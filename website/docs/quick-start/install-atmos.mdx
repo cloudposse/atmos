@@ -96,6 +96,20 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     ```shell
     nix-env -iA nixpkgs.atmos
     ```
+
+    To get the latest version, you may need to update the Nix config to add "unstable" packages. 
+
+    For example, in `~/.config/nixpkgs/config.nix` add the following line to the file:
+
+    ```console
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    ```
+
+    Then run the following to install:
+
+    ```shell
+    nix-shell -p atmos
+    ```
   </TabItem>
 
   <TabItem value="scoop" label="Windows">
@@ -195,6 +209,29 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     __NOTE:__ Don't have `mise`? Install it first from [here](https://mise.jdx.dev/getting-started.html)
   </TabItem>
 
+  <TabItem value="aqua" label="aqua">
+    #### Install with aqua
+
+    [aqua](https://aquaproj.github.io/) is a CLI Version Manager.
+    aqua allows you to manage multiple versions of CLI tools, making it easy to switch between different versions of Atmos and other tools in your projects.
+
+    Create `aqua.yaml` by `aqua init`:
+
+    ```shell
+    aqua init
+    ```
+
+    Add atmos to aqua.yaml:
+
+    ```shell
+    aqua g -i cloudposse/atmos
+    ```
+
+    Then, run `aqua install` in the same directory.
+
+    __NOTE:__ Don't have `aqua`? Install it first from [here](https://aquaproj.github.io/docs/install)
+  </TabItem>
+
   <TabItem value="source" label="From Source">
     #### Build from Source
 
@@ -241,6 +278,58 @@ The latest version of Atmos (<LatestRelease />) might not be available with thir
 - Add the execution bit to the binary (e.g. on Linux and Mac, run `chmod u+x atmos`)
 - Place the binary somewhere on your `PATH` (e.g. on Linux and Mac: `mv atmos /usr/local/bin/`)
 
+## Set Up Your Terminal
+
+Atmos is a modern CLI with a Text-based UI (TUI), as such, for the best experience we recommend ensuring you have
+a decent terminal and modern fonts installed and configured in your terminal.
+
+### TERM Environment Variable
+
+Atmos uses ANSI color codes. These should work in every modern terminal, including the default terminal shipped with
+macOS. You *may* have to set the `TERM` environment variable to `xterm-256color` for it to work.
+This can be persisted in your `~/.bashrc` or `~/.zshrc` file (or the respective RC file of whatever shell is in use).
+
+```shell
+export TERM=xterm-256color
+```
+
+If you're having any troule, try [iTerm2](https://iterm2.com/) or any other modern day terminal that supports
+ANSI characters and fonts.
+
+:::tip Install NerdFonts
+To display all icons used by `atmos`, we recommend the use of a Nerd Font, like *Fira Code*.
+:::
+
+### NerdFonts
+
+ Nerd Fonts are popular fonts that are patched to include icons.
+
+The exact process will depend on your terminal and operating system, but the general idea is to install a font that
+includes the necessary glyphs and then configure your terminal.
+
+Go to https://www.nerdfonts.com/ for more information.
+
+::tip
+We recommend the "Fira Code" NerdFont version, which is what all our screenshots are based on.
+:::
+
+<Tabs>
+  <TabItem value="homebrew-cask-fonts" label="Homebrew">
+    #### Homebrew
+
+    If you're using Homebrew, you can tap the `homebrew-cask-fonts` repository to install Nerd Fonts.
+
+    Paste the following into a macOS Terminal window.
+
+    ```shell
+    brew tap homebrew/cask-fonts     # You only need to do this once!
+    brew search nerd-font            # Search for font packages
+
+    # Install the NerdFont version of Fira Code
+    brew install --cask font-fira-code-nerd-font
+    ```
+  </TabItem>
+</Tabs>
 
 ## Next Steps
 
