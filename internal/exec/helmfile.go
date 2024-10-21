@@ -278,6 +278,10 @@ func checkHelmfileConfig(cliConfig schema.CliConfiguration) error {
 			return errors.New("Helm AWS profile pattern must be provided in 'components.helmfile.helm_aws_profile_pattern' config or " +
 				"'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV variable")
 		}
+
+		if len(cliConfig.Components.Helmfile.ClusterNamePattern) < 1 {
+			return errors.New("Cluster name pattern must be provided in 'components.helmfile.cluster_name_pattern' config or " + "'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable")
+		}
 	}
 
 	return nil
