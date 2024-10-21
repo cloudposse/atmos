@@ -15,9 +15,6 @@ var vendorPullCmd = &cobra.Command{
 	Long:               `This command executes 'atmos vendor pull' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
-
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
