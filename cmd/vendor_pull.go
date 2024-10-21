@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -15,7 +16,13 @@ var vendorPullCmd = &cobra.Command{
 	Long:               `This command executes 'atmos vendor pull' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteVendorPullCmd(cmd, args)
+		// Check Atmos configuration
+		cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		if err != nil {
+			u.LogErrorAndExit(cliConfig, err)
+		}
+
+		err = e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
