@@ -42,7 +42,17 @@ schemas:
 
 In the component [manifest](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
 the `settings.validation` section:
-
+### Specify Remote Schemas
+specify remote schemas by setting the `manifest` field to a remote URL. 
+<File title="atmos.yaml">
+```yaml
+# Validation schemas (for validating atmos stacks and components)
+schemas:
+  atmos:
+    # You can specify a remote schema URL as well
+    manifest: "https://example.com/path/to/remote/atmos-manifest.json"
+```
+</File>
 <EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml"/>
 
 Add the following JSON Schema in the
