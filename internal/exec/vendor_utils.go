@@ -127,41 +127,57 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 	error,
 ) {
 	var vendorConfig schema.AtmosVendorConfig
-	vendorConfigFileExists := true
+	var foundVendorConfigFile string
+	vendorConfigFileExists := false
 
-	foundVendorConfigFile := vendorConfigFile
+	// Build a list of possible paths to the vendor config file
+	var pathsToCheck []string
 
-	// If the vendoring manifest is specified without an extension, use the default extension
-	vendorConfigPath := vendorConfigFile
+	// If 'vendor_config_path' is specified in 'atmos.yaml', use it
 	if cliConfig.Vendor.VendorYamlPath != "" {
-		vendorConfigPath = cliConfig.Vendor.VendorYamlPath
+		vendorConfigPath := cliConfig.Vendor.VendorYamlPath
 		if !filepath.IsAbs(vendorConfigPath) {
-			vendorConfigPath = filepath.Join(cliConfig.BasePath, vendorConfigPath)
+			vendorConfigPath = path.Join(cliConfig.BasePath, vendorConfigPath)
 		}
+		pathsToCheck = append(pathsToCheck, vendorConfigPath)
 	} else {
-		vendorConfigPath = filepath.Join(cliConfig.BasePath, vendorConfigFile)
+		// Check the current directory
+		pathsToCheck = append(pathsToCheck, vendorConfigFile)
+		// Check the base_path directory
+		basePathVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
+		pathsToCheck = append(pathsToCheck, basePathVendorConfig)
 	}
 
-	if !u.FileExists(vendorConfigPath) {
-		vendorConfigFileExists = false
-		return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", vendorConfigPath)
+	// Search for the vendor config file
+	for _, filePath := range pathsToCheck {
+		if u.FileExists(filePath) {
+			foundVendorConfigFile = filePath
+			vendorConfigFileExists = true
+			break
+		}
 	}
 
-	foundVendorConfigFile = vendorConfigPath
+	// If not found, return an error
+	if !vendorConfigFileExists {
+		return vendorConfig, false, "", fmt.Errorf("vendor config file not found in paths: %v", pathsToCheck)
+	}
 
+	// Read the content of the vendor config file
 	vendorConfigFileContent, err := os.ReadFile(foundVendorConfigFile)
 	if err != nil {
 		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
+	// Unmarshal the YAML content into the vendorConfig struct
 	vendorConfig, err = u.UnmarshalYAML[schema.AtmosVendorConfig](string(vendorConfigFileContent))
 	if err != nil {
 		return vendorConfig, vendorConfigFileExists, "", err
 	}
 
+	// Validate the 'kind' field
 	if vendorConfig.Kind != "AtmosVendorConfig" {
 		return vendorConfig, vendorConfigFileExists, "",
-			fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'AtmosVendorConfig'",
+			fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kind: 'AtmosVendorConfig'",
 				vendorConfig.Kind,
 				foundVendorConfigFile,
 			)
