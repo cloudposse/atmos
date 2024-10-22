@@ -17,6 +17,12 @@
 # are considered paths relative to 'base_path'.
 base_path: "./examples/quick-start-advanced"
 
+vendor:
+  # Path to the vendor.yaml file
+  # Supports both absolute and relative paths
+  # Can also be set using 'ATMOS_VENDOR_YAML_PATH' ENV var, or '--vendor-yaml-path' command-line argument
+  vendor_yaml_path: "./vendor.yaml"
+
 components:
   terraform:
     # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
@@ -351,9 +357,3 @@ settings:
   #            If the source and destination lists have the same length, all items in the destination lists are
   #            deep-merged with all items in the source list.
   list_merge_strategy: replace
-
-vendor:
-  # Path to the vendor.yaml file
-  # Supports both absolute and relative paths
-  # Can also be set using 'ATMOS_VENDOR_YAML_PATH' ENV var, or '--vendor-yaml-path' command-line argument
-  vendor_yaml_path: "./vendor.yaml"

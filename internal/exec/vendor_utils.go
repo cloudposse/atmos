@@ -138,6 +138,10 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 		} else {
 			foundVendorConfigFile = cliConfig.Vendor.VendorYamlPath
 		}
+		if !u.FileExists(foundVendorConfigFile) {
+			vendorConfigFileExists = false
+			return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", foundVendorConfigFile)
+		}
 	} else {
 		// Path is not defined in atmos.yaml, proceed with existing logic
 		var fileExists bool
