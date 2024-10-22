@@ -80,7 +80,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 
 	// Check `vendor.yaml`
 	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName)
-	if vendorConfigExists && err != nil {
+	if err != nil {
 		return err
 	}
 
@@ -128,22 +128,35 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 ) {
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfigFileExists := true
+	var foundVendorConfigFile string
 
-	// Check if the vendoring manifest file exists
-	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
-
-	if !fileExists {
-		// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`
-		pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
-
-		if !u.FileExists(pathToVendorConfig) {
-			vendorConfigFileExists = false
-			return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", pathToVendorConfig)
+	// Check if the vendor config path is defined in atmos.yaml
+	if cliConfig.Vendor.VendorYamlPath != "" {
+		// Resolve the vendor_yaml_path relative to base_path if it's a relative path
+		if !filepath.IsAbs(cliConfig.Vendor.VendorYamlPath) {
+			foundVendorConfigFile = filepath.Join(cliConfig.BasePath, cliConfig.Vendor.VendorYamlPath)
+		} else {
+			foundVendorConfigFile = cliConfig.Vendor.VendorYamlPath
 		}
+	} else {
+		// Path is not defined in atmos.yaml, proceed with existing logic
+		var fileExists bool
+		foundVendorConfigFile, fileExists = u.SearchConfigFile(vendorConfigFile)
 
-		foundVendorConfigFile = pathToVendorConfig
+		if !fileExists {
+			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
+			pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
+
+			if !u.FileExists(pathToVendorConfig) {
+				vendorConfigFileExists = false
+				return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", pathToVendorConfig)
+			}
+
+			foundVendorConfigFile = pathToVendorConfig
+		}
 	}
 
+	// Read the vendor config file
 	vendorConfigFileContent, err := os.ReadFile(foundVendorConfigFile)
 	if err != nil {
 		return vendorConfig, vendorConfigFileExists, "", err
