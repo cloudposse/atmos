@@ -198,7 +198,16 @@ func SearchConfigFile(path string) (string, bool) {
 // IsURL checks if a string is a URL
 func IsURL(s string) bool {
 	url, err := url.Parse(s)
-	return err == nil && url.Scheme != "" && url.Host != ""
+	validSchemes := []string{"http", "https"}
+	schemeValid := false
+	for _, scheme := range validSchemes {
+		if url.Scheme == scheme {
+			schemeValid = true
+			break
+		}
+	}
+	return err == nil && schemeValid
+
 }
 
 // GetFileNameFromURL extracts the file name from a URL

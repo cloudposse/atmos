@@ -101,7 +101,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 			}
 			tempDir := os.TempDir()
 			fileName, err := u.GetFileNameFromURL(cliConfig.Schemas.Atmos.Manifest)
-			if err != nil {
+			if err != nil || fileName == "" {
 				return fmt.Errorf("failed to get the file name from the URL '%s': %w", cliConfig.Schemas.Atmos.Manifest, err)
 			}
 			atmosManifestJsonSchemaFilePath = path.Join(tempDir, fileName)
