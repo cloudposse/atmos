@@ -17,6 +17,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// ValidateConfig holds configuration options for Atmos validation.
+// CheckStack determines whether stack configuration validation should be performed.
 type ValidateConfig struct {
 	CheckStack bool
 	// Other configuration fields
