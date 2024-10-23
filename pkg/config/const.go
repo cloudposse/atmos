@@ -18,6 +18,7 @@ const (
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
 	BasePathFlag                = "--base-path"
+	VendorYamlPathFlag          = "--vendor-yaml-path"
 	WorkflowDirFlag             = "--workflows-dir"
 	KubeConfigConfigFlag        = "--kubeconfig-path"
 	JsonSchemaDirFlag           = "--schemas-jsonschema-dir"
