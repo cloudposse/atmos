@@ -21,9 +21,9 @@ type ValidateConfig struct {
 	CheckStack bool
 	// Other configuration fields
 }
-type AtomsValidateOption func(*ValidateConfig)
+type AtmosValidateOption func(*ValidateConfig)
 
-func WithCheckStack(check bool) AtomsValidateOption {
+func WithStackValidation(check bool) AtmosValidateOption {
 	return func(cfg *ValidateConfig) {
 		cfg.CheckStack = check
 	}
@@ -335,7 +335,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config
-func checkAtmosConfig(opts ...AtomsValidateOption) {
+func checkAtmosConfig(opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
 	}
@@ -354,10 +354,6 @@ func checkAtmosConfig(opts ...AtomsValidateOption) {
 			printMessageForMissingAtmosConfig(cliConfig)
 			os.Exit(0)
 		}
-	}
-	if err != nil {
-		printMessageForMissingAtmosConfig(cliConfig)
-		os.Exit(0)
 	}
 }
 
