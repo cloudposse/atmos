@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -16,13 +15,12 @@ var vendorPullCmd = &cobra.Command{
 	Long:               `This command executes 'atmos vendor pull' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-		if err != nil {
-			u.LogErrorAndExit(cliConfig, err)
-		}
+		// checkStack is true if the --stack flag is provided
+		checkStack := cmd.Flag("stack").Changed
+		// WithCheckStack is a functional option to check the stack
+		checkAtmosConfig(WithCheckStack(checkStack))
 
-		err = e.ExecuteVendorPullCmd(cmd, args)
+		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}

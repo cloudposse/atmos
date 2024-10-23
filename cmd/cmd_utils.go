@@ -17,6 +17,18 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+type ValidateConfig struct {
+	CheckStack bool
+	// Other configuration fields
+}
+type AtomsValidateOption func(*ValidateConfig)
+
+func WithCheckStack(check bool) AtomsValidateOption {
+	return func(cfg *ValidateConfig) {
+		cfg.CheckStack = check
+	}
+}
+
 // processCustomCommands processes and executes custom commands
 func processCustomCommands(
 	cliConfig schema.CliConfiguration,
@@ -323,15 +335,27 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config
-func checkAtmosConfig() {
+func checkAtmosConfig(opts ...AtomsValidateOption) {
+	vCfg := &ValidateConfig{
+		CheckStack: true, // Default value true to check the stack
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(vCfg)
+	}
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
-
-	atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
-
-	if !atmosConfigExists || err != nil {
+	if vCfg.CheckStack {
+		atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
+		if !atmosConfigExists || err != nil {
+			printMessageForMissingAtmosConfig(cliConfig)
+			os.Exit(0)
+		}
+	}
+	if err != nil {
 		printMessageForMissingAtmosConfig(cliConfig)
 		os.Exit(0)
 	}
