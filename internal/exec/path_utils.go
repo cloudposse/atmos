@@ -131,19 +131,14 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 	for _, item := range items {
 		fullPath := filepath.Join(basePath, item)
 
-		// Check if the file or folder exists
-		if _, err := os.Stat(fullPath); err == nil {
-			// File or folder exists, attempt to delete
-			err := os.RemoveAll(fullPath)
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return fmt.Errorf("failed to delete %s: %w", fullPath, err)
-			}
-			lastFolderName := filepath.Base(basePath)
-			fmt.Printf("Deleted: %s/%s\n", lastFolderName, item)
+		// Attempt to delete the file or folder
+		err := os.RemoveAll(fullPath)
+		if err != nil {
+			fmt.Printf("Error deleting %s: %s\n", fullPath, err.Error())
+			continue
 		}
+
+		fmt.Printf("Deleted: %s\n", fullPath)
 	}
 
 	// Now, delete matching files and folders from immediate subdirectories

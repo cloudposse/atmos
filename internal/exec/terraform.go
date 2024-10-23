@@ -22,6 +22,7 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	everythingFlag            = "--everything"
+	forceFlag                 = "--force"
 )
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
@@ -64,7 +65,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	needProcessStacks := true
 	checkStack := true
 	// If the user runs `atmos terraform clean --everything`, don't process stacks
-	if info.SubCommand == "clean" && u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) {
+	if info.SubCommand == "clean" &&
+		(u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) || u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)) {
 		if info.ComponentFromArg == "" {
 			needProcessStacks = false
 		}
@@ -106,15 +108,38 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	varFile := constructTerraformComponentVarfileName(info)
 	planFile := constructTerraformComponentPlanfileName(info)
 	if info.SubCommand == "clean" {
+		filesToClear := []string{"backend.tf.json", ".terraform", "terraform.tfstate.d", ".terraform.lock.hcl"}
+
+		if u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag) {
+			err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+			if err != nil {
+				u.LogWarning(cliConfig, err.Error())
+			}
+			return nil
+		}
 		// If the --everything flag is provided, delete the Terraform state folder for this component
 		if u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) {
-			filesToClear := []string{"backend.tf.json", ".terraform", "terraform.tfstate.d", ".terraform.lock.hcl"}
 			// If the component is not specified, delete the Terraform state folder for all components
 			if info.ComponentFromArg == "" {
-				err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+				// Create a confirmation model
+
+				message := "This will delete all Terraform state files for all components.\nAre you sure you want to proceed?"
+				confirmed, err := u.Confirm(message)
 				if err != nil {
-					u.LogWarning(cliConfig, err.Error())
+					return fmt.Errorf("error confirming the operation: %w", err)
 				}
+				if confirmed {
+					fmt.Println("Proceeding with the operation...")
+					err = deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+					if err != nil {
+						u.LogWarning(cliConfig, err.Error())
+					}
+				} else {
+					fmt.Println("Operation canceled.")
+					return nil
+
+				}
+
 				return nil
 				// If the component is specified, delete the Terraform state folder for the specified component
 			} else if info.ComponentFromArg != "" && info.StackFromArg == "" {
