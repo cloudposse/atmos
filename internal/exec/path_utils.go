@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -166,7 +167,7 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 						return fmt.Errorf("failed to delete %s: %v", fullPath, err)
 					}
 					lastFolderName := filepath.Base(subDirPath)
-					fmt.Printf("Deleted: %s/%s\n", lastFolderName, item)
+					log.Printf("Deleted: %s/%s\n", lastFolderName, item)
 				}
 			}
 		}
