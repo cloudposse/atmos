@@ -31,7 +31,8 @@ func processHelp(componentType string, command string) error {
 				"to a planfile. The '--planfile' flag should be used instead of the planfile argument in the native 'terraform apply <planfile>' command")
 			u.PrintMessage(" - 'atmos terraform clean' command deletes the '.terraform' folder, '.terraform.lock.hcl' lock file, " +
 				"and the previously generated 'planfile', 'varfile', and 'backend.tf.json' file for the specified component and stack. " +
-				"Use the --everything flag to also delete the Terraform state files ('terraform.tfstate.d') for the component. State files store the current state of your infrastructure.  " +
+				"Use the --everything flag to also delete the Terraform state files and and directories for the component. State files store the current state of your infrastructure.  " +
+				"Use --force to forcefully delete Terraform state files and directories for the component.\n\n" +
 				"Use --skip-lock-file to skip deleting the lock file. " +
 				"If no component or stack is specified, the clean operation will apply globally to all components.")
 			u.PrintMessage(" - 'atmos terraform workspace' command first runs 'terraform init -reconfigure', then 'terraform workspace select', " +
@@ -77,7 +78,8 @@ func processHelp(componentType string, command string) error {
 			" - generated 'backend.tf.json' file\n" +
 			" - 'terraform.tfstate.d' folder (if '--everything' flag is used)\n\n" +
 			"Usage: atmos terraform clean <component> -s <stack> <flags>\n\n" +
-			"Use '--everything' flag to also delete the Terraform state files ('terraform.tfstate.d').\n\n" +
+			"Use '--everything' flag to also delete the Terraform state files and and directories with confirm message.\n\n" +
+			"Use --force to forcefully delete Terraform state files and directories for the component.\n\n" +
 			"- If no component is specified, the command will apply to all components and stacks.\n" +
 			"- If no stack is specified, the command will apply to all stacks for the specified component.\n" +
 			"Use '--skip-lock-file' flag to skip deleting the '.terraform.lock.hcl' file.\n\n" +
