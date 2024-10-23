@@ -16,9 +16,8 @@ var vendorPullCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		// checkStack is true if the --stack flag is provided
-		checkStack := cmd.Flag("stack").Changed
-		// WithCheckStack is a functional option to check the stack
-		checkAtmosConfig(WithCheckStack(checkStack))
+		// WithStackValidation is a functional option to check the stack
+		checkAtmosConfig(WithStackValidation(cmd.Flag("stack").Changed))
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
