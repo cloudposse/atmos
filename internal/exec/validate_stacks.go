@@ -122,7 +122,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 				"It can be configured in the 'schemas.atmos.manifest' section in 'atmos.yaml', or provided using the 'ATMOS_SCHEMAS_ATMOS_MANIFEST' "+
 				"ENV variable or '--schemas-atmos-manifest' command line argument.\n"+
 				"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'. \n"+
-				"Alternatively, the schema file can be downloaded from the provided URL",
+				"Alternatively, you can specify a schema file using a URL that will be downloaded automatically.",
 				cliConfig.Schemas.Atmos.Manifest)
 		}
 	}
