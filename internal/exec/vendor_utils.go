@@ -37,7 +37,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	cliConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize CLI config: %w", err)
 	}
 
 	dryRun, err := flags.GetBool("dry-run")
