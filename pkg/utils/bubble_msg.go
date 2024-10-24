@@ -58,11 +58,12 @@ func (m model) View() string {
 		return fmt.Sprintf("You chose %s\n", m.choices[m.cursor])
 	}
 
-	s := fmt.Sprintf("%s\n\n", m.message)
+	s := fmt.Sprintf("%s\n\n", m.message) +
+		"Use ↑↓ or j/k to navigate, Enter to select\n\n"
 	for i, choice := range m.choices {
 		cursor := " " // no cursor
 		if m.cursor == i {
-			cursor = ">" // cursor
+			cursor = "▶" // cursor
 		}
 		s += fmt.Sprintf("%s %s\n", cursor, choice)
 	}
