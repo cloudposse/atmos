@@ -6,10 +6,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// model represents the state of a confirmation dialog
 type model struct {
-	message  string
-	choices  []string
-	cursor   int
+	// message is the prompt text shown to the user
+	message string
+	// choices contains the available options (Yes/No)
+	choices []string
+	// cursor tracks the currently selected choice
+	cursor int
+	// selected indicates if the user has made a choice
 	selected bool
 }
 
@@ -17,7 +22,7 @@ func initialModel(message string) model {
 	return model{
 		message:  message,
 		choices:  []string{"Yes", "No"},
-		cursor:   0,
+		cursor:   1, // Default to "No"
 		selected: false,
 	}
 }
