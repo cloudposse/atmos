@@ -154,7 +154,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d")
 				tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, info.StackFromArg)
 				if err != nil {
-					u.LogWarning(cliConfig, err.Error())
+					return fmt.Errorf("failed to find stack folders: %w", err)
 				}
 				for _, folderName := range tfStateFolderNames {
 					tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d", folderName)
