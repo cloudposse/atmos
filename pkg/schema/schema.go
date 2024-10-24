@@ -133,6 +133,7 @@ type ArgsAndFlagsInfo struct {
 	DeployRunInit             string
 	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
+	AppendUserAgent           string
 	UseTerraformPlan          bool
 	PlanFile                  string
 	DryRun                    bool
