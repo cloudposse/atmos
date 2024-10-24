@@ -96,7 +96,7 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 	// First, read the directories at the root level (level 1)
 	level1Dirs, err := os.ReadDir(root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading root directory %s: %w", root, err)
 	}
 
 	for _, dir := range level1Dirs {
@@ -110,7 +110,9 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 			level2Path := filepath.Join(root, dir.Name())
 			level2Dirs, err := os.ReadDir(level2Path)
 			if err != nil {
-				return nil, err
+				// Log the error and continue with the next directory
+				fmt.Printf("error reading subdirectory %s: %v\n", level2Path, err)
+				continue
 			}
 
 			for _, subDir := range level2Dirs {
