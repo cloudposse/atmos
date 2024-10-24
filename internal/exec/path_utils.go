@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack
@@ -110,8 +111,7 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 			level2Path := filepath.Join(root, dir.Name())
 			level2Dirs, err := os.ReadDir(level2Path)
 			if err != nil {
-				// Log the error and continue with the next directory
-				fmt.Printf("error reading subdirectory %s: %v\n", level2Path, err)
+				u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error reading subdirectory %s: %v", level2Path, err))
 				continue
 			}
 
@@ -136,11 +136,11 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 		// Attempt to delete the file or folder
 		err := os.RemoveAll(fullPath)
 		if err != nil {
-			fmt.Printf("Error deleting %s: %s\n", fullPath, err.Error())
+			u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", fullPath, err))
 			continue
 		}
+		u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("Deleted %s", fullPath))
 
-		fmt.Printf("Deleted: %s\n", fullPath)
 	}
 
 	// Now, delete matching files and folders from immediate subdirectories
@@ -159,7 +159,7 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 				// Attempt to delete the file or folder
 				err := os.RemoveAll(fullPath)
 				if err != nil {
-					fmt.Printf("Error deleting %s: %v\n", fullPath, err)
+					u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", fullPath, err))
 					continue
 				}
 			}

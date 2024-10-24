@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"log"
 	"os"
 	osexec "os/exec"
 	"path"
@@ -130,13 +131,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					return fmt.Errorf("error confirming the operation: %w", err)
 				}
 				if confirmed {
-					fmt.Println("Proceeding with the operation...")
+					log.Println("Proceeding with the operation...")
 					err = deleteFilesAndFoldersRecursive(componentPath, filesToClear)
 					if err != nil {
 						u.LogWarning(cliConfig, err.Error())
 					}
 				} else {
-					fmt.Println("Operation canceled.")
+					u.LogInfo(cliConfig, "Operation canceled.")
 					return nil
 
 				}
