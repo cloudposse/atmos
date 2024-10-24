@@ -35,6 +35,7 @@ var (
 		cfg.DeployRunInitFlag,
 		cfg.InitRunReconfigure,
 		cfg.AutoGenerateBackendFileFlag,
+		cfg.AppendUserAgentFlag,
 		cfg.FromPlanFlag,
 		cfg.PlanFileFlag,
 		cfg.HelpFlag1,
@@ -666,6 +667,21 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.TerraformDir = terraformDirFlagParts[1]
+		}
+
+		if arg == cfg.AppendUserAgentFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s requires a value", arg)
+			}
+			info.AppendUserAgent = inputArgsAndFlags[i+1]
+			indexesToRemove = append(indexesToRemove, i, i+1)
+		} else if strings.HasPrefix(arg+"=", cfg.AppendUserAgentFlag) {
+			parts := strings.SplitN(arg, "=", 2)
+			if len(parts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.AppendUserAgent = parts[1]
+			indexesToRemove = append(indexesToRemove, i)
 		}
 
 		if arg == cfg.HelmfileCommandFlag {
