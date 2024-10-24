@@ -3,9 +3,11 @@ package exec
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -170,4 +172,102 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 	}
 
 	return nil
+}
+
+// Helper functions to improve readability and maintainability
+func cleanAllComponents(cliConfig schema.CliConfiguration, filesToClear []string, componentPath string, force bool) error {
+	u.LogWarning(cliConfig, fmt.Sprintf("Deleting all local Terraform state files for all components in path %s", componentPath))
+	if !force {
+		message := "This will delete all local Terraform state files for all components.\nAre you sure you want to proceed?"
+		confirm, err := confirmDeleteTerrFormLocal(message)
+		if err != nil {
+			return err
+		}
+		if !confirm {
+			u.LogWarning(cliConfig, "Operation canceled.")
+			return nil
+		}
+	}
+	// get relative path form base path
+
+	err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+	if err != nil {
+		u.LogWarning(cliConfig, err.Error())
+	}
+
+	return nil
+}
+
+func cleanSpecificComponent(cliConfig schema.CliConfiguration, componentPath string, filesToClear []string, force bool, componentName string, baseComponentName string) error {
+	u.LogWarning(cliConfig, fmt.Sprintf("Deleting local Terraform state files for component in path %s", componentPath))
+
+	if !force {
+		if !force {
+			message := fmt.Sprintf("This will delete all local Terraform state files for component %s base %s.\nAre you sure you want to proceed?", componentName, baseComponentName)
+			confirm, err := confirmDeleteTerrFormLocal(message)
+			if err != nil {
+				return err
+			}
+			if !confirm {
+				u.LogWarning(cliConfig, "Operation canceled.")
+				return nil
+			}
+		}
+
+	}
+	u.LogWarning(cliConfig, fmt.Sprintf("Deleting all local Terraform state files for component %s base %s", componentName, baseComponentName))
+	return deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+}
+
+func cleanStackComponent(cliConfig schema.CliConfiguration, componentPath, stack string, force bool, component string) error {
+	if !force {
+		if !force {
+			message := fmt.Sprintf("This will delete all local Terraform state files for component %s and stack %s.\nAre you sure you want to proceed?", component, stack)
+			confirm, err := confirmDeleteTerrFormLocal(message)
+			if err != nil {
+				return err
+			}
+			if !confirm {
+				u.LogWarning(cliConfig, "Operation canceled.")
+				return nil
+			}
+		}
+
+	}
+	u.LogWarning(cliConfig, fmt.Sprintf("Deleting all local Terraform state files for component %s and stack %s", component, stack))
+	tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d")
+	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack)
+	if err != nil {
+		return fmt.Errorf("failed to find stack folders: %w", err)
+	}
+
+	for _, folderName := range tfStateFolderNames {
+		tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d", folderName)
+		u.LogInfo(cliConfig, fmt.Sprintf("Deleting 'terraform.tfstate.d/%s' folder", folderName))
+		if err := os.RemoveAll(tfStateFolderPath); err != nil {
+			return fmt.Errorf("failed to delete stack folder %s: %w", folderName, err)
+		}
+	}
+	return nil
+}
+func confirmDeleteTerrFormLocal(message string) (confirm bool, err error) {
+	confirm = false
+	confirmPrompt := huh.NewConfirm().
+		Title(message).
+		Affirmative("Yes!").
+		Negative("No.").
+		Value(&confirm)
+	if err := confirmPrompt.Run(); err != nil {
+		if err == huh.ErrUserAborted {
+			return confirm, fmt.Errorf("operation canceled")
+		}
+		return confirm, err
+	}
+
+	if confirm {
+		return true, nil
+	} else {
+		return false, nil
+
+	}
 }

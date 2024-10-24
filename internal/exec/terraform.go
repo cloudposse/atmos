@@ -7,7 +7,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/charmbracelet/huh"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -73,7 +72,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if info.ComponentFromArg == "" {
 			shouldProcessStacks = false
 		}
-		shouldCheckStack = false
+
+		shouldCheckStack = info.Stack != ""
 
 	}
 
@@ -111,69 +111,36 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	varFile := constructTerraformComponentVarfileName(info)
 	planFile := constructTerraformComponentPlanfileName(info)
 	if info.SubCommand == "clean" {
-		filesToClear := []string{"backend.tf.json", ".terraform", "terraform.tfstate.d", ".terraform.lock.hcl"}
-
-		if u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag) {
-			err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
-			if err != nil {
-				u.LogWarning(cliConfig, err.Error())
-			}
-			return nil
-		}
-		// If the --everything flag is provided, delete the Terraform state folder for this component
-		if u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) {
-			// If the component is not specified, delete the Terraform state folder for all components
-			var confirm bool
+		if u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) || u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag) {
+			force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
+			filesToClear := []string{"backend.tf.json", ".terraform", "terraform.tfstate.d", ".terraform.lock.hcl"}
 			if info.ComponentFromArg == "" {
-				message := "This will delete all local Terraform state files for all components.\nAre you sure you want to proceed?"
-				confirmPrompt := huh.NewConfirm().
-					Title(message).
-					Affirmative("Yes!").
-					Negative("No.").
-					Value(&confirm)
-				if err := confirmPrompt.Run(); err != nil {
-					if err == huh.ErrUserAborted {
-						u.LogWarning(cliConfig, "Operation canceled.")
-						return nil
-					}
+				err := cleanAllComponents(cliConfig, filesToClear, componentPath, force)
+				if err != nil {
 					u.LogWarning(cliConfig, err.Error())
-					return err
 				}
-
-				if confirm {
-					u.LogInfo(cliConfig, "Deleting all local Terraform state files for all components")
-					err = deleteFilesAndFoldersRecursive(componentPath, filesToClear)
-					if err != nil {
-						u.LogWarning(cliConfig, err.Error())
-					}
-				} else {
-					u.LogWarning(cliConfig, "Operation canceled.")
-					return nil
-
-				}
-
 				return nil
 			} else if info.ComponentFromArg != "" && info.StackFromArg == "" {
-				componentPath = path.Join(componentPath, info.Component)
-				err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+				if info.Context.BaseComponent == "" {
+					return fmt.Errorf("could not find the component '%s'", info.ComponentFromArg)
+				}
+				componentPath = path.Join(componentPath, info.Context.BaseComponent)
+				err := cleanSpecificComponent(cliConfig, componentPath, filesToClear, force, info.Context.Component, info.Context.BaseComponent)
 				if err != nil {
 					u.LogWarning(cliConfig, err.Error())
 				}
 				return nil
 			} else {
-				// If the component and stack are specified, delete the Terraform state folder for the specified component and stack
-				tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d")
-				tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, info.StackFromArg)
-				if err != nil {
-					return fmt.Errorf("failed to find stack folders for '%s': %w", info.StackFromArg, err)
+				if info.Context.Component == "" {
+					return fmt.Errorf("could not find the component '%s'", info.Context.Component)
 				}
-				for _, folderName := range tfStateFolderNames {
-					tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d", folderName)
-					u.LogInfo(cliConfig, fmt.Sprintf("Deleting 'terraform.tfstate.d/%s' folder", folderName))
-					err = os.RemoveAll(tfStateFolderPath)
-					if err != nil {
-						u.LogWarning(cliConfig, err.Error())
-					}
+				if info.Stack == "" {
+					return fmt.Errorf("could not fins stack")
+				}
+				// If the component and stack are specified, delete the Terraform state folder for the specified component and stack
+				err := cleanStackComponent(cliConfig, componentPath, info.StackFromArg, force, info.Component)
+				if err != nil {
+					u.LogWarning(cliConfig, err.Error())
 				}
 			}
 		}
