@@ -78,5 +78,9 @@ func Confirm(message string) (bool, error) {
 		return false, fmt.Errorf("error starting confirm program: %w", err)
 	}
 
-	return m.(model).choices[m.(model).cursor] == "Yes", nil
+	if finalModel, ok := m.(model); ok {
+		return finalModel.choices[finalModel.cursor] == "Yes", nil
+	}
+	return false, fmt.Errorf("unexpected model type: %T", m)
+
 }
