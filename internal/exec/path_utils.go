@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,8 +124,8 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 	return folderNames, nil
 }
 
-// deleteFilesAndFoldersRecursive deletes files and folders from the given list if they exist under the specified path,
-// including files and folders in the second-level subdirectories.
+// DeleteFilesAndFoldersRecursive deletes specified files and folders from the base path,
+// including those found in immediate subdirectories.
 func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 	// First, delete files and folders directly under the base path
 	for _, item := range items {
@@ -155,19 +154,11 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 
 			for _, item := range items {
 				fullPath := filepath.Join(subDirPath, item)
-
-				// Check if the file or folder exists in the subdirectory
-				if _, err := os.Stat(fullPath); err == nil {
-					// File or folder exists, attempt to delete
-					err := os.RemoveAll(fullPath)
-					if err != nil {
-						if os.IsNotExist(err) {
-							continue
-						}
-						return fmt.Errorf("failed to delete %s: %v", fullPath, err)
-					}
-					lastFolderName := filepath.Base(subDirPath)
-					log.Printf("Deleted: %s/%s\n", lastFolderName, item)
+				// Attempt to delete the file or folder
+				err := os.RemoveAll(fullPath)
+				if err != nil {
+					fmt.Printf("Error deleting %s: %v\n", fullPath, err)
+					continue
 				}
 			}
 		}
