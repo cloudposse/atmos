@@ -63,25 +63,26 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	needProcessStacks := true
-	checkStack := true
-	// Skip stack processing for 'clean' command with --everything or --force flags
+	shouldProcessStacks := true
+	shouldCheckStack := true
+	// Skip stack processing when cleaning with --everything or --force flags to allow
+	// cleaning without requiring stack configuration
 	if info.SubCommand == "clean" &&
 		(u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) ||
 			u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)) {
 		if info.ComponentFromArg == "" {
-			needProcessStacks = false
+			shouldProcessStacks = false
 		}
-		checkStack = false
+		shouldCheckStack = false
 
 	}
 
-	if needProcessStacks {
-		info, err = ProcessStacks(cliConfig, info, checkStack, true)
+	if shouldProcessStacks {
+		info, err = ProcessStacks(cliConfig, info, shouldCheckStack, true)
 		if err != nil {
 			return err
 		}
-		if len(info.Stack) < 1 && checkStack {
+		if len(info.Stack) < 1 && shouldCheckStack {
 			return errors.New("stack must be specified")
 		}
 	}
@@ -164,7 +165,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d")
 				tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, info.StackFromArg)
 				if err != nil {
-					return fmt.Errorf("failed to find stack folders: %w", err)
+					return fmt.Errorf("failed to find stack folders for '%s': %w", info.StackFromArg, err)
 				}
 				for _, folderName := range tfStateFolderNames {
 					tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d", folderName)

@@ -93,11 +93,14 @@ func constructHelmfileComponentVarfilePath(cliConfig schema.CliConfiguration, in
 // The search is performed at the root level (level 1) and one level deeper (level 2).
 func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 	var folderNames []string
-
+	if root == "" {
+		return nil, fmt.Errorf("root path cannot be empty")
+	}
 	// First, read the directories at the root level (level 1)
 	level1Dirs, err := os.ReadDir(root)
 	if err != nil {
-		return nil, fmt.Errorf("error reading root directory %s: %w", root, err)
+		u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error reading root directory %s: %v", root, err))
+		return nil, err
 	}
 
 	for _, dir := range level1Dirs {
