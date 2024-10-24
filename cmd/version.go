@@ -10,9 +10,8 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
-
-var Version = "0.0.1"
 
 var versionCmd = &cobra.Command{
 	Use:     "version",
@@ -27,14 +26,14 @@ var versionCmd = &cobra.Command{
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 
-		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", Version, runtime.GOOS, runtime.GOARCH))
+		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", version.Version, runtime.GOOS, runtime.GOARCH))
 		fmt.Println()
 
 		// Check for the latest Atmos release on GitHub
 		latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 		if err == nil && latestReleaseTag != "" {
 			latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
-			currentRelease := strings.TrimPrefix(Version, "v")
+			currentRelease := strings.TrimPrefix(version.Version, "v")
 			if latestRelease != currentRelease {
 				printMessageToUpgradeToAtmosLatestRelease(latestRelease)
 			}
