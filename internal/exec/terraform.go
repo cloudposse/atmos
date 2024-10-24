@@ -146,7 +146,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 						u.LogWarning(cliConfig, err.Error())
 					}
 				} else {
-					u.LogInfo(cliConfig, "Operation canceled.")
+					u.LogWarning(cliConfig, "Operation canceled.")
 					return nil
 
 				}
