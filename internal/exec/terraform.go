@@ -64,9 +64,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	needProcessStacks := true
 	checkStack := true
-	// If the user runs `atmos terraform clean --everything`, don't process stacks
+	// Skip stack processing for 'clean' command with --everything or --force flags
 	if info.SubCommand == "clean" &&
-		(u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) || u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)) {
+		(u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) ||
+			u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)) {
 		if info.ComponentFromArg == "" {
 			needProcessStacks = false
 		}
