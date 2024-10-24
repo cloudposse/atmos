@@ -130,6 +130,7 @@ type ArgsAndFlagsInfo struct {
 	StacksDir                 string
 	WorkflowsDir              string
 	BasePath                  string
+	VendorYamlPathFlag        string
 	DeployRunInit             string
 	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
@@ -175,6 +176,7 @@ type ConfigAndStacksInfo struct {
 	AdditionalArgsAndFlags        []string
 	GlobalOptions                 []string
 	BasePath                      string
+	VendorYamlPathFlag            string
 	TerraformCommand              string
 	TerraformDir                  string
 	HelmfileCommand               string
