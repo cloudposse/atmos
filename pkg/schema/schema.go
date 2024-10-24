@@ -15,6 +15,7 @@ type CliConfiguration struct {
 	Schemas                       Schemas        `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates      `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Settings                      CliSettings    `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Vendor                        Vendor         `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool           `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	StacksBaseAbsolutePath        string         `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string       `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
@@ -129,6 +130,7 @@ type ArgsAndFlagsInfo struct {
 	StacksDir                 string
 	WorkflowsDir              string
 	BasePath                  string
+	VendorYamlPathFlag        string
 	DeployRunInit             string
 	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
@@ -174,6 +176,7 @@ type ConfigAndStacksInfo struct {
 	AdditionalArgsAndFlags        []string
 	GlobalOptions                 []string
 	BasePath                      string
+	VendorYamlPathFlag            string
 	TerraformCommand              string
 	TerraformDir                  string
 	HelmfileCommand               string
@@ -543,4 +546,8 @@ type AtmosVendorConfig struct {
 	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
 	Metadata   AtmosVendorMetadata
 	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
+}
+
+type Vendor struct {
+	VendorYamlPath string `yaml:"vendor_yaml_path" json:"vendor_yaml_path" mapstructure:"vendor_yaml_path"`
 }
