@@ -142,7 +142,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				}
 
 				return nil
-				// If the component is specified, delete the Terraform state folder for the specified component
 			} else if info.ComponentFromArg != "" && info.StackFromArg == "" {
 				componentPath = path.Join(componentPath, info.Component)
 				err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
