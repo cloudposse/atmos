@@ -139,7 +139,7 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 			u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", fullPath, err))
 			continue
 		}
-		u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("Deleted %s", fullPath))
+		u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("Deleted %s", item))
 
 	}
 
@@ -159,7 +159,7 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 				// Attempt to delete the file or folder
 				err := os.RemoveAll(fullPath)
 				if err != nil {
-					u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", fullPath, err))
+					u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
 					continue
 				}
 			}

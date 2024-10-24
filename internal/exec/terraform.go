@@ -2,12 +2,12 @@ package exec
 
 import (
 	"fmt"
-	"log"
 	"os"
 	osexec "os/exec"
 	"path"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -122,16 +122,25 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// If the --everything flag is provided, delete the Terraform state folder for this component
 		if u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) {
 			// If the component is not specified, delete the Terraform state folder for all components
+			var confirm bool
 			if info.ComponentFromArg == "" {
-				// Create a confirmation model
-
-				message := "This will delete all Terraform state files for all components.\nAre you sure you want to proceed?"
-				confirmed, err := u.Confirm(message)
-				if err != nil {
-					return fmt.Errorf("error confirming the operation: %w", err)
+				message := "This will delete all local Terraform state files for all components.\nAre you sure you want to proceed?"
+				confirmPrompt := huh.NewConfirm().
+					Title(message).
+					Affirmative("Yes!").
+					Negative("No.").
+					Value(&confirm)
+				if err := confirmPrompt.Run(); err != nil {
+					if err == huh.ErrUserAborted {
+						u.LogWarning(cliConfig, "Operation canceled.")
+						return nil
+					}
+					u.LogWarning(cliConfig, err.Error())
+					return err
 				}
-				if confirmed {
-					log.Println("Proceeding with the operation...")
+
+				if confirm {
+					u.LogInfo(cliConfig, "Deleting all local Terraform state files for all components")
 					err = deleteFilesAndFoldersRecursive(componentPath, filesToClear)
 					if err != nil {
 						u.LogWarning(cliConfig, err.Error())
