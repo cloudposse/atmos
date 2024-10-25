@@ -392,3 +392,8 @@ func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	u.PrintMessageInColor("Install Atmos:\n", c2)
 	u.PrintMessage("https://atmos.tools/install\n")
 }
+
+// Check Atmos is version command
+func isVersionCommand() bool {
+	return len(os.Args) > 1 && os.Args[1] == "version"
+}
