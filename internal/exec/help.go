@@ -45,6 +45,8 @@ func processHelp(componentType string, command string) error {
 			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
 				"native arguments and flags for the 'terraform' commands. " +
 				"For example: atmos terraform plan <component> -s <stack> -- -refresh=false -lock=false")
+
+			u.PrintMessage(" - '--append-user-agent' flag allows you to customize the User-Agent string appended to Terraform requests for enhanced observability and traceability.\n")
 		}
 
 		if componentType == "helmfile" {
