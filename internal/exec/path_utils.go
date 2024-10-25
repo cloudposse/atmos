@@ -133,27 +133,31 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 
 // DeleteFilesAndFoldersRecursive deletes specified files and folders from the base path,
 // including those found in immediate subdirectories.
-func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
+func deleteFilesAndFoldersRecursive(basePath string, items []string) (bool, error) {
+	isDelete := false
 	// First, delete files and folders directly under the base path
 	for _, item := range items {
 		fullPath := filepath.Join(basePath, item)
-
-		// Attempt to delete the file or folder
+		// check if the path exists before attempting to delete it
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			continue
+		}
+		// Attempt to delete the file or folder If the path does not exist, RemoveAll returns nil (no error)
 		err := os.RemoveAll(fullPath)
 		if err != nil {
-			xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("x")
+			xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
 			u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("%s Error deleting %s", xMark, item))
 			continue
 		}
 		checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
 		u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("%s Deleted %s", checkMark, item))
-
+		isDelete = true
 	}
 
 	// Now, delete matching files and folders from immediate subdirectories
 	entries, err := os.ReadDir(basePath)
 	if err != nil {
-		return fmt.Errorf("error reading the base path %s: %v", basePath, err)
+		return isDelete, fmt.Errorf("error reading the base path %s: %v", basePath, err)
 	}
 
 	for _, entry := range entries {
@@ -163,6 +167,10 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 
 			for _, item := range items {
 				fullPath := filepath.Join(subDirPath, item)
+				// check if the path exists before attempting to delete it
+				if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+					continue
+				}
 				// Attempt to delete the file or folder
 				err := os.RemoveAll(fullPath)
 				if err != nil {
@@ -171,11 +179,12 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 				}
 				checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
 				u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("%s Deleted %s", checkMark, item))
+				isDelete = true
 			}
 		}
 	}
 
-	return nil
+	return isDelete, nil
 }
 
 // Helper functions to improve readability and maintainability
@@ -195,13 +204,13 @@ func cleanAllComponents(cliConfig schema.CliConfiguration, filesToClear []string
 			return nil
 		}
 	}
-	// get relative path form base path
-
-	err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+	isDelete, err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
 	if err != nil {
 		u.LogWarning(cliConfig, err.Error())
 	}
-
+	if !isDelete {
+		u.LogWarning(cliConfig, "Nothing to delete")
+	}
 	return nil
 }
 
@@ -224,8 +233,12 @@ func cleanSpecificComponent(cliConfig schema.CliConfiguration, componentPath str
 			return nil
 		}
 	}
+	isDelete, err := deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+	if !isDelete {
+		u.LogWarning(cliConfig, "Nothing to delete")
+	}
 
-	return deleteFilesAndFoldersRecursive(componentPath, filesToClear)
+	return err
 }
 
 func cleanStackComponent(cliConfig schema.CliConfiguration, componentPath, stack string, force bool, component string) error {
