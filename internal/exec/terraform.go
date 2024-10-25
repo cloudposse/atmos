@@ -140,30 +140,42 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				// If the component and stack are specified, delete the Terraform state folder for the specified component and stack
 				err := cleanStackComponent(cliConfig, componentPath, info.StackFromArg, force, info.Component)
 				if err != nil {
-					return fmt.Errorf("failed to clean all components: %w", err)
+					u.LogWarning(cliConfig, err.Error())
 				}
 			}
 		}
-		u.LogInfo(cliConfig, "Deleting '.terraform' folder")
-		err = os.RemoveAll(filepath.Join(componentPath, ".terraform"))
-		if err != nil {
-			u.LogWarning(cliConfig, err.Error())
+		item := ".terraform"
+		fullPath := filepath.Join(componentPath, ".terraform")
+		if err := DeletePathTerraform(fullPath, item); err != nil {
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
 		}
+
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
-			u.LogInfo(cliConfig, "Deleting '.terraform.lock.hcl' file")
-			_ = os.Remove(filepath.Join(componentPath, ".terraform.lock.hcl"))
+			item := ".terraform.lock.hcl"
+			fullPath := filepath.Join(componentPath, ".terraform.lock.hcl")
+			if err := DeletePathTerraform(fullPath, item); err != nil {
+				u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
+			}
 		}
 
-		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s", varFile))
-		_ = os.Remove(filepath.Join(componentPath, varFile))
+		item = fmt.Sprintf("varfile : %s", varFile)
+		fullPath = filepath.Join(componentPath, varFile)
+		if err := DeletePathTerraform(fullPath, item); err != nil {
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
+		}
 
-		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s", planFile))
-		_ = os.Remove(filepath.Join(componentPath, planFile))
-
+		item = fmt.Sprintf("planfile: %s", planFile)
+		fullPath = filepath.Join(componentPath, planFile)
+		if err := DeletePathTerraform(fullPath, item); err != nil {
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
+		}
 		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
 		if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-			u.LogInfo(cliConfig, "Deleting 'backend.tf.json' file")
-			_ = os.Remove(filepath.Join(componentPath, "backend.tf.json"))
+			item := "backend.tf.json"
+			fullPath := filepath.Join(componentPath, "backend.tf.json")
+			if err := DeletePathTerraform(fullPath, item); err != nil {
+				u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
+			}
 		}
 
 		tfDataDir := os.Getenv("TF_DATA_DIR")

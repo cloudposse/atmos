@@ -138,19 +138,10 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) (bool, erro
 	// First, delete files and folders directly under the base path
 	for _, item := range items {
 		fullPath := filepath.Join(basePath, item)
-		// check if the path exists before attempting to delete it
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		if err := DeletePathTerraform(fullPath, item); err != nil {
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
 			continue
 		}
-		// Attempt to delete the file or folder If the path does not exist, RemoveAll returns nil (no error)
-		err := os.RemoveAll(fullPath)
-		if err != nil {
-			xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
-			u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("%s Error deleting %s", xMark, item))
-			continue
-		}
-		checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
-		u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("%s Deleted %s", checkMark, item))
 		isDelete = true
 	}
 
@@ -167,18 +158,10 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) (bool, erro
 
 			for _, item := range items {
 				fullPath := filepath.Join(subDirPath, item)
-				// check if the path exists before attempting to delete it
-				if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+				if err := DeletePathTerraform(fullPath, item); err != nil {
+					u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
 					continue
 				}
-				// Attempt to delete the file or folder
-				err := os.RemoveAll(fullPath)
-				if err != nil {
-					u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
-					continue
-				}
-				checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
-				u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("%s Deleted %s", checkMark, item))
 				isDelete = true
 			}
 		}
@@ -271,11 +254,10 @@ func cleanStackComponent(cliConfig schema.CliConfiguration, componentPath, stack
 
 	for _, folderName := range tfStateFolderNames {
 		tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d", folderName)
-		if err := os.RemoveAll(tfStateFolderPath); err != nil {
-			return fmt.Errorf("failed to delete stack folder %s: %w", folderName, err)
+		if err := DeletePathTerraform(tfStateFolderPath, folderName); err != nil {
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", tfStateFolderPath, err))
+			continue
 		}
-		checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
-		u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("%s Deleted 'terraform.tfstate.d/%s' folder", checkMark, folderName))
 	}
 	return nil
 }
@@ -301,4 +283,22 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	}
 
 	return confirm, nil
+}
+
+// DeletePathTerraform deletes the specified file or folder. with a checkmark or xmark
+func DeletePathTerraform(fullPath string, objectName string) error {
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		return err
+	}
+	// Attempt to delete the file or folder If the path does not exist, RemoveAll returns nil (no error)
+	err := os.RemoveAll(fullPath)
+	if err != nil {
+		xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
+		fmt.Printf("%s Error deleting %s", xMark, objectName)
+		return err
+	}
+	checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
+	fmt.Printf("%s Deleted %s", checkMark, objectName)
+	println()
+	return nil
 }
