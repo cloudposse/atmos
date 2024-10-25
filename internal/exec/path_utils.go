@@ -200,7 +200,7 @@ func cleanAllComponents(cliConfig schema.CliConfiguration, filesToClear []string
 			return err
 		}
 		if !confirm {
-			u.LogWarning(cliConfig, "mission aborted.")
+			u.LogWarning(cliConfig, "Mission aborted.")
 			return nil
 		}
 	}
@@ -229,7 +229,7 @@ func cleanSpecificComponent(cliConfig schema.CliConfiguration, componentPath str
 			return err
 		}
 		if !confirm {
-			u.LogWarning(cliConfig, "mission aborted.")
+			u.LogWarning(cliConfig, "Mission aborted.")
 			return nil
 		}
 	}
@@ -258,7 +258,7 @@ func cleanStackComponent(cliConfig schema.CliConfiguration, componentPath, stack
 			return err
 		}
 		if !confirm {
-			u.LogWarning(cliConfig, "mission aborted.")
+			u.LogWarning(cliConfig, "Mission aborted.")
 			return nil
 		}
 	}
@@ -295,7 +295,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 		Value(&confirm).WithTheme(t)
 	if err := confirmPrompt.Run(); err != nil {
 		if err == huh.ErrUserAborted {
-			return confirm, fmt.Errorf("mission aborted")
+			return confirm, fmt.Errorf("Mission aborted")
 		}
 		return confirm, err
 	}
