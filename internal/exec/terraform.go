@@ -135,12 +135,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					return fmt.Errorf("could not find the component '%s'", info.Context.Component)
 				}
 				if info.Stack == "" {
-					return fmt.Errorf("could not fins stack")
+					return fmt.Errorf("could not find stack")
 				}
 				// If the component and stack are specified, delete the Terraform state folder for the specified component and stack
 				err := cleanStackComponent(cliConfig, componentPath, info.StackFromArg, force, info.Component)
 				if err != nil {
-					u.LogWarning(cliConfig, err.Error())
+					return fmt.Errorf("failed to clean all components: %w", err)
 				}
 			}
 		}

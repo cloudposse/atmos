@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -170,6 +169,8 @@ func deleteFilesAndFoldersRecursive(basePath string, items []string) error {
 					u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
 					continue
 				}
+				checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
+				u.LogInfo(schema.CliConfiguration{}, fmt.Sprintf("%s Deleted %s", checkMark, item))
 			}
 		}
 	}
@@ -184,12 +185,12 @@ func cleanAllComponents(cliConfig schema.CliConfiguration, filesToClear []string
 	}
 	if !force {
 		message := "Are you sure"
-		confirm, err := confirmDeleteTerrFormLocal(message)
+		confirm, err := confirmDeleteTerraformLocal(message)
 		if err != nil {
 			return err
 		}
 		if !confirm {
-			u.LogWarning(cliConfig, "Operation canceled.")
+			u.LogWarning(cliConfig, "mission aborted.")
 			return nil
 		}
 	}
@@ -212,19 +213,17 @@ func cleanSpecificComponent(cliConfig schema.CliConfiguration, componentPath str
 	}
 
 	if !force {
-		if !force {
-			message := "Are you sure"
-			confirm, err := confirmDeleteTerrFormLocal(message)
-			if err != nil {
-				return err
-			}
-			if !confirm {
-				u.LogWarning(cliConfig, "Operation canceled.")
-				return nil
-			}
+		message := "Are you sure"
+		confirm, err := confirmDeleteTerraformLocal(message)
+		if err != nil {
+			return err
 		}
-
+		if !confirm {
+			u.LogWarning(cliConfig, "mission aborted.")
+			return nil
+		}
 	}
+
 	return deleteFilesAndFoldersRecursive(componentPath, filesToClear)
 }
 
@@ -239,27 +238,25 @@ func cleanStackComponent(cliConfig schema.CliConfiguration, componentPath, stack
 		return fmt.Errorf("component name cannot be empty")
 	}
 	if !force {
-		if !force {
-			message := "Are you sure"
-			confirm, err := confirmDeleteTerrFormLocal(message)
-			if err != nil {
-				return err
-			}
-			if !confirm {
-				u.LogWarning(cliConfig, "Operation canceled.")
-				return nil
-			}
+		message := "Are you sure"
+		confirm, err := confirmDeleteTerraformLocal(message)
+		if err != nil {
+			return err
 		}
-
+		if !confirm {
+			u.LogWarning(cliConfig, "mission aborted.")
+			return nil
+		}
 	}
-	tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d")
+
+	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
 	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack)
 	if err != nil {
 		return fmt.Errorf("failed to find stack folders: %w", err)
 	}
 
 	for _, folderName := range tfStateFolderNames {
-		tfStateFolderPath := path.Join(componentPath, "terraform.tfstate.d", folderName)
+		tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d", folderName)
 		if err := os.RemoveAll(tfStateFolderPath); err != nil {
 			return fmt.Errorf("failed to delete stack folder %s: %w", folderName, err)
 		}
@@ -268,25 +265,26 @@ func cleanStackComponent(cliConfig schema.CliConfiguration, componentPath, stack
 	}
 	return nil
 }
-func confirmDeleteTerrFormLocal(message string) (confirm bool, err error) {
+
+func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
-	th := huh.ThemeCharm()
+	t := huh.ThemeCharm()
+	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
+	purple := lipgloss.Color("#5B00FF")
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
+	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
 	confirmPrompt := huh.NewConfirm().
 		Title(message).
 		Affirmative("Yes!").
 		Negative("No.").
-		Value(&confirm).WithTheme(th)
+		Value(&confirm).WithTheme(t)
 	if err := confirmPrompt.Run(); err != nil {
 		if err == huh.ErrUserAborted {
-			return confirm, fmt.Errorf("operation canceled")
+			return confirm, fmt.Errorf("mission aborted")
 		}
 		return confirm, err
 	}
 
-	if confirm {
-		return true, nil
-	} else {
-		return false, nil
-
-	}
+	return confirm, nil
 }
