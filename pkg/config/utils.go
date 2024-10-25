@@ -327,9 +327,9 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.Logs.Level = logsLevel
 	}
 
-	tfAppendUserAgent := os.Getenv("TF_APPEND_USER_AGENT")
+	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
 	if len(tfAppendUserAgent) > 0 {
-		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var TF_APPEND_USER_AGENT=%s", tfAppendUserAgent))
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT=%s", tfAppendUserAgent))
 		cliConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 

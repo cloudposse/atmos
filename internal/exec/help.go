@@ -46,7 +46,7 @@ func processHelp(componentType string, command string) error {
 				"native arguments and flags for the 'terraform' commands. " +
 				"For example: atmos terraform plan <component> -s <stack> -- -refresh=false -lock=false")
 
-			u.PrintMessage(" - '--append-user-agent' flag sets TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. " +
+			u.PrintMessage(" - '--append-user-agent' flag sets ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. " +
 				"The recommended format is 'Atmos/<version> (Cloud Posse; +https://atmos.tools)' for enhanced observability and traceability.\n")
 
 		}
