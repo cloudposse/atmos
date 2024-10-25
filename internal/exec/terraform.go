@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	osexec "os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -92,20 +92,20 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	// Check if the component (or base component) exists as Terraform component
-	componentPath := path.Join(cliConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath := filepath.Join(cliConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			path.Join(cliConfig.Components.Terraform.BasePath, info.ComponentFolderPrefix),
+			filepath.Join(cliConfig.Components.Terraform.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute is not set to `abstract`)
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
 		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component))
+			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
 	varFile := constructTerraformComponentVarfileName(info)
@@ -124,7 +124,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				if info.Context.BaseComponent == "" {
 					return fmt.Errorf("could not find the component '%s'", info.ComponentFromArg)
 				}
-				componentPath = path.Join(componentPath, info.Context.BaseComponent)
+				componentPath = filepath.Join(componentPath, info.Context.BaseComponent)
 				err := cleanSpecificComponent(cliConfig, componentPath, filesToClear, force, info.Context.Component, info.Context.BaseComponent)
 				if err != nil {
 					u.LogWarning(cliConfig, err.Error())
@@ -145,25 +145,25 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			}
 		}
 		u.LogInfo(cliConfig, "Deleting '.terraform' folder")
-		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
+		err = os.RemoveAll(filepath.Join(componentPath, ".terraform"))
 		if err != nil {
 			u.LogWarning(cliConfig, err.Error())
 		}
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
 			u.LogInfo(cliConfig, "Deleting '.terraform.lock.hcl' file")
-			_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
+			_ = os.Remove(filepath.Join(componentPath, ".terraform.lock.hcl"))
 		}
 
 		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s", varFile))
-		_ = os.Remove(path.Join(componentPath, varFile))
+		_ = os.Remove(filepath.Join(componentPath, varFile))
 
 		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s", planFile))
-		_ = os.Remove(path.Join(componentPath, planFile))
+		_ = os.Remove(filepath.Join(componentPath, planFile))
 
 		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
 		if cliConfig.Components.Terraform.AutoGenerateBackendFile {
 			u.LogInfo(cliConfig, "Deleting 'backend.tf.json' file")
-			_ = os.Remove(path.Join(componentPath, "backend.tf.json"))
+			_ = os.Remove(filepath.Join(componentPath, "backend.tf.json"))
 		}
 
 		tfDataDir := os.Getenv("TF_DATA_DIR")
@@ -178,7 +178,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			}
 			if userAnswer == "yes" {
 				u.PrintMessage(fmt.Sprintf("Deleting folder '%s'\n", tfDataDir))
-				err = os.RemoveAll(path.Join(componentPath, tfDataDir))
+				err = os.RemoveAll(filepath.Join(componentPath, tfDataDir))
 				if err != nil {
 					u.LogWarning(cliConfig, err.Error())
 				}
@@ -251,7 +251,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Auto-generate backend file
 	if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-		backendFileName := path.Join(workingDir, "backend.tf.json")
+		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
 		u.LogDebug(cliConfig, "\nWriting the backend config to file:")
 		u.LogDebug(cliConfig, backendFileName)
@@ -271,7 +271,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Generate `providers_override.tf.json` file if the `providers` section is configured
 	if len(info.ComponentProvidersSection) > 0 {
-		providerOverrideFileName := path.Join(workingDir, "providers_override.tf.json")
+		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
 		u.LogDebug(cliConfig, "\nWriting the provider overrides to file:")
 		u.LogDebug(cliConfig, providerOverrideFileName)
@@ -369,7 +369,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		u.LogDebug(cliConfig, "Stack: "+info.StackFromArg)
 	} else {
 		u.LogDebug(cliConfig, "Stack: "+info.StackFromArg)
-		u.LogDebug(cliConfig, "Stack path: "+path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
+		u.LogDebug(cliConfig, "Stack path: "+filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
 	}
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
