@@ -184,6 +184,7 @@ func cleanAllComponents(cliConfig schema.CliConfiguration, filesToClear []string
 		return fmt.Errorf("component path cannot be empty")
 	}
 	if !force {
+		u.LogInfo(cliConfig, "this will delete all terraform state files for all components")
 		message := "Are you sure"
 		confirm, err := confirmDeleteTerraformLocal(message)
 		if err != nil {
