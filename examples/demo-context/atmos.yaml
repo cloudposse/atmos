@@ -26,6 +26,7 @@ stacks:
     - "**/*"
   excluded_paths:
     - "**/_defaults.yaml"
+    - "catalog/**/*"
 
   name_template: "{{.providers.context.values.product}}-{{.providers.context.values.region}}-{{.providers.context.values.environment}}"
 
