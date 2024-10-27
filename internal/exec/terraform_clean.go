@@ -378,6 +378,12 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	if err != nil {
 		return err
 	}
+	if info.Context.BaseComponent != "" {
+		// remove the base component from the relative path
+		relativePath = strings.Replace(relativePath, info.Context.BaseComponent, "", 1)
+		// remove the leading slash
+		relativePath = strings.TrimPrefix(relativePath, "/")
+	}
 
 	force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
 	everything := u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag)
