@@ -196,7 +196,6 @@ func getStackTerraformStateFolder(componentPath string, stack string) ([]Directo
 			return nil, fmt.Errorf("failed to collect files in %s: %w", tfStateFolderPath, err)
 		}
 		for i := range folder {
-			fmt.Println(folder[i].FullPath)
 			if folder[i].Files != nil {
 				for j := range folder[i].Files {
 					folder[i].Files[j].Name = folderName + "/" + folder[i].Files[j].Name
