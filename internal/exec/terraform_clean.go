@@ -12,18 +12,18 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-type FileInfo struct {
+type ObjectInfo struct {
 	FullPath     string
 	RelativePath string
 	Name         string
 	IsDir        bool
 }
 
-type Folder struct {
+type Directory struct {
 	Name         string
 	FullPath     string
 	RelativePath string
-	Files        []FileInfo
+	Files        []ObjectInfo
 }
 
 // findFoldersNamesWithPrefix finds the names of folders that match the given prefix under the specified root path.
@@ -66,15 +66,15 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 	return folderNames, nil
 }
 
-func CollectFoldersWithFiles(basePath string, patterns []string) ([]Folder, error) {
+func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, error) {
 	if basePath == "" {
 		return nil, fmt.Errorf("path cannot be empty")
 	}
 
-	var folders []Folder
+	var folders []Directory
 
 	// Helper function to add file information if it exists
-	addFileInfo := func(filePath string) (*FileInfo, error) {
+	addFileInfo := func(filePath string) (*ObjectInfo, error) {
 		relativePath, err := filepath.Rel(basePath, filePath)
 		if err != nil {
 			return nil, fmt.Errorf("error determining relative path for %s: %v", filePath, err)
@@ -86,7 +86,7 @@ func CollectFoldersWithFiles(basePath string, patterns []string) ([]Folder, erro
 			return nil, fmt.Errorf("error stating file %s: %v", filePath, err)
 		}
 
-		return &FileInfo{
+		return &ObjectInfo{
 			FullPath:     filePath,
 			RelativePath: relativePath,
 			Name:         filepath.Base(filePath),
@@ -95,22 +95,22 @@ func CollectFoldersWithFiles(basePath string, patterns []string) ([]Folder, erro
 	}
 
 	// Function to create a folder entry with its files
-	createFolder := func(folderPath string, folderName string) (*Folder, error) {
+	createFolder := func(folderPath string, folderName string) (*Directory, error) {
 		relativePath, err := filepath.Rel(basePath, folderPath)
 		if err != nil {
 			return nil, fmt.Errorf("error determining relative path for folder %s: %v", folderPath, err)
 		}
 
-		return &Folder{
+		return &Directory{
 			Name:         folderName,
 			FullPath:     folderPath,
 			RelativePath: relativePath,
-			Files:        []FileInfo{},
+			Files:        []ObjectInfo{},
 		}, nil
 	}
 
 	// Function to collect files for a given folder path
-	collectFilesInFolder := func(folder *Folder, folderPath string) error {
+	collectFilesInFolder := func(folder *Directory, folderPath string) error {
 		for _, pat := range patterns {
 			matchedFiles, err := filepath.Glob(filepath.Join(folderPath, pat))
 			if err != nil {
@@ -178,24 +178,25 @@ func CollectFoldersWithFiles(basePath string, patterns []string) ([]Folder, erro
 }
 
 // get stack terraform state files
-func getStackTerraformStateFolder(componentPath string, stack string) ([]Folder, error) {
+func getStackTerraformStateFolder(componentPath string, stack string) ([]Directory, error) {
 	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
 	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find stack folders: %w", err)
 	}
-	var stackTfStateFolders []Folder
+	var stackTfStateFolders []Directory
 	for _, folderName := range tfStateFolderNames {
 		tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d", folderName)
 		// Check if exists
 		if _, err := os.Stat(tfStateFolderPath); os.IsNotExist(err) {
 			continue
 		}
-		folder, err := CollectFoldersWithFiles(tfStateFolderPath, []string{"*.tfstate", "*.tfstate.backup"})
+		folder, err := CollectDirectoryObjects(tfStateFolderPath, []string{"*.tfstate", "*.tfstate.backup"})
 		if err != nil {
 			return nil, fmt.Errorf("failed to collect files in %s: %w", tfStateFolderPath, err)
 		}
 		for i := range folder {
+			fmt.Println(folder[i].FullPath)
 			if folder[i].Files != nil {
 				for j := range folder[i].Files {
 					folder[i].Files[j].Name = folderName + "/" + folder[i].Files[j].Name
@@ -265,7 +266,8 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 func DeletePathTerraform(fullPath string, objectName string) error {
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 		xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
-		fmt.Printf("%s Error deleting %s", xMark, objectName)
+		fmt.Printf("%s Error deleting not exist %s", xMark, objectName)
+		fmt.Println()
 		return err
 	}
 	// Attempt to delete the file or folder If the path does not exist, RemoveAll returns nil (no error)
@@ -273,6 +275,7 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	if err != nil {
 		xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
 		fmt.Printf("%s Error deleting %s", xMark, objectName)
+		fmt.Println()
 		return err
 	}
 
@@ -297,7 +300,7 @@ func confirmDeletion(cliConfig schema.CliConfiguration) (bool, error) {
 }
 
 // deleteFolders handles the deletion of the specified folders and files.
-func deleteFolders(folders []Folder, relativePath string) {
+func deleteFolders(folders []Directory, relativePath string) {
 	for _, folder := range folders {
 		for _, file := range folder.Files {
 			path := filepath.ToSlash(filepath.Join(relativePath, file.Name))
@@ -308,6 +311,14 @@ func deleteFolders(folders []Folder, relativePath string) {
 			}
 		}
 	}
+	// check if the folder is empty by using the os.ReadDir function
+	for _, folder := range folders {
+		entries, err := os.ReadDir(folder.FullPath)
+		if err == nil && len(entries) == 0 {
+			os.Remove(folder.FullPath)
+		}
+	}
+
 }
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
@@ -335,7 +346,7 @@ func handleTFDataDir(componentPath string, cliConfig schema.CliConfiguration) {
 	}
 }
 func initializeFilesToClear(info schema.ConfigAndStacksInfo, cliConfig schema.CliConfiguration, everything bool) []string {
-	if everything {
+	if everything && info.Stack == "" {
 		return []string{".terraform", ".terraform.lock.hcl", "*.tfvar.json", "terraform.tfstate.d"}
 	}
 	varFile := constructTerraformComponentVarfileName(info)
@@ -371,8 +382,9 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 
 	force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
 	everything := u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag)
+
 	filesToClear := initializeFilesToClear(info, cliConfig, everything)
-	folders, err := CollectFoldersWithFiles(cleanPath, filesToClear)
+	folders, err := CollectDirectoryObjects(cleanPath, filesToClear)
 	if err != nil {
 		u.LogTrace(cliConfig, fmt.Errorf("error collecting folders and files: %v", err).Error())
 		return err
@@ -381,8 +393,8 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	if info.Component != "" && info.Stack != "" {
 		stackFolders, err := getStackTerraformStateFolder(cleanPath, info.Stack)
 		if err != nil {
-			fmt.Println("Error getting stack folders:", err)
-			return err
+			errMsg := fmt.Errorf("error getting stack terraform state folders: %v", err)
+			u.LogTrace(cliConfig, errMsg.Error())
 		}
 		folders = append(folders, stackFolders...)
 	}
