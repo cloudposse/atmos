@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // processHelp processes help commands
@@ -46,8 +47,9 @@ func processHelp(componentType string, command string) error {
 				"native arguments and flags for the 'terraform' commands. " +
 				"For example: atmos terraform plan <component> -s <stack> -- -refresh=false -lock=false")
 
-			u.PrintMessage(" - '--append-user-agent' flag sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. " +
-				"Example: 'Atmos/<version> (Cloud Posse; +https://atmos.tools)'\n")
+			u.PrintMessage(fmt.Sprintf(" - '--append-user-agent' flag sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. "+
+				"Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. "+
+				"If not specified, defaults to 'atmos %s'\n", version.Version, version.Version))
 
 		}
 
