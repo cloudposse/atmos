@@ -36,8 +36,7 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 	// First, read the directories at the root level (level 1)
 	level1Dirs, err := os.ReadDir(root)
 	if err != nil {
-		u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error reading root directory %s: %v", root, err))
-		return nil, err
+		return nil, fmt.Errorf("error reading root directory %s: %w", root, err)
 	}
 
 	for _, dir := range level1Dirs {
@@ -191,20 +190,20 @@ func getStackTerraformStateFolder(componentPath string, stack string) ([]Directo
 		if _, err := os.Stat(tfStateFolderPath); os.IsNotExist(err) {
 			continue
 		}
-		folder, err := CollectDirectoryObjects(tfStateFolderPath, []string{"*.tfstate", "*.tfstate.backup"})
+		directories, err := CollectDirectoryObjects(tfStateFolderPath, []string{"*.tfstate", "*.tfstate.backup"})
 		if err != nil {
 			return nil, fmt.Errorf("failed to collect files in %s: %w", tfStateFolderPath, err)
 		}
-		for i := range folder {
-			if folder[i].Files != nil {
-				for j := range folder[i].Files {
-					folder[i].Files[j].Name = folderName + "/" + folder[i].Files[j].Name
+		for i := range directories {
+			if directories[i].Files != nil {
+				for j := range directories[i].Files {
+					directories[i].Files[j].Name = folderName + "/" + directories[i].Files[j].Name
 
 				}
 
 			}
 		}
-		stackTfStateFolders = append(stackTfStateFolders, folder...)
+		stackTfStateFolders = append(stackTfStateFolders, directories...)
 	}
 
 	return stackTfStateFolders, nil
@@ -229,8 +228,13 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 		fmt.Printf("Error getting absolute path for basePath: %v\n", err)
 		return "", err
 	}
+	absComponentPath, err := filepath.Abs(componentPath)
+	if err != nil {
+		fmt.Printf("Error getting absolute path for componentPath: %v\n", err)
+		return "", err
+	}
 
-	relPath, err := filepath.Rel(absBasePath, componentPath)
+	relPath, err := filepath.Rel(absBasePath, absComponentPath)
 	if err != nil {
 		fmt.Printf("Error getting relative path: %v\n", err)
 		return "", err
@@ -242,7 +246,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := huh.ThemeCharm()
 	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
-	purple := lipgloss.Color("#5B00FF")
+	purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
 	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
 	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
 	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
@@ -265,7 +269,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 func DeletePathTerraform(fullPath string, objectName string) error {
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 		xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
-		fmt.Printf("%s Error deleting not exist %s", xMark, objectName)
+		fmt.Printf("%s Cannot delete %s: path does not exist", xMark, objectName)
 		fmt.Println()
 		return err
 	}
@@ -280,7 +284,7 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 
 	checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
 	fmt.Printf("%s deleted %s", checkMark, objectName)
-	println()
+	fmt.Println()
 	return nil
 }
 
