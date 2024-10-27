@@ -108,98 +108,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
-	varFile := constructTerraformComponentVarfileName(info)
-	planFile := constructTerraformComponentPlanfileName(info)
 	if info.SubCommand == "clean" {
-		if u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) || u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag) {
-			force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
-			filesToClear := []string{"backend.tf.json", ".terraform", "terraform.tfstate.d", ".terraform.lock.hcl"}
-			if info.ComponentFromArg == "" {
-				err := cleanAllComponents(cliConfig, filesToClear, componentPath, force)
-				if err != nil {
-					u.LogWarning(cliConfig, err.Error())
-				}
-				return nil
-			} else if info.ComponentFromArg != "" && info.StackFromArg == "" {
-				if info.Context.BaseComponent == "" {
-					return fmt.Errorf("could not find the component '%s'", info.ComponentFromArg)
-				}
-				componentPath = filepath.Join(componentPath, info.Context.BaseComponent)
-				err := cleanSpecificComponent(cliConfig, componentPath, filesToClear, force, info.Context.Component, info.Context.BaseComponent)
-				if err != nil {
-					u.LogWarning(cliConfig, err.Error())
-				}
-				return nil
-			} else {
-				if info.Context.Component == "" {
-					return fmt.Errorf("could not find the component '%s'", info.Context.Component)
-				}
-				if info.Stack == "" {
-					return fmt.Errorf("could not find stack")
-				}
-				// If the component and stack are specified, delete the Terraform state folder for the specified component and stack
-				err := cleanStackComponent(cliConfig, componentPath, info.StackFromArg, force, info.Component)
-				if err != nil {
-					u.LogWarning(cliConfig, err.Error())
-				}
-			}
+		err := handleCleanSubCommand(info, componentPath, cliConfig)
+		if err != nil {
+			u.LogTrace(cliConfig, fmt.Errorf("error cleaning the terraform component: %v", err).Error())
+			return err
 		}
-		item := ".terraform"
-		fullPath := filepath.Join(componentPath, ".terraform")
-		if err := DeletePathTerraform(fullPath, item); err != nil {
-			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
-		}
-
-		if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
-			item := ".terraform.lock.hcl"
-			fullPath := filepath.Join(componentPath, ".terraform.lock.hcl")
-			if err := DeletePathTerraform(fullPath, item); err != nil {
-				u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
-			}
-		}
-
-		item = fmt.Sprintf("varfile : %s", varFile)
-		fullPath = filepath.Join(componentPath, varFile)
-		if err := DeletePathTerraform(fullPath, item); err != nil {
-			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
-		}
-
-		item = fmt.Sprintf("planfile: %s", planFile)
-		fullPath = filepath.Join(componentPath, planFile)
-		if err := DeletePathTerraform(fullPath, item); err != nil {
-			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
-		}
-		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
-		if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-			item := "backend.tf.json"
-			fullPath := filepath.Join(componentPath, "backend.tf.json")
-			if err := DeletePathTerraform(fullPath, item); err != nil {
-				u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("Error deleting %s: %v", item, err))
-			}
-		}
-
-		tfDataDir := os.Getenv("TF_DATA_DIR")
-		if len(tfDataDir) > 0 && tfDataDir != "." && tfDataDir != "/" && tfDataDir != "./" {
-			u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
-			var userAnswer string
-			u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)\n", tfDataDir))
-			fmt.Print("Enter a value: ")
-			count, err := fmt.Scanln(&userAnswer)
-			if count > 0 && err != nil {
-				return err
-			}
-			if userAnswer == "yes" {
-				u.PrintMessage(fmt.Sprintf("Deleting folder '%s'\n", tfDataDir))
-				err = os.RemoveAll(filepath.Join(componentPath, tfDataDir))
-				if err != nil {
-					u.LogWarning(cliConfig, err.Error())
-				}
-			}
-		}
-
 		return nil
 	}
-
+	varFile := constructTerraformComponentVarfileName(info)
+	planFile := constructTerraformComponentPlanfileName(info)
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
