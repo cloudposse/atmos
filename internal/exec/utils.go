@@ -218,7 +218,7 @@ func processCommandLineArgs(
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
-		err = processHelp(componentType, argsAndFlagsInfo.SubCommand)
+		err = processHelp(schema.CliConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -629,8 +629,14 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 	var info schema.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
-
 	var indexesToRemove []int
+
+	// For commands like `atmos terraform clean` and `atmos terraform plan`, show the command help
+	if len(inputArgsAndFlags) == 1 {
+		info.SubCommand = inputArgsAndFlags[0]
+		info.NeedHelp = true
+		return info, nil
+	}
 
 	// https://github.com/roboll/helmfile#cli-reference
 	var globalOptionsFlagIndex int
