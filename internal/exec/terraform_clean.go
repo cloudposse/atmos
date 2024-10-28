@@ -225,18 +225,15 @@ func determineCleanPath(info schema.ConfigAndStacksInfo, componentPath string) (
 func getRelativePath(basePath, componentPath string) (string, error) {
 	absBasePath, err := filepath.Abs(basePath)
 	if err != nil {
-		fmt.Printf("Error getting absolute path for basePath: %v\n", err)
 		return "", err
 	}
 	absComponentPath, err := filepath.Abs(componentPath)
 	if err != nil {
-		fmt.Printf("Error getting absolute path for componentPath: %v\n", err)
 		return "", err
 	}
 
 	relPath, err := filepath.Rel(absBasePath, absComponentPath)
 	if err != nil {
-		fmt.Printf("Error getting relative path: %v\n", err)
 		return "", err
 	}
 
@@ -327,26 +324,32 @@ func deleteFolders(folders []Directory, relativePath string) {
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
 func handleTFDataDir(componentPath string, cliConfig schema.CliConfiguration) {
 	tfDataDir := os.Getenv("TF_DATA_DIR")
-	if tfDataDir == "" || tfDataDir == "." || tfDataDir == "/" || tfDataDir == "./" {
+	if tfDataDir == "" {
+		return
+	}
+	absTFDataDir, err := filepath.Abs(tfDataDir)
+	if err != nil {
+		u.LogWarning(cliConfig, fmt.Sprintf("Error resolving TF_DATA_DIR path: %v", err))
+		return
+	}
+	if absTFDataDir == "/" || absTFDataDir == filepath.Clean("/") {
+		u.LogWarning(cliConfig, "Refusing to delete root directory '/'")
+		return
+	}
+	if strings.Contains(absTFDataDir, "..") {
+		u.LogWarning(cliConfig, "Refusing to delete directory containing '..'")
 		return
 	}
 
 	u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
-	u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)\n", tfDataDir))
-	fmt.Print("Enter a value: ")
-
-	var userAnswer string
-	if _, err := fmt.Scanln(&userAnswer); err != nil {
-		u.LogWarning(cliConfig, fmt.Sprintf("Error reading input: %v", err))
+	u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
+	if confirm, err := confirmDeletion(cliConfig); err != nil || !confirm {
 		return
 	}
-
-	if userAnswer == "yes" {
-		u.PrintMessage(fmt.Sprintf("Deleting folder '%s'\n", tfDataDir))
-		if err := os.RemoveAll(filepath.Join(componentPath, tfDataDir)); err != nil {
-			u.LogWarning(cliConfig, err.Error())
-		}
+	if err := DeletePathTerraform(filepath.Join(componentPath, tfDataDir), tfDataDir); err != nil {
+		u.LogWarning(cliConfig, err.Error())
 	}
+
 }
 func initializeFilesToClear(info schema.ConfigAndStacksInfo, cliConfig schema.CliConfiguration, everything bool) []string {
 	if everything && info.Stack == "" {
@@ -407,14 +410,25 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		}
 		folders = append(folders, stackFolders...)
 	}
-
 	if len(folders) == 0 {
 		u.LogWarning(cliConfig, "Nothing to delete")
 		return nil
 	}
-
 	if !force {
-		u.LogInfo(cliConfig, "This will delete all terraform state files for all components")
+		if everything && info.Component == "" {
+			// extra line after delete all
+			u.LogInfo(cliConfig, "This will delete all")
+			u.LogInfo(cliConfig, " terraform state files for all components")
+		} else if info.Component != "" && info.Stack != "" {
+			u.LogInfo(cliConfig, "This will delete")
+			u.LogInfo(cliConfig, fmt.Sprintf("terraform state files for component '%s' in stack '%s'", info.Component, info.Stack))
+
+		} else if info.Component != "" {
+			u.LogInfo(cliConfig, "This will delete all")
+			u.LogInfo(cliConfig, fmt.Sprintf("terraform state files for component '%s'", info.Component))
+		} else {
+			u.LogInfo(cliConfig, "This will delete selected terraform state files")
+		}
 		if confirm, err := confirmDeletion(cliConfig); err != nil || !confirm {
 			return err
 		}
