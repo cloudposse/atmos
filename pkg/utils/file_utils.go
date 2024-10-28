@@ -198,6 +198,9 @@ func SearchConfigFile(path string) (string, bool) {
 // IsURL checks if a string is a URL
 func IsURL(s string) bool {
 	url, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
 	validSchemes := []string{"http", "https"}
 	schemeValid := false
 	for _, scheme := range validSchemes {
@@ -206,7 +209,7 @@ func IsURL(s string) bool {
 			break
 		}
 	}
-	return err == nil && schemeValid
+	return schemeValid
 
 }
 
