@@ -310,7 +310,7 @@ func deleteFolders(folders []Directory, relativePath string) {
 }
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
-func handleTFDataDir(componentPath string, cliConfig schema.CliConfiguration) {
+func handleTFDataDir(componentPath string, relativePath string, cliConfig schema.CliConfiguration) {
 
 	tfDataDir := os.Getenv("TF_DATA_DIR")
 	if tfDataDir == "" {
@@ -329,7 +329,7 @@ func handleTFDataDir(componentPath string, cliConfig schema.CliConfiguration) {
 	if confirm, err := confirmDeletion(cliConfig); err != nil || !confirm {
 		return
 	}
-	if err := DeletePathTerraform(filepath.Join(componentPath, tfDataDir), tfDataDir); err != nil {
+	if err := DeletePathTerraform(filepath.Join(componentPath, tfDataDir), filepath.Join(relativePath, tfDataDir)); err != nil {
 		u.LogWarning(cliConfig, err.Error())
 	}
 
@@ -452,7 +452,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 	if len(tfDataDirFolders) > 0 {
 		tfDataDirFolder := tfDataDirFolders[0]
-		handleTFDataDir(tfDataDirFolder.FullPath, cliConfig)
+		handleTFDataDir(tfDataDirFolder.FullPath, relativePath, cliConfig)
 	}
 
 	return nil
