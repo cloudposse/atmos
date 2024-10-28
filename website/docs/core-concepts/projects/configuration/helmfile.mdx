@@ -11,7 +11,11 @@ import File from '@site/src/components/File'
 Atmos natively supports opinionated workflows for Helmfile. It's compatible with every version of helmfile and designed to work with multiple different versions of Helmfile concurrently.
 </Intro>
 
-Keep in mind that Atmos does not handle the downloading or installation of Helmfile (or Kustomize, a dependency of Helmfile); it assumes that any required commands are already installed on your system. To automate this, consider creating a [Custom Command](/core-concepts/custom-commands) to install Helmfile.
+Keep in mind that Atmos does not handle the downloading or installation of Helmfile (or its dependency Kustomize); it assumes these commands are already installed on your system. For installation instructions, refer to:
+- [Helmfile Installation Guide](https://helmfile.readthedocs.io/en/latest/#installation)
+- [Kustomize Installation Guide](https://kubectl.docs.kubernetes.io/installation/kustomize/)
+
+To automate the installation process, consider creating a [Custom Command](/core-concepts/custom-commands).
 
 Atmos provides many settings that are specific to Helmfile which are configured in `atmos.yaml`.
 
