@@ -212,6 +212,9 @@ func IsURL(s string) bool {
 
 // GetFileNameFromURL extracts the file name from a URL
 func GetFileNameFromURL(rawURL string) (string, error) {
+	if rawURL == "" {
+		return "", fmt.Errorf("empty URL provided")
+	}
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
 		return "", err
