@@ -32,9 +32,9 @@ func processHelp(componentType string, command string) error {
 			u.PrintMessage(" - 'atmos terraform clean' command deletes the '.terraform' folder, '.terraform.lock.hcl' lock file, " +
 				"and the previously generated 'planfile', 'varfile', and 'backend.tf.json' file for the specified component and stack. " +
 				"Use the --everything flag to also delete the Terraform state files and directories for the component. " +
-				"Note: State files store the current state of your infrastructure and should be handled with care.\n\n" +
+				"Note: State files store the local state of your infrastructure and should be handled with care, if not using a remote backend.\n\n" +
 				"Additional flags:\n" +
-				"  --force Forcefully delete Terraform state files and directories\n" +
+				"  --force Forcefully delete Terraform state files and directories without interaction\n" +
 				"  --skip-lock-file Skip deleting the '.terraform.lock.hcl' file\n\n" +
 				"If no component or stack is specified, the clean operation will apply globally to all components." +
 				"  --skip-lock-file Skip deleting the '.terraform.lock.hcl' file\n\n" +
