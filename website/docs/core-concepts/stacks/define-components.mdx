@@ -161,11 +161,11 @@ components:
         inherits:
           - example-defaults
 
-      # Define the terraform variables, which will get deep-merged and exported to a `.tfvars` file by atmos.
+      # Define the Helmfile variables, which will get deep-merged into the Helmfile configuration.
       vars:
         enabled: true
-        name: superduper
-        nodes: 10
+        release_name: my-release
+        chart_version: "1.2.3"
 ```
 
 #### Helmfile Attributes
