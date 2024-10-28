@@ -195,21 +195,6 @@ components:
   <dt>`settings`</dt>
   <dd>The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations).</dd>
 
-  <dt>`base_path`</dt>
-  <dd>The root directory where the Helmfile components and configurations are located. This path serves as the starting point for resolving any relative paths within the Helmfile setup.</dd>
-
-  <dt>`use_eks` (default: `false`)</dt>
-  <dd>A flag indicating whether the component is configured to use Amazon EKS (Elastic Kubernetes Service). When set to `true`, the component will interact with EKS for provisioning and managing Kubernetes clusters. Also, it means `cluster_name_pattern` must be defined.</dd>
-
-  <dt>`kubeconfig_path`</dt>
-  <dd>The file path to the `kubeconfig` file, which contains the necessary authentication and configuration details to interact with the Kubernetes cluster. This path is essential for managing cluster resources using Helmfile.</dd>
-
-  <dt>`helm_aws_profile_pattern`</dt>
-  <dd>A pattern that defines which AWS CLI profiles should be used by Helm when interacting with AWS services, such as EKS. This allows for dynamic selection of AWS credentials based on the environment or cluster.</dd>
-
-  <dt>`cluster_name_pattern` (required when `use_eks=true`)</dt>
-  <dd>A naming pattern used to identify and select the Kubernetes cluster within the Helmfile configuration. This pattern helps automate the management of different clusters by matching their names based on the specified criteria.</dd>
-
 </dl>
 
 
