@@ -439,7 +439,7 @@ components:
       backend:
         s3:
           # Ensure the path in the bucket is stable across versions
-          # IMPORTANT: If not explicilty set, the `workspace_key_prefix` will include the version
+          # IMPORTANT: If not explicitly set, the `workspace_key_prefix` will include the version
           #            This will cause the state to be lost when upgrading between versions.
           workspace_key_prefix: vpc
       metadata:
