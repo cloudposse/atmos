@@ -417,17 +417,17 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	if !force {
 		if everything && info.Component == "" {
 			// extra line after delete all
-			u.LogInfo(cliConfig, "This will delete all")
-			u.LogInfo(cliConfig, " terraform state files for all components")
+			u.PrintMessage("This will delete all")
+			u.PrintMessage("terraform state files for all components")
 		} else if info.Component != "" && info.Stack != "" {
-			u.LogInfo(cliConfig, "This will delete")
-			u.LogInfo(cliConfig, fmt.Sprintf("terraform state files for component '%s' in stack '%s'", info.Component, info.Stack))
+			u.PrintMessage("This will delete")
+			u.PrintMessage(fmt.Sprintf("terraform state files for component '%s' in stack '%s'", info.Component, info.Stack))
 
 		} else if info.Component != "" {
-			u.LogInfo(cliConfig, "This will delete all")
-			u.LogInfo(cliConfig, fmt.Sprintf("terraform state files for component '%s'", info.Component))
+			u.PrintMessage("This will delete all")
+			u.PrintMessage(fmt.Sprintf("terraform state files for component '%s'", info.Component))
 		} else {
-			u.LogInfo(cliConfig, "This will delete selected terraform state files")
+			u.PrintMessage("This will delete selected terraform state files")
 		}
 		if confirm, err := confirmDeletion(cliConfig); err != nil || !confirm {
 			return err
