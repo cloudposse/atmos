@@ -11,7 +11,6 @@ import Intro from '@site/src/components/Intro';
     Once you're done developing your components and configuring them with stacks, you can deploy them with a single command or in a CI/CD pipeline.
 </Intro>
 
-
 In Atmos, when we talk about "Deployment," it refers to taking the [fully rendered and deep-merged configuration](/core-concepts/describe) of a [stack](/core-concepts/stacks) and provisioning an instance of one of the components. We call this a "component instance," and it's simply a component that has been deployed in a specific stack.
 
 ### Deployment in Atmos
@@ -39,7 +38,6 @@ All configurations in Atmos are defined in YAML. If you can write a Terraform mo
 - [GitHub Actions](/integrations/github-actions): Currently, our GitHub Actions do not support dependency order application.
 - [Spacelift](/integrations/spacelift): Our Spacelift integrations support dependency order application.
 - [Atlantis](/integrations/atlantis): By customizing the template generated for Atlantis, similar dependency handling can probably be achieved, although we do not have any documentation on this.
-
 
 ### Automate Cold Starts
 

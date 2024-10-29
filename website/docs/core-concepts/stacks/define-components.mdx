@@ -23,11 +23,14 @@ To configure a Component in a [Stack](/core-concepts/stacks), you define the com
   that consists of the resources defined in the `.tf` files in a working directory
   (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/main/examples/tests/components/terraform/infra/vpc))
 
-- **Component Configuration** provides configuration (variables and other settings) for a type of component (e.g. a Terraform component) 
+- **Component Configuration** provides configuration (variables and other settings) for a type of component (e.g. a Terraform component)
   and is defined in one or more YAML stack config files (which are called [Atmos stacks](/core-concepts/stacks))
 :::
 
-The schema of an Atmos Component in an Atmos Stack is as follows:
+
+### Terraform Schema
+
+The schema of an Atmos Terraform Component in an Atmos Stack is as follows:
 
 ```yaml
 components:
@@ -39,7 +42,7 @@ components:
       metadata:
         # Components can be of type "real" (default) or "abstract"
         type: real
-        # This is the directory path of the component. 
+        # This is the directory path of the component.
         # In this example, we're referencing a component in the `components/terraform/stable/example` folder.
         component: stable/example
 
@@ -59,10 +62,9 @@ components:
         nodes: 10
 ```
 
-### Component Attributes
+#### Terraform Attributes
 
 <dl>
-
   <dt>`vars` (optional)</dt>
   <dd>The `vars` section is a free-form map. Use [component validation](/core-concepts/validate) to enforce policies.</dd>
 
@@ -134,15 +136,79 @@ components:
 
 </dl>
 
+
+
+### Helmfile Schema
+
+The schema of an Atmos Helmfile Component in an Atmos Stack is as follows:
+
+```yaml
+components:
+  helmfile:
+    # the slug of the component
+    example:
+
+      # configuration specific to atmos
+      metadata:
+        # Components can be of type "real" (default) or "abstract"
+        type: real
+
+        # This is the directory path of the component.
+        # In this example, we're referencing a component in the `components/terraform/stable/example` folder.
+        component: stable/example
+
+        # We can leverage multiple inheritance to sequentially deep merge multiple configurations
+        inherits:
+          - example-defaults
+
+      # Define the Helmfile variables, which will get deep-merged into the Helmfile configuration.
+      vars:
+        enabled: true
+        release_name: my-release
+        chart_version: "1.2.3"
+```
+
+#### Helmfile Attributes
+
+<dl>
+
+  <dt>`vars` (optional)</dt>
+  <dd>The `vars` section is a free-form map. Use [component validation](/core-concepts/validate) to enforce policies.</dd>
+
+  <dt>`vars.namespace` (optional)</dt>
+  <dd>
+  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
+
+  The namespace of all stacks. Typically, there will be one namespace for the organization.
+
+  Example:
+
+  ```yaml
+  vars:
+    namespace: acme
+  ```
+  </dd>
+
+  <dt>`metadata` (optional)</dt>
+  <dd>The `metadata` section extends functionality of the component.</dd>
+
+  <dt>`settings`</dt>
+  <dd>The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations).</dd>
+
+</dl>
+
+
 ### Types of Components
+
+In Atmos, each component configuration defines its type through the `metadata.type` parameter. This defines how the component behaves—whether it can be used directly to provision resources or serves as a base configuration for other components.
 
 The type of component is expressed in the `metadata.type` parameter of a given component configuration.
 
 There are two types of components:
 <dl>
   <dt>`real`</dt>
-  <dd>is a ["concrete"](https://en.wikipedia.org/wiki/Concrete_class) component instance that can be provisioned</dd>
+  <dd>Think of a `real` component as one that can be deployed. It’s fully configured and ready to be provisioned, similar to a "concrete" class in programming. Once defined, you can use it to create resources or services directly in your infrastructure.</dd>
 
   <dt>`abstract`</dt>
-  <dd>a component configuration, which cannot be instantiated directly. The concept is borrowed from ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) of Object-Oriented Programming</dd>
+  <dd>An `abstract` component is more like a blueprint. It can’t be deployed on its own. Instead, it’s a base configuration that needs to be extended or inherited by other components. This is similar to an ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) in programming—it defines reusable configurations, but it’s not complete enough to be deployed directly.</dd>
 </dl>
