@@ -11,6 +11,7 @@ import Link from '@docusaurus/Link';
 import Intro from '@site/src/components/Intro'
 import LatestRelease from '@site/src/components/LatestRelease'
 import File from '@site/src/components/File'
+import CodeBlock from '@theme/CodeBlock';
 
 <Intro>
 There are many ways to install Atmos. Choose the method that works best for you!
@@ -97,7 +98,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     nix-env -iA nixpkgs.atmos
     ```
 
-    To get the latest version, you may need to update the Nix config to add "unstable" packages. 
+    To get the latest version, you may need to update the Nix config to add "unstable" packages.
 
     For example, in `~/.config/nixpkgs/config.nix` add the following line to the file:
 
@@ -125,7 +126,13 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     __NOTE:__ Don't have `scoop`? Install it first from https://scoop.sh/
 
   </TabItem>
+</Tabs>
 
+## Other Ways to Install
+
+Atmos has a few other ways to install, including using Go, asdf, mise, aqua, building from source, or using the automatic installer.
+
+<Tabs>
   <TabItem value="go" label="Go">
     #### Install with Go
 
@@ -137,9 +144,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 
     Grab a specific version:
 
-    ```shell
-    go install github.com/cloudposse/atmos@v1.64.0
-    ```
+    <CodeBlock language="shell">go install github.com/cloudposse/atmos@<LatestRelease /></CodeBlock>
 
     Or specifically request the latest version.
 
@@ -147,8 +152,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     go install github.com/cloudposse/atmos@latest
     ```
 
-    __NOTE:__ Since the version is passed in via `-ldflags` during the build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1`
-    when running `atmos version`.
+    __NOTE:__ Since the version is passed in via `-ldflags` during the build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1` when running `atmos version`.
   </TabItem>
 
   <TabItem value="asdf" label="asdf">
@@ -168,9 +172,8 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 
     Install a specified version:
 
-    ```shell
-    asdf install atmos <LatestRelease />
-    ```
+    <CodeBlock language="shell">asdf install atmos <LatestRelease /></CodeBlock>
+
     Alternatively, create a `.tool-versions` file in your project to specify a consistent version for the users:
     <File title=".tool-versions">
       <pre>
@@ -189,10 +192,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     #### Install with Mise
 
     Install a specified version:
-
-    ```shell
-    mise use atmos@<LatestRelease />
-    ```
+    <CodeBlock language="shell">mise use atmos@<LatestRelease /></CodeBlock>
 
     Alternatively, create a `.mise.toml` file in your repository to specify a consistent version for the users:
     <File title=".mise.toml">
@@ -242,7 +242,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     or run this and replace `$version` with the version that should be returned with `atmos version`.
 
     ```shell
-    go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/cmd.Version=$version'"
+    go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
     ```
   </TabItem>
 
