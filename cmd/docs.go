@@ -17,7 +17,7 @@ import (
 
 const atmosDocsURL = "https://atmos.tools"
 
-// docsCmd opens the Atmos docs or displays component documentation
+// docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
 	Use:                "docs",
 	Short:              "Open the Atmos docs or display component documentation",
@@ -28,8 +28,7 @@ var docsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 1 {
 			info := schema.ConfigAndStacksInfo{
-				ComponentFromArg:      args[0],
-				FinalComponent:        args[0],
+				Component:             args[0],
 				ComponentFolderPrefix: "terraform",
 			}
 
@@ -38,34 +37,37 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
 
-			// Use only BasePath and FinalComponent to construct the correct path
-			componentPath := path.Join(cliConfig.Components.Terraform.BasePath, info.FinalComponent)
+			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
+			componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, info.Component)
+
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
-				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
-					info.ComponentFromArg,
-					info.FinalComponent,
-					cliConfig.Components.Terraform.BasePath,
+				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'",
+					info.Component,
+					componentPath,
 				))
 			}
 
 			readmePath := path.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); os.IsNotExist(err) {
-				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("No README found for component: %s", info.FinalComponent))
+				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("No README found for component: %s", info.Component))
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
-			renderedContent, err := glamour.Render(string(readmeContent), "dark")
+
+			componentDocs, err := glamour.Render(string(readmeContent), "dark")
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
-			fmt.Println(renderedContent)
+
+			fmt.Println(componentDocs)
 			return
 		}
 
+		// Opens atmos.tools docs if no component argument is provided
 		var err error
 		switch runtime.GOOS {
 		case "linux":
