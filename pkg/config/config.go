@@ -338,11 +338,12 @@ func processConfigFile(
 	path string,
 	v *viper.Viper,
 ) (bool, error) {
-	if !u.FileExists(path) {
+	// Check if the config file exists
+	configPath, fileExists := u.SearchConfigFile(path)
+	if !fileExists {
 		return false, nil
 	}
-
-	reader, err := os.Open(path)
+	reader, err := os.Open(configPath)
 	if err != nil {
 		return false, err
 	}
@@ -350,7 +351,7 @@ func processConfigFile(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(cliConfig, fmt.Sprintf("error closing file '"+path+"'. "+err.Error()))
+			u.LogWarning(cliConfig, fmt.Sprintf("error closing file '"+configPath+"'. "+err.Error()))
 		}
 	}(reader)
 

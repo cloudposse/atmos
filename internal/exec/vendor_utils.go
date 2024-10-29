@@ -27,14 +27,18 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	flags := cmd.Flags()
+
+	// Check if the `stack` flag is set
+	// If it's set, process stacks
+	processStacks := flags.Changed("stack")
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	cliConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
 		return err
 	}
-
-	flags := cmd.Flags()
 
 	dryRun, err := flags.GetBool("dry-run")
 	if err != nil {
@@ -125,15 +129,10 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 	var vendorConfig schema.AtmosVendorConfig
 	vendorConfigFileExists := true
 
-	// If the vendoring manifest is specified without an extension, use the default extension
-	if filepath.Ext(vendorConfigFile) == "" {
-		vendorConfigFile = vendorConfigFile + cfg.DefaultVendoringManifestFileExtension
-	}
+	// Check if the vendoring manifest file exists
+	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
 
-	foundVendorConfigFile := vendorConfigFile
-
-	// Look for the vendoring manifest in the current directory
-	if !u.FileExists(vendorConfigFile) {
+	if !fileExists {
 		// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`
 		pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
 
@@ -181,8 +180,11 @@ func ExecuteAtmosVendorInternal(
 	var uri string
 	vendorConfigFilePath := path.Dir(vendorConfigFileName)
 
-	u.LogInfo(cliConfig, fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName))
-
+	logMessage := fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName)
+	if len(tags) > 0 {
+		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
+	}
+	u.LogInfo(cliConfig, logMessage)
 	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
 	}
