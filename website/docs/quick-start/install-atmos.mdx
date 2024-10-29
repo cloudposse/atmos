@@ -242,7 +242,7 @@ Atmos has a few other ways to install, including using Go, asdf, mise, aqua, bui
     or run this and replace `$version` with the version that should be returned with `atmos version`.
 
     ```shell
-    go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/cmd.Version=$version'"
+    go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
     ```
   </TabItem>
 
