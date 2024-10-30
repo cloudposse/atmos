@@ -41,7 +41,10 @@ var docsCmd = &cobra.Command{
 			componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, info.Component)
 
 			componentPathExists, err := u.IsDirectory(componentPath)
-			if err != nil || !componentPathExists {
+			if err != nil {
+				u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			}
+			if !componentPathExists {
 				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'",
 					info.Component,
 					componentPath,
@@ -49,8 +52,12 @@ var docsCmd = &cobra.Command{
 			}
 
 			readmePath := path.Join(componentPath, "README.md")
-			if _, err := os.Stat(readmePath); os.IsNotExist(err) {
-				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("No README found for component: %s", info.Component))
+			if _, err := os.Stat(readmePath); err != nil {
+				if os.IsNotExist(err) {
+					u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("No README found for component: %s", info.Component))
+				} else {
+					u.LogErrorAndExit(schema.CliConfiguration{}, err)
+				}
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
