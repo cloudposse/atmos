@@ -40,9 +40,13 @@ func FindAllStackConfigsInPathsForStack(
 			// TODO: review `doublestar` library
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
-				y, _ := u.ConvertToYAML(cliConfig)
-				return nil, nil, false, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
+				if cliConfig.Logs.Level == u.LogLevelTrace {
+					y, _ := u.ConvertToYAML(cliConfig)
+					return nil, nil, false, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
+				}
+				return nil, nil, false, err
 			}
+
 		}
 
 		// Exclude files that match any of the excludePaths
@@ -118,8 +122,11 @@ func FindAllStackConfigsInPaths(
 			// TODO: review `doublestar` library
 			matches, err = u.GetGlobMatches(pathWithExt)
 			if err != nil {
-				y, _ := u.ConvertToYAML(cliConfig)
-				return nil, nil, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
+				if cliConfig.Logs.Level == u.LogLevelTrace {
+					y, _ := u.ConvertToYAML(cliConfig)
+					return nil, nil, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
+				}
+				return nil, nil, err
 			}
 		}
 
@@ -318,6 +325,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 	if len(logsLevel) > 0 {
 		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
 		cliConfig.Logs.Level = logsLevel
+	}
+
+	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
+	if len(tfAppendUserAgent) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT=%s", tfAppendUserAgent))
+		cliConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 
 	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")

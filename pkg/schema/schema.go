@@ -62,6 +62,7 @@ type TemplatesSettingsGomplate struct {
 type Terraform struct {
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
+	AppendUserAgent         string `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
 	DeployRunInit           bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
 	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
 	AutoGenerateBackendFile bool   `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
@@ -132,6 +133,7 @@ type ArgsAndFlagsInfo struct {
 	DeployRunInit             string
 	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
+	AppendUserAgent           string
 	UseTerraformPlan          bool
 	PlanFile                  string
 	DryRun                    bool

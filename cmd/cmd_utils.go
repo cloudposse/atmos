@@ -17,6 +17,21 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// ValidateConfig holds configuration options for Atmos validation.
+// CheckStack determines whether stack configuration validation should be performed.
+type ValidateConfig struct {
+	CheckStack bool
+	// Other configuration fields
+}
+
+type AtmosValidateOption func(*ValidateConfig)
+
+func WithStackValidation(check bool) AtmosValidateOption {
+	return func(cfg *ValidateConfig) {
+		cfg.CheckStack = check
+	}
+}
+
 // processCustomCommands processes and executes custom commands
 func processCustomCommands(
 	cliConfig schema.CliConfiguration,
@@ -225,7 +240,7 @@ func executeCustomCommand(
 			}
 			if component == "" || component == "<no value>" {
 				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName))
+					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
@@ -235,7 +250,7 @@ func executeCustomCommand(
 			}
 			if stack == "" || stack == "<no value>" {
 				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName))
+					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
 			}
 
 			// Get the config for the component in the stack
@@ -323,17 +338,27 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config
-func checkAtmosConfig() {
+func checkAtmosConfig(opts ...AtmosValidateOption) {
+	vCfg := &ValidateConfig{
+		CheckStack: true, // Default value true to check the stack
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(vCfg)
+	}
+
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
-
-	if !atmosConfigExists || err != nil {
-		printMessageForMissingAtmosConfig(cliConfig)
-		os.Exit(0)
+	if vCfg.CheckStack {
+		atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
+		if !atmosConfigExists || err != nil {
+			printMessageForMissingAtmosConfig(cliConfig)
+			os.Exit(0)
+		}
 	}
 }
 
@@ -391,4 +416,9 @@ func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 
 	u.PrintMessageInColor("Install Atmos:\n", c2)
 	u.PrintMessage("https://atmos.tools/install\n")
+}
+
+// Check Atmos is version command
+func isVersionCommand() bool {
+	return len(os.Args) > 1 && os.Args[1] == "version"
 }

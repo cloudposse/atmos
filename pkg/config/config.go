@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 var (
@@ -43,6 +44,7 @@ var (
 				DeployRunInit:           true,
 				InitRunReconfigure:      true,
 				AutoGenerateBackendFile: true,
+				AppendUserAgent:         fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version),
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
@@ -105,6 +107,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 	// Default configuration values
 	v.SetDefault("components.helmfile.use_eks", true)
+	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 
 	// Process config in system folder
 	configFilePath1 := ""
@@ -243,6 +246,11 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		cliConfig.BasePath = configAndStacksInfo.AtmosBasePath
 	}
 
+	// After unmarshalling, ensure AppendUserAgent is set if still empty
+	if cliConfig.Components.Terraform.AppendUserAgent == "" {
+		cliConfig.Components.Terraform.AppendUserAgent = fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version)
+	}
+
 	// Check config
 	err = checkConfig(cliConfig)
 	if err != nil {
@@ -338,11 +346,12 @@ func processConfigFile(
 	path string,
 	v *viper.Viper,
 ) (bool, error) {
-	if !u.FileExists(path) {
+	// Check if the config file exists
+	configPath, fileExists := u.SearchConfigFile(path)
+	if !fileExists {
 		return false, nil
 	}
-
-	reader, err := os.Open(path)
+	reader, err := os.Open(configPath)
 	if err != nil {
 		return false, err
 	}
@@ -350,7 +359,7 @@ func processConfigFile(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(cliConfig, fmt.Sprintf("error closing file '"+path+"'. "+err.Error()))
+			u.LogWarning(cliConfig, fmt.Sprintf("error closing file '"+configPath+"'. "+err.Error()))
 		}
 	}(reader)
 
