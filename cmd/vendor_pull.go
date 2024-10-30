@@ -15,8 +15,9 @@ var vendorPullCmd = &cobra.Command{
 	Long:               `This command executes 'atmos vendor pull' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
+		// WithStackValidation is a functional option that enables/disables stack configuration validation
+		// based on whether the --stack flag is provided
+		checkAtmosConfig(WithStackValidation(cmd.Flag("stack").Changed))
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
