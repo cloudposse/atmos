@@ -23,6 +23,7 @@ type ValidateConfig struct {
 	CheckStack bool
 	// Other configuration fields
 }
+
 type AtmosValidateOption func(*ValidateConfig)
 
 func WithStackValidation(check bool) AtmosValidateOption {
@@ -346,10 +347,12 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	for _, opt := range opts {
 		opt(vCfg)
 	}
+
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
+
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
