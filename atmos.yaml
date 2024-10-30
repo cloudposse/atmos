@@ -22,6 +22,9 @@ vendor:
   # Supports both absolute and relative paths
   # If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
   # Can also be set using 'ATMOS_VENDOR_BASE_PATH' ENV var, or '--vendor-base-path' command-line argument
+  # Examples:
+  #   base_path: "./vendor.yaml"           # Single file
+  #   base_path: "./vendor/configs/"       # Directory containing multiple .yaml files
   base_path: "./vendor.yaml"
 
 components:

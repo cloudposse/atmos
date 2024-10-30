@@ -49,7 +49,7 @@ If `atmos.yaml` is not found in any of the searched locations, Atmos will use th
 ```yaml
 base_path: "."
 vendor:
-  vendor_yaml_path: vendor.yaml
+  base_path: "./vendor.yaml"
 components:
   terraform:
     base_path: components/terraform
@@ -607,7 +607,7 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 |:------------------------------------------------------|:------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                                                                                                  |
 | ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                                                                                                               |
-| ATMOS_VENDOR_YAML_PATH                                | vendor.vendor_yaml_path                         | Path to the vendor configuration file (vendor.yaml). Supports both absolute and relative paths. Used to configure vendor-specific settings for the Atmos CLI.                                                                                                                                                                                        |
+| ATMOS_VENDOR_BASE_PATH                                | vendor.base_path                                | Path to vendor configuration file or directory containing vendor files. If a directory is specified, all .yaml files in the directory will be processed in lexicographical order. Supports both absolute and relative paths. |
 | ATMOS_COMPONENTS_TERRAFORM_COMMAND                    | components.terraform.command                    | The executable to be called by `atmos` when running Terraform commands                                                                                                                                                       |
 | ATMOS_COMPONENTS_TERRAFORM_BASE_PATH                  | components.terraform.base_path                  | Base path to Terraform components                                                                                                                                                                                            |
 | ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE         | components.terraform.apply_auto_approve         | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                     |
