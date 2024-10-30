@@ -10,10 +10,10 @@ on:
       - main
       - release/v*
     paths-ignore:
-      - '.github/**'
-      - 'docs/**'
-      - 'examples/**'
-      - 'test/**'
+      - ".github/**"
+      - "docs/**"
+      - "examples/**"
+      - "test/**"
 
   workflow_dispatch:
 
@@ -94,29 +94,29 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-    - name: Check out code
-      uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
 
-    - uses: hadolint/hadolint-action@v3.1.0
-      id: hadolint
-      with:
-        dockerfile: Dockerfile
-        failure-threshold: warning
-        format: sarif
-        output-file: hadolint.sarif
-        # https://github.com/hadolint/hadolint?tab=readme-ov-file#rules
-        # DL3008 Pin versions in apt-get install
-        ignore: DL3008
+      - uses: hadolint/hadolint-action@v3.1.0
+        id: hadolint
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+          format: sarif
+          output-file: hadolint.sarif
+          # https://github.com/hadolint/hadolint?tab=readme-ov-file#rules
+          # DL3008 Pin versions in apt-get install
+          ignore: DL3008
 
-    - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        # Path to SARIF file relative to the root of the repository
-        sarif_file: hadolint.sarif
-        # Optional category for the results (used to differentiate multiple results for one commit)
-        category: hadolint
-        wait-for-processing: true
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          # Path to SARIF file relative to the root of the repository
+          sarif_file: hadolint.sarif
+          # Optional category for the results (used to differentiate multiple results for one commit)
+          category: hadolint
+          wait-for-processing: true
 
   # run localstack demo tests
   localstack:
@@ -254,7 +254,7 @@ jobs:
           # - demo-mock-architecture
           # - demo-stack-templating
           # - demo-multi-cloud
-          # - demo-vendoring
+          - demo-vendoring
 
     timeout-minutes: 20
     steps:

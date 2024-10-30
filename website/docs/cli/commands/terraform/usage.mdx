@@ -114,6 +114,8 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --re
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr ./errors.txt
 
 atmos terraform plan test/test-component -s tenant1-ue2-dev -- -refresh=false -lock=false
+
+atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent "Acme/1.0 (Build 1234; arm64)"
 ```
 
 ## Arguments
@@ -124,12 +126,12 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev -- -refresh=false -l
 
 ## Flags
 
-| Flag                | Description                                                                                                                                   | Alias | Required |
-| :------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------- | :---- | :------- |
-| `--stack`           | Atmos stack                                                                                                                                   | `-s`  | yes      |
-| `--dry-run`         | Dry run                                                                                                                                       |       | no       |
-| `--redirect-stderr` | File descriptor to redirect `stderr` to.<br/>Errors can be redirected to any file or any standard file descriptor<br/>(including `/dev/null`) |       | no       |
-
+| Flag                  | Description                                                                                                                                   | Alias | Required |
+| :------------------   | :-------------------------------------------------------------------------------------------------------------------------------------------- | :---- | :------- |
+| `--stack`             | Atmos stack                                                                                                                                   | `-s`  | yes      |
+| `--dry-run`           | Dry run                                                                                                                                       |       | no       |
+| `--redirect-stderr`   | File descriptor to redirect `stderr` to.<br/>Errors can be redirected to any file or any standard file descriptor<br/>(including `/dev/null`) |       | no       |
+| `--append-user-agent` | Append a custom User-Agent to Terraform requests. Can also be set using the ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT environment variable.|       | no       |
 <br />
 
 :::note
