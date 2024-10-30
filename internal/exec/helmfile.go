@@ -228,6 +228,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		envVars = append(envVars, fmt.Sprintf("REGION=%s", context.Region))
 	}
 
+	if cliConfig.Components.Helmfile.KubeconfigPath != "" {
+		envVars = append(envVars, fmt.Sprintf("KUBECONFIG=%s", cliConfig.Components.Helmfile.KubeconfigPath))
+	}
+
 	if cliConfig.Components.Helmfile.UseEKS {
 		envVars = append(envVars, envVarsEKS...)
 	}
