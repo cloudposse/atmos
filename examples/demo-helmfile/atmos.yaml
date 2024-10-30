@@ -4,16 +4,24 @@ schemas:
   atmos:
     manifest: "schemas/atmos-manifest.json"
 
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
 components:
   helmfile:
     base_path: "components/helmfile"
     use_eks: false
-    kubeconfig_path: "{{ .Env.KUBECONFIG }}"
 
 stacks:
   base_path: "stacks"
   included_paths:
-    - "**/*"
+    - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_pattern: "{stage}"
