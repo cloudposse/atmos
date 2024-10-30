@@ -358,13 +358,13 @@ func IsValidDataDir(tfDataDir string) error {
 	}
 	absTFDataDir, err := filepath.Abs(tfDataDir)
 	if err != nil {
-		return fmt.Errorf(" Error resolving TF_DATA_DIR path: %v", err)
+		return fmt.Errorf("error resolving TF_DATA_DIR path: %v", err)
 	}
 	if absTFDataDir == "/" || absTFDataDir == filepath.Clean("/") {
-		return fmt.Errorf(" Refusing to delete root directory '/'")
+		return fmt.Errorf("refusing to delete root directory '/'")
 	}
 	if strings.Contains(absTFDataDir, "..") {
-		return fmt.Errorf(" Refusing to delete directory containing '..'")
+		return fmt.Errorf("refusing to delete directory containing '..'")
 	}
 	return nil
 }

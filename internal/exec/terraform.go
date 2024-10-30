@@ -83,7 +83,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return err
 		}
 		if len(info.Stack) < 1 && shouldCheckStack {
-			return errors.New("stack must be specified")
+			return errors.New("stack must be specified when not using --everything or --force flags")
 		}
 	}
 
