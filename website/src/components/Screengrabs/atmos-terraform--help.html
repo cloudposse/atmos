@@ -28,6 +28,7 @@ Additions and differences from native terraform:
  - 'atmos terraform generate varfile' command generates a varfile for an 'atmos' component in a stack
  - 'atmos terraform generate varfiles' command generates varfiles for all 'atmos' components in all stacks
  - 'atmos terraform shell' command configures an environment for an 'atmos' component in a stack and starts a new shell allowing executing all native terraform commands inside the shell without using atmos-specific arguments and flags
+ - `--append-user-agent` flag allows you to customize the User-Agent string appended to Terraform requests for enhanced observability and traceability.
  - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional native arguments and flags for the 'terraform' commands. For example: atmos terraform plan &lt;component&gt; -s &lt;stack&gt; -- -refresh=false -lock=false
 
 Usage: terraform [global options] &lt;subcommand&gt; [args]

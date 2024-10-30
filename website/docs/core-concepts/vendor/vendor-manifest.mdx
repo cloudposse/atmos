@@ -424,6 +424,33 @@ Pulling sources for the component 'vpc-flow-logs-bucket' from 'github.com/cloudp
 ```
 </Terminal>
 
+## Vendoring Multiple Versions of Components
+
+Atmos supports vendoring multiple versions of the same component. This is useful when you need to pin stacks to different versions of the same component.
+
+When vendoring multiple versions of the same component, use the `{{ .Version }}` template parameter in the `targets` attribute to ensure the components are vendored into different folders. Then update the stack configuration to point to the correct version of the component, and ensure the `backend.s3.workspace_key_prefix` is defined _without the version_ to ensure you can seamlessly upgrade between versions of a component wihtout losing the state. By default the `workspace_key_prefix` incorporates the `component` relative path, which will include the version if it's included in the path.
+
+```
+components:
+  terraform:
+    # `vpc` is the Atmos component name
+    vpc:
+      # Backend configuration for the component
+      backend:
+        s3:
+          # Ensure the path in the bucket is stable across versions
+          # IMPORTANT: If not explicitly set, the `workspace_key_prefix` will include the version
+          #            This will cause the state to be lost when upgrading between versions.
+          workspace_key_prefix: vpc
+      metadata:
+        # Point to the Terraform component on the filesystem
+        component: vpc/1.2.3
+```
+
+:::important
+If not using the S3 backend, use the appropriate parameter for your backend to ensure the workspace is stable across versions of the component deployed.
+:::
+
 ## Vendoring from OCI Registries
 
 Atmos supports vendoring from [OCI registries](https://opencontainers.org).

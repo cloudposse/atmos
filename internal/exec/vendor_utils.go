@@ -27,14 +27,18 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	flags := cmd.Flags()
+
+	// Check if the `stack` flag is set
+	// If it's set, process stacks
+	processStacks := flags.Changed("stack")
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	cliConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize CLI config: %w", err)
 	}
-
-	flags := cmd.Flags()
 
 	dryRun, err := flags.GetBool("dry-run")
 	if err != nil {

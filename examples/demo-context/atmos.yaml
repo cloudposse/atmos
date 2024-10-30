@@ -23,7 +23,7 @@ components:
 stacks:
   base_path: "stacks"
   included_paths:
-    - "**/*"
+    - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
 

@@ -66,8 +66,6 @@ Components are different from Stacks.
 
 When a component is added to a stack, we call that a "Component Instance"
 
-
-
 ### Parent Stacks vs Child Stacks
 
 <dl>
@@ -150,27 +148,33 @@ components:
 
 ### Stack Attributes
 
-#### components
+<dl>
+  <dt>`components`</dt>
+  <dd>
+  The `components` is the list of all the building blocks.
 
-The `components` is the list of all the building blocks.
+  Example:
 
-Example:
+  ```yaml
+  components:
+    sometool: # "sometool" can be any tool
+      somecomponent: # "somecomponent" can be the name of any "sometool" component
+        vars: # etc...
+  ```
+  </dd>
 
-```yaml
-components:
-  sometool: # "sometool" can be any tool
-    somecomponent: # "somecomponent" can be the name of any "sometool" component
-      vars: # etc...
-```
+  <dt>`components.terraform`</dt>
+  <dd>
+  So for `terraform`, it might look something like this:
 
-So for `terraform`, it might look something like this:
-
-```yaml
-components:
-  terraform:
-    vpc:
-      vars: # etc...
-```
+  ```yaml
+  components:
+    terraform:
+      vpc:
+        vars: # etc...
+  ```
+  </dd>
+</dl>
 
 ## Stack Files
 
