@@ -167,15 +167,16 @@ func preCustomCommand(
 ) {
 	var sb strings.Builder
 	if len(args) != len(commandConfig.Arguments) {
-		sb.WriteString(fmt.Sprintf("This command needs %d argument(s):", len(commandConfig.Arguments)))
-		argName := make([]string, 0, len(commandConfig.Arguments))
-		for _, arg := range commandConfig.Arguments {
+		sb.WriteString(fmt.Sprintf("Command requires %d argument(s):\n", len(commandConfig.Arguments)))
+		for i, arg := range commandConfig.Arguments {
 			if arg.Name == "" {
 				u.LogErrorAndExit(schema.CliConfiguration{}, errors.New("invalid argument configuration: empty argument name"))
 			}
-			argName = append(argName, arg.Name)
+			sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, arg.Name))
 		}
-		sb.WriteString(fmt.Sprintf(" %s", strings.Join(argName, ", ")))
+		if len(args) > 0 {
+			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s", len(args), strings.Join(args, ", ")))
+		}
 		u.LogErrorAndExit(schema.CliConfiguration{}, errors.New(sb.String()))
 	}
 
