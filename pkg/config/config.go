@@ -48,7 +48,7 @@ var (
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
-				KubeconfigPath:        "/dev/shm",
+				KubeconfigPath:        "",
 				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
 				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 				UseEKS:                true,
