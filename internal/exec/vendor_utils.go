@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
+	"github.com/bmatcuk/doublestar/v4"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -163,18 +164,14 @@ func ReadAndProcessVendorConfigFile(
 
 	var configFiles []string
 	if fileInfo.IsDir() {
-		// Read all .yaml files from directory
-		entries, err := os.ReadDir(foundVendorConfigFile)
+		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "**/*.{yaml,yml}")
 		if err != nil {
 			return vendorConfig, false, "", err
 		}
-
-		// Filter for .yaml files and sort
-		for _, entry := range entries {
-			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
-				configFiles = append(configFiles, filepath.Join(foundVendorConfigFile, entry.Name()))
-			}
+		for i, match := range matches {
+			matches[i] = filepath.Join(foundVendorConfigFile, match)
 		}
+		configFiles = matches
 		sort.Strings(configFiles)
 	} else {
 		configFiles = []string{foundVendorConfigFile}
