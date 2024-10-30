@@ -2,8 +2,7 @@ base_path: "./"
 
 schemas:
   atmos:
-    manifest: "schemas/atmos-manifest.json"
-
+    manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 # https://pkg.go.dev/text/template
 templates:
   settings:
