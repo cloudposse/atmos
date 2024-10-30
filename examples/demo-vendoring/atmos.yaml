@@ -24,7 +24,7 @@ vendor:
   #base_path: "./vendor"
   
   # Absolute path
-  # base_path: "nested-vendor/vendor1.yaml"
+  # base_path: "vendor.d/vendor1.yaml"
 
 logs:
   file: "/dev/stderr"
