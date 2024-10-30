@@ -1,0 +1,14 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: vendor-test-2
+  description: Test vendor config 2
+spec:
+  sources:
+    - component: "weather"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "components/terraform/{{ .Component }}/{{.Version}}"
+      tags:
+        - demo

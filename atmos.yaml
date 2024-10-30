@@ -18,10 +18,11 @@
 base_path: "./examples/quick-start-advanced"
 
 vendor:
-  # Path to the vendor.yaml file
+  # Path to vendor configuration file or directory containing vendor files
   # Supports both absolute and relative paths
-  # Can also be set using 'ATMOS_VENDOR_YAML_PATH' ENV var, or '--vendor-yaml-path' command-line argument
-  vendor_yaml_path: "./vendor.yaml"
+  # If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
+  # Can also be set using 'ATMOS_VENDOR_BASE_PATH' ENV var, or '--vendor-base-path' command-line argument
+  base_path: "./vendor.yaml"
 
 components:
   terraform:

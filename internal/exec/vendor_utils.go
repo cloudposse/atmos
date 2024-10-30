@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -120,23 +122,20 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 }
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
-func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorConfigFile string) (
-	schema.AtmosVendorConfig,
-	bool,
-	string,
-	error,
-) {
+func ReadAndProcessVendorConfigFile(
+	cliConfig schema.CliConfiguration,
+	vendorConfigFile string,
+) (schema.AtmosVendorConfig, bool, string, error) {
 	var vendorConfig schema.AtmosVendorConfig
-	vendorConfigFileExists := true
+	var vendorConfigFileExists bool
 	var foundVendorConfigFile string
 
-	// Check if the vendor config path is defined in atmos.yaml
-	if cliConfig.Vendor.VendorYamlPath != "" {
-		// Resolve the vendor_yaml_path relative to base_path if it's a relative path
-		if !filepath.IsAbs(cliConfig.Vendor.VendorYamlPath) {
-			foundVendorConfigFile = filepath.Join(cliConfig.BasePath, cliConfig.Vendor.VendorYamlPath)
+	// Check if vendor config is specified in atmos.yaml
+	if cliConfig.Vendor.BasePath != "" {
+		if !filepath.IsAbs(cliConfig.Vendor.BasePath) {
+			foundVendorConfigFile = filepath.Join(cliConfig.BasePath, cliConfig.Vendor.BasePath)
 		} else {
-			foundVendorConfigFile = cliConfig.Vendor.VendorYamlPath
+			foundVendorConfigFile = cliConfig.Vendor.BasePath
 		}
 	} else {
 		// Path is not defined in atmos.yaml, proceed with existing logic
@@ -149,31 +148,61 @@ func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorCon
 
 			if !u.FileExists(pathToVendorConfig) {
 				vendorConfigFileExists = false
-				return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", pathToVendorConfig)
+				return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file or directory '%s' does not exist", pathToVendorConfig)
 			}
 
 			foundVendorConfigFile = pathToVendorConfig
 		}
 	}
 
-	// Read the vendor config file
-	vendorConfigFileContent, err := os.ReadFile(foundVendorConfigFile)
+	// Check if it's a directory
+	fileInfo, err := os.Stat(foundVendorConfigFile)
 	if err != nil {
-		return vendorConfig, vendorConfigFileExists, "", err
+		return vendorConfig, false, "", err
 	}
 
-	vendorConfig, err = u.UnmarshalYAML[schema.AtmosVendorConfig](string(vendorConfigFileContent))
-	if err != nil {
-		return vendorConfig, vendorConfigFileExists, "", err
+	var configFiles []string
+	if fileInfo.IsDir() {
+		// Read all .yaml files from directory
+		entries, err := os.ReadDir(foundVendorConfigFile)
+		if err != nil {
+			return vendorConfig, false, "", err
+		}
+
+		// Filter for .yaml files and sort
+		for _, entry := range entries {
+			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
+				configFiles = append(configFiles, filepath.Join(foundVendorConfigFile, entry.Name()))
+			}
+		}
+		sort.Strings(configFiles)
+	} else {
+		configFiles = []string{foundVendorConfigFile}
 	}
 
-	if vendorConfig.Kind != "AtmosVendorConfig" {
-		return vendorConfig, vendorConfigFileExists, "",
-			fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'AtmosVendorConfig'",
-				vendorConfig.Kind,
-				foundVendorConfigFile,
-			)
+	// Process all config files
+	var mergedSources []schema.AtmosVendorSource
+	var mergedImports []string
+
+	for _, configFile := range configFiles {
+		vendorConfigFileContent, err := os.ReadFile(configFile)
+		if err != nil {
+			return vendorConfig, false, "", err
+		}
+
+		var currentConfig schema.AtmosVendorConfig
+		if err := yaml.Unmarshal(vendorConfigFileContent, &currentConfig); err != nil {
+			return vendorConfig, false, "", err
+		}
+
+		mergedSources = append(mergedSources, currentConfig.Spec.Sources...)
+		mergedImports = append(mergedImports, currentConfig.Spec.Imports...)
 	}
+
+	// Create final merged config
+	vendorConfig.Spec.Sources = mergedSources
+	vendorConfig.Spec.Imports = mergedImports
+	vendorConfigFileExists = true
 
 	return vendorConfig, vendorConfigFileExists, foundVendorConfigFile, nil
 }

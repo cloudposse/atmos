@@ -131,7 +131,7 @@ type ArgsAndFlagsInfo struct {
 	StacksDir                 string
 	WorkflowsDir              string
 	BasePath                  string
-	VendorYamlPathFlag        string
+	VendorBasePath            string
 	DeployRunInit             string
 	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
@@ -178,7 +178,7 @@ type ConfigAndStacksInfo struct {
 	AdditionalArgsAndFlags        []string
 	GlobalOptions                 []string
 	BasePath                      string
-	VendorYamlPathFlag            string
+	VendorBasePathFlag            string
 	TerraformCommand              string
 	TerraformDir                  string
 	HelmfileCommand               string
@@ -551,5 +551,7 @@ type AtmosVendorConfig struct {
 }
 
 type Vendor struct {
-	VendorYamlPath string `yaml:"vendor_yaml_path" json:"vendor_yaml_path" mapstructure:"vendor_yaml_path"`
+	// Path to vendor configuration file or directory containing vendor files
+	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 }
