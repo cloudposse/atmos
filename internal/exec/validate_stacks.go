@@ -1,11 +1,16 @@
 package exec
 
 import (
+	"context"
 	"fmt"
+	"net/url"
+	"os"
 	"path"
 	"reflect"
 	"strings"
+	"time"
 
+	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -86,15 +91,20 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 			atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
 		} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
 			atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
+		} else if u.IsURL(cliConfig.Schemas.Atmos.Manifest) {
+			atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(cliConfig.Schemas.Atmos.Manifest)
+			if err != nil {
+				return err
+			}
 		} else {
 			return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist.\n"+
 				"It can be configured in the 'schemas.atmos.manifest' section in 'atmos.yaml', or provided using the 'ATMOS_SCHEMAS_ATMOS_MANIFEST' "+
 				"ENV variable or '--schemas-atmos-manifest' command line argument.\n"+
-				"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'.",
+				"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'. \n"+
+				"Alternatively, you can specify a schema file using a URL that will be downloaded automatically.",
 				cliConfig.Schemas.Atmos.Manifest)
 		}
 	}
-
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
 	includedPaths := []string{"**/*"}
 	// Don't exclude any YAML files for validation
@@ -339,4 +349,33 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 	}
 
 	return res, nil
+}
+
+// downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
+func downloadSchemaFromURL(manifestURL string) (string, error) {
+	parsedURL, err := url.Parse(manifestURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL '%s': %w", manifestURL, err)
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return "", fmt.Errorf("unsupported URL scheme '%s' for schema manifest", parsedURL.Scheme)
+	}
+	tempDir := os.TempDir()
+	fileName, err := u.GetFileNameFromURL(manifestURL)
+	if err != nil || fileName == "" {
+		return "", fmt.Errorf("failed to get the file name from the URL '%s': %w", manifestURL, err)
+	}
+	atmosManifestJsonSchemaFilePath := path.Join(tempDir, fileName)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	client := &getter.Client{
+		Ctx:  ctx,
+		Dst:  atmosManifestJsonSchemaFilePath,
+		Src:  manifestURL,
+		Mode: getter.ClientModeFile,
+	}
+	if err = client.Get(); err != nil {
+		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
+	}
+	return atmosManifestJsonSchemaFilePath, nil
 }
