@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -149,11 +150,13 @@ func preCustomCommand(
 	parentCommand *cobra.Command,
 	commandConfig *schema.Command,
 ) {
-	var err error
 
 	if len(args) != len(commandConfig.Arguments) {
-		err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(commandConfig.Arguments))
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		errMsg := fmt.Sprintf("This command needs %d argument(s):", len(commandConfig.Arguments))
+		for _, arg := range commandConfig.Arguments {
+			errMsg = fmt.Sprintf("%s %s", errMsg, arg.Name)
+		}
+		u.LogErrorAndExit(schema.CliConfiguration{}, errors.New(errMsg))
 	}
 
 	// no "steps" means a sub command should be specified
