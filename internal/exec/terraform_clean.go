@@ -324,11 +324,6 @@ func handleTFDataDir(componentPath string, relativePath string, cliConfig schema
 		u.LogWarning(cliConfig, fmt.Sprintf("TF_DATA_DIR '%s' does not exist", tfDataDir))
 		return
 	}
-	u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
-	u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
-	if confirm, err := confirmDeletion(cliConfig); err != nil || !confirm {
-		return
-	}
 	if err := DeletePathTerraform(filepath.Join(componentPath, tfDataDir), filepath.Join(relativePath, tfDataDir)); err != nil {
 		u.LogWarning(cliConfig, err.Error())
 	}
@@ -408,7 +403,9 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			errMsg := fmt.Errorf("error getting stack terraform state folders: %v", err)
 			u.LogTrace(cliConfig, errMsg.Error())
 		}
-		folders = append(folders, stackFolders...)
+		if stackFolders != nil {
+			folders = append(folders, stackFolders...)
+		}
 	}
 	tfDataDir := os.Getenv("TF_DATA_DIR")
 
@@ -422,34 +419,42 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			u.LogTrace(cliConfig, fmt.Errorf("error collecting folder of ENV TF_DATA_DIR: %v", err).Error())
 		}
 	}
-	if len(folders) == 0 && len(tfDataDirFolders) == 0 {
+	total := len(folders) + len(tfDataDirFolders)
+
+	if total == 0 {
 		u.PrintMessage("Nothing to delete")
 		return nil
 	}
-	if len(folders) > 0 {
+
+	if total > 0 {
 		if !force {
+			if len(tfDataDirFolders) > 0 {
+				u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
+				u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
+			}
 			var message string
-			if everything && info.Component == "" {
-				message = "This will delete all terraform state files for all components"
+			if everything && info.ComponentFromArg == "" {
+				message = fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
 			} else if info.Component != "" && info.Stack != "" {
-				message = fmt.Sprintf("This will delete terraform state files for component '%s' in stack '%s'", info.Component, info.Stack)
-			} else if info.Component != "" {
-				message = fmt.Sprintf("This will delete all terraform state files for component '%s'", info.Component)
+				message = fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, info.Component, info.Stack)
+			} else if info.ComponentFromArg != "" {
+				message = fmt.Sprintf("This will delete %v local terraform state files for component '%s'", total, info.ComponentFromArg)
 			} else {
 				message = "This will delete selected terraform state files"
 			}
 			u.PrintMessage(message)
+			println()
 			if confirm, err := confirmDeletion(cliConfig); err != nil || !confirm {
 				return err
 			}
 		}
 
 		deleteFolders(folders, relativePath)
+		if len(tfDataDirFolders) > 0 {
+			tfDataDirFolder := tfDataDirFolders[0]
+			handleTFDataDir(tfDataDirFolder.FullPath, relativePath, cliConfig)
+		}
 
-	}
-	if len(tfDataDirFolders) > 0 {
-		tfDataDirFolder := tfDataDirFolders[0]
-		handleTFDataDir(tfDataDirFolder.FullPath, relativePath, cliConfig)
 	}
 
 	return nil
