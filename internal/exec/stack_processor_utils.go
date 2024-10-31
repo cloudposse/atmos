@@ -1516,6 +1516,7 @@ func processSettingsIntegrationsGithub(cliConfig schema.CliConfiguration, settin
 	settingsIntegrationsSection := make(map[string]any)
 	settingsIntegrationsGithubSection := make(map[string]any)
 
+	// Find `settings.integrations.github` section from stack manifests
 	if settingsIntegrations, ok := settings[cfg.IntegrationsSectionName]; ok {
 		if settingsIntegrationsMap, ok := settingsIntegrations.(map[string]any); ok {
 			settingsIntegrationsSection = settingsIntegrationsMap
@@ -1527,6 +1528,7 @@ func processSettingsIntegrationsGithub(cliConfig schema.CliConfiguration, settin
 		}
 	}
 
+	// deep-merge the `settings.integrations.github` section from stack manifests with  the `integrations.github` section from `atmos.yaml`
 	settingsIntegrationsGithubMerged, err := m.Merge(
 		cliConfig,
 		[]map[string]any{
@@ -1537,6 +1539,7 @@ func processSettingsIntegrationsGithub(cliConfig schema.CliConfiguration, settin
 		return nil, err
 	}
 
+	// Update the `settings.integrations.github` section
 	if len(settingsIntegrationsGithubMerged) > 0 {
 		settingsIntegrationsSection[cfg.GithubSectionName] = settingsIntegrationsGithubMerged
 		settings[cfg.IntegrationsSectionName] = settingsIntegrationsSection
