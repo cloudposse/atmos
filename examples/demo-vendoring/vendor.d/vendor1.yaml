@@ -2,8 +2,9 @@ apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
   name: vendor-test-1
-  description:  Demo vendor configuration showcasing the structure and usage of Atmos vendor configs.
-  This example demonstrates component sourcing from GitHub repositories with versioning.
+  description: |
+    Demo vendor configuration showcasing the structure and usage of Atmos vendor configs.
+    This example demonstrates component sourcing from GitHub repositories with versioning.
 spec:
   sources:
     - component: "ipinfo"
