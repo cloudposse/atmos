@@ -48,11 +48,9 @@ func processHelp(
 			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
 				"native arguments and flags for the 'terraform' commands. " +
 				"For example: atmos terraform plan <component> -s <stack> -- -refresh=false -lock=false")
-
 			u.PrintMessage(fmt.Sprintf(" - '--append-user-agent' flag sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. "+
 				"Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. "+
 				"If not specified, defaults to 'atmos %s'\n", version.Version, version.Version))
-
 		}
 
 		if componentType == "helmfile" {
@@ -66,15 +64,6 @@ func processHelp(
 			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
 				"native arguments and flags for the 'helmfile' commands")
 		}
-
-		if cliConfig.Logs.Level == u.LogLevelTrace {
-			fmt.Println()
-			err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, "")
-			if err != nil {
-				return err
-			}
-		}
-
 	} else if componentType == "terraform" && command == "clean" {
 		u.PrintMessage("\n'atmos terraform clean' command deletes the following folders and files from the component's directory:\n\n" +
 			" - '.terraform' folder\n" +
@@ -119,14 +108,6 @@ func processHelp(
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
 		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
 		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
-
-		if cliConfig.Logs.Level == u.LogLevelTrace {
-			fmt.Println()
-			err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, "")
-			if err != nil {
-				return err
-			}
-		}
 	}
 
 	return nil
