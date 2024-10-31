@@ -181,19 +181,37 @@ func ReadAndProcessVendorConfigFile(
 	var mergedSources []schema.AtmosVendorSource
 	var mergedImports []string
 
+	seenSources := make(map[string]bool)
+	seenImports := make(map[string]bool)
+
 	for _, configFile := range configFiles {
 		vendorConfigFileContent, err := os.ReadFile(configFile)
 		if err != nil {
-			return vendorConfig, false, "", err
+			return vendorConfig, false, "", fmt.Errorf("error reading vendor config file '%s': %w", configFile, err)
 		}
 
 		var currentConfig schema.AtmosVendorConfig
 		if err := yaml.Unmarshal(vendorConfigFileContent, &currentConfig); err != nil {
-			return vendorConfig, false, "", err
+			return vendorConfig, false, "", fmt.Errorf("error parsing YAML file '%s': %w", configFile, err)
 		}
 
-		mergedSources = append(mergedSources, currentConfig.Spec.Sources...)
-		mergedImports = append(mergedImports, currentConfig.Spec.Imports...)
+		// Set file field and deduplicate sources
+		for i := range currentConfig.Spec.Sources {
+			source := &currentConfig.Spec.Sources[i]
+			source.File = configFile
+			if !seenSources[source.Source] {
+				vendorConfig.Spec.Sources = append(vendorConfig.Spec.Sources, *source)
+				seenSources[source.Source] = true
+			}
+		}
+
+		// Deduplicate imports
+		for _, imp := range currentConfig.Spec.Imports {
+			if !seenImports[imp] {
+				vendorConfig.Spec.Imports = append(vendorConfig.Spec.Imports, imp)
+				seenImports[imp] = true
+			}
+		}
 	}
 
 	// Create final merged config
