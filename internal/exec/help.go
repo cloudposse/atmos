@@ -9,9 +9,11 @@ import (
 )
 
 // processHelp processes help commands
-func processHelp(componentType string, command string) error {
-	cliConfig := schema.CliConfiguration{}
-
+func processHelp(
+	cliConfig schema.CliConfiguration,
+	componentType string,
+	command string,
+) error {
 	if len(command) == 0 {
 		u.PrintMessage(fmt.Sprintf("'atmos' supports all native '%s' commands.\n", componentType))
 		u.PrintMessage("In addition, the 'component' argument and 'stack' flag are required to generate the variables and backend config for the component in the stack.\n")
@@ -65,10 +67,12 @@ func processHelp(componentType string, command string) error {
 				"native arguments and flags for the 'helmfile' commands")
 		}
 
-		fmt.Println()
-		err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, "")
-		if err != nil {
-			return err
+		if cliConfig.Logs.Level == u.LogLevelTrace {
+			fmt.Println()
+			err := ExecuteShellCommand(cliConfig, componentType, []string{"--help"}, "", nil, false, "")
+			if err != nil {
+				return err
+			}
 		}
 
 	} else if componentType == "terraform" && command == "clean" {
@@ -116,10 +120,12 @@ func processHelp(componentType string, command string) error {
 		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
 		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
 
-		fmt.Println()
-		err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, "")
-		if err != nil {
-			return err
+		if cliConfig.Logs.Level == u.LogLevelTrace {
+			fmt.Println()
+			err := ExecuteShellCommand(cliConfig, componentType, []string{command, "--help"}, "", nil, false, "")
+			if err != nil {
+				return err
+			}
 		}
 	}
 
