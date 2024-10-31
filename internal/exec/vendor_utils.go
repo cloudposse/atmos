@@ -176,6 +176,9 @@ func ReadAndProcessVendorConfigFile(
 			configFiles = append(configFiles, filepath.Join(foundVendorConfigFile, match))
 		}
 		sort.Strings(configFiles)
+		if len(configFiles) == 0 {
+			return vendorConfig, false, "", fmt.Errorf("no YAML configuration files found in directory '%s'", foundVendorConfigFile)
+		}
 	} else {
 		configFiles = []string{foundVendorConfigFile}
 	}
