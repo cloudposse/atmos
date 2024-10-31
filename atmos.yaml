@@ -297,6 +297,13 @@ integrations:
           steps:
             - run: terraform apply $PLANFILE
 
+  # GitHub integration
+  github:
+    gitops:
+      opentofu-version: 1.8.4
+      terraform-version: 1.9.8
+      infracost-enabled: false
+
 # Validation schemas (for validating atmos stacks and components)
 schemas:
   # https://json-schema.org

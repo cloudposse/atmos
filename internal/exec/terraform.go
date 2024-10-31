@@ -52,7 +52,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return err
 		}
 
-		err = processHelp("terraform", "")
+		err = processHelp(cliConfig, "terraform", "")
 		if err != nil {
 			return err
 		}
