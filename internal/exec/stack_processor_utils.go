@@ -1513,26 +1513,33 @@ func ProcessStackConfig(
 // processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with
 // the `integrations.github` section from `atmos.yaml`
 func processSettingsIntegrationsGithub(cliConfig schema.CliConfiguration, settings map[string]any) (map[string]any, error) {
+	settingsIntegrationsSection := make(map[string]any)
+	settingsIntegrationsGithubSection := make(map[string]any)
+
 	if settingsIntegrations, ok := settings[cfg.IntegrationsSectionName]; ok {
 		if settingsIntegrationsMap, ok := settingsIntegrations.(map[string]any); ok {
+			settingsIntegrationsSection = settingsIntegrationsMap
 			if settingsIntegrationsGithub, ok := settingsIntegrationsMap[cfg.GithubSectionName]; ok {
 				if settingsIntegrationsGithubMap, ok := settingsIntegrationsGithub.(map[string]any); ok {
-
-					settingsIntegrationsGithubMerged, err := m.Merge(
-						cliConfig,
-						[]map[string]any{
-							cliConfig.Integrations.GitHub,
-							settingsIntegrationsGithubMap,
-						})
-					if err != nil {
-						return nil, err
-					}
-
-					settingsIntegrationsMap[cfg.GithubSectionName] = settingsIntegrationsGithubMerged
-					settings[cfg.IntegrationsSectionName] = settingsIntegrationsMap
+					settingsIntegrationsGithubSection = settingsIntegrationsGithubMap
 				}
 			}
 		}
+	}
+
+	settingsIntegrationsGithubMerged, err := m.Merge(
+		cliConfig,
+		[]map[string]any{
+			cliConfig.Integrations.GitHub,
+			settingsIntegrationsGithubSection,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(settingsIntegrationsGithubMerged) > 0 {
+		settingsIntegrationsSection[cfg.GithubSectionName] = settingsIntegrationsGithubMerged
+		settings[cfg.IntegrationsSectionName] = settingsIntegrationsSection
 	}
 
 	return settings, nil
