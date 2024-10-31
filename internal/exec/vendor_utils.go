@@ -128,6 +128,10 @@ func ReadAndProcessVendorConfigFile(
 	vendorConfigFile string,
 ) (schema.AtmosVendorConfig, bool, string, error) {
 	var vendorConfig schema.AtmosVendorConfig
+
+	// Initialize empty sources slice
+	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{}
+
 	var vendorConfigFileExists bool
 	var foundVendorConfigFile string
 
@@ -164,14 +168,13 @@ func ReadAndProcessVendorConfigFile(
 
 	var configFiles []string
 	if fileInfo.IsDir() {
-		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "**/*.{yaml,yml}")
+		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "*.{yaml,yml}")
 		if err != nil {
 			return vendorConfig, false, "", err
 		}
-		for i, match := range matches {
-			matches[i] = filepath.Join(foundVendorConfigFile, match)
+		for _, match := range matches {
+			configFiles = append(configFiles, filepath.Join(foundVendorConfigFile, match))
 		}
-		configFiles = matches
 		sort.Strings(configFiles)
 	} else {
 		configFiles = []string{foundVendorConfigFile}
@@ -181,37 +184,21 @@ func ReadAndProcessVendorConfigFile(
 	var mergedSources []schema.AtmosVendorSource
 	var mergedImports []string
 
-	seenSources := make(map[string]bool)
-	seenImports := make(map[string]bool)
-
 	for _, configFile := range configFiles {
-		vendorConfigFileContent, err := os.ReadFile(configFile)
-		if err != nil {
-			return vendorConfig, false, "", fmt.Errorf("error reading vendor config file '%s': %w", configFile, err)
-		}
-
 		var currentConfig schema.AtmosVendorConfig
-		if err := yaml.Unmarshal(vendorConfigFileContent, &currentConfig); err != nil {
-			return vendorConfig, false, "", fmt.Errorf("error parsing YAML file '%s': %w", configFile, err)
+		yamlFile, err := os.ReadFile(configFile)
+		if err != nil {
+			return vendorConfig, false, "", err
 		}
 
-		// Set file field and deduplicate sources
-		for i := range currentConfig.Spec.Sources {
-			source := &currentConfig.Spec.Sources[i]
-			source.File = configFile
-			if !seenSources[source.Source] {
-				vendorConfig.Spec.Sources = append(vendorConfig.Spec.Sources, *source)
-				seenSources[source.Source] = true
-			}
+		err = yaml.Unmarshal(yamlFile, &currentConfig)
+		if err != nil {
+			return vendorConfig, false, "", err
 		}
 
-		// Deduplicate imports
-		for _, imp := range currentConfig.Spec.Imports {
-			if !seenImports[imp] {
-				vendorConfig.Spec.Imports = append(vendorConfig.Spec.Imports, imp)
-				seenImports[imp] = true
-			}
-		}
+		// Merge sources and imports from current config
+		mergedSources = append(mergedSources, currentConfig.Spec.Sources...)
+		mergedImports = append(mergedImports, currentConfig.Spec.Imports...)
 	}
 
 	// Create final merged config
@@ -588,7 +575,7 @@ func processVendorImports(
 			return nil, nil, err
 		}
 
-		for i, _ := range vendorConfig.Spec.Sources {
+		for i := range vendorConfig.Spec.Sources {
 			vendorConfig.Spec.Sources[i].File = imp
 		}
 
