@@ -4,17 +4,24 @@ schemas:
   atmos:
     manifest: "schemas/atmos-manifest.json"
 
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
 components:
   helmfile:
     base_path: "components/helmfile"
-    kubeconfig_path: "{{ .Env.KUBECONFIG }}"
-    helm_aws_profile_pattern: default
-    cluster_name_pattern: 'demo'
+    use_eks: false
 
 stacks:
   base_path: "stacks"
   included_paths:
-    - "**/*"
+    - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_pattern: "{stage}"
@@ -31,10 +38,11 @@ commands:
   description: "Run all tests"
   steps:
   - atmos validate stacks
-  # FIXME: `atmos helmfile apply` assumes EKS
-  #- atmos helmfile apply demo -s dev
-  - atmos helmfile generate varfile demo -s dev
-  - helmfile -f components/helmfile/nginx/helmfile.yaml apply --values dev-demo.helmfile.vars.yaml
+  - atmos helmfile apply demo -s dev
+
+  # This is equivalent to the following commands:
+  #- atmos helmfile generate varfile demo -s dev
+  #- helmfile -f components/helmfile/nginx/helmfile.yaml apply --values dev-demo.helmfile.vars.yaml
 
 # Use Nested Custom Commands to provide easier interface for Docker Compose
 - name: "k3s"

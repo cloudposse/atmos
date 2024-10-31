@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 var (
@@ -43,10 +44,11 @@ var (
 				DeployRunInit:           true,
 				InitRunReconfigure:      true,
 				AutoGenerateBackendFile: true,
+				AppendUserAgent:         fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version),
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
-				KubeconfigPath:        "/dev/shm",
+				KubeconfigPath:        "",
 				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
 				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 				UseEKS:                true,
@@ -105,6 +107,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 	// Default configuration values
 	v.SetDefault("components.helmfile.use_eks", true)
+	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 
 	// Process config in system folder
 	configFilePath1 := ""
@@ -241,6 +244,11 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// This overrides all other atmos base path configs (`atmos.yaml`, ENV var `ATMOS_BASE_PATH`)
 	if configAndStacksInfo.AtmosBasePath != "" {
 		cliConfig.BasePath = configAndStacksInfo.AtmosBasePath
+	}
+
+	// After unmarshalling, ensure AppendUserAgent is set if still empty
+	if cliConfig.Components.Terraform.AppendUserAgent == "" {
+		cliConfig.Components.Terraform.AppendUserAgent = fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version)
 	}
 
 	// Check config

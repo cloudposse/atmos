@@ -23,7 +23,7 @@ builds:
     binary: atmos
     ldflags:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`
-      - '-s -w -X "github.com/cloudposse/atmos/cmd.Version={{.Version}}"'
+      - '-s -w -X "github.com/cloudposse/atmos/pkg/version.Version={{.Version}}"'
 
 archives:
   - format: binary
