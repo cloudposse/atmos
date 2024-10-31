@@ -419,7 +419,11 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			u.LogTrace(cliConfig, fmt.Errorf("error collecting folder of ENV TF_DATA_DIR: %v", err).Error())
 		}
 	}
-	total := len(folders) + len(tfDataDirFolders)
+	objectCount := 0
+	for _, folder := range folders {
+		objectCount += len(folder.Files)
+	}
+	total := objectCount + len(tfDataDirFolders)
 
 	if total == 0 {
 		u.PrintMessage("Nothing to delete")
