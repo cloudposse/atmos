@@ -1184,16 +1184,21 @@ func ProcessStackConfig(
 					}
 				}
 
+				finalSettings, err := processSettingsIntegrationsGithub(cliConfig, finalComponentSettings)
+				if err != nil {
+					return nil, err
+				}
+
 				comp := map[string]any{}
 				comp[cfg.VarsSectionName] = finalComponentVars
-				comp[cfg.SettingsSectionName] = finalComponentSettings
+				comp[cfg.SettingsSectionName] = finalSettings
 				comp[cfg.EnvSectionName] = finalComponentEnv
 				comp[cfg.BackendTypeSectionName] = finalComponentBackendType
 				comp[cfg.BackendSectionName] = finalComponentBackend
-				comp["remote_state_backend_type"] = finalComponentRemoteStateBackendType
-				comp["remote_state_backend"] = finalComponentRemoteStateBackend
+				comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
+				comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
 				comp[cfg.CommandSectionName] = finalComponentTerraformCommand
-				comp["inheritance"] = componentInheritanceChain
+				comp[cfg.InheritanceSectionName] = componentInheritanceChain
 				comp[cfg.MetadataSectionName] = componentMetadata
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
@@ -1472,9 +1477,14 @@ func ProcessStackConfig(
 					finalComponentHelmfileCommand = componentOverridesHelmfileCommand
 				}
 
+				finalSettings, err := processSettingsIntegrationsGithub(cliConfig, finalComponentSettings)
+				if err != nil {
+					return nil, err
+				}
+
 				comp := map[string]any{}
 				comp[cfg.VarsSectionName] = finalComponentVars
-				comp[cfg.SettingsSectionName] = finalComponentSettings
+				comp[cfg.SettingsSectionName] = finalSettings
 				comp[cfg.EnvSectionName] = finalComponentEnv
 				comp[cfg.CommandSectionName] = finalComponentHelmfileCommand
 				comp["inheritance"] = componentInheritanceChain
@@ -1498,6 +1508,34 @@ func ProcessStackConfig(
 	}
 
 	return result, nil
+}
+
+// processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with
+// the `integrations.github` section from `atmos.yaml`
+func processSettingsIntegrationsGithub(cliConfig schema.CliConfiguration, settings map[string]any) (map[string]any, error) {
+	if settingsIntegrations, ok := settings[cfg.IntegrationsSectionName]; ok {
+		if settingsIntegrationsMap, ok := settingsIntegrations.(map[string]any); ok {
+			if settingsIntegrationsGithub, ok := settingsIntegrationsMap[cfg.GithubSectionName]; ok {
+				if settingsIntegrationsGithubMap, ok := settingsIntegrationsGithub.(map[string]any); ok {
+
+					settingsIntegrationsGithubMerged, err := m.Merge(
+						cliConfig,
+						[]map[string]any{
+							cliConfig.Integrations.GitHub,
+							settingsIntegrationsGithubMap,
+						})
+					if err != nil {
+						return nil, err
+					}
+
+					settingsIntegrationsMap[cfg.GithubSectionName] = settingsIntegrationsGithubMerged
+					settings[cfg.IntegrationsSectionName] = settingsIntegrationsMap
+				}
+			}
+		}
+	}
+
+	return settings, nil
 }
 
 // FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined
