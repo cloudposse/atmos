@@ -183,6 +183,8 @@ func ReadAndProcessVendorConfigFile(
 	// Process all config files
 	var mergedSources []schema.AtmosVendorSource
 	var mergedImports []string
+	sourceMap := make(map[string]bool) // Track unique sources by component name
+	importMap := make(map[string]bool) // Track unique imports
 
 	for _, configFile := range configFiles {
 		var currentConfig schema.AtmosVendorConfig
@@ -196,9 +198,26 @@ func ReadAndProcessVendorConfigFile(
 			return vendorConfig, false, "", err
 		}
 
-		// Merge sources and imports from current config
-		mergedSources = append(mergedSources, currentConfig.Spec.Sources...)
-		mergedImports = append(mergedImports, currentConfig.Spec.Imports...)
+		// Merge sources, checking for duplicates
+		for _, source := range currentConfig.Spec.Sources {
+			if source.Component != "" {
+				if sourceMap[source.Component] {
+					return vendorConfig, false, "", fmt.Errorf("duplicate component '%s' found in config file '%s'",
+						source.Component, configFile)
+				}
+				sourceMap[source.Component] = true
+			}
+			mergedSources = append(mergedSources, source)
+		}
+
+		// Merge imports, checking for duplicates
+		for _, imp := range currentConfig.Spec.Imports {
+			if importMap[imp] {
+				continue // Skip duplicate imports
+			}
+			importMap[imp] = true
+			mergedImports = append(mergedImports, imp)
+		}
 	}
 
 	// Create final merged config
