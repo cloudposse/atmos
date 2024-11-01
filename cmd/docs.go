@@ -123,5 +123,5 @@ var docsCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(docsCmd)
-	docsCmd.Flags().UintVarP(&width, "width", "w", 0, "word-wrap at width (set to 0 to disable)")
+	docsCmd.Flags().UintVarP(&width, "width", "w", 0, "Set word-wrap width (0 disables word wrapping). Influences output formatting, particularly for tables.")
 }
