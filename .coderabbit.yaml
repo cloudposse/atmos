@@ -9,8 +9,8 @@ reviews:
   high_level_summary: true
   high_level_summary_placeholder: "@auto-summary"
   auto_title_placeholder: "@auto-title"
-  review_status: true
-  commit_status: true
+  review_status: false
+  commit_status: false
   poem: false
   collapse_walkthrough: true
   sequence_diagrams: true
@@ -23,7 +23,7 @@ reviews:
     - label: "major"
       instructions: "Apply when changes introduce new functionality that causes breaking changes requiring the user to update their configuration."
     - label: "no-release"
-      instructions: "Apply when the PR contains changes only to documentation or no changes to the Go code."
+      instructions: "Apply this label when the PR contains changes only to documentation, website content, or other non-Go code. Changes that do not affect the Go code or the application functionality fall under this category."
   #path_filters:
   #  - "!dist/**"
   #  - "src/**"
