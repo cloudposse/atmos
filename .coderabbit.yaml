@@ -19,9 +19,9 @@ reviews:
     - label: "patch"
       instructions: "Apply when the PR contains changes that fix existing functionality."
     - label: "minor"
-      instructions: "Apply when changes introduces new functionality but is non-breaking."
+      instructions: "Apply when changes introduce new functionality but are non-breaking."
     - label: "major"
-      instructions: "Apply when changes introduces new functionality that causes breaking changes requiring the user to update their configuration."
+      instructions: "Apply when changes introduce new functionality that causes breaking changes requiring the user to update their configuration."
     - label: "no-release"
       instructions: "Apply when the PR contains changes only to documentation."
   #path_filters:
