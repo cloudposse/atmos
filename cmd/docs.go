@@ -19,8 +19,6 @@ import (
 
 const atmosDocsURL = "https://atmos.tools"
 
-var width uint
-
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
 	Use:                "docs",
@@ -42,6 +40,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			// Detect terminal width if width flag is not set
+			width, _ := cmd.Flags().GetUint("width")
 			if !cmd.Flags().Changed("width") {
 				if term.IsTerminal(int(os.Stdout.Fd())) {
 					w, _, err := term.GetSize(int(os.Stdout.Fd()))
@@ -123,5 +122,5 @@ var docsCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(docsCmd)
-	docsCmd.Flags().UintVarP(&width, "width", "w", 0, "Set word-wrap width (0 disables word wrapping). Influences output formatting, particularly for tables.")
+	docsCmd.Flags().UintP("width", "w", 0, "Set word-wrap width (0 disables word wrapping). Influences output formatting, particularly for tables.")
 }
