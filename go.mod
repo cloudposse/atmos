@@ -9,8 +9,8 @@ require (
 	github.com/arsham/figurine v1.3.0
 	github.com/bmatcuk/doublestar/v4 v4.7.1
 	github.com/charmbracelet/bubbles v0.20.0
-	github.com/charmbracelet/glamour v0.8.0
 	github.com/charmbracelet/bubbletea v1.1.2
+	github.com/charmbracelet/glamour v0.8.0
 	github.com/charmbracelet/lipgloss v0.13.1
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.18.0
