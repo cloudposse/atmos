@@ -71,7 +71,7 @@ reviews:
     hadolint:
       enabled: true
     swiftlint:
-      enabled: true
+      enabled: false
       config_file: ".swiftlint.yml"
     phpstan:
       enabled: true
@@ -86,12 +86,12 @@ reviews:
     checkov:
       enabled: true
     detekt:
-      enabled: true
+      enabled: false
       config_file: "detekt.yml"
     eslint:
       enabled: true
     rubocop:
-      enabled: true
+      enabled: false
     buf:
       enabled: true
     regal:
@@ -99,12 +99,12 @@ reviews:
     actionlint:
       enabled: true
     pmd:
-      enabled: true
+      enabled: false
       config_file: "pmd.xml"
     cppcheck:
-      enabled: true
+      enabled: false
     semgrep:
-      enabled: true
+      enabled: false
       config_file: ".semgrep.yaml"
     circleci:
       enabled: false
