@@ -8,6 +8,7 @@ import (
 	"runtime"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -16,6 +17,8 @@ import (
 )
 
 const atmosDocsURL = "https://atmos.tools"
+
+var width uint
 
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
@@ -39,16 +42,12 @@ var docsCmd = &cobra.Command{
 
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, info.Component)
-
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
 			if !componentPathExists {
-				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'",
-					info.Component,
-					componentPath,
-				))
+				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
 			}
 
 			readmePath := path.Join(componentPath, "README.md")
@@ -65,7 +64,17 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
 
-			componentDocs, err := glamour.Render(string(readmeContent), "dark")
+			r, err := glamour.NewTermRenderer(
+				glamour.WithColorProfile(lipgloss.ColorProfile()),
+				glamour.WithAutoStyle(),
+				glamour.WithPreservedNewLines(),
+				glamour.WithWordWrap(int(width)),
+			)
+			if err != nil {
+				u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			}
+
+			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
@@ -95,4 +104,5 @@ var docsCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(docsCmd)
+	docsCmd.Flags().UintVarP(&width, "width", "w", 80, "word-wrap at width")
 }
