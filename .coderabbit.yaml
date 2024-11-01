@@ -23,7 +23,7 @@ reviews:
     - label: "major"
       instructions: "Apply when changes introduce new functionality that causes breaking changes requiring the user to update their configuration."
     - label: "no-release"
-      instructions: "Apply when the PR contains changes only to documentation."
+      instructions: "Apply when the PR contains changes only to documentation or no changes to the Go code."
   #path_filters:
   #  - "!dist/**"
   #  - "src/**"
