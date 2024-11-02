@@ -509,7 +509,7 @@ func ProcessStacks(
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted
 
-		// Process Atmos manifest sections after processing `Go` templates
+		// Process Atmos manifest sections
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 			configAndStacksInfo.ComponentProvidersSection = i
 		}
@@ -544,10 +544,6 @@ func ProcessStacks(
 
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
 			configAndStacksInfo.Component = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
-			configAndStacksInfo.Command = i
 		}
 	}
 
