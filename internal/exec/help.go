@@ -15,7 +15,7 @@ func processHelp(
 	command string,
 ) error {
 	if len(command) == 0 {
-		u.PrintMessage(fmt.Sprintf("'atmos' supports all native '%s' commands.\n", componentType))
+		u.PrintMessage(fmt.Sprintf("Atmos supports all native '%s' commands.\n", componentType))
 		u.PrintMessage("In addition, the 'component' argument and 'stack' flag are required to generate the variables and backend config for the component in the stack.\n")
 		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> -s <stack> [options]", componentType))
 		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> --stack <stack> [options]", componentType))
@@ -104,10 +104,11 @@ func processHelp(
 			"Usage: atmos terraform workspace <component> -s <stack>\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/workspace\n")
 	} else {
-		u.PrintMessage(fmt.Sprintf("'atmos' supports native '%s' commands with all the options, arguments and flags.\n", componentType))
+		u.PrintMessage(fmt.Sprintf("\nAtmos supports native '%s' commands with all the options, arguments and flags.\n", componentType))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
 		u.PrintMessage(fmt.Sprintf("atmos %s <subcommand> <component> -s <stack> [options]", componentType))
 		u.PrintMessage(fmt.Sprintf("atmos %s <subcommand> <component> --stack <stack> [options]", componentType))
+		u.PrintMessage(fmt.Sprintf("\nFor more details, execute '%s --help'\n", componentType))
 	}
 
 	return nil
