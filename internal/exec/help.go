@@ -104,10 +104,10 @@ func processHelp(
 			"Usage: atmos terraform workspace <component> -s <stack>\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/workspace\n")
 	} else {
-		u.PrintMessage(fmt.Sprintf("'atmos' supports native '%s %s' command with all the options, arguments and flags.\n", componentType, command))
+		u.PrintMessage(fmt.Sprintf("'atmos' supports native '%s' commands with all the options, arguments and flags.\n", componentType))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
-		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> -s <stack> [options]", componentType, command))
-		u.PrintMessage(fmt.Sprintf("atmos %s %s <component> --stack <stack> [options]", componentType, command))
+		u.PrintMessage(fmt.Sprintf("atmos %s <subcommand> <component> -s <stack> [options]", componentType))
+		u.PrintMessage(fmt.Sprintf("atmos %s <subcommand> <component> --stack <stack> [options]", componentType))
 	}
 
 	return nil
