@@ -45,7 +45,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			return err
 		}
 
-		err = processHelp("helmfile", "")
+		err = processHelp(cliConfig, "helmfile", "")
 		if err != nil {
 			return err
 		}
