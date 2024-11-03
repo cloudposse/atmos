@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mattn/go-shellwords"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -29,9 +30,13 @@ func ExecuteShellCommand(
 	dryRun bool,
 	redirectStdError string,
 ) error {
-	cmdParts := strings.Split(command, " ")
-	cmdName := cmdParts[0]
-	cmdArgs := slices.Concat(cmdParts[1:], args)
+	parsedArgs, err := shellwords.Parse(command)
+	if err != nil {
+		return err
+	}
+
+	cmdName := parsedArgs[0]
+	cmdArgs := slices.Concat(parsedArgs[1:], args)
 	cmd := exec.Command(cmdName, cmdArgs...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
