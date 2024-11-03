@@ -129,8 +129,8 @@ func ProcessComponentConfig(
 	}
 
 	// Process component metadata and find a base component (if any) and whether the component is real or abstract
-	componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled := ProcessComponentMetadata(component, componentSection)
-	if !componentIsEnabled {
+	componentMetadata, baseComponentName, componentIsAbstract, componentIsDisabled := ProcessComponentMetadata(component, componentSection)
+	if componentIsDisabled {
 		return nil
 	}
 
@@ -576,8 +576,9 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 	// Process component metadata
-	_, baseComponentName, _, _ := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
+	_, baseComponentName, _, componentIsDisabled := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
 	configAndStacksInfo.BaseComponentPath = baseComponentName
+	configAndStacksInfo.ComponentIsDisabled = componentIsDisabled
 
 	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""

@@ -70,6 +70,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return errors.New("stack must be specified")
 	}
 
+	if info.ComponentIsDisabled {
+		u.LogInfo(cliConfig, "component is disabled and skipped")
+		return nil
+	}
+
 	err = checkTerraformConfig(cliConfig)
 	if err != nil {
 		return err

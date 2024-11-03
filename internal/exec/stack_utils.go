@@ -54,14 +54,14 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 	return strings.Replace(workspace, "/", "-", -1), nil
 }
 
-// ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether the component is real or abstract and whether the component is enabled or not
+// ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether the component is real or abstract and whether the component is disabled or not
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
 ) (map[string]any, string, bool, bool) {
 	baseComponentName := ""
 	componentIsAbstract := false
-	componentIsEnabled := true
+	componentIsDisabled := false
 	var componentMetadata map[string]any
 
 	// Find base component in the `component` attribute
@@ -76,9 +76,9 @@ func ProcessComponentMetadata(
 				componentIsAbstract = true
 			}
 		}
-		if enabledValue, exists := componentMetadata["enabled"]; exists {
-			if enabled, ok := enabledValue.(bool); ok && !enabled {
-				componentIsEnabled = false
+		if disabledValue, exists := componentMetadata["disabled"]; exists {
+			if disabled, ok := disabledValue.(bool); ok && disabled {
+				componentIsDisabled = true
 			}
 		}
 		// Find base component in the `metadata.component` attribute
@@ -93,7 +93,7 @@ func ProcessComponentMetadata(
 		baseComponentName = ""
 	}
 
-	return componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled
+	return componentMetadata, baseComponentName, componentIsAbstract, componentIsDisabled
 }
 
 // BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config
