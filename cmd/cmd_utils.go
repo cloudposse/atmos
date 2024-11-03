@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -16,6 +17,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// ValidateConfig holds configuration options for Atmos validation.
+// CheckStack determines whether stack configuration validation should be performed.
+type ValidateConfig struct {
+	CheckStack bool
+	// Other configuration fields
+}
+
+type AtmosValidateOption func(*ValidateConfig)
+
+func WithStackValidation(check bool) AtmosValidateOption {
+	return func(cfg *ValidateConfig) {
+		cfg.CheckStack = check
+	}
+}
 
 // processCustomCommands processes and executes custom commands
 func processCustomCommands(
@@ -149,11 +165,19 @@ func preCustomCommand(
 	parentCommand *cobra.Command,
 	commandConfig *schema.Command,
 ) {
-	var err error
-
+	var sb strings.Builder
 	if len(args) != len(commandConfig.Arguments) {
-		err = fmt.Errorf("invalid number of arguments, %d argument(s) required", len(commandConfig.Arguments))
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		sb.WriteString(fmt.Sprintf("Command requires %d argument(s):\n", len(commandConfig.Arguments)))
+		for i, arg := range commandConfig.Arguments {
+			if arg.Name == "" {
+				u.LogErrorAndExit(schema.CliConfiguration{}, errors.New("invalid argument configuration: empty argument name"))
+			}
+			sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, arg.Name))
+		}
+		if len(args) > 0 {
+			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s", len(args), strings.Join(args, ", ")))
+		}
+		u.LogErrorAndExit(schema.CliConfiguration{}, errors.New(sb.String()))
 	}
 
 	// no "steps" means a sub command should be specified
@@ -323,17 +347,27 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config
-func checkAtmosConfig() {
+func checkAtmosConfig(opts ...AtmosValidateOption) {
+	vCfg := &ValidateConfig{
+		CheckStack: true, // Default value true to check the stack
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(vCfg)
+	}
+
 	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
-
-	if !atmosConfigExists || err != nil {
-		printMessageForMissingAtmosConfig(cliConfig)
-		os.Exit(0)
+	if vCfg.CheckStack {
+		atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
+		if !atmosConfigExists || err != nil {
+			printMessageForMissingAtmosConfig(cliConfig)
+			os.Exit(0)
+		}
 	}
 }
 

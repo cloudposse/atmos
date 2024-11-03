@@ -33,6 +33,11 @@ components:
             disabled: false
             # Validation timeout in seconds
             timeout: 10
+        integrations:
+          github:
+            gitops:
+              infracost-enabled: true
+              test_enabled: true
       vars:
         enabled: true
         name: "common"
