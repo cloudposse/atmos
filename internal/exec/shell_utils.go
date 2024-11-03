@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/expand"
@@ -28,7 +29,10 @@ func ExecuteShellCommand(
 	dryRun bool,
 	redirectStdError string,
 ) error {
-	cmd := exec.Command(command, args...)
+	cmdParts := strings.Split(command, " ")
+	cmdName := cmdParts[0]
+	cmdArgs := slices.Concat(cmdParts[1:], args)
+	cmd := exec.Command(cmdName, cmdArgs...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
