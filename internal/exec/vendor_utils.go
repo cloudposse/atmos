@@ -224,16 +224,8 @@ func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 			}
 
 		case pkgTypeLocal:
-			// Copy from local file system
-			copyOptions := cp.Options{
-				PreserveTimes: false,
-				PreserveOwner: false,
-				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
-			}
-			if p.sourceIsLocalFile {
-				p.tempDir = path.Join(p.tempDir, filepath.Base(p.uri))
-			}
-			if err := cp.Copy(p.uri, p.tempDir, copyOptions); err != nil {
+			// Process local files
+			if err := localFileSystem(p.cliConfig, p.uri, p.sourceIsLocalFile); err != nil {
 				return installedPkgMsg{
 					err:  err,
 					name: p.name,
