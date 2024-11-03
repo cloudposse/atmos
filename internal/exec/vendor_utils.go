@@ -34,7 +34,6 @@ const (
 
 type pkg struct {
 	uri               string
-	tempDir           string
 	name              string
 	targetPath        string
 	cliConfig         schema.CliConfiguration
@@ -177,7 +176,6 @@ type installedPkgMsg struct {
 
 func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 	return func() tea.Msg {
-		defer removeTempDir(p.cliConfig, p.tempDir)
 
 		// Log the action
 		//logPullingAction(p.cliConfig, p.name, p.uri, p.targetPath)
@@ -190,13 +188,19 @@ func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 				name: p.name,
 			}
 		}
+		// Create temp directory
+		tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+		if err != nil {
+			return err
+		}
+		defer removeTempDir(p.cliConfig, tempDir)
 
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
 			client := &getter.Client{
 				Ctx:  context.Background(),
-				Dst:  p.tempDir,
+				Dst:  tempDir,
 				Src:  p.uri,
 				Mode: getter.ClientModeAny,
 			}
@@ -207,7 +211,7 @@ func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 				}
 			}
 			// Copy to target
-			if err := copyToTarget(p.cliConfig, p.tempDir, p.targetPath, p.s, p.sourceIsLocalFile, p.uri); err != nil {
+			if err := copyToTarget(p.cliConfig, tempDir, p.targetPath, p.s, p.sourceIsLocalFile, p.uri); err != nil {
 				return installedPkgMsg{
 					err:  err,
 					name: p.name,
@@ -216,7 +220,7 @@ func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 
 		case pkgTypeOci:
 			// Process OCI images
-			if err := processOciImage(p.cliConfig, p.uri, p.tempDir); err != nil {
+			if err := processOciImage(p.cliConfig, p.uri, tempDir); err != nil {
 				return installedPkgMsg{
 					err:  err,
 					name: p.name,
@@ -224,15 +228,28 @@ func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 			}
 
 		case pkgTypeLocal:
-			// Process local files
-			if err := localFileSystem(p.cliConfig, p.uri, p.sourceIsLocalFile); err != nil {
+			// Copy from local file system
+			copyOptions := cp.Options{
+				PreserveTimes: false,
+				PreserveOwner: false,
+				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+			}
+			if p.sourceIsLocalFile {
+				tempDir = path.Join(tempDir, filepath.Base(p.uri))
+			}
+			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{
 					err:  err,
 					name: p.name,
 				}
 			}
 		}
-
+		if err := copyToTarget(p.cliConfig, tempDir, p.targetPath, p.s, p.sourceIsLocalFile, p.uri); err != nil {
+			return installedPkgMsg{
+				err:  err,
+				name: p.name,
+			}
+		}
 		return installedPkgMsg{
 			err:  nil,
 			name: p.name,
@@ -517,16 +534,9 @@ func ExecuteAtmosVendorInternal(
 			}
 			targetPath := path.Join(vendorConfigFilePath, target)
 
-			// Create temp directory
-			tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
-			if err != nil {
-				return err
-			}
-
 			// Create package struct
 			p := pkg{
 				uri:               uri,
-				tempDir:           tempDir,
 				name:              s.Component,
 				targetPath:        targetPath,
 				cliConfig:         cliConfig,
@@ -693,20 +703,4 @@ func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s s
 		u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'", trimmedSrc))
 		return false, nil
 	}
-}
-func localFileSystem(cliConfig schema.CliConfiguration, uri string, sourceIsLocalFile bool) error {
-	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
-	if err != nil {
-		return err
-	}
-	defer removeTempDir(cliConfig, tempDir)
-	copyOptions := cp.Options{
-		PreserveTimes: false,
-		PreserveOwner: false,
-		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
-	}
-	if sourceIsLocalFile {
-		tempDir = path.Join(tempDir, filepath.Base(uri))
-	}
-	return cp.Copy(uri, tempDir, copyOptions)
 }
