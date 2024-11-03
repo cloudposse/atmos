@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,6 +24,14 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+type pkgType int
+
+const (
+	pkgTypeRemote pkgType = iota
+	pkgTypeOci
+	pkgTypeLocal
+)
+
 type pkg struct {
 	uri               string
 	tempDir           string
@@ -33,6 +40,7 @@ type pkg struct {
 	cliConfig         schema.CliConfiguration
 	s                 schema.AtmosVendorSource
 	sourceIsLocalFile bool
+	pkgType           pkgType
 }
 type model struct {
 	packages []pkg
@@ -42,6 +50,7 @@ type model struct {
 	spinner  spinner.Model
 	progress progress.Model
 	done     bool
+	dryRun   bool
 }
 
 var (
@@ -51,7 +60,7 @@ var (
 	xMark               = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
 )
 
-func newModel(pkg []pkg) (model, error) {
+func newModel(pkg []pkg, dryRun bool) (model, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(40),
@@ -64,12 +73,13 @@ func newModel(pkg []pkg) (model, error) {
 		packages: pkg,
 		spinner:  s,
 		progress: p,
+		dryRun:   dryRun,
 	}, nil
 }
 
 func (m model) Init() tea.Cmd {
 	// Start downloading with the `uri`, package name, and `tempDir` directly from the model
-	return tea.Batch(downloadAndInstall(m.packages[0]), m.spinner.Tick)
+	return tea.Batch(downloadAndInstall(m.packages[0], m.dryRun), m.spinner.Tick)
 }
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -92,12 +102,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 
 		}
+		successMsg := ""
+		if pkg.name != "" {
+			successMsg = fmt.Sprintf("pull component %s into %s", pkg.name, pkg.targetPath)
+		} else {
+			successMsg = fmt.Sprintf("pull sources from %s into %s", pkg.uri, pkg.targetPath)
+		}
+		if m.dryRun {
+			successMsg = fmt.Sprintf("Dry run: %s", successMsg)
+		}
 		if m.index >= len(m.packages)-1 {
+
 			// Everything's been installed. We're done!
 			m.done = true
 			return m, tea.Sequence(
-				tea.Printf("%s %s", checkMark, pkg.name), // print the last success message
-				tea.Quit,                                 // exit the program
+				tea.Printf("%s %s", checkMark, successMsg), // print the last success message
+				tea.Quit, // exit the program
 			)
 		}
 
@@ -106,8 +126,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
 		return m, tea.Batch(
 			progressCmd,
-			tea.Printf("%s Successfully pull component %s into %s", checkMark, pkg.name, pkg.targetPath), // print success message above our program
-			downloadAndInstall(m.packages[m.index]),                                                      // download the next package
+			tea.Printf("%s %s", checkMark, successMsg),        // print success message above our program
+			downloadAndInstall(m.packages[m.index], m.dryRun), // download the next package
 		)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -128,6 +148,9 @@ func (m model) View() string {
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 
 	if m.done {
+		if m.dryRun {
+			return doneStyle.Render("Done! Dry run completed. No components installed.\n")
+		}
 		return doneStyle.Render(fmt.Sprintf("Done! Installed %d components.\n", n))
 	}
 
@@ -152,29 +175,72 @@ type installedPkgMsg struct {
 	name string
 }
 
-func downloadAndInstall(p pkg) tea.Cmd {
+func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 	return func() tea.Msg {
-		// Set up the getter.Client with `tempDir` as destination
 		defer removeTempDir(p.cliConfig, p.tempDir)
-		client := &getter.Client{
-			Ctx:  context.Background(),
-			Dst:  p.tempDir,
-			Src:  p.uri,
-			Mode: getter.ClientModeAny,
-		}
 
-		// Download the package
-		if err := client.Get(); err != nil {
+		// Log the action
+		//logPullingAction(p.cliConfig, p.name, p.uri, p.targetPath)
+
+		if dryRun {
+			// Simulate the action
+			time.Sleep(1 * time.Second)
 			return installedPkgMsg{
-				err:  err,
+				err:  nil,
 				name: p.name,
 			}
 		}
-		err := copyToTarget(p.cliConfig, p.tempDir, p.targetPath, p.s, p.sourceIsLocalFile, p.uri)
-		if err != nil {
-			//u.LogError(p.cliConfig, err)
-			log.Println(err)
+
+		switch p.pkgType {
+		case pkgTypeRemote:
+			// Use go-getter to download remote packages
+			client := &getter.Client{
+				Ctx:  context.Background(),
+				Dst:  p.tempDir,
+				Src:  p.uri,
+				Mode: getter.ClientModeAny,
+			}
+			if err := client.Get(); err != nil {
+				return installedPkgMsg{
+					err:  err,
+					name: p.name,
+				}
+			}
+			// Copy to target
+			if err := copyToTarget(p.cliConfig, p.tempDir, p.targetPath, p.s, p.sourceIsLocalFile, p.uri); err != nil {
+				return installedPkgMsg{
+					err:  err,
+					name: p.name,
+				}
+			}
+
+		case pkgTypeOci:
+			// Process OCI images
+			if err := processOciImage(p.cliConfig, p.uri, p.tempDir); err != nil {
+				return installedPkgMsg{
+					err:  err,
+					name: p.name,
+				}
+			}
+
+		case pkgTypeLocal:
+			// Copy from local file system
+			copyOptions := cp.Options{
+				PreserveTimes: false,
+				PreserveOwner: false,
+				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+			}
+			if p.sourceIsLocalFile {
+				p.tempDir = path.Join(p.tempDir, filepath.Base(p.uri))
+			}
+			if err := cp.Copy(p.uri, p.tempDir, copyOptions); err != nil {
+				return installedPkgMsg{
+					err:  err,
+					name: p.name,
+				}
+			}
 		}
+
 		return installedPkgMsg{
 			err:  nil,
 			name: p.name,
@@ -440,6 +506,17 @@ func ExecuteAtmosVendorInternal(
 		}
 
 		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(uri, vendorConfigFilePath)
+
+		// Determine package type
+		var pType pkgType
+		if useOciScheme {
+			pType = pkgTypeOci
+		} else if useLocalFileSystem {
+			pType = pkgTypeLocal
+		} else {
+			pType = pkgTypeRemote
+		}
+
 		// Process each target within the source
 		for indexTarget, tgt := range s.Targets {
 			target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", indexSource, indexTarget), tgt, tmplData, false)
@@ -447,50 +524,42 @@ func ExecuteAtmosVendorInternal(
 				return err
 			}
 			targetPath := path.Join(vendorConfigFilePath, target)
-			if dryRun {
-				logPullingAction(cliConfig, s.Component, uri, targetPath)
-				return nil
-			}
-			if useOciScheme {
-				logPullingAction(cliConfig, s.Component, uri, targetPath)
-				tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
-				if err != nil {
-					return err
-				}
-				defer removeTempDir(cliConfig, tempDir)
-				return processOciImage(cliConfig, uri, tempDir)
-			}
-			if useLocalFileSystem {
-				logPullingAction(cliConfig, s.Component, uri, targetPath)
-				return localFileSystem(cliConfig, uri, sourceIsLocalFile)
-			}
+
+			// Create temp directory
 			tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 			if err != nil {
 				return err
 			}
-			packages = append(
-				packages,
-				pkg{
-					uri: uri, tempDir: tempDir, name: s.Component, targetPath: targetPath,
-					cliConfig:         cliConfig,
-					s:                 s,
-					sourceIsLocalFile: sourceIsLocalFile,
-				},
-			)
 
+			// Create package struct
+			p := pkg{
+				uri:               uri,
+				tempDir:           tempDir,
+				name:              s.Component,
+				targetPath:        targetPath,
+				cliConfig:         cliConfig,
+				s:                 s,
+				sourceIsLocalFile: sourceIsLocalFile,
+				pkgType:           pType,
+			}
+
+			packages = append(packages, p)
+
+			// Log the action (handled in downloadAndInstall)
 		}
-
 	}
-	if len(packages) > 0 && !dryRun {
-		model, err := newModel(packages)
+
+	// Run TUI to process packages
+	if len(packages) > 0 {
+		model, err := newModel(packages, dryRun)
 		if err != nil {
-			return fmt.Errorf("error initializing model error %v", err)
+			return fmt.Errorf("error initializing model: %v", err)
 		}
 		if _, err := tea.NewProgram(model).Run(); err != nil {
-			return fmt.Errorf("running download error %w", err)
+			return fmt.Errorf("running download error: %w", err)
 		}
-
 	}
+
 	return nil
 }
 
@@ -587,14 +656,6 @@ func determineSourceType(uri, vendorConfigFilePath string) (bool, bool, bool) {
 		}
 	}
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
-}
-
-func logPullingAction(cliConfig schema.CliConfiguration, component, uri, targetPath string) {
-	if component != "" {
-		u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'", component, uri, targetPath))
-	} else {
-		u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources from '%s' into '%s'", uri, targetPath))
-	}
 }
 
 func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string, s schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
