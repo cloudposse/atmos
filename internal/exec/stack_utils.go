@@ -61,7 +61,7 @@ func ProcessComponentMetadata(
 ) (map[string]any, string, bool, bool) {
 	baseComponentName := ""
 	componentIsAbstract := false
-	componentIsEnabled := false
+	componentIsEnabled := true
 	var componentMetadata map[string]any
 
 	// Find base component in the `component` attribute
@@ -76,8 +76,8 @@ func ProcessComponentMetadata(
 				componentIsAbstract = true
 			}
 		}
-		if componentMetadataEnabled, componentMetadataEnabledExists := componentMetadata["enabled"].(bool); componentMetadataEnabledExists && componentMetadataEnabled {
-			componentIsEnabled = true
+		if componentMetadataEnabled, componentMetadataEnabledExists := componentMetadata["enabled"].(bool); componentMetadataEnabledExists && !componentMetadataEnabled {
+			componentIsEnabled = false
 		}
 		// Find base component in the `metadata.component` attribute
 		// `metadata.component` overrides `component`
