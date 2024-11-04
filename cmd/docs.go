@@ -40,12 +40,12 @@ var docsCmd = &cobra.Command{
 			}
 
 			// Detect terminal width if width flag is not set
-			width, _ := cmd.Flags().GetUint("width")
-			if !cmd.Flags().Changed("width") {
+			width := cliConfig.Settings.Docs.MaxWidth
+			if width == 0 {
 				if term.IsTerminal(int(os.Stdout.Fd())) {
 					w, _, err := term.GetSize(int(os.Stdout.Fd()))
 					if err == nil {
-						width = uint(w)
+						width = int(w)
 					}
 
 					if width > 120 {
@@ -89,7 +89,7 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(int(width)),
 			)
 			if err != nil {
-				u.LogErrorAndExit(schema.CliConfiguration{}, err)
+				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("failed to initialize markdown renderer: %w", err))
 			}
 
 			componentDocs, err := r.Render(string(readmeContent))
@@ -122,5 +122,4 @@ var docsCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(docsCmd)
-	docsCmd.Flags().UintP("width", "w", 0, "Set word-wrap width (0 disables word wrapping). Influences output formatting, particularly for tables.")
 }
