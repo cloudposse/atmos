@@ -496,7 +496,8 @@ func ExecuteAtmosVendorInternal(
 			Version   string
 		}{s.Component, s.Version}
 
-		uri, err := generateSourceURI(s, tmplData, indexSource)
+		// Parse 'source' template
+		uri, err := ProcessTmpl(fmt.Sprintf("source-%d", indexSource), s.Source, tmplData, false)
 		if err != nil {
 			return err
 		}
@@ -520,11 +521,14 @@ func ExecuteAtmosVendorInternal(
 				return err
 			}
 			targetPath := path.Join(vendorConfigFilePath, target)
-
+			pkgName := s.Component
+			if pkgName == "" {
+				pkgName = uri
+			}
 			// Create package struct
 			p := pkg{
 				uri:               uri,
-				name:              s.Component,
+				name:              pkgName,
 				targetPath:        targetPath,
 				cliConfig:         cliConfig,
 				s:                 s,
@@ -623,10 +627,9 @@ func validateSourceFields(s schema.AtmosVendorSource, vendorConfigFileName strin
 }
 func shouldSkipSource(s schema.AtmosVendorSource, component string, tags []string) bool {
 	// Skip if component or tags do not match
+	// If `--component` is specified, and it's not equal to this component, skip this component
+	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
-}
-func generateSourceURI(s schema.AtmosVendorSource, tmplData interface{}, indexSource int) (string, error) {
-	return ProcessTmpl(fmt.Sprintf("source-%d", indexSource), s.Source, tmplData, false)
 }
 
 func determineSourceType(uri, vendorConfigFilePath string) (bool, bool, bool) {
