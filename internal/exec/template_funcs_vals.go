@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/helmfile/vals"
@@ -33,6 +34,11 @@ func (w valsLogWriter) Write(p []byte) (int, error) {
 func valsFunc(cliConfig schema.CliConfiguration, ref string) (any, error) {
 	if ref == "" {
 		return nil, fmt.Errorf("vals reference cannot be empty")
+	}
+
+	// validate reference format
+	if !strings.HasPrefix(ref, "ref+") {
+		return nil, fmt.Errorf("vals invalid reference format: must start with 'ref+'")
 	}
 
 	vrt, err := valsRuntime(cliConfig)
