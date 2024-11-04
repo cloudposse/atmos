@@ -42,14 +42,15 @@ type pkg struct {
 	pkgType           pkgType
 }
 type model struct {
-	packages []pkg
-	index    int
-	width    int
-	height   int
-	spinner  spinner.Model
-	progress progress.Model
-	done     bool
-	dryRun   bool
+	packages  []pkg
+	index     int
+	width     int
+	height    int
+	spinner   spinner.Model
+	progress  progress.Model
+	done      bool
+	dryRun    bool
+	failedPkg int
 }
 
 var (
@@ -92,31 +93,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case installedPkgMsg:
 
 		pkg := m.packages[m.index]
-		if msg.err != nil {
-			u.LogError(pkg.cliConfig, msg.err)
-			m.done = false
-			return m, tea.Sequence(
-				tea.Printf("%s %s", xMark, pkg.name),
-				tea.Quit,
-			)
+		mark := checkMark
 
-		}
-		successMsg := ""
-		if pkg.name != "" {
-			successMsg = fmt.Sprintf("pull component %s into %s", pkg.name, pkg.targetPath)
-		} else {
-			successMsg = fmt.Sprintf("pull sources from %s into %s", pkg.uri, pkg.targetPath)
-		}
-		if m.dryRun {
-			successMsg = fmt.Sprintf("Dry run: %s", successMsg)
+		if msg.err != nil {
+			u.LogDebug(pkg.cliConfig, fmt.Sprintf("Failed to pull component %s error %s", pkg.name, msg.err))
+			mark = xMark
+			m.failedPkg++
 		}
 		if m.index >= len(m.packages)-1 {
-
 			// Everything's been installed. We're done!
 			m.done = true
 			return m, tea.Sequence(
-				tea.Printf("%s %s", checkMark, successMsg), // print the last success message
-				tea.Quit, // exit the program
+				tea.Printf("%s %s", mark, pkg.name),
+				tea.Quit,
 			)
 		}
 
@@ -125,7 +114,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
 		return m, tea.Batch(
 			progressCmd,
-			tea.Printf("%s %s", checkMark, successMsg),        // print success message above our program
+			tea.Printf("%s %s", mark, pkg.name),               // print success message above our program
 			downloadAndInstall(m.packages[m.index], m.dryRun), // download the next package
 		)
 	case spinner.TickMsg:
@@ -145,16 +134,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
-
 	if m.done {
 		if m.dryRun {
 			return doneStyle.Render("Done! Dry run completed. No components installed.\n")
+		}
+		if m.failedPkg > 0 {
+			return doneStyle.Render(fmt.Sprintf("Done! Installed %d components. %d components failed to install.\n", n-m.failedPkg, m.failedPkg))
 		}
 		return doneStyle.Render(fmt.Sprintf("Done! Installed %d components.\n", n))
 	}
 
 	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index, w, n)
-
 	spin := m.spinner.View() + " "
 	prog := m.progress.View()
 	cellsAvail := max(0, m.width-lipgloss.Width(spin+prog+pkgCount))
@@ -176,10 +166,6 @@ type installedPkgMsg struct {
 
 func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 	return func() tea.Msg {
-
-		// Log the action
-		//logPullingAction(p.cliConfig, p.name, p.uri, p.targetPath)
-
 		if dryRun {
 			// Simulate the action
 			time.Sleep(1 * time.Second)
