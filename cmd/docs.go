@@ -46,9 +46,9 @@ var docsCmd = &cobra.Command{
 			screenWidth := defaultWidth
 
 			if term.IsTerminal(int(os.Stdout.Fd())) {
-				w, _, err := term.GetSize(int(os.Stdout.Fd()))
-				if err == nil && w > 0 {
-					screenWidth = w
+				termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
+				if err == nil && termWidth > 0 {
+					screenWidth = termWidth
 				}
 			}
 
