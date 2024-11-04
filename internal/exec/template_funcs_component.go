@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
+	"github.com/mattn/go-shellwords"
 	"github.com/samber/lo"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -145,8 +146,16 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 			u.LogTrace(cliConfig, providerOverrideFileName)
 		}
 
+		parsedArgs, err := shellwords.Parse(executable)
+		if err != nil {
+			return nil, err
+		}
+
+		// last element should be the command name, terraform, tofu, etc.
+		cmdName := parsedArgs[len(parsedArgs)-1]
+
 		// Initialize Terraform/OpenTofu
-		tf, err := tfexec.NewTerraform(componentPath, executable)
+		tf, err := tfexec.NewTerraform(componentPath, cmdName)
 		if err != nil {
 			return nil, err
 		}
