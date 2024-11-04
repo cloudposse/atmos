@@ -57,8 +57,8 @@ func valsFunc(cliConfig schema.CliConfiguration, ref string) (any, error) {
 
 // vals singleton runtime to support builtin LRU cache and avoid multiple initialization
 func valsRuntime(cliConfig schema.CliConfiguration) (*vals.Runtime, error) {
-	vlw := valsLogWriter{cliConfig}
 	valsOnce.Do(func() {
+		vlw := valsLogWriter{cliConfig}
 		valsInst, valsErr = vals.New(vals.Options{LogOutput: vlw})
 	})
 	return valsInst, valsErr
