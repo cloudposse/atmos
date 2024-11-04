@@ -1,12 +1,14 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"path"
 
 	"github.com/pkg/errors"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func checkTerraformConfig(cliConfig schema.CliConfiguration) error {
@@ -23,6 +25,7 @@ func checkTerraformConfig(cliConfig schema.CliConfiguration) error {
 // helping Terraform identify the active workspace context for managing your infrastructure.
 // We delete the file to prevent the Terraform prompt asking to select the default or the
 // previously used workspace. This happens when different backends are used for the same component.
-func cleanTerraformWorkspace(componentPath string) {
+func cleanTerraformWorkspace(cliConfig schema.CliConfiguration, componentPath string) {
+	u.LogTrace(cliConfig, fmt.Sprintf("\nDeleting '.terraform/environment' file: %s", componentPath))
 	_ = os.Remove(path.Join(componentPath, ".terraform", "environment"))
 }

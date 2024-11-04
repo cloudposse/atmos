@@ -280,7 +280,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(componentPath)
+		cleanTerraformWorkspace(cliConfig, componentPath)
 
 		err = ExecuteShellCommand(
 			cliConfig,
@@ -364,7 +364,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	case "init":
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(componentPath)
+		cleanTerraformWorkspace(cliConfig, componentPath)
 
 		if cliConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
