@@ -40,6 +40,7 @@ type pkg struct {
 	s                 schema.AtmosVendorSource
 	sourceIsLocalFile bool
 	pkgType           pkgType
+	version           string
 }
 type model struct {
 	packages  []pkg
@@ -104,7 +105,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Everything's been installed. We're done!
 			m.done = true
 			return m, tea.Sequence(
-				tea.Printf("%s %s", mark, pkg.name),
+				tea.Printf("%s %s %s", mark, pkg.name, pkg.version),
 				tea.Quit,
 			)
 		}
@@ -114,8 +115,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
 		return m, tea.Batch(
 			progressCmd,
-			tea.Printf("%s %s", mark, pkg.name),               // print success message above our program
-			downloadAndInstall(m.packages[m.index], m.dryRun), // download the next package
+			tea.Printf("%s %s %s", mark, pkg.name, pkg.version), // print success message above our program
+			downloadAndInstall(m.packages[m.index], m.dryRun),   // download the next package
 		)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -529,6 +530,7 @@ func ExecuteAtmosVendorInternal(
 				s:                 s,
 				sourceIsLocalFile: sourceIsLocalFile,
 				pkgType:           pType,
+				version:           s.Version,
 			}
 
 			packages = append(packages, p)
