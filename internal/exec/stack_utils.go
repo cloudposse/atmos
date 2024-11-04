@@ -61,7 +61,7 @@ func ProcessComponentMetadata(
 ) (map[string]any, string, bool, bool) {
 	baseComponentName := ""
 	componentIsAbstract := false
-	componentIsDisabled := false
+	componentIsEnabled := false
 	var componentMetadata map[string]any
 
 	// Find base component in the `component` attribute
@@ -76,9 +76,9 @@ func ProcessComponentMetadata(
 				componentIsAbstract = true
 			}
 		}
-		if disabledValue, exists := componentMetadata["disabled"]; exists {
-			if disabled, ok := disabledValue.(bool); ok && disabled {
-				componentIsDisabled = true
+		if enabledValue, exists := componentMetadata["enabled"]; exists {
+			if enabled, ok := enabledValue.(bool); ok && enabled {
+				componentIsEnabled = true
 			}
 		}
 		// Find base component in the `metadata.component` attribute
@@ -93,7 +93,7 @@ func ProcessComponentMetadata(
 		baseComponentName = ""
 	}
 
-	return componentMetadata, baseComponentName, componentIsAbstract, componentIsDisabled
+	return componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled
 }
 
 // BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config
