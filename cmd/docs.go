@@ -39,21 +39,21 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
 
-			// Detect terminal width if width flag is not set
-			width := cliConfig.Settings.Docs.MaxWidth
-			if width == 0 {
+			// Detect terminal width if not specified in `atmos.yaml`
+			maxWidth := cliConfig.Settings.Docs.MaxWidth
+			if maxWidth == 0 {
 				if term.IsTerminal(int(os.Stdout.Fd())) {
 					w, _, err := term.GetSize(int(os.Stdout.Fd()))
 					if err == nil {
-						width = int(w)
+						maxWidth = int(w)
 					}
 
-					if width > 120 {
-						width = 120
+					if maxWidth > 120 {
+						maxWidth = 120
 					}
 
-					if width == 0 {
-						width = 80
+					if maxWidth == 0 {
+						maxWidth = 80
 					}
 				}
 			}
@@ -86,7 +86,7 @@ var docsCmd = &cobra.Command{
 				glamour.WithColorProfile(lipgloss.ColorProfile()),
 				glamour.WithAutoStyle(),
 				glamour.WithPreservedNewLines(),
-				glamour.WithWordWrap(int(width)),
+				glamour.WithWordWrap(int(maxWidth)),
 			)
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("failed to initialize markdown renderer: %w", err))
