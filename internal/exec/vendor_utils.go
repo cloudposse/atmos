@@ -669,26 +669,55 @@ func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s s
 		if strings.HasSuffix(src, ".git") {
 			return true, nil
 		}
+
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
+		// Exclude the files that match the 'excluded_paths' patterns
+		// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+		// https://en.wikipedia.org/wiki/Glob_(programming)
+		// https://github.com/bmatcuk/doublestar#patterns
 		for _, excludePath := range s.ExcludedPaths {
-			if match, _ := u.PathMatch(excludePath, src); match {
-				u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' matching '%s'", trimmedSrc, excludePath))
+			excludeMatch, err := u.PathMatch(excludePath, src)
+			if err != nil {
+				return true, err
+			} else if excludeMatch {
+				// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+				u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+					trimmedSrc,
+					excludePath,
+				))
 				return true, nil
 			}
 		}
 
+		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
 		if len(s.IncludedPaths) > 0 {
+			anyMatches := false
 			for _, includePath := range s.IncludedPaths {
-				if match, _ := u.PathMatch(includePath, src); match {
-					u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' matching '%s'", trimmedSrc, includePath))
-					return false, nil
+				includeMatch, err := u.PathMatch(includePath, src)
+				if err != nil {
+					return true, err
+				} else if includeMatch {
+					// If the file matches ANY of the 'included_paths' patterns, include the file
+					u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+						trimmedSrc,
+						includePath,
+					))
+					anyMatches = true
+					break
 				}
 			}
-			return true, nil
+
+			if anyMatches {
+				return false, nil
+			} else {
+				u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+				return true, nil
+			}
 		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'", trimmedSrc))
+		// If 'included_paths' is not provided, include all files that were not excluded
+		u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
 }
