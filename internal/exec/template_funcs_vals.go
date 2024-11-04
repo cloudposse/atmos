@@ -30,6 +30,7 @@ func (w valsLogWriter) Write(p []byte) (int, error) {
 
 // Vals processes the given reference string and returns the corresponding value.
 // The reference format should follow ref+BACKEND://PATH[?PARAMS][#FRAGMENT][+] URI-like expression.
+// Example: ref+op://vault/item/field
 // Returns the processed value or an error if the reference is invalid.
 func valsFunc(cliConfig schema.CliConfiguration, ref string) (any, error) {
 	if ref == "" {
@@ -56,8 +57,8 @@ func valsFunc(cliConfig schema.CliConfiguration, ref string) (any, error) {
 
 // vals singleton runtime to support builtin LRU cache and avoid multiple initialization
 func valsRuntime(cliConfig schema.CliConfiguration) (*vals.Runtime, error) {
+	vlw := valsLogWriter{cliConfig}
 	valsOnce.Do(func() {
-		vlw := valsLogWriter{cliConfig}
 		valsInst, valsErr = vals.New(vals.Options{LogOutput: vlw})
 	})
 	return valsInst, valsErr
