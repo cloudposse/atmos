@@ -9,6 +9,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"text/template"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -38,6 +39,13 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 	return gomplateDatasourceFunc(f.cliConfig, alias, f.gomplateData, args...)
 }
 
-func (f AtmosFuncs) Vals(ref string) (any, error) {
+// Vals processes the given reference string and returns the corresponding value.
+// The reference format should follow ref+BACKEND://PATH[?PARAMS][#FRAGMENT][+] URI-like expression.
+// Returns the processed value or an error if the reference is invalid.
+func (f AtmosFuncs) Vals(ref string) (interface{}, error) {
+	if ref == "" {
+		return nil, fmt.Errorf("vals reference code cannot be empty")
+	}
+
 	return valsFunc(f.cliConfig, ref)
 }

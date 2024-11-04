@@ -2,6 +2,8 @@ module github.com/cloudposse/atmos
 
 go 1.23
 
+toolchain go1.23.2
+
 require (
 	dario.cat/mergo v1.0.1
 	github.com/Masterminds/sprig/v3 v3.3.0
