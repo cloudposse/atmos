@@ -40,22 +40,22 @@ var docsCmd = &cobra.Command{
 			}
 
 			// Detect terminal width if not specified in `atmos.yaml`
+			// The default screen width is 120 characters, but uses maxWidth if set and greater than zero
 			maxWidth := cliConfig.Settings.Docs.MaxWidth
-			if maxWidth == 0 {
-				if term.IsTerminal(int(os.Stdout.Fd())) {
-					w, _, err := term.GetSize(int(os.Stdout.Fd()))
-					if err == nil {
-						maxWidth = int(w)
-					}
+			defaultWidth := 120
+			screenWidth := defaultWidth
 
-					if maxWidth > 120 {
-						maxWidth = 120
-					}
-
-					if maxWidth == 0 {
-						maxWidth = 80
-					}
+			if term.IsTerminal(int(os.Stdout.Fd())) {
+				w, _, err := term.GetSize(int(os.Stdout.Fd()))
+				if err == nil && w > 0 {
+					screenWidth = w
 				}
+			}
+
+			if maxWidth > 0 {
+				screenWidth = min(maxWidth, screenWidth)
+			} else {
+				screenWidth = defaultWidth
 			}
 
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
@@ -86,7 +86,7 @@ var docsCmd = &cobra.Command{
 				glamour.WithColorProfile(lipgloss.ColorProfile()),
 				glamour.WithAutoStyle(),
 				glamour.WithPreservedNewLines(),
-				glamour.WithWordWrap(int(maxWidth)),
+				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("failed to initialize markdown renderer: %w", err))
