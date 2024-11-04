@@ -197,13 +197,6 @@ func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 					name: p.name,
 				}
 			}
-			// Copy to target
-			if err := copyToTarget(p.cliConfig, tempDir, p.targetPath, p.s, p.sourceIsLocalFile, p.uri); err != nil {
-				return installedPkgMsg{
-					err:  err,
-					name: p.name,
-				}
-			}
 
 		case pkgTypeOci:
 			// Process OCI images
