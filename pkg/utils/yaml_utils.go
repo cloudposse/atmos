@@ -50,13 +50,56 @@ func ConvertToYAML(data any) (string, error) {
 	return string(y), nil
 }
 
-// UnmarshalYAML takes a YAML string as input and unmarshals it into a Go type
 func UnmarshalYAML[T any](input string) (T, error) {
-	var data T
+	var node yaml.Node
 	b := []byte(input)
 
-	if err := yaml.Unmarshal(b, &data); err != nil {
-		return data, err
+	// Unmarshal into yaml.Node to preserve custom tags and structure
+	if err := yaml.Unmarshal(b, &node); err != nil {
+		var zeroValue T
+		return zeroValue, err
 	}
+
+	// Now, unmarshal the yaml.Node into the desired type T
+	var data T
+	if err := node.Decode(&data); err != nil {
+		var zeroValue T
+		return zeroValue, err
+	}
+
 	return data, nil
 }
+
+//func UnmarshalYAML[T any](input string) (T, error) {
+//	var data T
+//	var node yaml.Node
+//	b := []byte(input)
+//
+//	// First, unmarshal into a yaml.Node to preserve custom tags and structure
+//	if err := yaml.Unmarshal(b, &node); err != nil {
+//		var zeroValue T
+//		return zeroValue, err
+//	}
+//
+//	// If T is yaml.Node, return the node directly
+//	if _, ok := any(data).(*yaml.Node); ok {
+//		return any(&node).(T), nil
+//	}
+//
+//	// Otherwise, unmarshal again into the desired type T
+//	if err := yaml.Unmarshal(b, &data); err != nil {
+//		return data, err
+//	}
+//	return data, nil
+//}
+
+// UnmarshalYAML takes a YAML string as input and unmarshals it into a Go type
+//func UnmarshalYAML[T any](input string) (T, error) {
+//	var data T
+//	b := []byte(input)
+//
+//	if err := yaml.Unmarshal(b, &data); err != nil {
+//		return data, err
+//	}
+//	return data, nil
+//}
