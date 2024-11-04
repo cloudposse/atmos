@@ -223,6 +223,12 @@ func downloadAndInstall(p pkg, dryRun bool) tea.Cmd {
 					name: p.name,
 				}
 			}
+		default:
+			return installedPkgMsg{
+				err:  fmt.Errorf("unknown package type"),
+				name: p.name,
+			}
+
 		}
 		if err := copyToTarget(p.cliConfig, tempDir, p.targetPath, p.s, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{
