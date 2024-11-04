@@ -60,7 +60,7 @@ func UnmarshalYAML[T any](input string) (T, error) {
 		return zeroValue, err
 	}
 
-	// Now, unmarshal the yaml.Node into the desired type T
+	// Unmarshal the yaml.Node into the desired type T
 	var data T
 	if err := node.Decode(&data); err != nil {
 		var zeroValue T
