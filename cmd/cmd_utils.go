@@ -33,6 +33,66 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
+func detectCycle(commands []schema.Command) bool {
+	// Build a command graph
+	graph := make(map[string][]string)
+	for _, cmd := range commands {
+		for _, step := range cmd.Steps {
+			// Add an edge from command to each command it depends on
+			graph[cmd.Name] = append(graph[cmd.Name], parseCommandName(step))
+		}
+	}
+
+	// To track visited nodes and detect cycles
+	visited := make(map[string]bool)
+	recStack := make(map[string]bool)
+
+	// Run DFS for each command to detect cycles
+	for cmd := range graph {
+		if detectCycleUtil(cmd, graph, visited, recStack) {
+			return true // Cycle detected
+		}
+	}
+	return false // No cycle detected
+}
+
+func detectCycleUtil(command string, graph map[string][]string, visited, recStack map[string]bool) bool {
+	// If the current command is in the recursion stack, there's a cycle
+	if recStack[command] {
+		return true
+	}
+
+	// If already visited, no need to explore again
+	if visited[command] {
+		return false
+	}
+
+	// Mark as visited and add to recursion stack
+	visited[command] = true
+	recStack[command] = true
+
+	// Recurse for all dependencies
+	for _, dep := range graph[command] {
+		if detectCycleUtil(dep, graph, visited, recStack) {
+			return true
+		}
+	}
+
+	// Remove from recursion stack before backtracking
+	recStack[command] = false
+	return false
+}
+
+// Helper function to parse command name from the step
+func parseCommandName(step string) string {
+	// Assuming the format "atmos <command>"
+	parts := strings.Split(step, " ")
+	if len(parts) == 2 && parts[0] == "atmos" {
+		return parts[1]
+	}
+	return ""
+}
+
 // processCustomCommands processes and executes custom commands
 func processCustomCommands(
 	cliConfig schema.CliConfiguration,
@@ -45,6 +105,10 @@ func processCustomCommands(
 
 	if topLevel {
 		existingTopLevelCommands = getTopLevelCommands()
+	}
+
+	if detectCycle(commands) {
+		return errors.New("cycle detected in custom cli commands")
 	}
 
 	for _, commandCfg := range commands {
