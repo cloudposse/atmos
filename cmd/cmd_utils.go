@@ -85,10 +85,13 @@ func detectCycleUtil(command string, graph map[string][]string, visited, recStac
 
 // Helper function to parse command name from the step
 func parseCommandName(step string) string {
-	// Assuming the format "atmos <command>"
+	// Split the step into parts
 	parts := strings.Split(step, " ")
-	if len(parts) == 2 && parts[0] == "atmos" {
-		return parts[1]
+
+	// Check if the command starts with "atmos" and has additional parts
+	if len(parts) > 1 && parts[0] == "atmos" {
+		// Return everything after "atmos" as a single string
+		return strings.Join(parts[1:], " ")
 	}
 	return ""
 }
