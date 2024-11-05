@@ -61,7 +61,7 @@ func ProcessComponentMetadata(
 ) (map[string]any, string, bool, bool) {
 	baseComponentName := ""
 	componentIsAbstract := false
-	componentIsEnabled := false
+	componentIsEnabled := true
 	var componentMetadata map[string]any
 
 	// Find base component in the `component` attribute
@@ -77,8 +77,8 @@ func ProcessComponentMetadata(
 			}
 		}
 		if enabledValue, exists := componentMetadata["enabled"]; exists {
-			if enabled, ok := enabledValue.(bool); ok && enabled {
-				componentIsEnabled = true
+			if enabled, ok := enabledValue.(bool); ok && !enabled {
+				componentIsEnabled = false
 			}
 		}
 		// Find base component in the `metadata.component` attribute
