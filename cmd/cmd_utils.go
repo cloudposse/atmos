@@ -165,19 +165,27 @@ func preCustomCommand(
 	parentCommand *cobra.Command,
 	commandConfig *schema.Command,
 ) {
-	var sb strings.Builder
 	if len(args) != len(commandConfig.Arguments) {
+		var sb strings.Builder
+		missingArgCount := 0
 		sb.WriteString(fmt.Sprintf("Command requires %d argument(s):\n", len(commandConfig.Arguments)))
-		for i, arg := range commandConfig.Arguments {
+		for _, arg := range commandConfig.Arguments {
+			if !arg.Required || arg.Default != "" {
+				continue
+			}
 			if arg.Name == "" {
 				u.LogErrorAndExit(schema.CliConfiguration{}, errors.New("invalid argument configuration: empty argument name"))
 			}
-			sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, arg.Name))
+			missingArgCount += 1
+			sb.WriteString(fmt.Sprintf("  %d. %s\n", missingArgCount, arg.Name))
 		}
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s", len(args), strings.Join(args, ", ")))
 		}
-		u.LogErrorAndExit(schema.CliConfiguration{}, errors.New(sb.String()))
+
+		if missingArgCount > 0 {
+			u.LogErrorAndExit(schema.CliConfiguration{}, errors.New(sb.String()))
+		}
 	}
 
 	// no "steps" means a sub command should be specified
