@@ -55,6 +55,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	includeEmptyStacks, err := cmd.Flags().GetBool("include-empty-stacks")
+	if err != nil {
+		return err
+	}
+
 	componentsCsv, err := flags.GetString("components")
 	if err != nil {
 		return err
@@ -97,6 +102,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		sections,
 		false,
 		processTemplates,
+		includeEmptyStacks,
 	)
 	if err != nil {
 		return err
@@ -119,6 +125,7 @@ func ExecuteDescribeStacks(
 	sections []string,
 	ignoreMissingFiles bool,
 	processTemplates bool,
+	includeEmptyStacks bool,
 ) (map[string]any, error) {
 
 	stacksMap, _, err := FindStacksMap(cliConfig, ignoreMissingFiles)
@@ -127,6 +134,7 @@ func ExecuteDescribeStacks(
 	}
 
 	finalStacksMap := make(map[string]any)
+	processedStacks := make(map[string]bool)
 	var varsSection map[string]any
 	var metadataSection map[string]any
 	var settingsSection map[string]any
@@ -141,6 +149,49 @@ func ExecuteDescribeStacks(
 	for stackFileName, stackSection := range stacksMap {
 		// Delete the stack-wide imports
 		delete(stackSection.(map[string]any), "imports")
+
+		// Check if components section exists and has explicit components
+		hasExplicitComponents := false
+		if componentsSection, ok := stackSection.(map[string]any)["components"]; ok {
+			fmt.Printf("DEBUG: Found components section for %s\n", stackFileName)
+			if componentsSection != nil {
+				if terraformSection, ok := componentsSection.(map[string]any)["terraform"].(map[string]any); ok {
+					hasExplicitComponents = len(terraformSection) > 0
+					fmt.Printf("DEBUG: Terraform components found: %v (count: %d)\n", hasExplicitComponents, len(terraformSection))
+				}
+				if helmfileSection, ok := componentsSection.(map[string]any)["helmfile"].(map[string]any); ok {
+					hasExplicitComponents = hasExplicitComponents || len(helmfileSection) > 0
+					fmt.Printf("DEBUG: Helmfile components found: %v\n", hasExplicitComponents)
+				}
+			}
+		}
+
+		// Also check for imports
+		hasImports := false
+		if importsSection, ok := stackSection.(map[string]any)["import"].([]any); ok {
+			hasImports = len(importsSection) > 0
+			fmt.Printf("DEBUG: Imports found for %s: %v (count: %d)\n", stackFileName, hasImports, len(importsSection))
+		}
+
+		fmt.Printf("DEBUG: Stack %s - hasExplicitComponents: %v, hasImports: %v, includeEmptyStacks: %v\n",
+			stackFileName, hasExplicitComponents, hasImports, includeEmptyStacks)
+
+		// Skip stacks without components or imports when includeEmptyStacks is false
+		if !includeEmptyStacks && !hasExplicitComponents && !hasImports {
+			fmt.Printf("DEBUG: Skipping empty stack: %s\n", stackFileName)
+			continue
+		}
+
+		stackName = stackFileName
+		if processedStacks[stackName] {
+			continue
+		}
+		processedStacks[stackName] = true
+
+		if !u.MapKeyExists(finalStacksMap, stackName) {
+			finalStacksMap[stackName] = make(map[string]any)
+			finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
+		}
 
 		if componentsSection, ok := stackSection.(map[string]any)["components"].(map[string]any); ok {
 
@@ -242,9 +293,13 @@ func ExecuteDescribeStacks(
 
 						if stackName == "" {
 							stackName = stackFileName
+						} else if strings.HasPrefix(stackFileName, "deploy/") {
+							// If we have a deploy/ prefixed version, use that as the canonical name
+							stackName = stackFileName
 						}
 
-						if !u.MapKeyExists(finalStacksMap, stackName) {
+						// Only create the stack entry if it doesn't exist or if we're using the canonical name
+						if !u.MapKeyExists(finalStacksMap, stackName) || strings.HasPrefix(stackName, "deploy/") {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
@@ -430,9 +485,13 @@ func ExecuteDescribeStacks(
 
 						if stackName == "" {
 							stackName = stackFileName
+						} else if strings.HasPrefix(stackFileName, "deploy/") {
+							// If we have a deploy/ prefixed version, use that as the canonical name
+							stackName = stackFileName
 						}
 
-						if !u.MapKeyExists(finalStacksMap, stackName) {
+						// Only create the stack entry if it doesn't exist or if we're using the canonical name
+						if !u.MapKeyExists(finalStacksMap, stackName) || strings.HasPrefix(stackName, "deploy/") {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
@@ -512,13 +571,76 @@ func ExecuteDescribeStacks(
 			}
 		}
 
-		// Filter out empty stacks (stacks without any components)
-		if st, ok := finalStacksMap[stackName].(map[string]any); ok {
-			if len(st) == 0 {
+		fmt.Printf("DEBUG: Final stack map for %s: %+v\n", stackName, finalStacksMap[stackName])
+	}
+
+	fmt.Printf("DEBUG: Before final filtering - Stack count: %d\n", len(finalStacksMap))
+
+	// Filter out empty stacks after processing all stack files
+	if !includeEmptyStacks {
+		fmt.Printf("DEBUG: Starting empty stack filtering\n")
+		for stackName := range finalStacksMap {
+			fmt.Printf("DEBUG: Checking final stack: %s\n", stackName)
+
+			if stackName == "" {
+				fmt.Printf("DEBUG: Removing empty stack name\n")
 				delete(finalStacksMap, stackName)
+				continue
+			}
+
+			stackEntry := finalStacksMap[stackName].(map[string]any)
+			componentsSection, hasComponents := stackEntry["components"].(map[string]any)
+			fmt.Printf("DEBUG: Stack %s has components section: %v\n", stackName, hasComponents)
+
+			if !hasComponents {
+				fmt.Printf("DEBUG: Removing stack %s - no components section\n", stackName)
+				delete(finalStacksMap, stackName)
+				continue
+			}
+
+			// Check if any component type (terraform/helmfile) has components
+			hasNonEmptyComponents := false
+			for componentType, components := range componentsSection {
+				fmt.Printf("DEBUG: Checking component type: %s\n", componentType)
+				if compTypeMap, ok := components.(map[string]any); ok {
+					for compName, comp := range compTypeMap {
+						fmt.Printf("DEBUG: Checking component: %s\n", compName)
+						if compContent, ok := comp.(map[string]any); ok {
+							// Check for specific fields that indicate a real component
+							if _, hasVars := compContent["vars"]; hasVars {
+								hasNonEmptyComponents = true
+								fmt.Printf("DEBUG: Found non-empty component %s with vars\n", compName)
+								break
+							}
+						}
+					}
+				}
+				if hasNonEmptyComponents {
+					break
+				}
+			}
+
+			if !hasNonEmptyComponents {
+				fmt.Printf("DEBUG: Removing stack %s - no non-empty components\n", stackName)
+				delete(finalStacksMap, stackName)
+				continue
+			}
+
+			// Check for duplicate stacks (deploy/ prefix)
+			if strings.HasPrefix(stackName, "deploy/") {
+				baseStackName := strings.TrimPrefix(stackName, "deploy/")
+				if _, exists := finalStacksMap[baseStackName]; exists {
+					fmt.Printf("DEBUG: Found duplicate stack %s (base: %s)\n", stackName, baseStackName)
+					// Use the deploy/ prefixed version as canonical and remove the base name
+					delete(finalStacksMap, baseStackName)
+				}
 			}
 		}
+	} else {
+		fmt.Printf("DEBUG: Skipping empty stack filtering because includeEmptyStacks is true\n")
 	}
+
+	fmt.Printf("DEBUG: After final filtering - Stack count: %d\n", len(finalStacksMap))
 
 	return finalStacksMap, nil
 }
