@@ -153,15 +153,12 @@ func ExecuteDescribeStacks(
 		// Check if components section exists and has explicit components
 		hasExplicitComponents := false
 		if componentsSection, ok := stackSection.(map[string]any)["components"]; ok {
-			fmt.Printf("DEBUG: Found components section for %s\n", stackFileName)
 			if componentsSection != nil {
 				if terraformSection, ok := componentsSection.(map[string]any)["terraform"].(map[string]any); ok {
 					hasExplicitComponents = len(terraformSection) > 0
-					fmt.Printf("DEBUG: Terraform components found: %v (count: %d)\n", hasExplicitComponents, len(terraformSection))
 				}
 				if helmfileSection, ok := componentsSection.(map[string]any)["helmfile"].(map[string]any); ok {
 					hasExplicitComponents = hasExplicitComponents || len(helmfileSection) > 0
-					fmt.Printf("DEBUG: Helmfile components found: %v\n", hasExplicitComponents)
 				}
 			}
 		}
@@ -170,15 +167,10 @@ func ExecuteDescribeStacks(
 		hasImports := false
 		if importsSection, ok := stackSection.(map[string]any)["import"].([]any); ok {
 			hasImports = len(importsSection) > 0
-			fmt.Printf("DEBUG: Imports found for %s: %v (count: %d)\n", stackFileName, hasImports, len(importsSection))
 		}
-
-		fmt.Printf("DEBUG: Stack %s - hasExplicitComponents: %v, hasImports: %v, includeEmptyStacks: %v\n",
-			stackFileName, hasExplicitComponents, hasImports, includeEmptyStacks)
 
 		// Skip stacks without components or imports when includeEmptyStacks is false
 		if !includeEmptyStacks && !hasExplicitComponents && !hasImports {
-			fmt.Printf("DEBUG: Skipping empty stack: %s\n", stackFileName)
 			continue
 		}
 
@@ -606,11 +598,13 @@ func ExecuteDescribeStacks(
 					for compName, comp := range compTypeMap {
 						fmt.Printf("DEBUG: Checking component: %s\n", compName)
 						if compContent, ok := comp.(map[string]any); ok {
-							// Check for specific fields that indicate a real component
-							if _, hasVars := compContent["vars"]; hasVars {
-								hasNonEmptyComponents = true
-								fmt.Printf("DEBUG: Found non-empty component %s with vars\n", compName)
-								break
+							// Check for any meaningful content
+							relevantSections := []string{"vars", "metadata", "settings", "env"}
+							for _, section := range relevantSections {
+								if _, hasSection := compContent[section]; hasSection {
+									hasNonEmptyComponents = true
+									break
+								}
 							}
 						}
 					}
