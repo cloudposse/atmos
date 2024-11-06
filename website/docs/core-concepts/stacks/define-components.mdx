@@ -223,10 +223,9 @@ The `metadata.enabled` parameter allows for conditional inclusion of components.
 components:
   terraform:
     vpc:
-       metadata:
-         type: real
-         enabled: false
-        component: infra/vpc
+      metadata:
+        type: real
+        enabled: false
       vars:
         name: primary-vpc
 ```
