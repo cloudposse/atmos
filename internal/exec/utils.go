@@ -130,9 +130,7 @@ func ProcessComponentConfig(
 
 	// Process component metadata and find a base component (if any) and whether the component is real or abstract
 	componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled := ProcessComponentMetadata(component, componentSection)
-	if !componentIsEnabled {
-		return nil
-	}
+	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
 
 	// Remove the ENV vars that are set to `null` in the `env` section.
 	// Setting an ENV var to `null` in stack config has the effect of unsetting it
@@ -394,7 +392,7 @@ func ProcessStacks(
 			}
 		}
 
-		if foundStackCount == 0 {
+		if foundStackCount == 0 && configAndStacksInfo.ComponentIsEnabled {
 			cliConfigYaml := ""
 
 			if cliConfig.Logs.Level == u.LogLevelTrace {
