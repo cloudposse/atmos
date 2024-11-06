@@ -21,7 +21,7 @@ func checkTerraformConfig(cliConfig schema.CliConfiguration) error {
 // cleanTerraformWorkspace deletes the `.terraform/environment` file from the component directory.
 // The `.terraform/environment` file contains the name of the currently selected workspace,
 // helping Terraform identify the active workspace context for managing your infrastructure.
-// We delete the file to prevent the Terraform prompt asking o select the default or the
+// We delete the file to prevent the Terraform prompt asking to select the default or the
 // previously used workspace. This happens when different backends are used for the same component.
 func cleanTerraformWorkspace(componentPath string) {
 	_ = os.Remove(path.Join(componentPath, ".terraform", "environment"))
