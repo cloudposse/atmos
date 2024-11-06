@@ -215,13 +215,19 @@ There are two types of components:
 
 ### Skipping Components with `metadata.enabled`
 
-The `metadata.enabled` parameter allows for conditional inclusion of components. By default, components are enabled. When `metadata.enabled` is set to `false`, the component is skipped during deployment, which is useful for disabling configurations without deletion.
+The `metadata.enabled` parameter allows for conditional inclusion of components. By default, components are enabled. When `metadata.enabled` is set to `false`, the component is completely skipped during deployment - no workspace is created and no Terraform commands are executed. This differs from `vars.enabled: false`, which still processes the component but may result in resource deletion. This feature is particularly useful for temporarily disabling components without removing their configurations.
 
 **Example**:
 ```yaml
-metadata:
-  type: real
-  enabled: false
-```
+# Disable a component in a specific environment
+components:
+  terraform:
+    vpc:
+       metadata:
+         type: real
+         enabled: false
+        component: infra/vpc
+      vars:
+        name: primary-vpc
 
 This enables flexible deployment configurations, ensuring that only the intended components are active in each environment.
