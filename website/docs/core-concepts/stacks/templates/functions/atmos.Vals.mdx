@@ -1,0 +1,53 @@
+---
+title: atmos.Vals
+sidebar_position: 3
+sidebar_label: atmos.Vals
+description: Load config values and secrets from external sources
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `atmos.Vals` template function wraps [vals](https://github.com/helmfile/vals) to support loading config values and secrets from external sources.
+</Intro>
+
+## Usage
+
+```yaml
+  {{ atmos.Vals "<reference>" }}
+```
+
+## Arguments
+
+<dl>
+  <dt>`reference`</dt>
+  <dd>vals reference URI</dd>
+</dl>
+
+For example:
+
+<File>
+```yaml
+components:
+  terraform:
+    dockerconfig:
+      vars:
+        auths:
+          ghcr.io:
+            auth: '{{ atmos.Vals "ref+op://infra/ghcr/token" }}'
+```
+</File>
+
+## Expression syntax
+
+References are URI-like expressions:
+
+```
+ref+BACKEND://PATH[?PARAMS][#FRAGMENT][+]
+```
+
+for mor details, see: https://github.com/helmfile/vals?tab=readme-ov-file#expression-syntax
+
+## Supported backends
+
+For the list of supported backends, see: https://github.com/helmfile/vals?tab=readme-ov-file#supported-backends
