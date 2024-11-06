@@ -212,3 +212,16 @@ There are two types of components:
   <dt>`abstract`</dt>
   <dd>An `abstract` component is more like a blueprint. It can’t be deployed on its own. Instead, it’s a base configuration that needs to be extended or inherited by other components. This is similar to an ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) in programming—it defines reusable configurations, but it’s not complete enough to be deployed directly.</dd>
 </dl>
+
+### Skipping Components with `metadata.enabled`
+
+The `metadata.enabled` parameter allows for conditional inclusion of components. By default, components are enabled. When `metadata.enabled` is set to `false`, the component is skipped during deployment, which is useful for disabling configurations without deletion.
+
+**Example**:
+```yaml
+metadata:
+  type: real
+  enabled: false
+```
+
+This enables flexible deployment configurations, ensuring that only the intended components are active in each environment.
