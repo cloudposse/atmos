@@ -223,87 +223,8 @@ func ExecuteComponentVendorInternal(
 			}
 		}
 
-		// Copy from the temp folder to the destination folder and skip the excluded files
-		copyOptions := cp.Options{
-			// Skip specifies which files should be skipped
-			Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-				if strings.HasSuffix(src, ".git") {
-					return true, nil
-				}
-
-				trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-				// Exclude the files that match the 'excluded_paths' patterns
-				// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
-				// https://en.wikipedia.org/wiki/Glob_(programming)
-				// https://github.com/bmatcuk/doublestar#patterns
-				for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
-					excludeMatch, err := u.PathMatch(excludePath, src)
-					if err != nil {
-						return true, err
-					} else if excludeMatch {
-						// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-						u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
-							trimmedSrc,
-							excludePath,
-						))
-						return true, nil
-					}
-				}
-
-				// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-				if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
-					anyMatches := false
-					for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
-						includeMatch, err := u.PathMatch(includePath, src)
-						if err != nil {
-							return true, err
-						} else if includeMatch {
-							// If the file matches ANY of the 'included_paths' patterns, include the file
-							u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
-								trimmedSrc,
-								includePath,
-							))
-							anyMatches = true
-							break
-						}
-					}
-
-					if anyMatches {
-						return false, nil
-					} else {
-						u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
-						return true, nil
-					}
-				}
-
-				// If 'included_paths' is not provided, include all files that were not excluded
-				u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
-				return false, nil
-			},
-
-			// Preserve the atime and the mtime of the entries
-			// On linux we can preserve only up to 1 millisecond accuracy
-			PreserveTimes: false,
-
-			// Preserve the uid and the gid of all entries
-			PreserveOwner: false,
-
-			// OnSymlink specifies what to do on symlink
-			// Override the destination file if it already exists
-			OnSymlink: func(src string) cp.SymlinkAction {
-				return cp.Deep
-			},
-		}
-
-		componentPath2 := componentPath
-		if sourceIsLocalFile {
-			if filepath.Ext(componentPath) == "" {
-				componentPath2 = path.Join(componentPath, filepath.Base(uri))
-			}
-		}
-
-		if err = cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
+		// Copy from the temp folder to the destination folder
+		if err = copyComponentToDestination(cliConfig, tempDir, componentPath, vendorComponentSpec, sourceIsLocalFile, uri); err != nil {
 			return err
 		}
 	}
@@ -420,4 +341,90 @@ func ExecuteStackVendorInternal(
 	dryRun bool,
 ) error {
 	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not supported yet")
+}
+func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, componentPath string, vendorComponentSpec schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
+	// Copy from the temp folder to the destination folder and skip the excluded files
+	copyOptions := cp.Options{
+		// Skip specifies which files should be skipped
+		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+			if strings.HasSuffix(src, ".git") {
+				return true, nil
+			}
+
+			trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
+
+			// Exclude the files that match the 'excluded_paths' patterns
+			// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+			// https://en.wikipedia.org/wiki/Glob_(programming)
+			// https://github.com/bmatcuk/doublestar#patterns
+			for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
+				excludeMatch, err := u.PathMatch(excludePath, src)
+				if err != nil {
+					return true, err
+				} else if excludeMatch {
+					// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+					u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+						trimmedSrc,
+						excludePath,
+					))
+					return true, nil
+				}
+			}
+
+			// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+			if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
+				anyMatches := false
+				for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
+					includeMatch, err := u.PathMatch(includePath, src)
+					if err != nil {
+						return true, err
+					} else if includeMatch {
+						// If the file matches ANY of the 'included_paths' patterns, include the file
+						u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+							trimmedSrc,
+							includePath,
+						))
+						anyMatches = true
+						break
+					}
+				}
+
+				if anyMatches {
+					return false, nil
+				} else {
+					u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+					return true, nil
+				}
+			}
+
+			// If 'included_paths' is not provided, include all files that were not excluded
+			u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+			return false, nil
+		},
+
+		// Preserve the atime and the mtime of the entries
+		// On linux we can preserve only up to 1 millisecond accuracy
+		PreserveTimes: false,
+
+		// Preserve the uid and the gid of all entries
+		PreserveOwner: false,
+
+		// OnSymlink specifies what to do on symlink
+		// Override the destination file if it already exists
+		OnSymlink: func(src string) cp.SymlinkAction {
+			return cp.Deep
+		},
+	}
+
+	componentPath2 := componentPath
+	if sourceIsLocalFile {
+		if filepath.Ext(componentPath) == "" {
+			componentPath2 = path.Join(componentPath, filepath.Base(uri))
+		}
+	}
+
+	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
+		return err
+	}
+	return nil
 }
