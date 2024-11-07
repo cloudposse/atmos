@@ -215,7 +215,11 @@ There are two types of components:
 
 ### Disabling Components with `metadata.enabled`
 
-The `metadata.enabled` parameter allows for conditional inclusion of components. By default, components are enabled. When `metadata.enabled` is set to `false`, the component is completely skipped during deployment - no workspace is created and no Terraform commands are executed. This differs from `vars.enabled: false`, which still processes the component but may result in resource deletion. This feature is particularly useful for temporarily disabling components without removing their configurations.
+The `metadata.enabled` parameter controls whether a component is included in deployment. By default, components are enabled. Setting `metadata.enabled` to `false` skips the component entirely—no workspace is created, and no Terraform commands are executed. Disabling a component does not cause deletion. It just signals that it's no longer managed by Atmos.
+
+<Note>
+This should not be confused with [Cloud Posse's conventions and best practices](/best-practices/terraform/) of having modules and components define a [Terraform input named `enabled`](/best-practices/terraform/#use-feature-flags-list-or-map-inputs-for-optional-functionality). This is a general convention and `vars.enabled` not a special variable. Atmos does not treat it differently from any other variable.
+</Note>
 
 **Example**:
 ```yaml
