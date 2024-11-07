@@ -103,6 +103,19 @@ func processHelp(
 			"If the workspace does not exist, the command creates it by executing the 'terraform workspace new' command.\n\n" +
 			"Usage: atmos terraform workspace <component> -s <stack>\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/workspace\n")
+	} else if componentType == "workflow" && command == "" {
+		u.PrintMessage("\nAtmos workflow commands support failure handling and resume functionality:\n\n" +
+			"When a workflow step fails:\n" +
+			" - The failed step name and command will be displayed\n" +
+			" - A resume command will be provided to restart from the failed step\n\n" +
+			"Example:\n" +
+			"Step 'deploy-vpc' failed!\n" +
+			"Error: Error applying plan:\n" +
+			"1 error occurred: AWS API call failed\n\n" +
+			"Failed command: terraform apply vpc -auto-approve\n\n" +
+			"To resume the workflow from this step, run:\n" +
+			"atmos workflow deploy-infra -f workflow1 --from-step deploy-vpc\n\n" +
+			"For more details refer to https://atmos.tools/cli/commands/workflow/resume\n")
 	} else {
 		u.PrintMessage(fmt.Sprintf("\nAtmos supports native '%s' commands with all the options, arguments and flags.\n", componentType))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
