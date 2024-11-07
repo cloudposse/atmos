@@ -52,7 +52,7 @@ commands:
         description: >-
           The GitHub repository to fetch the stargazers count for.
           e.g. cloudposse/atmos
-        required: false
+        required: true
         default: cloudposse/atmos
     steps:
       - curl -s https://api.github.com/repos/{{ .Arguments.repo }} | jq -r .stargazers_count
