@@ -45,6 +45,7 @@ var docsCmd = &cobra.Command{
 			defaultWidth := 120
 			screenWidth := defaultWidth
 
+			// Detect terminal width and use it by default if available
 			if term.IsTerminal(int(os.Stdout.Fd())) {
 				termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
 				if err == nil && termWidth > 0 {
@@ -54,8 +55,6 @@ var docsCmd = &cobra.Command{
 
 			if maxWidth > 0 {
 				screenWidth = min(maxWidth, screenWidth)
-			} else {
-				screenWidth = defaultWidth
 			}
 
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
@@ -73,7 +72,7 @@ var docsCmd = &cobra.Command{
 				if os.IsNotExist(err) {
 					u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("No README found for component: %s", info.Component))
 				} else {
-					u.LogErrorAndExit(schema.CliConfiguration{}, err)
+					u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component %s not found", info.Component))
 				}
 			}
 
