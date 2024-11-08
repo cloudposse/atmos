@@ -111,7 +111,7 @@ func ExecuteWorkflow(
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
 			failedMsg := color.New(color.FgRed).Sprintf("\nStep '%s' failed!", step.Name)
-			cmdMsg := color.New(color.FgYellow).Sprintf("Failed command: %s", command)
+			cmdMsg := color.New(color.FgYellow).Sprintf("\nCommand failed:\n%s", command)
 			resumeMsg := color.New(color.FgGreen).Sprintf(
 				"\nTo resume the workflow from this step, run:\ncd %s && atmos workflow %s -f %s --from-step %s",
 				filepath.Dir(workflowPath),
