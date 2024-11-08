@@ -112,10 +112,10 @@ func processHelp(
 			"Step 'deploy-vpc' failed!\n" +
 			"Error: Error applying plan:\n" +
 			"1 error occurred: AWS API call failed\n\n" +
-			"Failed command: terraform apply vpc -auto-approve\n\n" +
+			"Command failed: terraform apply vpc -auto-approve\n\n" +
 			"To resume the workflow from this step, run:\n" +
 			"atmos workflow deploy-infra -f workflow1 --from-step deploy-vpc\n\n" +
-			"For more details refer to https://atmos.tools/cli/commands/workflow/resume\n")
+			"For more details refer to https://atmos.tools/cli/commands/workflow/\n")
 	} else {
 		u.PrintMessage(fmt.Sprintf("\nAtmos supports native '%s' commands with all the options, arguments and flags.\n", componentType))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")

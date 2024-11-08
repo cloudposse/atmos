@@ -380,16 +380,16 @@ When a workflow step fails, Atmos will:
 
 Given this workflow:
 
-```yaml
+```yaml title="stacks/workflows/networking.yaml"
 workflows:
-  test-1:
-    description: "Deploy test components"
+  provision-vpcs:
+    description: "Deploy vpc components"
     steps:
-      - command: terraform plan test/test-component-override-1
+      - command: terraform plan vpc -s plat-ue2-dev
         name: step-1
-      - command: terraform plan test/test-component-override-2
+      - command: terraform plan vpc -s plat-ue2-staging
         name: step-2
-      - command: terraform plan test/test-component-override-3
+      - command: terraform plan vpc -s plat-ue2-prod
         name: step-3
 ```
 
@@ -397,10 +397,12 @@ If step-2 fails, you'll see:
 
 ```console
 Step 'step-2' failed!
-Failed command: terraform plan test/test-component-override-2
+
+Command failed: 
+terraform plan vpc -s plat-ue2-staging
 
 To resume the workflow from this step, run:
-atmos workflow test-1 -f workflow1 --from-step step-2
+atmos workflow provision-vpcs -f networking --from-step step-2
 ```
 
 ### Stack Precedence
