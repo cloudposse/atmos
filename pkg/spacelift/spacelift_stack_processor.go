@@ -172,9 +172,9 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					// Process component metadata and find a base component (if any) and whether the component is real or abstract
-					componentMetadata, baseComponentName, componentIsAbstract := e.ProcessComponentMetadata(component, componentMap)
+					componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled := e.ProcessComponentMetadata(component, componentMap)
 
-					if componentIsAbstract {
+					if componentIsAbstract || !componentIsEnabled {
 						continue
 					}
 
