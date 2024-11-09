@@ -353,7 +353,7 @@ jobs:
       - name: Validate YAML Schema
         uses: InoUno/yaml-ls-check@v1.4.0
         with:
-          root: .
+          root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
             {
               "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
