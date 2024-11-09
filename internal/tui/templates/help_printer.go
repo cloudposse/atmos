@@ -22,12 +22,18 @@ type HelpFlagPrinter struct {
 }
 
 func NewHelpFlagPrinter(out io.Writer, wrapLimit uint) *HelpFlagPrinter {
-	if wrapLimit < minWidth {
+	termWriter := term.NewResponsiveWriter(out)
+
+	// Get the actual terminal width from the writer
+	if tw, ok := termWriter.(*term.TerminalWriter); ok {
+		wrapLimit = tw.GetWidth()
+	} else if wrapLimit < minWidth {
 		wrapLimit = minWidth
 	}
+
 	return &HelpFlagPrinter{
 		wrapLimit: wrapLimit,
-		out:       term.NewResponsiveWriter(out),
+		out:       termWriter,
 	}
 }
 
@@ -46,7 +52,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	}
 
 	prefixLen := len(prefix.String())
-	descWidth := int(p.wrapLimit) - prefixLen - len(flagIndent) - 4
+	descWidth := int(p.wrapLimit) - prefixLen - len(flagIndent)
 
 	description := flag.Usage
 	if flag.DefValue != "" && flag.DefValue != "false" {
@@ -58,11 +64,11 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 
 	fmt.Fprintf(p.out, "%s%s%s\n",
 		prefix.String(),
-		strings.Repeat(" ", descWidth-len(lines[0])),
+		strings.Repeat(" ", 4),
 		lines[0])
 
 	if len(lines) > 1 {
-		indent := strings.Repeat(" ", prefixLen+2)
+		indent := strings.Repeat(" ", prefixLen+4)
 		for _, line := range lines[1:] {
 			fmt.Fprintf(p.out, "%s%s\n", indent, line)
 		}

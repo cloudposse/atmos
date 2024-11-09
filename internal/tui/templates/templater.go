@@ -2,11 +2,11 @@ package templates
 
 import (
 	"fmt"
-	"os"
+	"strings"
 
+	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"golang.org/x/term"
 )
 
 // Templater handles the generation and management of command usage templates.
@@ -16,7 +16,7 @@ type Templater struct {
 
 // SetCustomUsageFunc configures a custom usage template for the provided cobra command.
 // It returns an error if the command is nil.
-func SetCustomUsageFunc(cmd *cobra.Command) error {
+func SetCustomUsageFunc(cmd *cobra.Command, b *boa.Boa) error {
 	if cmd == nil {
 		return fmt.Errorf("command cannot be nil")
 	}
@@ -56,12 +56,18 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 `
 }
 
-// WrappedFlagUsages formats the flag usage string to fit within the terminal width.
-// It attempts to detect the terminal width, falling back to 80 columns if detection fails.
+// Default terminal width if actual width cannot be determined
+const maxWidth = 80
+
+// WrappedFlagUsages formats the flag usage string to fit within the terminal width
 func WrappedFlagUsages(f *pflag.FlagSet) string {
-	width := 80 // Default width
-	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
-		width = w
-	}
-	return f.FlagUsagesWrapped(width - 1)
+	var builder strings.Builder
+
+	printer := NewHelpFlagPrinter(&builder, maxWidth)
+
+	f.VisitAll(func(flag *pflag.Flag) {
+		printer.PrintHelpFlag(flag)
+	})
+
+	return builder.String()
 }

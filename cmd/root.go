@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/elewis787/boa"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -117,19 +118,25 @@ func init() {
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
 	// Set custom usage template
-	templates.SetCustomUsageFunc(RootCmd)
+	templates.SetCustomUsageFunc(RootCmd, nil)
 	cobra.OnInitialize(initConfig)
 }
 
 func initConfig() {
-	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
-		fmt.Println()
+	styles := boa.DefaultStyles()
+	b := boa.New(boa.WithStyles(styles))
 
+	RootCmd.SetUsageFunc(b.UsageFunc)
+
+	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
+		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
+
+		b.HelpFunc(command, strings)
 		command.Usage()
 	})
 }

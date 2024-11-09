@@ -73,3 +73,7 @@ func (w *TerminalWriter) Write(p []byte) (int, error) {
 	// return the original length as per io.Writer contract
 	return originalLen, nil
 }
+
+func (w *TerminalWriter) GetWidth() uint {
+	return w.width
+}
