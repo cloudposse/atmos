@@ -53,6 +53,14 @@ func (w *TerminalWriter) Write(p []byte) (int, error) {
 	if w.width == 0 {
 		return w.writer.Write(p)
 	}
+
+	// Preserving the original length for correct return value
+	originalLen := len(p)
 	wrapped := wordwrap.WrapString(string(p), w.width)
-	return w.writer.Write([]byte(wrapped))
+	n, err := w.writer.Write([]byte(wrapped))
+	if err != nil {
+		return n, err
+	}
+	// return the original length as per io.Writer contract
+	return originalLen, nil
 }
