@@ -62,8 +62,9 @@ const maxWidth = 80
 // WrappedFlagUsages formats the flag usage string to fit within the terminal width
 func WrappedFlagUsages(f *pflag.FlagSet) string {
 	var builder strings.Builder
+	printer := NewHelpFlagPrinter(&builder, maxWidth, f)
 
-	printer := NewHelpFlagPrinter(&builder, maxWidth)
+	printer.maxFlagLen = calculateMaxFlagLength(f)
 
 	f.VisitAll(func(flag *pflag.Flag) {
 		printer.PrintHelpFlag(flag)
