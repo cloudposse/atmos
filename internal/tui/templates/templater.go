@@ -44,10 +44,10 @@ Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand (eq .Name "he
   {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
 
 Flags:
-{{wrappedFlagUsages .LocalFlags | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+{{WrappedFlagUsages .LocalFlags | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
 
 Global Flags:
-{{wrappedFlagUsages .InheritedFlags | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
+{{WrappedFlagUsages .InheritedFlags | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
 
 Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
   {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
@@ -56,7 +56,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 `
 }
 
-// wrappedFlagUsages returns flag usages wrapped to the terminal width
+// WrappedFlagUsages formats the flag usage string to fit within the terminal width.
+// It attempts to detect the terminal width, falling back to 80 columns if detection fails.
 func WrappedFlagUsages(f *pflag.FlagSet) string {
 	width := 80 // Default width
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
