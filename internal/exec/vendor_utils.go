@@ -247,7 +247,7 @@ func ExecuteAtmosVendorInternal(
 	//}
 
 	// Process sources
-	var packages []pkg
+	var packages []pkgAtmosVendor
 	for indexSource, s := range sources {
 		if shouldSkipSource(s, component, tags) {
 			continue
@@ -292,14 +292,14 @@ func ExecuteAtmosVendorInternal(
 				pkgName = uri
 			}
 			// Create package struct
-			p := pkg{
+			p := pkgAtmosVendor{
 				uri:               uri,
 				name:              pkgName,
 				targetPath:        targetPath,
 				sourceIsLocalFile: sourceIsLocalFile,
 				pkgType:           pType,
 				version:           s.Version,
-				s:                 s,
+				atmosVendorSource: s,
 			}
 
 			packages = append(packages, p)
@@ -310,7 +310,7 @@ func ExecuteAtmosVendorInternal(
 
 	// Run TUI to process packages
 	if len(packages) > 0 {
-		model, err := newModel(packages, dryRun, cliConfig)
+		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
 		if err != nil {
 			return fmt.Errorf("error initializing model: %v", err)
 		}

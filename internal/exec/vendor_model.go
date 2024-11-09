@@ -28,17 +28,17 @@ const (
 	pkgTypeLocal
 )
 
-type pkg struct {
+type pkgAtmosVendor struct {
 	uri               string
 	name              string
 	targetPath        string
 	sourceIsLocalFile bool
 	pkgType           pkgType
 	version           string
-	s                 schema.AtmosVendorSource
+	atmosVendorSource schema.AtmosVendorSource
 }
-type model struct {
-	packages  []pkg
+type modelAtmosVendorInternal struct {
+	packages  []pkgAtmosVendor
 	index     int
 	width     int
 	height    int
@@ -57,7 +57,7 @@ var (
 	xMark               = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
 )
 
-func newModel(pkg []pkg, dryRun bool, cliConfig schema.CliConfiguration) (model, error) {
+func newModelAtmosVendorInternal(pkg []pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfiguration) (modelAtmosVendorInternal, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(30),
@@ -66,7 +66,7 @@ func newModel(pkg []pkg, dryRun bool, cliConfig schema.CliConfiguration) (model,
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 
-	return model{
+	return modelAtmosVendorInternal{
 		packages:  pkg,
 		spinner:   s,
 		progress:  p,
@@ -75,15 +75,15 @@ func newModel(pkg []pkg, dryRun bool, cliConfig schema.CliConfiguration) (model,
 	}, nil
 }
 
-func (m model) Init() tea.Cmd {
+func (m modelAtmosVendorInternal) Init() tea.Cmd {
 	// Start downloading with the `uri`, package name, and `tempDir` directly from the model
 	return tea.Batch(downloadAndInstall(m.packages[0], m.dryRun, m.cliConfig), m.spinner.Tick)
 }
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m modelAtmosVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		if m.width > 120 { // Example: max width set to 80 characters
+		if m.width > 120 {
 			m.width = 120
 		}
 	case tea.KeyMsg:
@@ -137,7 +137,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+func (m modelAtmosVendorInternal) View() string {
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
@@ -176,7 +176,7 @@ func max(a, b int) int {
 	}
 	return b
 }
-func downloadAndInstall(p pkg, dryRun bool, cliConfig schema.CliConfiguration) tea.Cmd {
+func downloadAndInstall(p pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			// Simulate the action
@@ -241,7 +241,7 @@ func downloadAndInstall(p pkg, dryRun bool, cliConfig schema.CliConfiguration) t
 			}
 
 		}
-		if err := copyToTarget(cliConfig, tempDir, p.targetPath, p.s, p.sourceIsLocalFile, p.uri); err != nil {
+		if err := copyToTarget(cliConfig, tempDir, p.targetPath, p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{
 				err:  err,
 				name: p.name,
