@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/elewis787/boa"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -107,30 +107,30 @@ func Execute() error {
 }
 
 func init() {
+	// Add template function for wrapped flag usages
+	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
+
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
 
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
+	// Set custom usage template
+	templates.SetCustomUsageFunc(RootCmd)
 	cobra.OnInitialize(initConfig)
 }
 
 func initConfig() {
-	styles := boa.DefaultStyles()
-	b := boa.New(boa.WithStyles(styles))
-
-	RootCmd.SetUsageFunc(b.UsageFunc)
-
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
-		// Print a styled Atmos logo to the terminal
 		fmt.Println()
+
+		// Print a styled Atmos logo to the terminal
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
-
-		b.HelpFunc(command, strings)
+		command.Usage()
 	})
 }
 
