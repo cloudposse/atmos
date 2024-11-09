@@ -33,6 +33,7 @@ func calculateMaxFlagLength(flags *pflag.FlagSet) int {
 	maxLen := 0
 	flags.VisitAll(func(flag *pflag.Flag) {
 		length := len(flagIndent)
+
 		if len(flag.Shorthand) > 0 {
 			length += len(fmt.Sprintf("-%s, --%s", flag.Shorthand, flag.Name))
 		} else {
@@ -47,40 +48,41 @@ func calculateMaxFlagLength(flags *pflag.FlagSet) int {
 			maxLen = length
 		}
 	})
-	return maxLen + 4
+	return maxLen
 }
 
 func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	nameIndent := 4
-	typeIndent := 4
 
-	flagName := ""
+	// Build the complete flag section (name + type) together
+	var flagSection string
 	if flag.Shorthand != "" {
-		flagName = fmt.Sprintf("%s-%s, --%s", strings.Repeat(" ", nameIndent), flag.Shorthand, flag.Name)
+		flagSection = fmt.Sprintf("%s-%s, --%s", strings.Repeat(" ", nameIndent), flag.Shorthand, flag.Name)
 	} else {
-		flagName = fmt.Sprintf("%s    --%s", strings.Repeat(" ", nameIndent), flag.Name)
+		flagSection = fmt.Sprintf("%s    --%s", strings.Repeat(" ", nameIndent), flag.Name)
 	}
 
-	typeStr := ""
 	if flag.Value.Type() != "bool" {
-		typeStr = fmt.Sprintf(" %s", flag.Value.Type())
+		flagSection += fmt.Sprintf(" %s", flag.Value.Type())
 	}
 
-	flagSection := fmt.Sprintf("%-*s%-*s", p.maxFlagLen, flagName, typeIndent, typeStr)
+	padding := p.maxFlagLen - len(flagSection)
+	if padding > 0 {
+		flagSection += strings.Repeat(" ", padding)
+	}
 
-	descIndent := p.maxFlagLen + len(typeStr) + typeIndent + 4
+	descIndent := p.maxFlagLen + 2
+	descWidth := int(p.wrapLimit) - descIndent
 
 	description := flag.Usage
 	if flag.DefValue != "" {
 		description = fmt.Sprintf("%s (default %q)", description, flag.DefValue)
 	}
 
-	descWidth := int(p.wrapLimit) - descIndent
-
 	wrapped := wordwrap.WrapString(description, uint(descWidth))
 	lines := strings.Split(wrapped, "\n")
 
-	fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0])
+	fmt.Fprintf(p.out, "%s  %s\n", flagSection, lines[0])
 
 	// Print remaining lines with proper indentation
 	for _, line := range lines[1:] {
