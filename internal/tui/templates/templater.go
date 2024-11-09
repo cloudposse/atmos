@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -8,19 +9,23 @@ import (
 	"golang.org/x/term"
 )
 
+// Templater handles the generation and management of command usage templates.
 type Templater struct {
 	UsageTemplate string
 }
 
-func SetCustomUsageFunc(cmd *cobra.Command) {
+// SetCustomUsageFunc configures a custom usage template for the provided cobra command.
+// It returns an error if the command is nil.
+func SetCustomUsageFunc(cmd *cobra.Command) error {
 	if cmd == nil {
-		panic("nil root command")
+		return fmt.Errorf("command cannot be nil")
 	}
 	t := &Templater{
 		UsageTemplate: MainUsageTemplate(),
 	}
 
 	cmd.SetUsageTemplate(t.UsageTemplate)
+	return nil
 }
 
 // MainUsageTemplate returns the usage template for the root command and wrap cobra flag usages to the terminal width
