@@ -171,7 +171,7 @@ components:
 
 Atmos caches (in memory) the results of `atmos.Component` template function execution.
 If you call the function for the same component in a stack more than once, the first call will produce the result
-and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the 
+and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
 `atmos.Component` function for the same component in a stack in multiple places in Atmos stack manifests.
 It will speed up the function execution and stack processing.
 
@@ -196,3 +196,37 @@ The template function `{{ atmos.Component "test" .stack }}` is executed three ti
 After the first execution, Atmos caches the result in memory (all the component sections, including the `outputs`),
 and reuses it in the next two calls to the function. The caching makes the stack processing about three times faster in this
 particular example. In a production environment where many components are used, the speedup can be even more significant.
+
+## Handling Outputs Containing Maps or Lists
+
+You can use the `atmos.Component` function to read complex outputs (remote state) from Terraform/OpenTofu components, and use those in your stack manifests. It's important to keep in mind that template functions are evaluated during the **text processing phase—before the file is interpreted as YAML**. (This is similar to the behavior of how Helm chart templates are evaluated.)
+
+To effectively use `atmos.Component` outputs in stack configurations, it’s important to understand the relationship between YAML and JSON. YAML is a superset of JSON, meaning you can embed JSON directly inside YAML, but the reverse is not true.
+
+This means:
+	1.	The output of a template function must be valid YAML (including the relative whitespace based on it's current position) or JSON to be parsed correctly.
+	2.	Simple types like strings are straightforward—they can be returned as-is.
+	3.	Complex types like lists or maps must be serialized into JSON to ensure compatibility.
+
+First, we need to adjust the delimiters in `atmos.yaml`, to avoid issues with YAML parsing:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    # Note the deliberate use of single quotes around the braces to avoid YAML parsing issues
+    delimiters: ["'{{", "}}'"]
+```
+
+Then we can use the `toRawJson` function to serialize complex types into JSON:
+
+```yaml
+  components:
+  terraform:
+    my_lambda_component:
+      vars:
+        vpc_config:
+          security_group_ids: ['{{ (atmos.Component "security-group/lambda" .stack).outputs.id }}']
+          subnet_ids: '{{ toRawJson ((atmos.Component "vpc" .stack).outputs.private_subnets) }}'
+```
+
+The results of the `toRawJson` function are serialized into JSON, which can be safely embedded in the YAML stack configuration. The single quotes around the braces in the `delimiters` setting ensure that the JSON is not parsed as YAML, but then processed as a template function which removes the single quotes and replaces it with the JSON string.
