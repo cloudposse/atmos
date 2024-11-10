@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/mattn/go-isatty"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -317,8 +316,7 @@ func ExecuteAtmosVendorInternal(
 			return fmt.Errorf("error initializing model: %v", err)
 		}
 		var opts []tea.ProgramOption
-		if os.Stdin == nil || !isatty.IsTerminal(os.Stdout.Fd()) {
-			// If we're in daemon mode don't render the TUI
+		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		}
 

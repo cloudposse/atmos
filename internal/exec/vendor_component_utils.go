@@ -339,8 +339,7 @@ func ExecuteComponentVendorInternal(
 			return fmt.Errorf("error initializing model: %v", err)
 		}
 		var opts []tea.ProgramOption
-		if os.Stdin == nil || !isatty.IsTerminal(os.Stdout.Fd()) {
-			// If we're in daemon mode don't render the TUI
+		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		}
 
@@ -349,4 +348,18 @@ func ExecuteComponentVendorInternal(
 		}
 	}
 	return nil
+}
+
+// CheckTTYSupport checks if both stdin and stdout support TTY.
+func CheckTTYSupport() bool {
+	// Check for standard TTY support on stdin and stdout
+	stdinTTY := isatty.IsTerminal(os.Stdin.Fd())
+	stdoutTTY := isatty.IsTerminal(os.Stdout.Fd())
+
+	// Optionally, also check for Cygwin/MSYS compatibility if on Windows
+	stdinCygwinTTY := isatty.IsCygwinTerminal(os.Stdin.Fd())
+	stdoutCygwinTTY := isatty.IsCygwinTerminal(os.Stdout.Fd())
+
+	// Return true if either standard TTY or Cygwin/MSYS TTY is available for both stdin and stdout
+	return (stdinTTY || stdinCygwinTTY) && (stdoutTTY || stdoutCygwinTTY)
 }
