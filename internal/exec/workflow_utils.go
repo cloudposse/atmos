@@ -111,7 +111,9 @@ func ExecuteWorkflow(
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
 			failedMsg := color.New(color.FgRed).Sprintf("\nStep '%s' failed!", step.Name)
-			cmdMsg := color.New(color.FgYellow).Sprintf("\nFailed command: %s", command)
+
+			u.LogDebug(cliConfig, fmt.Sprintf("\nCommand failed: %s", command))
+			u.LogDebug(cliConfig, fmt.Sprintf("Error: %v", err))
 
 			resumeWithCd := fmt.Sprintf("cd %s && atmos workflow %s -f %s --from-step %s",
 				filepath.Dir(workflowPath),
@@ -128,7 +130,7 @@ func ExecuteWorkflow(
 				step.Name,
 			)
 
-			return fmt.Errorf("%s\n%s\n%s\nError: %v", failedMsg, cmdMsg, resumeMsg, err)
+			return fmt.Errorf("%s\n%s", failedMsg, resumeMsg)
 		}
 	}
 
