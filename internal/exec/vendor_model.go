@@ -38,17 +38,15 @@ type pkgAtmosVendor struct {
 	atmosVendorSource schema.AtmosVendorSource
 }
 type modelAtmosVendorInternal struct {
-	packages   []pkgAtmosVendor
-	index      int
-	width      int
-	height     int
-	spinner    spinner.Model
-	progress   progress.Model
-	done       bool
-	dryRun     bool
-	failedPkg  int
-	cliConfig  schema.CliConfiguration
-	TTYSupport bool
+	packages  []pkgAtmosVendor
+	index     int
+	width     int
+	height    int
+	spinner   spinner.Model
+	done      bool
+	dryRun    bool
+	failedPkg int
+	cliConfig schema.CliConfiguration
 }
 
 var (
@@ -59,24 +57,17 @@ var (
 )
 
 func newModelAtmosVendorInternal(pkg []pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfiguration) (modelAtmosVendorInternal, error) {
-	p := progress.New(
-		progress.WithDefaultGradient(),
-		progress.WithWidth(30),
-		progress.WithoutPercentage(),
-	)
+
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	if len(pkg) == 0 {
 		return modelAtmosVendorInternal{}, nil
 	}
-	tty := CheckTTYSupport()
 	return modelAtmosVendorInternal{
-		packages:   pkg,
-		spinner:    s,
-		progress:   p,
-		dryRun:     dryRun,
-		cliConfig:  cliConfig,
-		TTYSupport: tty,
+		packages:  pkg,
+		spinner:   s,
+		dryRun:    dryRun,
+		cliConfig: cliConfig,
 	}, nil
 }
 
@@ -128,15 +119,8 @@ func (m modelAtmosVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update progress bar
 		m.index++
-		if !m.TTYSupport {
-			return m, tea.Batch(
-				tea.Printf("%s %s %s", mark, pkg.name, version),                // print success message above our program
-				downloadAndInstall(m.packages[m.index], m.dryRun, m.cliConfig), // download the next package
-			)
-		}
-		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
+		//progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
 		return m, tea.Batch(
-			progressCmd,
 			tea.Printf("%s %s %s", mark, pkg.name, version),                // print success message above our program
 			downloadAndInstall(m.packages[m.index], m.dryRun, m.cliConfig), // download the next package
 		)
@@ -145,14 +129,7 @@ func (m modelAtmosVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	case progress.FrameMsg:
-		if !m.TTYSupport {
-			return m, nil
-		}
-		newModel, cmd := m.progress.Update(msg)
-		if newModel, ok := newModel.(progress.Model); ok {
-			m.progress = newModel
-		}
-		return m, cmd
+		return m, nil
 	}
 	return m, nil
 }
@@ -172,11 +149,8 @@ func (m modelAtmosVendorInternal) View() string {
 
 	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index, w, n)
 	spin := m.spinner.View() + " "
+	//prog := m.progress.View()
 	prog := ""
-	if m.TTYSupport {
-		prog = m.progress.View()
-	}
-
 	cellsAvail := max(0, m.width-lipgloss.Width(spin+prog+pkgCount))
 	if m.index >= len(m.packages) {
 		return ""
