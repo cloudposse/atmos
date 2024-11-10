@@ -2,6 +2,8 @@ package exec
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -319,7 +321,7 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		}
-		opts = []tea.ProgramOption{tea.WithoutRenderer()}
+		log.SetOutput(io.Discard)
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}

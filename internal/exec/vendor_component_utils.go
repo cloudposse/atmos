@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -343,7 +345,7 @@ func ExecuteComponentVendorInternal(
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		}
-		opts = []tea.ProgramOption{tea.WithoutRenderer()}
+		log.SetOutput(io.Discard)
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
@@ -353,6 +355,7 @@ func ExecuteComponentVendorInternal(
 
 // CheckTTYSupport checks if both stdin  support TTY.
 func CheckTTYSupport() bool {
+
 	// Check for standard TTY support on stdin
 	stdinTTY := isatty.IsTerminal(os.Stdin.Fd())
 
