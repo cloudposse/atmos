@@ -354,7 +354,7 @@ func ExecuteComponentVendorInternal(
 func CheckTTYSupport() bool {
 
 	// Check for standard TTY support on stdin
-	stdinTTY := isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+	stdinTTY := isatty.IsTerminal(os.Stdin.Fd())
 
 	// Return true if either standard TTY
 	return stdinTTY

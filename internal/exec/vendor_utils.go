@@ -314,7 +314,7 @@ func ExecuteAtmosVendorInternal(
 
 		var opts []tea.ProgramOption
 		if !CheckTTYSupport() {
-			// set tea.WithInput(nil) workaround the issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
+			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		}
 		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
