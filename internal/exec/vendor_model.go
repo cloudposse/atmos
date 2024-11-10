@@ -188,6 +188,7 @@ func downloadAndInstall(p pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfi
 		// Create temp directory
 		tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 		if err != nil {
+			u.LogTrace(cliConfig, fmt.Sprintf("Failed to create temp directory %s", err))
 			return err
 		}
 		defer removeTempDir(cliConfig, tempDir)
@@ -202,6 +203,7 @@ func downloadAndInstall(p pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfi
 				Mode: getter.ClientModeAny,
 			}
 			if err := client.Get(); err != nil {
+				u.LogTrace(cliConfig, fmt.Sprintf("Failed to download package %s error %s", p.name, err))
 				return installedPkgMsg{
 					err:  err,
 					name: p.name,
@@ -211,6 +213,7 @@ func downloadAndInstall(p pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfi
 		case pkgTypeOci:
 			// Process OCI images
 			if err := processOciImage(cliConfig, p.uri, tempDir); err != nil {
+				u.LogTrace(cliConfig, fmt.Sprintf("Failed to process OCI image %s error %s", p.name, err))
 				return installedPkgMsg{
 					err:  err,
 					name: p.name,
@@ -228,12 +231,14 @@ func downloadAndInstall(p pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfi
 				tempDir = path.Join(tempDir, filepath.Base(p.uri))
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
+				u.LogTrace(cliConfig, fmt.Sprintf("Failed to copy package %s error %s", p.name, err))
 				return installedPkgMsg{
 					err:  err,
 					name: p.name,
 				}
 			}
 		default:
+			u.LogTrace(cliConfig, fmt.Sprintf("Unknown package type %s", p.name))
 			return installedPkgMsg{
 				err:  fmt.Errorf("unknown package type"),
 				name: p.name,
@@ -241,6 +246,7 @@ func downloadAndInstall(p pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfi
 
 		}
 		if err := copyToTarget(cliConfig, tempDir, p.targetPath, p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
+			u.LogTrace(cliConfig, fmt.Sprintf("Failed to copy package %s error %s", p.name, err))
 			return installedPkgMsg{
 				err:  err,
 				name: p.name,
