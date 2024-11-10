@@ -317,7 +317,7 @@ func ExecuteAtmosVendorInternal(
 			return fmt.Errorf("error initializing model: %v", err)
 		}
 		var opts []tea.ProgramOption
-		if !isatty.IsTerminal(os.Stdout.Fd()) {
+		if os.Stdin == nil || !isatty.IsTerminal(os.Stdout.Fd()) {
 			// If we're in daemon mode don't render the TUI
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		}
