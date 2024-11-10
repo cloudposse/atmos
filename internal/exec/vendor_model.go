@@ -146,9 +146,7 @@ func (m modelAtmosVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m modelAtmosVendorInternal) View() string {
-	if !CheckTTYSupport() {
-		return fmt.Sprintf("Pulling %s", m.packages[m.index].name)
-	}
+
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
