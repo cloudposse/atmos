@@ -65,7 +65,9 @@ func newModelAtmosVendorInternal(pkg []pkgAtmosVendor, dryRun bool, cliConfig sc
 	)
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
-
+	if len(pkg) == 0 {
+		return modelAtmosVendorInternal{}, nil
+	}
 	return modelAtmosVendorInternal{
 		packages:  pkg,
 		spinner:   s,
@@ -76,6 +78,10 @@ func newModelAtmosVendorInternal(pkg []pkgAtmosVendor, dryRun bool, cliConfig sc
 }
 
 func (m modelAtmosVendorInternal) Init() tea.Cmd {
+	if len(m.packages) == 0 {
+		m.done = true
+		return nil
+	}
 	return tea.Batch(downloadAndInstall(m.packages[0], m.dryRun, m.cliConfig), m.spinner.Tick)
 }
 func (m modelAtmosVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

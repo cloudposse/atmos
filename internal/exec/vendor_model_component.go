@@ -53,7 +53,9 @@ func newModelComponentVendorInternal(pkg []pkgComponentVendor, dryRun bool, cliC
 	)
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
-
+	if len(pkg) == 0 {
+		return modelComponentVendorInternal{}, nil
+	}
 	return modelComponentVendorInternal{
 		packages:  pkg,
 		spinner:   s,
@@ -65,6 +67,10 @@ func newModelComponentVendorInternal(pkg []pkgComponentVendor, dryRun bool, cliC
 
 func (m modelComponentVendorInternal) Init() tea.Cmd {
 	// Start downloading with the `uri`, package name, and `tempDir` directly from the model
+	if len(m.packages) == 0 {
+		m.done = true
+		return nil
+	}
 	return tea.Batch(downloadComponentAndInstall(m.packages[0], m.dryRun, m.cliConfig), m.spinner.Tick)
 }
 func (m modelComponentVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
