@@ -322,7 +322,7 @@ func ExecuteAtmosVendorInternal(
 			return fmt.Errorf("error initializing model: %v", err)
 		}
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
-			return fmt.Errorf("running download error: %w", err)
+			return fmt.Errorf("running atmos vendor internal download error: %w", err)
 		}
 	}
 
