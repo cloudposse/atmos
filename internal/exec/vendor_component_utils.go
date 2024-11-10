@@ -341,7 +341,7 @@ func ExecuteComponentVendorInternal(
 		var opts []tea.ProgramOption
 		// Disable TUI if no TTY support is available
 		if !CheckTTYSupport() {
-			opts = []tea.ProgramOption{tea.WithoutRenderer()}
+			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		}
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
