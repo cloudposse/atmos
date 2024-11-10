@@ -2,8 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -320,8 +318,10 @@ func ExecuteAtmosVendorInternal(
 		var opts []tea.ProgramOption
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
+			fmt.Println("TTY is not supported. Running in non-interactive mode.")
+		} else {
+			fmt.Println("TTY is supported. Running in interactive mode.")
 		}
-		log.SetOutput(io.Discard)
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
