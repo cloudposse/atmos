@@ -118,7 +118,7 @@ func init() {
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
 	// Set custom usage template
-	templates.SetCustomUsageFunc(RootCmd, nil)
+	templates.SetCustomUsageFunc(RootCmd)
 	cobra.OnInitialize(initConfig)
 }
 

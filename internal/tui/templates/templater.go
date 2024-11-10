@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -16,7 +15,7 @@ type Templater struct {
 
 // SetCustomUsageFunc configures a custom usage template for the provided cobra command.
 // It returns an error if the command is nil.
-func SetCustomUsageFunc(cmd *cobra.Command, b *boa.Boa) error {
+func SetCustomUsageFunc(cmd *cobra.Command) error {
 	if cmd == nil {
 		return fmt.Errorf("command cannot be nil")
 	}

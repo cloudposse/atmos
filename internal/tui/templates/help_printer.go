@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	defaultOffset = 10
-	minWidth      = 80
-	flagIndent    = "    "
+	defaultOffset   = 10
+	minWidth        = 80
+	flagIndent      = "    "
+	nameIndentWidth = 4
+	minDescWidth    = 20
 )
 
 type HelpFlagPrinter struct {
@@ -22,6 +24,16 @@ type HelpFlagPrinter struct {
 }
 
 func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) *HelpFlagPrinter {
+	if out == nil {
+		panic("output writer cannot be nil")
+	}
+	if flags == nil {
+		panic("flag set cannot be nil")
+	}
+	if wrapLimit < minWidth {
+		wrapLimit = minWidth
+	}
+
 	return &HelpFlagPrinter{
 		wrapLimit:  wrapLimit,
 		out:        out,
@@ -35,13 +47,17 @@ func calculateMaxFlagLength(flags *pflag.FlagSet) int {
 		length := len(flagIndent)
 
 		if len(flag.Shorthand) > 0 {
-			length += len(fmt.Sprintf("-%s, --%s", flag.Shorthand, flag.Name))
+			if flag.Value.Type() != "bool" {
+				length += len(fmt.Sprintf("-%s, --%s %s", flag.Shorthand, flag.Name, flag.Value.Type()))
+			} else {
+				length += len(fmt.Sprintf("-%s, --%s", flag.Shorthand, flag.Name))
+			}
 		} else {
-			length += len(fmt.Sprintf("    --%s", flag.Name))
-		}
-
-		if flag.Value.Type() != "bool" {
-			length += len(fmt.Sprintf(" %s", flag.Value.Type()))
+			if flag.Value.Type() != "bool" {
+				length += len(fmt.Sprintf("    --%s %s", flag.Name, flag.Value.Type()))
+			} else {
+				length += len(fmt.Sprintf("    --%s", flag.Name))
+			}
 		}
 
 		if length > maxLen {
@@ -52,42 +68,55 @@ func calculateMaxFlagLength(flags *pflag.FlagSet) int {
 }
 
 func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
-	nameIndent := 4
+	nameIndent := nameIndentWidth
 
-	// Build the complete flag section (name + type) together
-	var flagSection string
+	flagName := ""
 	if flag.Shorthand != "" {
-		flagSection = fmt.Sprintf("%s-%s, --%s", strings.Repeat(" ", nameIndent), flag.Shorthand, flag.Name)
+		if flag.Value.Type() != "bool" {
+			flagName = fmt.Sprintf("%s-%s, --%s %s", strings.Repeat(" ", nameIndent),
+				flag.Shorthand, flag.Name, flag.Value.Type())
+		} else {
+			flagName = fmt.Sprintf("%s-%s, --%s", strings.Repeat(" ", nameIndent),
+				flag.Shorthand, flag.Name)
+		}
 	} else {
-		flagSection = fmt.Sprintf("%s    --%s", strings.Repeat(" ", nameIndent), flag.Name)
+		if flag.Value.Type() != "bool" {
+			flagName = fmt.Sprintf("%s    --%s %s", strings.Repeat(" ", nameIndent),
+				flag.Name, flag.Value.Type())
+		} else {
+			flagName = fmt.Sprintf("%s    --%s", strings.Repeat(" ", nameIndent),
+				flag.Name)
+		}
 	}
 
-	if flag.Value.Type() != "bool" {
-		flagSection += fmt.Sprintf(" %s", flag.Value.Type())
-	}
-
-	padding := p.maxFlagLen - len(flagSection)
-	if padding > 0 {
-		flagSection += strings.Repeat(" ", padding)
-	}
-
-	descIndent := p.maxFlagLen + 2
-	descWidth := int(p.wrapLimit) - descIndent
+	flagSection := fmt.Sprintf("%-*s", p.maxFlagLen, flagName)
+	descIndent := p.maxFlagLen + 4
 
 	description := flag.Usage
 	if flag.DefValue != "" {
 		description = fmt.Sprintf("%s (default %q)", description, flag.DefValue)
 	}
 
+	descWidth := int(p.wrapLimit) - descIndent
+	if descWidth < minDescWidth {
+		descWidth = minDescWidth
+	}
+
 	wrapped := wordwrap.WrapString(description, uint(descWidth))
 	lines := strings.Split(wrapped, "\n")
 
-	fmt.Fprintf(p.out, "%s  %s\n", flagSection, lines[0])
+	if _, err := fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0]); err != nil {
+		return
+	}
 
 	// Print remaining lines with proper indentation
 	for _, line := range lines[1:] {
-		fmt.Fprintf(p.out, "%s%s\n", strings.Repeat(" ", descIndent), line)
+		if _, err := fmt.Fprintf(p.out, "%s%s\n", strings.Repeat(" ", descIndent), line); err != nil {
+			return
+		}
 	}
 
-	fmt.Fprintln(p.out)
+	if _, err := fmt.Fprintln(p.out); err != nil {
+		return
+	}
 }
