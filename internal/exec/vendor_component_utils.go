@@ -355,6 +355,7 @@ func ExecuteComponentVendorInternal(
 
 // CheckTTYSupport checks if both stdin and stdout support TTY.
 func CheckTTYSupport() bool {
+	return false
 	nTTY := true
 	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
 		_, err := unix.IoctlGetWinsize(int(os.Stdout.Fd()), unix.TIOCGWINSZ)
