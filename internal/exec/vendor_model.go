@@ -92,7 +92,10 @@ func (m modelAtmosVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case installedPkgMsg:
-
+		// ensure index is within bounds
+		if m.index >= len(m.packages) {
+			return m, nil
+		}
 		pkg := m.packages[m.index]
 		mark := checkMark
 
@@ -153,7 +156,9 @@ func (m modelAtmosVendorInternal) View() string {
 	spin := m.spinner.View() + " "
 	prog := m.progress.View()
 	cellsAvail := max(0, m.width-lipgloss.Width(spin+prog+pkgCount))
-
+	if m.index >= len(m.packages) {
+		return ""
+	}
 	pkgName := currentPkgNameStyle.Render(m.packages[m.index].name)
 
 	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render("Pulling " + pkgName)
