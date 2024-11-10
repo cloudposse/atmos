@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hairyhenderson/gomplate/v3"
+	"github.com/mattn/go-isatty"
 	cp "github.com/otiai10/copy"
 )
 
@@ -251,11 +252,7 @@ func ExecuteComponentVendorInternal(
 	} else {
 		pType = pkgTypeRemote
 	}
-	u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'",
-		component,
-		uri,
-		componentPath,
-	))
+
 	componentPkg := pkgComponentVendor{
 		uri:                 uri,
 		name:                component,
@@ -341,7 +338,13 @@ func ExecuteComponentVendorInternal(
 		if err != nil {
 			return fmt.Errorf("error initializing model: %v", err)
 		}
-		if _, err := tea.NewProgram(model).Run(); err != nil {
+		var opts []tea.ProgramOption
+		if !isatty.IsTerminal(os.Stdout.Fd()) {
+			// If we're in daemon mode don't render the TUI
+			opts = []tea.ProgramOption{tea.WithoutRenderer()}
+		}
+
+		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
 	}

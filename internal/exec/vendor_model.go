@@ -76,7 +76,6 @@ func newModelAtmosVendorInternal(pkg []pkgAtmosVendor, dryRun bool, cliConfig sc
 }
 
 func (m modelAtmosVendorInternal) Init() tea.Cmd {
-	// Start downloading with the `uri`, package name, and `tempDir` directly from the model
 	return tea.Batch(downloadAndInstall(m.packages[0], m.dryRun, m.cliConfig), m.spinner.Tick)
 }
 func (m modelAtmosVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -145,7 +144,7 @@ func (m modelAtmosVendorInternal) View() string {
 			return doneStyle.Render("Done! Dry run completed. No components vendored.\n")
 		}
 		if m.failedPkg > 0 {
-			return doneStyle.Render(fmt.Sprintf("Vendored %d components.Failed to vendor %d components.\n", n-m.failedPkg, m.failedPkg))
+			return doneStyle.Render(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", n-m.failedPkg, m.failedPkg))
 		}
 		return doneStyle.Render(fmt.Sprintf("Vendored %d components.\n", n))
 	}
@@ -180,7 +179,7 @@ func downloadAndInstall(p pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfi
 	return func() tea.Msg {
 		if dryRun {
 			// Simulate the action
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			return installedPkgMsg{
 				err:  nil,
 				name: p.name,

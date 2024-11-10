@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattn/go-isatty"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -86,6 +87,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return ExecuteAtmosVendorInternal(cliConfig, foundVendorConfigFile, vendorConfig.Spec, component, tags, dryRun)
 	} else {
 		// Check and process `component.yaml`
+		fmt.Println("No vendor config file found. Checking for component vendoring...")
 		if component != "" {
 			// Process component vendoring
 			componentType, err := flags.GetString("type")
@@ -314,7 +316,13 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return fmt.Errorf("error initializing model: %v", err)
 		}
-		if _, err := tea.NewProgram(model).Run(); err != nil {
+		var opts []tea.ProgramOption
+		if !isatty.IsTerminal(os.Stdout.Fd()) {
+			// If we're in daemon mode don't render the TUI
+			opts = []tea.ProgramOption{tea.WithoutRenderer()}
+		}
+
+		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
 	}
