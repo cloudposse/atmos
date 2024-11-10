@@ -19,6 +19,7 @@ import (
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/mattn/go-isatty"
 	cp "github.com/otiai10/copy"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
@@ -339,6 +340,7 @@ func ExecuteComponentVendorInternal(
 			return fmt.Errorf("error initializing model: %v", err)
 		}
 		var opts []tea.ProgramOption
+		// Disable TUI if no TTY support is available
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		}
@@ -352,6 +354,10 @@ func ExecuteComponentVendorInternal(
 
 // CheckTTYSupport checks if both stdin and stdout support TTY.
 func CheckTTYSupport() bool {
+	t := terminal.IsTerminal(int(os.Stdout.Fd()))
+	if !t {
+		return false
+	}
 	// Check for standard TTY support on stdin and stdout
 	stdinTTY := isatty.IsTerminal(os.Stdin.Fd())
 	stdoutTTY := isatty.IsTerminal(os.Stdout.Fd())
