@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -195,7 +196,8 @@ func execTerraformShellCommand(
 			}
 		}
 
-		if shellCommand == "/bin/zsh" {
+		shellName := filepath.Base(shellCommand)
+		if shellName == "zsh" {
 			shellCommand = shellCommand + " -d -f -i"
 		}
 	}
