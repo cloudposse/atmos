@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/template"
 
@@ -19,7 +20,7 @@ import (
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/mattn/go-isatty"
 	cp "github.com/otiai10/copy"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sys/unix"
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
@@ -354,18 +355,16 @@ func ExecuteComponentVendorInternal(
 
 // CheckTTYSupport checks if both stdin and stdout support TTY.
 func CheckTTYSupport() bool {
-	t := terminal.IsTerminal(int(os.Stdout.Fd()))
-	if !t {
-		return false
+	nTTY := true
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		_, err := unix.IoctlGetWinsize(int(os.Stdout.Fd()), unix.TIOCGWINSZ)
+		if err != nil {
+			nTTY = false
+		}
 	}
 	// Check for standard TTY support on stdin and stdout
 	stdinTTY := isatty.IsTerminal(os.Stdin.Fd())
-	stdoutTTY := isatty.IsTerminal(os.Stdout.Fd())
-
-	// Optionally, also check for Cygwin/MSYS compatibility if on Windows
-	stdinCygwinTTY := isatty.IsCygwinTerminal(os.Stdin.Fd())
-	stdoutCygwinTTY := isatty.IsCygwinTerminal(os.Stdout.Fd())
 
 	// Return true if either standard TTY or Cygwin/MSYS TTY is available for both stdin and stdout
-	return (stdinTTY || stdinCygwinTTY) && (stdoutTTY || stdoutCygwinTTY)
+	return stdinTTY && nTTY
 }
