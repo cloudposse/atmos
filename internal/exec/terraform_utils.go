@@ -3,7 +3,7 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 
@@ -26,6 +26,7 @@ func checkTerraformConfig(cliConfig schema.CliConfiguration) error {
 // We delete the file to prevent the Terraform prompt asking to select the default or the
 // previously used workspace. This happens when different backends are used for the same component.
 func cleanTerraformWorkspace(cliConfig schema.CliConfiguration, componentPath string) {
-	u.LogTrace(cliConfig, fmt.Sprintf("\nDeleting '.terraform/environment' file: %s", componentPath))
-	_ = os.Remove(path.Join(componentPath, ".terraform", "environment"))
+	filePath := filepath.Join(componentPath, ".terraform", "environment")
+	u.LogTrace(cliConfig, fmt.Sprintf("\nDeleting '%s' file", filePath))
+	_ = os.Remove(filePath)
 }
