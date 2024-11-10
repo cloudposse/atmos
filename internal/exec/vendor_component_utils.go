@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"text/template"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/mattn/go-isatty"
 	cp "github.com/otiai10/copy"
-	"golang.org/x/sys/unix"
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
@@ -345,7 +343,7 @@ func ExecuteComponentVendorInternal(
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		}
-
+		opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
@@ -353,19 +351,11 @@ func ExecuteComponentVendorInternal(
 	return nil
 }
 
-// CheckTTYSupport checks if both stdin and stdout support TTY.
+// CheckTTYSupport checks if both stdin  support TTY.
 func CheckTTYSupport() bool {
-	return false
-	nTTY := true
-	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-		_, err := unix.IoctlGetWinsize(int(os.Stdout.Fd()), unix.TIOCGWINSZ)
-		if err != nil {
-			nTTY = false
-		}
-	}
-	// Check for standard TTY support on stdin and stdout
+	// Check for standard TTY support on stdin
 	stdinTTY := isatty.IsTerminal(os.Stdin.Fd())
 
-	// Return true if either standard TTY or Cygwin/MSYS TTY is available for both stdin and stdout
-	return stdinTTY && nTTY
+	// Return true if either standard TTY
+	return stdinTTY
 }

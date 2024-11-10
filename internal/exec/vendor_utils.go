@@ -319,7 +319,7 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		}
-
+		opts = []tea.ProgramOption{tea.WithoutRenderer()}
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
