@@ -314,21 +314,17 @@ func ExecuteAtmosVendorInternal(
 
 		var opts []tea.ProgramOption
 		if !CheckTTYSupport() {
-			opts = []tea.ProgramOption{tea.WithoutRenderer()}
+			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 			fmt.Println("TTY is not supported. Running in non-interactive mode.")
 		}
-		// model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
-		// if err != nil {
-		// 	return fmt.Errorf("error initializing model: %v", err)
-		// }
-		// if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
-		// 	return fmt.Errorf("running atmos vendor internal download error: %w", err)
-		// }
-		p := tea.NewProgram(newModel(), opts...)
-		if _, err := p.Run(); err != nil {
-			fmt.Println("Error starting Bubble Tea program:", err)
-			os.Exit(1)
+		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
+		if err != nil {
+			return fmt.Errorf("error initializing model: %v", err)
 		}
+		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
+			return fmt.Errorf("running atmos vendor internal download error: %w", err)
+		}
+
 	}
 
 	return nil
