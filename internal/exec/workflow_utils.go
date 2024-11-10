@@ -115,14 +115,6 @@ func ExecuteWorkflow(
 			u.LogDebug(cliConfig, fmt.Sprintf("\nCommand failed: %s", command))
 			u.LogDebug(cliConfig, fmt.Sprintf("Error: %v", err))
 
-			resumeWithCd := fmt.Sprintf("cd %s && atmos workflow %s -f %s --from-step %s",
-				filepath.Dir(workflowPath),
-				workflow,
-				workflowFileName,
-				step.Name,
-			)
-			u.LogDebug(cliConfig, fmt.Sprintf("\nFull resume command: %s", resumeWithCd))
-
 			resumeMsg := color.New(color.FgGreen).Sprintf(
 				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",
 				workflow,
