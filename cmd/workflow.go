@@ -12,29 +12,14 @@ import (
 var workflowCmd = &cobra.Command{
 	Use:   "workflow",
 	Short: "Execute a workflow",
-	Long: `This command executes a workflow: atmos workflow <name> -f <file>
-
-Atmos workflow commands support failure handling and resume functionality:
-
-When a workflow step fails:
- - The failed step name and command will be displayed
- - A resume command will be provided to restart from the failed step
-
-Example:
-Step 'deploy-vpc' failed!
-Error: Error applying plan:
-1 error occurred: AWS API call failed
-
-Command failed: terraform apply vpc -auto-approve
-
-To resume the workflow from this step, run:
-atmos workflow deploy-infra -f workflow1 --from-step deploy-vpc
-
-For more details refer to https://atmos.tools/cli/commands/workflow/`,
+	Long:  `This command executes a workflow: atmos workflow <name> -f <file>`,
 	Example: "atmos workflow\n" +
 		"atmos workflow <name> -f <file>\n" +
 		"atmos workflow <name> -f <file> -s <stack>\n" +
-		"atmos workflow <name> -f <file> --from-step <step-name>",
+		"atmos workflow <name> -f <file> --from-step <step-name>\n\n" +
+		"To resume the workflow from this step, run:\n" +
+		"atmos workflow deploy-infra -f workflow1 --from-step deploy-vpc\n\n" +
+		"For more details refer to https://atmos.tools/cli/commands/workflow/",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteWorkflowCmd(cmd, args)
