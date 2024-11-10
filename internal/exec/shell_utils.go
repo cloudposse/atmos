@@ -194,6 +194,10 @@ func execTerraformShellCommand(
 				shellCommand = bashPath
 			}
 		}
+
+		if shellCommand == "/bin/zsh" {
+			shellCommand = shellCommand + " -d -f -i"
+		}
 	}
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
