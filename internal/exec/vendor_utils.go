@@ -311,16 +311,15 @@ func ExecuteAtmosVendorInternal(
 
 	// Run TUI to process packages
 	if len(packages) > 0 {
-		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
-		if err != nil {
-			return fmt.Errorf("error initializing model: %v", err)
-		}
+
 		var opts []tea.ProgramOption
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer()}
 			fmt.Println("TTY is not supported. Running in non-interactive mode.")
-		} else {
-			fmt.Println("TTY is supported. Running in interactive mode.")
+		}
+		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
+		if err != nil {
+			return fmt.Errorf("error initializing model: %v", err)
 		}
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
