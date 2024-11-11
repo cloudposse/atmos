@@ -19,6 +19,7 @@ import (
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands
 func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
+
 	info, err := processCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
@@ -69,6 +70,17 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	if component != "" && len(tags) > 0 {
 		return fmt.Errorf("either '--component' or '--tags' flag can to be provided, but not both")
 	}
+	everything, err := flags.GetBool("everything")
+	if err != nil {
+		return err
+	}
+	if !everything && !flags.Changed("everything") && (component == "" && stack == "" && len(tags) == 0) {
+		// Display help and return an error to prevent execution
+		return fmt.Errorf("either '--component', '--stack', '--tags', or '--everything' flag must be provided")
+	}
+	if everything && (component != "" || stack != "" || len(tags) > 0) {
+		return fmt.Errorf("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
+	}
 
 	if stack != "" {
 		// Process stack vendoring
@@ -80,13 +92,14 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	if vendorConfigExists && err != nil {
 		return err
 	}
-
+	if !vendorConfigExists && everything {
+		return fmt.Errorf("the '--everything' flag is set, but the vendor config file '%s' does not exist", cfg.AtmosVendorConfigFileName)
+	}
 	if vendorConfigExists {
 		// Process `vendor.yaml`
 		return ExecuteAtmosVendorInternal(cliConfig, foundVendorConfigFile, vendorConfig.Spec, component, tags, dryRun)
 	} else {
 		// Check and process `component.yaml`
-		fmt.Println("No vendor config file found. Checking for component vendoring...")
 		if component != "" {
 			// Process component vendoring
 			componentType, err := flags.GetString("type")

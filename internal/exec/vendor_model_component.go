@@ -7,7 +7,6 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -32,20 +31,8 @@ type pkgComponentVendor struct {
 	IsMixins            bool
 	mixinFilename       string
 }
-type modelComponentVendorInternal struct {
-	packages  []pkgComponentVendor
-	index     int
-	width     int
-	height    int
-	spinner   spinner.Model
-	progress  progress.Model
-	done      bool
-	dryRun    bool
-	failedPkg int
-	cliConfig schema.CliConfiguration
-}
 
-func newModelComponentVendorInternal(pkg []pkgComponentVendor, dryRun bool, cliConfig schema.CliConfiguration) (modelComponentVendorInternal, error) {
+func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, cliConfig schema.CliConfiguration) (modelVendor, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(30),
@@ -53,117 +40,31 @@ func newModelComponentVendorInternal(pkg []pkgComponentVendor, dryRun bool, cliC
 	)
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
-	if len(pkg) == 0 {
-		return modelComponentVendorInternal{}, nil
+	if len(pkgs) == 0 {
+		return modelVendor{}, nil
 	}
-	return modelComponentVendorInternal{
-		packages:  pkg,
+	vendorPks := []pkgVendor{}
+	for _, pkg := range pkgs {
+		vendorPkg := pkgVendor{
+			name:             pkg.name,
+			version:          pkg.version,
+			componentPackage: &pkg,
+		}
+		vendorPks = append(vendorPks, vendorPkg)
+
+	}
+	tty := CheckTTYSupport()
+	return modelVendor{
+		packages:  vendorPks,
 		spinner:   s,
 		progress:  p,
 		dryRun:    dryRun,
 		cliConfig: cliConfig,
+		isTTY:     tty,
 	}, nil
 }
 
-func (m modelComponentVendorInternal) Init() tea.Cmd {
-	// Start downloading with the `uri`, package name, and `tempDir` directly from the model
-	if len(m.packages) == 0 {
-		m.done = true
-		return nil
-	}
-	return tea.Batch(downloadComponentAndInstall(m.packages[0], m.dryRun, m.cliConfig), m.spinner.Tick)
-}
-func (m modelComponentVendorInternal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		if m.width > 120 {
-			m.width = 120
-		}
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc", "q":
-			return m, tea.Quit
-		}
-
-	case installedPkgMsg:
-		if m.index >= len(m.packages) {
-			return m, nil
-		}
-		pkg := m.packages[m.index]
-		mark := checkMark
-
-		if msg.err != nil {
-			u.LogDebug(m.cliConfig, fmt.Sprintf("Failed to vendor component %s error %s", pkg.name, msg.err))
-			mark = xMark
-			m.failedPkg++
-		}
-		version := ""
-		if pkg.version != "" {
-			version = fmt.Sprintf("(%s)", pkg.version)
-		}
-		if m.index >= len(m.packages)-1 {
-			// Everything's been installed. We're done!
-			m.done = true
-			return m, tea.Sequence(
-				tea.Printf("%s %s %s", mark, pkg.name, version),
-				tea.Quit,
-			)
-		}
-
-		// Update progress bar
-		m.index++
-		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
-		return m, tea.Batch(
-			progressCmd,
-			tea.Printf("%s %s %s", mark, pkg.name, version),                         // print success message above our program
-			downloadComponentAndInstall(m.packages[m.index], m.dryRun, m.cliConfig), // download the next package
-		)
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	case progress.FrameMsg:
-		newModel, cmd := m.progress.Update(msg)
-		if newModel, ok := newModel.(progress.Model); ok {
-			m.progress = newModel
-		}
-		return m, cmd
-	}
-	return m, nil
-}
-
-func (m modelComponentVendorInternal) View() string {
-	n := len(m.packages)
-	w := lipgloss.Width(fmt.Sprintf("%d", n))
-	if m.done {
-		if m.dryRun {
-			return doneStyle.Render("Done! Dry run completed. No components vendored.\n")
-		}
-		if m.failedPkg > 0 {
-			return doneStyle.Render(fmt.Sprintf("Vendored %d components.Failed to vendor %d components.\n", n-m.failedPkg, m.failedPkg))
-		}
-		return doneStyle.Render(fmt.Sprintf("Vendored %d components.\n", n))
-	}
-
-	pkgCount := fmt.Sprintf(" %*d/%*d", w, m.index, w, n)
-	spin := m.spinner.View() + " "
-	prog := m.progress.View()
-	cellsAvail := max(0, m.width-lipgloss.Width(spin+prog+pkgCount))
-	if m.index >= len(m.packages) {
-		return ""
-	}
-	pkgName := currentPkgNameStyle.Render(m.packages[m.index].name)
-
-	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render("Pulling " + pkgName)
-
-	cellsRemaining := max(0, m.width-lipgloss.Width(spin+info+prog+pkgCount))
-	gap := strings.Repeat(" ", cellsRemaining)
-
-	return spin + info + gap + prog + pkgCount
-}
-
-func downloadComponentAndInstall(p pkgComponentVendor, dryRun bool, cliConfig schema.CliConfiguration) tea.Cmd {
+func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, cliConfig schema.CliConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			// Simulate the action
@@ -208,7 +109,7 @@ func downloadComponentAndInstall(p pkgComponentVendor, dryRun bool, cliConfig sc
 		}
 	}
 }
-func installComponent(p pkgComponentVendor, cliConfig schema.CliConfiguration) error {
+func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) error {
 
 	// Create temp folder
 	// We are using a temp folder for the following reasons:
@@ -281,7 +182,7 @@ func installComponent(p pkgComponentVendor, cliConfig schema.CliConfiguration) e
 	return nil
 
 }
-func installMixin(p pkgComponentVendor, cliConfig schema.CliConfiguration) error {
+func installMixin(p *pkgComponentVendor, cliConfig schema.CliConfiguration) error {
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
 		u.LogTrace(cliConfig, fmt.Sprintf("Failed to create temp directory %s", err))
