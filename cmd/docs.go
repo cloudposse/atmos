@@ -49,7 +49,8 @@ var docsCmd = &cobra.Command{
 			if term.IsTerminal(int(os.Stdout.Fd())) {
 				termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
 				if err == nil && termWidth > 0 {
-					screenWidth = termWidth
+					// Adjusted for subtle padding effect at the terminal boundaries
+					screenWidth = termWidth - 2
 				}
 			}
 
