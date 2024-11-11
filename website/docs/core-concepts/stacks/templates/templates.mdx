@@ -352,24 +352,27 @@ vars:
 
 There are some performance implications of using Go Templates with Atmos Stack configurations.
 
-Using Go templates and template functions in Atmos stack configurations is generally safe and provides powerful flexibility. However, caution is required when leveraging functions like Atmos.Component or others that depend on remote resources or network configurations. These functions can have significant performance implications and potential impacts on availability.
+Using Go templates and template functions in Atmos stack configurations is generally safe and provides powerful flexibility. However, caution is required when leveraging functions like `atmos.Component` or others that depend on remote resources or network configurations. These functions can have significant performance implications and potential impacts on availability.
 
 :::warning Why the Caution?
 
-Atmos processes stack configuration files in two stages: first as Go templates, and then as YAML. During the Go template stage, every template function must be evaluated and resolved before Atmos can load the file. This introduces a critical dependency: Atmos cannot proceed unless all referenced resources are available and accessible.
+Atmos processes stack configuration files in multiple stages: first as Go templates, and then as YAML. During the Go template stage, every template function must be evaluated and resolved before Atmos can load the file. This introduces a critical dependency: Atmos cannot proceed unless all referenced resources are available and accessible.
 :::
 
-	1.	**Performance**: Functions like [`Atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component) may require Atmos to retrieve extensive information about other components or remote resources. This adds latency, especially if used extensively across your stack configurations. Commands like [`atmos describe stacks`](/cli/commands/describe/stacks) or [`atmos describe affected`](/cli/commands/describe/affected), which rely on evaluating all templates, can become noticeably slower as the number of remote calls increases.
+	1.	**Performance**: Functions like [`Atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component) may require Atmos to retrieve extensive information about other components or outputs that depend on Terraform remote state. This adds latency, especially if used extensively across your stack configurations. In the case of retrieving Terraform outputs, Atmos must initialize the Terraform component which involves downloading all Terraform providers, which is slow. Commands like [`atmos describe stacks`](/cli/commands/describe/stacks) or [`atmos describe affected`](/cli/commands/describe/affected), which rely on evaluating all templates, can become noticeably slower as the number of remote calls increases.
 	2.	**Availability Risks:** Templated references to remote resources introduce fragility. If a referenced resource becomes unavailable—whether due to downtime, decommissioning, or network issues—Atmos commands that depend on those templates will fail. This can severely impact high availability (HA) scenarios and your ability to reliably deploy or manage infrastructure.
 
-### Recommendations when using Template Functions
+### Template Function Best Practices
 
-To mitigate these risks, we recommend the following best practices:
-	1.	**Minimize Dependency on Remote Sources**: Avoid referencing resources in your templates that are not highly available or are prone to downtime. Where possible, use static or locally resolvable values.
-	2.	**Use Atmos.Component Sparingly**: While Atmos.Component is powerful, its overuse can significantly degrade performance. Limit its use to scenarios where it is truly necessary, and consider precomputing or caching values to reduce the frequency of evaluations.
-	3.	**Test for Resilience**: Simulate scenarios where a remote resource becomes unavailable and observe how Atmos behaves. Design your configurations to handle failures gracefully or provide fallbacks where feasible.
+Careful management of template dependencies is essential for optimizing the performance of Atmos while ensuring a robust and reliable infrastructure configuration process.
 
-By carefully managing template dependencies and understanding the implications of remote resource evaluations, you can optimize the performance of Atmos while maintaining a robust and reliable infrastructure configuration process.
+To avoid potential pitfalls and maximize efficiency, follow these best practices:
+
+	1. **Minimize Dependency on Remote Sources**: Avoid referencing resources in your templates that are not highly available or are prone to downtime. Where possible, use static or locally resolvable values.
+	2. **Use `Atmos.Component` Sparingly**: While Atmos.Component is powerful, its overuse can significantly degrade performance. Limit its use to scenarios where it is truly necessary, and consider precomputing or caching values to reduce the frequency of evaluations.
+  3. **Use Terraform Remote State Directly**: Instead of relying on template functions to retrieve remote state, [use Terraform's native ability to retrieve the remote state](/core-concepts/share-data/#using-terraform-remote-state) of other components.
+	4. **Test for Resilience**: Simulate scenarios where a remote resource becomes unavailable and observe how Atmos behaves. Design your configurations to handle failures gracefully or provide fallbacks where feasible.
+
 
 ## Template Evaluations
 
@@ -567,7 +570,7 @@ chart_values:
     message: '{{ printf "Application {{ .app.metadata.name }} is now running new version." }}'
 ```
 
-## Excluding Templates in Imports from Processing by Atmos
+## Excluding Templates in Imports
 
 If you are using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and `Go` templates
 in stack manifests in the same Atmos manifest, take into account that in this case Atmos will do `Go`
