@@ -168,6 +168,15 @@ func preCustomCommand(
 	if len(args) != len(commandConfig.Arguments) {
 		var sb strings.Builder
 		missingArgCount := 0
+		if len(commandConfig.Arguments) == 0 {
+			u.LogError(schema.CliConfiguration{}, errors.New("invalid command"))
+			sb.WriteString("Available command(s):\n")
+			for i, c := range commandConfig.Commands {
+				sb.WriteString(fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name))
+			}
+			u.LogInfo(schema.CliConfiguration{}, sb.String())
+			os.Exit(1)
+		}
 		sb.WriteString(fmt.Sprintf("Command requires %d argument(s):\n", len(commandConfig.Arguments)))
 		for _, arg := range commandConfig.Arguments {
 			if !arg.Required || arg.Default != "" {
