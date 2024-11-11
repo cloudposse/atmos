@@ -29,6 +29,11 @@ type CliConfiguration struct {
 
 type CliSettings struct {
 	ListMergeStrategy string `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Docs              Docs   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+}
+
+type Docs struct {
+	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
 }
 
 type Templates struct {
