@@ -588,7 +588,7 @@ func ExecuteDescribeStacks(
 					for _, comp := range compTypeMap {
 						if compContent, ok := comp.(map[string]any); ok {
 							// Check for any meaningful content
-							relevantSections := []string{"vars", "metadata", "settings", "env"}
+							relevantSections := []string{"vars", "metadata", "settings", "env", "workspace"}
 							for _, section := range relevantSections {
 								if _, hasSection := compContent[section]; hasSection {
 									hasNonEmptyComponents = true
@@ -615,6 +615,13 @@ func ExecuteDescribeStacks(
 			}
 		}
 	} else {
+		// When including empty stacks, we still need to handle deploy/ prefix duplicates
+		for stackName := range finalStacksMap {
+			if strings.HasPrefix(stackName, "deploy/") {
+				baseStackName := strings.TrimPrefix(stackName, "deploy/")
+				delete(finalStacksMap, baseStackName)
+			}
+		}
 	}
 
 	return finalStacksMap, nil
