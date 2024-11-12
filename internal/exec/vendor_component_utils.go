@@ -311,8 +311,6 @@ func ExecuteComponentVendorInternal(
 			}
 			if useOciScheme {
 				pType = pkgTypeOci
-			} else if useLocalFileSystem {
-				pType = pkgTypeLocal
 			} else {
 				pType = pkgTypeRemote
 			}
@@ -321,7 +319,7 @@ func ExecuteComponentVendorInternal(
 				uri:                 uri,
 				pkgType:             pType,
 				name:                "mixin " + uri,
-				sourceIsLocalFile:   sourceIsLocalFile,
+				sourceIsLocalFile:   false,
 				IsMixins:            true,
 				vendorComponentSpec: vendorComponentSpec,
 				version:             mixin.Version,
@@ -342,6 +340,7 @@ func ExecuteComponentVendorInternal(
 		// Disable TUI if no TTY support is available
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+			u.LogWarning(cliConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)

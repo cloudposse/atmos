@@ -263,11 +263,11 @@ func ExecuteAtmosVendorInternal(
 	// Process sources
 	var packages []pkgAtmosVendor
 	for indexSource, s := range sources {
-		if shouldSkipSource(s, component, tags) {
+		if shouldSkipSource(&s, component, tags) {
 			continue
 		}
 
-		if err := validateSourceFields(s, vendorConfigFileName); err != nil {
+		if err := validateSourceFields(&s, vendorConfigFileName); err != nil {
 			return err
 		}
 
@@ -329,6 +329,7 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+			u.LogWarning(cliConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
 		if err != nil {
@@ -398,7 +399,7 @@ func logInitialMessage(cliConfig schema.CliConfiguration, vendorConfigFileName s
 	u.LogInfo(cliConfig, logMessage)
 
 }
-func validateSourceFields(s schema.AtmosVendorSource, vendorConfigFileName string) error {
+func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
 	// Ensure necessary fields are present
 	if s.File == "" {
 		s.File = vendorConfigFileName
@@ -411,7 +412,7 @@ func validateSourceFields(s schema.AtmosVendorSource, vendorConfigFileName strin
 	}
 	return nil
 }
-func shouldSkipSource(s schema.AtmosVendorSource, component string, tags []string) bool {
+func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []string) bool {
 	// Skip if component or tags do not match
 	// If `--component` is specified, and it's not equal to this component, skip this component
 	// If `--tags` list is specified, and it does not contain any tags defined in this component, skip this component
@@ -437,7 +438,7 @@ func determineSourceType(uri, vendorConfigFilePath string) (bool, bool, bool) {
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
 }
 
-func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string, s schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
+func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
 	copyOptions := cp.Options{
 		Skip:          generateSkipFunction(cliConfig, tempDir, s),
 		PreserveTimes: false,
@@ -453,7 +454,7 @@ func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string,
 	return cp.Copy(tempDir, targetPath, copyOptions)
 }
 
-func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
+func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 		if strings.HasSuffix(src, ".git") {
 			return true, nil

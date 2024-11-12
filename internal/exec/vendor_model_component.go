@@ -211,7 +211,11 @@ func installMixin(p *pkgComponentVendor, cliConfig schema.CliConfiguration) erro
 			return err
 		}
 	case pkgTypeLocal:
-		return nil
+		if p.uri == "" {
+			return fmt.Errorf("local mixin URI cannot be empty")
+		}
+		// Implement local mixin installation logic
+		return fmt.Errorf("local mixin installation not implemented")
 
 	default:
 		u.LogTrace(cliConfig, fmt.Sprintf("Unknown package type %s", p.name))

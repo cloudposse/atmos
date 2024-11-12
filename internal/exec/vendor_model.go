@@ -62,6 +62,7 @@ var (
 	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
 	checkMark           = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
 	xMark               = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
+	grayColor           = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
 func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfiguration) (modelVendor, error) {
@@ -147,6 +148,7 @@ func (m modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				u.LogInfo(m.cliConfig, fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
 			}
+			version := grayColor.Render(version)
 			return m, tea.Sequence(
 				tea.Printf("%s %s %s", mark, pkg.name, version),
 				tea.Quit,
@@ -161,6 +163,7 @@ func (m modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.isTTY {
 			u.LogInfo(m.cliConfig, fmt.Sprintf("Pulling %s", m.packages[m.index].name))
 		}
+		version = grayColor.Render(version)
 		return m, tea.Batch(
 			progressCmd,
 			tea.Printf("%s %s %s", mark, pkg.name, version),            // print success message above our program
@@ -293,7 +296,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 			}
 
 		}
-		if err := copyToTarget(cliConfig, tempDir, p.targetPath, p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
+		if err := copyToTarget(cliConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			u.LogTrace(cliConfig, fmt.Sprintf("Failed to copy package %s error %s", p.name, err))
 			return installedPkgMsg{
 				err:  err,
@@ -313,5 +316,13 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, cliConfig schema.CliConfig
 	if installer.componentPackage != nil {
 		return downloadComponentAndInstall(installer.componentPackage, dryRun, cliConfig)
 	}
-	return nil
+	// No valid package provided
+	return func() tea.Msg {
+		err := fmt.Errorf("no valid installer package provided for %s", installer.name)
+		u.LogError(cliConfig, err)
+		return installedPkgMsg{
+			err:  err,
+			name: installer.name,
+		}
+	}
 }
