@@ -30,6 +30,13 @@ Refer to each backend's documentation for the complete list of required credenti
   {{ atmos.Vals "<reference>" }}
 ```
 
+### Security Best Practices
+
+When managing credentials:
+- Implement regular credential rotation
+- Use different credentials per environment
+- Consider using credential management tools like AWS IAM roles or Vault
+
 ## Arguments
 
 <dl>
@@ -52,6 +59,20 @@ components:
 </File>
 
 <b>Note</b>: 1Password backend expects the `OP_SERVICE_ACCOUNT_TOKEN` environment variable to be set prior to running Atmos.
+
+### Validation
+
+To validate your configuration:
+
+1. Ensure the secret exists in 1Password
+2. Verify the service account token has necessary permissions
+3. Test with `atmos describe stack --stack=your-stack` in a secure environment
+
+### Common Issues
+
+- Invalid token format
+- Insufficient permissions
+- Secret path not found
 
 ## Expression syntax
 
