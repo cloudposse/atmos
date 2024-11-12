@@ -118,3 +118,23 @@ Common expression patterns:
 - [Bitwarden](https://github.com/helmfile/vals#bitwarden)
 
 For the complete list of supported backends, see: https://github.com/helmfile/vals?tab=readme-ov-file#supported-backends
+
+## Error Handling
+
+The `atmos.Vals` function will:
+- Return an error if the backend is unreachable
+- Fail fast if credentials are invalid
+- Surface backend-specific error messages
+
+Handle potential errors in your templates:
+
+```yaml
+{{ $secret := atmos.Vals "ref+vault://secret/myapp" | default "fallback-value" }}
+```
+
+## Performance Considerations
+
+- Cache Duration: Secrets are cached for the duration of the Atmos command
+- Parallel Requests: Multiple vals references are fetched concurrently
+- Backend Latency: Consider the network latency to your chosen backend
+- Rate Limits: Be aware of backend-specific API rate limits
