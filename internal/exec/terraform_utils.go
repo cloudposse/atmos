@@ -27,6 +27,6 @@ func checkTerraformConfig(cliConfig schema.CliConfiguration) error {
 // previously used workspace. This happens when different backends are used for the same component.
 func cleanTerraformWorkspace(cliConfig schema.CliConfiguration, componentPath string) {
 	filePath := filepath.Join(componentPath, ".terraform", "environment")
-	u.LogTrace(cliConfig, fmt.Sprintf("\nDeleting '%s' file", filePath))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nDeleting file: '%s'", filePath))
 	_ = os.Remove(filePath)
 }
