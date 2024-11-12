@@ -70,6 +70,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return errors.New("stack must be specified")
 	}
 
+	if !info.ComponentIsEnabled {
+		u.LogInfo(cliConfig, fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		return nil
+	}
+
 	err = checkTerraformConfig(cliConfig)
 	if err != nil {
 		return err
@@ -280,7 +285,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(componentPath)
+		cleanTerraformWorkspace(cliConfig, componentPath)
 
 		err = ExecuteShellCommand(
 			cliConfig,
@@ -364,7 +369,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	case "init":
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(componentPath)
+		cleanTerraformWorkspace(cliConfig, componentPath)
 
 		if cliConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
