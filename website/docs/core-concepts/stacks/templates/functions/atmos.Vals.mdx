@@ -9,16 +9,22 @@ import Intro from '@site/src/components/Intro'
 import Admonition from '@theme/Admonition'
 
 <Intro>
-The `atmos.Vals` template function wraps [vals](https://github.com/helmfile/vals) to support loading config values and secrets from external sources.
-</Intro>
+The `atmos.Vals` template function wraps [vals](https://github.com/helmfile/vals) to support loading config values and secrets from external sources. This enables secure management of sensitive information by keeping secrets separate from your configuration files and leveraging established secret management systems.
+ </Intro>
 
 <Admonition type="warning" title="Careful with secrets">
-  `atmos describe stack` will reveal the secrets in plain text without obfuscation.
+  `atmos describe stack` will reveal the secrets in plain text without obfuscation. Make sure not to accidentally run these commands to stdout in your CI/CD pipelines.
 </Admonition>
 
 ## Usage
 
-To use [vals](https://github.com/helmfile/vals) environment variables need to be set corresponding to the secrets backend used.
+To use [vals](https://github.com/helmfile/vals), you need to set specific environment variables based on your chosen backend:
+
+- For AWS backends: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- For GCP backends: `GOOGLE_APPLICATION_CREDENTIALS`
+- For Azure backends: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
+
+Refer to each backend's documentation for the complete list of required credentials.
 
 ```yaml
   {{ atmos.Vals "<reference>" }}
@@ -55,7 +61,13 @@ References are URI-like expressions:
 ref+BACKEND://PATH[?PARAMS][#FRAGMENT][+]
 ```
 
-for mor details, see: https://github.com/helmfile/vals?tab=readme-ov-file#expression-syntax
+For more details, see: https://github.com/helmfile/vals?tab=readme-ov-file#expression-syntax
+
+Common expression patterns:
+
+- AWS Secret: `ref+awssecrets://myapp/dev/secret`
+- Vault Secret: `ref+vault://secret/data/myapp#/mykey`
+- SOPS: `ref+sops://path/to/file#/foo/bar`
 
 ## Supported backends
 
