@@ -27,7 +27,7 @@ Atmos searches for the vendoring manifest in the following locations and uses th
 After defining the `vendor.yaml` manifest, all the remote artifacts can be downloaded by running the following command:
 
 ```shell
-atmos vendor pull
+atmos vendor pull --everything
 ```
 
 To vendor a particular component or other artifact, execute the following command:
@@ -154,7 +154,7 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
 With this configuration, it would be possible to run the following commands:
 <Terminal>
 ```shell
-# atmos vendor pull
+# atmos vendor pull --everything
 # atmos vendor pull --component vpc-mixin-1
 # atmos vendor pull -c vpc-mixin-2
 # atmos vendor pull -c vpc-mixin-3
@@ -411,7 +411,7 @@ are defined:
 
 <Terminal>
 ```shell
-> atmos vendor pull
+> atmos vendor pull --everything
 
 Processing vendor config file 'vendor.yaml'
 Pulling sources for the component 'my-vpc6' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.315.0' into 'components/terraform/infra/my-vpc6'
