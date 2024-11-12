@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/helmfile/vals"
 
@@ -47,10 +48,12 @@ func valsFunc(cliConfig schema.CliConfiguration, ref string) (any, error) {
 		return nil, fmt.Errorf("vals failed to initialize runtime: %w", err)
 	}
 
+	now := time.Now()
 	res, err := vrt.Get(ref)
 	if err != nil {
 		return nil, fmt.Errorf("vals failed to get value for reference %q: %w", ref, err)
 	}
+	u.LogDebug(cliConfig, fmt.Sprintf("vals get: '%s' in %s", ref, time.Since(now)))
 
 	return res, nil
 }
@@ -58,8 +61,10 @@ func valsFunc(cliConfig schema.CliConfiguration, ref string) (any, error) {
 // vals singleton runtime to support builtin LRU cache and avoid multiple initialization
 func valsRuntime(cliConfig schema.CliConfiguration) (*vals.Runtime, error) {
 	valsOnce.Do(func() {
+		now := time.Now()
 		vlw := valsLogWriter{cliConfig}
 		valsInst, valsErr = vals.New(vals.Options{LogOutput: vlw})
+		u.LogDebug(cliConfig, fmt.Sprintf("vals runtime init in %s", time.Since(now)))
 	})
 	return valsInst, valsErr
 }
