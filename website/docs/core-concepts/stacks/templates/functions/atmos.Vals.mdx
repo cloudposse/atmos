@@ -129,8 +129,23 @@ The `atmos.Vals` function will:
 Handle potential errors in your templates:
 
 ```yaml
+# Basic error handling with default value
 {{ $secret := atmos.Vals "ref+vault://secret/myapp" | default "fallback-value" }}
-```
+
+# Conditional logic based on secret availability
+{{- if $secret := atmos.Vals "ref+vault://secret/myapp" }}
+  value: {{ $secret }}
+{{- else }}
+  {{- fail "Required secret not available" }}
+{{- end }}
+
+# Multiple secrets with error aggregation
+{{- $creds := dict }}
+{{- range $key := list "username" "password" "api-key" }}
+  {{- $path := printf "ref+vault://secret/myapp/%s" $key }}
+  {{- $value := atmos.Vals $path | default (fail (printf "Missing required secret: %s" $key)) }}
+  {{- $_ := set $creds $key $value }}
+{{- end }}
 
 ## Performance Considerations
 
