@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -154,6 +155,7 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_import=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
+	componentEnvList = append(componentEnvList, fmt.Sprintf("PS1=atmos:%s/%s> ", stack, component))
 
 	u.LogDebug(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
 	u.LogDebug(cliConfig, fmt.Sprintf("Component: %s\n", component))
@@ -183,11 +185,21 @@ func execTerraformShellCommand(
 		if len(shellCommand) == 0 {
 			bashPath, err := exec.LookPath("bash")
 			if err != nil {
-				return err
+				// Try fallback to sh if bash is not available
+				shPath, shErr := exec.LookPath("sh")
+				if shErr != nil {
+					return fmt.Errorf("no suitable shell found: %v", shErr)
+				}
+				shellCommand = shPath
+			} else {
+				shellCommand = bashPath
 			}
-			shellCommand = bashPath
 		}
-		shellCommand = shellCommand + " -l"
+
+		shellName := filepath.Base(shellCommand)
+		if shellName == "zsh" {
+			shellCommand = shellCommand + " -d -f -i"
+		}
 	}
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
