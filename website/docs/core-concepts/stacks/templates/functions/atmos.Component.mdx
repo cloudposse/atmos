@@ -125,9 +125,9 @@ You can use the `atmos.Component` function to read complex outputs (remote state
 To effectively use `atmos.Component` outputs in stack configurations, it’s important to understand the relationship between YAML and JSON. YAML is a superset of JSON, meaning you can embed JSON directly inside YAML, but the reverse is not true.
 
 This means:
-	1.	The output of a template function must be valid YAML (including the relative whitespace based on it's current position) or JSON to be parsed correctly.
-	2.	Simple types like strings are straightforward—they can be returned as-is.
-	3.	Complex types like lists or maps must be serialized into JSON to ensure compatibility.
+  1. The output of a template function must be valid YAML (including the relative whitespace based on it's current position) or JSON to be parsed correctly.
+  2. Simple types like strings are straightforward—they can be returned as-is.
+  3. Complex types like lists or maps must be serialized into JSON to ensure compatibility.
 
 ### Atmos Configuration
 
@@ -149,10 +149,10 @@ In YAML, the default `{{` and `}}` delimiters used for templating can conflict w
 
 2. Go Template Processing Phase: After successfully parsing the YAML structure, Atmos treats the file as a Go template and processes the content. Here’s what happens:
    - Everything between the delimiters (`{{ ... }}`) is replaced by the result of the template function or expression.
-	 - The output of this replacement must also be valid YAML so the file can remain usable for the next steps (e.g., Terraform processing).
+   - The output of this replacement must also be valid YAML so the file can remain usable for the next steps (e.g., Terraform processing).
 3. How Adjusted Delimiters Work: By configuring delimiters as `["'{{", "}}'"]` in `atmos.yaml`, you ensure that:
-	 - During the YAML Parsing Phase, the single quotes (`'`) around the template expressions make them valid YAML strings, allowing the file to pass YAML validation.
-	 - During the Go Template Processing Phase, Atmos processes the content within '`{{` and `}}`' and replaces it with the evaluated result.
+   - During the YAML Parsing Phase, the single quotes (`'`) around the template expressions make them valid YAML strings, allowing the file to pass YAML validation.
+   - During the Go Template Processing Phase, Atmos processes the content within '`{{` and `}}`' and replaces it with the evaluated result.
 
 </details>
 
