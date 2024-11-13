@@ -15,7 +15,7 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/bmatcuk/doublestar/v4"
 	cfg "github.com/cloudposse/atmos/pkg/config"
