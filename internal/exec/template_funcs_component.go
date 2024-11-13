@@ -154,6 +154,9 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		ctx := context.Background()
 
 		// 'terraform init'
+		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
+		cleanTerraformWorkspace(cliConfig, componentPath)
+
 		u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform init %s -s %s'", component, stack))
 		err = tf.Init(ctx, tfexec.Upgrade(false))
 		if err != nil {
