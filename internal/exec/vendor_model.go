@@ -243,12 +243,13 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 			return err
 		}
 		defer removeTempDir(cliConfig, tempDir)
-
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
 			client := &getter.Client{
-				Ctx:  context.Background(),
+				Ctx:  ctx,
 				Dst:  tempDir,
 				Src:  p.uri,
 				Mode: getter.ClientModeAny,
