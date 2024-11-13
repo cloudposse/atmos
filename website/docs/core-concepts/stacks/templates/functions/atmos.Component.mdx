@@ -171,20 +171,7 @@ Then we can use the `toRawJson` function to serialize complex types into JSON:
           subnet_ids: '{{ toRawJson ((atmos.Component "vpc" .stack).outputs.private_subnets) }}'
 ```
 
-Then we can use the `toRawJson` function to serialize complex types into JSON:
-
-```yaml
-  components:
-  terraform:
-    my_lambda_component:
-      vars:
-        vpc_config:
-          security_group_ids: ['{{ (atmos.Component "security-group/lambda" .stack).outputs.id }}']
-          subnet_ids: '{{ toRawJson ((atmos.Component "vpc" .stack).outputs.private_subnets) }}'
-```
-
 The results of the `toRawJson` function are serialized into JSON, which can be safely embedded in the YAML stack configuration. The single quotes around the braces in the `delimiters` setting ensure that the JSON is not parsed as YAML, but then processed as a template function which removes the single quotes and replaces it with the JSON string.
-
 
 ## Examples
 
