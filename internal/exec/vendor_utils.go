@@ -64,20 +64,25 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if component != "" && stack != "" {
-		return fmt.Errorf("either '--component' or '--stack' flag can to be provided, but not both")
+		return fmt.Errorf("either '--component' or '--stack' flag can be provided, but not both")
 	}
 
 	if component != "" && len(tags) > 0 {
-		return fmt.Errorf("either '--component' or '--tags' flag can to be provided, but not both")
+		return fmt.Errorf("either '--component' or '--tags' flag can be provided, but not both")
 	}
+
+	// Retrieve the 'everything' flag and set default behavior if no other flags are set
 	everything, err := flags.GetBool("everything")
 	if err != nil {
 		return err
 	}
-	if !everything && !flags.Changed("everything") && (component == "" && stack == "" && len(tags) == 0) {
-		// Display help and return an error to prevent execution
-		return fmt.Errorf("either '--component', '--stack', '--tags', or '--everything' flag must be provided")
+
+	// If neither `everything`, `component`, `stack`, nor `tags` flags are set, default to `everything = true`
+	if !everything && !flags.Changed("everything") && component == "" && stack == "" && len(tags) == 0 {
+		everything = true
 	}
+
+	// Validate that only one of `--everything`, `--component`, `--stack`, or `--tags` is provided
 	if everything && (component != "" || stack != "" || len(tags) > 0) {
 		return fmt.Errorf("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
 	}
