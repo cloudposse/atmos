@@ -340,7 +340,7 @@ func ExecuteComponentVendorInternal(
 		// Disable TUI if no TTY support is available
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(cliConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+			u.LogWarning(cliConfig, "TTY is not supported. Running in non-interactive mode")
 		}
 		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
@@ -349,12 +349,9 @@ func ExecuteComponentVendorInternal(
 	return nil
 }
 
-// CheckTTYSupport checks if both stdin  support TTY.
+// CheckTTYSupport checks stdin support TTY.
 func CheckTTYSupport() bool {
-
-	// Check for standard TTY support on stdin
-	stdinTTY := isatty.IsTerminal(os.Stdin.Fd())
-
-	// Return true if either standard TTY
-	return stdinTTY
+	stdinTTYStdin := isatty.IsTerminal(os.Stdin.Fd())
+	stdoutTTYStdout := isatty.IsTerminal(os.Stdout.Fd())
+	return stdinTTYStdin && stdoutTTYStdout
 }

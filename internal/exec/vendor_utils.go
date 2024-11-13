@@ -281,7 +281,10 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return err
 		}
-
+		err = validateURI(uri)
+		if err != nil {
+			return err
+		}
 		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(uri, vendorConfigFilePath)
 
 		// Determine package type
@@ -329,7 +332,7 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(cliConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+			u.LogWarning(cliConfig, "TTY is not supported. Running in non-interactive mode")
 		}
 		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
 		if err != nil {
@@ -392,7 +395,7 @@ func processVendorImports(
 	return append(mergedSources, sources...), allImports, nil
 }
 func logInitialMessage(cliConfig schema.CliConfiguration, vendorConfigFileName string, tags []string) {
-	logMessage := fmt.Sprintf("Processing vendor config file '%s'", vendorConfigFileName)
+	logMessage := fmt.Sprintf("Vendoring from '%s'", vendorConfigFileName)
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
@@ -510,4 +513,11 @@ func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *
 		u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
+}
+func validateURI(uri string) error {
+	if uri == "" {
+		return fmt.Errorf("URI cannot be empty")
+	}
+	// Add more validation as needed
+	return nil
 }
