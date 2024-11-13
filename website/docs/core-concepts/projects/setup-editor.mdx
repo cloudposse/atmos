@@ -23,9 +23,9 @@ To work effectively with Atmos, we recommend configuring your VS Code editor for
 <Tabs>
     <TabItem value="vscode" label="Visual Studio Code">
 
-    ## Configure Visual Studio Code
+        ## Configure Visual Studio Code
 
-    You can manually configure your VS Code environment with the following settings.
+        You can manually configure your VS Code environment with the following settings.
 
         ### Recommended Visual Studio Code Extensions
 
@@ -46,28 +46,28 @@ To work effectively with Atmos, we recommend configuring your VS Code editor for
 
         ```json
         {
-        "git.openRepositoryInParentFolders": "always",
-        "git.autofetch": true,
-        "git.showProgress": true,
-        "workbench.startupEditor": "readme",
-        "workbench.editor.autoLockGroups": {
-            "readme": "/welcome.md"
-        },
-        "workbench.editorAssociations": {
-            "*.md": "vscode.markdown.preview.editor"
-        },
-        "terminal.integrated.tabs.title": "Atmos (${process})",
-        "terminal.integrated.tabs.description": "${task}${separator}${local}${separator}${cwdFolder}",
-        "terminal.integrated.shell.linux": "/bin/zsh",
-        "terminal.integrated.allowWorkspaceConfiguration": true,
-        "yaml.schemaStore.enable": true,
-        "yaml.schemas": {
-            "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
-            "**/stacks/**/*.yaml",
-            "!**/stacks/workflows/**/*.yaml",
-            "!**/stacks/schemas/**/*.yaml"
-            ]
-        }
+            "git.openRepositoryInParentFolders": "always",
+            "git.autofetch": true,
+            "git.showProgress": true,
+            "workbench.startupEditor": "readme",
+            "workbench.editor.autoLockGroups": {
+                "readme": "/welcome.md"
+            },
+            "workbench.editorAssociations": {
+                "*.md": "vscode.markdown.preview.editor"
+            },
+            "terminal.integrated.tabs.title": "Atmos (${process})",
+            "terminal.integrated.tabs.description": "${task}${separator}${local}${separator}${cwdFolder}",
+            "terminal.integrated.shell.linux": "/bin/zsh",
+            "terminal.integrated.allowWorkspaceConfiguration": true,
+            "yaml.schemaStore.enable": true,
+            "yaml.schemas": {
+                "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
+                "**/stacks/**/*.yaml",
+                "!**/stacks/workflows/**/*.yaml",
+                "!**/stacks/schemas/**/*.yaml"
+                ]
+            }
         }
         ```
 
