@@ -19,6 +19,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const atmosManifestDefault = "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	info, err := processCommandLineArgs("", cmd, args, nil)
@@ -84,27 +86,29 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
 	var atmosManifestJsonSchemaFilePath string
 
-	if cliConfig.Schemas.Atmos.Manifest != "" {
-		atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
-
-		if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
-			atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
-		} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
-			atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
-		} else if u.IsURL(cliConfig.Schemas.Atmos.Manifest) {
-			atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(cliConfig.Schemas.Atmos.Manifest)
-			if err != nil {
-				return err
-			}
-		} else {
-			return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist.\n"+
-				"It can be configured in the 'schemas.atmos.manifest' section in 'atmos.yaml', or provided using the 'ATMOS_SCHEMAS_ATMOS_MANIFEST' "+
-				"ENV variable or '--schemas-atmos-manifest' command line argument.\n"+
-				"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'. \n"+
-				"Alternatively, you can specify a schema file using a URL that will be downloaded automatically.",
-				cliConfig.Schemas.Atmos.Manifest)
-		}
+	if cliConfig.Schemas.Atmos.Manifest == "" {
+		cliConfig.Schemas.Atmos.Manifest = atmosManifestDefault
 	}
+	atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
+
+	if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
+		atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
+	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
+		atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
+	} else if u.IsURL(cliConfig.Schemas.Atmos.Manifest) {
+		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(cliConfig.Schemas.Atmos.Manifest)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist.\n"+
+			"It can be configured in the 'schemas.atmos.manifest' section in 'atmos.yaml', or provided using the 'ATMOS_SCHEMAS_ATMOS_MANIFEST' "+
+			"ENV variable or '--schemas-atmos-manifest' command line argument.\n"+
+			"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'. \n"+
+			"Alternatively, you can specify a schema file using a URL that will be downloaded automatically.",
+			cliConfig.Schemas.Atmos.Manifest)
+	}
+
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
 	includedPaths := []string{"**/*"}
 	// Don't exclude any YAML files for validation
