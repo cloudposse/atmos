@@ -74,7 +74,7 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, cliConfig s
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	if len(pkgs) == 0 {
-		return modelVendor{}, nil
+		return modelVendor{done: true}, nil
 	}
 	tty := CheckTTYSupport()
 	var vendorPks []pkgVendor

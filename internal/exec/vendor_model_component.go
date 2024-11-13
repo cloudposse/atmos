@@ -41,7 +41,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, cli
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	if len(pkgs) == 0 {
-		return modelVendor{}, nil
+		return modelVendor{done: true}, nil
 	}
 	vendorPks := []pkgVendor{}
 	for _, pkg := range pkgs {
