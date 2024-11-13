@@ -195,9 +195,17 @@ func TestDescribeStacksWithEmptyStacks(t *testing.T) {
 	foundEmptyStack := false
 	for _, stackContent := range stacksWithEmpty {
 		if components, ok := stackContent.(map[string]any)["components"].(map[string]any); ok {
-			if len(components) == 0 || (len(components) == 1 && len(components["terraform"].(map[string]any)) == 0) {
+			if len(components) == 0 {
 				foundEmptyStack = true
 				break
+			}
+			if len(components) == 1 {
+				if terraformComps, hasTerraform := components["terraform"].(map[string]any); hasTerraform {
+					if len(terraformComps) == 0 {
+						foundEmptyStack = true
+						break
+					}
+				}
 			}
 		}
 	}
@@ -228,9 +236,19 @@ func TestDescribeStacksWithVariousEmptyStacks(t *testing.T) {
 		if stack, ok := stackContent.(map[string]any); ok {
 			if components, hasComponents := stack["components"].(map[string]any); hasComponents {
 				// Check for completely empty components
-				if len(components) == 0 || (len(components) == 1 && len(components["terraform"].(map[string]any)) == 0) {
+				if len(components) == 0 {
 					emptyStacks = append(emptyStacks, stackName)
 					continue
+				}
+
+				// Check if only terraform exists and is empty
+				if len(components) == 1 {
+					if terraformComps, hasTerraform := components["terraform"].(map[string]any); hasTerraform {
+						if len(terraformComps) == 0 {
+							emptyStacks = append(emptyStacks, stackName)
+							continue
+						}
+					}
 				}
 
 				// If we have any components at all, consider it non-empty

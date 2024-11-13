@@ -573,7 +573,10 @@ func ExecuteDescribeStacks(
 				continue
 			}
 
-			stackEntry := finalStacksMap[stackName].(map[string]any)
+			stackEntry, ok := finalStacksMap[stackName].(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid stack entry type for stack %s", stackName)
+			}
 			componentsSection, hasComponents := stackEntry["components"].(map[string]any)
 
 			if !hasComponents {
