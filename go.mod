@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/go-getter v1.7.6
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.22.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20240801114854-6714b46f5fe4
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20241107133921-3adb156ecfe2
 	github.com/hashicorp/terraform-exec v0.21.0
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
@@ -31,7 +31,7 @@ require (
 	github.com/lrstanley/bubblezone v0.0.0-20240914071701-b48c55a5e78e
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/mitchellh/go-wordwrap v1.0.0
+	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/open-policy-agent/opa v0.70.0
 	github.com/otiai10/copy v1.14.0
