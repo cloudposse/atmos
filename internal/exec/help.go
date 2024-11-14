@@ -39,8 +39,6 @@ func processHelp(
 				"Additional flags:\n" +
 				"  --force Forcefully delete Terraform state files and directories without interaction\n" +
 				"  --skip-lock-file Skip deleting the '.terraform.lock.hcl' file\n\n" +
-				"If no component or stack is specified, the clean operation will apply globally to all components." +
-				"  --skip-lock-file Skip deleting the '.terraform.lock.hcl' file\n\n" +
 				"If no component or stack is specified, the clean operation will apply globally to all components.")
 			u.PrintMessage(" - 'atmos terraform workspace' command first runs 'terraform init -reconfigure', then 'terraform workspace select', " +
 				"and if the workspace was not created before, it then runs 'terraform workspace new'")
