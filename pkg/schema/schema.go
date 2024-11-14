@@ -15,6 +15,7 @@ type CliConfiguration struct {
 	Schemas                       Schemas        `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates      `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Settings                      CliSettings    `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Vendor                        Vendor         `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool           `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	StacksBaseAbsolutePath        string         `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string       `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
@@ -29,6 +30,11 @@ type CliConfiguration struct {
 
 type CliSettings struct {
 	ListMergeStrategy string `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Docs              Docs   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+}
+
+type Docs struct {
+	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
 }
 
 type Templates struct {
@@ -130,6 +136,7 @@ type ArgsAndFlagsInfo struct {
 	StacksDir                 string
 	WorkflowsDir              string
 	BasePath                  string
+	VendorBasePath            string
 	DeployRunInit             string
 	InitRunReconfigure        string
 	AutoGenerateBackendFile   string
@@ -176,6 +183,7 @@ type ConfigAndStacksInfo struct {
 	AdditionalArgsAndFlags        []string
 	GlobalOptions                 []string
 	BasePath                      string
+	VendorBasePathFlag            string
 	TerraformCommand              string
 	TerraformDir                  string
 	HelmfileCommand               string
@@ -548,4 +556,10 @@ type AtmosVendorConfig struct {
 	Kind       string `yaml:"kind" json:"kind" mapstructure:"kind"`
 	Metadata   AtmosVendorMetadata
 	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
+}
+
+type Vendor struct {
+	// Path to vendor configuration file or directory containing vendor files
+	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 }
