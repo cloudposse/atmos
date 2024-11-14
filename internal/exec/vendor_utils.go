@@ -551,6 +551,11 @@ func ExecuteAtmosVendorInternal(
 				}
 			}
 
+			targetDir := filepath.Dir(targetPath)
+			if err := os.MkdirAll(targetDir, 0755); err != nil {
+				return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
+			}
+
 			if err = cp.Copy(tempDir, targetPath, copyOptions); err != nil {
 				return err
 			}
