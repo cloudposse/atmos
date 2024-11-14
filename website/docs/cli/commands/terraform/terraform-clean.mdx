@@ -20,7 +20,7 @@ component in a stack.
 Execute the `terraform clean` command like this:
 
 ```shell
-atmos terraform clean <component> -s <stack> [--skip-lock-file]
+atmos terraform clean <component> -s <stack> [--skip-lock-file] [--everything] [--force]
 ```
 
 :::tip
@@ -30,6 +30,8 @@ Run `atmos terraform clean --help` to see all the available options
 ## Examples
 
 ```shell
+atmos terraform clean --everything
+atmos terraform clean --everything --force
 atmos terraform clean top-level-component1 -s tenant1-ue2-dev
 atmos terraform clean infra/vpc -s tenant1-ue2-staging
 atmos terraform clean infra/vpc -s tenant1-ue2-staging --skip-lock-file

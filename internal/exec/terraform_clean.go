@@ -288,7 +288,7 @@ func confirmDeletion(cliConfig schema.CliConfiguration) (bool, error) {
 }
 
 // deleteFolders handles the deletion of the specified folders and files.
-func deleteFolders(folders []Directory, relativePath string) {
+func deleteFolders(folders []Directory, relativePath string, cliConfig schema.CliConfiguration) {
 	for _, folder := range folders {
 		for _, file := range folder.Files {
 			path := filepath.ToSlash(filepath.Join(relativePath, file.Name))
@@ -303,7 +303,9 @@ func deleteFolders(folders []Directory, relativePath string) {
 	for _, folder := range folders {
 		entries, err := os.ReadDir(folder.FullPath)
 		if err == nil && len(entries) == 0 {
-			os.Remove(folder.FullPath)
+			if err := os.Remove(folder.FullPath); err != nil {
+				u.LogWarning(cliConfig, fmt.Sprintf("Error removing directory %s: %v", folder.FullPath, err))
+			}
 		}
 	}
 
@@ -453,7 +455,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			}
 		}
 
-		deleteFolders(folders, relativePath)
+		deleteFolders(folders, relativePath, cliConfig)
 		if len(tfDataDirFolders) > 0 {
 			tfDataDirFolder := tfDataDirFolders[0]
 			handleTFDataDir(tfDataDirFolder.FullPath, relativePath, cliConfig)

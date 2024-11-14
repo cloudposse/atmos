@@ -1045,7 +1045,13 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			info.SubCommand = additionalArgsAndFlags[0]
 			if len(additionalArgsAndFlags) > 1 {
 				secondArg := additionalArgsAndFlags[1]
+				if len(secondArg) == 0 {
+					return info, fmt.Errorf("invalid empty argument provided")
+				}
 				if strings.HasPrefix(secondArg, "--") {
+					if len(secondArg) <= 2 {
+						return info, fmt.Errorf("invalid option format: %s", secondArg)
+					}
 					info.AdditionalArgsAndFlags = []string{secondArg}
 				} else {
 					info.ComponentFromArg = secondArg
