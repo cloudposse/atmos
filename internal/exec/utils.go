@@ -31,6 +31,7 @@ var (
 		cfg.CliConfigDirFlag,
 		cfg.StackDirFlag,
 		cfg.BasePathFlag,
+		cfg.VendorBasePathFlag,
 		cfg.GlobalOptionsFlag,
 		cfg.DeployRunInitFlag,
 		cfg.InitRunReconfigure,
@@ -764,6 +765,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.BasePath = stacksDirFlagParts[1]
+		}
+
+		if arg == cfg.VendorBasePathFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.VendorBasePath = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.VendorBasePathFlag) {
+			var vendorBasePathFlagParts = strings.Split(arg, "=")
+			if len(vendorBasePathFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.VendorBasePath = vendorBasePathFlagParts[1]
 		}
 
 		if arg == cfg.DeployRunInitFlag {
