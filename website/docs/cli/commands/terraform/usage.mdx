@@ -108,6 +108,16 @@ atmos terraform destroy test/test-component-override -s tenant1-ue2-dev --redire
 
 atmos terraform init test/test-component-override-3 -s tenant1-ue2-dev
 
+# Clean all components (with confirmation)
+atmos terraform clean --everything
+
+# Clean a specific component
+atmos terraform clean vpc --everything
+
+# Clean a specific component in a stack
+atmos terraform clean vpc --stack dev --everything
+
+# Clean without confirmation prompt
 atmos terraform clean --everything --force
 atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 
