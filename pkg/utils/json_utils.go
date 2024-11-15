@@ -40,11 +40,13 @@ func PrintAsJSONToFileDescriptor(cliConfig schema.CliConfiguration, data any) er
 
 // WriteToFileAsJSON converts the provided value to JSON and writes it to the specified file
 func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
-	j, err := ConvertToJSON(data)
+	// Convert data to indented JSON
+	j, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(filePath, []byte(j), fileMode)
+
+	err = os.WriteFile(filePath, j, fileMode)
 	if err != nil {
 		return err
 	}
@@ -53,7 +55,7 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 
 // ConvertToJSON converts the provided value to a JSON-encoded string
 func ConvertToJSON(data any) (string, error) {
-	var jc = jsoniter.Config{
+	jc := jsoniter.Config{
 		EscapeHTML:                    true,
 		ObjectFieldMustBeSimpleString: false,
 		SortMapKeys:                   true,
@@ -69,7 +71,7 @@ func ConvertToJSON(data any) (string, error) {
 
 // ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents
 func ConvertToJSONFast(data any) (string, error) {
-	var jc = jsoniter.Config{
+	jc := jsoniter.Config{
 		EscapeHTML:                    false,
 		MarshalFloatWith6Digits:       true,
 		ObjectFieldMustBeSimpleString: true,
@@ -86,7 +88,7 @@ func ConvertToJSONFast(data any) (string, error) {
 
 // ConvertFromJSON converts the provided JSON-encoded string to Go data types
 func ConvertFromJSON(jsonString string) (any, error) {
-	var jc = jsoniter.Config{
+	jc := jsoniter.Config{
 		EscapeHTML:                    false,
 		MarshalFloatWith6Digits:       true,
 		ObjectFieldMustBeSimpleString: true,
