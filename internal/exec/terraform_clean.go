@@ -415,10 +415,11 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	if tfDataDir != "" {
 		if err := IsValidDataDir(tfDataDir); err != nil {
 			u.LogTrace(cliConfig, err.Error())
-		}
-		tfDataDirFolders, err = CollectDirectoryObjects(cleanPath, []string{tfDataDir})
-		if err != nil {
-			u.LogTrace(cliConfig, fmt.Errorf("error collecting folder of ENV TF_DATA_DIR: %v", err).Error())
+		} else {
+			tfDataDirFolders, err = CollectDirectoryObjects(cleanPath, []string{tfDataDir})
+			if err != nil {
+				u.LogTrace(cliConfig, fmt.Errorf("error collecting folder of ENV TF_DATA_DIR: %v", err).Error())
+			}
 		}
 	}
 	objectCount := 0
