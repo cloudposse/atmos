@@ -128,11 +128,12 @@ func ReadAndProcessVendorConfigFile(
 	vendorConfigFile string,
 ) (schema.AtmosVendorConfig, bool, string, error) {
 	var vendorConfig schema.AtmosVendorConfig
-	var foundVendorConfigFile string
-	var vendorConfigFileExists bool
 
 	// Initialize empty sources slice
 	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{}
+
+	var vendorConfigFileExists bool
+	var foundVendorConfigFile string
 
 	// Check if vendor config is specified in atmos.yaml
 	if cliConfig.Vendor.BasePath != "" {
@@ -140,12 +141,6 @@ func ReadAndProcessVendorConfigFile(
 			foundVendorConfigFile = filepath.Join(cliConfig.BasePath, cliConfig.Vendor.BasePath)
 		} else {
 			foundVendorConfigFile = cliConfig.Vendor.BasePath
-		}
-
-		// Check if specified path exists
-		if !u.FileExists(foundVendorConfigFile) {
-			u.LogWarning(cliConfig, fmt.Sprintf("Vendor config path '%s' specified in atmos.yaml does not exist", foundVendorConfigFile))
-			return vendorConfig, false, "", nil
 		}
 	} else {
 		// Path is not defined in atmos.yaml, proceed with existing logic
@@ -157,8 +152,8 @@ func ReadAndProcessVendorConfigFile(
 			pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
 
 			if !u.FileExists(pathToVendorConfig) {
-				// Instead of returning error, return false to indicate no vendor config exists
-				return vendorConfig, false, "", nil
+				vendorConfigFileExists = false
+				return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file or directory '%s' does not exist", pathToVendorConfig)
 			}
 
 			foundVendorConfigFile = pathToVendorConfig
@@ -554,6 +549,11 @@ func ExecuteAtmosVendorInternal(
 				if filepath.Ext(targetPath) == "" {
 					targetPath = path.Join(targetPath, filepath.Base(uri))
 				}
+			}
+
+			targetDir := filepath.Dir(targetPath)
+			if err := os.MkdirAll(targetDir, 0755); err != nil {
+				return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 			}
 
 			if err = cp.Copy(tempDir, targetPath, copyOptions); err != nil {
