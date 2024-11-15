@@ -83,7 +83,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 
 	// Check `vendor.yaml`
 	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName)
-	if err != nil {
+	if vendorConfigExists && err != nil {
 		return err
 	}
 
@@ -549,11 +549,6 @@ func ExecuteAtmosVendorInternal(
 				if filepath.Ext(targetPath) == "" {
 					targetPath = path.Join(targetPath, filepath.Base(uri))
 				}
-			}
-
-			targetDir := filepath.Dir(targetPath)
-			if err := os.MkdirAll(targetDir, 0755); err != nil {
-				return fmt.Errorf("failed to create target directory '%s': %w", targetDir, err)
 			}
 
 			if err = cp.Copy(tempDir, targetPath, copyOptions); err != nil {
