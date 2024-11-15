@@ -102,11 +102,11 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 			return err
 		}
 	} else {
-		return fmt.Errorf("the Atmos JSON Schema file '%s' does not exist.\n"+
-			"It can be configured in the 'schemas.atmos.manifest' section in 'atmos.yaml', or provided using the 'ATMOS_SCHEMAS_ATMOS_MANIFEST' "+
-			"ENV variable or '--schemas-atmos-manifest' command line argument.\n"+
-			"The path to the schema file should be an absolute path or a path relative to the 'base_path' setting in 'atmos.yaml'. \n"+
-			"Alternatively, you can specify a schema file using a URL that will be downloaded automatically.",
+		return fmt.Errorf("Schema file '%s' not found. Configure via:\n"+
+			"1. 'schemas.atmos.manifest' in atmos.yaml\n"+
+			"2. ATMOS_SCHEMAS_ATMOS_MANIFEST env var\n"+
+			"3. --schemas-atmos-manifest flag\n\n"+
+			"Accepts: absolute path, relative to base_path, or URL",
 			cliConfig.Schemas.Atmos.Manifest)
 	}
 
