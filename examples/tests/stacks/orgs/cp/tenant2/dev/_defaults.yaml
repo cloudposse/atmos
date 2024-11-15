@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
 import:
   - mixins/stage/dev
   - orgs/cp/tenant2/_defaults
