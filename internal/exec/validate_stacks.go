@@ -106,7 +106,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 			"1. 'schemas.atmos.manifest' in atmos.yaml\n"+
 			"2. ATMOS_SCHEMAS_ATMOS_MANIFEST env var\n"+
 			"3. --schemas-atmos-manifest flag\n\n"+
-			"Accepts: absolute path, relative to base_path, or URL",
+			"Accepts: absolute path, paths relative to base_path, or URL",
 			cliConfig.Schemas.Atmos.Manifest)
 	}
 
