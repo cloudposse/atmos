@@ -40,13 +40,18 @@ func PrintAsJSONToFileDescriptor(cliConfig schema.CliConfiguration, data any) er
 
 // WriteToFileAsJSON converts the provided value to JSON and writes it to the specified file
 func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
-	// Convert data to indented JSON
-	j, err := json.MarshalIndent(data, "", "  ")
+	j, err := ConvertToJSON(data)
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(filePath, j, fileMode)
+	// Convert data to indented JSON
+	indentedJSON, err := json.MarshalIndent(json.RawMessage(j), "", "  ")
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(filePath, indentedJSON, fileMode)
 	if err != nil {
 		return err
 	}
