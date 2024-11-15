@@ -155,7 +155,9 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_import=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
-	componentEnvList = append(componentEnvList, fmt.Sprintf("PS1=atmos:%s/%s> ", stack, component))
+	if cliConfig.Components.Terraform.Shell.Prompt != "" {
+		componentEnvList = append(componentEnvList, cliConfig.Components.Terraform.Shell.Prompt)
+	}
 
 	u.LogDebug(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
 	u.LogDebug(cliConfig, fmt.Sprintf("Component: %s\n", component))
