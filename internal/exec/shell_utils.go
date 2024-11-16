@@ -219,12 +219,13 @@ func execTerraformShellCommand(
 		}
 
 		shellName := filepath.Base(shellCommand)
-		if shellName == "zsh" {
-			shellCommand = shellCommand + " -d -f -i"
-		}
 
 		if !hasCustomShellPrompt {
 			shellCommand = shellCommand + " -l"
+		}
+
+		if shellName == "zsh" && hasCustomShellPrompt {
+			shellCommand = shellCommand + " -d -f -i"
 		}
 	}
 
