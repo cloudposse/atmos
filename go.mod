@@ -21,7 +21,7 @@ require (
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
 	github.com/hashicorp/go-getter v1.7.6
 	github.com/hashicorp/hcl v1.0.0
-	github.com/hashicorp/hcl/v2 v2.22.0
+	github.com/hashicorp/hcl/v2 v2.23.0
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20241107133921-3adb156ecfe2
 	github.com/hashicorp/terraform-exec v0.21.0
 	github.com/ivanpirog/coloredcobra v1.0.1
