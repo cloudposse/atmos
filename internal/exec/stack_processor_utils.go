@@ -201,7 +201,6 @@ func ProcessYAMLConfigFile(
 	}
 	if stackYamlConfig == "" {
 		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, nil
-
 	}
 
 	stackManifestTemplatesProcessed := stackYamlConfig
@@ -1879,7 +1878,6 @@ func GetFileContent(filePath string) (string, error) {
 	existingContent, found := getFileContentSyncMap.Load(filePath)
 	if found && existingContent != nil {
 		return fmt.Sprintf("%s", existingContent), nil
-
 	}
 
 	content, err := os.ReadFile(filePath)
