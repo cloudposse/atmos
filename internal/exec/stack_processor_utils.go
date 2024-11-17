@@ -1878,7 +1878,8 @@ func CreateComponentStackMap(
 func GetFileContent(filePath string) (string, error) {
 	existingContent, found := getFileContentSyncMap.Load(filePath)
 	if found && existingContent != nil {
-		return "", nil
+		return fmt.Sprintf("%s", existingContent), nil
+
 	}
 
 	content, err := os.ReadFile(filePath)
