@@ -590,5 +590,18 @@ func validateURI(uri string) error {
 		return fmt.Errorf("URI cannot be empty")
 	}
 	// Add more validation as needed
+	// Validate URI format
+	if strings.Contains(uri, "..") {
+		return fmt.Errorf("URI cannot contain path traversal sequences")
+	}
+	if strings.Contains(uri, " ") {
+		return fmt.Errorf("URI cannot contain spaces")
+	}
+	// Validate scheme
+	if strings.HasPrefix(uri, "oci://") {
+		if !strings.Contains(uri[6:], "/") {
+			return fmt.Errorf("invalid OCI URI format")
+		}
+	}
 	return nil
 }
