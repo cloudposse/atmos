@@ -69,7 +69,9 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	if basePath == "" {
 		return nil, fmt.Errorf("path cannot be empty")
 	}
-
+	if _, err := os.Stat(basePath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("path %s does not exist", basePath)
+	}
 	var folders []Directory
 
 	// Helper function to add file information if it exists
