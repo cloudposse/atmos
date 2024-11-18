@@ -79,7 +79,7 @@ func parseNodeWithTags(node *yaml.Node, out map[string]TaggedValue) error {
 		switch valueNode.Kind {
 		case yaml.ScalarNode:
 			// Directly store scalar values
-			taggedValue.Value = valueNode.Value
+			taggedValue.Value = valueNode.Tag + " " + valueNode.Value
 		case yaml.MappingNode:
 			// Recursively parse maps
 			nestedMap := make(map[string]TaggedValue)
