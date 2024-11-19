@@ -118,6 +118,61 @@ tenant `net` (instead of `plat`):
     sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
 :::
 
+## Handling Outputs Containing Maps or Lists
+
+You can use the `atmos.Component` function to read complex outputs (remote state) from Terraform/OpenTofu components, and use those in your stack manifests. It's important to keep in mind that template functions are evaluated during the **text processing phase—before the file is interpreted as YAML**. (This is similar to the behavior of how Helm chart templates are evaluated.)
+
+To effectively use `atmos.Component` outputs in stack configurations, it’s important to understand the relationship between YAML and JSON. YAML is a superset of JSON, meaning you can embed JSON directly inside YAML, but the reverse is not true.
+
+This means:
+  1. The output of a template function must be valid YAML (including the relative whitespace based on it's current position) or JSON to be parsed correctly.
+  2. Simple types like strings are straightforward—they can be returned as-is.
+  3. Complex types like lists or maps must be serialized into JSON to ensure compatibility.
+
+### Atmos Configuration
+
+First, we need to adjust the delimiters in `atmos.yaml`, to avoid issues with YAML parsing:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    # Note the deliberate use of single quotes around the braces to avoid YAML parsing issues
+    delimiters: ["'{{", "}}'"]
+```
+
+<details>
+<summary>Detailed Explanation</summary>
+
+In YAML, the default `{{` and `}}` delimiters used for templating can conflict with YAML’s syntax rules, leading to parsing errors. For example, YAML interprets unquoted braces as JSON maps, which can cause YAML parsing to fail.
+
+1. YAML Parsing Phase First, the file is parsed as YAML to extract its structure, such as imports. At this stage, the file must be valid YAML for Atmos to proceed. If the template expressions inside `{{ ... }}` are not properly handled, they can break the YAML syntax, leading to parsing errors.
+
+2. Go Template Processing Phase: After successfully parsing the YAML structure, Atmos treats the file as a Go template and processes the content. Here’s what happens:
+   - Everything between the delimiters (`{{ ... }}`) is replaced by the result of the template function or expression.
+   - The output of this replacement must also be valid YAML so the file can remain usable for the next steps (e.g., Terraform processing).
+3. How Adjusted Delimiters Work: By configuring delimiters as `["'{{", "}}'"]` in `atmos.yaml`, you ensure that:
+   - During the YAML Parsing Phase, the single quotes (`'`) around the template expressions make them valid YAML strings, allowing the file to pass YAML validation.
+   - During the Go Template Processing Phase, Atmos processes the content within '`{{` and `}}`' and replaces it with the evaluated result.
+
+</details>
+
+
+### Using `toRawJson` Function
+
+Then we can use the `toRawJson` function to serialize complex types into JSON:
+
+```yaml
+  components:
+  terraform:
+    my_lambda_component:
+      vars:
+        vpc_config:
+          security_group_ids: ['{{ (atmos.Component "security-group/lambda" .stack).outputs.id }}']
+          subnet_ids: '{{ toRawJson ((atmos.Component "vpc" .stack).outputs.private_subnets) }}'
+```
+
+The results of the `toRawJson` function are serialized into JSON, which can be safely embedded in the YAML stack configuration. The single quotes around the braces in the `delimiters` setting ensure that the JSON is not parsed as YAML, but then processed as a template function which removes the single quotes and replaces it with the JSON string.
+
 ## Examples
 
 The following configurations show different ways of using the `atmos.Component` template function to read values from
@@ -171,7 +226,7 @@ components:
 
 Atmos caches (in memory) the results of `atmos.Component` template function execution.
 If you call the function for the same component in a stack more than once, the first call will produce the result
-and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the 
+and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
 `atmos.Component` function for the same component in a stack in multiple places in Atmos stack manifests.
 It will speed up the function execution and stack processing.
 
