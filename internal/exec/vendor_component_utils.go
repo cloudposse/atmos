@@ -349,9 +349,7 @@ func ExecuteComponentVendorInternal(
 	return nil
 }
 
-// CheckTTYSupport checks stdin support TTY.
+// CheckTTYSupport checks if stdout supports TTY for displaying the progress UI.
 func CheckTTYSupport() bool {
-	stdinTTYStdin := isatty.IsTerminal(os.Stdin.Fd())
-	stdoutTTYStdout := isatty.IsTerminal(os.Stdout.Fd())
-	return stdinTTYStdin && stdoutTTYStdout
+	return isatty.IsTerminal(os.Stdout.Fd())
 }
