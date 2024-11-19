@@ -342,7 +342,7 @@ func ExecuteComponentVendorInternal(
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 			u.LogWarning(cliConfig, "TTY is not supported. Running in non-interactive mode")
 		}
-		if _, err := tea.NewProgram(model, opts...).Run(); err != nil {
+		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
 	}

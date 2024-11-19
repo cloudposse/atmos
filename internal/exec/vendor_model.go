@@ -100,14 +100,14 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, cliConfig s
 	}, nil
 }
 
-func (m modelVendor) Init() tea.Cmd {
+func (m *modelVendor) Init() tea.Cmd {
 	if len(m.packages) == 0 {
 		m.done = true
 		return nil
 	}
 	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.cliConfig), m.spinner.Tick)
 }
-func (m modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -293,7 +293,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 			}
 		default:
 			return installedPkgMsg{
-				err:  fmt.Errorf("unknown package type: %s package", p.pkgType.String(), p.name),
+				err:  fmt.Errorf("unknown package type %s for package %s", p.pkgType.String(), p.name),
 				name: p.name,
 			}
 
