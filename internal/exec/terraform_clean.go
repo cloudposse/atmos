@@ -28,7 +28,7 @@ type Directory struct {
 
 // findFoldersNamesWithPrefix finds the names of folders that match the given prefix under the specified root path.
 // The search is performed at the root level (level 1) and one level deeper (level 2).
-func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
+func findFoldersNamesWithPrefix(root, prefix string, cliConfig schema.CliConfiguration) ([]string, error) {
 	var folderNames []string
 	if root == "" {
 		return nil, fmt.Errorf("root path cannot be empty")
@@ -50,7 +50,7 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 			level2Path := filepath.Join(root, dir.Name())
 			level2Dirs, err := os.ReadDir(level2Path)
 			if err != nil {
-				u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Error reading subdirectory %s: %v", level2Path, err))
+				u.LogWarning(cliConfig, fmt.Sprintf("Error reading subdirectory %s: %v", level2Path, err))
 				continue
 			}
 
@@ -179,9 +179,9 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 }
 
 // get stack terraform state files
-func getStackTerraformStateFolder(componentPath string, stack string) ([]Directory, error) {
+func getStackTerraformStateFolder(componentPath string, stack string, cliConfig schema.CliConfiguration) ([]Directory, error) {
 	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
-	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack)
+	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack, cliConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find stack folders: %w", err)
 	}
@@ -402,7 +402,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 
 	if info.Component != "" && info.Stack != "" {
-		stackFolders, err := getStackTerraformStateFolder(cleanPath, info.Stack)
+		stackFolders, err := getStackTerraformStateFolder(cleanPath, info.Stack, cliConfig)
 		if err != nil {
 			errMsg := fmt.Errorf("error getting stack terraform state folders: %v", err)
 			u.LogTrace(cliConfig, errMsg.Error())
