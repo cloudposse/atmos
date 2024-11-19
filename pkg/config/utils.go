@@ -25,20 +25,31 @@ func FindAllStackConfigsInPathsForStack(
 	var stackIsDir = strings.IndexAny(stack, "/") > 0
 
 	for _, p := range includeStackPaths {
-		pathWithExt := p
+		// Try both regular and template patterns
+		patterns := []string{p}
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			ext = DefaultStackConfigFileExtension
-			pathWithExt = p + ext
+			// If no extension, try both regular and template extensions
+			patterns = []string{
+				p + DefaultStackConfigFileExtension,
+				p + DefaultStackConfigFileExtension + ".tmpl",
+				p + ".yaml.tmpl",
+				p + ".yml.tmpl",
+			}
 		}
 
-		// Find all matches in the glob
-		matches, err := u.GetGlobMatches(pathWithExt)
-		if err != nil || len(matches) == 0 {
-			// Retry (b/c we are using `doublestar` library, and it sometimes has issues reading many files in a Docker container)
-			// TODO: review `doublestar` library
-			matches, err = u.GetGlobMatches(pathWithExt)
+		var allMatches []string
+		for _, pattern := range patterns {
+			// Find all matches in the glob
+			matches, err := u.GetGlobMatches(pattern)
+			if err == nil && len(matches) > 0 {
+				allMatches = append(allMatches, matches...)
+			}
+		}
+
+		if len(allMatches) == 0 {
+			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
 				if cliConfig.Logs.Level == u.LogLevelTrace {
 					y, _ := u.ConvertToYAML(cliConfig)
@@ -46,15 +57,18 @@ func FindAllStackConfigsInPathsForStack(
 				}
 				return nil, nil, false, err
 			}
-
+			continue
 		}
 
-		// Exclude files that match any of the excludePaths
-		for _, matchedFileAbsolutePath := range matches {
+		// Process all matches found
+		for _, matchedFileAbsolutePath := range allMatches {
 			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
-			stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+DefaultStackConfigFileExtension)
+			stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+DefaultStackConfigFileExtension) ||
+				strings.HasSuffix(matchedFileAbsolutePath, stack+DefaultStackConfigFileExtension+".tmpl") ||
+				strings.HasSuffix(matchedFileAbsolutePath, stack+".yaml.tmpl") ||
+				strings.HasSuffix(matchedFileAbsolutePath, stack+".yml.tmpl")
 
 			if stackMatch {
 				allExcluded := true
@@ -93,6 +107,10 @@ func FindAllStackConfigsInPathsForStack(
 		}
 	}
 
+	if len(absolutePaths) == 0 {
+		return nil, nil, false, fmt.Errorf("no matches found for the provided stack '%s' in the paths %v", stack, includeStackPaths)
+	}
+
 	return absolutePaths, relativePaths, false, nil
 }
 
@@ -107,20 +125,32 @@ func FindAllStackConfigsInPaths(
 	var relativePaths []string
 
 	for _, p := range includeStackPaths {
-		pathWithExt := p
+		patterns := []string{p}
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			ext = DefaultStackConfigFileExtension
-			pathWithExt = p + ext
+			// If no extension, try both regular and template extensions
+			patterns = []string{
+				p + DefaultStackConfigFileExtension,
+				p + DefaultStackConfigFileExtension + ".tmpl",
+				p + ".yaml.tmpl",
+				p + ".yml.tmpl",
+			}
 		}
 
-		// Find all matches in the glob
-		matches, err := u.GetGlobMatches(pathWithExt)
-		if err != nil || len(matches) == 0 {
-			// Retry (b/c we are using `doublestar` library, and it sometimes has issues reading many files in a Docker container)
-			// TODO: review `doublestar` library
-			matches, err = u.GetGlobMatches(pathWithExt)
+		var allMatches []string
+		for _, pattern := range patterns {
+			// Find all matches in the glob
+			matches, err := u.GetGlobMatches(pattern)
+			if err == nil && len(matches) > 0 {
+				allMatches = append(allMatches, matches...)
+			}
+		}
+
+		// If no matches found in any pattern, return error using the first pattern
+		// This maintains backward compatibility with the original error handling
+		if len(allMatches) == 0 {
+			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
 				if cliConfig.Logs.Level == u.LogLevelTrace {
 					y, _ := u.ConvertToYAML(cliConfig)
@@ -128,10 +158,11 @@ func FindAllStackConfigsInPaths(
 				}
 				return nil, nil, err
 			}
+			continue
 		}
 
-		// Exclude files that match any of the excludePaths
-		for _, matchedFileAbsolutePath := range matches {
+		// Process all matches found
+		for _, matchedFileAbsolutePath := range allMatches {
 			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 			include := true
 
@@ -629,4 +660,61 @@ func GetStackNameFromContextAndStackNamePattern(
 	}
 
 	return stack, nil
+}
+
+func getConfigFilePatterns(path string, forGlobMatch bool) []string {
+	ext := filepath.Ext(path)
+	if ext != "" {
+		return []string{path}
+	}
+
+	patterns := []string{
+		path + DefaultStackConfigFileExtension,
+		path + DefaultStackConfigFileExtension + ".tmpl",
+		path + ".yaml.tmpl",
+		path + ".yml.tmpl",
+	}
+	if !forGlobMatch {
+		// For direct file search, include the exact path without extension
+		patterns = append([]string{path}, patterns...)
+	}
+
+	return patterns
+}
+
+func SearchConfigFile(configPath string, cliConfig schema.CliConfiguration) (string, error) {
+	// If path already has an extension, verify it exists
+	if ext := filepath.Ext(configPath); ext != "" {
+		if _, err := os.Stat(configPath); err == nil {
+			return configPath, nil
+		}
+		return "", fmt.Errorf("specified config file not found: %s", configPath)
+	}
+
+	dir := filepath.Dir(configPath)
+	base := filepath.Base(configPath)
+
+	// Read directory once for better performance
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", fmt.Errorf("error reading directory %s: %v", dir, err)
+	}
+
+	// Create a map of existing files for quick lookup
+	fileMap := make(map[string]bool)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			fileMap[entry.Name()] = true
+		}
+	}
+
+	// Try all patterns in order
+	patterns := getConfigFilePatterns(base, false)
+	for _, pattern := range patterns {
+		if fileMap[pattern] {
+			return filepath.Join(dir, pattern), nil
+		}
+	}
+
+	return "", fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", configPath, dir, base)
 }

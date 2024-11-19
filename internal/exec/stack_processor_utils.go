@@ -368,8 +368,33 @@ func ProcessYAMLConfigFile(
 		impWithExt := imp
 		ext := filepath.Ext(imp)
 		if ext == "" {
-			ext = cfg.DefaultStackConfigFileExtension
-			impWithExt = imp + ext
+			extensions := []string{
+				".yaml",
+				".yml",
+				".yaml.tmpl",
+				".yml.tmpl",
+			}
+
+			found := false
+			for _, extension := range extensions {
+				testPath := path.Join(basePath, imp+extension)
+				if _, err := os.Stat(testPath); err == nil {
+					impWithExt = imp + extension
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				// Default to .yaml if no file is found
+				impWithExt = imp + cfg.DefaultStackConfigFileExtension
+			}
+		} else if ext == ".yaml" || ext == ".yml" {
+			// Check if there's a template version of this file
+			templatePath := impWithExt + ".tmpl"
+			if _, err := os.Stat(path.Join(basePath, templatePath)); err == nil {
+				impWithExt = templatePath
+			}
 		}
 
 		impWithExtPath := path.Join(basePath, impWithExt)
