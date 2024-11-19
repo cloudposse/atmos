@@ -6,7 +6,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -29,7 +28,11 @@ const (
 )
 
 func (p pkgType) String() string {
-	return [...]string{"remote", "oci", "local"}[p]
+	names := [...]string{"remote", "oci", "local"}
+	if p < pkgTypeRemote || p > pkgTypeLocal {
+		return "unknown"
+	}
+	return names[p]
 }
 
 type pkgVendor struct {
@@ -240,12 +243,13 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 		}
 
 		// Create temp directory
-		tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
 		if err != nil {
-			return installedPkgMsg{
-				err:  fmt.Errorf("failed to create temp directory: %w", err),
-				name: p.name,
-			}
+			return fmt.Errorf("Failed to create temp directory %s", err)
+		}
+		// Ensure directory permissions are restricted
+		if err := os.Chmod(tempDir, 0700); err != nil {
+			return fmt.Errorf("failed to set temp directory permissions: %w", err)
 		}
 		defer removeTempDir(cliConfig, tempDir)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
