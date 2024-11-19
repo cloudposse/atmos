@@ -1,34 +1,26 @@
 # Examples
 
 > [!TIP]
-  > ### You can try `atmos` directly in your browser using GitHub Codespaces!
-  >
-  > [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=cloudposse/atmos&skip_quickstart=true)
-  >
-  > <i>Already start one? Find it [here](https://github.com/codespaces).</i>
-  >
+> ### You can try `atmos` directly in your browser using GitHub Codespaces!
+>
+> [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=cloudposse/atmos&skip_quickstart=true)
+>
+> <i>Already start one? Find it [here](https://github.com/codespaces).</i>
+>
 
 ## Try it Locally
 
-To play with these demos locally, start by [installing `atmos`](https://atmos.tools/install). 
+To play with these demos locally, start by [installing `atmos`](https://atmos.tools/install).
 
-Then run the following commands (Note, these commands requires that you have `curl` and `tar` installed on your system.)
+Then, clone this repo and [try out the demos](https://github.com/cloudposse/atmos/tree/main/examples).
 
 ```shell
-atmos demo download <example>
+# Clone this repo
+git clone git@github.com:cloudposse/atmos.git
+
+# Try the examples: https://github.com/cloudposse/atmos/tree/main/examples
+cd examples/
 ```
-
-For example, the following command will download the `demo-stacks` example.
-```shell
-atmos demo download demo-stacks
-```
-
-> [!TIP]
-> #### Fun Fact
->
-> The `download` command is a [custom command](https://atmos.tools/core-concepts/custom-commands) added to the default `atmos.yaml`.
->
-
 
 ## Demos
 
@@ -37,12 +29,16 @@ We designed the demos to be basic examples showcasing functionality. Expect some
 Think of each demo folder as representing an example of a standalone repository. To make it easier, we put all the demos in one place.
 
 ```shell
-1. ├── demo-stacks/            # Start your journey here
-2. ├── demo-library/           #
-3. ├── demo-validation/        #
-4. ├── demo-vendoring/         #
-5. ├── demo-custom-commands/   #
-6. └── demo-workflows/         #
+1.  ├── demo-stacks/              # Kickstart your journey by exploring stack configurations and their structure.
+2.  ├── demo-library/             # Explore a reusable component library designed for seamless vendoring.
+3.  ├── demo-vendoring/           # Learn how to use vendoring to download and integrate remote dependencies from the `demo-library`.
+4.  ├── demo-validation/          # Validate your configurations to ensure correctness and compliance.
+5.  ├── demo-localstack/          # Leverage LocalStack to provision an S3 bucket using Atmos and Terraform.
+6.  ├── demo-helmfile/            # Deploy NGINX on a local lightweight Kubernetes cluster (k3s) using Helm.
+7.  ├── demo-custom-command/      # Learn how to extend Atmos with your own custom CLI commands.
+8.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.
+9.  ├── demo-context/             # Simplify resource naming and tagging with our Terraform context provider.
+10. └── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
 ```
 
 ## Playground
