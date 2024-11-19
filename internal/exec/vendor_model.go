@@ -28,6 +28,10 @@ const (
 	pkgTypeLocal
 )
 
+func (p pkgType) String() string {
+	return [...]string{"remote", "oci", "local"}[p]
+}
+
 type pkgVendor struct {
 	name             string
 	version          string
@@ -126,7 +130,7 @@ func (m modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		mark := checkMark
 
 		if msg.err != nil {
-			u.LogDebug(m.cliConfig, fmt.Sprintf("Failed to vendor component %s error %s", pkg.name, msg.err))
+			u.LogError(m.cliConfig, fmt.Errorf("Failed to vendor %s: error : %s", pkg.name, msg.err))
 			mark = xMark
 			m.failedPkg++
 		}
@@ -139,7 +143,6 @@ func (m modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.done = true
 			if !m.isTTY {
 				u.LogInfo(m.cliConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
-
 				if m.dryRun {
 					u.LogInfo(m.cliConfig, "Done! Dry run completed. No components vendored.\n")
 				}
@@ -239,11 +242,13 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 		// Create temp directory
 		tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 		if err != nil {
-			u.LogTrace(cliConfig, fmt.Sprintf("Failed to create temp directory %s", err))
-			return err
+			return installedPkgMsg{
+				err:  fmt.Errorf("failed to create temp directory: %w", err),
+				name: p.name,
+			}
 		}
 		defer removeTempDir(cliConfig, tempDir)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		switch p.pkgType {
 		case pkgTypeRemote:
@@ -255,9 +260,8 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 				Mode: getter.ClientModeAny,
 			}
 			if err := client.Get(); err != nil {
-				u.LogTrace(cliConfig, fmt.Sprintf("Failed to download package %s error %s", p.name, err))
 				return installedPkgMsg{
-					err:  err,
+					err:  fmt.Errorf("failed to download package: %w", err),
 					name: p.name,
 				}
 			}
@@ -265,9 +269,8 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 		case pkgTypeOci:
 			// Process OCI images
 			if err := processOciImage(cliConfig, p.uri, tempDir); err != nil {
-				u.LogTrace(cliConfig, fmt.Sprintf("Failed to process OCI image %s error %s", p.name, err))
 				return installedPkgMsg{
-					err:  err,
+					err:  fmt.Errorf("failed to process OCI image: %w", err),
 					name: p.name,
 				}
 			}
@@ -283,24 +286,21 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 				tempDir = path.Join(tempDir, filepath.Base(p.uri))
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
-				u.LogTrace(cliConfig, fmt.Sprintf("Failed to copy package %s error %s", p.name, err))
 				return installedPkgMsg{
-					err:  err,
+					err:  fmt.Errorf("failed to copy package: %w", err),
 					name: p.name,
 				}
 			}
 		default:
-			u.LogTrace(cliConfig, fmt.Sprintf("Unknown package type %s", p.name))
 			return installedPkgMsg{
-				err:  fmt.Errorf("unknown package type"),
+				err:  fmt.Errorf("unknown package type: %s package", p.pkgType.String(), p.name),
 				name: p.name,
 			}
 
 		}
 		if err := copyToTarget(cliConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
-			u.LogTrace(cliConfig, fmt.Sprintf("Failed to copy package %s error %s", p.name, err))
 			return installedPkgMsg{
-				err:  err,
+				err:  fmt.Errorf("failed to copy package: %w", err),
 				name: p.name,
 			}
 		}
@@ -320,7 +320,6 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, cliConfig schema.CliConfig
 	// No valid package provided
 	return func() tea.Msg {
 		err := fmt.Errorf("no valid installer package provided for %s", installer.name)
-		u.LogError(cliConfig, err)
 		return installedPkgMsg{
 			err:  err,
 			name: installer.name,

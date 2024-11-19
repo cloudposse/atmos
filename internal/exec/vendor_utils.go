@@ -528,9 +528,11 @@ func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string,
 	return cp.Copy(tempDir, targetPath, copyOptions)
 }
 
+// generateSkipFunction generates a function that determines whether to skip a file or directory
+// based on the 'excluded_paths' and 'included_paths' patterns in the vendor source
 func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		if strings.HasSuffix(src, ".git") {
+		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
 

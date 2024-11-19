@@ -14,7 +14,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 )
@@ -102,9 +101,8 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, cliConfig s
 				name: p.name,
 			}
 		}
-		u.LogTrace(cliConfig, fmt.Sprintf("Unknown install operation for %s", p.name))
 		return installedPkgMsg{
-			err:  fmt.Errorf("unknown install operation"),
+			err:  fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name),
 			name: p.name,
 		}
 	}
@@ -115,12 +113,14 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 	// We are using a temp folder for the following reasons:
 	// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
 	// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+	tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
 	if err != nil {
-		u.LogTrace(cliConfig, fmt.Sprintf("Failed to create temp directory %s", err))
-		return err
+		return fmt.Errorf("Failed to create temp directory %s", err)
 	}
-
+	// Ensure directory permissions are restricted
+	if err := os.Chmod(tempDir, 0700); err != nil {
+		return fmt.Errorf("failed to set temp directory permissions: %w", err)
+	}
 	defer removeTempDir(cliConfig, tempDir)
 
 	switch p.pkgType {
@@ -137,16 +137,14 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 		}
 
 		if err = client.Get(); err != nil {
-			u.LogTrace(cliConfig, fmt.Sprintf("Failed to download package %s error %s", p.name, err))
-			return err
+			return fmt.Errorf("Failed to download package %s error %s", p.name, err)
 		}
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(cliConfig, p.uri, tempDir)
 		if err != nil {
-			u.LogTrace(cliConfig, fmt.Sprintf("Failed to process OCI image %s error %s", p.name, err))
-			return err
+			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
 		}
 
 	case pkgTypeLocal:
@@ -166,17 +164,14 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 		}
 
 		if err = cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
-			u.LogTrace(cliConfig, fmt.Sprintf("Failed to copy package %s error %s", p.name, err))
-			return err
+			return fmt.Errorf("failed to copy package %s error %s", p.name, err)
 		}
 	default:
-		u.LogTrace(cliConfig, fmt.Sprintf("Unknown package type %s", p.name))
-		return fmt.Errorf("unknown package type")
+		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
 
 	}
 	if err = copyComponentToDestination(cliConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
-		u.LogTrace(cliConfig, fmt.Sprintf("Failed to copy package %s error %s", p.name, err))
-		return err
+		return fmt.Errorf("failed to copy package %s error %s", p.name, err)
 	}
 
 	return nil
@@ -185,30 +180,29 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 func installMixin(p *pkgComponentVendor, cliConfig schema.CliConfiguration) error {
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
-		u.LogTrace(cliConfig, fmt.Sprintf("Failed to create temp directory %s", err))
-		return err
+		return fmt.Errorf("Failed to create temp directory %s", err)
 	}
 
 	defer removeTempDir(cliConfig, tempDir)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
 	switch p.pkgType {
 	case pkgTypeRemote:
 		client := &getter.Client{
-			Ctx:  context.Background(),
+			Ctx:  ctx,
 			Dst:  path.Join(tempDir, p.mixinFilename),
 			Src:  p.uri,
 			Mode: getter.ClientModeFile,
 		}
 
 		if err = client.Get(); err != nil {
-			u.LogTrace(cliConfig, fmt.Sprintf("Failed to download package %s error %s", p.name, err))
-			return err
+			return fmt.Errorf("Failed to download package %s error %s", p.name, err)
 		}
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(cliConfig, p.uri, tempDir)
 		if err != nil {
-			u.LogTrace(cliConfig, fmt.Sprintf("Failed to process OCI image %s error %s", p.name, err))
-			return err
+			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
 		}
 	case pkgTypeLocal:
 		if p.uri == "" {
@@ -218,8 +212,7 @@ func installMixin(p *pkgComponentVendor, cliConfig schema.CliConfiguration) erro
 		return fmt.Errorf("local mixin installation not implemented")
 
 	default:
-		u.LogTrace(cliConfig, fmt.Sprintf("Unknown package type %s", p.name))
-		return fmt.Errorf("unknown package type")
+		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
 
 	}
 	// Copy from the temp folder to the destination folder
@@ -240,8 +233,7 @@ func installMixin(p *pkgComponentVendor, cliConfig schema.CliConfiguration) erro
 	}
 
 	if err = cp.Copy(tempDir, p.componentPath, copyOptions); err != nil {
-		u.LogTrace(cliConfig, fmt.Sprintf("Failed to copy package %s error %s", p.name, err))
-		return err
+		return fmt.Errorf("Failed to copy package %s error %s", p.name, err)
 	}
 
 	return nil

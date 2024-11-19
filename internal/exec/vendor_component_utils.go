@@ -108,7 +108,7 @@ func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, comp
 	copyOptions := cp.Options{
 		// Skip specifies which files should be skipped
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-			if strings.HasSuffix(src, ".git") {
+			if filepath.Base(src) == ".git" {
 				return true, nil
 			}
 
