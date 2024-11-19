@@ -30,7 +30,6 @@ func FindAllStackConfigsInPathsForStack(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			// If no extension, try both regular and template extensions
 			patterns = []string{
 				p + DefaultStackConfigFileExtension,
 				p + DefaultStackConfigFileExtension + ".tmpl",
@@ -129,7 +128,6 @@ func FindAllStackConfigsInPaths(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			// If no extension, try both regular and template extensions
 			patterns = []string{
 				p + DefaultStackConfigFileExtension,
 				p + DefaultStackConfigFileExtension + ".tmpl",
@@ -694,7 +692,6 @@ func SearchConfigFile(configPath string, cliConfig schema.CliConfiguration) (str
 	dir := filepath.Dir(configPath)
 	base := filepath.Base(configPath)
 
-	// Read directory once for better performance
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return "", fmt.Errorf("error reading directory %s: %v", dir, err)
