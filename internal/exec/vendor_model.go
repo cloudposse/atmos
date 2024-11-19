@@ -245,11 +245,17 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 		// Create temp directory
 		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
 		if err != nil {
-			return fmt.Errorf("Failed to create temp directory %s", err)
+			return installedPkgMsg{
+				err:  fmt.Errorf("failed to create temp directory: %w", err),
+				name: p.name,
+			}
 		}
 		// Ensure directory permissions are restricted
 		if err := os.Chmod(tempDir, 0700); err != nil {
-			return fmt.Errorf("failed to set temp directory permissions: %w", err)
+			return installedPkgMsg{
+				err:  fmt.Errorf("failed to set temp directory permissions: %w", err),
+				name: p.name,
+			}
 		}
 		defer removeTempDir(cliConfig, tempDir)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
