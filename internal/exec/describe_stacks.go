@@ -286,17 +286,13 @@ func ExecuteDescribeStacks(
 
 						if stackName == "" {
 							stackName = stackFileName
-						} else if strings.HasPrefix(stackFileName, "deploy/") {
-							// If we have a deploy/ prefixed version, use that as the canonical name
-							stackName = stackFileName
 						}
 
-						// Only create the stack entry if it doesn't exist or if we're using the canonical name
-						if !u.MapKeyExists(finalStacksMap, stackName) || strings.HasPrefix(stackName, "deploy/") {
+						// Only create the stack entry if it doesn't exist
+						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
-						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 						configAndStacksInfo.ComponentSection["stack"] = stackName
@@ -478,13 +474,10 @@ func ExecuteDescribeStacks(
 
 						if stackName == "" {
 							stackName = stackFileName
-						} else if strings.HasPrefix(stackFileName, "deploy/") {
-							// If we have a deploy/ prefixed version, use that as the canonical name
-							stackName = stackFileName
 						}
 
-						// Only create the stack entry if it doesn't exist or if we're using the canonical name
-						if !u.MapKeyExists(finalStacksMap, stackName) || strings.HasPrefix(stackName, "deploy/") {
+						// Only create the stack entry if it doesn't exist
+						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
@@ -610,20 +603,11 @@ func ExecuteDescribeStacks(
 				delete(finalStacksMap, stackName)
 				continue
 			}
-
-			// Check for duplicate stacks (deploy/ prefix)
-			if strings.HasPrefix(stackName, "deploy/") {
-				baseStackName := strings.TrimPrefix(stackName, "deploy/")
-				delete(finalStacksMap, baseStackName)
-			}
 		}
 	} else {
-		// When including empty stacks, we still need to handle deploy/ prefix duplicates
-		for stackName := range finalStacksMap {
-			if strings.HasPrefix(stackName, "deploy/") {
-				baseStackName := strings.TrimPrefix(stackName, "deploy/")
-				delete(finalStacksMap, baseStackName)
-			}
+		// Process stacks normally without special handling for any prefixes
+		for stackName, stackConfig := range finalStacksMap {
+			finalStacksMap[stackName] = stackConfig
 		}
 	}
 
