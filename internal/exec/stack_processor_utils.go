@@ -199,6 +199,9 @@ func ProcessYAMLConfigFile(
 			return nil, nil, nil, err
 		}
 	}
+	if stackYamlConfig == "" {
+		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, nil
+	}
 
 	stackManifestTemplatesProcessed := stackYamlConfig
 	stackManifestTemplatesErrorMessage := ""
