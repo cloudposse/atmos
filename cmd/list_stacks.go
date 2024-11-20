@@ -61,13 +61,13 @@ var listStacksCmd = &cobra.Command{
 				output = fmt.Sprintf("No stacks found for component '%s'", componentFlag)
 			} else {
 				sort.Strings(filteredStacks)
-				output += strings.Join(filteredStacks, "\n")
+				output += strings.Join(filteredStacks, "\n") + "\n"
 			}
 		} else {
 			// List all stacks
 			stacks := lo.Keys(stacksMap)
 			sort.Strings(stacks)
-			output = strings.Join(stacks, "\n")
+			output = strings.Join(stacks, "\n") + "\n"
 		}
 		u.PrintMessageInColor(output, color.New(color.FgGreen))
 	},

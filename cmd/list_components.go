@@ -73,7 +73,7 @@ var listComponentsCmd = &cobra.Command{
 		if len(components) == 0 {
 			u.PrintMessageInColor("No components found", color.New(color.FgYellow))
 		} else {
-			u.PrintMessageInColor(strings.Join(components, "\n"), color.New(color.FgGreen))
+			u.PrintMessageInColor(strings.Join(components, "\n")+"\n", color.New(color.FgGreen))
 		}
 	},
 }
