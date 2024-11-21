@@ -254,23 +254,26 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 
 // DeletePathTerraform deletes the specified file or folder. with a checkmark or xmark
 func DeletePathTerraform(fullPath string, objectName string) error {
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+	fileInfo, err := os.Lstat(fullPath)
+	if os.IsNotExist(err) {
 		xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
 		fmt.Printf("%s Cannot delete %s: path does not exist", xMark, objectName)
 		fmt.Println()
 		return err
 	}
-	// Attempt to delete the file or folder If the path does not exist, RemoveAll returns nil (no error)
-	err := os.RemoveAll(fullPath)
+	if fileInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to delete symbolic link: %s", objectName)
+	}
+	// Proceed with deletion
+	err = os.RemoveAll(fullPath)
 	if err != nil {
 		xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
 		fmt.Printf("%s Error deleting %s", xMark, objectName)
 		fmt.Println()
 		return err
 	}
-
 	checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
-	fmt.Printf("%s deleted %s", checkMark, objectName)
+	fmt.Printf("%s Deleted %s", checkMark, objectName)
 	fmt.Println()
 	return nil
 }
