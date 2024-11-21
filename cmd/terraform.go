@@ -17,6 +17,15 @@ var terraformCmd = &cobra.Command{
 	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
+		// Check if help is requested
+		if cmd.Flags().Changed("help") || (len(args) > 0 && args[0] == "help") {
+			err := e.ExecuteTerraformCmd(cmd, args, nil)
+			if err != nil {
+				u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			}
+			return
+		}
+
 		// Check Atmos configuration
 		checkAtmosConfig()
 

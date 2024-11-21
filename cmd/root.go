@@ -48,6 +48,7 @@ var RootCmd = &cobra.Command{
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			return
 		}
 
 		err = e.ExecuteAtmosCmd()
@@ -73,10 +74,6 @@ func Execute() error {
 	err := RootCmd.ParseFlags(os.Args)
 	if err != nil && errors.Is(err, pflag.ErrHelp) {
 		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
-		}
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
