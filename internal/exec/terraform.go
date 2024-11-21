@@ -35,8 +35,7 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
-	// Don't require config to process the terraform command
-	if info.NeedHelp {
+	if info.NeedHelp || info.SubCommand == "" {
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
@@ -55,23 +54,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	cliConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
-	}
-
-	// If the user just types `atmos terraform`, print Atmos logo and show terraform help
-	if info.SubCommand == "" {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			return err
-		}
-
-		err = processHelp(cliConfig, "terraform", "")
-		if err != nil {
-			return err
-		}
-
-		fmt.Println()
-		return nil
 	}
 
 	info, err = ProcessStacks(cliConfig, info, true, true)
