@@ -32,7 +32,7 @@ var listComponentsCmd = &cobra.Command{
 			return
 		}
 
-		stacksMap, err := e.ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false)
+		stacksMap, err := e.ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false, false)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), color.New(color.FgRed))
 			return
