@@ -183,8 +183,8 @@ func validateComponentInternal(
 	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
-	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
+	if schemaType != "jsonschema" && schemaType != "opa" {
+		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa", schemaType)
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
