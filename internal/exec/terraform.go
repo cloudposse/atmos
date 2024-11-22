@@ -35,23 +35,35 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
-	if info.NeedHelp || info.SubCommand == "" {
+	// For help commands and empty subcommand, we don't need to process stacks
+	if info.NeedHelp || info.SubCommand == "help" || info.SubCommand == "--help" || info.SubCommand == "" {
+		cliConfig, err := cfg.InitCliConfig(info, false)
+		if err != nil {
+			return err
+		}
+
 		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
+		err = tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			return err
 		}
 
-		err = processHelp(schema.CliConfiguration{}, "terraform", "")
+		err = processHelp(cliConfig, "terraform", "")
 		if err != nil {
 			return err
 		}
-
 		fmt.Println()
 		return nil
 	}
 
+	// For all other commands, we need to process stacks
 	cliConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	err = tuiUtils.PrintStyledText("ATMOS")
 	if err != nil {
 		return err
 	}
@@ -59,6 +71,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	info, err = ProcessStacks(cliConfig, info, true, true)
 	if err != nil {
 		return err
+	}
+
+	if info.ComponentFromArg == "" {
+		return errors.New("component must be specified")
 	}
 
 	if len(info.Stack) < 1 {
