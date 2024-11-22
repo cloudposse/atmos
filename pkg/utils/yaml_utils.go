@@ -122,19 +122,20 @@ func UnmarshalYAML[T any](input string) (T, error) {
 		return zeroValue, err
 	}
 
-	resultWithTags := make(map[string]TaggedValue)
-	if err := parseNodeWithTags(&node, resultWithTags); err != nil {
-		return zeroValue, err
-	}
-
-	_, err := ConvertToYAML(resultWithTags)
-	if err != nil {
-		return zeroValue, err
-	}
+	//resultWithTags := make(map[string]TaggedValue)
+	//if err := parseNodeWithTags(&node, resultWithTags); err != nil {
+	//	return zeroValue, err
+	//}
+	//
+	//_, err := ConvertToYAML(resultWithTags)
+	//if err != nil {
+	//	return zeroValue, err
+	//}
 
 	// Unmarshal the yaml.Node into the desired type T
 	var data T
 	if err := node.Decode(&data); err != nil {
+		fmt.Printf("ERROR_1: %v\n", err)
 		return zeroValue, err
 	}
 
