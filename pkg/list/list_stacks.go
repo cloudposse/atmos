@@ -26,7 +26,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string) (string, er
 		}
 
 		if len(filteredStacks) == 0 {
-			return fmt.Sprintf("No stacks found for component '%s'", component), nil
+			return fmt.Sprintf("No stacks found for component '%s'"+"\n", component), nil
 		}
 		sort.Strings(filteredStacks)
 		return strings.Join(filteredStacks, "\n") + "\n", nil
