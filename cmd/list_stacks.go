@@ -2,15 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
-	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 )
 
@@ -41,33 +39,10 @@ var listStacksCmd = &cobra.Command{
 			return
 		}
 
-		var output string
-		if componentFlag != "" {
-			// Filter stacks by component
-			filteredStacks := []string{}
-			for stackName, stackData := range stacksMap {
-				if v2, ok := stackData.(map[string]any); ok {
-					if v3, ok := v2["components"].(map[string]any); ok {
-						if v4, ok := v3["terraform"].(map[string]any); ok {
-							if _, exists := v4[componentFlag]; exists {
-								filteredStacks = append(filteredStacks, stackName)
-							}
-						}
-					}
-				}
-			}
-
-			if len(filteredStacks) == 0 {
-				output = fmt.Sprintf("No stacks found for component '%s'", componentFlag)
-			} else {
-				sort.Strings(filteredStacks)
-				output += strings.Join(filteredStacks, "\n") + "\n"
-			}
-		} else {
-			// List all stacks
-			stacks := lo.Keys(stacksMap)
-			sort.Strings(stacks)
-			output = strings.Join(stacks, "\n") + "\n"
+		output, err := l.FilterAndListStacks(stacksMap, componentFlag)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), color.New(color.FgRed))
+			return
 		}
 		u.PrintMessageInColor(output, color.New(color.FgGreen))
 	},

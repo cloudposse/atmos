@@ -2,15 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
-	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 )
 
@@ -40,41 +38,13 @@ var listComponentsCmd = &cobra.Command{
 			return
 		}
 
-		components := []string{}
-		if stackFlag != "" {
-			if stackData, ok := stacksMap[stackFlag]; ok {
-				if stackMap, ok := stackData.(map[string]any); ok {
-					if componentsMap, ok := stackMap["components"].(map[string]any); ok {
-						if terraformComponents, ok := componentsMap["terraform"].(map[string]any); ok {
-							components = append(components, lo.Keys(terraformComponents)...)
-						}
-					}
-				}
-			} else {
-				u.PrintMessageInColor(fmt.Sprintf("Stack '%s' not found", stackFlag), color.New(color.FgYellow))
-				return
-			}
-		} else {
-			// Get all components from all stacks
-			for _, stackData := range stacksMap {
-				if stackMap, ok := stackData.(map[string]any); ok {
-					if componentsMap, ok := stackMap["components"].(map[string]any); ok {
-						if terraformComponents, ok := componentsMap["terraform"].(map[string]any); ok {
-							components = append(components, lo.Keys(terraformComponents)...)
-						}
-					}
-				}
-			}
+		output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error: %v", err), color.New(color.FgYellow))
+			return
 		}
 
-		components = lo.Uniq(components)
-		sort.Strings(components)
-
-		if len(components) == 0 {
-			u.PrintMessageInColor("No components found", color.New(color.FgYellow))
-		} else {
-			u.PrintMessageInColor(strings.Join(components, "\n")+"\n", color.New(color.FgGreen))
-		}
+		u.PrintMessageInColor(output, color.New(color.FgGreen))
 	},
 }
 
