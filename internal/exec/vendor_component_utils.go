@@ -309,6 +309,13 @@ func ExecuteComponentVendorInternal(
 					uri = absPath
 				}
 			}
+			// Check if it's a local file
+			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+				if u.FileExists(absPath) {
+					pType = pkgTypeLocal
+					continue
+				}
+			}
 			if useOciScheme {
 				pType = pkgTypeOci
 			} else {
