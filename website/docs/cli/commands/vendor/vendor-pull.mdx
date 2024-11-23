@@ -29,6 +29,7 @@ With Atmos vendoring, you can copy components and other artifacts from the follo
 Execute the `vendor pull` command like this:
 
 ```shell
+atmos vendor pull 
 atmos vendor pull --everything
 atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
@@ -114,6 +115,7 @@ Run `atmos vendor pull --help` to see all the available options
 ## Examples
 
 ```shell
+atmos vendor pull 
 atmos vendor pull --everything
 atmos vendor pull --component vpc
 atmos vendor pull -c vpc-flow-logs-bucket
@@ -124,7 +126,7 @@ atmos vendor pull --tags networking --dry-run
 
 :::note
 
-When executing the `atmos vendor pull --everything` command, Atmos performs the following steps to decide which vendoring manifest to use:
+When executing the `atmos vendor pull` command, Atmos performs the following steps to decide which vendoring manifest to use:
 
 - If `vendor.yaml` manifest is found (in the directory from which the command is executed), Atmos will parse the file and execute the command
   against it. If the flag `--component` is not specified, Atmos will vendor all the artifacts defined in the `vendor.yaml` manifest.
