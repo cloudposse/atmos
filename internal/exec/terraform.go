@@ -62,12 +62,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	fmt.Println()
-	err = tuiUtils.PrintStyledText("ATMOS")
-	if err != nil {
-		return err
-	}
-
 	info, err = ProcessStacks(cliConfig, info, true, true)
 	if err != nil {
 		return err
