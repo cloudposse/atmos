@@ -166,8 +166,23 @@ func execTerraformShellCommand(
 
 	// decrement the value after exiting the shell
 	defer func() {
-		val, _ := strconv.Atoi(os.Getenv("ATMOS_SHLVL"))
-		os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", val-1))
+		atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+		if atmosShellLvl == "" {
+			return
+		}
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			return
+		}
+		// Prevent negative values
+		newVal := val - 1
+		if newVal < 0 {
+			newVal = 0
+		}
+		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+		}
 	}()
 
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
