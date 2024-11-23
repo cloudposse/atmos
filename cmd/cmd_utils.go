@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/fatih/color"
@@ -16,6 +17,11 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+const (
+	AtmosCommandMaxDepthEnv  = "ATMOS_COMMAND_MAX_DEPTH"
+	AtmosCommandDefaultDepth = 10
 )
 
 // ValidateConfig holds configuration options for Atmos validation.
@@ -33,13 +39,32 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
+func getAtmosCommandMaxDepth() int {
+	maxDepth := os.Getenv(AtmosCommandMaxDepthEnv)
+	if maxDepth == "" {
+		return AtmosCommandDefaultDepth
+	}
+	if val, err := strconv.Atoi(maxDepth); err == nil {
+		return val
+	}
+	return AtmosCommandDefaultDepth
+}
+
 func detectCycle(commands []schema.Command) bool {
+	// Create a map of valid commands for quick lookup
+	validCommands := make(map[string]bool)
+	for _, cmd := range commands {
+		validCommands[cmd.Name] = true
+	}
 	// Build a command graph
 	graph := make(map[string][]string)
 	for _, cmd := range commands {
 		for _, step := range cmd.Steps {
-			// Add an edge from command to each command it depends on
-			graph[cmd.Name] = append(graph[cmd.Name], parseCommandName(step))
+			cmdName := parseCommandName(step)
+			if cmdName != "" && !validCommands[cmdName] {
+				return true
+			}
+			graph[cmd.Name] = append(graph[cmd.Name], cmdName)
 		}
 	}
 
@@ -47,16 +72,27 @@ func detectCycle(commands []schema.Command) bool {
 	visited := make(map[string]bool)
 	recStack := make(map[string]bool)
 
-	// Run DFS for each command to detect cycles
+	// Track the maximum recursion depth
+	maxDepth := getAtmosCommandMaxDepth()
+
+	// Run DFS for each command to detect cycles and compute depth
 	for cmd := range graph {
-		if detectCycleUtil(cmd, graph, visited, recStack) {
+		if detectCycleUtil(cmd, graph, visited, recStack, 0, &maxDepth) {
 			return true // Cycle detected
 		}
 	}
+
+	// Print or return the max depth if needed
+	fmt.Println("Maximum Recursion Depth:", maxDepth)
 	return false // No cycle detected
 }
 
-func detectCycleUtil(command string, graph map[string][]string, visited, recStack map[string]bool) bool {
+func detectCycleUtil(command string, graph map[string][]string, visited, recStack map[string]bool, depth int, maxDepth *int) bool {
+	// Update the maximum recursion depth
+	if depth > *maxDepth {
+		*maxDepth = depth
+	}
+
 	// If the current command is in the recursion stack, there's a cycle
 	if recStack[command] {
 		return true
@@ -73,7 +109,7 @@ func detectCycleUtil(command string, graph map[string][]string, visited, recStac
 
 	// Recurse for all dependencies
 	for _, dep := range graph[command] {
-		if detectCycleUtil(dep, graph, visited, recStack) {
+		if detectCycleUtil(dep, graph, visited, recStack, depth+1, maxDepth) {
 			return true
 		}
 	}
@@ -90,8 +126,15 @@ func parseCommandName(step string) string {
 
 	// Check if the command starts with "atmos" and has additional parts
 	if len(parts) > 1 && parts[0] == "atmos" {
-		// Return everything after "atmos" as a single string
-		return strings.Join(parts[1:], " ")
+		// Extract the actual command name, handling flags and arguments
+		cmdParts := []string{}
+		for _, part := range parts[1:] {
+			if strings.HasPrefix(part, "-") {
+				break
+			}
+			cmdParts = append(cmdParts, part)
+		}
+		return strings.Join(cmdParts, " ")
 	}
 	return ""
 }
@@ -111,7 +154,7 @@ func processCustomCommands(
 	}
 
 	if detectCycle(commands) {
-		return errors.New("cycle detected in custom cli commands")
+		return fmt.Errorf("cycle detected in custom CLI commands - this could lead to infinite recursion")
 	}
 
 	for _, commandCfg := range commands {
