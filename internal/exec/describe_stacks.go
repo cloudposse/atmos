@@ -55,6 +55,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	includeEmptyStacks, err := cmd.Flags().GetBool("include-empty-stacks")
+	if err != nil {
+		return err
+	}
+
 	componentsCsv, err := flags.GetString("components")
 	if err != nil {
 		return err
@@ -97,6 +102,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		sections,
 		false,
 		processTemplates,
+		includeEmptyStacks,
 	)
 	if err != nil {
 		return err
@@ -119,6 +125,7 @@ func ExecuteDescribeStacks(
 	sections []string,
 	ignoreMissingFiles bool,
 	processTemplates bool,
+	includeEmptyStacks bool,
 ) (map[string]any, error) {
 
 	stacksMap, _, err := FindStacksMap(cliConfig, ignoreMissingFiles)
@@ -127,6 +134,7 @@ func ExecuteDescribeStacks(
 	}
 
 	finalStacksMap := make(map[string]any)
+	processedStacks := make(map[string]bool)
 	var varsSection map[string]any
 	var metadataSection map[string]any
 	var settingsSection map[string]any
@@ -136,11 +144,47 @@ func ExecuteDescribeStacks(
 	var backendSection map[string]any
 	var backendTypeSection string
 	var stackName string
-	context := schema.Context{}
 
 	for stackFileName, stackSection := range stacksMap {
+		var context schema.Context
+
 		// Delete the stack-wide imports
 		delete(stackSection.(map[string]any), "imports")
+
+		// Check if components section exists and has explicit components
+		hasExplicitComponents := false
+		if componentsSection, ok := stackSection.(map[string]any)["components"]; ok {
+			if componentsSection != nil {
+				if terraformSection, ok := componentsSection.(map[string]any)["terraform"].(map[string]any); ok {
+					hasExplicitComponents = len(terraformSection) > 0
+				}
+				if helmfileSection, ok := componentsSection.(map[string]any)["helmfile"].(map[string]any); ok {
+					hasExplicitComponents = hasExplicitComponents || len(helmfileSection) > 0
+				}
+			}
+		}
+
+		// Also check for imports
+		hasImports := false
+		if importsSection, ok := stackSection.(map[string]any)["import"].([]any); ok {
+			hasImports = len(importsSection) > 0
+		}
+
+		// Skip stacks without components or imports when includeEmptyStacks is false
+		if !includeEmptyStacks && !hasExplicitComponents && !hasImports {
+			continue
+		}
+
+		stackName = stackFileName
+		if processedStacks[stackName] {
+			continue
+		}
+		processedStacks[stackName] = true
+
+		if !u.MapKeyExists(finalStacksMap, stackName) {
+			finalStacksMap[stackName] = make(map[string]any)
+			finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
+		}
 
 		if componentsSection, ok := stackSection.(map[string]any)["components"].(map[string]any); ok {
 
@@ -244,11 +288,11 @@ func ExecuteDescribeStacks(
 							stackName = stackFileName
 						}
 
+						// Only create the stack entry if it doesn't exist
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
-						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 						configAndStacksInfo.ComponentSection["stack"] = stackName
@@ -432,6 +476,7 @@ func ExecuteDescribeStacks(
 							stackName = stackFileName
 						}
 
+						// Only create the stack entry if it doesn't exist
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
@@ -511,12 +556,58 @@ func ExecuteDescribeStacks(
 				}
 			}
 		}
+	}
 
-		// Filter out empty stacks (stacks without any components)
-		if st, ok := finalStacksMap[stackName].(map[string]any); ok {
-			if len(st) == 0 {
+	// Filter out empty stacks after processing all stack files
+	if !includeEmptyStacks {
+		for stackName := range finalStacksMap {
+			if stackName == "" {
 				delete(finalStacksMap, stackName)
+				continue
 			}
+
+			stackEntry, ok := finalStacksMap[stackName].(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid stack entry type for stack %s", stackName)
+			}
+			componentsSection, hasComponents := stackEntry["components"].(map[string]any)
+
+			if !hasComponents {
+				delete(finalStacksMap, stackName)
+				continue
+			}
+
+			// Check if any component type (terraform/helmfile) has components
+			hasNonEmptyComponents := false
+			for _, components := range componentsSection {
+				if compTypeMap, ok := components.(map[string]any); ok {
+					for _, comp := range compTypeMap {
+						if compContent, ok := comp.(map[string]any); ok {
+							// Check for any meaningful content
+							relevantSections := []string{"vars", "metadata", "settings", "env", "workspace"}
+							for _, section := range relevantSections {
+								if _, hasSection := compContent[section]; hasSection {
+									hasNonEmptyComponents = true
+									break
+								}
+							}
+						}
+					}
+				}
+				if hasNonEmptyComponents {
+					break
+				}
+			}
+
+			if !hasNonEmptyComponents {
+				delete(finalStacksMap, stackName)
+				continue
+			}
+		}
+	} else {
+		// Process stacks normally without special handling for any prefixes
+		for stackName, stackConfig := range finalStacksMap {
+			finalStacksMap[stackName] = stackConfig
 		}
 	}
 

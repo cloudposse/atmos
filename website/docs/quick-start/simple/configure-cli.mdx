@@ -88,7 +88,7 @@ Well-known paths are how Atmos finds all your stack configurations, components, 
 
 <dl>
   <dt>`base_path`</dt>
-  <dd>The base path for components, stacks, and workflow configurations. We set it to an empty string because we've decided to use the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo</dd>
+  <dd>The base path for components, stacks, and workflow configurations. We set it to `./` so it will use the current working directory. Alternatively, we can override this behavior by setting the ENV var `ATMOS_BASE_PATH` to point to another directory location.</dd>
 
   <dt>`components.terraform.base_path`</dt>
   <dd>The base path to the Terraform components (Terraform root modules). As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `components.terraform.base_path` to calculate the final path to the Terraform components</dd>

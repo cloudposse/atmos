@@ -29,14 +29,32 @@ The `settings.depends_on` section is a map of objects. The map keys are just the
 We originally implemented `settings.depends_on` as a list. However, since it’s not clear how lists should be deep-merged, so we decided to convert it to a map instead. In this map, the keys are lexicographically ordered, and based on that order, the dependencies are managed.
 </details>
 
-
 Each object in the `settings.depends_on` section has the following schema:
 
-- `component` (required) - an Atmos component that the current component depends on
-- `namespace` (optional) - the `namespace` where the Atmos component is provisioned
-- `tenant` (optional) - the `tenant` where the Atmos component is provisioned
-- `environment` (optional) - the `environment` where the Atmos component is provisioned
-- `stage` (optional) - the `stage` where the Atmos component is provisioned
+<dl>
+  <dt>file <em>(optional)</em></dt>
+  <dd>A file on the local filesystem that the current component depends on</dd>
+
+  <dt>folder <em>(optional)</em></dt>
+  <dd>A folder on the local filesystem that the current component depends on</dd>
+
+  <dt>component <em>(required if `file` or `folder` is not specified)</em></dt>
+  <dd>an Atmos component that the current component depends on</dd>
+
+  <dt>namespace <em>(optional)</em></dt>
+  <dd>The `namespace` where the `component` is provisioned</dd>
+
+  <dt>tenant <em>(optional)</em></dt>
+  <dd>The `tenant` where the `component` is provisioned</dd>
+
+  <dt>environment <em>(optional)</em></dt>
+  <dd>The `environment` where the `component` is provisioned</dd>
+
+  <dt>stage <em>(optional)</em></dt>
+  <dd>The `stage` where the `component` is provisioned</dd>
+</dl>
+
+One of `component`, `file` or `folder` is required.
 
 The `component` attribute is required. The rest are the context variables and are used to define Atmos stacks other than the current stack.
 For example, you can specify:
