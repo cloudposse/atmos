@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"text/template"
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -155,7 +156,28 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_import=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
-	componentEnvList = append(componentEnvList, fmt.Sprintf("PS1=atmos:%s/%s> ", stack, component))
+
+	hasCustomShellPrompt := cliConfig.Components.Terraform.Shell.Prompt != ""
+	if hasCustomShellPrompt {
+		// Template for the custom shell prompt
+		tmpl := cliConfig.Components.Terraform.Shell.Prompt
+
+		// Data for the template
+		data := struct {
+			Component string
+			Stack     string
+		}{
+			Component: component,
+			Stack:     stack,
+		}
+
+		// Parse and execute the template
+		var result bytes.Buffer
+		t := template.Must(template.New("shellPrompt").Parse(tmpl))
+		if err := t.Execute(&result, data); err == nil {
+			componentEnvList = append(componentEnvList, fmt.Sprintf("PS1=%s", result.String()))
+		}
+	}
 
 	u.LogDebug(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
 	u.LogDebug(cliConfig, fmt.Sprintf("Component: %s\n", component))
@@ -197,7 +219,12 @@ func execTerraformShellCommand(
 		}
 
 		shellName := filepath.Base(shellCommand)
-		if shellName == "zsh" {
+
+		if !hasCustomShellPrompt {
+			shellCommand = shellCommand + " -l"
+		}
+
+		if shellName == "zsh" && hasCustomShellPrompt {
 			shellCommand = shellCommand + " -d -f -i"
 		}
 	}
