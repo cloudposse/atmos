@@ -41,6 +41,7 @@ var (
 		cfg.PlanFileFlag,
 		cfg.HelpFlag1,
 		cfg.HelpFlag2,
+		cfg.HelpFlag3,
 		cfg.WorkflowDirFlag,
 		cfg.JsonSchemaDirFlag,
 		cfg.OpaDirFlag,
@@ -962,7 +963,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			info.SkipInit = true
 		}
 
-		if arg == cfg.HelpFlag1 || arg == cfg.HelpFlag2 || arg == "help" {
+		if arg == cfg.HelpFlag1 || arg == cfg.HelpFlag2 || arg == cfg.HelpFlag3 {
 			info.NeedHelp = true
 			// For help commands, we don't need a component or stack
 			info.ComponentFromArg = ""

@@ -36,7 +36,7 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// For help commands and empty subcommand, we don't need to process stacks
-	if info.NeedHelp || info.SubCommand == "help" || info.SubCommand == "--help" || info.SubCommand == "" {
+	if info.NeedHelp || info.SubCommand == cfg.HelpFlag1 || info.SubCommand == cfg.HelpFlag2 || info.SubCommand == "" {
 		cliConfig, err := cfg.InitCliConfig(info, false)
 		if err != nil {
 			return err
