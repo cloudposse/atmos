@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -149,6 +150,25 @@ func execTerraformShellCommand(
 	workingDir string,
 	workspaceName string,
 	componentPath string) error {
+
+	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+	atmosShellVal := 1
+	if atmosShellLvl != "" {
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			return err
+		}
+		atmosShellVal = val + 1
+	}
+	if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", atmosShellVal)); err != nil {
+		return err
+	}
+
+	// decrement the value after exiting the shell
+	defer func() {
+		val, _ := strconv.Atoi(os.Getenv("ATMOS_SHLVL"))
+		os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", val-1))
+	}()
 
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_apply=-var-file=%s", varFile))
