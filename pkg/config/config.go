@@ -244,6 +244,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		_, err := os.Stat(atmosDPath)
 		if err == nil {
 			cliConfig.Import = []string{"atmos.d/**/*.yaml"}
+		} else if !os.IsNotExist(err) {
+			return cliConfig, err // Handle unexpected errors
 		}
 	}
 	// Process imports if any
