@@ -41,7 +41,7 @@ logs:
 
 # No arguments or flags are required
 commands:
-- name: "test"
-  description: "Run all tests"
-  steps:
-  - atmos vendor pull
+  - name: "test"
+    description: "Run all tests"
+    steps:
+      - atmos vendor pull
