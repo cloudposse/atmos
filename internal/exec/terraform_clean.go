@@ -294,14 +294,26 @@ func confirmDeletion(cliConfig schema.CliConfiguration) (bool, error) {
 
 // deleteFolders handles the deletion of the specified folders and files.
 func deleteFolders(folders []Directory, relativePath string, cliConfig schema.CliConfiguration) {
+	var errors []error
 	for _, folder := range folders {
 		for _, file := range folder.Files {
 			path := filepath.ToSlash(filepath.Join(relativePath, file.Name))
 			if file.IsDir {
 				DeletePathTerraform(file.FullPath, path+"/")
+				if err := DeletePathTerraform(file.FullPath, path+"/"); err != nil {
+					errors = append(errors, fmt.Errorf("failed to delete %s: %w", path, err))
+				}
 			} else {
 				DeletePathTerraform(file.FullPath, path)
+				if err := DeletePathTerraform(file.FullPath, path); err != nil {
+					errors = append(errors, fmt.Errorf("failed to delete %s: %w", path, err))
+				}
 			}
+		}
+	}
+	if len(errors) > 0 {
+		for _, err := range errors {
+			u.LogWarning(cliConfig, err.Error())
 		}
 	}
 	// check if the folder is empty by using the os.ReadDir function
