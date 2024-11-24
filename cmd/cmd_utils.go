@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -130,13 +131,29 @@ func processCustomCommands(
 		u.LogWarning(cliConfig, "cycle detected in custom CLI commands")
 		// Prompt the user for input
 		u.LogInfo(cliConfig, "Do you want to continue? (y/n):")
-		var userInput string
-		fmt.Scanln(&userInput)
 
-		if strings.ToLower(userInput) != "y" {
-			return errors.New("execution stopped due to cycle detection")
+		// Channels for user input and timeout
+		userInput := make(chan string)
+		timeout := time.After(30 * time.Second)
+
+		// Goroutine to read user input
+		go func() {
+			var input string
+			fmt.Scanln(&input)
+			userInput <- strings.TrimSpace(strings.ToLower(input))
+		}()
+
+		// Use select to handle input or timeout
+		select {
+		case input := <-userInput:
+			if input == "y" {
+				u.LogWarning(cliConfig, "Continuing execution despite the detected cycle.")
+			} else {
+				return errors.New("execution stopped due to cycle detection")
+			}
+		case <-timeout:
+			u.LogWarning(cliConfig, "No response from the user. Automatically continuing execution.")
 		}
-		u.LogWarning(cliConfig, "Continuing execution despite the detected cycle.")
 	}
 
 	for _, commandCfg := range commands {
