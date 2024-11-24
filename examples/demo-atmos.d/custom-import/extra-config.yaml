@@ -1,0 +1,3 @@
+environment: production
+logs:
+  file: /var/log/atmos.log

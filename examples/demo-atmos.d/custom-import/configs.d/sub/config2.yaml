@@ -1,0 +1,4 @@
+logs:
+  level: Warning
+settings:
+  timeout: 30s

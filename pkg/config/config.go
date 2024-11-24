@@ -2,14 +2,18 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/fatih/color"
+	"github.com/hashicorp/go-getter"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -227,7 +231,29 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if err != nil {
 		return cliConfig, err
 	}
+	// Check if 'import' key exists
+	if len(cliConfig.Import) == 0 {
+		// If 'import' key does not exist, set default import path to 'atmos.d/**/*.yaml'
+		// check if the atmos.d directory exists
+		atmosDPath := path.Join(cliConfig.BasePath, "atmos.d")
+		_, err := os.Stat(atmosDPath)
+		if err == nil {
+			cliConfig.Import = []string{"atmos.d/**/*.yaml"}
+		}
+	}
+	// Process imports if any
+	if len(cliConfig.Import) > 0 {
+		err = processImports(cliConfig, v)
+		if err != nil {
+			return cliConfig, err
+		}
 
+		// Re-unmarshal the merged configuration into cliConfig
+		err = v.Unmarshal(&cliConfig)
+		if err != nil {
+			return cliConfig, err
+		}
+	}
 	// Process ENV vars
 	err = processEnvVars(&cliConfig)
 	if err != nil {
@@ -369,4 +395,116 @@ func processConfigFile(
 	}
 
 	return true, nil
+}
+func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
+	for _, importPath := range cliConfig.Import {
+		if importPath == "" {
+			continue
+		}
+
+		var resolvedPaths []string
+		var err error
+
+		if strings.HasPrefix(importPath, "http://") || strings.HasPrefix(importPath, "https://") {
+			// Handle remote URLs
+			tempFile, err := downloadRemoteConfig(importPath)
+			if err != nil {
+				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to download remote config '%s': %v", importPath, err))
+				continue
+			}
+			resolvedPaths = []string{tempFile}
+		} else {
+			impWithExt := importPath
+			ext := filepath.Ext(importPath)
+			if ext == "" {
+				ext = ".yaml"
+				impWithExt = importPath + ext
+			}
+			resolvedPaths, err = u.GetGlobMatches(impWithExt)
+			if err != nil {
+				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to resolve import path '%s': %v", impWithExt, err))
+				continue
+			}
+		}
+
+		for _, path := range resolvedPaths {
+			// Process each configuration file
+			_, err = processConfigFile(cliConfig, path, v)
+			if err != nil {
+				// Log the error but continue processing other files
+				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to merge configuration from '%s': %v", path, err))
+				continue
+			}
+		}
+	}
+	return nil
+}
+
+func resolveImportPaths(pattern string, basePath string) ([]string, error) {
+	if strings.HasPrefix(pattern, "http://") || strings.HasPrefix(pattern, "https://") {
+		// Handle remote URLs
+		tempFile, err := downloadRemoteConfig(pattern)
+		if err != nil {
+			return nil, err
+		}
+		return []string{tempFile}, nil
+	}
+
+	// Resolve absolute base path
+	absBasePath, err := filepath.Abs(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute base path: %w", err)
+	}
+
+	// If pattern is not absolute, join it with absBasePath
+	absPattern := pattern
+	if !filepath.IsAbs(pattern) {
+		absPattern = filepath.Join(absBasePath, pattern)
+	}
+
+	// Convert pattern to use forward slashes (for compatibility)
+	absPattern = filepath.ToSlash(absPattern)
+
+	// Use doublestar.Glob with the absolute pattern
+	matches, err := u.GetGlobMatches(absPattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to glob pattern '%s': %w", absPattern, err)
+	}
+
+	// Filter out directories
+	var files []string
+	for _, match := range matches {
+		info, err := os.Stat(match)
+		if err != nil {
+			continue
+		}
+		if !info.IsDir() {
+			files = append(files, match)
+		}
+	}
+
+	// Sort the files
+	sort.Strings(files)
+
+	return files, nil
+}
+
+func downloadRemoteConfig(url string) (string, error) {
+	tempDir, err := os.MkdirTemp("", "atmos-import-*")
+	if err != nil {
+		return "", err
+	}
+	tempFile := filepath.Join(tempDir, "config.yaml")
+
+	client := &getter.Client{
+		Ctx:  context.Background(),
+		Src:  url,
+		Dst:  tempFile,
+		Mode: getter.ClientModeFile,
+	}
+	err = client.Get()
+	if err != nil {
+		return "", fmt.Errorf("failed to download remote config: %w", err)
+	}
+	return tempFile, nil
 }
