@@ -40,7 +40,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		fullMatches = append(fullMatches, path.Join(base, match))
 	}
 	// Sort matches lexicographically
-	sort.Strings(matches)
+	sort.Strings(fullMatches)
 
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
 
