@@ -78,7 +78,7 @@ func ExecuteDescribeDependents(
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, true)
+	stacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, true, false)
 	if err != nil {
 		return nil, err
 	}
