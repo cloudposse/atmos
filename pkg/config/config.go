@@ -429,7 +429,7 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 			}
 		}
 		// print the resolved paths
-		u.LogDebug(cliConfig, fmt.Sprintf("Resolved import paths: %v", resolvedPaths))
+		u.LogTrace(cliConfig, fmt.Sprintf("Resolved import paths: %v", resolvedPaths))
 		for _, path := range resolvedPaths {
 			// Process each configuration file
 			_, err = processConfigFile(cliConfig, path, v)
