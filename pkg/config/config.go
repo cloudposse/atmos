@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/hashicorp/go-getter"
@@ -415,12 +416,14 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 
 		if strings.HasPrefix(importPath, "http://") || strings.HasPrefix(importPath, "https://") {
 			// Handle remote URLs
-			tempFile, err := downloadRemoteConfig(importPath)
+			tempDir, tempFile, err := downloadRemoteConfig(importPath)
 			if err != nil {
 				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to download remote config '%s': %v", importPath, err))
 				continue
 			}
 			resolvedPaths = []string{tempFile}
+			defer os.RemoveAll(tempDir)
+
 		} else {
 			impWithExt := importPath
 			ext := filepath.Ext(importPath)
@@ -458,22 +461,24 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 	return nil
 }
 
-func downloadRemoteConfig(url string) (string, error) {
+func downloadRemoteConfig(url string) (string, string, error) {
 	tempDir, err := os.MkdirTemp("", "atmos-import-*")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	tempFile := filepath.Join(tempDir, "config.yaml")
-
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	client := &getter.Client{
-		Ctx:  context.Background(),
+		Ctx:  ctx,
 		Src:  url,
 		Dst:  tempFile,
 		Mode: getter.ClientModeFile,
 	}
 	err = client.Get()
 	if err != nil {
-		return "", fmt.Errorf("failed to download remote config: %w", err)
+		os.RemoveAll(tempDir)
+		return "", "", fmt.Errorf("failed to download remote config: %w", err)
 	}
-	return tempFile, nil
+	return tempDir, tempFile, nil
 }
