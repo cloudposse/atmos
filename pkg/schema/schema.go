@@ -26,7 +26,7 @@ type CliConfiguration struct {
 	StackConfigFilesAbsolutePaths []string       `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string         `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
 	Default                       bool           `yaml:"default" json:"default" mapstructure:"default"`
-	Import                        []string       `yaml:"import"`
+	Import                        []string       `yaml:"import" json:"import" mapstructure:"import"`
 }
 
 type CliSettings struct {
