@@ -299,12 +299,10 @@ func deleteFolders(folders []Directory, relativePath string, cliConfig schema.Cl
 		for _, file := range folder.Files {
 			path := filepath.ToSlash(filepath.Join(relativePath, file.Name))
 			if file.IsDir {
-				DeletePathTerraform(file.FullPath, path+"/")
 				if err := DeletePathTerraform(file.FullPath, path+"/"); err != nil {
 					errors = append(errors, fmt.Errorf("failed to delete %s: %w", path, err))
 				}
 			} else {
-				DeletePathTerraform(file.FullPath, path)
 				if err := DeletePathTerraform(file.FullPath, path); err != nil {
 					errors = append(errors, fmt.Errorf("failed to delete %s: %w", path, err))
 				}
