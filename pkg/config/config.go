@@ -238,10 +238,16 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 	// Check if 'import' key exists
 	if len(cliConfig.Import) == 0 {
-		// If 'import' key does not exist, set default import path to 'atmos.d/**/*.yaml'
-		// check if the atmos.d directory exists
-		atmosDPath := path.Join(cliConfig.BasePath, "atmos.d")
-		_, err := os.Stat(atmosDPath)
+		basePath, err := filepath.Abs(cliConfig.BasePath)
+		if err != nil {
+			return cliConfig, err
+		}
+		atmosDPath := path.Join(basePath, "atmos.d")
+		// Ensure the joined path doesn't escape the intended directory
+		if !strings.HasPrefix(atmosDPath, basePath) {
+			return cliConfig, fmt.Errorf("invalid atmos.d path: attempted directory traversal")
+		}
+		_, err = os.Stat(atmosDPath)
 		if err == nil {
 			cliConfig.Import = []string{"atmos.d/**/*.yaml"}
 		} else if !os.IsNotExist(err) {
@@ -422,7 +428,16 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 				ext = ".yaml"
 				impWithExt = importPath + ext
 			}
-			resolvedPaths, err = u.GetGlobMatches(impWithExt)
+			basePath, err := filepath.Abs(cliConfig.BasePath)
+			if err != nil {
+				return err
+			}
+			imp := path.Join(basePath, impWithExt)
+			// ensure the joined path doesn't escape the intended directory
+			if !strings.HasPrefix(imp, basePath) {
+				return fmt.Errorf("invalid import path: attempted directory traversal")
+			}
+			resolvedPaths, err = u.GetGlobMatches(imp)
 			if err != nil {
 				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to resolve import path '%s': %v", impWithExt, err))
 				continue
