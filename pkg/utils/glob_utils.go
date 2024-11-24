@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 
@@ -38,6 +39,8 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	for _, match := range matches {
 		fullMatches = append(fullMatches, path.Join(base, match))
 	}
+	// Sort matches lexicographically
+	sort.Strings(matches)
 
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
 

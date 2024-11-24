@@ -9,7 +9,6 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/fatih/color"
@@ -229,6 +228,12 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&cliConfig)
 	if err != nil {
+		return cliConfig,
+			err
+	}
+	// Process ENV vars
+	err = processEnvVars(&cliConfig)
+	if err != nil {
 		return cliConfig, err
 	}
 	// Check if 'import' key exists
@@ -253,11 +258,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		if err != nil {
 			return cliConfig, err
 		}
-	}
-	// Process ENV vars
-	err = processEnvVars(&cliConfig)
-	if err != nil {
-		return cliConfig, err
 	}
 
 	// Process command-line args
@@ -426,7 +426,8 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 				continue
 			}
 		}
-
+		// print the resolved paths
+		u.LogDebug(cliConfig, fmt.Sprintf("Resolved import paths: %v", resolvedPaths))
 		for _, path := range resolvedPaths {
 			// Process each configuration file
 			_, err = processConfigFile(cliConfig, path, v)
@@ -438,55 +439,6 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 		}
 	}
 	return nil
-}
-
-func resolveImportPaths(pattern string, basePath string) ([]string, error) {
-	if strings.HasPrefix(pattern, "http://") || strings.HasPrefix(pattern, "https://") {
-		// Handle remote URLs
-		tempFile, err := downloadRemoteConfig(pattern)
-		if err != nil {
-			return nil, err
-		}
-		return []string{tempFile}, nil
-	}
-
-	// Resolve absolute base path
-	absBasePath, err := filepath.Abs(basePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute base path: %w", err)
-	}
-
-	// If pattern is not absolute, join it with absBasePath
-	absPattern := pattern
-	if !filepath.IsAbs(pattern) {
-		absPattern = filepath.Join(absBasePath, pattern)
-	}
-
-	// Convert pattern to use forward slashes (for compatibility)
-	absPattern = filepath.ToSlash(absPattern)
-
-	// Use doublestar.Glob with the absolute pattern
-	matches, err := u.GetGlobMatches(absPattern)
-	if err != nil {
-		return nil, fmt.Errorf("failed to glob pattern '%s': %w", absPattern, err)
-	}
-
-	// Filter out directories
-	var files []string
-	for _, match := range matches {
-		info, err := os.Stat(match)
-		if err != nil {
-			continue
-		}
-		if !info.IsDir() {
-			files = append(files, match)
-		}
-	}
-
-	// Sort the files
-	sort.Strings(files)
-
-	return files, nil
 }
 
 func downloadRemoteConfig(url string) (string, error) {
