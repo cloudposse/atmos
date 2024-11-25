@@ -14,14 +14,20 @@ func FilterAndListStacks(stacksMap map[string]any, component string) (string, er
 		// Filter stacks by component
 		filteredStacks := []string{}
 		for stackName, stackData := range stacksMap {
-			if v2, ok := stackData.(map[string]any); ok {
-				if v3, ok := v2["components"].(map[string]any); ok {
-					if v4, ok := v3["terraform"].(map[string]any); ok {
-						if _, exists := v4[component]; exists {
-							filteredStacks = append(filteredStacks, stackName)
-						}
-					}
-				}
+			v2, ok := stackData.(map[string]any)
+			if !ok {
+				continue
+			}
+			components, ok := v2["components"].(map[string]any)
+			if !ok {
+				continue
+			}
+			terraform, ok := components["terraform"].(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, exists := terraform[component]; exists {
+				filteredStacks = append(filteredStacks, stackName)
 			}
 		}
 
