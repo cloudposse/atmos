@@ -11,6 +11,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	testComponent = "infra/vpc"
+)
+
 func TestListStacks(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
@@ -22,14 +26,10 @@ func TestListStacks(t *testing.T) {
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, "")
-	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	dependentsYaml, err := u.ConvertToYAML(output)
+	assert.NotEmpty(t, dependentsYaml)
 }
-
-const (
-    testComponent = "infra/vpc"
-)
 
 func TestListStacksWithComponent(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -46,7 +46,7 @@ func TestListStacksWithComponent(t *testing.T) {
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
-	
+
 	// Verify the output structure
 	assert.NotEmpty(t, dependentsYaml)
 	// Verify that only stacks with the specified component are included

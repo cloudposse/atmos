@@ -11,6 +11,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	testStack = "tenant1-ue2-dev"
+)
+
 func TestListComponents(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
@@ -36,14 +40,17 @@ func TestListComponentsWithStack(t *testing.T) {
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
-	stack := "tenant1-ue2-dev"
 
-	stacksMap, err := e.ExecuteDescribeStacks(cliConfig, stack, nil, nil,
+	stacksMap, err := e.ExecuteDescribeStacks(cliConfig, testStack, nil, nil,
 		nil, false, false, false)
 	assert.Nil(t, err)
 
-	output, err := FilterAndListStacks(stacksMap, stack)
+	output, err := FilterAndListStacks(stacksMap, testStack)
+	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
+	assert.NotNil(t, dependentsYaml)
+	assert.Greater(t, len(dependentsYaml), 0)
+	assert.Contains(t, dependentsYaml, testStack)
 	t.Log(dependentsYaml)
 }
