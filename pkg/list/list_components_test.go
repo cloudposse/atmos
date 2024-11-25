@@ -22,8 +22,12 @@ func TestListComponents(t *testing.T) {
 	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents("", stacksMap)
+	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
+	// Add assertions to validate the output structure
+	assert.NotNil(t, dependentsYaml)
+	assert.Greater(t, len(dependentsYaml), 0)
 	t.Log(dependentsYaml)
 }
 
