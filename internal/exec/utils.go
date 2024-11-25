@@ -31,6 +31,7 @@ var (
 		cfg.CliConfigDirFlag,
 		cfg.StackDirFlag,
 		cfg.BasePathFlag,
+		cfg.VendorBasePathFlag,
 		cfg.GlobalOptionsFlag,
 		cfg.DeployRunInitFlag,
 		cfg.InitRunReconfigure,
@@ -129,7 +130,8 @@ func ProcessComponentConfig(
 	}
 
 	// Process component metadata and find a base component (if any) and whether the component is real or abstract
-	componentMetadata, baseComponentName, componentIsAbstract := ProcessComponentMetadata(component, componentSection)
+	componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled := ProcessComponentMetadata(component, componentSection)
+	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
 
 	// Remove the ENV vars that are set to `null` in the `env` section.
 	// Setting an ENV var to `null` in stack config has the effect of unsetting it
@@ -219,7 +221,7 @@ func processCommandLineArgs(
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
-		err = processHelp(componentType, argsAndFlagsInfo.SubCommand)
+		err = processHelp(schema.CliConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -391,7 +393,7 @@ func ProcessStacks(
 			}
 		}
 
-		if foundStackCount == 0 {
+		if foundStackCount == 0 && configAndStacksInfo.ComponentIsEnabled {
 			cliConfigYaml := ""
 
 			if cliConfig.Logs.Level == u.LogLevelTrace {
@@ -509,7 +511,7 @@ func ProcessStacks(
 
 		configAndStacksInfo.ComponentSection = componentSectionConverted
 
-		// Process Atmos manifest sections
+		// Process Atmos manifest sections after processing `Go` templates
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 			configAndStacksInfo.ComponentProvidersSection = i
 		}
@@ -545,6 +547,10 @@ func ProcessStacks(
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
 			configAndStacksInfo.Component = i
 		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
+			configAndStacksInfo.Command = i
+		}
 	}
 
 	// Spacelift stack
@@ -569,8 +575,9 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 	// Process component metadata
-	_, baseComponentName, _ := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
+	_, baseComponentName, _, componentIsEnabled := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
 	configAndStacksInfo.BaseComponentPath = baseComponentName
+	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
 
 	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""
@@ -630,11 +637,17 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 	var info schema.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
-
 	var indexesToRemove []int
 
 	// https://github.com/roboll/helmfile#cli-reference
 	var globalOptionsFlagIndex int
+
+	// For commands like `atmos terraform clean` and `atmos terraform plan`, show the command help
+	if len(inputArgsAndFlags) == 1 {
+		info.SubCommand = inputArgsAndFlags[0]
+		info.NeedHelp = true
+		return info, nil
+	}
 
 	for i, arg := range inputArgsAndFlags {
 		if arg == cfg.GlobalOptionsFlag {
@@ -745,6 +758,19 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.BasePath = stacksDirFlagParts[1]
+		}
+
+		if arg == cfg.VendorBasePathFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.VendorBasePath = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.VendorBasePathFlag) {
+			var vendorBasePathFlagParts = strings.Split(arg, "=")
+			if len(vendorBasePathFlagParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.VendorBasePath = vendorBasePathFlagParts[1]
 		}
 
 		if arg == cfg.DeployRunInitFlag {

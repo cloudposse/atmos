@@ -163,6 +163,12 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.BasePath = basePath
 	}
 
+	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
+	if len(vendorBasePath) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_VENDOR_BASE_PATH=%s", vendorBasePath))
+		cliConfig.Vendor.BasePath = vendorBasePath
+	}
+
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
 		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_STACKS_BASE_PATH=%s", stacksBasePath))

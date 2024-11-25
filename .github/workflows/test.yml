@@ -321,12 +321,43 @@ jobs:
             --config=${{ github.workspace }}/examples/.tflint.hcl
           fail_on_error: true
 
+  # run other demo tests
+  validate:
+    name: "[validate] ${{ matrix.demo-folder }}"
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        demo-folder:
+          - demo-context
+          - demo-localstack
+          - demo-stacks
+          - demo-helmfile
+          - quick-start-advanced
+          - quick-start-simple
+
+    timeout-minutes: 20
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Validate YAML Schema
+        uses: InoUno/yaml-ls-check@v1.4.0
+        with:
+          root: "examples/${{ matrix.demo-folder }}/stacks"
+          schemaMapping: |
+            {
+              "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
+                "examples/${{ matrix.demo-folder }}/stacks/**/*.yaml",
+                "examples/${{ matrix.demo-folder }}/stacks/**/*.yml"
+              ]
+            }
+
   release:
-    needs: [test, lint, mock, k3s, localstack, docker]
+    needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
       publish: false
       format: binary
     secrets: inherit
-

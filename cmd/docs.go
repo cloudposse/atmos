@@ -8,7 +8,9 @@ import (
 	"runtime"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -37,18 +39,33 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
 
+			// Detect terminal width if not specified in `atmos.yaml`
+			// The default screen width is 120 characters, but uses maxWidth if set and greater than zero
+			maxWidth := cliConfig.Settings.Docs.MaxWidth
+			defaultWidth := 120
+			screenWidth := defaultWidth
+
+			// Detect terminal width and use it by default if available
+			if term.IsTerminal(int(os.Stdout.Fd())) {
+				termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
+				if err == nil && termWidth > 0 {
+					// Adjusted for subtle padding effect at the terminal boundaries
+					screenWidth = termWidth - 2
+				}
+			}
+
+			if maxWidth > 0 {
+				screenWidth = min(maxWidth, screenWidth)
+			}
+
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, info.Component)
-
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
 			if !componentPathExists {
-				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'",
-					info.Component,
-					componentPath,
-				))
+				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
 			}
 
 			readmePath := path.Join(componentPath, "README.md")
@@ -56,7 +73,7 @@ var docsCmd = &cobra.Command{
 				if os.IsNotExist(err) {
 					u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("No README found for component: %s", info.Component))
 				} else {
-					u.LogErrorAndExit(schema.CliConfiguration{}, err)
+					u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component %s not found", info.Component))
 				}
 			}
 
@@ -65,7 +82,17 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
 
-			componentDocs, err := glamour.Render(string(readmeContent), "dark")
+			r, err := glamour.NewTermRenderer(
+				glamour.WithColorProfile(lipgloss.ColorProfile()),
+				glamour.WithAutoStyle(),
+				glamour.WithPreservedNewLines(),
+				glamour.WithWordWrap(screenWidth),
+			)
+			if err != nil {
+				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("failed to initialize markdown renderer: %w", err))
+			}
+
+			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}

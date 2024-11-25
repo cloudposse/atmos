@@ -45,7 +45,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			return err
 		}
 
-		err = processHelp("helmfile", "")
+		err = processHelp(cliConfig, "helmfile", "")
 		if err != nil {
 			return err
 		}
@@ -61,6 +61,11 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	if len(info.Stack) < 1 {
 		return errors.New("stack must be specified")
+	}
+
+	if !info.ComponentIsEnabled {
+		u.LogInfo(cliConfig, fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		return nil
 	}
 
 	err = checkHelmfileConfig(cliConfig)

@@ -52,7 +52,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return err
 		}
 
-		err = processHelp("terraform", "")
+		err = processHelp(cliConfig, "terraform", "")
 		if err != nil {
 			return err
 		}
@@ -68,6 +68,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	if len(info.Stack) < 1 {
 		return errors.New("stack must be specified")
+	}
+
+	if !info.ComponentIsEnabled {
+		u.LogInfo(cliConfig, fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		return nil
 	}
 
 	err = checkTerraformConfig(cliConfig)
@@ -238,19 +243,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Run `terraform init` before running other commands
-	runTerraformInit := true
-	if info.SubCommand == "init" ||
-		info.SubCommand == "clean" ||
-		(info.SubCommand == "deploy" && !cliConfig.Components.Terraform.DeployRunInit) {
-		runTerraformInit = false
-	}
-
-	if info.SkipInit {
-		u.LogDebug(cliConfig, "Skipping over 'terraform init' due to '--skip-init' flag being passed")
-		runTerraformInit = false
-	}
-
 	// Set `TF_IN_AUTOMATION` ENV var to `true` to suppress verbose instructions after terraform commands
 	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
 	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
@@ -273,11 +265,28 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
+	// Run `terraform init` before running other commands
+	runTerraformInit := true
+	if info.SubCommand == "init" ||
+		info.SubCommand == "clean" ||
+		(info.SubCommand == "deploy" && !cliConfig.Components.Terraform.DeployRunInit) {
+		runTerraformInit = false
+	}
+
+	if info.SkipInit {
+		u.LogDebug(cliConfig, "Skipping over 'terraform init' due to '--skip-init' flag being passed")
+		runTerraformInit = false
+	}
+
 	if runTerraformInit {
 		initCommandWithArguments := []string{"init"}
 		if info.SubCommand == "workspace" || cliConfig.Components.Terraform.InitRunReconfigure {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
+
+		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
+		cleanTerraformWorkspace(cliConfig, componentPath)
+
 		err = ExecuteShellCommand(
 			cliConfig,
 			info.Command,
@@ -359,6 +368,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 		}
 	case "init":
+		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
+		cleanTerraformWorkspace(cliConfig, componentPath)
+
 		if cliConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}

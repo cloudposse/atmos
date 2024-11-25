@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +15,9 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
+	"github.com/bmatcuk/doublestar/v4"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -80,7 +83,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 
 	// Check `vendor.yaml`
 	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName)
-	if vendorConfigExists && err != nil {
+	if err != nil {
 		return err
 	}
 
@@ -120,47 +123,110 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 }
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
-func ReadAndProcessVendorConfigFile(cliConfig schema.CliConfiguration, vendorConfigFile string) (
-	schema.AtmosVendorConfig,
-	bool,
-	string,
-	error,
-) {
+func ReadAndProcessVendorConfigFile(
+	cliConfig schema.CliConfiguration,
+	vendorConfigFile string,
+) (schema.AtmosVendorConfig, bool, string, error) {
 	var vendorConfig schema.AtmosVendorConfig
-	vendorConfigFileExists := true
 
-	// Check if the vendoring manifest file exists
-	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
+	// Initialize empty sources slice
+	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{}
 
-	if !fileExists {
-		// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in the `atmos.yaml`
-		pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
+	var vendorConfigFileExists bool
+	var foundVendorConfigFile string
 
-		if !u.FileExists(pathToVendorConfig) {
-			vendorConfigFileExists = false
-			return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file '%s' does not exist", pathToVendorConfig)
+	// Check if vendor config is specified in atmos.yaml
+	if cliConfig.Vendor.BasePath != "" {
+		if !filepath.IsAbs(cliConfig.Vendor.BasePath) {
+			foundVendorConfigFile = filepath.Join(cliConfig.BasePath, cliConfig.Vendor.BasePath)
+		} else {
+			foundVendorConfigFile = cliConfig.Vendor.BasePath
+		}
+	} else {
+		// Path is not defined in atmos.yaml, proceed with existing logic
+		var fileExists bool
+		foundVendorConfigFile, fileExists = u.SearchConfigFile(vendorConfigFile)
+
+		if !fileExists {
+			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
+			pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
+
+			if !u.FileExists(pathToVendorConfig) {
+				vendorConfigFileExists = false
+				return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file or directory '%s' does not exist", pathToVendorConfig)
+			}
+
+			foundVendorConfigFile = pathToVendorConfig
+		}
+	}
+
+	// Check if it's a directory
+	fileInfo, err := os.Stat(foundVendorConfigFile)
+	if err != nil {
+		return vendorConfig, false, "", err
+	}
+
+	var configFiles []string
+	if fileInfo.IsDir() {
+		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "*.{yaml,yml}")
+		if err != nil {
+			return vendorConfig, false, "", err
+		}
+		for _, match := range matches {
+			configFiles = append(configFiles, filepath.Join(foundVendorConfigFile, match))
+		}
+		sort.Strings(configFiles)
+		if len(configFiles) == 0 {
+			return vendorConfig, false, "", fmt.Errorf("no YAML configuration files found in directory '%s'", foundVendorConfigFile)
+		}
+	} else {
+		configFiles = []string{foundVendorConfigFile}
+	}
+
+	// Process all config files
+	var mergedSources []schema.AtmosVendorSource
+	var mergedImports []string
+	sourceMap := make(map[string]bool) // Track unique sources by component name
+	importMap := make(map[string]bool) // Track unique imports
+
+	for _, configFile := range configFiles {
+		var currentConfig schema.AtmosVendorConfig
+		yamlFile, err := os.ReadFile(configFile)
+		if err != nil {
+			return vendorConfig, false, "", err
 		}
 
-		foundVendorConfigFile = pathToVendorConfig
+		err = yaml.Unmarshal(yamlFile, &currentConfig)
+		if err != nil {
+			return vendorConfig, false, "", err
+		}
+
+		// Merge sources, checking for duplicates
+		for _, source := range currentConfig.Spec.Sources {
+			if source.Component != "" {
+				if sourceMap[source.Component] {
+					return vendorConfig, false, "", fmt.Errorf("duplicate component '%s' found in config file '%s'",
+						source.Component, configFile)
+				}
+				sourceMap[source.Component] = true
+			}
+			mergedSources = append(mergedSources, source)
+		}
+
+		// Merge imports, checking for duplicates
+		for _, imp := range currentConfig.Spec.Imports {
+			if importMap[imp] {
+				continue // Skip duplicate imports
+			}
+			importMap[imp] = true
+			mergedImports = append(mergedImports, imp)
+		}
 	}
 
-	vendorConfigFileContent, err := os.ReadFile(foundVendorConfigFile)
-	if err != nil {
-		return vendorConfig, vendorConfigFileExists, "", err
-	}
-
-	vendorConfig, err = u.UnmarshalYAML[schema.AtmosVendorConfig](string(vendorConfigFileContent))
-	if err != nil {
-		return vendorConfig, vendorConfigFileExists, "", err
-	}
-
-	if vendorConfig.Kind != "AtmosVendorConfig" {
-		return vendorConfig, vendorConfigFileExists, "",
-			fmt.Errorf("invalid 'kind: %s' in the vendor config file '%s'. Supported kinds: 'AtmosVendorConfig'",
-				vendorConfig.Kind,
-				foundVendorConfigFile,
-			)
-	}
+	// Create final merged config
+	vendorConfig.Spec.Sources = mergedSources
+	vendorConfig.Spec.Imports = mergedImports
+	vendorConfigFileExists = true
 
 	return vendorConfig, vendorConfigFileExists, foundVendorConfigFile, nil
 }
@@ -531,7 +597,7 @@ func processVendorImports(
 			return nil, nil, err
 		}
 
-		for i, _ := range vendorConfig.Spec.Sources {
+		for i := range vendorConfig.Spec.Sources {
 			vendorConfig.Spec.Sources[i].File = imp
 		}
 
