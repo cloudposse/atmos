@@ -27,19 +27,28 @@ func TestListStacks(t *testing.T) {
 	t.Log(dependentsYaml)
 }
 
+const (
+    testComponent = "infra/vpc"
+)
+
 func TestListStacksWithComponent(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
-	component := "infra/vpc"
+	component := testComponent
 
 	stacksMap, err := e.ExecuteDescribeStacks(cliConfig, component, nil, nil,
 		nil, false, false, false)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, component)
+	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	
+	// Verify the output structure
+	assert.NotEmpty(t, dependentsYaml)
+	// Verify that only stacks with the specified component are included
+	assert.Contains(t, dependentsYaml, testComponent)
 }
