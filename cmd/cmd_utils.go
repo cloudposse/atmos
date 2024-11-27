@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/fatih/color"
@@ -16,6 +17,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // ValidateConfig holds configuration options for Atmos validation.
@@ -26,6 +28,8 @@ type ValidateConfig struct {
 }
 
 type AtmosValidateOption func(*ValidateConfig)
+
+var originalHelpFunc func(*cobra.Command, []string)
 
 func WithStackValidation(check bool) AtmosValidateOption {
 	return func(cfg *ValidateConfig) {
@@ -423,17 +427,61 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 
 // printMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
 func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
-	c1 := color.New(color.FgCyan)
 	c2 := color.New(color.FgGreen)
 
-	u.PrintMessageInColor(fmt.Sprintf("\nYour version of Atmos is out of date. The latest version is %s\n\n", latestVersion), c1)
-	u.PrintMessage("To upgrade Atmos, refer to the following links and documents:\n")
+	message := fmt.Sprintf("Atmos update available: %s. Enjoy the latest updates and improvements!", c2.Sprint(latestVersion))
+	links := []string{
+		fmt.Sprintf("%s: https://github.com/cloudposse/atmos/releases", c2.Sprint("Atmos Releases")),
+		fmt.Sprintf("%s: https://atmos.tools/install", c2.Sprint("Install Atmos")),
+	}
+	messageLines := append([]string{message}, links...)
+	maxWidth := 0
+	for _, line := range messageLines {
+		lineLength := len(stripANSI(line))
+		if lineLength > maxWidth {
+			maxWidth = lineLength
+		}
+	}
 
-	u.PrintMessageInColor("Atmos Releases:\n", c2)
-	u.PrintMessage("https://github.com/cloudposse/atmos/releases\n")
+	// Calculate border width
+	padding := 2
+	borderWidth := maxWidth + padding*2
 
-	u.PrintMessageInColor("Install Atmos:\n", c2)
-	u.PrintMessage("https://atmos.tools/install\n")
+	// Print top border
+	c2.Println("┌" + strings.Repeat("─", borderWidth) + "┐")
+
+	// Print each line with padding
+	for _, line := range messageLines {
+		lineLength := len(stripANSI(line))
+		spaces := borderWidth - lineLength
+		leftPadding := spaces / 2
+		rightPadding := spaces - leftPadding
+		fmt.Printf("%s%s%s%s%s\n", c2.Sprint("│"), strings.Repeat(" ", leftPadding), line, strings.Repeat(" ", rightPadding), c2.Sprint("│"))
+	}
+
+	// Print bottom border
+	c2.Println("└" + strings.Repeat("─", borderWidth) + "┘")
+}
+
+// Function to strip ANSI color codes
+func stripANSI(str string) string {
+	ansi := "\033\\[[0-9;]*m"
+	re := regexp.MustCompile(ansi)
+	return re.ReplaceAllString(str, "")
+}
+
+// customHelpMessageToUpgradeToAtmosLatestRelease adds Atmos version info at the end of each help commnad
+func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
+	originalHelpFunc(cmd, args)
+	// Check for the latest Atmos release on GitHub
+	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
+	if err == nil && latestReleaseTag != "" {
+		latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
+		currentRelease := strings.TrimPrefix(version.Version, "v")
+		if latestRelease != currentRelease {
+			printMessageToUpgradeToAtmosLatestRelease(latestRelease)
+		}
+	}
 }
 
 // Check Atmos is version command
