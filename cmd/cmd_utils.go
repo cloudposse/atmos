@@ -29,8 +29,6 @@ type ValidateConfig struct {
 
 type AtmosValidateOption func(*ValidateConfig)
 
-var originalHelpFunc func(*cobra.Command, []string)
-
 func WithStackValidation(check bool) AtmosValidateOption {
 	return func(cfg *ValidateConfig) {
 		cfg.CheckStack = check
@@ -429,7 +427,7 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	c2 := color.New(color.FgGreen)
 
-	message := fmt.Sprintf("Atmos update available: %s. Enjoy the latest updates and improvements!", c2.Sprint(latestVersion))
+	message := fmt.Sprintf("%s %s >> %s", c2.Sprint("Update available!"), version.Version, c2.Sprint(latestVersion))
 	links := []string{
 		fmt.Sprintf("%s: https://github.com/cloudposse/atmos/releases", c2.Sprint("Atmos Releases")),
 		fmt.Sprintf("%s: https://atmos.tools/install", c2.Sprint("Install Atmos")),

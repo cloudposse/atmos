@@ -18,6 +18,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// originalHelpFunc holds Cobra's original help function to avoid recursion.
+var originalHelpFunc func(*cobra.Command, []string)
+
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
