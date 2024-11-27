@@ -86,7 +86,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	// If the workflow file is specified without an extension, use the default extension
 	ext := filepath.Ext(workflowPath)
 	if ext == "" {
-		ext = cfg.DefaultStackConfigFileExtension
+		ext = u.DefaultStackConfigFileExtension
 		workflowPath = workflowPath + ext
 	}
 

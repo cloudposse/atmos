@@ -66,7 +66,7 @@ func ProcessYAMLConfigFiles(
 			stackFileName := strings.TrimSuffix(
 				strings.TrimSuffix(
 					u.TrimBasePathFromPath(stackBasePath+"/", p),
-					cfg.DefaultStackConfigFileExtension),
+					u.DefaultStackConfigFileExtension),
 				".yml",
 			)
 
@@ -390,7 +390,7 @@ func ProcessYAMLConfigFile(
 
 			if !found {
 				// Default to .yaml if no file is found
-				impWithExt = imp + cfg.DefaultStackConfigFileExtension
+				impWithExt = imp + u.DefaultStackConfigFileExtension
 			}
 		} else if ext == ".yaml" || ext == ".yml" {
 			// Check if there's a template version of this file
@@ -477,7 +477,7 @@ func ProcessYAMLConfigFile(
 			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
-				ext2 = cfg.DefaultStackConfigFileExtension
+				ext2 = u.DefaultStackConfigFileExtension
 			}
 			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
@@ -518,7 +518,7 @@ func ProcessStackConfig(
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			cfg.DefaultStackConfigFileExtension),
+			u.DefaultStackConfigFileExtension),
 		".yml",
 	)
 
@@ -1884,13 +1884,13 @@ func CreateComponentStackMap(
 
 	for stack, components := range stackComponentMap["terraform"] {
 		for _, component := range components {
-			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, cfg.DefaultStackConfigFileExtension, "", 1))
+			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, u.DefaultStackConfigFileExtension, "", 1))
 		}
 	}
 
 	for stack, components := range stackComponentMap["helmfile"] {
 		for _, component := range components {
-			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, cfg.DefaultStackConfigFileExtension, "", 1))
+			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, u.DefaultStackConfigFileExtension, "", 1))
 		}
 	}
 
