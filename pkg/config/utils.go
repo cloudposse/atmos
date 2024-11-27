@@ -661,6 +661,9 @@ func GetStackNameFromContextAndStackNamePattern(
 }
 
 func getConfigFilePatterns(path string, forGlobMatch bool) []string {
+	if path == "" {
+		return []string{}
+	}
 	ext := filepath.Ext(path)
 	if ext != "" {
 		return []string{path}
