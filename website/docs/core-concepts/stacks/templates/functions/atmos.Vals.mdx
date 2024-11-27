@@ -1,0 +1,155 @@
+---
+title: atmos.Vals
+sidebar_position: 3
+sidebar_label: atmos.Vals
+description: Load config values and secrets from external sources
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Admonition from '@theme/Admonition'
+
+<Intro>
+The `atmos.Vals` template function wraps [vals](https://github.com/helmfile/vals) to support loading config values and secrets from external sources. This enables secure management of sensitive information by keeping secrets separate from your configuration files and leveraging established secret management systems.
+ </Intro>
+
+<Admonition type="warning" title="Careful with secrets">
+  `atmos describe stack` will reveal the secrets in plain text without obfuscation. Make sure not to accidentally run these commands to stdout in your CI/CD pipelines.
+</Admonition>
+
+## Usage
+
+To use [vals](https://github.com/helmfile/vals), you need to set specific environment variables based on your chosen backend:
+
+- For AWS backends: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- For GCP backends: `GOOGLE_APPLICATION_CREDENTIALS`
+- For Azure backends: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
+
+Refer to each backend's documentation for the complete list of required credentials.
+
+```yaml
+  {{ atmos.Vals "<reference>" }}
+```
+
+### Security Best Practices
+
+When managing credentials:
+- Implement regular credential rotation
+- Use different credentials per environment
+- Consider using credential management tools like AWS IAM roles or Vault
+
+## Arguments
+
+<dl>
+  <dt>`reference`</dt>
+  <dd>vals reference URI</dd>
+</dl>
+
+For example, to retrieve a secret from 1Password, we could do the following:
+
+<File>
+```yaml
+components:
+  terraform:
+    dockerconfig:
+      vars:
+        auths:
+          ghcr.io:
+            auth: '{{ atmos.Vals "ref+op://infra/ghcr/token" }}'
+```
+</File>
+
+<b>Note</b>: 1Password backend expects the `OP_SERVICE_ACCOUNT_TOKEN` environment variable to be set prior to running Atmos.
+
+### Validation
+
+To validate your configuration:
+
+1. Ensure the secret exists in 1Password
+2. Verify the service account token has necessary permissions
+3. Test with `atmos describe stack --stack=your-stack` in a secure environment
+
+### Common Issues
+
+- Invalid token format
+- Insufficient permissions
+- Secret path not found
+
+## Expression syntax
+
+References are URI-like expressions:
+
+```
+ref+BACKEND://PATH[?PARAMS][#FRAGMENT][+]
+```
+
+For more details, see: https://github.com/helmfile/vals?tab=readme-ov-file#expression-syntax
+
+Common expression patterns:
+
+- AWS Secret: `ref+awssecrets://myapp/dev/secret`
+- Vault Secret: `ref+vault://secret/data/myapp#/mykey`
+- SOPS: `ref+sops://path/to/file#/foo/bar`
+
+## Supported backends
+
+- [Vault](https://github.com/helmfile/vals#vault)
+- [AWS SSM Parameter Store](https://github.com/helmfile/vals#aws-ssm-parameter-store)
+- [AWS Secrets Manager](https://github.com/helmfile/vals#aws-secrets-manager)
+- [AWS S3](https://github.com/helmfile/vals#aws-s3)
+- [GCP Secrets Manager](https://github.com/helmfile/vals#gcp-secrets-manager)
+- [GCP KMS](https://github.com/helmfile/vals#gcp-kms)
+- [Google Sheets](https://github.com/helmfile/vals#google-sheets)
+- [Google GCS](https://github.com/helmfile/vals#google-gcs)
+- [SOPS](https://github.com/helmfile/vals#sops) powered by [sops](https://github.com/getsops/sops)
+- [Terraform (tfstate)](https://github.com/helmfile/vals#terraform-tfstate) powered by [tfstate-lookup](https://github.com/fujiwara/tfstate-lookup)
+- [Echo](https://github.com/helmfile/vals#echo)
+- [File](https://github.com/helmfile/vals#file)
+- [Azure Key Vault](https://github.com/helmfile/vals#azure-key-vault)
+- [EnvSubst](https://github.com/helmfile/vals#envsubst)
+- [GitLab](https://github.com/helmfile/vals#gitlab)
+- [1Password](https://github.com/helmfile/vals#1password)
+- [1Password Connect](https://github.com/helmfile/vals#1password-connect)
+- [Doppler](https://github.com/helmfile/vals#doppler)
+- [Pulumi State](https://github.com/helmfile/vals#pulumi-state)
+- [Kubernetes](https://github.com/helmfile/vals#kubernetes)
+- [Conjur](https://github.com/helmfile/vals#conjur)
+- [HCP Vault Secrets](https://github.com/helmfile/vals#hcp-vault-secrets)
+- [HTTP JSON](https://github.com/helmfile/vals#http-json)
+- [Bitwarden](https://github.com/helmfile/vals#bitwarden)
+
+For the complete list of supported backends, see: https://github.com/helmfile/vals?tab=readme-ov-file#supported-backends
+
+## Error Handling
+
+The `atmos.Vals` function will:
+- Return an error if the backend is unreachable
+- Fail fast if credentials are invalid
+- Surface backend-specific error messages
+
+Handle potential errors in your templates:
+
+```yaml
+# Basic error handling with default value
+{{ $secret := atmos.Vals "ref+vault://secret/myapp" | default "fallback-value" }}
+
+# Conditional logic based on secret availability
+{{- if $secret := atmos.Vals "ref+vault://secret/myapp" }}
+  value: {{ $secret }}
+{{- else }}
+  {{- fail "Required secret not available" }}
+{{- end }}
+
+# Multiple secrets with error aggregation
+{{- $creds := dict }}
+{{- range $key := list "username" "password" "api-key" }}
+  {{- $path := printf "ref+vault://secret/myapp/%s" $key }}
+  {{- $value := atmos.Vals $path | default (fail (printf "Missing required secret: %s" $key)) }}
+  {{- $_ := set $creds $key $value }}
+{{- end }}
+
+## Performance Considerations
+
+- Cache Duration: Secrets are cached for the duration of the Atmos command
+- Parallel Requests: Multiple vals references are fetched concurrently
+- Backend Latency: Consider the network latency to your chosen backend
+- Rate Limits: Be aware of backend-specific API rate limits
