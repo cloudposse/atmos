@@ -31,10 +31,10 @@ func FindAllStackConfigsInPathsForStack(
 		ext := filepath.Ext(p)
 		if ext == "" {
 			patterns = []string{
-				p + DefaultStackConfigFileExtension,
-				p + DefaultStackConfigFileExtension + ".tmpl",
-				p + ".yaml.tmpl",
-				p + ".yml.tmpl",
+				p + u.DefaultStackConfigFileExtension,
+				p + u.DefaultStackConfigFileExtension + u.TemplateExtension,
+				p + u.YamlTemplateExtension,
+				p + u.YmlTemplateExtension,
 			}
 		}
 
@@ -64,10 +64,10 @@ func FindAllStackConfigsInPathsForStack(
 			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
-			stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+DefaultStackConfigFileExtension) ||
-				strings.HasSuffix(matchedFileAbsolutePath, stack+DefaultStackConfigFileExtension+".tmpl") ||
-				strings.HasSuffix(matchedFileAbsolutePath, stack+".yaml.tmpl") ||
-				strings.HasSuffix(matchedFileAbsolutePath, stack+".yml.tmpl")
+			stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+u.DefaultStackConfigFileExtension) ||
+				strings.HasSuffix(matchedFileAbsolutePath, stack+u.DefaultStackConfigFileExtension+u.TemplateExtension) ||
+				strings.HasSuffix(matchedFileAbsolutePath, stack+u.YamlTemplateExtension) ||
+				strings.HasSuffix(matchedFileAbsolutePath, stack+u.YmlTemplateExtension)
 
 			if stackMatch {
 				allExcluded := true
@@ -129,10 +129,10 @@ func FindAllStackConfigsInPaths(
 		ext := filepath.Ext(p)
 		if ext == "" {
 			patterns = []string{
-				p + DefaultStackConfigFileExtension,
-				p + DefaultStackConfigFileExtension + ".tmpl",
-				p + ".yaml.tmpl",
-				p + ".yml.tmpl",
+				p + u.DefaultStackConfigFileExtension,
+				p + u.DefaultStackConfigFileExtension + u.TemplateExtension,
+				p + u.YamlTemplateExtension,
+				p + u.YmlTemplateExtension,
 			}
 		}
 
@@ -670,10 +670,10 @@ func getConfigFilePatterns(path string, forGlobMatch bool) []string {
 	}
 
 	patterns := []string{
-		path + DefaultStackConfigFileExtension,
-		path + DefaultStackConfigFileExtension + ".tmpl",
-		path + ".yaml.tmpl",
-		path + ".yml.tmpl",
+		path + u.DefaultStackConfigFileExtension,
+		path + u.DefaultStackConfigFileExtension + u.TemplateExtension,
+		path + u.YamlTemplateExtension,
+		path + u.YmlTemplateExtension,
 	}
 	if !forGlobMatch {
 		// For direct file search, include the exact path without extension

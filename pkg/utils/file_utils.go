@@ -39,7 +39,7 @@ func FileOrDirExists(filename string) bool {
 
 // IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file)
 func IsYaml(file string) bool {
-	yamlExtensions := []string{".yaml", ".yml", ".yaml.tmpl", ".yml.tmpl"}
+	yamlExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	ext := filepath.Ext(file)
 	if ext == ".tmpl" {
 		// For .tmpl files, we check if the full extension is .yaml.tmpl or .yml.tmpl
@@ -190,7 +190,7 @@ func SearchConfigFile(path string) (string, bool) {
 		return path, FileExists(path)
 	}
 	// Define the possible config file extensions
-	configExtensions := []string{".yaml", ".yml", ".yaml.tmpl", ".yml.tmpl"}
+	configExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	for _, ext := range configExtensions {
 		filePath := path + ext
 		if FileExists(filePath) {
