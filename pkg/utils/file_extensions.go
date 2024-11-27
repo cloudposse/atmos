@@ -1,6 +1,5 @@
 package utils
 
-// File extensions
 const (
 	DefaultStackConfigFileExtension       = ".yaml"
 	DefaultVendoringManifestFileExtension = ".yaml"
