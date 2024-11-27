@@ -1,0 +1,46 @@
+---
+title: atmos list stacks
+sidebar_label: stacks
+sidebar_class_name: command
+id: stacks
+description: Use this command to list all Stack configurations or a stack of a specified component.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note Purpose
+Use this command to list Atmos stacks.
+:::
+
+<Screengrab title="atmos list stacks --help" slug="atmos-list-stacks--help" />
+
+## Usage
+
+Execute the `list stacks` command like this:
+
+```shell
+atmos list stacks
+```
+
+To view all stacks for a provided component, execute the `list stacks` command like this:
+
+```shell
+atmos list stacks -c <component>
+```
+
+:::tip
+Run `atmos list stacks --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos list stacks
+atmos list stacks -c vpc
+```
+
+## Flags
+
+| Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
+|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|----------|
+| `--component`    | Atmos component                                                                                                                                                                                                                         | `-c`  | no       |
