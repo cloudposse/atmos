@@ -1,0 +1,45 @@
+---
+title: atmos list components
+sidebar_label: components
+sidebar_class_name: command
+id: component
+description: Use this command to list Atmos components 
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note purpose
+Use this command to list all Atmos components or Atmos components in a specified stack.
+:::
+
+<Screengrab title="atmos list components --help" slug="atmos-list-components--help" />
+
+## Usage
+
+Execute the `list components` command like this:
+
+```shell
+atmos list components
+```
+
+This command lists Atmos components in a specified stack.
+
+```shell
+atmos list components -s <stack>
+```
+
+:::tip
+Run `atmos list components --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos list components
+atmos list components -s tenant1-ue2-dev
+```
+
+## Flags
+
+| Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
+|:-----------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--stack`        | Atmos stack                                                                                                                                                                                                                               | `-s`  | no       |
