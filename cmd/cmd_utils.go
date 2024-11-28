@@ -425,12 +425,17 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 
 // printMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
 func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
-	c2 := color.New(color.FgGreen)
+	//RGB values to define dark grey color
+	r1, g1, b1 := 105, 105, 105
 
-	message := fmt.Sprintf("%s %s >> %s", c2.Sprint("Update available!"), version.Version, c2.Sprint(latestVersion))
+	c1 := color.RGB(r1, g1, b1)
+	c2 := color.New(color.FgGreen)
+	c3 := color.New(color.FgCyan)
+
+	message := fmt.Sprintf("Update available! %s » %s", c1.Sprint(version.Version), c2.Sprint(latestVersion))
 	links := []string{
-		fmt.Sprintf("%s: https://github.com/cloudposse/atmos/releases", c2.Sprint("Atmos Releases")),
-		fmt.Sprintf("%s: https://atmos.tools/install", c2.Sprint("Install Atmos")),
+		fmt.Sprintf("Atmos Releases: %s", c3.Sprint("https://github.com/cloudposse/atmos/releases")),
+		fmt.Sprintf("Install Atmos: %s", c3.Sprint("https://atmos.tools/install")),
 	}
 	messageLines := append([]string{message}, links...)
 	maxWidth := 0
@@ -450,7 +455,7 @@ func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 
 	// Print each line with padding
 	for _, line := range messageLines {
-		lineLength := len(stripANSI(line))
+		lineLength := calculateDisplayWidth(line)
 		spaces := borderWidth - lineLength
 		leftPadding := spaces / 2
 		rightPadding := spaces - leftPadding
@@ -466,6 +471,20 @@ func stripANSI(str string) string {
 	ansi := "\033\\[[0-9;]*m"
 	re := regexp.MustCompile(ansi)
 	return re.ReplaceAllString(str, "")
+}
+
+// Function to calculate display width, treating '»' as width 1
+func calculateDisplayWidth(str string) int {
+	stripped := stripANSI(str)
+	width := 0
+	for _, r := range stripped {
+		if r == '»' {
+			width += 1
+		} else {
+			width += 1
+		}
+	}
+	return width
 }
 
 // customHelpMessageToUpgradeToAtmosLatestRelease adds Atmos version info at the end of each help commnad
