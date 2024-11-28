@@ -140,8 +140,6 @@ func FindAllStackConfigsInPaths(
 		// If no matches were found across all patterns, we perform an additional check:
 		// We try to get matches for the first pattern only to determine if there's a genuine error
 		// (like permission issues or invalid path) versus simply no matching files.
-		// This maintains backward compatibility with the original error handling while providing
-		// more detailed error information in trace mode.
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
