@@ -30,12 +30,7 @@ func FindAllStackConfigsInPathsForStack(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			patterns = []string{
-				p + u.DefaultStackConfigFileExtension,
-				p + u.DefaultStackConfigFileExtension + u.TemplateExtension,
-				p + u.YamlTemplateExtension,
-				p + u.YmlTemplateExtension,
-			}
+			patterns = getStackFilePatterns(p)
 		}
 
 		var allMatches []string
@@ -47,6 +42,9 @@ func FindAllStackConfigsInPathsForStack(
 			}
 		}
 
+		// If no matches were found across all patterns, we perform an additional check:
+		// We try to get matches for the first pattern only to determine if there's a genuine error
+		// (like permission issues or invalid path) versus simply no matching files.
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
@@ -56,6 +54,8 @@ func FindAllStackConfigsInPathsForStack(
 				}
 				return nil, nil, false, err
 			}
+			// If there's no error but still no matches, we continue to the next path
+			// This happens when the pattern is valid but no files match it
 			continue
 		}
 
@@ -64,10 +64,7 @@ func FindAllStackConfigsInPathsForStack(
 			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
-			stackMatch := strings.HasSuffix(matchedFileAbsolutePath, stack+u.DefaultStackConfigFileExtension) ||
-				strings.HasSuffix(matchedFileAbsolutePath, stack+u.DefaultStackConfigFileExtension+u.TemplateExtension) ||
-				strings.HasSuffix(matchedFileAbsolutePath, stack+u.YamlTemplateExtension) ||
-				strings.HasSuffix(matchedFileAbsolutePath, stack+u.YmlTemplateExtension)
+			stackMatch := matchesStackFilePattern(matchedFileAbsolutePath, stack)
 
 			if stackMatch {
 				allExcluded := true
@@ -128,12 +125,7 @@ func FindAllStackConfigsInPaths(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			patterns = []string{
-				p + u.DefaultStackConfigFileExtension,
-				p + u.DefaultStackConfigFileExtension + u.TemplateExtension,
-				p + u.YamlTemplateExtension,
-				p + u.YmlTemplateExtension,
-			}
+			patterns = getStackFilePatterns(p)
 		}
 
 		var allMatches []string
@@ -145,8 +137,11 @@ func FindAllStackConfigsInPaths(
 			}
 		}
 
-		// If no matches found in any pattern, return error using the first pattern
-		// This maintains backward compatibility with the original error handling
+		// If no matches were found across all patterns, we perform an additional check:
+		// We try to get matches for the first pattern only to determine if there's a genuine error
+		// (like permission issues or invalid path) versus simply no matching files.
+		// This maintains backward compatibility with the original error handling while providing
+		// more detailed error information in trace mode.
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
@@ -156,6 +151,8 @@ func FindAllStackConfigsInPaths(
 				}
 				return nil, nil, err
 			}
+			// If there's no error but still no matches, we continue to the next path
+			// This happens when the pattern is valid but no files match it
 			continue
 		}
 
@@ -658,6 +655,27 @@ func GetStackNameFromContextAndStackNamePattern(
 	}
 
 	return stack, nil
+}
+
+// getStackFilePatterns returns a slice of possible file patterns for a given base path
+func getStackFilePatterns(basePath string) []string {
+	return []string{
+		basePath + u.DefaultStackConfigFileExtension,
+		basePath + u.DefaultStackConfigFileExtension + u.TemplateExtension,
+		basePath + u.YamlTemplateExtension,
+		basePath + u.YmlTemplateExtension,
+	}
+}
+
+// matchesStackFilePattern checks if a file path matches any of the valid stack file patterns
+func matchesStackFilePattern(filePath, stackName string) bool {
+	patterns := getStackFilePatterns(stackName)
+	for _, pattern := range patterns {
+		if strings.HasSuffix(filePath, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 func getConfigFilePatterns(path string, forGlobMatch bool) []string {
