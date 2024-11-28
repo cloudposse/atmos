@@ -372,10 +372,10 @@ func ProcessYAMLConfigFile(
 		ext := filepath.Ext(imp)
 		if ext == "" {
 			extensions := []string{
-				".yaml",
-				".yml",
-				".yaml.tmpl",
-				".yml.tmpl",
+				u.YamlFileExtension,
+				u.YmlFileExtension,
+				u.YamlTemplateExtension,
+				u.YmlTemplateExtension,
 			}
 
 			found := false
