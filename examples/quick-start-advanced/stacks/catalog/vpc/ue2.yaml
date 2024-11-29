@@ -5,7 +5,6 @@ components:
   terraform:
     vpc:
       vars:
-        test: !terraform.output a b c
         availability_zones:
           - us-east-2a
           - us-east-2b
