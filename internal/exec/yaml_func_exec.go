@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -20,5 +21,9 @@ func processTagExec(cliConfig schema.CliConfiguration, input string) any {
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	return res
+	var decoded any
+	if err := json.Unmarshal([]byte(res), &decoded); err != nil {
+		return res
+	}
+	return decoded
 }

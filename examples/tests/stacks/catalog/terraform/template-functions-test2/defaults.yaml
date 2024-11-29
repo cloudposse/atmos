@@ -24,3 +24,7 @@ components:
         test_13: '!template {{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
         test_14: '!template {{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map }}'
         test_20: '!exec echo 42'
+        test_21: !exec echo 43
+        test_30: '!exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_label_id'
+        test_31: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_map
+        test_32: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_list
