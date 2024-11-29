@@ -14,5 +14,11 @@ func processTagExec(cliConfig schema.CliConfiguration, input string) any {
 
 	part := strings.TrimPrefix(input, config.AtmosYamlFuncExec)
 	part = strings.TrimSpace(part)
-	return part
+
+	res, err := ExecuteShellAndReturnOutput(cliConfig, part, input, ".", nil, false)
+	if err != nil {
+		u.LogErrorAndExit(cliConfig, err)
+	}
+
+	return res
 }
