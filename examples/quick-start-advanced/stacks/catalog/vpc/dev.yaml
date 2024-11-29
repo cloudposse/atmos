@@ -4,5 +4,3 @@ components:
       vars:
         ipv4_primary_cidr_block: 10.7.0.0/18
         vpc_flow_logs_enabled: false
-        tags:
-          atmos_component2: !template "{{ .atmos_component }}"
