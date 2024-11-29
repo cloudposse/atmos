@@ -11,6 +11,8 @@ import (
 var (
 	AtmosYamlTags = []string{
 		"!terraform.output",
+		"!exec",
+		"!template",
 	}
 )
 

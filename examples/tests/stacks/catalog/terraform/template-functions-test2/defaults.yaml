@@ -12,3 +12,11 @@ components:
         # Examples of using Atmos template functions to get the outputs of another Atmos component
         test_label_id: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
         test_label_id_2: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+        test_label_id_3: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_label_id_4: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map }}'
+        test_label_id_5: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_label_id_10: !terraform.output template-functions-test {{ .stack }} test_label_id
+        test_label_id_11: '!terraform.output template-functions-test {{ .stack }} test_label_id'
+        test_label_id_12: '!template {{ .stack }}'
+        test_label_id_13: '!template {{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_label_id_14: '!template {{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map }}'
