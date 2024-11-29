@@ -6,6 +6,9 @@ components:
       metadata:
         # Point to the Terraform component
         component: "test/template-functions-test2"
+      settings:
+        spacelift:
+          workspace_enabled: false
       vars:
         enabled: true
         name: "test2"

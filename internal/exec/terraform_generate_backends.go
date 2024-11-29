@@ -254,7 +254,12 @@ func ExecuteTerraformGenerateBackends(
 					u.LogErrorAndExit(cliConfig, err)
 				}
 
-				componentSection = componentSectionConverted
+				componentSectionFinal, err := ProcessCustomYamlTags(componentSectionConverted)
+				if err != nil {
+					return err
+				}
+
+				componentSection = componentSectionFinal
 
 				if i, ok := componentSection[cfg.BackendSectionName].(map[string]any); ok {
 					backendSection = i

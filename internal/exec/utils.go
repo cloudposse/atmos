@@ -509,9 +509,14 @@ func ProcessStacks(
 			u.LogErrorAndExit(cliConfig, err)
 		}
 
-		configAndStacksInfo.ComponentSection = componentSectionConverted
+		componentSectionFinal, err := ProcessCustomYamlTags(componentSectionConverted)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
 
-		// Process Atmos manifest sections after processing `Go` templates
+		configAndStacksInfo.ComponentSection = componentSectionFinal
+
+		// Process Atmos manifest sections after processing `Go` templates and custom YAML tags
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 			configAndStacksInfo.ComponentProvidersSection = i
 		}
