@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/go-getter v1.7.6
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.23.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20241107133921-3adb156ecfe2
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20241129133400-c404f8227ea6
 	github.com/hashicorp/terraform-exec v0.21.0
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
