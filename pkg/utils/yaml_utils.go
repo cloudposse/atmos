@@ -112,6 +112,34 @@ func parseNodeWithTags(node *yaml.Node, out map[string]TaggedValue) error {
 	return nil
 }
 
+// gopkg.in/yaml.v3.TaggedStyle
+func processNode(node *yaml.Node) error {
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		return processNode(node.Content[0])
+	}
+
+	for i := 0; i < len(node.Content); i += 2 {
+		valueNode := node.Content[i+1]
+
+		if valueNode.Tag == "!terraform.output" || valueNode.Tag == "!template" {
+			valueNode.Value = valueNode.Tag + " " + valueNode.Value
+		}
+
+		if valueNode.Kind == yaml.SequenceNode {
+			for _, seqNode := range valueNode.Content {
+				if err := processNode(seqNode); err != nil {
+					return err
+				}
+			}
+		} else {
+			if err := processNode(valueNode); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func UnmarshalYAML[T any](input string) (T, error) {
 	var zeroValue T
 	var node yaml.Node
@@ -119,6 +147,10 @@ func UnmarshalYAML[T any](input string) (T, error) {
 
 	// Unmarshal into yaml.Node to preserve custom tags and structure
 	if err := yaml.Unmarshal(b, &node); err != nil {
+		return zeroValue, err
+	}
+
+	if err := processNode(&node); err != nil {
 		return zeroValue, err
 	}
 
@@ -135,7 +167,6 @@ func UnmarshalYAML[T any](input string) (T, error) {
 	// Unmarshal the yaml.Node into the desired type T
 	var data T
 	if err := node.Decode(&data); err != nil {
-		fmt.Printf("ERROR_1: %v\n", err)
 		return zeroValue, err
 	}
 
