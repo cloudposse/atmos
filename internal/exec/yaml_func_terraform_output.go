@@ -174,56 +174,56 @@ func processTagTerraformOutput(cliConfig schema.CliConfiguration, input string) 
 	// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
 	cleanTerraformWorkspace(cliConfig, componentPath)
 
-	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform init %s -s %s'", component, stack))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nexecuting 'terraform init %s -s %s'", input, component, stack))
 	err = tf.Init(ctx, tfexec.Upgrade(false))
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
-	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform init %s -s %s'", component, stack))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nexecuted 'terraform init %s -s %s'", input, component, stack))
 
 	// Terraform workspace
-	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nexecuting 'terraform workspace new %s' for component '%s' in stack '%s'", input, terraformWorkspace, component, stack))
 
 	err = tf.WorkspaceNew(ctx, terraformWorkspace)
 	if err != nil {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nWorkspace exists. Executing 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nterraform workspace exists. Executing 'terraform workspace select %s' for component '%s' in stack '%s'", input, terraformWorkspace, component, stack))
 		err = tf.WorkspaceSelect(ctx, terraformWorkspace)
 		if err != nil {
 			u.LogErrorAndExit(cliConfig, err)
 		}
-		u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nexecuted 'terraform workspace select %s' for component '%s' in stack '%s'", input, terraformWorkspace, component, stack))
 	} else {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+		u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nexecuted 'terraform workspace new %s' for component '%s' in stack '%s'", input, terraformWorkspace, component, stack))
 	}
 
 	// Terraform output
-	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuting 'terraform output %s -s %s'", component, stack))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nexecuting 'terraform output %s -s %s'", input, component, stack))
 
 	outputMeta, err := tf.Output(ctx)
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
-	u.LogTrace(cliConfig, fmt.Sprintf("\nExecuted 'terraform output %s -s %s'", component, stack))
+	u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nexecuted 'terraform output %s -s %s'", input, component, stack))
 
 	if cliConfig.Logs.Level == u.LogLevelTrace {
 		y, err2 := u.ConvertToYAML(outputMeta)
 		if err2 != nil {
 			u.LogError(cliConfig, err2)
 		} else {
-			u.LogTrace(cliConfig, fmt.Sprintf("\nResult of 'terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
+			u.LogTrace(cliConfig, fmt.Sprintf("\nAtmos YAML function: %s\nresult of 'terraform output %s -s %s' before processing it:\n%s\n", input, component, stack, y))
 		}
 	}
 
 	outputProcessed = lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
 		s := string(v.Value)
-		u.LogTrace(cliConfig, fmt.Sprintf("Converting the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\n", k, s))
+		u.LogTrace(cliConfig, fmt.Sprintf("Atmos YAML function: %s\nconverting the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\n", input, k, s))
 
 		d, err2 := u.ConvertFromJSON(s)
 
 		if err2 != nil {
 			u.LogError(cliConfig, err2)
 		} else {
-			u.LogTrace(cliConfig, fmt.Sprintf("Converted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", k, s, d))
+			u.LogTrace(cliConfig, fmt.Sprintf("Atmos YAML function: %s\nconverted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", input, k, s, d))
 		}
 
 		return k, d
