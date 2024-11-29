@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -49,16 +48,10 @@ func processNodes(data map[string]any) map[string]any {
 func processCustomTags(input string) any {
 	if strings.HasPrefix(input, "!template") {
 		return processTemplateTag(input)
+	} else if strings.HasPrefix(input, "!exec") {
+		return processExecTag(input)
+	} else if strings.HasPrefix(input, "!terraform.output") {
+		return processTerraformOutputTag(input)
 	}
 	return input
-}
-
-func processTemplateTag(input string) any {
-	jsonPart := strings.TrimPrefix(input, "!template")
-	jsonPart = strings.TrimSpace(jsonPart)
-	var decoded any
-	if err := json.Unmarshal([]byte(jsonPart), &decoded); err != nil {
-		return jsonPart
-	}
-	return decoded
 }
