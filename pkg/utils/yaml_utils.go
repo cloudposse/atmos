@@ -61,23 +61,15 @@ func processCustomTags(node *yaml.Node) error {
 		return processCustomTags(node.Content[0])
 	}
 
-	for i := 0; i < len(node.Content); i += 2 {
-		valueNode := node.Content[i+1]
+	for i := 0; i < len(node.Content); i++ {
+		n := node.Content[i]
 
-		if SliceContainsString(AtmosYamlTags, valueNode.Tag) {
-			valueNode.Value = valueNode.Tag + " " + valueNode.Value
+		if SliceContainsString(AtmosYamlTags, n.Tag) {
+			n.Value = n.Tag + " " + n.Value
 		}
 
-		if valueNode.Kind == yaml.SequenceNode {
-			for _, seqNode := range valueNode.Content {
-				if err := processCustomTags(seqNode); err != nil {
-					return err
-				}
-			}
-		} else {
-			if err := processCustomTags(valueNode); err != nil {
-				return err
-			}
+		if err := processCustomTags(n); err != nil {
+			return err
 		}
 	}
 	return nil
