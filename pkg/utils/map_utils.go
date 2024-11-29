@@ -33,3 +33,14 @@ func SortMapByKeysAndValuesUniq(m map[string][]string) map[string][]string {
 	}
 	return res
 }
+
+func MapOfInterfacesToMapOfStrings(input map[any]any) map[string]any {
+	converted := make(map[string]any)
+	for key, value := range input {
+		strKey, ok := key.(string)
+		if ok {
+			converted[strKey] = value
+		}
+	}
+	return converted
+}

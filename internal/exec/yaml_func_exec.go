@@ -2,6 +2,7 @@ package exec
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,6 +17,11 @@ func processTagExec(cliConfig schema.CliConfiguration, input string) any {
 	part := strings.TrimPrefix(input, config.AtmosYamlFuncExec)
 	part = strings.TrimSpace(part)
 
+	if part == "" {
+		err := errors.New(fmt.Sprintf("invalid Atmos YAML function: %s", input))
+		u.LogErrorAndExit(cliConfig, err)
+	}
+
 	res, err := ExecuteShellAndReturnOutput(cliConfig, part, input, ".", nil, false)
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
@@ -25,5 +31,6 @@ func processTagExec(cliConfig schema.CliConfiguration, input string) any {
 	if err := json.Unmarshal([]byte(res), &decoded); err != nil {
 		return res
 	}
+
 	return decoded
 }
