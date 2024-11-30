@@ -202,10 +202,6 @@ func validateComponentInternal(
 			{
 				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.Opa.BasePath, schemaPath)
 			}
-		case "cue":
-			{
-				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.Cue.BasePath, schemaPath)
-			}
 		}
 
 		if !u.FileExists(filePath) {
@@ -244,13 +240,6 @@ func validateComponentInternal(
 	case "opa_legacy":
 		{
 			ok, err = ValidateWithOpaLegacy(componentSection, filePath, schemaText, timeoutSeconds)
-			if err != nil {
-				return false, err
-			}
-		}
-	case "cue":
-		{
-			ok, err = ValidateWithCue(componentSection, filePath, schemaText)
 			if err != nil {
 				return false, err
 			}
