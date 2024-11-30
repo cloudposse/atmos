@@ -20,8 +20,8 @@ import DocCardList from '@theme/DocCardList'
 </Intro>
 
 Atmos YAML functions are based on [YAML Explicit typing](https://yaml.org/spec/1.2.2/)
-and in essence are user-defined [Explicit Tags](https://yaml.org/spec/1.2.2/#tags) (or local data types).
-Explicit tags are denoted by the exclamation point (“!”) symbol.
+and user-defined [Explicit Tags](https://yaml.org/spec/1.2.2/#tags) (local data types).
+Explicit tags are denoted by the exclamation point (__"!"__) symbol.
 Atmos detects the tags in the stack manifests and executes the corresponding functions.
 
 :::info
@@ -33,6 +33,14 @@ Finally, YAML defines a way to extend the data type definitions locally to accom
 structures, primitives, and functions.
 :::
 
+## Use-cases
+
+ - The __`!template`__ YAML function can be used to
+   [handle template outputs containing maps or lists](/core-concepts/stacks/templates/functions/atmos.Component#handling-outputs-containing-maps-or-lists)
+   returned from the [__`atmos.Component`__](/core-concepts/stacks/templates/functions/atmos.Component) template function
+
+ - Execute shell scripts and assign the result
+
 ## YAML Function Examples
 
 <File title="stack.yaml">
@@ -43,18 +51,18 @@ components:
   terraform:
     component2:
       vars:
-        test_1: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_list }}'
+        #
+        test_1: '!template {{ toJson (atmos.Component "component1" "plat-ue2-dev").outputs.test_list }}'
         test_2: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
         test_3: !exec echo 42
-        test_4: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -json test_label_id
+        test_4: !exec atmos terraform output component1 -s plat-ue2-dev --skip-init -- -json test_label_id
         test_5: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -json test_map
         test_6: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -json test_list
-        test_7: !terraform.output component1 {{ .stack }} test_label_id
-        test_8: !terraform.output component1 {{ .stack }} test_list
-        test_9: !terraform.output component1 {{ .stack }} test_map
+        test_7: !terraform.output component1 plat-ue2-dev test_label_id
+        test_8: !terraform.output component1 {{ .stack }} test_label_id
+        test_9: !terraform.output component1 {{ .stack }} test_list
+        test_10: !terraform.output component1 {{ .stack }} test_map
 ```
-
-## Use-cases
 
 ## Atmos YAML Functions
 
