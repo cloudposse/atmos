@@ -58,9 +58,9 @@ var1: '["item_1","item_2","item_3"]'
 var2: '{"a":1,"b":2,"c":3}'
 ```
 
-The results are JSON-encoded strings, not objects.
+Because the template expressions are quoted, the results are JSON-encoded strings, not objects.
 
-They can be sent to the `var1` and `var2` Terraform variables, but the variables need to be of type `string`, and
+The results can be sent to the `var1` and `var2` Terraform variables, but the variables need to be of type `string`, and
 you'll have to decode the strings into Terraform list and map using the
 [`jsondecode`](https://developer.hashicorp.com/terraform/language/functions/jsondecode) function in your Terraform code.
 In many cases, this is not an acceptable solution because the Terraform variables `var1` and `var2` are already of type list and map,
@@ -76,7 +76,6 @@ var2: {{ toJson (atmos.Component "component1" "<stack>").outputs.test_map }}
 but it does not work because it's not a valid YAML.
 In YAML, curly braces `{ }` are used to denote a JSON-like inline mapping, which corresponds to a map or dictionary in YAML,
 and the double curly braces are not valid in YAML.
-
 
 We can try to use [YAML multiline strings](https://yaml-multiline.info/) with the block style indicator, and un-quote the templates:
 
