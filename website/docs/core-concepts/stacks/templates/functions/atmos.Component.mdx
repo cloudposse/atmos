@@ -120,13 +120,13 @@ tenant `net` (instead of `plat`):
 
 ## Handling Outputs Containing Maps or Lists
 
-You can use the `atmos.Component` function to read complex outputs (remote state) from Terraform/OpenTofu components, and use those in your stack manifests. It's important to keep in mind that template functions are evaluated during the **text processing phase—before the file is interpreted as YAML**. (This is similar to the behavior of how Helm chart templates are evaluated.)
-
-To effectively use `atmos.Component` outputs in stack configurations, it’s important to understand the relationship between YAML and JSON. YAML is a superset of JSON, meaning you can embed JSON directly inside YAML, but the reverse is not true.
+You can use the `atmos.Component` function to read complex outputs (remote state) from Terraform/OpenTofu components, and use those in your stack manifests.
+To effectively use `atmos.Component` outputs in stack configurations, it’s important to understand the relationship between YAML and JSON.
+YAML is a superset of JSON, meaning you can embed JSON directly inside YAML, but the reverse is not true.
 
 This means:
-  1. The output of a template function must be valid YAML (including the relative whitespace based on it's current position) or JSON to be parsed correctly.
-  2. Simple types like strings are straightforward—they can be returned as-is.
+  1. The output of a template function must be valid YAML (including the relative whitespace based on its current position) or JSON to be parsed correctly.
+  2. Simple types like strings are straightforward — they can be returned as-is.
   3. Complex types like lists or maps must be serialized into JSON to ensure compatibility.
 
 ### Atmos Configuration
@@ -157,9 +157,9 @@ In YAML, the default `{{` and `}}` delimiters used for templating can conflict w
 </details>
 
 
-### Using `toRawJson` Function
+### Using `toRawJson` or `toJson` Functions
 
-Then we can use the `toRawJson` function to serialize complex types into JSON:
+Then we can use the [`toRawJson` or `toJson`](https://masterminds.github.io/sprig/defaults.html) functions to serialize complex types into JSON:
 
 ```yaml
   components:
@@ -171,7 +171,29 @@ Then we can use the `toRawJson` function to serialize complex types into JSON:
           subnet_ids: '{{ toRawJson ((atmos.Component "vpc" .stack).outputs.private_subnets) }}'
 ```
 
-The results of the `toRawJson` function are serialized into JSON, which can be safely embedded in the YAML stack configuration. The single quotes around the braces in the `delimiters` setting ensure that the JSON is not parsed as YAML, but then processed as a template function which removes the single quotes and replaces it with the JSON string.
+The results of the `toRawJson` function are serialized into JSON, which can be safely embedded in the YAML stack configuration.
+The single quotes around the braces in the `delimiters` setting ensure that the JSON is not parsed as YAML, but then processed as a template function which removes the single quotes and replaces it with the JSON string.
+
+### Using `!template` Atmos YAML Function
+
+Instead of adjusting the template delimiters in `atmos.yaml`, you can use the [`!template`](/core-concepts/stacks/yaml-functions/template) Atmos YAML function.
+Atmos executes the __`!template`__ YAML function, which correctly handles the JSON returned from the
+[`toRawJson` or `toJson`](https://masterminds.github.io/sprig/defaults.html) functions and converts the result into the list or map YAML types.
+The final result of type list or map can be sent directly to the corresponding Terraform/OpenTofu component without modifying the types of the input variables.
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    component2:
+      vars:
+        # Handle the output of type list form the `atmos.Component` template function
+        test_1: '!template {{ toJson (atmos.Component "component1" "plat-ue2-dev").outputs.test_list }}'
+
+        # Handle the output of type map form the `atmos.Component` template function
+        test_2: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
+    ```
+</File>
 
 ## Examples
 
