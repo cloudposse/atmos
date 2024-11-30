@@ -27,11 +27,13 @@ Atmos detects the tags in the stack manifests and executes the corresponding fun
 :::info
 YAML data types can be divided into three categories: core, defined, and user-defined.
 Core are ones expected to exist in any parser (e.g. floats, ints, strings, lists, maps).
-Many more advanced data types, such as binary data, are defined in the YAML specification but not supported in all implementations.
-Finally, YAML defines a way to extend the data type definitions locally to accommodate user-defined classes, structures, primitives, and functions.
+Many more advanced data types, such as binary data, are defined in the YAML specification but not supported
+in all implementations.
+Finally, YAML defines a way to extend the data type definitions locally to accommodate user-defined classes,
+structures, primitives, and functions.
 :::
 
-## YAML Functions Examples
+## YAML Function Examples
 
 <File title="stack.yaml">
 </File>
@@ -39,18 +41,20 @@ Finally, YAML defines a way to extend the data type definitions locally to accom
 ```yaml
 components:
   terraform:
-    component-2:
+    component2:
       vars:
-        test_1: '!template {{ toJson (atmos.Component "component-1" .stack).outputs.test_list }}'
-        test_2: '!template {{ toJson (atmos.Component "component-1" .stack).outputs.test_map }}'
+        test_1: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_list }}'
+        test_2: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
         test_3: !exec echo 42
-        test_4: !exec atmos terraform output component-1 -s {{ .stack }} --skip-init -- -json test_label_id
-        test_5: !exec atmos terraform output component-1 -s {{ .stack }} --skip-init -- -json test_map
-        test_6: !exec atmos terraform output component-1 -s {{ .stack }} --skip-init -- -json test_list
-        test_7: !terraform.output component-1 {{ .stack }} test_label_id
-        test_8: !terraform.output component-1 {{ .stack }} test_list
-        test_9: !terraform.output component-1 {{ .stack }} test_map
+        test_4: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -json test_label_id
+        test_5: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -json test_map
+        test_6: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -json test_list
+        test_7: !terraform.output component1 {{ .stack }} test_label_id
+        test_8: !terraform.output component1 {{ .stack }} test_list
+        test_9: !terraform.output component1 {{ .stack }} test_map
 ```
+
+## Use-cases
 
 ## Atmos YAML Functions
 
