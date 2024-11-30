@@ -47,33 +47,50 @@ structures, primitives, and functions.
 
 :::note
 You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) and Atmos YAML functions in the same
-configurations at the same time.
+stack configurations at the same time.
 Atmos processes the templates first, and then executes the YAML functions, allowing you to provide the parameters to
-the YAML functions dynamically
+the YAML functions dynamically.
 :::
 
 ## Examples
 
 <File title="stack.yaml">
-</File>
-
 ```yaml
 components:
   terraform:
     component2:
       vars:
-        #
+        # Correctly handle the output of type list form the `atmos.Component` template function
         test_1: '!template {{ toJson (atmos.Component "component1" "plat-ue2-dev").outputs.test_list }}'
+
+        # Correctly handle the output of type map form the `atmos.Component` template function
         test_2: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
+
+        # Execute the shell script and assign the result to the `test_3` variable
         test_3: !exec echo 42
+
+        # Execute the shell script to get the `test_label_id` output from the `component1` component in the stack `plat-ue2-dev`
         test_4: !exec atmos terraform output component1 -s plat-ue2-dev --skip-init -- -json test_label_id
+
+        # Execute the shell script to get the `test_map` output from the `component1` component in the current stack
         test_5: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -json test_map
+
+        # Execute the shell script to get the `test_list` output from the `component1` component in the current stack
         test_6: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -json test_list
+
+        # Get the `test_label_id` output of type string from the `component1` component in the stack `plat-ue2-dev`
         test_7: !terraform.output component1 plat-ue2-dev test_label_id
+
+        # Get the `test_label_id` output of type string from the `component1` component in the current stack
         test_8: !terraform.output component1 {{ .stack }} test_label_id
+
+        # Get the `test_list` output of type list from the `component1` component in the current stack
         test_9: !terraform.output component1 {{ .stack }} test_list
+
+        # Get the `test_map` output of type map from the `component1` component in the current stack
         test_10: !terraform.output component1 {{ .stack }} test_map
 ```
+</File>
 
 ## Atmos YAML Functions
 
