@@ -2,20 +2,20 @@
 title: "!terraform.output"
 sidebar_position: 3
 sidebar_label: "!terraform.output"
-description: Read the remote state or configuration of any Atmos component
+description: Read the remote state of any Atmos component
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `atmos.Component` template function allows reading any Atmos section or any attribute from a section for an
-Atmos component in a stack, and use it in `Go` templates in Atmos component configurations.
+The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/components/terraform/remote-state))
+of components directly in Atmos stack manifests.
 </Intro>
 
 ## Usage
 
 ```yaml
-  {{ (atmos.Component "<component>" "<stack>").<section>.<attribute> }}
+  !terraform.output <component> <stack> <output>
 ```
 
 ## Arguments
@@ -27,54 +27,61 @@ Atmos component in a stack, and use it in `Go` templates in Atmos component conf
   <dt>`stack`</dt>
   <dd>Atmos stack name</dd>
 
-  <dt>`section`</dt>
-  <dd>Atmos section name. Any section returned by the CLI command
-  <a href="/cli/commands/describe/component#output">atmos describe component</a> can be used.
-  A special `outputs` section is also supported to get the outputs (remote state) of Terraform/OpenTofu components.</dd>
-
-  <dt>`outputs`</dt>
-  <dd>Using the `outputs` section in the `atmos.Component` command is an convenient way to read the outputs (remote state)
-  of a component in a stack directly in Atmos stack manifests. It is an alternative to using the `remote-state`
-  module and configuring Terraform/OpenTofu components to use the `remote-state` module as described in
-  <a href="/core-concepts/components/terraform/remote-state">Component Remote State</a></dd>
-
-  <dt>`attribute`</dt>
-  <dd>
-  Attribute name (field) from the `section`. `attribute` is optional, you can use the `section` itself
-  if it's a simple type (e.g. `string`). Any number of attributes can be chained using the dot (`.`) notation.
-  For example, if the first two attributes are maps, you can chain them and get a field from the last map:
-  ```yaml
-  {{ (atmos.Component "<component>" "<stack>").<section>.<attribute1>.<attribute2>.<field1> }}
-  ```
-  </dd>
+  <dt>`output`</dt>
+  <dd>Terraform output</dd>
 </dl>
 
 
+## Examples
+
+<File title="stack.yaml">
+```yaml
+  components:
+    terraform:
+      component2:
+        vars:
+          # Get the `test_label_id` output of type string from the `component1` component in the stack `plat-ue2-dev`
+          var1: !terraform.output component1 plat-ue2-dev test_label_id
+
+          # Get the `test_label_id` output of type string from the `component1` component in the current stack
+          var2: !terraform.output component1 {{ .stack }} test_label_id
+
+          # Get the `test_list` output of type list from the `component1` component in the current stack
+          var3: !terraform.output component1 {{ .stack }} test_list
+
+          # Get the `test_map` output of type map from the `component1` component in the current stack
+          var4: !terraform.output component1 {{ .stack }} test_map
+```
+</File>
+
 ## Specifying Atmos `stack`
 
-There are multiple ways you can specify the Atmos stack parameter in the `atmos.Component` function.
+There are multiple ways you can specify the Atmos stack parameter in the `!terraform.output` function.
 
-The `stack` argument is the second argument of the `atmos.Component` function, and it can be specified in a few different ways:
+The `stack` argument is the second argument of the `!terraform.output` function, and it can be specified in a few different ways:
 
 ### Hardcoded Stack Name
 
-Hardcoded stack name. Use it if you want to get an output from a component from a different (well-known and static) stack. For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` output from the `vpc` component from the stack `plat-ue2-prod`:
+Hardcoded stack name.
+Use it if you want to get an output from a component from a different (well-known and static) stack.
+For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` output from the `vpc` component from the stack `plat-ue2-prod`:
 
 ```yaml title="plat-ue2-dev"
   components:
     terraform:
       tgw:
         vars:
-          vpc_id: '{{ (atmos.Component "vpc" "plat-ue2-prod").outputs.vpc_id }}'
+          vpc_id: !terraform.output vpc plat-ue2-prod vpc_id
 ```
 
 ### Reference the Current Stack Name
 
-Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component is in (for which the `atmos.Component` function is executed):
+Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component is in
+(for which the `!terraform.output` function is executed):
 
 ```yaml
-  {{ (atmos.Component "<component>" .stack).<section>.<attribute> }}
-  {{ (atmos.Component "<component>" .atmos_stack).<section>.<attribute> }}
+  !terraform.output <component> {{ .stack }} <output>
+  !terraform.output <component> {{ .atmos_stack }} <output>
 ```
 
 For example, you have a `tgw` component that requires the `vpc_id` output from the `vpc` component in the same stack:
@@ -84,19 +91,20 @@ For example, you have a `tgw` component that requires the `vpc_id` output from t
     terraform:
       tgw:
         vars:
-          vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
+          vpc_id: !terraform.output vpc {{ .stack }} vpc_id
 ```
 
 ### Use a Format Function
 
-Use the `printf` template function to construct stack names using static strings and dynamic identifiers. This is convenient when you want to override some identifiers in the stack name:
+Use the `printf` template function to construct stack names using static strings and dynamic identifiers.
+This is convenient when you want to override some identifiers in the stack name:
 
 ```yaml
-  {{ (atmos.Component "<component>" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage)).<section>.<attribute> }}
+  !terraform.output <component> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <output>
 
-  {{ (atmos.Component "<component>" (printf "plat-%s-prod" .vars.environment)).<section>.<attribute> }}
+  !terraform.output <component> {{ printf "plat-%s-prod" .vars.environment }} <output>
 
-  {{ (atmos.Component "<component>" (printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account)).<section>.<attribute> }}
+  !terraform.output <component> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <output>
 ```
 
 For example, you have a `tgw` component deployed in the stack `plat-ue2-dev`. The `tgw` component requires the
@@ -108,7 +116,7 @@ tenant `net` (instead of `plat`):
     terraform:
       tgw:
         vars:
-          vpc_id: '{{ (atmos.Component "vpc" (printf "net-%s-%s" .vars.environment .vars.stage)).outputs.vpc_id }}'
+          vpc_id: '!terraform.output vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id'
 ```
 
 :::tip Important
@@ -118,116 +126,13 @@ tenant `net` (instead of `plat`):
     sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
 :::
 
-## Handling Outputs Containing Maps or Lists
 
-You can use the `atmos.Component` function to read complex outputs (remote state) from Terraform/OpenTofu components, and use those in your stack manifests. It's important to keep in mind that template functions are evaluated during the **text processing phase—before the file is interpreted as YAML**. (This is similar to the behavior of how Helm chart templates are evaluated.)
+## Caching the result of `!terraform.output` function
 
-To effectively use `atmos.Component` outputs in stack configurations, it’s important to understand the relationship between YAML and JSON. YAML is a superset of JSON, meaning you can embed JSON directly inside YAML, but the reverse is not true.
-
-This means:
-  1. The output of a template function must be valid YAML (including the relative whitespace based on it's current position) or JSON to be parsed correctly.
-  2. Simple types like strings are straightforward—they can be returned as-is.
-  3. Complex types like lists or maps must be serialized into JSON to ensure compatibility.
-
-### Atmos Configuration
-
-First, we need to adjust the delimiters in `atmos.yaml`, to avoid issues with YAML parsing:
-
-```yaml title="atmos.yaml"
-templates:
-  settings:
-    # Note the deliberate use of single quotes around the braces to avoid YAML parsing issues
-    delimiters: ["'{{", "}}'"]
-```
-
-<details>
-<summary>Detailed Explanation</summary>
-
-In YAML, the default `{{` and `}}` delimiters used for templating can conflict with YAML’s syntax rules, leading to parsing errors. For example, YAML interprets unquoted braces as JSON maps, which can cause YAML parsing to fail.
-
-1. YAML Parsing Phase First, the file is parsed as YAML to extract its structure, such as imports. At this stage, the file must be valid YAML for Atmos to proceed. If the template expressions inside `{{ ... }}` are not properly handled, they can break the YAML syntax, leading to parsing errors.
-
-2. Go Template Processing Phase: After successfully parsing the YAML structure, Atmos treats the file as a Go template and processes the content. Here’s what happens:
-   - Everything between the delimiters (`{{ ... }}`) is replaced by the result of the template function or expression.
-   - The output of this replacement must also be valid YAML so the file can remain usable for the next steps (e.g., Terraform processing).
-3. How Adjusted Delimiters Work: By configuring delimiters as `["'{{", "}}'"]` in `atmos.yaml`, you ensure that:
-   - During the YAML Parsing Phase, the single quotes (`'`) around the template expressions make them valid YAML strings, allowing the file to pass YAML validation.
-   - During the Go Template Processing Phase, Atmos processes the content within '`{{` and `}}`' and replaces it with the evaluated result.
-
-</details>
-
-
-### Using `toRawJson` Function
-
-Then we can use the `toRawJson` function to serialize complex types into JSON:
-
-```yaml
-  components:
-  terraform:
-    my_lambda_component:
-      vars:
-        vpc_config:
-          security_group_ids: ['{{ (atmos.Component "security-group/lambda" .stack).outputs.id }}']
-          subnet_ids: '{{ toRawJson ((atmos.Component "vpc" .stack).outputs.private_subnets) }}'
-```
-
-The results of the `toRawJson` function are serialized into JSON, which can be safely embedded in the YAML stack configuration. The single quotes around the braces in the `delimiters` setting ensure that the JSON is not parsed as YAML, but then processed as a template function which removes the single quotes and replaces it with the JSON string.
-
-## Examples
-
-The following configurations show different ways of using the `atmos.Component` template function to read values from
-different Atmos sections directly in Atmos stack manifests, including the outputs of other
-(already provisioned) components.
-
-<File>
-```yaml
-# Global `settings` section
-# It will be added and deep-merged to the `settings` section of all components
-settings:
-  test: true
-
-components:
-  terraform:
-    test:
-      metadata:
-        # Point to the Terraform/OpenTofu component
-        component: "test"
-      vars:
-        name: "test"
-
-    test1:
-      metadata:
-        # Point to the Terraform/OpenTofu component
-        component: "test1"
-      vars:
-        name: "test1"
-
-    test2:
-      metadata:
-        # Point to the Terraform/OpenTofu component
-        component: "test2"
-      vars:
-        name: "test2"
-        # Use the `atmos.Component` function to get the outputs of the Atmos component `test1`
-        # The `test1` component must be already provisioned and its outputs stored in the Terraform/OpenTofu state
-        # Atmos will execute `terraform output` on the `test1` component in the same stack to read its outputs
-        test1_id: '{{ (atmos.Component "test1" .stack).outputs.test1_id }}'
-        tags:
-          # Get the `settings.test` field from the `test` component in the same stack
-          test: '{{ (atmos.Component "test" .stack).settings.test }}'
-          # Get the `metadata.component` field from the `test` component in the same stack
-          test_terraform_component: '{{ (atmos.Component "test" .stack).metadata.component }}'
-          # Get the `vars.name` field from the `test1` component in the same stack
-          test1_name: '{{ (atmos.Component "test1" .stack).vars.name }}'
-```
-</File>
-
-## Caching the result of `atmos.Component` function
-
-Atmos caches (in memory) the results of `atmos.Component` template function execution.
+Atmos caches (in memory) the results of `!terraform.output` function execution.
 If you call the function for the same component in a stack more than once, the first call will produce the result
 and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
-`atmos.Component` function for the same component in a stack in multiple places in Atmos stack manifests.
+`!terraform.output` function for the same component in a stack in multiple places in Atmos stack manifests.
 It will speed up the function execution and stack processing.
 
 For example:
@@ -239,15 +144,15 @@ components:
     test2:
       vars:
         tags:
-          test: '{{ (atmos.Component "test" .stack).outputs.id }}'
-          test2: '{{ (atmos.Component "test" .stack).outputs.id }}'
-          test3: '{{ (atmos.Component "test" .stack).outputs.id }}'
+          test: !terraform.output test {{ .stack }} id
+          test2: !terraform.output test {{ .stack }} id
+          test3: !terraform.output test {{ .stack }} id
 ```
 </File>
 
 In the example, the `test2` Atmos component uses the outputs (remote state) of the `test` Atmos component from the same stack.
-The template function `{{ atmos.Component "test" .stack }}` is executed three times (once for each tag).
+The YAML function `!terraform.output` is executed three times (once for each tag).
 
-After the first execution, Atmos caches the result in memory (all the component sections, including the `outputs`),
-and reuses it in the next two calls to the function. The caching makes the stack processing about three times faster in this
-particular example. In a production environment where many components are used, the speedup can be even more significant.
+After the first execution, Atmos caches the result in memory,
+and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
+In a production environment where many components are used, the speedup can be significant.
