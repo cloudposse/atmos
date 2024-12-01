@@ -60,10 +60,10 @@ components:
     component2:
       vars:
         # Handle the output of type list from the `atmos.Component` template function
-        test_1: '!template {{ toJson (atmos.Component "component1" "plat-ue2-dev").outputs.test_list }}'
+        test_1: !template '{{ toJson (atmos.Component "component1" "plat-ue2-dev").outputs.test_list }}'
 
         # Handle the output of type map from the `atmos.Component` template function
-        test_2: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
+        test_2: !template '{{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
 
         # Execute the shell script and assign the result to the `test_3` variable
         test_3: !exec echo 42

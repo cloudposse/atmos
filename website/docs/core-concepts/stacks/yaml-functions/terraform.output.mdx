@@ -122,7 +122,7 @@ tenant `net` (instead of `plat`):
     terraform:
       tgw:
         vars:
-          vpc_id: '!terraform.output vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id'
+          vpc_id: !terraform.output vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id
 ```
 
 :::tip Important

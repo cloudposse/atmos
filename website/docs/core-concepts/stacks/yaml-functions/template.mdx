@@ -18,10 +18,10 @@ import Intro from '@site/src/components/Intro'
 
 ```yaml
 # Process the output of type list from the `atmos.Component` template function in the provided stack
-var1: '!template {{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}'
+var1: !template '{{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}'
 
 # Process the output of type map from the `atmos.Component` template function in the current stack
-var2: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
+var2: !template '{{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
 ```
 
 ## Why `!template` is needed?
@@ -109,8 +109,8 @@ types (list or map) by decoding the JSON strings.
 The following `!template` function calls:
 
 ```yaml
-var1: '!template {{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}'
-var2: '!template {{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
+var1: !template '{{ toJson (atmos.Component "<component>" "<stack>").outputs.test_list }}'
+var2: !template '{{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
 ```
 
 generates the following YAML:
