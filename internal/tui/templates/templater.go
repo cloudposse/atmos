@@ -2,10 +2,12 @@ package templates
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/term"
 )
 
 // Templater handles the generation and management of command usage templates.
@@ -25,6 +27,22 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 
 	cmd.SetUsageTemplate(t.UsageTemplate)
 	return nil
+}
+
+// getTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
+func getTerminalWidth() int {
+	defaultWidth := 80
+	screenWidth := defaultWidth
+
+	// Detect terminal width and use it by default if available
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		termWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
+		if err == nil && termWidth > 0 {
+			screenWidth = termWidth - 2
+		}
+	}
+
+	return screenWidth
 }
 
 // MainUsageTemplate returns the usage template for the root command and wrap cobra flag usages to the terminal width
@@ -55,13 +73,11 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 `
 }
 
-// Default terminal width if actual width cannot be determined
-const maxWidth = 80
-
 // WrappedFlagUsages formats the flag usage string to fit within the terminal width
 func WrappedFlagUsages(f *pflag.FlagSet) string {
 	var builder strings.Builder
-	printer := NewHelpFlagPrinter(&builder, maxWidth, f)
+	width := getTerminalWidth()
+	printer := NewHelpFlagPrinter(&builder, uint(width), f)
 
 	printer.maxFlagLen = calculateMaxFlagLength(f)
 
