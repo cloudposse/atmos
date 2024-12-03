@@ -153,11 +153,11 @@ components:
         vpc_config:
           security_group_ids: ['{{ (atmos.Component "security-group/lambda" .stack).outputs.id }}']
 
-          # Handle the output of type list from the `atmos.Component` template function
+          # Output of type list from the `atmos.Component` template function
           subnet_ids: !template '{{ toJson (atmos.Component "vpc" .stack).outputs.private_subnet_ids }}'
 
-          # Handle the output of type map from the `atmos.Component` template function
-          config_map: !template '{{ toJson (atmos.Component "vpc" .stack).outputs.config_map }}'
+          # Output of type map from the `atmos.Component` template function
+          config_map: !template '{{ toJson (atmos.Component "config" .stack).outputs.config_map }}'
 ```
 </File>
 

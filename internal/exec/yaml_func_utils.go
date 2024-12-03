@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/config"
@@ -57,4 +58,16 @@ func processCustomTags(cliConfig schema.CliConfiguration, input string) any {
 
 	// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
 	return input
+}
+
+func getStringAfterTag(cliConfig schema.CliConfiguration, input string, tag string) (string, error) {
+	str := strings.TrimPrefix(input, tag)
+	str = strings.TrimSpace(str)
+
+	if str == "" {
+		err := fmt.Errorf("invalid Atmos YAML function: %s", input)
+		return "", err
+	}
+
+	return str, nil
 }

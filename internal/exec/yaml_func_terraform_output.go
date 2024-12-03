@@ -24,15 +24,13 @@ var (
 func processTagTerraformOutput(cliConfig schema.CliConfiguration, input string) any {
 	u.LogTrace(cliConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
-	part := strings.TrimPrefix(input, config.AtmosYamlFuncTerraformOutput)
-	part = strings.TrimSpace(part)
+	str, err := getStringAfterTag(cliConfig, input, config.AtmosYamlFuncTerraformOutput)
 
-	if part == "" {
-		err := errors.New(fmt.Sprintf("invalid Atmos YAML function: %s\nthree parameters are required: component, stack, output", input))
+	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	parts := strings.Split(part, " ")
+	parts := strings.Split(str, " ")
 
 	if len(parts) != 3 {
 		err := errors.New(fmt.Sprintf("invalid Atmos YAML function: %s\nthree parameters are required: component, stack, output", input))

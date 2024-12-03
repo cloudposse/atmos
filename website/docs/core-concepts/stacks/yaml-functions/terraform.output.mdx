@@ -42,21 +42,17 @@ the function dynamically.
 
 <File title="stack.yaml">
 ```yaml
-  components:
-    terraform:
-      component2:
-        vars:
-          # Get the `test_label_id` output of type string from the `component1` component in the stack `plat-ue2-dev`
-          var1: !terraform.output component1 plat-ue2-dev test_label_id
-
-          # Get the `test_label_id` output of type string from the `component1` component in the current stack
-          var2: !terraform.output component1 {{ .stack }} test_label_id
-
-          # Get the `test_list` output of type list from the `component1` component in the current stack
-          var3: !terraform.output component1 {{ .stack }} test_list
-
-          # Get the `test_map` output of type map from the `component1` component in the current stack
-          var4: !terraform.output component1 {{ .stack }} test_map
+components:
+  terraform:
+    my_lambda_component:
+      vars:
+        vpc_config:
+          # Output of type string
+          security_group_id: !terraform.output security-group/lambda {{ .stack }} id
+          # Output of type list
+          subnet_ids: !terraform.output vpc {{ .stack }} private_subnet_ids
+          # Output of type map
+          config_map: !terraform.output config {{ .stack }} config_map
 ```
 </File>
 

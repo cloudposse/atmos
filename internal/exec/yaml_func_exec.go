@@ -2,9 +2,7 @@ package exec
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,21 +12,19 @@ import (
 func processTagExec(cliConfig schema.CliConfiguration, input string) any {
 	u.LogTrace(cliConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
-	part := strings.TrimPrefix(input, config.AtmosYamlFuncExec)
-	part = strings.TrimSpace(part)
+	str, err := getStringAfterTag(cliConfig, input, config.AtmosYamlFuncExec)
 
-	if part == "" {
-		err := errors.New(fmt.Sprintf("invalid Atmos YAML function: %s", input))
+	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	res, err := ExecuteShellAndReturnOutput(cliConfig, part, input, ".", nil, false)
+	res, err := ExecuteShellAndReturnOutput(cliConfig, str, input, ".", nil, false)
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
 	var decoded any
-	if err := json.Unmarshal([]byte(res), &decoded); err != nil {
+	if err = json.Unmarshal([]byte(res), &decoded); err != nil {
 		return res
 	}
 
