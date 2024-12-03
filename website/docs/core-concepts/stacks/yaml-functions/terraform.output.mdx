@@ -142,7 +142,7 @@ tenant `net` (instead of `plat`):
 Atmos caches (in memory) the results of `!terraform.output` function.
 
 The cache is per Atmos CLI command execution, e.g. each new execution of a command like `atmos terraform plan`,
-`atmos terraform apply` or `atmos describe component` will create and use a new memory cache.
+`atmos terraform apply` or `atmos describe component` will create and use a new memory cache, which involves re-invoking `terraform outputs` after reinitialization.
 
 If you define the function in stack manifests for the same component in a stack more than once, the first call will
 produce the result and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
