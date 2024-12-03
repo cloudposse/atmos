@@ -109,6 +109,14 @@ This is convenient when you want to override some identifiers in the stack name:
   !terraform.output <component> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <output>
 ```
 
+<dl>
+  <dt>`<component`</dt>
+  <dl>Placeholder for an actual component name (e.g. `vpc`)</dl>
+  <dt>`<output>`</dt>
+  <dl>Placeholder for an actual Terraform output (e.g. `subnet_ids`)</dl>
+</dl>
+
+
 For example, you have a `tgw` component deployed in the stack `plat-ue2-dev`. The `tgw` component requires the
 `vpc_id` output from the `vpc` component from the same environment (`ue2`) and same stage (`dev`), but from a different
 tenant `net` (instead of `plat`):
