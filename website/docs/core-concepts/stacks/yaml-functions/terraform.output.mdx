@@ -171,7 +171,7 @@ After the first execution, Atmos caches the result in memory,
 and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
 In a production environment where many components are used, the speedup can be significant.
 
-## Recommendations
+## Considerations
 
  - Using `!terraform.output` with secrets will leak secrets to standard output (stdout) in any commands that describe stacks or components
 
