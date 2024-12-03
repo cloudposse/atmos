@@ -44,8 +44,26 @@ YAML supports three types of data: core, defined, and user-defined.
    Note that this requires initializing each component (`terraform init`), which downloads all Terraform providers and may significantly impact performance.
 
 :::tip
-You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration. Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.  
+You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration.
+Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
 :::
+
+## Atmos sections supporting YAML functions
+
+You can use the YAML functions in all Atmos stack manifest sections:
+
+  - `vars`
+  - `settings`
+  - `env`
+  - `metadata`
+  - `command`
+  - `component`
+  - `providers`
+  - `overrides`
+  - `backend`
+  - `backend_type`
+  - `remote_state_backend`
+  - `remote_state_backend_type`
 
 ## Examples
 
@@ -54,6 +72,10 @@ You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/template
 components:
   terraform:
     component2:
+      settings:
+        s1: !exec echo 's1'
+      env:
+        ENV_VAR_1: !template '{{ (atmos.Component "component3" .stack).settings.env.ENV_VAR_1 }}'
       vars:
         # Handle the output of type list from the `atmos.Component` template function
         test_1: !template '{{ toJson (atmos.Component "component1" "plat-ue2-dev").outputs.test_list }}'
