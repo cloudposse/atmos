@@ -1,4 +1,7 @@
 logs:
   level: Debug
-settings:
-  retries: 3
+commands:
+- name: "test"
+  description: "Run all tests with custom command"
+  steps:
+  - atmos vendor pull
