@@ -131,9 +131,13 @@ tenant `net` (instead of `plat`):
 
 ## Caching the result of `!terraform.output` function
 
-Atmos caches (in memory) the results of `!terraform.output` function execution.
-If you call the function for the same component in a stack more than once, the first call will produce the result
-and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
+Atmos caches (in memory) the results of `!terraform.output` function.
+
+The cache is per Atmos CLI command execution, e.g. each new execution of a command like `atmos terraform plan`,
+`atmos terraform apply` or `atmos describe component` will create and use a new memory cache.
+
+If you define the function in stack manifests for the same component in a stack more than once, the first call will
+produce the result and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
 `!terraform.output` function for the same component in a stack in multiple places in Atmos stack manifests.
 It will speed up the function execution and stack processing.
 
