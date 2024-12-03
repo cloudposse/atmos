@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
@@ -141,7 +142,8 @@ func execTerraformOutput(cliConfig schema.CliConfiguration, component string, st
 			return nil, err
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+		defer cancel()
 
 		// 'terraform init'
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
