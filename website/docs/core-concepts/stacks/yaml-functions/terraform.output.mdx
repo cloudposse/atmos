@@ -163,43 +163,17 @@ After the first execution, Atmos caches the result in memory,
 and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
 In a production environment where many components are used, the speedup can be significant.
 
-## Security and Access Control Considerations
+## Recommendations
 
-When using the `!terraform.output` function (and `terraform output` command in general),
-addressing security and access control is critical to protect sensitive information.
+ - Using `!terraform.output` with secrets will leak secrets to standard output (stdout) in any commands that describe stacks or components
 
- - **Restrict Terraform CLI Access**: Only authorized personnel should have access to the system where the Terraform CLI is installed.
-   This prevents unauthorized users from running terraform output to retrieve sensitive data.
+ - Using `!terraform.output` with [`atmos describe affected`](/cli/commands/describe/affected) means
+   Atmos will need access to all remote states used.
+   If you have a narrow permissions scope (e.g. for `dev`) and use [`atmos describe affected`](/cli/commands/describe/affected)
+   with stacks that reference production, it will fail
 
- - **Role-Based Access Control (RBAC)**: Implement RBAC policies to ensure only those with a legitimate need can interact with Terraform projects and access outputs.
+ - Overuse of the function within a stack for multiple components can significantly reduce performance
 
- - **Audit Logs**: Maintain detailed logs of Terraform commands executed, including `terraform output`, to track who accessed sensitive information.
+ - Consider DR implications if using it across regions
 
- - **Output Restrictions**: Where possible, limit sensitive data exposure by avoiding the use of `terraform output` for secrets.
-   Store these values securely in dedicated secret management solutions (e.g., AWS Secrets Manager, HashiCorp Vault).
-
- - **Encrypt State Files**: Ensure that Terraform state files (e.g., `terraform.tfstate`) are encrypted both at rest and in transit.
-   Use backend providers like AWS S3 with server-side encryption or other managed storage with encryption capabilities.
-
- - **Limit State File Access**: Restrict access to the state file storage backend using IAM policies or similar controls to only authorized users and processes.
-
- - **Remote State Locking**: Enable remote state locking to prevent accidental overwrites and ensure consistent state handling.
-   This is supported by backends like AWS DynamoDB when using S3.
-
- - **Secrets in State Files**: Avoid exposing sensitive data in the state file whenever possible.
-   Mark sensitive outputs with `sensitive = true` in Terraform configurations, which prevents them from appearing in plaintext in the output or logs.
-
-
-## Best Practices for Handling Sensitive Outputs
-
- - **Use `sensitive = true` attribute**: For sensitive outputs, set `sensitive = true` in the Terraform configuration.
-   This prevents accidental display in the CLI and other outputs.
-
- - **Environment-Specific Outputs**: Avoid hardcoding sensitive outputs. Instead, manage environment-specific configurations dynamically or through variables.
-
- - **Secure Storage**: Redirect sensitive outputs to a secure storage location rather than displaying them in plaintext
-   (e.g., use a script to pipe outputs directly into a secure secrets management system).
-
- - **Review Before Sharing Outputs**: Before sharing outputs with teams, scrub or redact sensitive information.
-
- - **Avoid Logging Outputs**: Ensure sensitive outputs are not logged during automated CI/CD workflows by reviewing and sanitizing pipeline configurations.
+ - Consider cold-start implications, when the dependent component is not yet provisioned, and `terraform output` will fail
