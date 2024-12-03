@@ -194,7 +194,8 @@ func execTerraformOutput(cliConfig schema.CliConfiguration, component string, st
 			d, err2 := u.ConvertFromJSON(s)
 
 			if err2 != nil {
-				u.LogError(cliConfig, err2)
+				u.LogError(cliConfig, fmt.Errorf("failed to convert output '%s': %w", k, err2))
+				return k, nil
 			} else {
 				u.LogTrace(cliConfig, fmt.Sprintf("Converted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", k, s, d))
 			}
