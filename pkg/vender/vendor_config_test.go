@@ -1,3 +1,5 @@
+// The package name `vendor` is reserved in Go for dependency management.
+// To avoid conflicts, the name `vender` was chosen as an alternative.
 package vender
 
 import (
