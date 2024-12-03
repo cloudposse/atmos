@@ -173,15 +173,13 @@ In a production environment where many components are used, the speedup can be s
 
 ## Considerations
 
- - Using `!terraform.output` with secrets will leak secrets to standard output (stdout) in any commands that describe stacks or components
+ - Using `!terraform.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.  
 
- - Using `!terraform.output` with [`atmos describe affected`](/cli/commands/describe/affected) means
-   Atmos will need access to all remote states used.
-   If you have a narrow permissions scope (e.g. for `dev`) and use [`atmos describe affected`](/cli/commands/describe/affected)
-   with stacks that reference production, it will fail
+- When using `!terraform.output` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.  
+   If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.  
 
- - Overuse of the function within a stack for multiple components can significantly reduce performance
+- Overusing the function within a stack to reference multiple components can significantly impact performance.  
 
- - Consider DR implications if using it across regions
+- Be mindful of disaster recovery (DR) implications when using it across regions.  
 
- - Consider cold-start implications, when the dependent component is not yet provisioned, and `terraform output` will fail
+- Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.  
