@@ -136,7 +136,7 @@ There are a few ways to handle the complex output types (maps and lists) from th
   - Adjusting the template delimiters in `atmos.yaml` and using the `toRawJson` or `toJson` template functions
 :::
 
-### Using the `!template` Atmos YAML Function and `toRawJson` or `toJson` Template Functions
+### Using the `!template` Atmos YAML Function and `toRawJson` or `toJson` template functions
 
 You can use the [`!template`](/core-concepts/stacks/yaml-functions/template) Atmos YAML function to handle the outputs containing maps or lists.
 
@@ -145,20 +145,23 @@ The __`!template`__ YAML function  correctly handles the JSON returned from the
 The final result of type list or map can be sent directly to the corresponding Terraform/OpenTofu component without modifying the types of the input variables.
 
 <File title="stack.yaml">
-    ```yaml
-    components:
-    terraform:
-    component2:
-    vars:
-    # Handle the output of type list from the `atmos.Component` template function
-    test_1: !template '{{ toJson (atmos.Component "component1" "plat-ue2-dev").outputs.test_list }}'
+```yaml
+components:
+  terraform:
+    my_lambda_component:
+      vars:
+        vpc_config:
+          security_group_ids: ['{{ (atmos.Component "security-group/lambda" .stack).outputs.id }}']
 
-    # Handle the output of type map from the `atmos.Component` template function
-    test_2: !template '{{ toJson (atmos.Component "component1" .stack).outputs.test_map }}'
-    ```
+          # Handle the output of type list from the `atmos.Component` template function
+          subnet_ids: !template '{{ toJson (atmos.Component "vpc" .stack).outputs.private_subnet_ids }}'
+
+          # Handle the output of type map from the `atmos.Component` template function
+          config_map: !template '{{ toJson (atmos.Component "vpc" .stack).outputs.config_map }}'
+```
 </File>
 
-### Adjusting the template delimiters in `atmos.yaml` and using the `toRawJson` or `toJson` Template Functions
+### Adjusting the template delimiters in `atmos.yaml` and using the `toRawJson` or `toJson` template functions
 
 First, we need to adjust the delimiters in `atmos.yaml`, to avoid issues with YAML parsing:
 
@@ -194,7 +197,7 @@ Then we can use the [`toRawJson` or `toJson`](https://masterminds.github.io/spri
       vars:
         vpc_config:
           security_group_ids: ['{{ (atmos.Component "security-group/lambda" .stack).outputs.id }}']
-          subnet_ids: '{{ toRawJson ((atmos.Component "vpc" .stack).outputs.private_subnets) }}'
+          subnet_ids: '{{ toRawJson ((atmos.Component "vpc" .stack).outputs.private_subnet_ids) }}'
 ```
 
 The results of the `toRawJson` function are serialized into JSON, which can be safely embedded in the YAML stack configuration.

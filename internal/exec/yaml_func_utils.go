@@ -54,5 +54,7 @@ func processCustomTags(cliConfig schema.CliConfiguration, input string) any {
 	} else if strings.HasPrefix(input, config.AtmosYamlFuncTerraformOutput) {
 		return processTagTerraformOutput(cliConfig, input)
 	}
+
+	// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
 	return input
 }
