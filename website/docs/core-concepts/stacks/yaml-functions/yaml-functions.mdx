@@ -39,8 +39,9 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!exec`__](/core-concepts/stacks/yaml-functions/exec) YAML function is used to execute shell scripts and assign
    the results to the sections in Atmos stack manifests
 
- - The [__`!terraform.output`__](/core-concepts/stacks/yaml-functions/terraform.output) YAML function is used to
-   [read the outputs (remote state) of components directly in Atmos stack manifests](/core-concepts/components/terraform/remote-state)
+ - The [__`!terraform.output`__](/core-concepts/stacks/yaml-functions/terraform.output) YAML function allows you to  
+   [access component outputs (remote state) directly within Atmos stack manifests](/core-concepts/components/terraform/remote-state).  
+   Note that this requires initializing each component (`terraform init`), which downloads all Terraform providers and may significantly impact performance.
 
 :::tip
 You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration. Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.  
