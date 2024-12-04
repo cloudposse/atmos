@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
@@ -425,66 +425,36 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 
 // printMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
 func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
-	//RGB values to define dark grey color
-	r1, g1, b1 := 105, 105, 105
+	// Define colors
+	c1 := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	c2 := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	c3 := lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 
-	c1 := color.RGB(r1, g1, b1)
-	c2 := color.New(color.FgGreen)
-	c3 := color.New(color.FgCyan)
+	// Define content
+	message := lipgloss.NewStyle().
+		Render(fmt.Sprintf("Update available! %s » %s",
+			c1.Render(version.Version),
+			c2.Render(latestVersion)))
 
-	message := fmt.Sprintf("Update available! %s » %s", c1.Sprint(version.Version), c2.Sprint(latestVersion))
-	links := []string{
-		fmt.Sprintf("Atmos Releases: %s", c3.Sprint("https://github.com/cloudposse/atmos/releases")),
-		fmt.Sprintf("Install Atmos: %s", c3.Sprint("https://atmos.tools/install")),
+	links := []string{lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", c3.Render("https://github.com/cloudposse/atmos/releases"))),
+		lipgloss.NewStyle().Render(fmt.Sprintf("Install Atmos: %s", c3.Render("https://atmos.tools/install"))),
 	}
+
 	messageLines := append([]string{message}, links...)
-	maxWidth := 0
-	for _, line := range messageLines {
-		lineLength := len(stripANSI(line))
-		if lineLength > maxWidth {
-			maxWidth = lineLength
-		}
-	}
+	messageContent := strings.Join(messageLines, "\n")
 
-	// Calculate border width
-	padding := 2
-	borderWidth := maxWidth + padding*2
+	// Define box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("10")).
+		Padding(0, 1).
+		Align(lipgloss.Center)
 
-	// Print top border
-	c2.Println("┌" + strings.Repeat("─", borderWidth) + "┐")
+	// Render the box
+	box := boxStyle.Render(messageContent)
 
-	// Print each line with padding
-	for _, line := range messageLines {
-		lineLength := calculateDisplayWidth(line)
-		spaces := borderWidth - lineLength
-		leftPadding := spaces / 2
-		rightPadding := spaces - leftPadding
-		fmt.Printf("%s%s%s%s%s\n", c2.Sprint("│"), strings.Repeat(" ", leftPadding), line, strings.Repeat(" ", rightPadding), c2.Sprint("│"))
-	}
-
-	// Print bottom border
-	c2.Println("└" + strings.Repeat("─", borderWidth) + "┘")
-}
-
-// Function to strip ANSI color codes
-func stripANSI(str string) string {
-	ansi := "\033\\[[0-9;]*m"
-	re := regexp.MustCompile(ansi)
-	return re.ReplaceAllString(str, "")
-}
-
-// Function to calculate display width, treating '»' as width 1
-func calculateDisplayWidth(str string) int {
-	stripped := stripANSI(str)
-	width := 0
-	for _, r := range stripped {
-		if r == '»' {
-			width += 1
-		} else {
-			width += 1
-		}
-	}
-	return width
+	// Print the box
+	fmt.Println(box)
 }
 
 // customHelpMessageToUpgradeToAtmosLatestRelease adds Atmos version info at the end of each help commnad
