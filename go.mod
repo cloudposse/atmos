@@ -9,7 +9,7 @@ require (
 	github.com/arsham/figurine v1.3.0
 	github.com/bmatcuk/doublestar/v4 v4.7.1
 	github.com/charmbracelet/bubbles v0.20.0
-	github.com/charmbracelet/bubbletea v1.2.3
+	github.com/charmbracelet/bubbletea v1.2.4
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/elewis787/boa v0.1.2
@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/go-getter v1.7.6
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.23.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20241107133921-3adb156ecfe2
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20241129133400-c404f8227ea6
 	github.com/hashicorp/terraform-exec v0.21.0
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/json-iterator/go v1.1.12
@@ -40,8 +40,8 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
-	github.com/stretchr/testify v1.9.0
-	github.com/zclconf/go-cty v1.15.0
+	github.com/stretchr/testify v1.10.0
+	github.com/zclconf/go-cty v1.15.1
 	golang.org/x/term v0.26.0
 	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/sh/v3 v3.10.0
