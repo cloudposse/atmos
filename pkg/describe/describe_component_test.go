@@ -78,3 +78,15 @@ func TestDescribeComponent6(t *testing.T) {
 	assert.Nil(t, err)
 	t.Log(componentSectionYaml)
 }
+
+func TestDescribeComponent7(t *testing.T) {
+	component := "infra/vpc"
+	stack := "tenant2-ue2-dev"
+
+	componentSection, err := ExecuteDescribeComponent(component, stack, true)
+	assert.Nil(t, err)
+
+	componentSectionYaml, err := u.ConvertToYAML(componentSection)
+	assert.Nil(t, err)
+	t.Log(componentSectionYaml)
+}
