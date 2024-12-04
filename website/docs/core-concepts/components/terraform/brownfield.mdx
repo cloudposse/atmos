@@ -72,14 +72,14 @@ components:
     vpc-flow-logs-bucket/defaults:
       metadata:
         type: abstract
-    # Use `static` remote state to configure the attributes for an existing
-    # S3 bucket for VPC Flow Logs
-    remote_state_backend_type: static
-    remote_state_backend:
-      static:
-        # ARN of the existing S3 bucket
-        # `vpc_flow_logs_bucket_arn` is used as an input for the `vpc` component
-        vpc_flow_logs_bucket_arn: "arn:aws:s3::/my-vpc-flow-logs-bucket"
+      # Use `static` remote state to configure the attributes for an existing
+      # S3 bucket for VPC Flow Logs
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          # ARN of the existing S3 bucket
+          # `vpc_flow_logs_bucket_arn` is used as an input for the `vpc` component
+          vpc_flow_logs_bucket_arn: "arn:aws:s3::/my-vpc-flow-logs-bucket"
 ```
 
 In the `stacks/ue2-dev.yaml` stack config file, add the following config for the `vpc-flow-logs-bucket-1` Atmos
