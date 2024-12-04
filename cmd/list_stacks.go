@@ -28,7 +28,14 @@ var listStacksCmd = &cobra.Command{
 			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), color.New(color.FgRed))
 			return
 		}
-		u.PrintMessageInColor(stackList, color.New(color.FgGreen))
+
+		if len(stackList) == 0 {
+			u.PrintMessageInColor("No stacks found.", color.New(color.FgYellow))
+		} else {
+			for _, stack := range stackList {
+				u.PrintMessageInColor(stack+"\n", color.New(color.FgGreen))
+			}
+		}
 	},
 }
 
