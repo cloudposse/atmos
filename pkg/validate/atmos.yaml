@@ -172,37 +172,6 @@ commands:
           - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
           - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
 
-  - name: list
-    description: Execute 'atmos list' commands
-    # subcommands
-    commands:
-      - name: stacks
-        description: |
-          List all Atmos stacks.
-        steps:
-          - >
-            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
-      - name: components
-        description: |
-          List all Atmos components in all stacks or in a single stack.
-
-          Example usage:
-            atmos list components
-            atmos list components -s tenant1-ue1-dev
-            atmos list components --stack tenant2-uw2-prod
-        flags:
-          - name: stack
-            shorthand: s
-            description: Name of the stack
-            required: false
-        steps:
-          - >
-            {{ if .Flags.stack }}
-            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-            {{ else }}
-            atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-            {{ end }}
-
   - name: set-eks-cluster
     description: |
       Download 'kubeconfig' and set EKS cluster.
