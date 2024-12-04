@@ -90,6 +90,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		cliConfig.Schemas.Atmos.Manifest = atmosManifestDefault
 		u.LogTrace(cliConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default schema '%s'", atmosManifestDefault))
 	}
+
 	atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
 
 	if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
