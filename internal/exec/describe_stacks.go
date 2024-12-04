@@ -362,7 +362,12 @@ func ExecuteDescribeStacks(
 									u.LogErrorAndExit(cliConfig, err)
 								}
 
-								componentSection = componentSectionConverted
+								componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSection = componentSectionFinal
 							}
 
 							// Add sections
@@ -542,7 +547,12 @@ func ExecuteDescribeStacks(
 									u.LogErrorAndExit(cliConfig, err)
 								}
 
-								componentSection = componentSectionConverted
+								componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSection = componentSectionFinal
 							}
 
 							// Add sections
