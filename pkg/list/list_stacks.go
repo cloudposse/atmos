@@ -5,11 +5,28 @@ import (
 	"sort"
 	"strings"
 
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/fatih/color"
 	"github.com/samber/lo"
 )
 
 // FilterAndListStacks filters stacks by the given component
-func FilterAndListStacks(stacksMap map[string]any, component string) (string, error) {
+func FilterAndListStacks(component string) (string, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	cliConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), color.New(color.FgRed))
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false, false)
+	if err != nil {
+		u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), color.New(color.FgRed))
+	}
+
 	if component != "" {
 		// Filter stacks by component
 		filteredStacks := []string{}
