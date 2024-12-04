@@ -28,7 +28,13 @@ var listComponentsCmd = &cobra.Command{
 			return
 		}
 
-		u.PrintMessageInColor(componentList, color.New(color.FgGreen))
+		if len(componentList) == 0 {
+			u.PrintMessageInColor("No components found", color.New(color.FgYellow))
+		} else {
+			for _, component := range componentList {
+				u.PrintMessageInColor(component+"\n", color.New(color.FgGreen))
+			}
+		}
 	},
 }
 

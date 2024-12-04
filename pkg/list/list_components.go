@@ -3,7 +3,6 @@ package list
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
@@ -34,18 +33,20 @@ func getStackComponents(stackData any) ([]string, error) {
 }
 
 // FilterAndListComponents filters and lists components based on the given stack
-func FilterAndListComponents(stackFlag string) (string, error) {
-	components := []string{}
+func FilterAndListComponents(stackFlag string) ([]string, error) {
+	var components []string
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	cliConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), color.New(color.FgRed))
+		return nil, fmt.Errorf("error initializing CLI config: %w", err)
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false, false)
 	if err != nil {
 		u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), color.New(color.FgRed))
+		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}
 
 	if stackFlag != "" {
@@ -53,18 +54,19 @@ func FilterAndListComponents(stackFlag string) (string, error) {
 		if stackData, ok := stacksMap[stackFlag]; ok {
 			stackComponents, err := getStackComponents(stackData)
 			if err != nil {
-				return "", fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
+				return nil, fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
 			}
 			components = append(components, stackComponents...)
 		} else {
-			return "", fmt.Errorf("stack '%s' not found", stackFlag)
+			return nil, fmt.Errorf("stack '%s' not found", stackFlag)
 		}
 	} else {
 		// Get all components from all stacks
 		for _, stackData := range stacksMap {
 			stackComponents, err := getStackComponents(stackData)
 			if err != nil {
-				continue // Skip invalid stacks
+				// Skip invalid stacks
+				continue
 			}
 			components = append(components, stackComponents...)
 		}
@@ -74,8 +76,6 @@ func FilterAndListComponents(stackFlag string) (string, error) {
 	components = lo.Uniq(components)
 	sort.Strings(components)
 
-	if len(components) == 0 {
-		return "No components found", nil
-	}
-	return strings.Join(components, "\n") + "\n", nil
+	// Return the components as an array
+	return components, nil
 }
