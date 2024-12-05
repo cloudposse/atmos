@@ -35,6 +35,85 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
+func detectCycle(commands []schema.Command) bool {
+	// Create a map of valid commands for quick lookup
+	validCommands := make(map[string]bool)
+	for _, cmd := range commands {
+		validCommands[cmd.Name] = true
+	}
+	// Build a command graph
+	graph := make(map[string][]string)
+	for _, cmd := range commands {
+		for _, step := range cmd.Steps {
+			cmdName := parseCommandName(step)
+			if cmdName != "" && !validCommands[cmdName] {
+				return true
+			}
+			graph[cmd.Name] = append(graph[cmd.Name], cmdName)
+		}
+	}
+
+	// To track visited nodes and detect cycles
+	visited := make(map[string]bool)
+	recStack := make(map[string]bool)
+
+	// Run DFS for each command to detect cycles and compute depth
+	for cmd := range graph {
+		if detectCycleUtil(cmd, graph, visited, recStack) {
+			return true // Cycle detected
+		}
+	}
+
+	return false // No cycle detected
+}
+
+func detectCycleUtil(command string, graph map[string][]string, visited, recStack map[string]bool) bool {
+	// If the current command is in the recursion stack, there's a cycle
+	if recStack[command] {
+		return true
+	}
+
+	// If already visited, no need to explore again
+	if visited[command] {
+		return false
+	}
+
+	// Mark as visited and add to recursion stack
+	visited[command] = true
+	recStack[command] = true
+
+	// Recurse for all dependencies
+	for _, dep := range graph[command] {
+		if detectCycleUtil(dep, graph, visited, recStack) {
+			return true
+		}
+	}
+
+	// Remove from recursion stack before backtracking
+	recStack[command] = false
+	return false
+}
+
+// Helper function to parse command name from the step
+func parseCommandName(step string) string {
+	// Split the step into parts
+	parts := strings.Split(step, " ")
+
+	// Check if the command starts with "atmos" and has additional parts
+	if len(parts) > 1 && parts[0] == "atmos" {
+		// Extract the actual command name, handling flags and arguments
+		cmdParts := []string{}
+		for _, part := range parts[1:] {
+			if strings.HasPrefix(part, "-") {
+				break
+			}
+			cmdParts = append(cmdParts, part)
+		}
+		return strings.Join(cmdParts, " ")
+	}
+	return ""
+}
+
 // processCustomCommands processes and executes custom commands
 func processCustomCommands(
 	cliConfig schema.CliConfiguration,
@@ -47,6 +126,19 @@ func processCustomCommands(
 
 	if topLevel {
 		existingTopLevelCommands = getTopLevelCommands()
+	}
+
+	if detectCycle(commands) {
+		u.LogWarning(cliConfig, "cycle detected in custom CLI commands")
+		// Prompt the user for input
+		u.LogInfo(cliConfig, "Do you want to continue? (y/n):")
+		var userInput string
+		fmt.Scanln(&userInput)
+
+		if strings.ToLower(userInput) != "y" {
+			return errors.New("execution stopped due to cycle detection")
+		}
+		u.LogWarning(cliConfig, "Continuing execution despite the detected cycle.")
 	}
 
 	for _, commandCfg := range commands {
