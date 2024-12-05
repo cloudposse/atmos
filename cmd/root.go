@@ -26,22 +26,6 @@ var RootCmd = &cobra.Command{
 	Use:   "atmos",
 	Short: "Universal Tool for DevOps and Cloud Automation",
 	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Determine if the command is a help command or if the help flag is set
-		isHelpCommand := cmd.Name() == "help"
-		helpFlag := cmd.Flags().Changed("help")
-
-		isHelpRequested := isHelpCommand || helpFlag
-
-		if isHelpRequested {
-			// Do not silence usage or errors when help is invoked
-			cmd.SilenceUsage = false
-			cmd.SilenceErrors = false
-		} else {
-			cmd.SilenceUsage = true
-			cmd.SilenceErrors = true
-		}
-	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
@@ -57,6 +41,24 @@ var RootCmd = &cobra.Command{
 		err = e.ExecuteAtmosCmd()
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+	},
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Determine if the command is a help command or if the help flag is set
+		isHelpCommand := cmd.Name() == "help"
+		helpFlag := cmd.Flags().Changed("help")
+
+		isHelpRequested := isHelpCommand || helpFlag
+
+		if isHelpRequested {
+			// Do not silence usage or errors when help is invoked
+			cmd.Root().SilenceUsage = false
+			cmd.Root().SilenceErrors = false
+		} else {
+			// For non-help commands, we want to control the error output
+			cmd.Root().SilenceUsage = true
+			// Only silence errors for unknown commands
+			cmd.Root().SilenceErrors = cmd.Parent() == nil
 		}
 	},
 }
@@ -80,6 +82,10 @@ func Execute() error {
 	// Override the help function with a custom one that adds an upgrade message after displaying help.
 	// This custom help function will call the original help function and then display the bordered message.
 	RootCmd.SetHelpFunc(customHelpMessageToUpgradeToAtmosLatestRelease)
+
+	// Set custom error handling to prevent duplicate messages
+	RootCmd.SilenceErrors = true
+	RootCmd.SilenceUsage = true
 
 	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
 	err := RootCmd.ParseFlags(os.Args)
