@@ -18,6 +18,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// originalHelpFunc holds Cobra's original help function to avoid recursion.
+var originalHelpFunc func(*cobra.Command, []string)
+
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
@@ -69,6 +72,14 @@ func Execute() error {
 		ExecName: cc.Bold,
 		Flags:    cc.Bold,
 	})
+
+	// Save the original help function to prevent infinite recursion when overriding it.
+	// This allows us to call the original help functionality within our custom help function.
+	originalHelpFunc = RootCmd.HelpFunc()
+
+	// Override the help function with a custom one that adds an upgrade message after displaying help.
+	// This custom help function will call the original help function and then display the bordered message.
+	RootCmd.SetHelpFunc(customHelpMessageToUpgradeToAtmosLatestRelease)
 
 	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
 	err := RootCmd.ParseFlags(os.Args)

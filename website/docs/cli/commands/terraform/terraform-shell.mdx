@@ -39,6 +39,10 @@ The command does the following:
 
 - Inside the shell, the user can execute all `terraform` commands using the native syntax
 
+- Atmos sets the `ATMOS_SHLVL` environment variable to track the nesting level of shells:
+    - If `ATMOS_SHLVL` is not already set, Atmos initializes it to `1`.
+    - If `ATMOS_SHLVL` is already set, Atmos increments its value by `1` for each new nested shell.
+
 :::tip
 Run `atmos terraform shell --help` to see all the available options
 :::
