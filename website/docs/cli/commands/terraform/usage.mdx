@@ -58,7 +58,13 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
   planfile
 
 - `atmos terraform clean` command deletes the `.terraform` folder, `.terraform.lock.hcl` lock file, and the previously generated `planfile`
-  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file.
+  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file. 
+  Use the `--everything` flag to delete all the local Terraform state files and directories (including `terraform.tfstate.d`) for all components and stacks. 
+  Use the `--force` flag to bypass the safety confirmation prompt and force the deletion (use with caution).
+
+  :::warning
+  The `--everything` flag performs destructive operations that can lead to permanent state loss. Always ensure you have remote state configured in your components before proceeding.
+  :::
 
 - `atmos terraform workspace` command first runs `terraform init -reconfigure`, then `terraform workspace select`, and if the workspace was not
   created before, it then runs `terraform workspace new`
@@ -106,6 +112,17 @@ atmos terraform destroy test/test-component-override -s tenant1-ue2-dev --redire
 
 atmos terraform init test/test-component-override-3 -s tenant1-ue2-dev
 
+# Clean all components (with confirmation)
+atmos terraform clean --everything
+
+# Clean a specific component
+atmos terraform clean vpc --everything
+
+# Clean a specific component in a stack
+atmos terraform clean vpc --stack dev --everything
+
+# Clean without confirmation prompt
+atmos terraform clean --everything --force
 atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
