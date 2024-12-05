@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -149,6 +150,40 @@ func execTerraformShellCommand(
 	workingDir string,
 	workspaceName string,
 	componentPath string) error {
+
+	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+	atmosShellVal := 1
+	if atmosShellLvl != "" {
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			return err
+		}
+		atmosShellVal = val + 1
+	}
+	if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", atmosShellVal)); err != nil {
+		return err
+	}
+
+	// decrement the value after exiting the shell
+	defer func() {
+		atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+		if atmosShellLvl == "" {
+			return
+		}
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			return
+		}
+		// Prevent negative values
+		newVal := val - 1
+		if newVal < 0 {
+			newVal = 0
+		}
+		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+		}
+	}()
 
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_apply=-var-file=%s", varFile))

@@ -1,13 +1,13 @@
 package validate
 
 import (
-	"github.com/cloudposse/atmos/pkg/schema"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/cmd"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
