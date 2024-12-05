@@ -89,7 +89,8 @@ func Execute() error {
 
 	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
 	err := RootCmd.ParseFlags(os.Args)
-	if err != nil && errors.Is(err, pflag.ErrHelp) {
+	if err != nil && errors.Is(err, pflag.ErrHelp) ||
+		(len(os.Args) > 1 && (os.Args[len(os.Args)-1] == "help" || os.Args[len(os.Args)-1] == "--help")) {
 		fmt.Println()
 		err = tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
