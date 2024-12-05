@@ -15,6 +15,18 @@ var describeComponentCmd = &cobra.Command{
 	Short:              "Execute 'describe component' command",
 	Long:               `This command shows configuration for an Atmos component in an Atmos stack: atmos describe component <component> -s <stack>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		componentList, err := l.FilterAndListComponents(toComplete)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+
+		return componentList, cobra.ShellCompDirectiveNoFileComp
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
@@ -40,7 +52,7 @@ func init() {
 
 	// Autocompletion for stack flag
 	describeComponentCmd.RegisterFlagCompletionFunc("stack", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		if len(args) != 0 {
+		if len(args) != 1 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 

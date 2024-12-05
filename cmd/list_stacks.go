@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	l "github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -43,4 +44,18 @@ func init() {
 	listStacksCmd.DisableFlagParsing = false
 	listStacksCmd.PersistentFlags().StringP("component", "c", "", "atmos list stacks -c <component>")
 	listCmd.AddCommand(listStacksCmd)
+	// Autocompletion for stack flag
+	listStacksCmd.RegisterFlagCompletionFunc("component", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		componentList, err := l.FilterAndListComponents(toComplete)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+
+		return componentList, cobra.ShellCompDirectiveNoFileComp
+	},
+	)
 }

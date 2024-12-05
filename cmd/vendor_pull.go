@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -32,6 +33,36 @@ func init() {
 	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "atmos vendor pull --component <component> --type=terraform|helmfile")
 	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "atmos vendor pull --component <component> --dry-run")
 	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags: atmos vendor pull --tags=dev,test")
+
+	// Autocompletion for stack flag
+	vendorPullCmd.RegisterFlagCompletionFunc("stack", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		stacksList, err := l.FilterAndListStacks(toComplete)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+
+		return stacksList, cobra.ShellCompDirectiveNoFileComp
+	},
+	)
+
+	// Autocompletion for component flag
+	vendorPullCmd.RegisterFlagCompletionFunc("component", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		componentList, err := l.FilterAndListComponents(toComplete)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+
+		return componentList, cobra.ShellCompDirectiveNoFileComp
+	},
+	)
 
 	vendorCmd.AddCommand(vendorPullCmd)
 }
