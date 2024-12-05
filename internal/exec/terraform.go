@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -39,12 +38,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// For help commands and empty subcommand, we don't need to process stacks
 	if info.NeedHelp || info.SubCommand == cfg.HelpFlag1 || info.SubCommand == cfg.HelpFlag2 || info.SubCommand == "" {
 		cliConfig, err := cfg.InitCliConfig(info, false)
-		if err != nil {
-			return err
-		}
-
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			return err
 		}
