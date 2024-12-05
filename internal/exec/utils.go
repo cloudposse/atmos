@@ -516,9 +516,14 @@ func ProcessStacks(
 			u.LogErrorAndExit(cliConfig, err)
 		}
 
-		configAndStacksInfo.ComponentSection = componentSectionConverted
+		componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+		if err != nil {
+			return configAndStacksInfo, err
+		}
 
-		// Process Atmos manifest sections after processing `Go` templates
+		configAndStacksInfo.ComponentSection = componentSectionFinal
+
+		// Process Atmos manifest sections after processing `Go` templates and custom YAML tags
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 			configAndStacksInfo.ComponentProvidersSection = i
 		}
@@ -645,6 +650,13 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 	var indexesToRemove []int
+
+	// For commands like `atmos terraform clean` and `atmos terraform plan`, show the command help
+	if len(inputArgsAndFlags) == 1 {
+		info.SubCommand = inputArgsAndFlags[0]
+		info.NeedHelp = true
+		return info, nil
+	}
 
 	// https://github.com/roboll/helmfile#cli-reference
 	var globalOptionsFlagIndex int
