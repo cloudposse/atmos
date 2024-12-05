@@ -231,7 +231,7 @@ func executeCustomCommand(
 
 		// Prepare template data for flags
 		flags := cmd.Flags()
-		flagsData := map[string]string{}
+		flagsData := map[string]any{}
 		for _, fl := range commandConfig.Flags {
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
@@ -239,6 +239,12 @@ func executeCustomCommand(
 					u.LogErrorAndExit(cliConfig, err)
 				}
 				flagsData[fl.Name] = providedFlag
+			} else if fl.Type == "bool" {
+				boolFlag, err := flags.GetBool(fl.Name)
+				if err != nil {
+					u.LogErrorAndExit(cliConfig, err)
+				}
+				flagsData[fl.Name] = boolFlag
 			}
 		}
 
