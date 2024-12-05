@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
@@ -16,6 +17,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // ValidateConfig holds configuration options for Atmos validation.
@@ -429,17 +431,50 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 
 // printMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
 func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
-	c1 := color.New(color.FgCyan)
-	c2 := color.New(color.FgGreen)
+	// Define colors
+	c1 := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	c2 := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	c3 := lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 
-	u.PrintMessageInColor(fmt.Sprintf("\nYour version of Atmos is out of date. The latest version is %s\n\n", latestVersion), c1)
-	u.PrintMessage("To upgrade Atmos, refer to the following links and documents:\n")
+	// Define content
+	message := lipgloss.NewStyle().
+		Render(fmt.Sprintf("Update available! %s » %s",
+			c1.Render(version.Version),
+			c2.Render(latestVersion)))
 
-	u.PrintMessageInColor("Atmos Releases:\n", c2)
-	u.PrintMessage("https://github.com/cloudposse/atmos/releases\n")
+	links := []string{lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", c3.Render("https://github.com/cloudposse/atmos/releases"))),
+		lipgloss.NewStyle().Render(fmt.Sprintf("Install Atmos: %s", c3.Render("https://atmos.tools/install"))),
+	}
 
-	u.PrintMessageInColor("Install Atmos:\n", c2)
-	u.PrintMessage("https://atmos.tools/install\n")
+	messageLines := append([]string{message}, links...)
+	messageContent := strings.Join(messageLines, "\n")
+
+	// Define box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("10")).
+		Padding(0, 1).
+		Align(lipgloss.Center)
+
+	// Render the box
+	box := boxStyle.Render(messageContent)
+
+	// Print the box
+	fmt.Println(box)
+}
+
+// customHelpMessageToUpgradeToAtmosLatestRelease adds Atmos version info at the end of each help commnad
+func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
+	originalHelpFunc(cmd, args)
+	// Check for the latest Atmos release on GitHub
+	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
+	if err == nil && latestReleaseTag != "" {
+		latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
+		currentRelease := strings.TrimPrefix(version.Version, "v")
+		if latestRelease != currentRelease {
+			printMessageToUpgradeToAtmosLatestRelease(latestRelease)
+		}
+	}
 }
 
 // Check Atmos is version command
