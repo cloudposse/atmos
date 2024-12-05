@@ -18,6 +18,7 @@ const (
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
 	BasePathFlag                = "--base-path"
+	VendorBasePathFlag          = "--vendor-base-path"
 	WorkflowDirFlag             = "--workflows-dir"
 	KubeConfigConfigFlag        = "--kubeconfig-path"
 	JsonSchemaDirFlag           = "--schemas-jsonschema-dir"
@@ -74,4 +75,9 @@ const (
 	AtmosProTokenEnvVarName    = "ATMOS_PRO_TOKEN"
 	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
 	AtmosProDefaultEndpoint    = "api"
+
+	// Atmos YAML functions
+	AtmosYamlFuncTemplate        = "!template"
+	AtmosYamlFuncExec            = "!exec"
+	AtmosYamlFuncTerraformOutput = "!terraform.output"
 )

@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"text/template"
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -149,13 +151,68 @@ func execTerraformShellCommand(
 	workspaceName string,
 	componentPath string) error {
 
+	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+	atmosShellVal := 1
+	if atmosShellLvl != "" {
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			return err
+		}
+		atmosShellVal = val + 1
+	}
+	if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", atmosShellVal)); err != nil {
+		return err
+	}
+
+	// decrement the value after exiting the shell
+	defer func() {
+		atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+		if atmosShellLvl == "" {
+			return
+		}
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			return
+		}
+		// Prevent negative values
+		newVal := val - 1
+		if newVal < 0 {
+			newVal = 0
+		}
+		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+		}
+	}()
+
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_apply=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_refresh=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_import=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
-	componentEnvList = append(componentEnvList, fmt.Sprintf("PS1=atmos:%s/%s> ", stack, component))
+
+	hasCustomShellPrompt := cliConfig.Components.Terraform.Shell.Prompt != ""
+	if hasCustomShellPrompt {
+		// Template for the custom shell prompt
+		tmpl := cliConfig.Components.Terraform.Shell.Prompt
+
+		// Data for the template
+		data := struct {
+			Component string
+			Stack     string
+		}{
+			Component: component,
+			Stack:     stack,
+		}
+
+		// Parse and execute the template
+		var result bytes.Buffer
+		t := template.Must(template.New("shellPrompt").Parse(tmpl))
+		if err := t.Execute(&result, data); err == nil {
+			componentEnvList = append(componentEnvList, fmt.Sprintf("PS1=%s", result.String()))
+		}
+	}
 
 	u.LogDebug(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
 	u.LogDebug(cliConfig, fmt.Sprintf("Component: %s\n", component))
@@ -197,7 +254,12 @@ func execTerraformShellCommand(
 		}
 
 		shellName := filepath.Base(shellCommand)
-		if shellName == "zsh" {
+
+		if !hasCustomShellPrompt {
+			shellCommand = shellCommand + " -l"
+		}
+
+		if shellName == "zsh" && hasCustomShellPrompt {
 			shellCommand = shellCommand + " -d -f -i"
 		}
 	}

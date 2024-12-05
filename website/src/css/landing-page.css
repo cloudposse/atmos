@@ -1,47 +1,46 @@
-html[data-theme='dark'] .landing-page footer {
-    background: rgb(0 0 0 / 21%);
+html[data-theme="dark"] .landing-page footer {
+  background: rgb(0 0 0 / 21%);
 }
 
 .landing-page main h2 strong {
-    color: #fff;
+  color: #fff;
 }
-
-
 
 /* Homepage */
 
-html.plugin-pages body, html[data-theme='dark'].plugin-pages body{
-    background-image: none;
+html.plugin-pages body,
+html[data-theme="dark"].plugin-pages body {
+  background-image: none;
 }
 
 .landing-page .section__description {
-    font-size: 1em;
-    margin-left: 1.5em;
-    margin-right: 1.5em;
-    display: flex;
-    flex-direction: column;
+  font-size: 1em;
+  margin-left: 1.5em;
+  margin-right: 1.5em;
+  display: flex;
+  flex-direction: column;
 }
 
 .landing-page .section__description > p {
-    font-size: 1.5em;
+  font-size: 1.5em;
 }
 
-html[data-theme='dark'] .landing-page .section__description > p {
-    color: #ccc;
+html[data-theme="dark"] .landing-page .section__description > p {
+  color: #ccc;
 }
 
 .landing-page .section__description > h2 {
-    font-size: 2.5rem;
-    margin-bottom: 0.5em;
+  font-size: 2.5rem;
+  margin-bottom: 0.5em;
 }
 
-html[data-theme='dark'] .landing-page .section__description > h2 {
-    color: #fff;
+html[data-theme="dark"] .landing-page .section__description > h2 {
+  color: #fff;
 }
 
 .landing-page .section__description .button {
-    margin-left: auto;
-    margin-right: auto;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .landing-page main section {
@@ -50,21 +49,23 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
 }
 
 .landing-page main {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .landing-page .main-wrapper {
-    align-items: center;
+  align-items: center;
+  margin-left: 3em;
+  margin-right: 3em;
 }
 
 .landing-page img.screenshot {
-    max-width: 50%;
-    height: auto;
-    box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
-    border-radius: 10px;
-    align-self: center;
+  max-width: 50%;
+  height: auto;
+  box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
+  border-radius: 10px;
+  align-self: center;
 }
 
 .landing-page .intro {
@@ -102,14 +103,15 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
   font-size: 1.5em;
 }
 
-.landing-page header h1, .landing-page header h3 {
+.landing-page header h1,
+.landing-page header h3 {
   text-align: center;
 }
 
 .landing-page .hero img {
-    min-width: 50%;
-    width: 100%;
-    height: auto;
+  min-width: 50%;
+  width: 100%;
+  height: auto;
 }
 
 .hero--full-height {
@@ -124,58 +126,62 @@ html[data-theme='dark'] .landing-page .section__description > h2 {
   gap: 1rem;
   justify-content: center;
   display: flex;
-
 }
 .landing-page main h2 {
-    text-align: center;
-    font-size: 2.5em;
-    margin-bottom: 2em;
-    color: #ccc;
+  text-align: center;
+  font-size: 2.5em;
+  margin-bottom: 2em;
+  color: #ccc;
 }
 
 .landing-page main h2.section {
-    background: #030711;
-    min-height: 4em;
-    justify-content: center;
-    flex-direction: column;
-    display: flex;
-    flex-grow: 1;
-    flex-basis: 100%;
-    width: 100vw;
-    vertical-align: middle;
-    align-items: center;
-
+  background: #030711;
+  min-height: 4em;
+  justify-content: center;
+  flex-direction: column;
+  display: flex;
+  flex-grow: 1;
+  flex-basis: 100%;
+  width: 100vw;
+  vertical-align: middle;
+  align-items: center;
 }
-html[data-theme='dark'] .landing-page main h2.section {
-    background: rgb(0 0 0 / 21%);
+html[data-theme="dark"] .landing-page main h2.section {
+  background: rgb(0 0 0 / 21%);
 }
-html[data-theme='dark'] .hero h1, html[data-theme='dark'] .section__description h2 {
-    color: unset;
-    background: linear-gradient(to right bottom, rgb(255, 255, 255) 30%, rgba(255, 255, 255, 0.50)) text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+html[data-theme="dark"] .hero h1,
+html[data-theme="dark"] .section__description h2 {
+  color: unset;
+  background: linear-gradient(
+      to right bottom,
+      rgb(255, 255, 255) 30%,
+      rgba(255, 255, 255, 0.5)
+    )
+    text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .landing-page main h3 {
-    text-align: center;
+  text-align: center;
 }
 
 .landing-page footer h2 {
-    color: #ccc;
+  color: #ccc;
 }
 
 .landing-page footer h3 {
-    font-size: 2em;
-    line-height: 1.7em;
-    color: #7c7b7b;
-    text-align: center;
+  font-size: 2em;
+  line-height: 1.7em;
+  color: #7c7b7b;
+  text-align: center;
 }
 
 .landing-page footer {
-    background: #0a1922;
-    min-width: 100vw;
-    padding: 3em;
-    text-align: center;
+  background: #0a1922;
+  min-width: 100vw;
+  margin: 3em;
+  text-align: center;
 }
 
 strong.underline {
@@ -205,60 +211,59 @@ strong.underline::after {
 }
 
 .alternate-section {
-    display: flex;
-    gap: 2rem;
-    margin-bottom: 10rem;
-    flex-wrap: nowrap;
-    padding: 2rem;
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 10rem;
+  flex-wrap: nowrap;
+  padding: 2rem;
 }
 
 .landing-page .alternate-section .terminal {
-    max-width: 50vw;
+  max-width: 50vw;
 }
 
 .landing-page .terminal pre.screengrab {
-    /* for the atmos logo, it's best to have 0.95em, but no logos on this page */
-    line-height: 1.1em;
+  /* for the atmos logo, it's best to have 0.95em, but no logos on this page */
+  line-height: 1.1em;
 }
 
-@media screen and (max-width: 996px)
-{
-    .landing-page header {
-        justify-content: flex-start;
-        max-width: 100vw;
-        overflow: hidden;;
-    }
+@media screen and (max-width: 996px) {
+  .landing-page header {
+    justify-content: flex-start;
+    max-width: 100vw;
+    overflow: hidden;
+  }
 
-    .hero__cta {
-        gap: 1rem;
-        display: flex;
-        max-width: 100vw;
-        flex-wrap: wrap;
-    }
+  .hero__cta {
+    gap: 1rem;
+    display: flex;
+    max-width: 100vw;
+    flex-wrap: wrap;
+  }
 
-    .alternate-section {
-        flex-wrap: wrap;
-    }
-    .landing-page main {
-        max-width: 100vw;
-        overflow: hidden;
-    }
-    .landing-page img.screenshot {
-        max-width: 98%;
-    }
+  .alternate-section {
+    flex-wrap: wrap;
+  }
+  .landing-page main {
+    max-width: 100vw;
+    overflow: hidden;
+  }
+  .landing-page img.screenshot {
+    max-width: 98%;
+  }
 
-    .landing-page .alternate-section .terminal {
-        max-width: 98vw;
-    }
+  .landing-page .alternate-section .terminal {
+    max-width: 98vw;
+  }
 
-    .landing-page .alternate-section  {
-        margin-bottom: 0;
-    }
+  .landing-page .alternate-section {
+    margin-bottom: 0;
+  }
 
-    .landing-page footer h2 {
-        display: flex;
-        flex-direction: column;
-    }
+  .landing-page footer h2 {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 .section--image-left {

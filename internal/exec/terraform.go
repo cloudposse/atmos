@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	osexec "os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -21,6 +21,8 @@ const (
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
+	everythingFlag            = "--everything"
+	forceFlag                 = "--force"
 )
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
@@ -29,7 +31,6 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 	if err != nil {
 		return err
 	}
-
 	return ExecuteTerraform(info)
 }
 
@@ -61,13 +62,29 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	info, err = ProcessStacks(cliConfig, info, true, true)
-	if err != nil {
-		return err
+	shouldProcessStacks := true
+	shouldCheckStack := true
+	// Skip stack processing when cleaning with --everything or --force flags to allow
+	// cleaning without requiring stack configuration
+	if info.SubCommand == "clean" &&
+		(u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) ||
+			u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)) {
+		if info.ComponentFromArg == "" {
+			shouldProcessStacks = false
+		}
+
+		shouldCheckStack = info.Stack != ""
+
 	}
 
-	if len(info.Stack) < 1 {
-		return errors.New("stack must be specified")
+	if shouldProcessStacks {
+		info, err = ProcessStacks(cliConfig, info, shouldCheckStack, true)
+		if err != nil {
+			return err
+		}
+		if len(info.Stack) < 1 && shouldCheckStack {
+			return errors.New("stack must be specified when not using --everything or --force flags")
+		}
 	}
 
 	if !info.ComponentIsEnabled {
@@ -79,73 +96,33 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-
 	// Check if the component (or base component) exists as Terraform component
-	componentPath := path.Join(cliConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath := filepath.Join(cliConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			path.Join(cliConfig.Components.Terraform.BasePath, info.ComponentFolderPrefix),
+			filepath.Join(cliConfig.Components.Terraform.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute is not set to `abstract`)
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
 		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component))
+			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
-
-	varFile := constructTerraformComponentVarfileName(info)
-	planFile := constructTerraformComponentPlanfileName(info)
 
 	if info.SubCommand == "clean" {
-		u.LogInfo(cliConfig, "Deleting '.terraform' folder")
-		err = os.RemoveAll(path.Join(componentPath, ".terraform"))
+		err := handleCleanSubCommand(info, componentPath, cliConfig)
 		if err != nil {
-			u.LogWarning(cliConfig, err.Error())
+			u.LogTrace(cliConfig, fmt.Errorf("error cleaning the terraform component: %v", err).Error())
+			return err
 		}
-
-		if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
-			u.LogInfo(cliConfig, "Deleting '.terraform.lock.hcl' file")
-			_ = os.Remove(path.Join(componentPath, ".terraform.lock.hcl"))
-		}
-
-		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform varfile: %s", varFile))
-		_ = os.Remove(path.Join(componentPath, varFile))
-
-		u.LogInfo(cliConfig, fmt.Sprintf("Deleting terraform planfile: %s", planFile))
-		_ = os.Remove(path.Join(componentPath, planFile))
-
-		// If `auto_generate_backend_file` is `true` (we are auto-generating backend files), remove `backend.tf.json`
-		if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-			u.LogInfo(cliConfig, "Deleting 'backend.tf.json' file")
-			_ = os.Remove(path.Join(componentPath, "backend.tf.json"))
-		}
-
-		tfDataDir := os.Getenv("TF_DATA_DIR")
-		if len(tfDataDir) > 0 && tfDataDir != "." && tfDataDir != "/" && tfDataDir != "./" {
-			u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
-			var userAnswer string
-			u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? (only 'yes' will be accepted to approve)\n", tfDataDir))
-			fmt.Print("Enter a value: ")
-			count, err := fmt.Scanln(&userAnswer)
-			if count > 0 && err != nil {
-				return err
-			}
-			if userAnswer == "yes" {
-				u.PrintMessage(fmt.Sprintf("Deleting folder '%s'\n", tfDataDir))
-				err = os.RemoveAll(path.Join(componentPath, tfDataDir))
-				if err != nil {
-					u.LogWarning(cliConfig, err.Error())
-				}
-			}
-		}
-
 		return nil
 	}
-
+	varFile := constructTerraformComponentVarfileName(info)
+	planFile := constructTerraformComponentPlanfileName(info)
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
@@ -209,7 +186,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Auto-generate backend file
 	if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-		backendFileName := path.Join(workingDir, "backend.tf.json")
+		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
 		u.LogDebug(cliConfig, "\nWriting the backend config to file:")
 		u.LogDebug(cliConfig, backendFileName)
@@ -229,7 +206,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Generate `providers_override.tf.json` file if the `providers` section is configured
 	if len(info.ComponentProvidersSection) > 0 {
-		providerOverrideFileName := path.Join(workingDir, "providers_override.tf.json")
+		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
 		u.LogDebug(cliConfig, "\nWriting the provider overrides to file:")
 		u.LogDebug(cliConfig, providerOverrideFileName)
@@ -285,7 +262,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(componentPath)
+		cleanTerraformWorkspace(cliConfig, componentPath)
 
 		err = ExecuteShellCommand(
 			cliConfig,
@@ -341,7 +318,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		u.LogDebug(cliConfig, "Stack: "+info.StackFromArg)
 	} else {
 		u.LogDebug(cliConfig, "Stack: "+info.StackFromArg)
-		u.LogDebug(cliConfig, "Stack path: "+path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
+		u.LogDebug(cliConfig, "Stack path: "+filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
 	}
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
@@ -369,7 +346,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	case "init":
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(componentPath)
+		cleanTerraformWorkspace(cliConfig, componentPath)
 
 		if cliConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
