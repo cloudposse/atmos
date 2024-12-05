@@ -39,11 +39,24 @@ Terraform remote state is incompatible with the `local` backend type. This is be
 
 
 :::tip New & Improved Way to Share Data
-Atmos now supports a new way to share data between components using a template function in your Stack configurations:
+Atmos now supports a new way to share data between components using the template function `atmos.Component`
+and the Atmos YAML function `!terraform.output`
+in your Stack configurations:
+
 ```
-{{ atmos.Component("<something>").outputs.<output_name> }}
+{{ (atmos.Component <component> <stack>).outputs.<output_name> }}
+
+!terraform.output <component> <stack> <output_name>
 ```
-This function allows reading any Atmos section or any attribute (not just outputs) from a section of an Atmos component in a stack. For more details, refer to the [`atmos.Component` function](/core-concepts/stacks/templates/functions/atmos.Component).
+
+The `atmos.Component` template function allows reading any Atmos section or any attribute (not just outputs) from a section
+of an Atmos component in a stack.
+
+For more details on `atmos.Component` function, refer to [`atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component).
+
+The `!terraform.output` Atmos YAML function allows reading any output (remote state) of an Atmos component in a stack.
+
+For more details on `!terraform.output` YAML function, refer to [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output).
 :::
 
 
@@ -339,9 +352,14 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
   outputs for the Atmos component provisioned in that region
 
 <ActionCard title="Use Remote State in Stack Configurations">
-Atmos supports an alternative way to read the outputs (remote state) of components directly in Atmos stack manifests by
-using the `atmos.Component` `Go` template function and the `outputs` section instead of using the `remote-state`
-module and configuring Terraform/OpenTofu components to use the module.
+Atmos supports alternative ways to read the outputs (remote state) of components directly in Atmos stack manifests by
+using the [`atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component) Go template function and
+the [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) Atmos YAML function instead of using
+the [`remote-state`](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module
+and configuring Terraform/OpenTofu components to use the module.
 
-<PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Component">Learn How</PrimaryCTA>
+<PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Component">Learn how to use 'atmos.Component' template function</PrimaryCTA>
+
+<PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.output">Learn how to use '!terraform.output' YAML function</PrimaryCTA>
+
 </ActionCard>
