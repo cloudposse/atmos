@@ -15,8 +15,8 @@ import:
   - catalog/terraform/spacelift/infrastructure-tenant1
 
   # Configurations to test `atmos.Component` template function
-  # - catalog/terraform/template-functions-test/defaults
-  # - catalog/terraform/template-functions-test2/defaults
+  - catalog/terraform/template-functions-test/defaults
+  - catalog/terraform/template-functions-test2/defaults
 
 components:
   terraform:
