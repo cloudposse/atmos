@@ -63,6 +63,14 @@ jobs:
           npm install --only=production
           npm run build:site
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: website
+          path: website/build
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Copy Website to S3 Bucket PR Folder
         run: |
           cd website/build
