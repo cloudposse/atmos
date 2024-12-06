@@ -128,8 +128,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 		return nil
 	}
+
 	varFile := constructTerraformComponentVarfileName(info)
 	planFile := constructTerraformComponentPlanfileName(info)
+
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
