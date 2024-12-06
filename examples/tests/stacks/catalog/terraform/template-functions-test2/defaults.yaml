@@ -6,6 +6,7 @@ components:
       metadata:
         # Point to the Terraform component
         component: "test/template-functions-test2"
+        terraform_workspace: '{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-test'
       settings:
         spacelift:
           workspace_enabled: false

@@ -563,6 +563,10 @@ func ProcessStacks(
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
 			configAndStacksInfo.Command = i
 		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {
+			configAndStacksInfo.TerraformWorkspace = i
+		}
 	}
 
 	// Spacelift stack

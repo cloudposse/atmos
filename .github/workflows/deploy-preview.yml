@@ -1,23 +1,18 @@
-name: "Website Deploy Preview"
+name: "Deploy Preview"
 
 on:
-  workflow_dispatch:
-
-  pull_request:
+  workflow_run:
+    workflows: [Website Deploy Preview]
     types:
-      - opened
-      - synchronize
-      - reopened
-    paths:
-      - "website/**"
+      - completed
 
 env:
   AWS_REGION: us-east-2
   IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
-  IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-pr-${{ github.event.pull_request.number }}
+  IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-pr-${{ github.event.workflow_run.pull_requests.0.number }}
   S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
-  PR_NUMBER: ${{ github.event.pull_request.number }}
-  DEPLOYMENT_HOST: pr-${{ github.event.pull_request.number }}.atmos-docs.ue2.dev.plat.cloudposse.org
+  PR_NUMBER: ${{ github.event.workflow_run.pull_requests.0.number }}
+  DEPLOYMENT_HOST: pr-${{ github.event.workflow_run.pull_requests.0.number }}.atmos-docs.ue2.dev.plat.cloudposse.org
   ALGOLIA_INDEX_NAME: atmos-preview.tools
   ALGOLIA_APP_ID: 32YOERUX83
 
@@ -28,11 +23,9 @@ permissions:
 
 jobs:
   website-deploy-preview:
-    # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
-    if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
-
+    # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy' or the workflow run failed
+    if: ${{ github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.pull_requests.*.labels.*.name, 'website-no-deploy')  }}
     runs-on: ubuntu-latest
-
     environment:
       name: preview
       url: https://${{ env.DEPLOYMENT_HOST }}
@@ -46,30 +39,12 @@ jobs:
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: "website/.nvmrc"
-
-      - name: Install Dependencies and Build Website
-        run: |
-          node --version
-          cd website
-          npm install --only=production
-          npm run build:site
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
           name: website
           path: website/build
-          if-no-files-found: error
-          retention-days: 1
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Copy Website to S3 Bucket PR Folder
         run: |
@@ -79,7 +54,7 @@ jobs:
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/pr-${{ env.PR_NUMBER }}/ --recursive --human-readable --summarize
 
       - name: ReIndex with Algolia
-        if: ${{ contains(github.event.*.labels.*.name, 'reindex') }}
+        if: ${{ contains(github.event.workflow_run.pull_requests.*.labels.*.name, 'reindex') }}
         env:
           ALGOLIA_SCRAPER_API_KEY: ${{ secrets.ALGOLIA_SCRAPER_API_KEY }}
         run: |
