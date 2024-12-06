@@ -56,34 +56,34 @@ terraform:
     s3:
       role_arn: "arn:aws:iam::123456789012:role/cp-gbl-root-terraform"
 
-#  providers:
-#    context:
-#      enabled: true
-#      delimiter: "-"
-#      properties:
-#        namespace:
-#          required: true
-#          min_length: 2
-#          max_length: 4
-#        tenant:
-#          required: true
-#          min_length: 2
-#          max_length: 10
-#        environment:
-#          required: true
-#          min_length: 2
-#          max_length: 6
-#        stage:
-#          required: true
-#          min_length: 2
-#          max_length: 20
-#      values:
-#        namespace: "{{ .vars.namespace }}"
-#        tenant: "{{ .vars.tenant }}"
-#        environment: "{{ .vars.environment }}"
-#        stage: "{{ .vars.stage }}"
-#        atmos_component: "{{ .atmos_component }}"
-#        atmos_stack: "{{ .atmos_stack }}"
+  providers:
+    context:
+      enabled: true
+      delimiter: "-"
+      properties:
+        namespace:
+          required: true
+          min_length: 2
+          max_length: 4
+        tenant:
+          required: true
+          min_length: 2
+          max_length: 10
+        environment:
+          required: true
+          min_length: 2
+          max_length: 6
+        stage:
+          required: true
+          min_length: 2
+          max_length: 20
+      values:
+        namespace: "{{ .vars.namespace }}"
+        tenant: "{{ .vars.tenant }}"
+        environment: "{{ .vars.environment }}"
+        stage: "{{ .vars.stage }}"
+        atmos_component: "{{ .atmos_component }}"
+        atmos_stack: "{{ .atmos_stack }}"
 
 helmfile:
   vars: {}
