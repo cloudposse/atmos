@@ -52,6 +52,23 @@ import:
   - catalog/file3.YAML  # Expicitly load a file with a .YAML extension
 ```
 
+### Automatic Template File Detection
+
+When importing files without specifying an extension, Atmos will now automatically search for and use template versions of the files if they exist. The search order is:
+
+1. `.yaml`
+2. `.yml`
+3. `.yaml.tmpl`
+4. `.yml.tmpl`
+
+For example, if you import `catalog/file1`, Atmos will:
+1. First look for `catalog/file1.yaml` or `catalog/file1.yml`
+2. If found, check if a template version exists (`catalog/file1.yaml.tmpl` or `catalog/file1.yml.tmpl`)
+3. Use the template version if it exists, otherwise use the regular YAML file
+4. If no files are found, default to using `.yaml` extension
+
+This feature makes it easier to work with templated configurations as you don't need to explicitly specify the template file extension - Atmos will automatically use the template version when available.
+
 ## Conventions
 
 We recommend placing all baseline "imports" in the `stacks/catalog` folder, however, they can exist anywhere.

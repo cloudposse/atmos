@@ -39,8 +39,13 @@ func FileOrDirExists(filename string) bool {
 
 // IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file)
 func IsYaml(file string) bool {
-	yamlExtensions := []string{".yaml", ".yml"}
+	yamlExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	ext := filepath.Ext(file)
+	if ext == ".tmpl" {
+		// For .tmpl files, we check if the full extension is .yaml.tmpl or .yml.tmpl
+		baseExt := filepath.Ext(strings.TrimSuffix(file, ext))
+		ext = baseExt + ext
+	}
 	return SliceContainsString(yamlExtensions, ext)
 }
 
@@ -180,12 +185,12 @@ func IsSocket(path string) (bool, error) {
 // If the path has a file extension, it checks if the file exists.
 // If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions
 func SearchConfigFile(path string) (string, bool) {
-	// check if the provided has a file extension
+	// check if the provided path has a file extension
 	if filepath.Ext(path) != "" {
 		return path, FileExists(path)
 	}
 	// Define the possible config file extensions
-	configExtensions := []string{".yaml", ".yml"}
+	configExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	for _, ext := range configExtensions {
 		filePath := path + ext
 		if FileExists(filePath) {
