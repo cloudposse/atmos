@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -70,11 +71,10 @@ func ExecuteWorkflow(
 			commandType = "atmos"
 		}
 
+		var err error
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			if err := ExecuteShell(cliConfig, command, commandName, ".", []string{}, dryRun); err != nil {
-				return err
-			}
+			err = ExecuteShell(cliConfig, command, commandName, ".", []string{}, dryRun)
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
@@ -101,11 +101,28 @@ func ExecuteWorkflow(
 				logFunc(cliConfig, fmt.Sprintf("Stack: %s", finalStack))
 			}
 
-			if err := ExecuteShellCommand(cliConfig, "atmos", args, ".", []string{}, dryRun, ""); err != nil {
-				return err
-			}
+			err = ExecuteShellCommand(cliConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
 			return fmt.Errorf("invalid workflow step type '%s'. Supported types are 'atmos' and 'shell'", commandType)
+		}
+
+		if err != nil {
+			workflowFileName := filepath.Base(workflowPath)
+			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
+
+			failedMsg := color.New(color.FgRed).Sprintf("\nStep '%s' failed!", step.Name)
+
+			u.LogDebug(cliConfig, fmt.Sprintf("\nCommand failed: %s", command))
+			u.LogDebug(cliConfig, fmt.Sprintf("Error: %v", err))
+
+			resumeMsg := color.New(color.FgGreen).Sprintf(
+				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",
+				workflow,
+				workflowFileName,
+				step.Name,
+			)
+
+			return fmt.Errorf("%s\n%s", failedMsg, resumeMsg)
 		}
 	}
 
