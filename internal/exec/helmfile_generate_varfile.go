@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -24,7 +25,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 
 	component := args[0]
 
-	info, err := processCommandLineArgs("helmfile", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("helmfile", cmd, args, nil)
 	if err != nil {
 		return err
 	}

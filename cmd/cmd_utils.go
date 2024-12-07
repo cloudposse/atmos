@@ -8,7 +8,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
@@ -429,40 +428,6 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
 
-// printMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
-func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
-	// Define colors
-	c1 := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	c2 := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	c3 := lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
-
-	// Define content
-	message := lipgloss.NewStyle().
-		Render(fmt.Sprintf("Update available! %s » %s",
-			c1.Render(version.Version),
-			c2.Render(latestVersion)))
-
-	links := []string{lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", c3.Render("https://github.com/cloudposse/atmos/releases"))),
-		lipgloss.NewStyle().Render(fmt.Sprintf("Install Atmos: %s", c3.Render("https://atmos.tools/install"))),
-	}
-
-	messageLines := append([]string{message}, links...)
-	messageContent := strings.Join(messageLines, "\n")
-
-	// Define box
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("10")).
-		Padding(0, 1).
-		Align(lipgloss.Center)
-
-	// Render the box
-	box := boxStyle.Render(messageContent)
-
-	// Print the box
-	fmt.Println(box)
-}
-
 // customHelpMessageToUpgradeToAtmosLatestRelease adds Atmos version info at the end of each help commnad
 func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
 	originalHelpFunc(cmd, args)
@@ -472,7 +437,7 @@ func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []s
 		latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
 		currentRelease := strings.TrimPrefix(version.Version, "v")
 		if latestRelease != currentRelease {
-			printMessageToUpgradeToAtmosLatestRelease(latestRelease)
+			u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
 		}
 	}
 }
