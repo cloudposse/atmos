@@ -163,7 +163,7 @@ func ProcessComponentConfig(
 }
 
 // processCommandLineArgs processes command-line args
-func processCommandLineArgs(
+func ProcessCommandLineArgs(
 	componentType string,
 	cmd *cobra.Command,
 	args []string,
@@ -221,6 +221,11 @@ func processCommandLineArgs(
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
+		// If we're dealing with `-h` or `--help`,
+		// then the SubCommand should be empty.
+		if argsAndFlagsInfo.SubCommand == "-h" || argsAndFlagsInfo.SubCommand == "--help" {
+			argsAndFlagsInfo.SubCommand = ""
+		}
 		err = processHelp(schema.CliConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -562,6 +567,10 @@ func ProcessStacks(
 
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
 			configAndStacksInfo.Command = i
+		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {
+			configAndStacksInfo.TerraformWorkspace = i
 		}
 	}
 

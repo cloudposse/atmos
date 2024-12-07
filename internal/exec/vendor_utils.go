@@ -25,7 +25,7 @@ import (
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands
 func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}

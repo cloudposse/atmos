@@ -27,7 +27,7 @@ const (
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
 func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
@@ -121,8 +121,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 		return nil
 	}
+
 	varFile := constructTerraformComponentVarfileName(info)
 	planFile := constructTerraformComponentPlanfileName(info)
+
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
