@@ -33,6 +33,7 @@ func PrintStyledText(text string) error {
 	return nil
 }
 
+// logoOnce ensures thread-safe single execution of logo display
 func PrintAtmosLogo() error {
 	var err error
 	logoOnce.Do(func() {
