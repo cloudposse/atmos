@@ -41,6 +41,7 @@ var (
 		cfg.PlanFileFlag,
 		cfg.HelpFlag1,
 		cfg.HelpFlag2,
+		cfg.HelpFlag3,
 		cfg.WorkflowDirFlag,
 		cfg.JsonSchemaDirFlag,
 		cfg.OpaDirFlag,
@@ -221,10 +222,6 @@ func processCommandLineArgs(
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
-		err = processHelp(schema.CliConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
-		if err != nil {
-			return configAndStacksInfo, err
-		}
 		return configAndStacksInfo, nil
 	}
 
@@ -284,6 +281,16 @@ func ProcessStacks(
 	}
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
+
+	// Initialize component section maps
+	configAndStacksInfo.ComponentSection = make(map[string]any)
+	configAndStacksInfo.ComponentVarsSection = make(map[string]any)
+	configAndStacksInfo.ComponentSettingsSection = make(map[string]any)
+	configAndStacksInfo.ComponentOverridesSection = make(map[string]any)
+	configAndStacksInfo.ComponentProvidersSection = make(map[string]any)
+	configAndStacksInfo.ComponentEnvSection = make(map[string]any)
+	configAndStacksInfo.ComponentBackendSection = make(map[string]any)
+	configAndStacksInfo.ComponentMetadataSection = make(map[string]any)
 
 	stacksMap, rawStackConfigs, err := FindStacksMap(cliConfig, false)
 	if err != nil {
@@ -979,8 +986,11 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			info.SkipInit = true
 		}
 
-		if arg == cfg.HelpFlag1 || arg == cfg.HelpFlag2 {
+		if arg == cfg.HelpFlag1 || arg == cfg.HelpFlag2 || arg == cfg.HelpFlag3 {
 			info.NeedHelp = true
+			// For help commands, we don't need a component or stack
+			info.ComponentFromArg = ""
+			return info, nil
 		}
 
 		for _, f := range commonFlags {

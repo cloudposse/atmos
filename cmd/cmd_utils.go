@@ -394,7 +394,7 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	c2 := color.New(color.FgGreen)
 
 	fmt.Println()
-	err := tuiUtils.PrintStyledText("ATMOS")
+	err := tuiUtils.PrintAtmosLogo()
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}

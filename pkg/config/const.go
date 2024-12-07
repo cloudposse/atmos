@@ -37,6 +37,7 @@ const (
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
+	HelpFlag3 = "-help"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"

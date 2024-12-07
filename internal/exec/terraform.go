@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -36,19 +35,9 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
-	cliConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	if info.NeedHelp {
-		return nil
-	}
-
-	// If the user just types `atmos terraform`, print Atmos logo and show terraform help
-	if info.SubCommand == "" {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
+	// For help commands and empty subcommand, we don't need to process stacks
+	if info.NeedHelp || info.SubCommand == cfg.HelpFlag1 || info.SubCommand == cfg.HelpFlag2 || info.SubCommand == "" {
+		cliConfig, err := cfg.InitCliConfig(info, false)
 		if err != nil {
 			return err
 		}
@@ -57,9 +46,27 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if err != nil {
 			return err
 		}
-
 		fmt.Println()
 		return nil
+	}
+
+	// For all other commands, we need to process stacks
+	cliConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+
+	info, err = ProcessStacks(cliConfig, info, true, true)
+	if err != nil {
+		return err
+	}
+
+	if info.ComponentFromArg == "" {
+		return errors.New("component must be specified")
+	}
+
+	if len(info.Stack) < 1 {
+		return errors.New("stack must be specified")
 	}
 
 	shouldProcessStacks := true

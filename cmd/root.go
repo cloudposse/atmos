@@ -26,6 +26,22 @@ var RootCmd = &cobra.Command{
 	Use:   "atmos",
 	Short: "Universal Tool for DevOps and Cloud Automation",
 	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
+		checkAtmosConfig()
+
+		// Print the Atmos logo
+		err := tuiUtils.PrintAtmosLogo()
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			return
+		}
+
+		err = e.ExecuteAtmosCmd()
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+	},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Determine if the command is a help command or if the help flag is set
 		isHelpCommand := cmd.Name() == "help"
@@ -35,27 +51,13 @@ var RootCmd = &cobra.Command{
 
 		if isHelpRequested {
 			// Do not silence usage or errors when help is invoked
-			cmd.SilenceUsage = false
-			cmd.SilenceErrors = false
+			cmd.Root().SilenceUsage = false
+			cmd.Root().SilenceErrors = false
 		} else {
-			cmd.SilenceUsage = true
-			cmd.SilenceErrors = true
-		}
-	},
-	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
-
-		// Print a styled Atmos logo to the terminal
-		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
-		}
-
-		err = e.ExecuteAtmosCmd()
-		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			// For non-help commands, we want to control the error output
+			cmd.Root().SilenceUsage = true
+			// Only silence errors for unknown commands
+			cmd.Root().SilenceErrors = cmd.Parent() == nil
 		}
 	},
 }
@@ -80,11 +82,15 @@ func Execute() error {
 	// This custom help function will call the original help function and then display the bordered message.
 	RootCmd.SetHelpFunc(customHelpMessageToUpgradeToAtmosLatestRelease)
 
+	// Set custom error handling to prevent duplicate messages
+	RootCmd.SilenceErrors = true
+	RootCmd.SilenceUsage = true
+
 	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
 	err := RootCmd.ParseFlags(os.Args)
-	if err != nil && errors.Is(err, pflag.ErrHelp) {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
+	if err != nil && errors.Is(err, pflag.ErrHelp) ||
+		(len(os.Args) > 1 && (os.Args[len(os.Args)-1] == "help" || os.Args[len(os.Args)-1] == "--help")) {
+		err = tuiUtils.PrintAtmosLogo()
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
@@ -140,9 +146,8 @@ func initConfig() {
 	RootCmd.SetUsageFunc(b.UsageFunc)
 
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
-		// Print a styled Atmos logo to the terminal
-		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
+		// Print the Atmos logo
+		err := tuiUtils.PrintAtmosLogo()
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
