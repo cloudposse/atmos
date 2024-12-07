@@ -15,7 +15,7 @@ import (
 
 // ExecuteDescribeDependentsCmd executes `describe dependents` command
 func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
