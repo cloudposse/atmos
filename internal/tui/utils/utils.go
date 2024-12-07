@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/alecthomas/chroma/quick"
 	"github.com/arsham/figurine/figurine"
@@ -20,8 +21,8 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 	return buf.String(), nil
 }
 
-// logoDisplayed is used to track if the ATMOS logo has been displayed
-var logoDisplayed bool
+// logoOnce ensures the ATMOS logo is printed exactly once
+var logoOnce sync.Once
 
 // PrintStyledText prints a styled text to the terminal
 func PrintStyledText(text string) error {
@@ -32,20 +33,11 @@ func PrintStyledText(text string) error {
 	return nil
 }
 
-// PrintAtmosLogo prints the ATMOS logo only once per session
 func PrintAtmosLogo() error {
-	if !logoDisplayed {
+	var err error
+	logoOnce.Do(func() {
 		fmt.Println()
-		err := PrintStyledText("ATMOS")
-		if err != nil {
-			return err
-		}
-		logoDisplayed = true
-	}
-	return nil
-}
-
-// ResetLogoDisplay resets the logo display flag (mainly for testing purposes)
-func ResetLogoDisplay() {
-	logoDisplayed = false
+		err = PrintStyledText("ATMOS")
+	})
+	return err
 }
