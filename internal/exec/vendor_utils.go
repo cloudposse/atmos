@@ -169,7 +169,8 @@ func ReadAndProcessVendorConfigFile(
 
 			if !u.FileExists(pathToVendorConfig) {
 				vendorConfigFileExists = false
-				return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file or directory '%s' does not exist", pathToVendorConfig)
+				u.LogWarning(cliConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+				return vendorConfig, vendorConfigFileExists, "", nil
 			}
 
 			foundVendorConfigFile = pathToVendorConfig
