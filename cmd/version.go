@@ -19,9 +19,8 @@ var versionCmd = &cobra.Command{
 	Long:    `This command prints the CLI version`,
 	Example: "atmos version",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Print a styled Atmos logo to the terminal
-		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
+		// Print the Atmos logo
+		err := tuiUtils.PrintAtmosLogo()
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}

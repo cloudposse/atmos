@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 
 	"github.com/alecthomas/chroma/quick"
@@ -19,6 +20,9 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 	return buf.String(), nil
 }
 
+// logoDisplayed is used to track if the ATMOS logo has been displayed
+var logoDisplayed bool
+
 // PrintStyledText prints a styled text to the terminal
 func PrintStyledText(text string) error {
 	// Check if the terminal supports colors
@@ -26,4 +30,22 @@ func PrintStyledText(text string) error {
 		return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
 	}
 	return nil
+}
+
+// PrintAtmosLogo prints the ATMOS logo only once per session
+func PrintAtmosLogo() error {
+	if !logoDisplayed {
+		fmt.Println()
+		err := PrintStyledText("ATMOS")
+		if err != nil {
+			return err
+		}
+		logoDisplayed = true
+	}
+	return nil
+}
+
+// ResetLogoDisplay resets the logo display flag (mainly for testing purposes)
+func ResetLogoDisplay() {
+	logoDisplayed = false
 }

@@ -30,9 +30,8 @@ var RootCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		// Print a styled Atmos logo to the terminal
-		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
+		// Print the Atmos logo
+		err := tuiUtils.PrintAtmosLogo()
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			return
@@ -91,8 +90,7 @@ func Execute() error {
 	err := RootCmd.ParseFlags(os.Args)
 	if err != nil && errors.Is(err, pflag.ErrHelp) ||
 		(len(os.Args) > 1 && (os.Args[len(os.Args)-1] == "help" || os.Args[len(os.Args)-1] == "--help")) {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
+		err = tuiUtils.PrintAtmosLogo()
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
@@ -148,9 +146,8 @@ func initConfig() {
 	RootCmd.SetUsageFunc(b.UsageFunc)
 
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
-		// Print a styled Atmos logo to the terminal
-		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
+		// Print the Atmos logo
+		err := tuiUtils.PrintAtmosLogo()
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}

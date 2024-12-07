@@ -39,8 +39,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	// If the user just types `atmos helmfile`, print Atmos logo and show helmfile help
 	if info.SubCommand == "" {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
+		err = tuiUtils.PrintAtmosLogo()
 		if err != nil {
 			return err
 		}
