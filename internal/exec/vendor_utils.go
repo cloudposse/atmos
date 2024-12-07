@@ -8,13 +8,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	tea "github.com/charmbracelet/bubbletea"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/bmatcuk/doublestar/v4"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -96,7 +96,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check `vendor.yaml`
-	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName)
+	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName, true)
 	if err != nil {
 		return err
 	}
@@ -142,6 +142,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 func ReadAndProcessVendorConfigFile(
 	cliConfig schema.CliConfiguration,
 	vendorConfigFile string,
+	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
 	var vendorConfig schema.AtmosVendorConfig
 
@@ -152,7 +153,7 @@ func ReadAndProcessVendorConfigFile(
 	var foundVendorConfigFile string
 
 	// Check if vendor config is specified in atmos.yaml
-	if cliConfig.Vendor.BasePath != "" {
+	if checkGlobalConfig && cliConfig.Vendor.BasePath != "" {
 		if !filepath.IsAbs(cliConfig.Vendor.BasePath) {
 			foundVendorConfigFile = filepath.Join(cliConfig.BasePath, cliConfig.Vendor.BasePath)
 		} else {
@@ -166,14 +167,13 @@ func ReadAndProcessVendorConfigFile(
 		if !fileExists {
 			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
 			pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
+			foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
 
-			if !u.FileExists(pathToVendorConfig) {
+			if !fileExists {
 				vendorConfigFileExists = false
 				u.LogWarning(cliConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
 				return vendorConfig, vendorConfigFileExists, "", nil
 			}
-
-			foundVendorConfigFile = pathToVendorConfig
 		}
 	}
 
@@ -357,6 +357,7 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return err
 		}
+
 		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(uri, vendorConfigFilePath)
 
 		// Determine package type
@@ -399,21 +400,20 @@ func ExecuteAtmosVendorInternal(
 
 	// Run TUI to process packages
 	if len(packages) > 0 {
-
 		var opts []tea.ProgramOption
 		if !CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 			u.LogWarning(cliConfig, "TTY is not supported. Running in non-interactive mode")
 		}
+
 		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
 		if err != nil {
 			return fmt.Errorf("error initializing model: %v", err)
 		}
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
-			return fmt.Errorf("running atmos vendor internal download error: %w", err)
+			return fmt.Errorf("ExecuteAtmosVendorInternal error: %w", err)
 		}
-
 	}
 
 	return nil
@@ -439,7 +439,7 @@ func processVendorImports(
 
 		allImports = append(allImports, imp)
 
-		vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(cliConfig, imp)
+		vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(cliConfig, imp, false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -466,14 +466,15 @@ func processVendorImports(
 
 	return append(mergedSources, sources...), allImports, nil
 }
+
 func logInitialMessage(cliConfig schema.CliConfiguration, vendorConfigFileName string, tags []string) {
 	logMessage := fmt.Sprintf("Vendoring from '%s'", vendorConfigFileName)
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
 	u.LogInfo(cliConfig, logMessage)
-
 }
+
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
 	// Ensure necessary fields are present
 	if s.File == "" {
@@ -487,6 +488,7 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 	}
 	return nil
 }
+
 func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []string) bool {
 	// Skip if component or tags do not match
 	// If `--component` is specified, and it's not equal to this component, skip this component
@@ -588,6 +590,7 @@ func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *
 		return false, nil
 	}
 }
+
 func validateURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("URI cannot be empty")

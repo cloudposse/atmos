@@ -41,6 +41,7 @@ type pkgVendor struct {
 	atmosPackage     *pkgAtmosVendor
 	componentPackage *pkgComponentVendor
 }
+
 type pkgAtmosVendor struct {
 	uri               string
 	name              string
@@ -50,6 +51,7 @@ type pkgAtmosVendor struct {
 	version           string
 	atmosVendorSource schema.AtmosVendorSource
 }
+
 type modelVendor struct {
 	packages  []pkgVendor
 	index     int
@@ -257,9 +259,11 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 				name: p.name,
 			}
 		}
+
 		defer removeTempDir(cliConfig, tempDir)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
+
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
@@ -320,13 +324,16 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 		}
 	}
 }
+
 func ExecuteInstall(installer pkgVendor, dryRun bool, cliConfig schema.CliConfiguration) tea.Cmd {
 	if installer.atmosPackage != nil {
 		return downloadAndInstall(installer.atmosPackage, dryRun, cliConfig)
 	}
+
 	if installer.componentPackage != nil {
 		return downloadComponentAndInstall(installer.componentPackage, dryRun, cliConfig)
 	}
+
 	// No valid package provided
 	return func() tea.Msg {
 		err := fmt.Errorf("no valid installer package provided for %s", installer.name)

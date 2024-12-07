@@ -52,7 +52,7 @@ spec:
 		assert.Nil(t, err)
 
 		// Test vendoring with component flag
-		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(cliConfig, vendorYamlPath)
+		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(cliConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
 		assert.True(t, exists)
 		assert.NotEmpty(t, configFile)
@@ -103,7 +103,7 @@ spec:
 	t.Run("no vendor.yaml or component.yaml", func(t *testing.T) {
 		// Test vendoring with component flag
 		vendorYamlPath := path.Join(testDir, "vendor.yaml")
-		_, exists, _, err := e.ReadAndProcessVendorConfigFile(cliConfig, vendorYamlPath)
+		_, exists, _, err := e.ReadAndProcessVendorConfigFile(cliConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
 		assert.False(t, exists)
 
@@ -131,7 +131,7 @@ spec:
 		assert.Nil(t, err)
 
 		// Test vendoring without component flag
-		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(cliConfig, vendorYamlPath)
+		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(cliConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
 		assert.True(t, exists)
 		assert.NotEmpty(t, configFile)
