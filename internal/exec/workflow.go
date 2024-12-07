@@ -20,7 +20,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	var workflowFile string
 	var fromStep string
 
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}

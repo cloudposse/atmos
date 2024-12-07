@@ -35,7 +35,7 @@ type DescribeAffectedCmdArgs struct {
 }
 
 func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
