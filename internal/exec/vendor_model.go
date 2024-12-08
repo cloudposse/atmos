@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -133,9 +134,12 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pkg := m.packages[m.index]
 
 		mark := checkMark
-
+		errMsg := ""
 		if msg.err != nil {
-			u.LogError(m.cliConfig, fmt.Errorf("Failed to vendor %s: error : %s", pkg.name, msg.err))
+			errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
+			if !m.isTTY {
+				u.LogError(m.cliConfig, errors.New(errMsg))
+			}
 			mark = xMark
 			m.failedPkg++
 		}
@@ -174,7 +178,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		version = grayColor.Render(version)
 		return m, tea.Batch(
 			progressCmd,
-			tea.Printf("%s %s %s", mark, pkg.name, version),            // print success message above our program
+			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg), // print message above our program
 			ExecuteInstall(m.packages[m.index], m.dryRun, m.cliConfig), // download the next package
 		)
 	case spinner.TickMsg:
