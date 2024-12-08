@@ -22,8 +22,6 @@ components:
     columns:
       - name: Component
         value: '{{ .atmos_component }}'
-      - name: Type
-        value: '{{ .atmos_component_type }}'
       - name: Stack
         value: '{{ .atmos_stack }}'
       - name: Folder
