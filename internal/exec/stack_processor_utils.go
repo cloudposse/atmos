@@ -432,7 +432,7 @@ func ProcessYAMLConfigFile(
 
 		// Process the imports in the current manifest
 		for _, importFile := range importMatches {
-			yamlConfig, _, yamlConfigRaw, _, _, err2 := ProcessYAMLConfigFile(
+			yamlConfig, _, yamlConfigRaw, importTerraformOverrides, importHelmfileOverrides, err2 := ProcessYAMLConfigFile(
 				cliConfig,
 				basePath,
 				importFile,
@@ -451,6 +451,24 @@ func ProcessYAMLConfigFile(
 			}
 
 			stackConfigs = append(stackConfigs, yamlConfig)
+
+			// Final Terraform `overrides`
+			finalTerraformOverrides, err = m.Merge(
+				cliConfig,
+				[]map[string]any{importTerraformOverrides, finalTerraformOverrides},
+			)
+			if err != nil {
+				return nil, nil, nil, nil, nil, err
+			}
+
+			// Final Helmfile `overrides`
+			finalHelmfileOverrides, err = m.Merge(
+				cliConfig,
+				[]map[string]any{importHelmfileOverrides, finalHelmfileOverrides},
+			)
+			if err != nil {
+				return nil, nil, nil, nil, nil, err
+			}
 
 			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
