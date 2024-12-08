@@ -185,11 +185,12 @@ func IsSocket(path string) (bool, error) {
 // If the path has a file extension, it checks if the file exists.
 // If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions
 func SearchConfigFile(path string) (string, bool) {
-	// check if the provided path has a file extension
+	// Check if the provided path has a file extension and the file exists
 	if filepath.Ext(path) != "" {
 		return path, FileExists(path)
 	}
-	// Define the possible config file extensions
+
+	// Check the possible config file extensions
 	configExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	for _, ext := range configExtensions {
 		filePath := path + ext
@@ -197,6 +198,7 @@ func SearchConfigFile(path string) (string, bool) {
 			return filePath, true
 		}
 	}
+
 	return "", false
 }
 
