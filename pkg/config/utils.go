@@ -30,7 +30,8 @@ func FindAllStackConfigsInPathsForStack(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			patterns = getStackFilePatterns(p)
+			// During validation, we don't want to include template files
+			patterns = getStackFilePatterns(p, false)
 		}
 
 		var allMatches []string
@@ -61,6 +62,13 @@ func FindAllStackConfigsInPathsForStack(
 
 		// Process all matches found
 		for _, matchedFileAbsolutePath := range allMatches {
+			// Skip template files
+			if strings.HasSuffix(matchedFileAbsolutePath, u.TemplateExtension) ||
+				strings.HasSuffix(matchedFileAbsolutePath, u.YamlTemplateExtension) ||
+				strings.HasSuffix(matchedFileAbsolutePath, u.YmlTemplateExtension) {
+				continue
+			}
+
 			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
@@ -125,7 +133,8 @@ func FindAllStackConfigsInPaths(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			patterns = getStackFilePatterns(p)
+			// During validation, we don't want to include template files
+			patterns = getStackFilePatterns(p, false)
 		}
 
 		var allMatches []string
@@ -156,6 +165,13 @@ func FindAllStackConfigsInPaths(
 
 		// Process all matches found
 		for _, matchedFileAbsolutePath := range allMatches {
+			// Skip template files
+			if strings.HasSuffix(matchedFileAbsolutePath, u.TemplateExtension) ||
+				strings.HasSuffix(matchedFileAbsolutePath, u.YamlTemplateExtension) ||
+				strings.HasSuffix(matchedFileAbsolutePath, u.YmlTemplateExtension) {
+				continue
+			}
+
 			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 			include := true
 
@@ -656,18 +672,27 @@ func GetStackNameFromContextAndStackNamePattern(
 }
 
 // getStackFilePatterns returns a slice of possible file patterns for a given base path
-func getStackFilePatterns(basePath string) []string {
-	return []string{
+func getStackFilePatterns(basePath string, includeTemplates bool) []string {
+	patterns := []string{
 		basePath + u.DefaultStackConfigFileExtension,
-		basePath + u.DefaultStackConfigFileExtension + u.TemplateExtension,
-		basePath + u.YamlTemplateExtension,
-		basePath + u.YmlTemplateExtension,
+		basePath + u.YmlFileExtension,
 	}
+
+	if includeTemplates {
+		patterns = append(patterns,
+			basePath+u.DefaultStackConfigFileExtension+u.TemplateExtension,
+			basePath+u.YamlTemplateExtension,
+			basePath+u.YmlTemplateExtension,
+		)
+	}
+
+	return patterns
 }
 
 // matchesStackFilePattern checks if a file path matches any of the valid stack file patterns
 func matchesStackFilePattern(filePath, stackName string) bool {
-	patterns := getStackFilePatterns(stackName)
+	// Always include template files for normal operations (imports, etc.)
+	patterns := getStackFilePatterns(stackName, true)
 	for _, pattern := range patterns {
 		if strings.HasSuffix(filePath, pattern) {
 			return true
@@ -685,12 +710,8 @@ func getConfigFilePatterns(path string, forGlobMatch bool) []string {
 		return []string{path}
 	}
 
-	patterns := []string{
-		path + u.DefaultStackConfigFileExtension,
-		path + u.DefaultStackConfigFileExtension + u.TemplateExtension,
-		path + u.YamlTemplateExtension,
-		path + u.YmlTemplateExtension,
-	}
+	// include template files for normal operations
+	patterns := getStackFilePatterns(path, true)
 	if !forGlobMatch {
 		// For direct file search, include the exact path without extension
 		patterns = append([]string{path}, patterns...)
