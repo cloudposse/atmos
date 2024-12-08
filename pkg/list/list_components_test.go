@@ -25,7 +25,14 @@ func TestListComponents(t *testing.T) {
 		nil, false, false, false)
 	assert.Nil(t, err)
 
-	output, err := FilterAndListComponents("", stacksMap, schema.ListConfig{})
+	listConfig := schema.ListConfig{
+		Columns: []schema.ListColumnConfig{
+			{Name: "Component", Value: "{{ .atmos_component }}"},
+			{Name: "Stack", Value: "{{ .atmos_stack }}"},
+			{Name: "Folder", Value: "{{ .vars.tenant }}"},
+		},
+	}
+	output, err := FilterAndListComponents("", stacksMap, listConfig)
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
