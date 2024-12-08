@@ -129,7 +129,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, _, _, _, err := ProcessYAMLConfigFile(
+		stackConfig, importsConfig, _, err := ProcessYAMLConfigFile(
 			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
 			filePath,

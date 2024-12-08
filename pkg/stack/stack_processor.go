@@ -51,8 +51,6 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	map[string]map[string]any,
 	map[string]any,
-	map[string]any,
-	map[string]any,
 	error,
 ) {
 	return exec.ProcessYAMLConfigFile(
