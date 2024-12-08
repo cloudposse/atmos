@@ -2,14 +2,19 @@ package list
 
 import (
 	"fmt"
+	"os"
+	"regexp"
 	"sort"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/samber/lo"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // getStackComponents extracts Terraform components from the final map of stacks
-func getStackComponents(stackData any) ([]string, error) {
+func getStackComponents(stackData any, listFields []string) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("could not parse stacks")
@@ -25,17 +30,84 @@ func getStackComponents(stackData any) ([]string, error) {
 		return nil, fmt.Errorf("could not parse Terraform components")
 	}
 
-	return lo.Keys(terraformComponents), nil
+	uniqueKeys := lo.Keys(terraformComponents)
+	result := make([]string, 0)
+
+	for _, dataKey := range uniqueKeys {
+		data := terraformComponents[dataKey]
+		dataMap, ok := data.(map[string]any)
+		if !ok {
+		    return nil, fmt.Errorf("unexpected data type for component '%s'", dataKey)
+		}
+		rowData := make([]string, 0)
+		for _, key := range listFields {
+			value, found := resolveKey(dataMap, key)
+			if !found {
+				value = "-"
+			}
+			rowData = append(rowData, fmt.Sprintf("%s", value))
+		}
+		result = append(result, strings.Join(rowData, "\t\t"))
+	}
+	return result, nil
+}
+
+// resolveKey resolves a key from a map, supporting nested keys with dot notation
+func resolveKey(data map[string]any, key string) (any, bool) {
+	// Remove leading dot from the key (e.g., `.vars.tenant` -> `vars.tenant`)
+	key = strings.TrimPrefix(key, ".")
+
+	// Split key on `.`
+	parts := strings.Split(key, ".")
+	current := data
+
+	// Traverse the map for each part
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			// Return the value for the last part
+			if value, exists := current[part]; exists {
+				return value, true
+			}
+			return nil, false
+		}
+
+		// Traverse deeper
+		if nestedMap, ok := current[part].(map[string]any); ok {
+			current = nestedMap
+		} else {
+			return nil, false
+		}
+	}
+
+	return nil, false
 }
 
 // FilterAndListComponents filters and lists components based on the given stack
-func FilterAndListComponents(stackFlag string, stacksMap map[string]any) (string, error) {
+func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listConfig schema.ListConfig) (string, error) {
 	components := []string{}
+
+	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.AlignRight)
+	header := make([]string, 0)
+	listFields := make([]string, 0)
+
+	re := regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
+
+	for _, v := range listConfig.Columns {
+		header = append(header, v.Name)
+		match := re.FindStringSubmatch(v.Value)
+
+		if len(match) > 1 {
+			listFields = append(listFields, match[1])
+		} else {
+			return "", fmt.Errorf("invalid value format for column name %s", v.Name)
+		}
+	}
+	fmt.Fprintln(writer, strings.Join(header, "\t\t"))
 
 	if stackFlag != "" {
 		// Filter components for the specified stack
 		if stackData, ok := stacksMap[stackFlag]; ok {
-			stackComponents, err := getStackComponents(stackData)
+			stackComponents, err := getStackComponents(stackData, listFields)
 			if err != nil {
 				return "", fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
 			}
@@ -46,7 +118,7 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any) (string
 	} else {
 		// Get all components from all stacks
 		for _, stackData := range stacksMap {
-			stackComponents, err := getStackComponents(stackData)
+			stackComponents, err := getStackComponents(stackData, listFields)
 			if err != nil {
 				continue // Skip invalid stacks
 			}
@@ -61,5 +133,10 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any) (string
 	if len(components) == 0 {
 		return "No components found", nil
 	}
-	return strings.Join(components, "\n") + "\n", nil
+
+	for _, com := range components {
+		fmt.Fprintln(writer, com)
+	}
+	writer.Flush()
+	return "", nil
 }
