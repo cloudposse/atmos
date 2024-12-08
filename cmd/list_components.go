@@ -3,8 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -25,30 +23,37 @@ var listComponentsCmd = &cobra.Command{
 
 		stackFlag, _ := cmd.Flags().GetString("stack")
 
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		cliConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), color.New(color.FgRed))
-			return
-		}
-
-		stacksMap, err := e.ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false, false)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), color.New(color.FgRed))
-			return
-		}
-
-		output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+		componentList, err := l.FilterAndListComponents(stackFlag)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), color.New(color.FgYellow))
 			return
 		}
 
-		u.PrintMessageInColor(output, color.New(color.FgGreen))
+		if len(componentList) == 0 {
+			u.PrintMessageInColor("No components found", color.New(color.FgYellow))
+		} else {
+			for _, component := range componentList {
+				u.PrintMessageInColor(component+"\n", color.New(color.FgGreen))
+			}
+		}
 	},
 }
 
 func init() {
 	listComponentsCmd.PersistentFlags().StringP("stack", "s", "", "Filter components by stack (e.g., atmos list components -s stack1)")
 	listCmd.AddCommand(listComponentsCmd)
+	// Autocompletion for stack flag
+	listComponentsCmd.RegisterFlagCompletionFunc("stack", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		stacksList, err := l.FilterAndListStacks(toComplete)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+
+		return stacksList, cobra.ShellCompDirectiveNoFileComp
+	},
+	)
 }

@@ -3,16 +3,35 @@ package list
 import (
 	"fmt"
 	"sort"
-	"strings"
 
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/fatih/color"
 	"github.com/samber/lo"
 )
 
 // FilterAndListStacks filters stacks by the given component
-func FilterAndListStacks(stacksMap map[string]any, component string) (string, error) {
+func FilterAndListStacks(component string) ([]string, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	cliConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), color.New(color.FgRed))
+		return nil, err
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false, false)
+	if err != nil {
+		u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), color.New(color.FgRed))
+		return nil, err
+	}
+
+	var filteredStacks []string
+
 	if component != "" {
 		// Filter stacks by component
-		filteredStacks := []string{}
 		for stackName, stackData := range stacksMap {
 			v2, ok := stackData.(map[string]any)
 			if !ok {
@@ -32,14 +51,15 @@ func FilterAndListStacks(stacksMap map[string]any, component string) (string, er
 		}
 
 		if len(filteredStacks) == 0 {
-			return fmt.Sprintf("No stacks found for component '%s'"+"\n", component), nil
+			return nil, fmt.Errorf("no stacks found for component '%s'", component)
 		}
-		sort.Strings(filteredStacks)
-		return strings.Join(filteredStacks, "\n") + "\n", nil
+	} else {
+		// List all stacks
+		filteredStacks = lo.Keys(stacksMap)
 	}
 
-	// List all stacks
-	stacks := lo.Keys(stacksMap)
-	sort.Strings(stacks)
-	return strings.Join(stacks, "\n") + "\n", nil
+	// Sort the result
+	sort.Strings(filteredStacks)
+
+	return filteredStacks, nil
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -19,6 +20,19 @@ var validateComponentCmd = &cobra.Command{
 	Example: "atmos validate component <component> -s <stack>\n" +
 		"atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa>\n" +
 		"atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type opa --module-paths catalog",
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		componentList, err := l.FilterAndListComponents(toComplete)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+
+		return componentList, cobra.ShellCompDirectiveNoFileComp
+	},
+
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -47,6 +61,21 @@ func init() {
 	if err != nil {
 		u.LogErrorAndExit(schema.CliConfiguration{}, err)
 	}
+
+	// Autocompletion for stack flag
+	validateComponentCmd.RegisterFlagCompletionFunc("stack", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 1 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		stacksList, err := l.FilterAndListStacks(toComplete)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+
+		return stacksList, cobra.ShellCompDirectiveNoFileComp
+	},
+	)
 
 	validateCmd.AddCommand(validateComponentCmd)
 }
