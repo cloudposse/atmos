@@ -403,15 +403,15 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(cliConfig, "TTY is not supported. Running in non-interactive mode")
+			u.LogWarning(cliConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 
 		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
 		if err != nil {
-			return fmt.Errorf("error initializing model: %v", err)
+			return fmt.Errorf("failed to initialize TUI model: %v (check terminal capabilities)", err)
 		}
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
-			return fmt.Errorf("ExecuteAtmosVendorInternal error: %w", err)
+			return fmt.Errorf("failed to execute vendor operation in TUI mode: %w", err)
 		}
 	}
 
@@ -605,12 +605,6 @@ func validateURI(uri string) error {
 	// Validate characters
 	if strings.ContainsAny(uri, "<>|&;$") {
 		return fmt.Errorf("URI contains invalid characters")
-	}
-	// Validate scheme
-	if strings.HasPrefix(uri, "oci://") {
-		if !strings.Contains(uri[6:], "/") {
-			return fmt.Errorf("invalid OCI URI format")
-		}
 	}
 	return nil
 }
