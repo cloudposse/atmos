@@ -499,7 +499,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	// Determine if the URI is an OCI scheme, a local file, or remote
 	useOciScheme := strings.HasPrefix(*uri, "oci://")
 	if useOciScheme {
-		//*uri = strings.TrimPrefix(*uri, "oci://")
+		*uri = strings.TrimPrefix(*uri, "oci://")
 	}
 
 	useLocalFileSystem := false
