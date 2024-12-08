@@ -90,8 +90,18 @@ type Helmfile struct {
 }
 
 type Components struct {
-	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Terraform Terraform  `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile  Helmfile   `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	List      ListConfig `yaml:"list" json:"list" mapstructure:"list"`
+}
+
+type ListConfig struct {
+	Columns []ListColumnConfig `yaml:"columns" json:"columns" mapstructure:"columns"`
+}
+
+type ListColumnConfig struct {
+	Name  string `yaml:"name" json:"name" mapstructure:"name"`
+	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
 
 type Stacks struct {

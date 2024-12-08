@@ -18,6 +18,16 @@
 base_path: "."
 
 components:
+  list:
+    columns:
+      - name: Component
+        value: '{{ .atmos_component }}'
+      - name: Type
+        value: '{{ .atmos_component_type }}'
+      - name: Stack
+        value: '{{ .atmos_stack }}'
+      - name: Folder
+        value: '{{ .vars.tenant }}'
   terraform:
     # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
     # If not defined, `terraform` is used

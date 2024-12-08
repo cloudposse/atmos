@@ -3,13 +3,14 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
 )
 
 // listComponentsCmd lists atmos components
@@ -38,7 +39,7 @@ var listComponentsCmd = &cobra.Command{
 			return
 		}
 
-		output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+		output, err := l.FilterAndListComponents(stackFlag, stacksMap, cliConfig.Components.List)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), color.New(color.FgYellow))
 			return
