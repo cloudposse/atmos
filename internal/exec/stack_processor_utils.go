@@ -327,33 +327,6 @@ func ProcessYAMLConfigFile(
 		return nil, nil, nil, err
 	}
 
-	// Add the `overrides` section for all components in this manifest
-	if len(finalTerraformOverrides) > 0 || len(finalHelmfileOverrides) > 0 {
-		if componentsSection, ok := stackConfigMap["components"].(map[string]any); ok {
-			// Terraform
-			if len(finalTerraformOverrides) > 0 {
-				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
-					for _, compSection := range terraformSection {
-						if componentSection, ok := compSection.(map[string]any); ok {
-							componentSection["overrides"] = finalTerraformOverrides
-						}
-					}
-				}
-			}
-
-			// Helmfile
-			if len(finalHelmfileOverrides) > 0 {
-				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
-					for _, compSection := range helmfileSection {
-						if componentSection, ok := compSection.(map[string]any); ok {
-							componentSection["overrides"] = finalHelmfileOverrides
-						}
-					}
-				}
-			}
-		}
-	}
-
 	// Find and process all imports
 	importStructs, err := ProcessImportSection(stackConfigMap, relativeFilePath)
 	if err != nil {
@@ -481,6 +454,33 @@ func ProcessYAMLConfigFile(
 			}
 			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
+		}
+	}
+
+	// Add the `overrides` section for all components in this manifest
+	if len(finalTerraformOverrides) > 0 || len(finalHelmfileOverrides) > 0 {
+		if componentsSection, ok := stackConfigMap["components"].(map[string]any); ok {
+			// Terraform
+			if len(finalTerraformOverrides) > 0 {
+				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+					for _, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							componentSection[cfg.OverridesSectionName] = finalTerraformOverrides
+						}
+					}
+				}
+			}
+
+			// Helmfile
+			if len(finalHelmfileOverrides) > 0 {
+				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
+					for _, compSection := range helmfileSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							componentSection[cfg.OverridesSectionName] = finalHelmfileOverrides
+						}
+					}
+				}
+			}
 		}
 	}
 
