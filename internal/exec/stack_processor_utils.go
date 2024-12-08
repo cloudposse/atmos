@@ -285,7 +285,7 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Terraform overrides in this stack manifest
+	// Terraform overrides
 	if o, ok := stackConfigMap["terraform"]; ok {
 		if globalTerraformSection, ok = o.(map[string]any); !ok {
 			return nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
@@ -298,7 +298,15 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Helmfile overrides in this stack manifest
+	finalTerraformOverrides, err = m.Merge(
+		cliConfig,
+		[]map[string]any{globalOverrides, terraformOverrides, parentTerraformOverrides},
+	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Helmfile overrides
 	if o, ok := stackConfigMap["helmfile"]; ok {
 		if globalHelmfileSection, ok = o.(map[string]any); !ok {
 			return nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
@@ -311,16 +319,6 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Final Terraform `overrides`
-	finalTerraformOverrides, err = m.Merge(
-		cliConfig,
-		[]map[string]any{globalOverrides, terraformOverrides, parentTerraformOverrides},
-	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// Final Helmfile `overrides`
 	finalHelmfileOverrides, err = m.Merge(
 		cliConfig,
 		[]map[string]any{globalOverrides, helmfileOverrides, parentHelmfileOverrides},
