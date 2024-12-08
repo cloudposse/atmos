@@ -357,7 +357,7 @@ func ExecuteAtmosVendorInternal(
 			return err
 		}
 
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(uri, vendorConfigFilePath)
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(&uri, vendorConfigFilePath)
 
 		// Determine package type
 		var pType pkgType
@@ -495,20 +495,20 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-func determineSourceType(uri, vendorConfigFilePath string) (bool, bool, bool) {
+func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool) {
 	// Determine if the URI is an OCI scheme, a local file, or remote
-	useOciScheme := strings.HasPrefix(uri, "oci://")
+	useOciScheme := strings.HasPrefix(*uri, "oci://")
 	if useOciScheme {
-		uri = strings.TrimPrefix(uri, "oci://")
+		*uri = strings.TrimPrefix(*uri, "oci://")
 	}
 
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
 	if !useOciScheme {
-		if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, uri); err == nil {
-			uri = absPath
+		if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, *uri); err == nil {
+			uri = &absPath
 			useLocalFileSystem = true
-			sourceIsLocalFile = u.FileExists(uri)
+			sourceIsLocalFile = u.FileExists(*uri)
 		}
 	}
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
