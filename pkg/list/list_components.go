@@ -35,9 +35,13 @@ func getStackComponents(stackData any, listFields []string) ([]string, error) {
 
 	for _, dataKey := range uniqueKeys {
 		data := terraformComponents[dataKey]
+		dataMap, ok := data.(map[string]any)
+		if !ok {
+		    return nil, fmt.Errorf("unexpected data type for component '%s'", dataKey)
+		}
 		rowData := make([]string, 0)
 		for _, key := range listFields {
-			value, found := resolveKey(data.(map[string]any), key)
+			value, found := resolveKey(dataMap, key)
 			if !found {
 				value = "-"
 			}
