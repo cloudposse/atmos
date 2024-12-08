@@ -1,7 +1,9 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
 import:
-  # The `testing` Team manages all the components defined in the following stack manifests:
+  # The `testing` Team manages all the components defined in the following stack manifests
+  # The `overrides` in `teams/testing-overrides` will affect all the components in this stack manifest
+  # and all the imported components that are imported BEFORE importing the `overrides` in `teams/testing-overrides`
   - teams/testing-overrides
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
