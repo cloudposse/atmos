@@ -420,7 +420,7 @@ func ProcessYAMLConfigFile(
 			}
 		}
 
-		// Support `context` in hierarchical imports.
+		// Process `context` in hierarchical imports.
 		// Deep-merge the parent `context` with the current `context` and propagate the result to the entire chain of imports.
 		// The parent `context` takes precedence over the current (imported) `context` and will override items with the same keys.
 		// TODO: instead of calling the conversion functions, we need to switch to generics and update everything to support it
@@ -481,7 +481,7 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Add the `overrides` section for all components in this stack manifest
+	// Add the `overrides` section to all components in this stack manifest
 	if len(finalTerraformOverrides) > 0 || len(finalHelmfileOverrides) > 0 {
 		if componentsSection, ok := stackConfigMap[cfg.ComponentsSectionName].(map[string]any); ok {
 			// Terraform
