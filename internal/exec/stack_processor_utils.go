@@ -459,7 +459,7 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Add the `overrides` section for all components in this stack manifest
+	// Add the `overrides` section for all components in this manifest
 	if len(finalTerraformOverrides) > 0 || len(finalHelmfileOverrides) > 0 {
 		if componentsSection, ok := stackConfigMap["components"].(map[string]any); ok {
 			// Terraform
