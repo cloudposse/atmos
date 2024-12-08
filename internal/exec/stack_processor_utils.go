@@ -280,7 +280,7 @@ func ProcessYAMLConfigFile(
 
 	// Check if the `overrides` sections exist and if we need to process overrides for the components in this stack manifest and its imports
 
-	// Global overrides
+	// Global overrides in this stack manifest
 	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
 		if globalOverrides, ok = i.(map[string]any); !ok {
 			return nil, nil, nil, nil, nil, fmt.Errorf("invalid 'overrides' section in the stack manifest '%s'", relativeFilePath)
@@ -288,7 +288,7 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Terraform overrides in this stack manifest
-	if o, ok := stackConfigMap["terraform"]; ok {
+	if o, ok := stackConfigMap[cfg.TerraformSectionName]; ok {
 		if globalTerraformSection, ok = o.(map[string]any); !ok {
 			return nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
 		}
@@ -301,7 +301,7 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Helmfile overrides in this stack manifest
-	if o, ok := stackConfigMap["helmfile"]; ok {
+	if o, ok := stackConfigMap[cfg.HelmfileSectionName]; ok {
 		if globalHelmfileSection, ok = o.(map[string]any); !ok {
 			return nil, nil, nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
 		}
@@ -451,11 +451,13 @@ func ProcessYAMLConfigFile(
 			}
 
 			stackConfigs = append(stackConfigs, yamlConfig)
+
 			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
 				ext2 = u.DefaultStackConfigFileExtension
 			}
+
 			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
 		}
@@ -463,10 +465,10 @@ func ProcessYAMLConfigFile(
 
 	// Add the `overrides` section for all components in this stack manifest
 	if len(finalTerraformOverrides) > 0 || len(finalHelmfileOverrides) > 0 {
-		if componentsSection, ok := stackConfigMap["components"].(map[string]any); ok {
+		if componentsSection, ok := stackConfigMap[cfg.ComponentsSectionName].(map[string]any); ok {
 			// Terraform
 			if len(finalTerraformOverrides) > 0 {
-				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
+				if terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any); ok {
 					for _, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
 							componentSection[cfg.OverridesSectionName] = finalTerraformOverrides
@@ -477,7 +479,7 @@ func ProcessYAMLConfigFile(
 
 			// Helmfile
 			if len(finalHelmfileOverrides) > 0 {
-				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
+				if helmfileSection, ok := componentsSection[cfg.HelmfileSectionName].(map[string]any); ok {
 					for _, compSection := range helmfileSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
 							componentSection[cfg.OverridesSectionName] = finalHelmfileOverrides
