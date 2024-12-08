@@ -2,7 +2,6 @@
 
 import:
   # The `testing` Team manages all the components defined in the following stack manifests:
-  - teams/testing-overrides
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
 
