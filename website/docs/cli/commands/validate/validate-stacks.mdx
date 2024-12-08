@@ -25,6 +25,8 @@ atmos validate stacks
 This command validates Atmos stack manifests and checks the following:
 
 - All YAML manifest files for YAML errors and inconsistencies
+  - Note: Template files (`.yaml.tmpl`, `.yml.tmpl`, `.tmpl`) are excluded from validation since they may contain template placeholders that are invalid YAML before being rendered
+  - Template files are still automatically detected and processed during normal operations (imports, etc.)
 
 - All imports: if they are configured correctly, have valid data types, and point to existing manifest files
 
