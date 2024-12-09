@@ -15,7 +15,7 @@ import (
 
 // ExecuteDescribeStacksCmd executes `describe stacks` command
 func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -368,7 +368,12 @@ func ExecuteDescribeStacks(
 									u.LogErrorAndExit(cliConfig, err)
 								}
 
-								componentSection = componentSectionConverted
+								componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSection = componentSectionFinal
 							}
 
 							// Add sections
@@ -553,7 +558,12 @@ func ExecuteDescribeStacks(
 									u.LogErrorAndExit(cliConfig, err)
 								}
 
-								componentSection = componentSectionConverted
+								componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSection = componentSectionFinal
 							}
 
 							// Add sections

@@ -17,7 +17,7 @@ import (
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -254,7 +254,12 @@ func ExecuteTerraformGenerateBackends(
 					u.LogErrorAndExit(cliConfig, err)
 				}
 
-				componentSection = componentSectionConverted
+				componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+				if err != nil {
+					return err
+				}
+
+				componentSection = componentSectionFinal
 
 				if i, ok := componentSection[cfg.BackendSectionName].(map[string]any); ok {
 					backendSection = i
