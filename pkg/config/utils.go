@@ -30,8 +30,8 @@ func FindAllStackConfigsInPathsForStack(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			// During validation, we don't want to include template files
-			patterns = getStackFilePatterns(p, false)
+			// Get all patterns since filtering is done later
+			patterns = getStackFilePatterns(p, true)
 		}
 
 		var allMatches []string
@@ -133,8 +133,8 @@ func FindAllStackConfigsInPaths(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			// During validation, we don't want to include template files
-			patterns = getStackFilePatterns(p, false)
+			// Get all patterns since filtering is done later
+			patterns = getStackFilePatterns(p, true)
 		}
 
 		var allMatches []string
@@ -674,13 +674,12 @@ func GetStackNameFromContextAndStackNamePattern(
 // getStackFilePatterns returns a slice of possible file patterns for a given base path
 func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	patterns := []string{
-		basePath + u.DefaultStackConfigFileExtension,
+		basePath + u.YamlFileExtension,
 		basePath + u.YmlFileExtension,
 	}
 
 	if includeTemplates {
 		patterns = append(patterns,
-			basePath+u.DefaultStackConfigFileExtension+u.TemplateExtension,
 			basePath+u.YamlTemplateExtension,
 			basePath+u.YmlTemplateExtension,
 		)
