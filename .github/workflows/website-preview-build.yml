@@ -38,7 +38,7 @@ jobs:
         run: |
           node --version
           cd website
-          npm install --only=production
+          npm ci --only=production
           npm run build:site
 
       - name: Upload artifacts
