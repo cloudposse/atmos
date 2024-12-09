@@ -1,48 +1,43 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
 import:
-  # The `testing` Team manages all the components defined in the following stack manifests
+  # The `testing` Team manages all the components defined in this stack manifest and imported from the catalog
+  - catalog/terraform/test-component-2
   # The `overrides` in `teams/testing-overrides` will affect all the components in this stack manifest
-  # and all the imported components that are imported BEFORE importing the `overrides` in `teams/testing-overrides`
+  # and all the components that are imported AFTER the `overrides` from `teams/testing-overrides`.
+  # It will affect the components imported from `catalog/terraform/test-component-2`.
+  # The `overrides` defined in this manifest will affect all the imported components, including `catalog/terraform/test-component-2`.
   - teams/testing-overrides
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
 
-## Global overrides.
-## Override the variables, env, command and settings ONLY in the components managed by the `testing` Team.
-#overrides:
-#  env:
-#    # This ENV variable will be added or overridden in all the components managed by the `testing` Team
-#    TEST_ENV_VAR1: "test-env-var1-overridden"
-#  settings: {}
-#  vars: {}
-#
-## Terraform overrides.
-## Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
-## The Terraform `overrides` are deep-merged with the global `overrides`
-## and takes higher priority (it will override the same keys from the global `overrides`).
-#terraform:
-#  overrides:
-#    settings:
-#      spacelift:
-#        # All the components managed by the `testing` Team will have the Spacelift stacks auto-applied
-#        # if the planning phase was successful and there are no plan policy warnings
-#        # https://docs.spacelift.io/concepts/stack/stack-settings#autodeploy
-#        autodeploy: true
-#    vars:
-#      # This variable will be added or overridden in all the Terraform components managed by the `testing` Team
-#      test_1: 1
-#    # The `testing` Team uses `tofu` instead of `terraform`
-#    # https://opentofu.org
-#    # The commands `atmos terraform <sub-command> ...` will execute the `tofu` binary
-#    command: tofu
-#
-## Helmfile overrides.
-## Override the variables, env, command and settings ONLY in the Helmfile components managed by the `testing` Team.
-## The Helmfile `overrides` are deep-merged with the global `overrides`
-## and takes higher priority (it will override the same keys from the global `overrides`).
-#helmfile:
-#  overrides:
-#    env:
-#      # This ENV variable will be added or overridden in all the Helmfile components managed by the `testing` Team
-#      TEST_ENV_VAR2: "test-env-var2-overridden"
+# The `overrides` in this stack manifest take precedence over the `overrides` imported from `teams/testing-overrides`
+
+# Global overrides
+# Override the variables, env, command and settings ONLY in the components managed by the `testing` Team.
+overrides:
+  env:
+    # This ENV variable will be added or overridden in all the components managed by the `testing` Team
+    TEST_ENV_VAR1: "test-env-var1-overridden-2"
+  settings: {}
+  vars: {}
+
+# Terraform overrides
+# Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
+# The Terraform `overrides` are deep-merged with the global `overrides`
+# and takes higher priority (it will override the same keys from the global `overrides`).
+terraform:
+  overrides:
+    vars:
+      # This variable will be added or overridden in all the Terraform components managed by the `testing` Team
+      test_1: 2
+
+# Helmfile overrides
+# Override the variables, env, command and settings ONLY in the Helmfile components managed by the `testing` Team.
+# The Helmfile `overrides` are deep-merged with the global `overrides`
+# and takes higher priority (it will override the same keys from the global `overrides`).
+helmfile:
+  overrides:
+    env:
+      # This ENV variable will be added or overridden in all the Helmfile components managed by the `testing` Team
+      TEST_ENV_VAR2: "test-env-var2-overridden-2"
