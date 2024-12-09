@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 
@@ -37,6 +38,21 @@ func init() {
 	if err != nil {
 		u.LogErrorAndExit(schema.CliConfiguration{}, err)
 	}
+
+	// Autocompletion for stack flag
+	describeDependentsCmd.RegisterFlagCompletionFunc("stack", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		stacksList, err := l.FilterAndListStacks(toComplete)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+
+		return stacksList, cobra.ShellCompDirectiveNoFileComp
+	},
+	)
 
 	describeCmd.AddCommand(describeDependentsCmd)
 }
