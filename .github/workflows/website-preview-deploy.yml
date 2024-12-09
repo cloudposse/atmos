@@ -20,6 +20,7 @@ env:
 permissions:
   id-token: write
   contents: read
+  deployments: write
 
 jobs:
   website-deploy-preview:
