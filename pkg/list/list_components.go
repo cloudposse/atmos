@@ -89,23 +89,26 @@ func resolveKey(data map[string]any, key string) (any, bool) {
 
 // parseColumns extracts the header and list fields from the listConfig
 func parseColumns(listConfig schema.ListConfig) ([]string, []string, error) {
-	header := make([]string, 0)
-	listFields := make([]string, 0)
-	re := regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
+    if len(listConfig.Columns) == 0 {
+        return nil, nil, fmt.Errorf("no columns configured")
+    }
+    header := make([]string, 0)
+    listFields := make([]string, 0)
+    re := regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
 
-	for _, col := range listConfig.Columns {
-		if col.Value == "" {
-			return nil, nil, fmt.Errorf("empty value for column name %s", col.Name)
-		}
-		header = append(header, col.Name)
-		match := re.FindStringSubmatch(col.Value)
-		if len(match) > 1 {
-			listFields = append(listFields, match[1])
-		} else {
-			return nil, nil, fmt.Errorf("invalid value format for column name %s", col.Name)
-		}
-	}
-	return header, listFields, nil
+    for _, col := range listConfig.Columns {
+        if col.Value == "" {
+            return nil, nil, fmt.Errorf("empty value for column name %s", col.Name)
+        }
+        header = append(header, col.Name)
+        match := re.FindStringSubmatch(col.Value)
+        if len(match) > 1 {
+            listFields = append(listFields, match[1])
+        } else {
+            return nil, nil, fmt.Errorf("invalid value format for column name %s", col.Name)
+        }
+    }
+    return header, listFields, nil
 }
 
 // collectComponents gathers components for the specified stack or all stacks
