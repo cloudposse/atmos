@@ -2,12 +2,11 @@ package list
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -37,7 +36,7 @@ func getStackComponents(stackData any, listFields []string) ([]string, error) {
 		data := terraformComponents[dataKey]
 		dataMap, ok := data.(map[string]any)
 		if !ok {
-		    return nil, fmt.Errorf("unexpected data type for component '%s'", dataKey)
+			return nil, fmt.Errorf("unexpected data type for component '%s'", dataKey)
 		}
 		rowData := make([]string, 0)
 		for _, key := range listFields {
@@ -84,14 +83,18 @@ func resolveKey(data map[string]any, key string) (any, bool) {
 
 // FilterAndListComponents filters and lists components based on the given stack
 func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listConfig schema.ListConfig) (string, error) {
-	components := []string{}
+	components := [][]string{}
 
-	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.AlignRight)
+	// Define lipgloss styles for headers and rows
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00BFFF"))
+	rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+
 	header := make([]string, 0)
 	listFields := make([]string, 0)
 
 	re := regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
 
+	// Extract and format headers
 	for _, v := range listConfig.Columns {
 		header = append(header, v.Name)
 		match := re.FindStringSubmatch(v.Value)
@@ -102,8 +105,8 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listCon
 			return "", fmt.Errorf("invalid value format for column name %s", v.Name)
 		}
 	}
-	fmt.Fprintln(writer, strings.Join(header, "\t\t"))
 
+	// Collect components for the table
 	if stackFlag != "" {
 		// Filter components for the specified stack
 		if stackData, ok := stacksMap[stackFlag]; ok {
@@ -111,7 +114,9 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listCon
 			if err != nil {
 				return "", fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
 			}
-			components = append(components, stackComponents...)
+			for _, c := range stackComponents {
+				components = append(components, strings.Fields(c))
+			}
 		} else {
 			return "", fmt.Errorf("stack '%s' not found", stackFlag)
 		}
@@ -122,21 +127,60 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listCon
 			if err != nil {
 				continue // Skip invalid stacks
 			}
-			components = append(components, stackComponents...)
+			for _, c := range stackComponents {
+				components = append(components, strings.Fields(c))
+			}
 		}
 	}
 
-	// Remove duplicates and sort components
-	components = lo.Uniq(components)
-	sort.Strings(components)
+	// Remove duplicates, sort, and prepare rows
+	componentsMap := lo.UniqBy(components, func(item []string) string {
+		return strings.Join(item, "\t")
+	})
+	sort.Slice(componentsMap, func(i, j int) bool {
+		return strings.Join(componentsMap[i], "\t") < strings.Join(componentsMap[j], "\t")
+	})
 
-	if len(components) == 0 {
+	if len(componentsMap) == 0 {
 		return "No components found", nil
 	}
 
-	for _, com := range components {
-		fmt.Fprintln(writer, com)
+	// Determine column widths
+	colWidths := make([]int, len(header))
+	for i, h := range header {
+		colWidths[i] = len(h)
 	}
-	writer.Flush()
+	for _, row := range componentsMap {
+		for i, field := range row {
+			if len(field) > colWidths[i] {
+				colWidths[i] = len(field)
+			}
+		}
+	}
+
+	// Format the headers
+	headerRow := make([]string, len(header))
+	for i, h := range header {
+		headerRow[i] = headerStyle.Render(padToWidth(h, colWidths[i]))
+	}
+	fmt.Println(strings.Join(headerRow, "  "))
+
+	// Format the rows
+	for _, row := range componentsMap {
+		formattedRow := make([]string, len(row))
+		for i, field := range row {
+			formattedRow[i] = rowStyle.Render(padToWidth(field, colWidths[i]))
+		}
+		fmt.Println(strings.Join(formattedRow, "  "))
+	}
+
 	return "", nil
+}
+
+// padToWidth ensures a string is padded to the given width
+func padToWidth(str string, width int) string {
+	for len(str) < width {
+		str += " "
+	}
+	return str
 }
