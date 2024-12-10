@@ -17,7 +17,7 @@ type CliConfiguration struct {
 	Schemas                       Schemas            `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates          `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Settings                      CliSettings        `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
-	Stores                        store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	StacksBaseAbsolutePath        string             `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
@@ -29,6 +29,11 @@ type CliConfiguration struct {
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
 	Default                       bool               `yaml:"default" json:"default" mapstructure:"default"`
+
+	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
+	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
+	// functions to be able to call stores from within hooks.
+	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
 }
 
 type CliSettings struct {

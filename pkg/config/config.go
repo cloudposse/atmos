@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -81,6 +82,7 @@ var (
 				},
 			},
 		},
+		Stores:      make(map[string]store.Store),
 		Initialized: true,
 	}
 )
@@ -236,6 +238,11 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 	// Process command-line args
 	err = processCommandLineArgs(&cliConfig, configAndStacksInfo)
+	if err != nil {
+		return cliConfig, err
+	}
+
+	err = processStoreConfig(&cliConfig)
 	if err != nil {
 		return cliConfig, err
 	}

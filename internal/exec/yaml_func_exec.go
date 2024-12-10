@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cloudposse/atmos/pkg/config"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -12,7 +12,7 @@ import (
 func processTagExec(cliConfig schema.CliConfiguration, input string) any {
 	u.LogTrace(cliConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
-	str, err := getStringAfterTag(cliConfig, input, config.AtmosYamlFuncExec)
+	str, err := getStringAfterTag(cliConfig, input, u.AtmosYamlFuncExec)
 
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)

@@ -74,9 +74,4 @@ const (
 	AtmosProTokenEnvVarName    = "ATMOS_PRO_TOKEN"
 	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
 	AtmosProDefaultEndpoint    = "api"
-
-	// Atmos YAML functions
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
 )
