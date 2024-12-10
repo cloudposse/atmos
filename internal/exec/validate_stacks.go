@@ -113,8 +113,13 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
 	includedPaths := []string{"**/*"}
-	// Don't exclude any YAML files for validation
-	excludedPaths := []string{}
+	// Don't exclude any YAML files for validation except template files
+	excludedPaths := []string{
+		// Exclude template files from validation since they may contain invalid YAML before being rendered
+		"**/*.tmpl",
+		"**/*.yaml.tmpl",
+		"**/*.yml.tmpl",
+	}
 	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(cliConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
@@ -125,7 +130,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		return err
 	}
 
-	u.LogDebug(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders\n",
+	u.LogDebug(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
 		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
