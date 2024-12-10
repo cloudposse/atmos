@@ -69,6 +69,15 @@ For example, if you import `catalog/file1`, Atmos will:
 
 This feature makes it easier to work with templated configurations as you don't need to explicitly specify the template file extension - Atmos will automatically use the template version when available.
 
+:::note Template File Validation
+While template files are automatically detected and processed during normal operations (imports, etc.), they are excluded from YAML validation (`atmos validate stacks`) since they may contain template placeholders that are invalid YAML before being rendered.
+
+This means:
+- Template files are fully supported for imports and normal operations
+- Template files are skipped during `atmos validate stacks` to prevent validation errors from unrendered templates
+- You don't need to explicitly specify template extensions - Atmos will find them automatically
+:::
+
 ## Conventions
 
 We recommend placing all baseline "imports" in the `stacks/catalog` folder, however, they can exist anywhere.
