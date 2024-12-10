@@ -320,6 +320,9 @@
             "real"
           ]
         },
+        "enabled": {
+          "type": "boolean"
+        },
         "component": {
           "type": "string"
         },
