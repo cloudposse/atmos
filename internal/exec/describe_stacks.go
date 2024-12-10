@@ -140,6 +140,7 @@ func ExecuteDescribeStacks(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var hooksSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
 	var backendTypeSection string
@@ -226,6 +227,10 @@ func ExecuteDescribeStacks(
 							providersSection = map[string]any{}
 						}
 
+						if hooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
+							hooksSection = map[string]any{}
+						}
+
 						if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
 							overridesSection = map[string]any{}
 						}
@@ -255,6 +260,7 @@ func ExecuteDescribeStacks(
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
 								cfg.ProvidersSectionName:   providersSection,
+								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
@@ -419,6 +425,10 @@ func ExecuteDescribeStacks(
 							providersSection = map[string]any{}
 						}
 
+						if hooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
+							hooksSection = map[string]any{}
+						}
+
 						if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
 							overridesSection = map[string]any{}
 						}
@@ -448,6 +458,7 @@ func ExecuteDescribeStacks(
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
 								cfg.ProvidersSectionName:   providersSection,
+								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,

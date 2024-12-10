@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func ProcessCustomYamlTags(cliConfig schema.CliConfiguration, input schema.AtmosSectionMapType) (schema.AtmosSectionMapType, error) {
@@ -48,16 +48,21 @@ func processNodes(cliConfig schema.CliConfiguration, data map[string]any) map[st
 }
 
 func processCustomTags(cliConfig schema.CliConfiguration, input string) any {
-	if strings.HasPrefix(input, config.AtmosYamlFuncTemplate) {
-		return processTagTemplate(cliConfig, input)
-	} else if strings.HasPrefix(input, config.AtmosYamlFuncExec) {
-		return processTagExec(cliConfig, input)
-	} else if strings.HasPrefix(input, config.AtmosYamlFuncTerraformOutput) {
-		return processTagTerraformOutput(cliConfig, input)
-	}
+	//log.Info("Processing custom tags", "input", input)
 
-	// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
-	return input
+	switch {
+	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate):
+		return processTagTemplate(cliConfig, input)
+	case strings.HasPrefix(input, u.AtmosYamlFuncExec):
+		return processTagExec(cliConfig, input)
+	case strings.HasPrefix(input, u.AtmosYamlFuncStore):
+		return processTagStore(cliConfig, input)
+	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput):
+		return processTagTerraformOutput(cliConfig, input)
+	default:
+		// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
+		return input
+	}
 }
 
 func getStringAfterTag(cliConfig schema.CliConfiguration, input string, tag string) (string, error) {

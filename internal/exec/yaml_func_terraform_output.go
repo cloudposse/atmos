@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -18,7 +17,7 @@ var (
 func processTagTerraformOutput(cliConfig schema.CliConfiguration, input string) any {
 	u.LogTrace(cliConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
-	str, err := getStringAfterTag(cliConfig, input, config.AtmosYamlFuncTerraformOutput)
+	str, err := getStringAfterTag(cliConfig, input, u.AtmosYamlFuncTerraformOutput)
 
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)

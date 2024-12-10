@@ -8,11 +8,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// Atmos YAML functions
+	AtmosYamlFuncExec            = "!exec"
+	AtmosYamlFuncStore           = "!store"
+	AtmosYamlFuncTemplate        = "!template"
+	AtmosYamlFuncTerraformOutput = "!terraform.output"
+)
+
 var (
 	AtmosYamlTags = []string{
-		"!terraform.output",
-		"!exec",
-		"!template",
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
 	}
 )
 
