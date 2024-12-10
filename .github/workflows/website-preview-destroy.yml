@@ -53,5 +53,6 @@ jobs:
         with:
           step: deactivate-env
           env: preview
+          override: false
           ref: ${{ steps.get_branch.outputs.branch }}
           desc: Environment was pruned
