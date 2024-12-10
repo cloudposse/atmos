@@ -30,7 +30,8 @@ func FindAllStackConfigsInPathsForStack(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			patterns = getStackFilePatterns(p)
+			// Get all patterns since filtering is done later
+			patterns = getStackFilePatterns(p, true)
 		}
 
 		var allMatches []string
@@ -125,7 +126,8 @@ func FindAllStackConfigsInPaths(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			patterns = getStackFilePatterns(p)
+			// Get all patterns since filtering is done later
+			patterns = getStackFilePatterns(p, true)
 		}
 
 		var allMatches []string
@@ -656,18 +658,26 @@ func GetStackNameFromContextAndStackNamePattern(
 }
 
 // getStackFilePatterns returns a slice of possible file patterns for a given base path
-func getStackFilePatterns(basePath string) []string {
-	return []string{
-		basePath + u.DefaultStackConfigFileExtension,
-		basePath + u.DefaultStackConfigFileExtension + u.TemplateExtension,
-		basePath + u.YamlTemplateExtension,
-		basePath + u.YmlTemplateExtension,
+func getStackFilePatterns(basePath string, includeTemplates bool) []string {
+	patterns := []string{
+		basePath + u.YamlFileExtension,
+		basePath + u.YmlFileExtension,
 	}
+
+	if includeTemplates {
+		patterns = append(patterns,
+			basePath+u.YamlTemplateExtension,
+			basePath+u.YmlTemplateExtension,
+		)
+	}
+
+	return patterns
 }
 
 // matchesStackFilePattern checks if a file path matches any of the valid stack file patterns
 func matchesStackFilePattern(filePath, stackName string) bool {
-	patterns := getStackFilePatterns(stackName)
+	// Always include template files for normal operations (imports, etc.)
+	patterns := getStackFilePatterns(stackName, true)
 	for _, pattern := range patterns {
 		if strings.HasSuffix(filePath, pattern) {
 			return true
@@ -685,12 +695,8 @@ func getConfigFilePatterns(path string, forGlobMatch bool) []string {
 		return []string{path}
 	}
 
-	patterns := []string{
-		path + u.DefaultStackConfigFileExtension,
-		path + u.DefaultStackConfigFileExtension + u.TemplateExtension,
-		path + u.YamlTemplateExtension,
-		path + u.YmlTemplateExtension,
-	}
+	// include template files for normal operations
+	patterns := getStackFilePatterns(path, true)
 	if !forGlobMatch {
 		// For direct file search, include the exact path without extension
 		patterns = append([]string{path}, patterns...)

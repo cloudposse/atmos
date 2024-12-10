@@ -1,0 +1,50 @@
+name: "Website Preview Build"
+
+on:
+  workflow_dispatch:
+
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - "website/**"
+
+# These permissions are needed to interact with the GitHub's OIDC Token endpoint
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  website-deploy-preview:
+    # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
+    if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "website/.nvmrc"
+
+      - name: Install Dependencies and Build Website
+        run: |
+          node --version
+          cd website
+          npm ci --only=production
+          npm run build:site
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: website
+          path: website/build
+          if-no-files-found: error
+          retention-days: 1

@@ -1,18 +1,18 @@
-name: "Deploy Preview"
+name: "Website Preview Deploy"
 
 on:
   workflow_run:
-    workflows: [Website Deploy Preview]
+    workflows: [Website Preview Build]
     types:
       - completed
 
 env:
   AWS_REGION: us-east-2
   IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
-  IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-pr-${{ github.event.workflow_run.pull_requests.0.number }}
+  IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-pr-${{ github.event.workflow_run.pull_requests[0].number }}
   S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
-  PR_NUMBER: ${{ github.event.workflow_run.pull_requests.0.number }}
-  DEPLOYMENT_HOST: pr-${{ github.event.workflow_run.pull_requests.0.number }}.atmos-docs.ue2.dev.plat.cloudposse.org
+  PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+  DEPLOYMENT_HOST: pr-${{ github.event.workflow_run.pull_requests[0].number }}.atmos-docs.ue2.dev.plat.cloudposse.org
   ALGOLIA_INDEX_NAME: atmos-preview.tools
   ALGOLIA_APP_ID: 32YOERUX83
 
@@ -20,6 +20,7 @@ env:
 permissions:
   id-token: write
   contents: read
+  deployments: write
 
 jobs:
   website-deploy-preview:
@@ -27,10 +28,22 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' && !contains(github.event.workflow_run.pull_requests.*.labels.*.name, 'website-no-deploy')  }}
     runs-on: ubuntu-latest
     environment:
-      name: preview
-      url: https://${{ env.DEPLOYMENT_HOST }}
+      name: release
 
     steps:
+      - name: Start deployment
+        uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
+        id: deployment
+        with:
+          step: start
+          env: preview
+          ref: ${{ github.event.workflow_run.pull_requests[0].head.ref }}
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -39,12 +52,19 @@ jobs:
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
+      - uses: actions/create-github-app-token@v1
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: website
           path: website/build
           run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ steps.github-app.outputs.token }}
 
       - name: Copy Website to S3 Bucket PR Folder
         run: |
@@ -59,3 +79,14 @@ jobs:
           ALGOLIA_SCRAPER_API_KEY: ${{ secrets.ALGOLIA_SCRAPER_API_KEY }}
         run: |
           ./website/algolia/reindex.sh
+
+      - name: Update deployment status
+        uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
+        if: always()
+        with:
+          step: finish
+          status: ${{ job.status }}
+          env: ${{ steps.deployment.outputs.env }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+          env_url: https://${{ env.DEPLOYMENT_HOST }}
+          auto_inactive: true
