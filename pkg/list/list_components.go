@@ -12,11 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const (
-	HeaderColor = "#00BFFF"
-	RowColor    = "#FFFFFF"
-)
-
 type tableData struct {
 	header    []string
 	rows      [][]string
@@ -174,34 +169,78 @@ func processComponents(header []string, components [][]string) ([][]string, []in
 	return uniqueComponents, colWidths
 }
 
-// formatTable generates the formatted table
-func formatTable(data tableData) {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(HeaderColor))
-	rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(RowColor))
+func generateTable(data tableData) {
+	// Style definitions
+	purple := lipgloss.Color("5")
+	headerStyle := lipgloss.NewStyle().
+		Foreground(purple).
+		Bold(true).
+		Align(lipgloss.Center)
+	cellStyle := lipgloss.NewStyle().
+		Padding(0, 1)
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(purple).
+		Padding(0)
 
-	// Format and print headers
-	headerRow := make([]string, len(data.header))
-	for i, h := range data.header {
-		headerRow[i] = headerStyle.Render(padToWidth(h, data.colWidths[i]))
+	// Calculate the maximum width for each column
+	colWidths := make([]int, len(data.header))
+	for i, header := range data.header {
+		colWidths[i] = len(header)
 	}
-	fmt.Println(strings.Join(headerRow, "  "))
-
-	// Format and print rows
 	for _, row := range data.rows {
-		formattedRow := make([]string, len(row))
-		for i, field := range row {
-			formattedRow[i] = rowStyle.Render(padToWidth(field, data.colWidths[i]))
+		for i, cell := range row {
+			if len(cell) > colWidths[i] {
+				colWidths[i] = len(cell)
+			}
 		}
-		fmt.Println(strings.Join(formattedRow, "  "))
 	}
+
+	// Standardize column widths across all rows
+	for i, width := range colWidths {
+		colWidths[i] = width + 2 // Add padding to each column
+	}
+
+	// Build formatted table rows
+	var tableRows []string
+
+	// Add the header
+	headerRow := formatRow(data.header, colWidths, headerStyle)
+	tableRows = append(tableRows, headerRow)
+
+	// Add a separator
+	separator := createSeparator(colWidths)
+	tableRows = append(tableRows, separator)
+
+	// Add data rows
+	for _, row := range data.rows {
+		formattedRow := formatRow(row, colWidths, cellStyle)
+		tableRows = append(tableRows, formattedRow)
+	}
+
+	// Combine rows into a single string
+	table := strings.Join(tableRows, "\n")
+
+	// Apply border and print the table
+	fmt.Println(borderStyle.Render(table))
 }
 
-// padToWidth ensures a string is padded to the given width
-func padToWidth(str string, width int) string {
-	for len(str) < width {
-		str += " "
+// formatRow creates a single formatted row
+func formatRow(row []string, colWidths []int, style lipgloss.Style) string {
+	formattedCells := make([]string, len(row))
+	for i, cell := range row {
+		formattedCells[i] = style.Width(colWidths[i]).Render(cell)
 	}
-	return str
+	return strings.Join(formattedCells, "│")
+}
+
+// createSeparator generates a horizontal separator for the table
+func createSeparator(colWidths []int) string {
+	segments := make([]string, len(colWidths))
+	for i, width := range colWidths {
+		segments[i] = strings.Repeat("─", width)
+	}
+	return strings.Join(segments, "┼")
 }
 
 // FilterAndListComponents orchestrates the process
@@ -230,7 +269,7 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listCon
 		rows:      processedComponents,
 		colWidths: colWidths,
 	}
-	formatTable(data)
+	generateTable(data)
 
 	return "", nil
 }

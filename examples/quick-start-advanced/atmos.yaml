@@ -24,8 +24,10 @@ components:
         value: '{{ .atmos_component }}'
       - name: Stack
         value: '{{ .atmos_stack }}'
-      - name: Folder
+      - name: Tenant
         value: '{{ .vars.tenant }}'
+      - name: Region
+        value: '{{ .vars.region }}'
   terraform:
     # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
     # If not defined, `terraform` is used
