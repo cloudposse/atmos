@@ -120,7 +120,12 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 func WrappedFlagUsages(f *pflag.FlagSet) string {
 	var builder strings.Builder
 	width := getTerminalWidth()
-	printer := NewHelpFlagPrinter(&builder, uint(width), f)
+	printer, err := NewHelpFlagPrinter(&builder, uint(width), f)
+	if err != nil {
+		// If we can't create the printer, return empty string
+		// This is unlikely to happen since we're using a strings.Builder
+		return ""
+	}
 
 	printer.maxFlagLen = calculateMaxFlagLength(f)
 
