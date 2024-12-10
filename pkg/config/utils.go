@@ -62,13 +62,6 @@ func FindAllStackConfigsInPathsForStack(
 
 		// Process all matches found
 		for _, matchedFileAbsolutePath := range allMatches {
-			// Skip template files
-			if strings.HasSuffix(matchedFileAbsolutePath, u.TemplateExtension) ||
-				strings.HasSuffix(matchedFileAbsolutePath, u.YamlTemplateExtension) ||
-				strings.HasSuffix(matchedFileAbsolutePath, u.YmlTemplateExtension) {
-				continue
-			}
-
 			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
@@ -165,13 +158,6 @@ func FindAllStackConfigsInPaths(
 
 		// Process all matches found
 		for _, matchedFileAbsolutePath := range allMatches {
-			// Skip template files
-			if strings.HasSuffix(matchedFileAbsolutePath, u.TemplateExtension) ||
-				strings.HasSuffix(matchedFileAbsolutePath, u.YamlTemplateExtension) ||
-				strings.HasSuffix(matchedFileAbsolutePath, u.YmlTemplateExtension) {
-				continue
-			}
-
 			matchedFileRelativePath := u.TrimBasePathFromPath(cliConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 			include := true
 
