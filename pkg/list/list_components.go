@@ -12,6 +12,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	HeaderColor = "#00BFFF"
+	RowColor    = "#FFFFFF"
+)
+
+type tableData struct {
+	header    []string
+	rows      [][]string
+	colWidths []int
+}
+
 // getStackComponents extracts Terraform components from the final map of stacks
 func getStackComponents(stackData any, listFields []string) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
@@ -81,47 +92,43 @@ func resolveKey(data map[string]any, key string) (any, bool) {
 	return nil, false
 }
 
-// FilterAndListComponents filters and lists components based on the given stack
-func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listConfig schema.ListConfig) (string, error) {
-	components := [][]string{}
-
-	// Define lipgloss styles for headers and rows
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00BFFF"))
-	rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
-
+// parseColumns extracts the header and list fields from the listConfig
+func parseColumns(listConfig schema.ListConfig) ([]string, []string, error) {
 	header := make([]string, 0)
 	listFields := make([]string, 0)
-
 	re := regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
 
-	// Extract and format headers
-	for _, v := range listConfig.Columns {
-		header = append(header, v.Name)
-		match := re.FindStringSubmatch(v.Value)
-
+	for _, col := range listConfig.Columns {
+		header = append(header, col.Name)
+		match := re.FindStringSubmatch(col.Value)
 		if len(match) > 1 {
 			listFields = append(listFields, match[1])
 		} else {
-			return "", fmt.Errorf("invalid value format for column name %s", v.Name)
+			return nil, nil, fmt.Errorf("invalid value format for column name %s", col.Name)
 		}
 	}
+	return header, listFields, nil
+}
 
-	// Collect components for the table
+// collectComponents gathers components for the specified stack or all stacks
+func collectComponents(stackFlag string, stacksMap map[string]any, listFields []string) ([][]string, error) {
+	components := [][]string{}
+
 	if stackFlag != "" {
 		// Filter components for the specified stack
 		if stackData, ok := stacksMap[stackFlag]; ok {
 			stackComponents, err := getStackComponents(stackData, listFields)
 			if err != nil {
-				return "", fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
+				return nil, fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
 			}
 			for _, c := range stackComponents {
 				components = append(components, strings.Fields(c))
 			}
 		} else {
-			return "", fmt.Errorf("stack '%s' not found", stackFlag)
+			return nil, fmt.Errorf("stack '%s' not found", stackFlag)
 		}
 	} else {
-		// Get all components from all stacks
+		// Collect components from all stacks
 		for _, stackData := range stacksMap {
 			stackComponents, err := getStackComponents(stackData, listFields)
 			if err != nil {
@@ -132,25 +139,23 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listCon
 			}
 		}
 	}
+	return components, nil
+}
 
-	// Remove duplicates, sort, and prepare rows
-	componentsMap := lo.UniqBy(components, func(item []string) string {
+// processComponents deduplicates, sorts, and calculates column widths
+func processComponents(header []string, components [][]string) ([][]string, []int) {
+	uniqueComponents := lo.UniqBy(components, func(item []string) string {
 		return strings.Join(item, "\t")
 	})
-	sort.Slice(componentsMap, func(i, j int) bool {
-		return strings.Join(componentsMap[i], "\t") < strings.Join(componentsMap[j], "\t")
+	sort.Slice(uniqueComponents, func(i, j int) bool {
+		return strings.Join(uniqueComponents[i], "\t") < strings.Join(uniqueComponents[j], "\t")
 	})
 
-	if len(componentsMap) == 0 {
-		return "No components found", nil
-	}
-
-	// Determine column widths
 	colWidths := make([]int, len(header))
 	for i, h := range header {
 		colWidths[i] = len(h)
 	}
-	for _, row := range componentsMap {
+	for _, row := range uniqueComponents {
 		for i, field := range row {
 			if len(field) > colWidths[i] {
 				colWidths[i] = len(field)
@@ -158,23 +163,29 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listCon
 		}
 	}
 
-	// Format the headers
-	headerRow := make([]string, len(header))
-	for i, h := range header {
-		headerRow[i] = headerStyle.Render(padToWidth(h, colWidths[i]))
+	return uniqueComponents, colWidths
+}
+
+// formatTable generates the formatted table
+func formatTable(data tableData) {
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(HeaderColor))
+	rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(RowColor))
+
+	// Format and print headers
+	headerRow := make([]string, len(data.header))
+	for i, h := range data.header {
+		headerRow[i] = headerStyle.Render(padToWidth(h, data.colWidths[i]))
 	}
 	fmt.Println(strings.Join(headerRow, "  "))
 
-	// Format the rows
-	for _, row := range componentsMap {
+	// Format and print rows
+	for _, row := range data.rows {
 		formattedRow := make([]string, len(row))
 		for i, field := range row {
-			formattedRow[i] = rowStyle.Render(padToWidth(field, colWidths[i]))
+			formattedRow[i] = rowStyle.Render(padToWidth(field, data.colWidths[i]))
 		}
 		fmt.Println(strings.Join(formattedRow, "  "))
 	}
-
-	return "", nil
 }
 
 // padToWidth ensures a string is padded to the given width
@@ -183,4 +194,35 @@ func padToWidth(str string, width int) string {
 		str += " "
 	}
 	return str
+}
+
+// FilterAndListComponents orchestrates the process
+func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listConfig schema.ListConfig) (string, error) {
+	// Step 1: Parse columns
+	header, listFields, err := parseColumns(listConfig)
+	if err != nil {
+		return "", err
+	}
+
+	// Step 2: Collect components
+	components, err := collectComponents(stackFlag, stacksMap, listFields)
+	if err != nil {
+		return "", err
+	}
+
+	// Step 3: Process components
+	processedComponents, colWidths := processComponents(header, components)
+	if len(processedComponents) == 0 {
+		return "No components found", nil
+	}
+
+	// Step 4: Format and display table
+	data := tableData{
+		header:    header,
+		rows:      processedComponents,
+		colWidths: colWidths,
+	}
+	formatTable(data)
+
+	return "", nil
 }
