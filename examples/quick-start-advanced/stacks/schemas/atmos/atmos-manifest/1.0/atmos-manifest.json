@@ -321,23 +321,28 @@
           ]
         },
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Flag to enable or disable the component"
         },
         "component": {
-          "type": "string"
+          "type": "string",
+          "description": "Terraform/OpenTofu/Helmfile component"
         },
         "inherits": {
           "type": "array",
+          "description": "A list of Atmos components that the current component inherits from",
           "uniqueItems": true,
           "items": {
             "type": "string"
           }
         },
         "terraform_workspace": {
-          "type": "string"
+          "type": "string",
+          "description": "Terraform workspace"
         },
         "terraform_workspace_pattern": {
-          "type": "string"
+          "type": "string",
+          "description": "Terraform workspace pattern"
         },
         "custom": {
           "type": "object",
