@@ -37,6 +37,7 @@ jobs:
         with:
           step: start
           env: preview
+          override: false
           ref: ${{ github.event.workflow_run.pull_requests[0].head.ref }}
 
       - name: Checkout Repository
@@ -86,6 +87,7 @@ jobs:
         with:
           step: finish
           status: ${{ job.status }}
+          override: false
           env: ${{ steps.deployment.outputs.env }}
           deployment_id: ${{ steps.deployment.outputs.deployment_id }}
           env_url: https://${{ env.DEPLOYMENT_HOST }}
