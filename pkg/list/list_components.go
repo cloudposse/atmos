@@ -99,6 +99,9 @@ func parseColumns(listConfig schema.ListConfig) ([]string, []string, error) {
 	re := regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
 
 	for _, col := range listConfig.Columns {
+		if col.Value == "" {
+			return nil, nil, fmt.Errorf("empty value for column name %s", col.Name)
+		}
 		header = append(header, col.Name)
 		match := re.FindStringSubmatch(col.Value)
 		if len(match) > 1 {
@@ -129,14 +132,19 @@ func collectComponents(stackFlag string, stacksMap map[string]any, listFields []
 		}
 	} else {
 		// Collect components from all stacks
+		var errors []string
 		for _, stackData := range stacksMap {
 			stackComponents, err := getStackComponents(stackData, listFields)
 			if err != nil {
+				errors = append(errors, err.Error())
 				continue // Skip invalid stacks
 			}
 			for _, c := range stackComponents {
 				components = append(components, strings.Fields(c))
 			}
+		}
+		if len(errors) > 0 {
+			return components, fmt.Errorf("errors processing stacks: %s", strings.Join(errors, "; "))
 		}
 	}
 	return components, nil
