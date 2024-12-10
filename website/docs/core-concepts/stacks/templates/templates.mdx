@@ -20,6 +20,12 @@ import SecondaryCTA from '@site/src/components/SecondaryCTA'
     Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations.
 </Intro>
 
+:::note Template File Validation
+Template files (`.yaml.tmpl`, `.yml.tmpl`, `.tmpl`) are automatically detected and processed during normal operations (imports, etc.).
+However, they are excluded from YAML validation (`atmos validate stacks`) since they may contain template placeholders that are invalid YAML before being rendered.
+This ensures that template files can contain valid Go template syntax without causing validation errors.
+:::
+
 ### Enable Templating
 
 Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI config file](/cli/configuration) in the
