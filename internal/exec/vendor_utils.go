@@ -408,10 +408,10 @@ func ExecuteAtmosVendorInternal(
 
 		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
 		if err != nil {
-			return fmt.Errorf("failed to initialize TUI model: %v (check terminal capabilities)", err)
+			return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
 		}
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
-			return fmt.Errorf("failed to execute vendor operation in TUI mode: %w", err)
+			return fmt.Errorf("failed to execute vendor operation in TUI mode: %w (check terminal state)", err)
 		}
 	}
 
@@ -530,8 +530,16 @@ func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string,
 	return cp.Copy(tempDir, targetPath, copyOptions)
 }
 
-// generateSkipFunction generates a function that determines whether to skip a file or directory
-// based on the 'excluded_paths' and 'included_paths' patterns in the vendor source
+// generateSkipFunction creates a function that determines whether to skip files during copying
+// based on the vendor source configuration. It uses the provided patterns in ExcludedPaths
+// and IncludedPaths to filter files during the copy operation.
+//
+// Parameters:
+//   - cliConfig: The CLI configuration for logging
+//   - tempDir: The temporary directory containing the files to copy
+//   - s: The vendor source configuration containing exclusion/inclusion patterns
+//
+// Returns a function that determines if a file should be skipped during copying
 func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 		if filepath.Base(src) == ".git" {
@@ -594,6 +602,10 @@ func validateURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("URI cannot be empty")
 	}
+	// Maximum length check
+	if len(uri) > 2048 {
+		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
+	}
 	// Add more validation as needed
 	// Validate URI format
 	if strings.Contains(uri, "..") {
@@ -606,5 +618,25 @@ func validateURI(uri string) error {
 	if strings.ContainsAny(uri, "<>|&;$") {
 		return fmt.Errorf("URI contains invalid characters")
 	}
+	// Validate scheme-specific format
+	if strings.HasPrefix(uri, "oci://") {
+		if !strings.Contains(uri[6:], "/") {
+			return fmt.Errorf("invalid OCI URI format")
+		}
+	} else if strings.Contains(uri, "://") {
+		scheme := strings.Split(uri, "://")[0]
+		if !isValidScheme(scheme) {
+			return fmt.Errorf("unsupported URI scheme: %s", scheme)
+		}
+	}
 	return nil
+}
+func isValidScheme(scheme string) bool {
+	validSchemes := map[string]bool{
+		"http":  true,
+		"https": true,
+		"git":   true,
+		"ssh":   true,
+	}
+	return validSchemes[scheme]
 }
