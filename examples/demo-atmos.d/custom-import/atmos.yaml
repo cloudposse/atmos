@@ -4,9 +4,9 @@
 # The configurations are loaded in the order they are defined in the import section.
 base_path: "./"
 import:
-  - "configs.d/**/*"          # Recursively load configurations from a directory
-  - "https://example.com/config.yaml" # Load from a remote URL
-  - "./extra-config.yaml"     # Load a specific file
+  - "configs.d/**/*"                   # Recursively load configurations from a directory
+  - "https://example.com/config.yaml"  # Load from a remote URL
+  - "./logging.yaml"                   # Load a specific file
 components:
   terraform:
     base_path: "components/terraform"

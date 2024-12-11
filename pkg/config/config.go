@@ -258,7 +258,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 		_, err = os.Stat(atmosDPath)
 		if err == nil {
-			cliConfig.Import = []string{"atmos.d/**/*.yaml"}
+			cliConfig.Import = []string{"atmos.d/**/*.yaml", "atmos.d/**/*.yml"}
 		} else if !os.IsNotExist(err) {
 			return cliConfig, err // Handle unexpected errors
 		}
@@ -474,7 +474,7 @@ func downloadRemoteConfig(url string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	tempFile := filepath.Join(tempDir, "config.yaml")
+	tempFile := filepath.Join(tempDir, "atmos.yaml")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	client := &getter.Client{
