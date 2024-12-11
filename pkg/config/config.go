@@ -115,9 +115,9 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 
 	// 1. If ATMOS_CLI_CONFIG_PATH is defined, check only there
-	if atmEnvPath := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmEnvPath != "" {
-		u.LogTrace(cliConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", atmEnvPath))
-		configFile := filepath.Join(atmEnvPath, CliConfigFileName)
+	if atmosCliConfigPathEnv := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmosCliConfigPathEnv != "" {
+		u.LogTrace(cliConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", atmosCliConfigPathEnv))
+		configFile := filepath.Join(atmosCliConfigPathEnv, CliConfigFileName)
 		found, err := processConfigFile(cliConfig, configFile, v)
 		if err != nil {
 			return cliConfig, err

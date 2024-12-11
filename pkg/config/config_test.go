@@ -69,6 +69,8 @@ func TestInitCliConfigWithInvalidEnvPath(t *testing.T) {
 
 // Config loads from default locations when ATMOS_CLI_CONFIG_PATH is not set
 func TestConfigLoadsFromDefaultLocations(t *testing.T) {
+	originalValue := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+	defer os.Setenv("ATMOS_CLI_CONFIG_PATH", originalValue)
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
 	// Setup temporary directory and default config file
@@ -103,6 +105,8 @@ stacks:
 
 // Imports from atmos.d directory are processed automatically when no explicit imports defined
 func TestImportsFromAtmosDProcessedAutomatically(t *testing.T) {
+	originalValue := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+	defer os.Setenv("ATMOS_CLI_CONFIG_PATH", originalValue)
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
 	// Setup temporary directory and atmos.d
