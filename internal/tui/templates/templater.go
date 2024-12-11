@@ -34,6 +34,12 @@ func formatCommand(name string, desc string, padding int) string {
 	return fmt.Sprintf("  %s    %s", styledName, styledDesc)
 }
 
+var customHelpShortMessage = map[string]string{
+	"help": "Display help information for Atmos commands",
+	"tf":   "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
+	"show": "Display help for show",
+}
+
 // formatCommands formats a slice of cobra commands with proper styling
 func formatCommands(cmds []*cobra.Command) string {
 	var maxLen int
@@ -46,6 +52,9 @@ func formatCommands(cmds []*cobra.Command) string {
 			if len(cmd.Name()) > maxLen {
 				maxLen = len(cmd.Name())
 			}
+		}
+		if v, ok := customHelpShortMessage[cmd.Name()]; ok {
+			cmd.Short = v
 		}
 	}
 

@@ -6,9 +6,14 @@ import (
 
 // awsCmd executes 'aws eks' CLI commands
 var awsEksCmd = &cobra.Command{
-	Use:                "eks",
-	Short:              "Execute 'aws eks' commands",
-	Long:               `This command executes 'aws eks' CLI commands`,
+	Use:   "eks",
+	Short: "Run AWS EKS CLI commands for cluster management",
+	Long: `This command allows you to execute various 'aws eks' CLI commands for managing Amazon EKS clusters.
+
+	You can use this command to interact with AWS EKS, including operations like configuring kubeconfig, managing clusters, and more.
+	
+	For a list of available AWS EKS commands, refer to the AWS CLI documentation:
+	https://docs.aws.amazon.com/cli/latest/reference/eks/`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 

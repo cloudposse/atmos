@@ -7,7 +7,7 @@ import (
 // atlantisCmd executes Atlantis commands
 var atlantisCmd = &cobra.Command{
 	Use:                "atlantis",
-	Short:              "Execute 'atlantis' commands",
+	Short:              "Generate and manage Atlantis configurations",
 	Long:               `This command executes Atlantis integration commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }

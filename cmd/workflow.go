@@ -11,7 +11,7 @@ import (
 // workflowCmd executes a workflow
 var workflowCmd = &cobra.Command{
 	Use:   "workflow",
-	Short: "Execute a workflow",
+	Short: "Run automated workflows for infrastructure and operations",
 	Long:  `This command executes a workflow: atmos workflow <name> -f <file>`,
 	Example: "atmos workflow\n" +
 		"atmos workflow <name> -f <file>\n" +

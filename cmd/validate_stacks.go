@@ -12,8 +12,8 @@ import (
 // ValidateStacksCmd validates stacks
 var ValidateStacksCmd = &cobra.Command{
 	Use:                "stacks",
-	Short:              "Execute 'validate stacks' command",
-	Long:               `This command validates stack manifest configurations: atmos validate stacks`,
+	Short:              "Validate stack manifest configurations",
+	Long:               "This command validates the configuration of stack manifests in Atmos to ensure proper setup and compliance.",
 	Example:            "validate stacks",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
