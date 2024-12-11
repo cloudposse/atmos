@@ -5,7 +5,7 @@
 base_path: "./"
 import:
   - "configs.d/**/*"                   # Recursively load configurations from a directory
-  - "https://example.com/config.yaml"  # Load from a remote URL
+  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"  # Load from a remote URL
   - "./logging.yaml"                   # Load a specific file
 components:
   terraform:
