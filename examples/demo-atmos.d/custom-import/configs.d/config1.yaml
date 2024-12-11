@@ -1,7 +1,0 @@
-logs:
-  level: Debug
-commands:
-- name: "test"
-  description: "Run all tests"
-  steps:
-  - atmos vendor pull

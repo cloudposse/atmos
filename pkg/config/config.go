@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/hashicorp/go-getter"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -209,10 +208,9 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		// Use default config if no config was found in any location
 		logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
 		if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace {
-			u.PrintMessageInColor("'atmos.yaml' CLI config was not found.\n"+
+			u.LogTrace(cliConfig, "atmos.yaml' CLI config was not found.\n"+
 				"Refer to https://atmos.tools/cli/configuration\n"+
-				"Using the default CLI config:\n\n", color.New(color.FgCyan))
-
+				"Using the default CLI config:\n\n")
 			err = u.PrintAsYAMLToFileDescriptor(cliConfig, defaultCliConfig)
 			if err != nil {
 				return cliConfig, err
@@ -253,12 +251,12 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		atmosDPath := filepath.Join(basePath, "atmos.d")
 		// Ensure the joined path doesn't escape the intended directory
 		if !strings.HasPrefix(atmosDPath, basePath) {
-			return cliConfig, fmt.Errorf("invalid atmos.d path: attempted directory traversal")
+			u.LogWarning(cliConfig, fmt.Sprintf("Warning: invalid atmos.d path: attempted directory traversal"))
 		}
 
 		_, err = os.Stat(atmosDPath)
 		if err == nil {
-			cliConfig.Import = []string{"atmos.d/**/*.yaml", "atmos.d/**/*.yml"}
+			cliConfig.Import = []string{"atmos.d/**/*.yaml", "atmos.d/**/*.yml", ".atmos.d/**/*.yaml", ".atmos.d/**/*.yml"}
 		} else if !os.IsNotExist(err) {
 			return cliConfig, err // Handle unexpected errors
 		}
@@ -433,25 +431,36 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 			defer os.RemoveAll(tempDir)
 
 		} else {
-			impWithExt := importPath
+
 			ext := filepath.Ext(importPath)
-			if ext == "" {
-				ext = ".yaml"
-				impWithExt = importPath + ext
-			}
+
 			basePath, err := filepath.Abs(cliConfig.BasePath)
 			if err != nil {
 				return err
 			}
-			imp := filepath.Join(basePath, impWithExt)
-			// ensure the joined path doesn't escape the intended directory
-			if !strings.HasPrefix(imp, basePath) {
-				return fmt.Errorf("invalid import path: attempted directory traversal")
-			}
-			resolvedPaths, err = u.GetGlobMatches(imp)
-			if err != nil {
-				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to resolve import path '%s': %v", impWithExt, err))
-				continue
+			if ext != "" {
+				imp := filepath.Join(basePath, importPath)
+				resolvedPaths, err = u.GetGlobMatches(imp)
+				if err != nil {
+					u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to resolve import path '%s': %v", imp, err))
+					continue
+				}
+			} else {
+				impYaml := filepath.Join(basePath, importPath+".yaml")
+				impYml := filepath.Join(basePath, importPath+".yml")
+				// ensure the joined path doesn't escape the intended directory
+				if !strings.HasPrefix(impYaml, basePath) || !strings.HasPrefix(impYml, basePath) {
+					return fmt.Errorf("invalid import path: attempted directory traversal")
+				}
+				resolvedPathYaml, errYaml := u.GetGlobMatches(impYaml)
+				resolvedPathsYml, errYml := u.GetGlobMatches(impYml)
+				if errYaml != nil && errYml != nil {
+					u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to resolve import path '%s': %v", importPath, err))
+					continue
+				}
+				resolvedPaths = append(resolvedPaths, resolvedPathYaml...)
+				resolvedPaths = append(resolvedPaths, resolvedPathsYml...)
+
 			}
 		}
 		// print the resolved paths
