@@ -7,7 +7,7 @@ import (
 // describeCmd describes configuration for stacks and components
 var describeCmd = &cobra.Command{
 	Use:                "describe",
-	Short:              "Execute 'describe' commands",
+	Short:              "Show details about Atmos configurations and components",
 	Long:               `This command shows configuration for CLI, stacks and components`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }

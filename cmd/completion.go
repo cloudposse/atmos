@@ -11,7 +11,7 @@ import (
 
 var completionCmd = &cobra.Command{
 	Use:                   "completion [bash|zsh|fish|powershell]",
-	Short:                 "Generate completion script for Bash, Zsh, Fish and PowerShell",
+	Short:                 "Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell",
 	Long:                  "This command generates completion scripts for Bash, Zsh, Fish and PowerShell",
 	DisableFlagsInUseLine: true,
 	ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},

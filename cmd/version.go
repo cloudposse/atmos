@@ -15,7 +15,7 @@ import (
 
 var versionCmd = &cobra.Command{
 	Use:     "version",
-	Short:   "Print the CLI version",
+	Short:   "Show the installed Atmos CLI version and check for updates",
 	Long:    `This command prints the CLI version`,
 	Example: "atmos version",
 	Run: func(cmd *cobra.Command, args []string) {
