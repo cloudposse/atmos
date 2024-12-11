@@ -315,3 +315,9 @@ settings:
   #            If the source and destination lists have the same length, all items in the destination lists are
   #            deep-merged with all items in the source list.
   list_merge_strategy: replace
+
+version:
+  check:
+    enabled: true
+    timeout: 1000 # ms
+    frequency: daily

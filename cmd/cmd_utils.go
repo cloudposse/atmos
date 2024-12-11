@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -428,18 +429,59 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
 
-// customHelpMessageToUpgradeToAtmosLatestRelease adds Atmos version info at the end of each help commnad
-func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
-	originalHelpFunc(cmd, args)
-	// Check for the latest Atmos release on GitHub
+// CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
+// It loads the cache, decides if it's time to check for updates, compares the current version to the latest available release,
+// and if newer, prints the update message. It also updates the cache's timestamp after printing.
+func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
+	// If version checking is disabled in the configuration, do nothing
+	if !cliConfig.Version.Check.Enabled {
+		return
+	}
+
+	// Load the cache
+	cacheCfg, err := cfg.LoadCache()
+	if err != nil {
+		u.LogWarning(cliConfig, fmt.Sprintf("Could not load cache: %s", err))
+		return
+	}
+
+	// Determine if it's time to check for updates based on frequency and last_checked
+	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, cliConfig.Version.Check.Frequency) {
+		// Not due for another check yet, so return without printing anything
+		return
+	}
+
+	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
-	if err == nil && latestReleaseTag != "" {
-		latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
-		currentRelease := strings.TrimPrefix(version.Version, "v")
-		if latestRelease != currentRelease {
-			u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
+	if err != nil {
+		u.LogTrace(cliConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		return
+	}
+
+	if latestReleaseTag == "" {
+		// No releases found or empty string, return silently
+		return
+	}
+
+	// Trim "v" prefix to compare versions
+	latestVersion := strings.TrimPrefix(latestReleaseTag, "v")
+	currentVersion := strings.TrimPrefix(version.Version, "v")
+
+	// If the versions differ, print the update message
+	if latestVersion != currentVersion {
+		u.PrintMessageToUpgradeToAtmosLatestRelease(latestVersion)
+
+		// Update the cache to mark the current timestamp
+		cacheCfg.LastChecked = time.Now().Unix()
+		if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
 		}
 	}
+}
+
+func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
+	originalHelpFunc(cmd, args)
+	CheckForAtmosUpdateAndPrintMessage(cliConfig)
 }
 
 // Check Atmos is version command

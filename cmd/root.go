@@ -18,6 +18,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+var cliConfig schema.CliConfiguration
+
 // originalHelpFunc holds Cobra's original help function to avoid recursion.
 var originalHelpFunc func(*cobra.Command, []string)
 
@@ -72,14 +74,6 @@ func Execute() error {
 		Flags:    cc.Bold,
 	})
 
-	// Save the original help function to prevent infinite recursion when overriding it.
-	// This allows us to call the original help functionality within our custom help function.
-	originalHelpFunc = RootCmd.HelpFunc()
-
-	// Override the help function with a custom one that adds an upgrade message after displaying help.
-	// This custom help function will call the original help function and then display the bordered message.
-	RootCmd.SetHelpFunc(customHelpMessageToUpgradeToAtmosLatestRelease)
-
 	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
 	err := RootCmd.ParseFlags(os.Args)
 	if err != nil && errors.Is(err, pflag.ErrHelp) {
@@ -89,21 +83,29 @@ func Execute() error {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	}
-
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil && !errors.Is(err, cfg.NotFound) {
+	var initErr error
+	cliConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
-			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", err))
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", initErr))
 		} else {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, initErr)
 		}
 	}
 
+	// Save the original help function to prevent infinite recursion when overriding it.
+	// This allows us to call the original help functionality within our custom help function.
+	originalHelpFunc = RootCmd.HelpFunc()
+
+	// Override the help function with a custom one that adds an upgrade message after displaying help.
+	// This custom help function will call the original help function and then display the bordered message.
+	RootCmd.SetHelpFunc(customHelpMessageToUpgradeToAtmosLatestRelease)
+
 	// If CLI configuration was found, process its custom commands and command aliases
-	if err == nil {
+	if initErr == nil {
 		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)

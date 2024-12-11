@@ -26,6 +26,7 @@ type CliConfiguration struct {
 	StackConfigFilesAbsolutePaths []string       `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string         `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
 	Default                       bool           `yaml:"default" json:"default" mapstructure:"default"`
+	Version                       Version        `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
 }
 
 type CliSettings struct {
@@ -126,6 +127,16 @@ type Context struct {
 	File               string `yaml:"file" json:"file" mapstructure:"file"`
 	Folder             string `yaml:"folder" json:"folder" mapstructure:"folder"`
 	TerraformWorkspace string `yaml:"terraform_workspace" json:"terraform_workspace" mapstructure:"terraform_workspace"`
+}
+
+type VersionCheck struct {
+	Enabled   bool   `yaml:"enabled,omitempty" mapstructure:"enabled"`
+	Timeout   int    `yaml:"timeout,omitempty" mapstructure:"timeout"`
+	Frequency string `yaml:"frequency,omitempty" mapstructure:"frequency"`
+}
+
+type Version struct {
+	Check VersionCheck `yaml:"check,omitempty" mapstructure:"check"`
 }
 
 type ArgsAndFlagsInfo struct {

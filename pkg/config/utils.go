@@ -371,6 +371,18 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		cliConfig.Settings.ListMergeStrategy = listMergeStrategy
 	}
 
+	versionEnabled := os.Getenv("ATMOS_VERSION_CHECK_ENABLED")
+	if len(versionEnabled) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_VERSION_CHECK_ENABLED=%s", versionEnabled))
+		enabled, err := strconv.ParseBool(versionEnabled)
+		if err != nil {
+			u.LogWarning(*cliConfig, fmt.Sprintf("Invalid boolean value '%s' for ATMOS_VERSION_CHECK_ENABLED; using default.", versionEnabled))
+		} else {
+			cliConfig.Version.Check.Enabled = enabled
+		}
+		cliConfig.Version.Check.Enabled = enabled
+	}
+
 	return nil
 }
 
