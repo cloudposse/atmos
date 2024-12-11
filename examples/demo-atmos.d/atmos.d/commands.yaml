@@ -1,7 +1,6 @@
-logs:
-  level: Debug
+# Custom CLI commands
 commands:
 - name: "test"
   description: "Run all tests with custom command"
   steps:
-  - atmos vendor pull
+  - atmos describe config

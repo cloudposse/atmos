@@ -1,5 +1,3 @@
-logs:
-  level: Warning
 components:
   helmfile:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
