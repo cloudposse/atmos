@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -422,6 +423,13 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 
 		if strings.HasPrefix(importPath, "http://") || strings.HasPrefix(importPath, "https://") {
 			// Handle remote URLs
+			// Validate the URL before downloading
+			parsedURL, err := url.Parse(importPath)
+			if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+				u.LogWarning(cliConfig, fmt.Sprintf("Warning: invalid URL '%s': %v", importPath, err))
+				continue
+			}
+
 			tempDir, tempFile, err := downloadRemoteConfig(importPath)
 			if err != nil {
 				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to download remote config '%s': %v", importPath, err))
