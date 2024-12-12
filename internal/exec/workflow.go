@@ -127,3 +127,94 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
+
+// ListWorkflows lists all available workflows in the configured workflows directory
+func ListWorkflows(cmd *cobra.Command, args []string) error {
+	// Initialize config without processing stacks
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		Command:    "workflow",
+		SubCommand: "list",
+	}, false)
+	if err != nil {
+		return fmt.Errorf("error initializing config: %v", err)
+	}
+
+	// Get the current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("error getting current directory: %v", err)
+	}
+
+	// If BasePath is relative, make it absolute from current directory
+	basePath := cliConfig.BasePath
+	if !filepath.IsAbs(basePath) {
+		basePath = filepath.Join(cwd, basePath)
+	}
+
+	// Get the workflows directory path
+	workflowsPath := filepath.Join(basePath, cliConfig.Workflows.BasePath)
+
+	// Check if workflows directory exists
+	if !u.FileExists(workflowsPath) {
+		return fmt.Errorf(`
+Workflows directory not found at '%s'
+
+To set up workflows:
+1. Create a workflows directory at '%s'
+2. Add your workflow YAML files in this directory
+3. Configure the workflows path in your atmos.yaml:
+
+   workflows:
+     basePath: %s
+
+For more information, visit: https://atmos.tools/cli/commands/workflow
+`, workflowsPath, workflowsPath, cliConfig.Workflows.BasePath)
+	}
+
+	// Find all workflow files
+	var workflows []string
+	err = filepath.Walk(workflowsPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && (filepath.Ext(path) == ".yaml" || filepath.Ext(path) == ".yml") {
+			relPath, err := filepath.Rel(workflowsPath, path)
+			if err != nil {
+				return err
+			}
+			workflows = append(workflows, relPath)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("error listing workflows: %v", err)
+	}
+
+	if len(workflows) == 0 {
+		fmt.Printf(`
+No workflow files found in '%s'
+
+To create a workflow:
+1. Create a YAML file in the workflows directory
+2. Define your workflow steps in the YAML file
+
+Example workflow.yaml:
+   description: Example workflow
+   steps:
+     - name: step1
+       command: echo "Hello World"
+
+For more information, visit: https://atmos.tools/cli/commands/workflow
+`, workflowsPath)
+		return nil
+	}
+
+	fmt.Printf("\nWorkflows in %s:\n", workflowsPath)
+	for _, workflow := range workflows {
+		fmt.Printf("  - %s\n", workflow)
+	}
+	fmt.Printf("\nTo execute a workflow: atmos workflow <name> -f <workflow-file>\n")
+
+	return nil
+}
