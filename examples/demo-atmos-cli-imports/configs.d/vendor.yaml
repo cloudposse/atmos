@@ -1,4 +1,4 @@
-vendor:  
+vendor:
   # Single file
   base_path: "./vendor.yaml"
 
