@@ -61,6 +61,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		fmt.Println()
 		return nil
 	}
+	if info.SubCommand == "version" {
+		return ExecuteShellCommand(cliConfig,
+			"terraform",
+			[]string{info.SubCommand},
+			"",
+			nil,
+			false,
+			info.RedirectStdErr)
+	}
 
 	shouldProcessStacks := true
 	shouldCheckStack := true
