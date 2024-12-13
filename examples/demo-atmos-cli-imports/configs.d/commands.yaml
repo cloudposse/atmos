@@ -3,5 +3,5 @@ commands:
   - name: "test"
     description: "Run all tests"
     steps:
-      - atmos vendor pull
+      - atmos describe config  
 

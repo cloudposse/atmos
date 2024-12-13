@@ -435,7 +435,7 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 			// Validate the URL before downloading
 			parsedURL, err := url.Parse(importPath)
 			if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-				u.LogWarning(cliConfig, fmt.Sprintf("Warning: invalid URL '%s': %v", importPath, err))
+				u.LogWarning(cliConfig, fmt.Sprintf("unsupported URL '%s': %v", importPath, err))
 				continue
 			}
 
