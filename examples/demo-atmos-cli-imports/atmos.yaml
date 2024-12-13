@@ -7,8 +7,3 @@ import:
   - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"  # Load from a remote URL
   - "configs.d/**/*"                                                                 # Recursively load configurations from a directory
   - "./logs.yaml"                                                                    # Load a specific file
-
-
-
-
-

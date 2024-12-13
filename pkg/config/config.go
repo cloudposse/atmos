@@ -432,7 +432,7 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 
 			tempDir, tempFile, err := downloadRemoteConfig(importPath)
 			if err != nil {
-				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to download remote config '%s': %v", importPath, err))
+				u.LogWarning(cliConfig, fmt.Sprintf("failed to download remote config '%s': %v", importPath, err))
 				continue
 			}
 			resolvedPaths = []string{tempFile}
@@ -450,7 +450,7 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 				imp := filepath.Join(basePath, importPath)
 				resolvedPaths, err = u.GetGlobMatches(imp)
 				if err != nil {
-					u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to resolve import path '%s': %v", imp, err))
+					u.LogWarning(cliConfig, fmt.Sprintf("failed to resolve import path '%s': %v", imp, err))
 					continue
 				}
 			} else {
@@ -463,7 +463,7 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 				resolvedPathYaml, errYaml := u.GetGlobMatches(impYaml)
 				resolvedPathsYml, errYml := u.GetGlobMatches(impYml)
 				if errYaml != nil && errYml != nil {
-					u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to resolve import path '%s': %v", importPath, err))
+					u.LogWarning(cliConfig, fmt.Sprintf("failed to resolve import path '%s': %v", importPath, err))
 					continue
 				}
 				resolvedPaths = append(resolvedPaths, resolvedPathYaml...)
@@ -478,7 +478,7 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 			_, err = processConfigFile(cliConfig, path, v)
 			if err != nil {
 				// Log the error but continue processing other files
-				u.LogWarning(cliConfig, fmt.Sprintf("Warning: failed to merge configuration from '%s': %v", path, err))
+				u.LogWarning(cliConfig, fmt.Sprintf("failed to merge configuration from '%s': %v", path, err))
 				continue
 			}
 		}
