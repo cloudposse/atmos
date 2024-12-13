@@ -20,7 +20,19 @@ Execute the `atmos version` command like this:
 atmos version
 ```
 
-This will show the CLI version.
+This will show the CLI version. 
+The frequency with which the update box message in version is shown is configured in atmos.yaml.
+There are two options daily and weekly. The default value is set to daily. 
+It is also possible to turn it off in atmos.yaml file by switching enable to false. 
+Or set an env variable ATMOS_VERSION_CHECK_ENABLED to false, 
+this overriders the config's settting. 
+
+```shell
+atmos version --check
+```
+
+The version command supports --check flag. 
+It will show the update box message irrespectively of the config settings.  
 
 :::tip
 To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.

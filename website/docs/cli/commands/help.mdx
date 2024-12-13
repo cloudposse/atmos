@@ -12,6 +12,13 @@ import Terminal from '@site/src/components/Terminal'
 ## Usage
 
 The `atmos --help` and `atmos -h` commands show help for all Atmos CLI commands.
+Please note that an atmos upgrage version box is shown at the end of each help command.
+The frequency with which the update box message is shown is configured in atmos.yaml.
+There are two options daily and weekly. The default value is set to daily. 
+It is also possible to turn it off in atmos.yaml file by switching enable to false. 
+Or set an env variable ATMOS_VERSION_CHECK_ENABLED to false, 
+this overriders the config's settting. 
+
 
 ```shell
 atmos help
