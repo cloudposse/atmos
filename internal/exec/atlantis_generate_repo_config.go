@@ -17,6 +17,20 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// ExecuteAtlantis executes atlantis command
+func ExecuteAtlantis(cmd *cobra.Command, args []string) error {
+	info, err := ProcessCommandLineArgs("atlantis", cmd, args, nil)
+	if err != nil {
+		return err
+	}
+
+	cliConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+	return ExecuteShellCommand(cliConfig, "atlantis", args, "", nil, false, "")
+}
+
 // ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)

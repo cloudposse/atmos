@@ -661,21 +661,20 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 	var indexesToRemove []int
 
 	// For commands like `atmos terraform clean` and `atmos terraform plan`, show the command help
-	if len(inputArgsAndFlags) == 1 {
+	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" {
 		info.SubCommand = inputArgsAndFlags[0]
 		info.NeedHelp = true
+		return info, nil
+	}
+
+	// For version commands `atmos terraform version` or `atmos atlantis version`
+	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "version" {
+		info.SubCommand = inputArgsAndFlags[0]
 		return info, nil
 	}
 
 	// https://github.com/roboll/helmfile#cli-reference
 	var globalOptionsFlagIndex int
-
-	// For commands like `atmos terraform clean` and `atmos terraform plan`, show the command help
-	if len(inputArgsAndFlags) == 1 {
-		info.SubCommand = inputArgsAndFlags[0]
-		info.NeedHelp = true
-		return info, nil
-	}
 
 	for i, arg := range inputArgsAndFlags {
 		if arg == cfg.GlobalOptionsFlag {
