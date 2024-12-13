@@ -252,15 +252,24 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		atmosDPath := filepath.Join(basePath, "atmos.d")
 		// Ensure the joined path doesn't escape the intended directory
 		if !strings.HasPrefix(atmosDPath, basePath) {
-			u.LogWarning(cliConfig, fmt.Sprintf("Warning: invalid atmos.d path: attempted directory traversal"))
+			u.LogWarning(cliConfig, "invalid atmos.d path: attempted directory traversal")
 		}
-
 		_, err = os.Stat(atmosDPath)
 		if err == nil {
-			cliConfig.Import = []string{"atmos.d/**/*.yaml", "atmos.d/**/*.yml", ".atmos.d/**/*.yaml", ".atmos.d/**/*.yml"}
+			cliConfig.Import = []string{"atmos.d/**/*.yaml", "atmos.d/**/*.yml"}
 		} else if !os.IsNotExist(err) {
 			return cliConfig, err // Handle unexpected errors
 		}
+		// Check for `.atmos.d` directory if `.atmos.d` directory is not found
+		atmosDPath = filepath.Join(atmosDPath, ".atmos.d")
+		_, err = os.Stat(atmosDPath)
+		if err == nil {
+			cliImport := []string{".atmos.d/**/*.yaml", ".atmos.d/**/*.yml"}
+			cliConfig.Import = append(cliConfig.Import, cliImport...)
+		} else if !os.IsNotExist(err) {
+			return cliConfig, err // Handle unexpected errors
+		}
+
 	}
 	// Process imports if any
 	if len(cliConfig.Import) > 0 {
