@@ -97,21 +97,20 @@ func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	now := time.Now().Unix()
 	var interval int64
 	switch frequency {
-        case "minute":
-	        interval = 60 // 1 minute
-        case "hourly":
-	        interval = 3600 // 1 hour
-        case "daily":
-	        interval = 86400 // 1 day
-        case "weekly":
-	        interval = 604800 // 1 week
-        case "monthly":
-	        interval = 2592000 // 30 days (approximate)
-        case "yearly":
-	        interval = 31536000 // 365 days
-        default:
-	        interval = 86400 // default to daily
-        }
+	case "minute":
+		interval = 60 // 1 minute
+	case "hourly":
+		interval = 3600 // 1 hour
+	case "daily":
+		interval = 86400 // 1 day
+	case "weekly":
+		interval = 604800 // 1 week
+	case "monthly":
+		interval = 2592000 // 30 days (approximate)
+	case "yearly":
+		interval = 31536000 // 365 days
+	default:
+		interval = 86400 // default to daily
 	}
 	return now-lastChecked >= interval
 }
