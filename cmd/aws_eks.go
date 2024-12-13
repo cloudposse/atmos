@@ -12,8 +12,8 @@ var awsEksCmd = &cobra.Command{
 
 	You can use this command to interact with AWS EKS, including operations like configuring kubeconfig, managing clusters, and more.
 	
-	For a list of available AWS EKS commands, refer to the AWS CLI documentation:
-	https://docs.aws.amazon.com/cli/latest/reference/eks/`,
+	For a list of available AWS EKS commands, refer to the Atmos documentation:
+	https://atmos.tools/cli/commands/aws/eks-update-kubeconfig`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
