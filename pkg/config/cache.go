@@ -1,10 +1,13 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -110,6 +113,7 @@ func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	case "yearly":
 		interval = 31536000 // 365 days
 	default:
+		u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Unexpected frequency '%s' encountered. Defaulting to daily.", frequency))
 		interval = 86400 // default to daily
 	}
 	return now-lastChecked >= interval
