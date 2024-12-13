@@ -380,7 +380,6 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 		} else {
 			cliConfig.Version.Check.Enabled = enabled
 		}
-		cliConfig.Version.Check.Enabled = enabled
 	}
 
 	return nil

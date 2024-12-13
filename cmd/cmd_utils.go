@@ -470,12 +470,13 @@ func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
 	// If the versions differ, print the update message
 	if latestVersion != currentVersion {
 		u.PrintMessageToUpgradeToAtmosLatestRelease(latestVersion)
+	}
 
-		// Update the cache to mark the current timestamp
-		cacheCfg.LastChecked = time.Now().Unix()
-		if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-			u.LogWarning(cliConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
-		}
+	// Update the cache to mark the current timestamp
+	cacheCfg.LastChecked = time.Now().Unix()
+	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
+		u.LogWarning(cliConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
+
 	}
 }
 
