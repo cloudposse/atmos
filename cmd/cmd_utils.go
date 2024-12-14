@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/fatih/color"
@@ -403,13 +403,13 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Println(" CLI config file was not found.")
 		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		u.PrintMessageInColor(filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist in the current path.")
 	} else {
 		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		u.PrintMessageInColor(filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist.")
 	}
 
