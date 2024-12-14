@@ -34,7 +34,8 @@ type CliSettings struct {
 }
 
 type Docs struct {
-	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	MaxWidth   int  `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	Pagination bool `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
 }
 
 type Templates struct {

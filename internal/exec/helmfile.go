@@ -54,6 +54,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
+	if info.SubCommand == "version" {
+		return ExecuteShellCommand(cliConfig, "helmfile", []string{info.SubCommand}, "", nil, false, info.RedirectStdErr)
+	}
+
 	info, err = ProcessStacks(cliConfig, info, true, true)
 	if err != nil {
 		return err
