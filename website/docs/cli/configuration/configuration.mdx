@@ -151,6 +151,13 @@ The `settings` section configures Atmos global settings.
       #            If the source and destination lists have the same length, all items in the destination lists are
       #            deep-merged with all items in the source list.
       list_merge_strategy: replace
+      # `docs` specifies how component documentation is displayed in the terminal.
+      # The following documentation display settings are supported:
+      # `max-width`: The maximum width for displaying component documentation in the terminal.
+      # 'pagination`: When enabled, displays component documentation in a pager instead of directly in the terminal.
+      docs:
+        max-width: 80
+        pagination: true
     ```
 </File>
 
@@ -171,9 +178,21 @@ The `settings` section configures Atmos global settings.
       <dd>The items in the destination list are deep-merged with the items in the source list. The items in the source list take precedence. The items are processed starting from the first up to the length of the source list (the remaining items are not processed). If the source and destination lists have the same length, all items in the destination lists are deep-merged with all items in the source list.</dd>
     </dl>
   </dd>
+  
+  <dt>`settings.docs`</dt>
+  <dd>
+    Specifies how component documentation is displayed in the terminal.
+
+    The following settings are supported:
+    <dl>
+      <dt>`max-width`</dt>
+      <dd>The maximum width for displaying component documentation in the terminal.</dd>
+
+      <dt>`pagination`</dt>
+      <dd>When enabled, displays component documentation in a pager instead of directly in the terminal.</dd>
+    </dl>
+  </dd>
 </dl>
-
-
 
 ## Workflows
 
