@@ -51,6 +51,13 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 		return err
 	}
 
+	const newlineByte = '\n'
+
+	// Ensure that the JSON content ends with a newline
+	if len(indentedJSON) == 0 || indentedJSON[len(indentedJSON)-1] != newlineByte {
+		indentedJSON = append(indentedJSON, newlineByte)
+	}
+
 	err = os.WriteFile(filePath, indentedJSON, fileMode)
 	if err != nil {
 		return err
