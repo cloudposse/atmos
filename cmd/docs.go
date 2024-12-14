@@ -97,7 +97,10 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
 			}
 
-			fmt.Println(componentDocs)
+			if err := u.DisplayDocs(componentDocs, cliConfig.Settings.Docs.Pagination); err != nil {
+				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("failed to display documentation: %w", err))
+			}
+
 			return
 		}
 
