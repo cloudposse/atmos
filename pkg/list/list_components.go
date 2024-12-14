@@ -2,11 +2,13 @@ package list
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -89,26 +91,26 @@ func resolveKey(data map[string]any, key string) (any, bool) {
 
 // parseColumns extracts the header and list fields from the listConfig
 func parseColumns(listConfig schema.ListConfig) ([]string, []string, error) {
-    if len(listConfig.Columns) == 0 {
-        return nil, nil, fmt.Errorf("no columns configured")
-    }
-    header := make([]string, 0)
-    listFields := make([]string, 0)
-    re := regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
+	if len(listConfig.Columns) == 0 {
+		return nil, nil, fmt.Errorf("no columns configured")
+	}
+	header := make([]string, 0)
+	listFields := make([]string, 0)
+	re := regexp.MustCompile(`\{\{\s*(.*?)\s*\}\}`)
 
-    for _, col := range listConfig.Columns {
-        if col.Value == "" {
-            return nil, nil, fmt.Errorf("empty value for column name %s", col.Name)
-        }
-        header = append(header, col.Name)
-        match := re.FindStringSubmatch(col.Value)
-        if len(match) > 1 {
-            listFields = append(listFields, match[1])
-        } else {
-            return nil, nil, fmt.Errorf("invalid value format for column name %s", col.Name)
-        }
-    }
-    return header, listFields, nil
+	for _, col := range listConfig.Columns {
+		if col.Value == "" {
+			return nil, nil, fmt.Errorf("empty value for column name %s", col.Name)
+		}
+		header = append(header, col.Name)
+		match := re.FindStringSubmatch(col.Value)
+		if len(match) > 1 {
+			listFields = append(listFields, match[1])
+		} else {
+			return nil, nil, fmt.Errorf("invalid value format for column name %s", col.Name)
+		}
+	}
+	return header, listFields, nil
 }
 
 // collectComponents gathers components for the specified stack or all stacks
@@ -172,78 +174,62 @@ func processComponents(header []string, components [][]string) ([][]string, []in
 	return uniqueComponents, colWidths
 }
 
+const (
+	purple    = lipgloss.Color("99")  // Purple color for headers and borders
+	gray      = lipgloss.Color("245") // Gray for odd rows
+	lightGray = lipgloss.Color("241") // Light gray for even rows
+)
+
 func generateTable(data tableData) {
-	// Style definitions
-	purple := lipgloss.Color("5")
-	headerStyle := lipgloss.NewStyle().
-		Foreground(purple).
-		Bold(true).
-		Align(lipgloss.Center)
-	cellStyle := lipgloss.NewStyle().
-		Padding(0, 1)
-	borderStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(purple).
-		Padding(0)
+	// Renderer for styling
+	re := lipgloss.NewRenderer(os.Stdout)
 
-	// Calculate the maximum width for each column
-	colWidths := make([]int, len(data.header))
-	for i, header := range data.header {
-		colWidths[i] = len(header)
-	}
-	for _, row := range data.rows {
-		for i, cell := range row {
-			if len(cell) > colWidths[i] {
-				colWidths[i] = len(cell)
+	// Define styles
+	var (
+		HeaderStyle = re.NewStyle().
+				Foreground(purple).
+				Bold(true).
+				Align(lipgloss.Center) // Header style
+
+		CellStyle = re.NewStyle().
+				Padding(0, 1).
+				Width(20) // Base style for rows
+
+		OddRowStyle  = CellStyle.Foreground(gray)      // Style for odd rows
+		EvenRowStyle = CellStyle.Foreground(lightGray) // Style for even rows
+
+		BorderStyle = lipgloss.NewStyle().
+				Foreground(purple) // Border style with purple color
+	)
+
+	// Create the table with headers, rows, and styles
+	t := table.New().
+		Border(lipgloss.ThickBorder()).
+		BorderStyle(BorderStyle).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			var style lipgloss.Style
+
+			switch {
+			case row == table.HeaderRow:
+				return HeaderStyle // Style for header
+			case row%2 == 0:
+				style = EvenRowStyle // Even rows
+			default:
+				style = OddRowStyle // Odd rows
 			}
-		}
-	}
 
-	// Standardize column widths across all rows
-	for i, width := range colWidths {
-		colWidths[i] = width + 2 // Add padding to each column
-	}
+			// Optional: Adjust specific columns (e.g., make the middle column wider)
+			if col == 1 {
+				style = style.Width(25)
+			}
 
-	// Build formatted table rows
-	var tableRows []string
+			return style
+		}).
+		Headers(data.header...).
+		Rows(data.rows...)
 
-	// Add the header
-	headerRow := formatRow(data.header, colWidths, headerStyle)
-	tableRows = append(tableRows, headerRow)
-
-	// Add a separator
-	separator := createSeparator(colWidths)
-	tableRows = append(tableRows, separator)
-
-	// Add data rows
-	for _, row := range data.rows {
-		formattedRow := formatRow(row, colWidths, cellStyle)
-		tableRows = append(tableRows, formattedRow)
-	}
-
-	// Combine rows into a single string
-	table := strings.Join(tableRows, "\n")
-
-	// Apply border and print the table
-	fmt.Println(borderStyle.Render(table))
-}
-
-// formatRow creates a single formatted row
-func formatRow(row []string, colWidths []int, style lipgloss.Style) string {
-	formattedCells := make([]string, len(row))
-	for i, cell := range row {
-		formattedCells[i] = style.Width(colWidths[i]).Render(cell)
-	}
-	return strings.Join(formattedCells, "│")
-}
-
-// createSeparator generates a horizontal separator for the table
-func createSeparator(colWidths []int) string {
-	segments := make([]string, len(colWidths))
-	for i, width := range colWidths {
-		segments[i] = strings.Repeat("─", width)
-	}
-	return strings.Join(segments, "┼")
+	// Render and print the table
+	fmt.Println(t)
 }
 
 // FilterAndListComponents orchestrates the process
