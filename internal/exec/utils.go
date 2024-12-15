@@ -398,14 +398,12 @@ func ProcessStacks(
 			}
 		}
 
-		if foundStackCount == 0 {
+		if foundStackCount == 0 && !checkStack {
 			// Allow proceeding without error if checkStack is false (e.g., for operations that don't require a stack)
-			if !checkStack {
-				return configAndStacksInfo, nil
-			}
+			return configAndStacksInfo, nil
 		}
 
-		if foundStackCount == 0 && configAndStacksInfo.ComponentIsEnabled {
+		if foundStackCount == 0 {
 			cliConfigYaml := ""
 
 			if cliConfig.Logs.Level == u.LogLevelTrace {
