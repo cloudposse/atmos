@@ -454,12 +454,12 @@ func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
 	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
-		u.LogTrace(cliConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		u.LogWarning(cliConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
 		return
 	}
 
 	if latestReleaseTag == "" {
-		// No releases found or empty string, return silently
+		u.LogWarning(cliConfig, "No release information available")
 		return
 	}
 

@@ -35,6 +35,14 @@ var versionCmd = &cobra.Command{
 			// Check for the latest Atmos release on GitHub
 			latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 			if err == nil && latestReleaseTag != "" {
+				if err != nil {
+					u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Failed to check for updates: %v", err))
+					return
+				}
+				if latestReleaseTag == "" {
+					u.LogWarning(schema.CliConfiguration{}, "No release information available")
+					return
+				}
 				latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
 				currentRelease := strings.TrimPrefix(version.Version, "v")
 				if latestRelease != currentRelease {

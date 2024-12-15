@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -98,23 +100,64 @@ func SaveCache(cfg CacheConfig) error {
 
 func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	now := time.Now().Unix()
-	var interval int64
-	switch frequency {
-	case "minute":
-		interval = 60 // 1 minute
-	case "hourly":
-		interval = 3600 // 1 hour
-	case "daily":
-		interval = 86400 // 1 day
-	case "weekly":
-		interval = 604800 // 1 week
-	case "monthly":
-		interval = 2592000 // 30 days (approximate)
-	case "yearly":
-		interval = 31536000 // 365 days
-	default:
-		u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Unexpected frequency '%s' encountered. Defaulting to daily.", frequency))
-		interval = 86400 // default to daily
+
+	interval, err := parseFrequency(frequency)
+	if err != nil {
+		// Log warning and default to daily if we can’t parse
+		u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Unsupported frequency '%s' encountered. Defaulting to daily.", frequency))
+		interval = 86400 // daily
 	}
 	return now-lastChecked >= interval
+}
+
+// parseFrequency attempts to parse the frequency string in three ways:
+// 1. As an integer (seconds)
+// 2. As a duration with a suffix (e.g., "1h", "5m", "30s")
+// 3. As one of the predefined keywords (daily, hourly, etc.)
+func parseFrequency(frequency string) (int64, error) {
+	freq := strings.TrimSpace(frequency)
+
+	if intVal, err := strconv.ParseInt(freq, 10, 64); err == nil {
+		if intVal > 0 {
+			return intVal, nil
+		}
+	}
+
+	// Parse duration with suffix
+	if len(freq) > 1 {
+		unit := freq[len(freq)-1]
+		valPart := freq[:len(freq)-1]
+		if valInt, err := strconv.ParseInt(valPart, 10, 64); err == nil && valInt > 0 {
+			switch unit {
+			case 's':
+				return valInt, nil
+			case 'm':
+				return valInt * 60, nil
+			case 'h':
+				return valInt * 3600, nil
+			case 'd':
+				return valInt * 86400, nil
+			default:
+				return 0, fmt.Errorf("unrecognized duration unit: %s", string(unit))
+			}
+		}
+	}
+
+	// Handle predefined keywords
+	switch freq {
+	case "minute":
+		return 60, nil
+	case "hourly":
+		return 3600, nil
+	case "daily":
+		return 86400, nil
+	case "weekly":
+		return 604800, nil
+	case "monthly":
+		return 2592000, nil
+	case "yearly":
+		return 31536000, nil
+	default:
+		return 0, fmt.Errorf("unrecognized frequency: %s", freq)
+	}
 }

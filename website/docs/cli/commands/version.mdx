@@ -22,16 +22,25 @@ atmos version
 
 This will show the CLI version. 
 
-From time to time, Atmos will check for updates. The frequency is configured in the `atmos.yaml`. There are six frequency options: minute, hourly, daily, weekly, monthly, and yearly. The default is to check `daily`, and if any unsupported values are passed this default will be used.
+From time to time, Atmos will check for updates. The frequency of these checks is configured in the atmos.yaml file.
 
-It is also possible to turn off version checks in `atmos.yaml` by switching `enable` to `false`, or by setting the `ATMOS_VERSION_CHECK_ENABLED` environment variable to `false`, which overriders the config's settings. 
+Atmos supports three ways to specify the update check frequency:
+
+1. As an integer: Specify the number of seconds between checks (for example, 3600 for hourly checks).
+2. As a duration with a suffix: Use a time suffix to indicate the interval (for example, 1m for one minute, 5h for five hours, or 2d for two days).
+3. As one of the predefined keywords: Choose from the following options: minute, hourly, daily, weekly, monthly, and yearly. The default is daily.
+The default is to check `daily`, and if any unsupported values are passed this default will be used.
+
+It is also possible to turn off version checks in `atmos.yaml` by switching `enable` to `false`,
+or by setting the `ATMOS_VERSION_CHECK_ENABLED` environment variable to `false`, which overrides
+the config's settings. 
 
 ```shell
 atmos version --check
 ```
 
 The version command supports a `--check` flag. 
-It will force atmos to check for a new version, irrespective of the configuration settings.  
+This will force Atmos to check for a new version, irrespective of the configuration settings.  
 
 :::tip
 To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.
