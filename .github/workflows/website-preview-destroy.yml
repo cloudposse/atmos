@@ -48,10 +48,19 @@ jobs:
           PR_HEAD: ${{ github.head_ref }}
         run: echo "##[set-output name=branch;]$(echo ${PR_HEAD#refs/heads/} | tr / -)"
 
-      - name: mark environment as deactivated
-        uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
+      - name: Seek deployment
+        uses: cloudposse/github-action-seek-deployment@0.1.1
+        id: deployment
         with:
-          step: deactivate-env
-          env: preview
+          environment: preview
+          github-token: ${{ github.token }}
           ref: ${{ steps.get_branch.outputs.branch }}
-          desc: Environment was pruned
+          status: success
+
+      - name: Inactivate deployment
+        uses: chrnorm/deployment-status@9a72af4586197112e0491ea843682b5dc280d806 # v2.0.3
+        if: ${{ steps.deployment.outputs.id != '' }}
+        with:
+          state: inactive
+          token: ${{ github.token }}
+          deployment-id: ${{ steps.deployment.outputs.id }}
