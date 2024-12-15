@@ -31,9 +31,9 @@ Atmos supports three ways to specify the update check frequency:
 3. As one of the predefined keywords: Choose from the following options: minute, hourly, daily, weekly, monthly, and yearly. The default is daily.
 The default is to check `daily`, and if any unsupported values are passed this default will be used.
 
-It is also possible to turn off version checks in `atmos.yaml` by switching `enable` to `false`,
+It is also possible to turn off version checks in `atmos.yaml` by setting `version.check.enabled` to `false`,
 or by setting the `ATMOS_VERSION_CHECK_ENABLED` environment variable to `false`, which overrides
-the config's settings. 
+the `version.check.enabled` settings in `atmos.yaml`.
 
 ```shell
 atmos version --check
