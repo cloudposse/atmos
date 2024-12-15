@@ -320,4 +320,4 @@ version:
   check:
     enabled: true
     timeout: 1000 # ms
-    frequency: 3m
+    frequency: hourly
