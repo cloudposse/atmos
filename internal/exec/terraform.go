@@ -61,6 +61,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		fmt.Println()
 		return nil
 	}
+	if info.SubCommand == "version" {
+		return ExecuteShellCommand(cliConfig,
+			"terraform",
+			[]string{info.SubCommand},
+			"",
+			nil,
+			false,
+			info.RedirectStdErr)
+	}
 
 	shouldProcessStacks := true
 	shouldCheckStack := true
@@ -478,7 +487,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Clean up
-	if info.SubCommand != "plan" && info.PlanFile == "" {
+	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" {
 		planFilePath := constructTerraformComponentPlanfilePath(cliConfig, info)
 		_ = os.Remove(planFilePath)
 	}

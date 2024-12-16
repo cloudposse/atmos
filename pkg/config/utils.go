@@ -30,7 +30,8 @@ func FindAllStackConfigsInPathsForStack(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			patterns = getStackFilePatterns(p)
+			// Get all patterns since filtering is done later
+			patterns = getStackFilePatterns(p, true)
 		}
 
 		var allMatches []string
@@ -125,7 +126,8 @@ func FindAllStackConfigsInPaths(
 
 		ext := filepath.Ext(p)
 		if ext == "" {
-			patterns = getStackFilePatterns(p)
+			// Get all patterns since filtering is done later
+			patterns = getStackFilePatterns(p, true)
 		}
 
 		var allMatches []string
@@ -367,6 +369,17 @@ func processEnvVars(cliConfig *schema.CliConfiguration) error {
 	if len(listMergeStrategy) > 0 {
 		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_SETTINGS_LIST_MERGE_STRATEGY=%s", listMergeStrategy))
 		cliConfig.Settings.ListMergeStrategy = listMergeStrategy
+	}
+
+	versionEnabled := os.Getenv("ATMOS_VERSION_CHECK_ENABLED")
+	if len(versionEnabled) > 0 {
+		u.LogTrace(*cliConfig, fmt.Sprintf("Found ENV var ATMOS_VERSION_CHECK_ENABLED=%s", versionEnabled))
+		enabled, err := strconv.ParseBool(versionEnabled)
+		if err != nil {
+			u.LogWarning(*cliConfig, fmt.Sprintf("Invalid boolean value '%s' for ATMOS_VERSION_CHECK_ENABLED; using default.", versionEnabled))
+		} else {
+			cliConfig.Version.Check.Enabled = enabled
+		}
 	}
 
 	return nil
@@ -656,18 +669,26 @@ func GetStackNameFromContextAndStackNamePattern(
 }
 
 // getStackFilePatterns returns a slice of possible file patterns for a given base path
-func getStackFilePatterns(basePath string) []string {
-	return []string{
-		basePath + u.DefaultStackConfigFileExtension,
-		basePath + u.DefaultStackConfigFileExtension + u.TemplateExtension,
-		basePath + u.YamlTemplateExtension,
-		basePath + u.YmlTemplateExtension,
+func getStackFilePatterns(basePath string, includeTemplates bool) []string {
+	patterns := []string{
+		basePath + u.YamlFileExtension,
+		basePath + u.YmlFileExtension,
 	}
+
+	if includeTemplates {
+		patterns = append(patterns,
+			basePath+u.YamlTemplateExtension,
+			basePath+u.YmlTemplateExtension,
+		)
+	}
+
+	return patterns
 }
 
 // matchesStackFilePattern checks if a file path matches any of the valid stack file patterns
 func matchesStackFilePattern(filePath, stackName string) bool {
-	patterns := getStackFilePatterns(stackName)
+	// Always include template files for normal operations (imports, etc.)
+	patterns := getStackFilePatterns(stackName, true)
 	for _, pattern := range patterns {
 		if strings.HasSuffix(filePath, pattern) {
 			return true
@@ -685,12 +706,8 @@ func getConfigFilePatterns(path string, forGlobMatch bool) []string {
 		return []string{path}
 	}
 
-	patterns := []string{
-		path + u.DefaultStackConfigFileExtension,
-		path + u.DefaultStackConfigFileExtension + u.TemplateExtension,
-		path + u.YamlTemplateExtension,
-		path + u.YmlTemplateExtension,
-	}
+	// include template files for normal operations
+	patterns := getStackFilePatterns(path, true)
 	if !forGlobMatch {
 		// For direct file search, include the exact path without extension
 		patterns = append([]string{path}, patterns...)

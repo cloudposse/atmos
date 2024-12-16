@@ -23,12 +23,12 @@ type HelpFlagPrinter struct {
 	maxFlagLen int
 }
 
-func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) *HelpFlagPrinter {
+func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) (*HelpFlagPrinter, error) {
 	if out == nil {
-		panic("output writer cannot be nil")
+		return nil, fmt.Errorf("invalid argument: output writer cannot be nil")
 	}
 	if flags == nil {
-		panic("flag set cannot be nil")
+		return nil, fmt.Errorf("invalid argument: flag set cannot be nil")
 	}
 
 	if wrapLimit < minWidth {
@@ -39,7 +39,7 @@ func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) *He
 		wrapLimit:  wrapLimit,
 		out:        out,
 		maxFlagLen: calculateMaxFlagLength(flags),
-	}
+	}, nil
 }
 
 func calculateMaxFlagLength(flags *pflag.FlagSet) int {

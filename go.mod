@@ -16,6 +16,7 @@ require (
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.12.0
+	github.com/gofrs/flock v0.12.1
 	github.com/google/go-containerregistry v0.20.2
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
@@ -85,6 +86,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.13.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.10 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.24.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.11.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.16.6 // indirect
 	github.com/aws/smithy-go v1.11.2 // indirect

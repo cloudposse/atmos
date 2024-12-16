@@ -97,11 +97,19 @@ func Execute() error {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil && !errors.Is(err, cfg.NotFound) {
 		if isVersionCommand() {
-			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", err))
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", initErr))
 		} else {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.CliConfiguration{}, initErr)
 		}
 	}
+
+	// Save the original help function to prevent infinite recursion when overriding it.
+	// This allows us to call the original help functionality within our custom help function.
+	originalHelpFunc = RootCmd.HelpFunc()
+
+	// Override the help function with a custom one that adds an upgrade message after displaying help.
+	// This custom help function will call the original help function and then display the bordered message.
+	RootCmd.SetHelpFunc(customHelpMessageToUpgradeToAtmosLatestRelease)
 
 	// If CLI configuration was found, process its custom commands and command aliases
 	if err == nil {

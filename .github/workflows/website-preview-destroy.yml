@@ -1,0 +1,66 @@
+name: "Website Preview Destroy"
+
+on:
+  workflow_dispatch:
+
+  pull_request_target:
+    types:
+      - closed
+
+# These permissions are needed to interact with the GitHub's OIDC Token endpoint
+permissions:
+  id-token: write
+  contents: read
+  deployments: write
+
+env:
+  AWS_REGION: us-east-2
+  IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
+  IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-destroy-pr-${{ github.event.pull_request.number }}
+  S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+
+jobs:
+  website-destroy-preview:
+    # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
+    if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
+
+      - name: Delete S3 Bucket PR Folder
+        run: |
+          aws sts get-caller-identity
+          aws s3 rm s3://${{ env.S3_BUCKET_NAME }}/ --recursive --exclude "*" --include "pr-${{ env.PR_NUMBER }}/*"
+
+      # see https://dev.to/bobheadxi/branch-previews-with-google-app-engine-and-github-actions-3pco
+      - name: extract branch name
+        id: get_branch
+        shell: bash
+        env:
+          PR_HEAD: ${{ github.head_ref }}
+        run: echo "##[set-output name=branch;]$(echo ${PR_HEAD#refs/heads/} | tr / -)"
+
+      - name: Seek deployment
+        uses: cloudposse/github-action-seek-deployment@0.1.1
+        id: deployment
+        with:
+          environment: preview
+          github-token: ${{ github.token }}
+          ref: ${{ steps.get_branch.outputs.branch }}
+          status: success
+
+      - name: Inactivate deployment
+        uses: chrnorm/deployment-status@9a72af4586197112e0491ea843682b5dc280d806 # v2.0.3
+        if: ${{ steps.deployment.outputs.id != '' }}
+        with:
+          state: inactive
+          token: ${{ github.token }}
+          deployment-id: ${{ steps.deployment.outputs.id }}
