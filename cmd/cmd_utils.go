@@ -476,8 +476,9 @@ func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
 }
 
 func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
+	atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(*schema.CliConfiguration)
 	originalHelpFunc(cmd, args)
-	CheckForAtmosUpdateAndPrintMessage(cliConfig)
+	CheckForAtmosUpdateAndPrintMessage(*atmosConfig)
 }
 
 // Check Atmos is version command
