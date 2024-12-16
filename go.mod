@@ -16,6 +16,7 @@ require (
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.12.0
+	github.com/gofrs/flock v0.12.1
 	github.com/google/go-containerregistry v0.20.2
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
