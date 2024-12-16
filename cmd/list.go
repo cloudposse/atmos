@@ -8,8 +8,7 @@ import (
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List available stacks and components",
-	Long: `The 'list' command retrieves and displays a list of all stacks and components within the environment.
-	It provides an overview of the current resources, making it easier to manage and navigate your infrastructure.`,
+	Long: `Retrieve and display a list of all available stacks and components in your environment.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
