@@ -51,7 +51,7 @@ func ExecuteAtmosCmd() error {
 		if v2, ok := v.(map[string]any); ok {
 			if v3, ok := v2["components"].(map[string]any); ok {
 				if v4, ok := v3["terraform"].(map[string]any); ok {
-					return k, lo.Keys(v4)
+					return k, FilterAbstractComponents(v4)
 				}
 				// TODO: process 'helmfile' components and stacks.
 				// This will require checking the list of commands and filtering the stacks and components depending on the selected command.

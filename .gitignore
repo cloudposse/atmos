@@ -33,3 +33,5 @@
 # Nix
 .envrc
 .direnv/
+
+.atmos/cache.yaml
