@@ -23,21 +23,33 @@ func processTagTerraformOutput(
 	u.LogTrace(cliConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
 	str, err := getStringAfterTag(cliConfig, input, config.AtmosYamlFuncTerraformOutput)
-
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	parts := strings.Split(str, " ")
+	var component string
+	var stack string
+	var output string
 
-	if len(parts) != 3 {
-		err := errors.New(fmt.Sprintf("invalid Atmos YAML function: %s\nthree parameters are required: component, stack, output", input))
+	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
+	// while also ignoring leading and trailing whitespace
+	parts := strings.Fields(str)
+	partsLen := len(parts)
+
+	if partsLen == 3 {
+		component = strings.TrimSpace(parts[0])
+		stack = strings.TrimSpace(parts[1])
+		output = strings.TrimSpace(parts[2])
+	} else if partsLen == 2 {
+		component = strings.TrimSpace(parts[0])
+		stack = currentStack
+		output = strings.TrimSpace(parts[1])
+		u.LogTrace(cliConfig, fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
+			"Using the current stack '%s' as the 'stack' parameter", input, currentStack))
+	} else {
+		err := errors.New(fmt.Sprintf("invalid number of arguments in the Atmos YAML function: %s", input))
 		u.LogErrorAndExit(cliConfig, err)
 	}
-
-	component := strings.TrimSpace(parts[0])
-	stack := strings.TrimSpace(parts[1])
-	output := strings.TrimSpace(parts[2])
 
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
