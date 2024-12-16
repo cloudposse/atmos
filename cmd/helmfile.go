@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"strings"
-
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // helmfileCmd represents the base command for all helmfile sub-commands
@@ -34,18 +31,10 @@ var helmfileCmd = &cobra.Command{
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
-
-		// Check for the latest Atmos release on GitHub and print update message
-		latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
-		if err == nil && latestReleaseTag != "" {
-			latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
-			currentRelease := strings.TrimPrefix(version.Version, "v")
-			if latestRelease != currentRelease {
-				u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
-			}
-		}
 		// Exit on help
 		if info.NeedHelp {
+			// Check for the latest Atmos release on GitHub and print update message
+			CheckForAtmosUpdateAndPrintMessage(cliConfig)
 			return
 		}
 		// Check Atmos configuration
