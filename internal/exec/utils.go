@@ -519,7 +519,7 @@ func ProcessStacks(
 			u.LogErrorAndExit(cliConfig, err)
 		}
 
-		componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+		componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted, configAndStacksInfo.Stack)
 		if err != nil {
 			return configAndStacksInfo, err
 		}

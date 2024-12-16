@@ -270,7 +270,7 @@ func ExecuteTerraformGenerateVarfiles(
 					u.LogErrorAndExit(cliConfig, err)
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+				componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted, stackName)
 				if err != nil {
 					return err
 				}

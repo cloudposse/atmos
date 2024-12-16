@@ -15,7 +15,11 @@ var (
 	terraformOutputFuncSyncMap = sync.Map{}
 )
 
-func processTagTerraformOutput(cliConfig schema.CliConfiguration, input string) any {
+func processTagTerraformOutput(
+	cliConfig schema.CliConfiguration,
+	input string,
+	currentStack string,
+) any {
 	u.LogTrace(cliConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
 	str, err := getStringAfterTag(cliConfig, input, config.AtmosYamlFuncTerraformOutput)
