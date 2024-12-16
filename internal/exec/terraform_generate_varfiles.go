@@ -17,7 +17,7 @@ import (
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -270,7 +270,12 @@ func ExecuteTerraformGenerateVarfiles(
 					u.LogErrorAndExit(cliConfig, err)
 				}
 
-				componentSection = componentSectionConverted
+				componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+				if err != nil {
+					return err
+				}
+
+				componentSection = componentSectionFinal
 
 				if i, ok := componentSection[cfg.VarsSectionName].(map[string]any); ok {
 					varsSection = i

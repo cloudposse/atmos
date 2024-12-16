@@ -66,11 +66,11 @@ func ProcessYAMLConfigFiles(
 			stackFileName := strings.TrimSuffix(
 				strings.TrimSuffix(
 					u.TrimBasePathFromPath(stackBasePath+"/", p),
-					cfg.DefaultStackConfigFileExtension),
+					u.DefaultStackConfigFileExtension),
 				".yml",
 			)
 
-			deepMergedStackConfig, importsConfig, stackConfig, err := ProcessYAMLConfigFile(
+			deepMergedStackConfig, importsConfig, stackConfig, _, _, err := ProcessYAMLConfigFile(
 				cliConfig,
 				stackBasePath,
 				p,
@@ -167,6 +167,8 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	map[string]map[string]any,
 	map[string]any,
+	map[string]any,
+	map[string]any,
 	error,
 ) {
 
@@ -194,13 +196,13 @@ func ProcessYAMLConfigFile(
 	// This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
 	if err != nil {
 		if ignoreMissingFiles || skipIfMissing {
-			return map[string]any{}, map[string]map[string]any{}, map[string]any{}, nil
+			return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
 		} else {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, nil, err
 		}
 	}
 	if stackYamlConfig == "" {
-		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, nil
+		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
 	}
 
 	stackManifestTemplatesProcessed := stackYamlConfig
@@ -215,7 +217,7 @@ func ProcessYAMLConfigFile(
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
 			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
-			return nil, nil, nil, e
+			return nil, nil, nil, nil, nil, e
 		}
 	}
 
@@ -225,7 +227,7 @@ func ProcessYAMLConfigFile(
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 		}
 		e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
-		return nil, nil, nil, e
+		return nil, nil, nil, nil, nil, e
 	}
 
 	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
@@ -234,12 +236,12 @@ func ProcessYAMLConfigFile(
 		// jsonschema: invalid jsonType: map[interface {}]interface {}
 		dataJson, err := u.ConvertToJSONFast(stackConfigMap)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, nil, err
 		}
 
 		dataFromJson, err := u.ConvertFromJSON(dataJson)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, nil, err
 		}
 
 		compiler := jsonschema.NewCompiler()
@@ -248,18 +250,18 @@ func ProcessYAMLConfigFile(
 
 		atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
 		if err != nil {
-			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 		}
 
 		if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 		}
 
 		compiler.Draft = jsonschema.Draft2020
 
 		compiledSchema, err := compiler.Compile(atmosManifestJsonSchemaFilePath)
 		if err != nil {
-			return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+			return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 		}
 
 		if err = compiledSchema.Validate(dataFromJson); err != nil {
@@ -267,112 +269,112 @@ func ProcessYAMLConfigFile(
 			case *jsonschema.ValidationError:
 				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 				if err2 != nil {
-					return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+					return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
 				}
-				return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
+				return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
 			default:
-				return nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 		}
 	}
 
 	// Check if the `overrides` sections exist and if we need to process overrides for the components in this stack manifest and its imports
 
-	// Global overrides
+	// Global overrides in this stack manifest
 	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
 		if globalOverrides, ok = i.(map[string]any); !ok {
-			return nil, nil, nil, fmt.Errorf("invalid 'overrides' section in the stack manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, fmt.Errorf("invalid 'overrides' section in the stack manifest '%s'", relativeFilePath)
 		}
 	}
 
-	// Terraform overrides
-	if o, ok := stackConfigMap["terraform"]; ok {
+	// Terraform overrides in this stack manifest
+	if o, ok := stackConfigMap[cfg.TerraformSectionName]; ok {
 		if globalTerraformSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform' section in the stack manifest '%s'", relativeFilePath)
 		}
 
 		if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
 			if terraformOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+				return nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
 			}
 		}
 	}
 
+	// Helmfile overrides in this stack manifest
+	if o, ok := stackConfigMap[cfg.HelmfileSectionName]; ok {
+		if globalHelmfileSection, ok = o.(map[string]any); !ok {
+			return nil, nil, nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
+		}
+
+		if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
+			if helmfileOverrides, ok = i.(map[string]any); !ok {
+				return nil, nil, nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
+			}
+		}
+	}
+
+	// Final Terraform `overrides`
 	finalTerraformOverrides, err = m.Merge(
 		cliConfig,
 		[]map[string]any{globalOverrides, terraformOverrides, parentTerraformOverrides},
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
-	// Helmfile overrides
-	if o, ok := stackConfigMap["helmfile"]; ok {
-		if globalHelmfileSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, fmt.Errorf("invalid 'helmfile' section in the stack manifest '%s'", relativeFilePath)
-		}
-
-		if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
-			if helmfileOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, fmt.Errorf("invalid 'terraform.overrides' section in the stack manifest '%s'", relativeFilePath)
-			}
-		}
-	}
-
+	// Final Helmfile `overrides`
 	finalHelmfileOverrides, err = m.Merge(
 		cliConfig,
 		[]map[string]any{globalOverrides, helmfileOverrides, parentHelmfileOverrides},
 	)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// Add the `overrides` section for all components in this manifest
-	if len(finalTerraformOverrides) > 0 || len(finalHelmfileOverrides) > 0 {
-		if componentsSection, ok := stackConfigMap["components"].(map[string]any); ok {
-			// Terraform
-			if len(finalTerraformOverrides) > 0 {
-				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
-					for _, compSection := range terraformSection {
-						if componentSection, ok := compSection.(map[string]any); ok {
-							componentSection["overrides"] = finalTerraformOverrides
-						}
-					}
-				}
-			}
-
-			// Helmfile
-			if len(finalHelmfileOverrides) > 0 {
-				if helmfileSection, ok := componentsSection["helmfile"].(map[string]any); ok {
-					for _, compSection := range helmfileSection {
-						if componentSection, ok := compSection.(map[string]any); ok {
-							componentSection["overrides"] = finalHelmfileOverrides
-						}
-					}
-				}
-			}
-		}
+		return nil, nil, nil, nil, nil, err
 	}
 
 	// Find and process all imports
 	importStructs, err := ProcessImportSection(stackConfigMap, relativeFilePath)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	for _, importStruct := range importStructs {
 		imp := importStruct.Path
 
 		if imp == "" {
-			return nil, nil, nil, fmt.Errorf("invalid empty import in the manifest '%s'", relativeFilePath)
+			return nil, nil, nil, nil, nil, fmt.Errorf("invalid empty import in the manifest '%s'", relativeFilePath)
 		}
 
 		// If the import file is specified without extension, use `.yaml` as default
 		impWithExt := imp
 		ext := filepath.Ext(imp)
 		if ext == "" {
-			ext = cfg.DefaultStackConfigFileExtension
-			impWithExt = imp + ext
+			extensions := []string{
+				u.YamlFileExtension,
+				u.YmlFileExtension,
+				u.YamlTemplateExtension,
+				u.YmlTemplateExtension,
+			}
+
+			found := false
+			for _, extension := range extensions {
+				testPath := path.Join(basePath, imp+extension)
+				if _, err := os.Stat(testPath); err == nil {
+					impWithExt = imp + extension
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				// Default to .yaml if no file is found
+				impWithExt = imp + u.DefaultStackConfigFileExtension
+			}
+		} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
+			// Check if there's a template version of this file
+			templatePath := impWithExt + u.TemplateExtension
+			if _, err := os.Stat(path.Join(basePath, templatePath)); err == nil {
+				impWithExt = templatePath
+			}
 		}
 
 		impWithExtPath := path.Join(basePath, impWithExt)
@@ -381,7 +383,7 @@ func ProcessYAMLConfigFile(
 			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
 				relativeFilePath,
 				imp)
-			return nil, nil, nil, errors.New(errorMessage)
+			return nil, nil, nil, nil, nil, errors.New(errorMessage)
 		}
 
 		// Find all import matches in the glob
@@ -395,7 +397,7 @@ func ProcessYAMLConfigFile(
 				// The import was not found -> check if the import is a Go template; if not, return the error
 				isGolangTemplate, err2 := IsGolangTemplate(imp)
 				if err2 != nil {
-					return nil, nil, nil, err2
+					return nil, nil, nil, nil, nil, err2
 				}
 
 				// If the import is not a Go template and SkipIfMissing is false, return the error
@@ -406,31 +408,31 @@ func ProcessYAMLConfigFile(
 							relativeFilePath,
 							err,
 						)
-						return nil, nil, nil, errors.New(errorMessage)
+						return nil, nil, nil, nil, nil, errors.New(errorMessage)
 					} else if importMatches == nil {
 						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
 							imp,
 							relativeFilePath,
 						)
-						return nil, nil, nil, errors.New(errorMessage)
+						return nil, nil, nil, nil, nil, errors.New(errorMessage)
 					}
 				}
 			}
 		}
 
-		// Support `context` in hierarchical imports.
+		// Process `context` in hierarchical imports.
 		// Deep-merge the parent `context` with the current `context` and propagate the result to the entire chain of imports.
 		// The parent `context` takes precedence over the current (imported) `context` and will override items with the same keys.
 		// TODO: instead of calling the conversion functions, we need to switch to generics and update everything to support it
 		listOfMaps := []map[string]any{importStruct.Context, context}
 		mergedContext, err := m.Merge(cliConfig, listOfMaps)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, nil, err
 		}
 
 		// Process the imports in the current manifest
 		for _, importFile := range importMatches {
-			yamlConfig, _, yamlConfigRaw, err2 := ProcessYAMLConfigFile(
+			yamlConfig, _, yamlConfigRaw, importTerraformOverrides, importHelmfileOverrides, err2 := ProcessYAMLConfigFile(
 				cliConfig,
 				basePath,
 				importFile,
@@ -445,17 +447,64 @@ func ProcessYAMLConfigFile(
 				"",
 			)
 			if err2 != nil {
-				return nil, nil, nil, err2
+				return nil, nil, nil, nil, nil, err2
 			}
 
 			stackConfigs = append(stackConfigs, yamlConfig)
+
+			// Final Terraform `overrides`
+			finalTerraformOverrides, err = m.Merge(
+				cliConfig,
+				[]map[string]any{importTerraformOverrides, finalTerraformOverrides},
+			)
+			if err != nil {
+				return nil, nil, nil, nil, nil, err
+			}
+
+			// Final Helmfile `overrides`
+			finalHelmfileOverrides, err = m.Merge(
+				cliConfig,
+				[]map[string]any{importHelmfileOverrides, finalHelmfileOverrides},
+			)
+			if err != nil {
+				return nil, nil, nil, nil, nil, err
+			}
+
 			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
-				ext2 = cfg.DefaultStackConfigFileExtension
+				ext2 = u.DefaultStackConfigFileExtension
 			}
+
 			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
+		}
+	}
+
+	// Add the `overrides` section to all components in this stack manifest
+	if len(finalTerraformOverrides) > 0 || len(finalHelmfileOverrides) > 0 {
+		if componentsSection, ok := stackConfigMap[cfg.ComponentsSectionName].(map[string]any); ok {
+			// Terraform
+			if len(finalTerraformOverrides) > 0 {
+				if terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any); ok {
+					for _, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							componentSection[cfg.OverridesSectionName] = finalTerraformOverrides
+						}
+					}
+				}
+			}
+
+			// Helmfile
+			if len(finalHelmfileOverrides) > 0 {
+				if helmfileSection, ok := componentsSection[cfg.HelmfileSectionName].(map[string]any); ok {
+					for _, compSection := range helmfileSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							componentSection[cfg.OverridesSectionName] = finalHelmfileOverrides
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -467,10 +516,10 @@ func ProcessYAMLConfigFile(
 	stackConfigsDeepMerged, err := m.Merge(cliConfig, stackConfigs)
 	if err != nil {
 		err2 := fmt.Errorf("ProcessYAMLConfigFile: Merge: Deep-merge the stack manifest and all the imports: Error: %v", err)
-		return nil, nil, nil, err2
+		return nil, nil, nil, nil, nil, err2
 	}
 
-	return stackConfigsDeepMerged, importsConfig, stackConfigMap, nil
+	return stackConfigsDeepMerged, importsConfig, stackConfigMap, finalTerraformOverrides, finalHelmfileOverrides, nil
 }
 
 // ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends,
@@ -493,7 +542,7 @@ func ProcessStackConfig(
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			cfg.DefaultStackConfigFileExtension),
+			u.DefaultStackConfigFileExtension),
 		".yml",
 	)
 
@@ -509,6 +558,7 @@ func ProcessStackConfig(
 	terraformEnv := map[string]any{}
 	terraformCommand := ""
 	terraformProviders := map[string]any{}
+	terraformHooks := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
@@ -610,6 +660,13 @@ func ProcessStackConfig(
 		terraformProviders, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := globalTerraformSection[cfg.HooksSectionName]; ok {
+		terraformHooks, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.hooks' section in the file '%s'", stackName)
 		}
 	}
 
@@ -749,6 +806,14 @@ func ProcessStackConfig(
 					}
 				}
 
+				componentHooks := map[string]any{}
+				if i, ok := componentMap[cfg.HooksSectionName]; ok {
+					componentHooks, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
+					}
+				}
+
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[string]any{}
@@ -809,6 +874,7 @@ func ProcessStackConfig(
 				componentOverridesSettings := map[string]any{}
 				componentOverridesEnv := map[string]any{}
 				componentOverridesProviders := map[string]any{}
+				componentOverridesHooks := map[string]any{}
 				componentOverridesTerraformCommand := ""
 
 				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
@@ -845,6 +911,12 @@ func ProcessStackConfig(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.providers' in the manifest '%s'", component, stackName)
 						}
 					}
+
+					if i, ok = componentOverrides[cfg.HooksSectionName]; ok {
+						if componentOverridesHooks, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.hooks' in the manifest '%s'", component, stackName)
+						}
+					}
 				}
 
 				// Process base component(s)
@@ -853,6 +925,7 @@ func ProcessStackConfig(
 				baseComponentSettings := map[string]any{}
 				baseComponentEnv := map[string]any{}
 				baseComponentProviders := map[string]any{}
+				baseComponentHooks := map[string]any{}
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
 				baseComponentBackendSection := map[string]any{}
@@ -889,6 +962,7 @@ func ProcessStackConfig(
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
 					baseComponentProviders = baseComponentConfig.BaseComponentProviders
+					baseComponentHooks = baseComponentConfig.BaseComponentHooks
 					baseComponentName = baseComponentConfig.FinalBaseComponentName
 					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
@@ -1016,6 +1090,15 @@ func ProcessStackConfig(
 				if err != nil {
 					return nil, err
 				}
+
+				finalComponentHooks, err := m.Merge(
+					cliConfig,
+					[]map[string]any{
+						terraformHooks,
+						baseComponentHooks,
+						componentHooks,
+						componentOverridesHooks,
+					})
 
 				// Final backend
 				finalComponentBackendType := globalBackendType
@@ -1205,6 +1288,7 @@ func ProcessStackConfig(
 				comp[cfg.MetadataSectionName] = componentMetadata
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
+				comp[cfg.HooksSectionName] = finalComponentHooks
 
 				if baseComponentName != "" {
 					comp[cfg.ComponentSectionName] = baseComponentName
@@ -1793,7 +1877,7 @@ func CreateComponentStackMap(
 			isYaml := u.IsYaml(p)
 
 			if !isDirectory && isYaml {
-				config, _, _, err := ProcessYAMLConfigFile(
+				config, _, _, _, _, err := ProcessYAMLConfigFile(
 					cliConfig,
 					stacksBasePath,
 					p,
@@ -1859,13 +1943,13 @@ func CreateComponentStackMap(
 
 	for stack, components := range stackComponentMap["terraform"] {
 		for _, component := range components {
-			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, cfg.DefaultStackConfigFileExtension, "", 1))
+			componentStackMap["terraform"][component] = append(componentStackMap["terraform"][component], strings.Replace(stack, u.DefaultStackConfigFileExtension, "", 1))
 		}
 	}
 
 	for stack, components := range stackComponentMap["helmfile"] {
 		for _, component := range components {
-			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, cfg.DefaultStackConfigFileExtension, "", 1))
+			componentStackMap["helmfile"][component] = append(componentStackMap["helmfile"][component], strings.Replace(stack, u.DefaultStackConfigFileExtension, "", 1))
 		}
 	}
 
@@ -1910,6 +1994,7 @@ func ProcessBaseComponentConfig(
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentProviders map[string]any
+	var baseComponentHooks map[string]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
@@ -2033,6 +2118,13 @@ func ProcessBaseComponentConfig(
 			}
 		}
 
+		if baseComponentHooksSection, baseComponentHooksSectionExist := baseComponentMap[cfg.HooksSectionName]; baseComponentHooksSectionExist {
+			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("invalid '%s.hooks' section in the stack '%s'", baseComponent, stack)
+			}
+		}
+
 		// Base component backend
 		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
 			baseComponentBackendType, ok = i.(string)
@@ -2102,6 +2194,13 @@ func ProcessBaseComponentConfig(
 			return err
 		}
 		baseComponentConfig.BaseComponentProviders = merged
+
+		// Base component `hooks`
+		merged, err = m.Merge(cliConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentHooks = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand

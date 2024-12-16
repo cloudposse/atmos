@@ -35,7 +35,7 @@ var versionCmd = &cobra.Command{
 			latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
 			currentRelease := strings.TrimPrefix(version.Version, "v")
 			if latestRelease != currentRelease {
-				printMessageToUpgradeToAtmosLatestRelease(latestRelease)
+				u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
 			}
 		}
 	},

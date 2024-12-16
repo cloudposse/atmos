@@ -16,6 +16,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // ValidateConfig holds configuration options for Atmos validation.
@@ -231,7 +232,7 @@ func executeCustomCommand(
 
 		// Prepare template data for flags
 		flags := cmd.Flags()
-		flagsData := map[string]string{}
+		flagsData := map[string]any{}
 		for _, fl := range commandConfig.Flags {
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
@@ -239,6 +240,12 @@ func executeCustomCommand(
 					u.LogErrorAndExit(cliConfig, err)
 				}
 				flagsData[fl.Name] = providedFlag
+			} else if fl.Type == "bool" {
+				boolFlag, err := flags.GetBool(fl.Name)
+				if err != nil {
+					u.LogErrorAndExit(cliConfig, err)
+				}
+				flagsData[fl.Name] = boolFlag
 			}
 		}
 
@@ -258,7 +265,7 @@ func executeCustomCommand(
 			}
 			if component == "" || component == "<no value>" {
 				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
+					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
@@ -268,7 +275,7 @@ func executeCustomCommand(
 			}
 			if stack == "" || stack == "<no value>" {
 				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
+					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
 			}
 
 			// Get the config for the component in the stack
@@ -421,19 +428,18 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
 
-// printMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
-func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
-	c1 := color.New(color.FgCyan)
-	c2 := color.New(color.FgGreen)
-
-	u.PrintMessageInColor(fmt.Sprintf("\nYour version of Atmos is out of date. The latest version is %s\n\n", latestVersion), c1)
-	u.PrintMessage("To upgrade Atmos, refer to the following links and documents:\n")
-
-	u.PrintMessageInColor("Atmos Releases:\n", c2)
-	u.PrintMessage("https://github.com/cloudposse/atmos/releases\n")
-
-	u.PrintMessageInColor("Install Atmos:\n", c2)
-	u.PrintMessage("https://atmos.tools/install\n")
+// customHelpMessageToUpgradeToAtmosLatestRelease adds Atmos version info at the end of each help commnad
+func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
+	originalHelpFunc(cmd, args)
+	// Check for the latest Atmos release on GitHub
+	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
+	if err == nil && latestReleaseTag != "" {
+		latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
+		currentRelease := strings.TrimPrefix(version.Version, "v")
+		if latestRelease != currentRelease {
+			u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
+		}
+	}
 }
 
 // Check Atmos is version command

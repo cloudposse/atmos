@@ -2,11 +2,12 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path"
+
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"os"
-	"path"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -15,7 +16,7 @@ import (
 
 // ExecuteValidateComponentCmd executes `validate component` command
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return "", "", err
 	}
@@ -183,8 +184,8 @@ func validateComponentInternal(
 	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
-	if schemaType != "jsonschema" && schemaType != "opa" && schemaType != "cue" {
-		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa, cue", schemaType)
+	if schemaType != "jsonschema" && schemaType != "opa" {
+		return false, fmt.Errorf("invalid schema type '%s'. Supported types: jsonschema, opa", schemaType)
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
@@ -201,10 +202,6 @@ func validateComponentInternal(
 		case "opa":
 			{
 				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.Opa.BasePath, schemaPath)
-			}
-		case "cue":
-			{
-				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.Cue.BasePath, schemaPath)
 			}
 		}
 
@@ -244,13 +241,6 @@ func validateComponentInternal(
 	case "opa_legacy":
 		{
 			ok, err = ValidateWithOpaLegacy(componentSection, filePath, schemaText, timeoutSeconds)
-			if err != nil {
-				return false, err
-			}
-		}
-	case "cue":
-		{
-			ok, err = ValidateWithCue(componentSection, filePath, schemaText)
 			if err != nil {
 				return false, err
 			}

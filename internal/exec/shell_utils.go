@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -150,12 +151,53 @@ func execTerraformShellCommand(
 	workspaceName string,
 	componentPath string) error {
 
+	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+	atmosShellVal := 1
+	if atmosShellLvl != "" {
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			return err
+		}
+		atmosShellVal = val + 1
+	}
+	if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", atmosShellVal)); err != nil {
+		return err
+	}
+
+	// decrement the value after exiting the shell
+	defer func() {
+		atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+		if atmosShellLvl == "" {
+			return
+		}
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			return
+		}
+		// Prevent negative values
+		newVal := val - 1
+		if newVal < 0 {
+			newVal = 0
+		}
+		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
+			u.LogWarning(cliConfig, fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+		}
+	}()
+
+	// Set the Terraform environment variables to reference the var file
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_apply=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_refresh=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_import=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
+
+	// Set environment variables to indicate the details of the Atmos shell configuration
+	componentEnvList = append(componentEnvList, fmt.Sprintf("ATMOS_STACK=%s", stack))
+	componentEnvList = append(componentEnvList, fmt.Sprintf("ATMOS_COMPONENT=%s", component))
+	componentEnvList = append(componentEnvList, fmt.Sprintf("ATMOS_SHELL_WORKING_DIR=%s", workingDir))
+	componentEnvList = append(componentEnvList, fmt.Sprintf("ATMOS_TERRAFORM_WORKSPACE=%s", workspaceName))
 
 	hasCustomShellPrompt := cliConfig.Components.Terraform.Shell.Prompt != ""
 	if hasCustomShellPrompt {
@@ -220,6 +262,9 @@ func execTerraformShellCommand(
 
 		shellName := filepath.Base(shellCommand)
 
+		// This means you cannot have a custom shell prompt inside Geodesic (Geodesic requires "-l").
+		// Perhaps we should have special detection for Geodesic?
+		// We could test if env var GEODESIC_SHELL is set to "true" (or set at all).
 		if !hasCustomShellPrompt {
 			shellCommand = shellCommand + " -l"
 		}

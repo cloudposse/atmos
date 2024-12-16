@@ -1,0 +1,41 @@
+### in atmos.yaml (or atmos.d)
+stores:
+  prod-artifactory:
+    type: artifactory
+    config:
+      url: https://artifactory.com
+      token: !env JFROG_API_KEY
+      delimiter: /
+      key-template:
+        - tenant
+        - stage
+        - environment
+        - component
+
+## in stack config
+components:
+  terraform:
+    vpc:
+      hooks:
+        store-outputs:
+          events:
+            - after.terraform.apply
+            - after.terraform.deploy
+          command: store
+          name: prod-artifactory
+          values:
+            vpc_id: !terraform.output id
+            cidr: !terraform.output cidr
+        post-plan-to-slack:
+          events:
+            - after.terraform.plan
+          command: slack
+          message: !terraform.plan
+      vars:
+        cidr: 10.0.0.0/16
+
+    bastion:
+      vars:
+        vpc_id: !store prod-artifactory vpc/vpc_id
+        allow_list: !store prod-artifactory vpc/cidr
+        additional_subnets: !store prod-artifactory core/auto/use1/vpc/cidr

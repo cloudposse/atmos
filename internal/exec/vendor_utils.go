@@ -25,7 +25,7 @@ import (
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands
 func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,8 @@ func ReadAndProcessVendorConfigFile(
 
 			if !u.FileExists(pathToVendorConfig) {
 				vendorConfigFileExists = false
-				return vendorConfig, vendorConfigFileExists, "", fmt.Errorf("vendor config file or directory '%s' does not exist", pathToVendorConfig)
+				u.LogWarning(cliConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+				return vendorConfig, vendorConfigFileExists, "", nil
 			}
 
 			foundVendorConfigFile = pathToVendorConfig

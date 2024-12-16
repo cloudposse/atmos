@@ -27,7 +27,7 @@ type ProUnlockCmdArgs struct {
 }
 
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return ProLockUnlockCmdArgs{}, err
 	}

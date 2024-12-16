@@ -6,9 +6,28 @@ components:
       metadata:
         # Point to the Terraform component
         component: "test/template-functions-test2"
+        terraform_workspace: '{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-test'
+      settings:
+        spacelift:
+          workspace_enabled: false
       vars:
         enabled: true
         name: "test2"
         # Examples of using Atmos template functions to get the outputs of another Atmos component
-        test_label_id: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
-        test_label_id_2: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+        test_1: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+        test_2: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+        test_3: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_4: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map }}'
+        test_5: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_10: !terraform.output template-functions-test {{ .stack }} test_label_id
+        test_11: !terraform.output template-functions-test {{ .stack }} test_label_id
+        test_12: !terraform.output template-functions-test {{ .stack }} test_list
+        test_13: !terraform.output template-functions-test {{ .stack }} test_map
+        test_17: !template '{{ .stack }}'
+        test_18: !template '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_19: !template '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map }}'
+        test_20: !exec echo 42
+        test_21: !exec echo 43
+        test_30: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_label_id
+        test_31: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_map
+        test_32: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_list

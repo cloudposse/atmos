@@ -23,7 +23,7 @@ const atmosManifestDefault = "https://atmos.tools/schemas/atmos/atmos-manifest/1
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -90,6 +90,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		cliConfig.Schemas.Atmos.Manifest = atmosManifestDefault
 		u.LogTrace(cliConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default schema '%s'", atmosManifestDefault))
 	}
+
 	atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
 
 	if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
@@ -128,7 +129,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, _, err := ProcessYAMLConfigFile(
+		stackConfig, importsConfig, _, _, _, err := ProcessYAMLConfigFile(
 			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -183,6 +184,7 @@ func createComponentStackMap(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var hooksSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
 	var backendTypeSection string
@@ -221,6 +223,10 @@ func createComponentStackMap(
 						providersSection = map[string]any{}
 					}
 
+					if hooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
+						hooksSection = map[string]any{}
+					}
+
 					if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
 						overridesSection = map[string]any{}
 					}
@@ -250,6 +256,7 @@ func createComponentStackMap(
 							cfg.SettingsSectionName:    settingsSection,
 							cfg.EnvSectionName:         envSection,
 							cfg.ProvidersSectionName:   providersSection,
+							cfg.HooksSectionName:       hooksSection,
 							cfg.OverridesSectionName:   overridesSection,
 							cfg.BackendSectionName:     backendSection,
 							cfg.BackendTypeSectionName: backendTypeSection,
