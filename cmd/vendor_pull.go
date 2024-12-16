@@ -21,11 +21,14 @@ var vendorPullCmd = &cobra.Command{
 		if value == nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("atmos configuration not found in context"))
 		}
-		atmosConfig := value.(*schema.CliConfiguration)
+		atmosConfig, ok := value.(schema.CliConfiguration)
+		if !ok {
+			u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("invalid atmos configuration type in context"))
+		}
 
 		// WithStackValidation is a functional option that enables/disables stack configuration validation
 		// based on whether the --stack flag is provided
-		checkAtmosConfig(atmosConfig, WithStackValidation(cmd.Flag("stack").Changed))
+		checkAtmosConfig(&atmosConfig, WithStackValidation(cmd.Flag("stack").Changed))
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
