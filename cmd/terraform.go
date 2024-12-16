@@ -6,7 +6,6 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
-	"github.com/charmbracelet/log"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -21,8 +20,6 @@ var terraformCmd = &cobra.Command{
 	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		//checkAtmosConfig()
 
 		var argsAfterDoubleDash []string
 		var finalArgs = args
@@ -50,16 +47,10 @@ var terraformCmd = &cobra.Command{
 			return
 		}
 
-		err := e.ExecuteTerraform(info)
+		err = e.ExecuteTerraform(info)
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
-	},
-	PreRun: func(cmd *cobra.Command, args []string) {
-		log.Info("Inside Pre Terraform command")
-	},
-	PostRun: func(cmd *cobra.Command, args []string) {
-		log.Info("Inside Post Terraform command")
 	},
 }
 
