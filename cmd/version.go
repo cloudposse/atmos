@@ -53,7 +53,11 @@ var versionCmd = &cobra.Command{
 		}
 
 		// Check for the cache and print update message
-		atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(*schema.CliConfiguration)
+		value := cmd.Context().Value(contextKey("atmos_config"))
+		if value == nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("atmos configuration not found in context"))
+		}
+		atmosConfig := value.(*schema.CliConfiguration)
 		CheckForAtmosUpdateAndPrintMessage(*atmosConfig)
 	},
 }

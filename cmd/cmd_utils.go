@@ -476,7 +476,12 @@ func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
 }
 
 func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
-	atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(*schema.CliConfiguration)
+	value := cmd.Context().Value(contextKey("atmos_config"))
+	if value == nil {
+		u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("atmos configuration not found in context"))
+	}
+	atmosConfig := value.(*schema.CliConfiguration)
+
 	originalHelpFunc(cmd, args)
 	CheckForAtmosUpdateAndPrintMessage(*atmosConfig)
 }
