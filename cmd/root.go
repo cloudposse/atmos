@@ -127,7 +127,7 @@ func Execute() error {
 	checkAtmosConfig(&atmosConfig)
 
 	// Now that we have fully parsed the Atmos config, add it to the context so it can be used by subcommands
-	ctx := context.WithValue(RootCmd.Context(), contextKey("atmos_config"), atmosConfig)
+	ctx := context.WithValue(context.Background(), contextKey("atmos_config"), atmosConfig)
 	RootCmd.SetContext(ctx)
 
 	return RootCmd.Execute()
