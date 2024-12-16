@@ -8,7 +8,7 @@ import (
 var awsEksCmd = &cobra.Command{
 	Use:   "eks",
 	Short: "Run AWS EKS CLI commands for cluster management",
-	Long: `This command allows you to execute various 'aws eks' CLI commands for managing Amazon EKS clusters.
+	Long: `Manage Amazon EKS clusters using AWS CLI, including configuring kubeconfig and performing cluster-related operations.`
 
 	You can use this command to interact with AWS EKS, including operations like configuring kubeconfig, managing clusters, and more.
 	
