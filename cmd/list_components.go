@@ -25,6 +25,7 @@ var listComponentsCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		stackFlag, _ := cmd.Flags().GetString("stack")
+		abstractFlag, _ := cmd.Flags().GetBool("abstract")
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		cliConfig, err := config.InitCliConfig(configAndStacksInfo, true)
@@ -39,7 +40,7 @@ var listComponentsCmd = &cobra.Command{
 			return
 		}
 
-		output, err := l.FilterAndListComponents(stackFlag, stacksMap, cliConfig.Components.List)
+		output, err := l.FilterAndListComponents(stackFlag, abstractFlag, stacksMap, cliConfig.Components.List)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), color.New(color.FgYellow))
 			return
@@ -51,5 +52,6 @@ var listComponentsCmd = &cobra.Command{
 
 func init() {
 	listComponentsCmd.PersistentFlags().StringP("stack", "s", "", "Filter components by stack (e.g., atmos list components -s stack1)")
+	listComponentsCmd.PersistentFlags().Bool("abstract", false, "Filter abstract component if true")
 	listCmd.AddCommand(listComponentsCmd)
 }

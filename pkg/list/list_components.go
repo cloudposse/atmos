@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/samber/lo"
 
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -21,7 +22,7 @@ type tableData struct {
 }
 
 // getStackComponents extracts Terraform components from the final map of stacks
-func getStackComponents(stackData any, listFields []string) ([]string, error) {
+func getStackComponents(stackData any, abstractFlag bool, listFields []string) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("could not parse stacks")
@@ -37,7 +38,13 @@ func getStackComponents(stackData any, listFields []string) ([]string, error) {
 		return nil, fmt.Errorf("could not parse Terraform components")
 	}
 
-	uniqueKeys := lo.Keys(terraformComponents)
+	var uniqueKeys []string
+
+	if abstractFlag {
+		uniqueKeys = lo.Keys(terraformComponents)
+	} else {
+		uniqueKeys = exec.FilterAbstractComponents(terraformComponents)
+	}
 	result := make([]string, 0)
 
 	for _, dataKey := range uniqueKeys {
@@ -114,13 +121,13 @@ func parseColumns(listConfig schema.ListConfig) ([]string, []string, error) {
 }
 
 // collectComponents gathers components for the specified stack or all stacks
-func collectComponents(stackFlag string, stacksMap map[string]any, listFields []string) ([][]string, error) {
+func collectComponents(stackFlag string, abstractFlag bool, stacksMap map[string]any, listFields []string) ([][]string, error) {
 	components := [][]string{}
 
 	if stackFlag != "" {
 		// Filter components for the specified stack
 		if stackData, ok := stacksMap[stackFlag]; ok {
-			stackComponents, err := getStackComponents(stackData, listFields)
+			stackComponents, err := getStackComponents(stackData, abstractFlag, listFields)
 			if err != nil {
 				return nil, fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
 			}
@@ -134,7 +141,7 @@ func collectComponents(stackFlag string, stacksMap map[string]any, listFields []
 		// Collect components from all stacks
 		var errors []string
 		for _, stackData := range stacksMap {
-			stackComponents, err := getStackComponents(stackData, listFields)
+			stackComponents, err := getStackComponents(stackData, abstractFlag, listFields)
 			if err != nil {
 				errors = append(errors, err.Error())
 				continue // Skip invalid stacks
@@ -199,7 +206,7 @@ func generateTable(data tableData) {
 		EvenRowStyle = CellStyle.Foreground(lightGray) // Style for even rows
 
 		BorderStyle = lipgloss.NewStyle().
-				Foreground(purple) // Border style with purple color
+				Foreground(gray)
 	)
 
 	// Create the table with headers, rows, and styles
@@ -233,7 +240,7 @@ func generateTable(data tableData) {
 }
 
 // FilterAndListComponents orchestrates the process
-func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listConfig schema.ListConfig) (string, error) {
+func FilterAndListComponents(stackFlag string, abstractFlag bool, stacksMap map[string]any, listConfig schema.ListConfig) (string, error) {
 	// Step 1: Parse columns
 	header, listFields, err := parseColumns(listConfig)
 	if err != nil {
@@ -241,7 +248,7 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any, listCon
 	}
 
 	// Step 2: Collect components
-	components, err := collectComponents(stackFlag, stacksMap, listFields)
+	components, err := collectComponents(stackFlag, abstractFlag, stacksMap, listFields)
 	if err != nil {
 		return "", err
 	}

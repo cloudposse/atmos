@@ -32,7 +32,7 @@ func TestListComponents(t *testing.T) {
 			{Name: "Folder", Value: "{{ .vars.tenant }}"},
 		},
 	}
-	output, err := FilterAndListComponents("", stacksMap, listConfig)
+	output, err := FilterAndListComponents("", false, stacksMap, listConfig)
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
