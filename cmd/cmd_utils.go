@@ -480,10 +480,13 @@ func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []s
 	if value == nil {
 		u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("atmos configuration not found in context"))
 	}
-	atmosConfig := value.(*schema.CliConfiguration)
+	atmosConfig, ok := value.(schema.CliConfiguration)
+	if !ok {
+		u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("invalid atmos configuration type in context"))
+	}
 
 	originalHelpFunc(cmd, args)
-	CheckForAtmosUpdateAndPrintMessage(*atmosConfig)
+	CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 }
 
 // Check Atmos is version command

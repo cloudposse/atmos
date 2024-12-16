@@ -40,9 +40,12 @@ var helmfileCmd = &cobra.Command{
 			if value == nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("atmos configuration not found in context"))
 			}
-			atmosConfig := value.(*schema.CliConfiguration)
+			atmosConfig, ok := value.(schema.CliConfiguration)
+			if !ok {
+				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("invalid atmos configuration type in context"))
+			}
 
-			CheckForAtmosUpdateAndPrintMessage(*atmosConfig)
+			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 			return
 		}
 
