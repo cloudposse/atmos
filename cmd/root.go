@@ -97,9 +97,9 @@ func Execute() error {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil && !errors.Is(err, cfg.NotFound) {
 		if isVersionCommand() {
-			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", initErr))
+			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", err))
 		} else {
-			u.LogErrorAndExit(schema.CliConfiguration{}, initErr)
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	}
 

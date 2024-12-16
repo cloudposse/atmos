@@ -53,7 +53,8 @@ var versionCmd = &cobra.Command{
 		}
 
 		// Check for the cache and print update message
-		CheckForAtmosUpdateAndPrintMessage(cliConfig)
+		atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(*schema.CliConfiguration)
+		CheckForAtmosUpdateAndPrintMessage(*atmosConfig)
 	},
 }
 

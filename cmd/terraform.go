@@ -34,7 +34,8 @@ var terraformCmd = &cobra.Command{
 		// Exit on help
 		if info.NeedHelp {
 			// Check for the latest Atmos release on GitHub and print update message
-			CheckForAtmosUpdateAndPrintMessage(cliConfig)
+			atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(*schema.CliConfiguration)
+			CheckForAtmosUpdateAndPrintMessage(*atmosConfig)
 			return
 		}
 
