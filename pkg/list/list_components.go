@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/samber/lo"
+	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -187,7 +188,25 @@ const (
 	lightGray = lipgloss.Color("241") // Light gray for even rows
 )
 
+// Fallback for non-TTY environments
+func printSimpleTable(data tableData) {
+	// Print headers
+	fmt.Println(data.header)
+
+	// Print rows
+	for _, row := range data.rows {
+		fmt.Println(row)
+	}
+}
+
 func generateTable(data tableData) {
+	// Check if TTY is attached
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		// Degrade to a simple tabular format
+		printSimpleTable(data)
+		return
+	}
+
 	// Renderer for styling
 	re := lipgloss.NewRenderer(os.Stdout)
 
