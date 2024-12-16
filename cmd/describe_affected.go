@@ -15,9 +15,6 @@ var describeAffectedCmd = &cobra.Command{
 	Long:               `This command produces a list of the affected Atmos components and stacks given two Git commits: atmos describe affected [options]`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
-
 		err := e.ExecuteDescribeAffectedCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)

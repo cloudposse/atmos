@@ -20,8 +20,6 @@ var listComponentsCmd = &cobra.Command{
 	Example: "atmos list components\n" +
 		"atmos list components -s <stack>",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
 
 		stackFlag, _ := cmd.Flags().GetString("stack")
 

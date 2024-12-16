@@ -48,8 +48,6 @@ var helmfileCmd = &cobra.Command{
 		if info.NeedHelp {
 			return
 		}
-		// Check Atmos configuration
-		checkAtmosConfig()
 
 		err = e.ExecuteHelmfile(info)
 		if err != nil {

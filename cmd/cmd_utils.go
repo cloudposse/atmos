@@ -363,7 +363,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config
-func checkAtmosConfig(opts ...AtmosValidateOption) {
+func checkAtmosConfig(atmosConfig *schema.CliConfiguration, opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
 	}
@@ -373,15 +373,10 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		opt(vCfg)
 	}
 
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		u.LogErrorAndExit(cliConfig, err)
-	}
-
 	if vCfg.CheckStack {
-		atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
+		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
-			printMessageForMissingAtmosConfig(cliConfig)
+			printMessageForMissingAtmosConfig(*atmosConfig)
 			os.Exit(0)
 		}
 	}

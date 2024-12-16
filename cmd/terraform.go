@@ -49,10 +49,8 @@ var terraformCmd = &cobra.Command{
 		if info.NeedHelp {
 			return
 		}
-		// Check Atmos configuration
-		checkAtmosConfig()
 
-		err = e.ExecuteTerraform(info)
+		err := e.ExecuteTerraform(info)
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
