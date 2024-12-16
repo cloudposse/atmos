@@ -207,6 +207,9 @@ func generateTable(data tableData) {
 		return
 	}
 
+	// Dynamically calculate column widths
+	columnWidths := calculateColumnWidths(data)
+
 	// Renderer for styling
 	re := lipgloss.NewRenderer(os.Stdout)
 
@@ -218,8 +221,7 @@ func generateTable(data tableData) {
 				Align(lipgloss.Center) // Header style
 
 		CellStyle = re.NewStyle().
-				Padding(0, 1).
-				Width(20) // Base style for rows
+				Padding(0, 1) // Base style for rows
 
 		OddRowStyle  = CellStyle.Foreground(gray)      // Style for odd rows
 		EvenRowStyle = CellStyle.Foreground(lightGray) // Style for even rows
@@ -244,10 +246,8 @@ func generateTable(data tableData) {
 				style = OddRowStyle // Odd rows
 			}
 
-			// Optional: Adjust specific columns (e.g., make the middle column wider)
-			if col == 1 {
-				style = style.Width(25)
-			}
+			// Apply dynamic width to each column
+			style = style.Width(columnWidths[col])
 
 			return style
 		}).
@@ -256,6 +256,35 @@ func generateTable(data tableData) {
 
 	// Render and print the table
 	fmt.Println(t)
+}
+
+// Calculate the maximum width for each column
+func calculateColumnWidths(data tableData) []int {
+	columnCount := len(data.header)
+	columnWidths := make([]int, columnCount)
+
+	// Check headers
+	for i, header := range data.header {
+		if len(header) > columnWidths[i] {
+			columnWidths[i] = len(header)
+		}
+	}
+
+	// Check rows
+	for _, row := range data.rows {
+		for i, cell := range row {
+			if len(cell) > columnWidths[i] {
+				columnWidths[i] = len(cell)
+			}
+		}
+	}
+
+	// Add padding for aesthetics
+	for i := range columnWidths {
+		columnWidths[i] += 2 // Add 2 spaces for padding
+	}
+
+	return columnWidths
 }
 
 // FilterAndListComponents orchestrates the process
