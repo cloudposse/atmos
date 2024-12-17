@@ -293,54 +293,56 @@ For example:
 ```yaml
 components:
   terraform:
-    # Component `test` is configured with the remote state backend of type `static`
-    test:
+    # Component `static-backend` is configured with the remote state backend of type `static`
+    static-backend:
       remote_state_backend_type: static
       remote_state_backend:
         static:
-          val1: true
-          val2: "2"
-          val3: 3
-          val4: null
-          val5:
-            - item1
-            - item2
-            - item3
-          val6:
-            i1: 1
-            i2: 2
-            i3: 3
-    test2:
+          region: "us-west-2"
+          cluster_name: "production-cluster"
+          vpc_cidr: "10.0.0.0/16"
+          database:
+            type: "postgresql"
+            version: "12.7"
+            storage_gb: 100
+          allowed_ips:
+            - "192.168.1.0/24"
+            - "10.1.0.0/16"
+          tags:
+            Environment: "production"
+            Owner: "infra-team"
+
+    eks-cluster:
       vars:
-        test_1: '{{ (atmos.Component "test" .stack).outputs.val1 }}'
-        test_2: '{{ (atmos.Component "test" .stack).outputs.val2 }}'
-        test_3: '{{ (atmos.Component "test" .stack).outputs.val3 }}'
-        test_4: '{{ (atmos.Component "test" .stack).outputs.val4 }}'
-        # Use the `!template` Atmos YAML function to correctly handle the outputs of types map and list
-        test_5: !template '{{ (atmos.Component "test" .stack).outputs.val5 }}'
-        test_6: !template '{{ (atmos.Component "test" .stack).outputs.val6 }}'
+        region: '{{ (atmos.Component "static-backend" .stack).outputs.region }}'
+        cluster_name: '{{ (atmos.Component "static-backend" .stack).outputs.cluster_name }}'
+        vpc_cidr: '{{ (atmos.Component "static-backend" .stack).outputs.vpc_cidr }}'
+        db_type: '{{ (atmos.Component "static-backend" .stack).outputs.database.type }}'
+        db_storage: '{{ (atmos.Component "static-backend" .stack).outputs.database.storage_gb }}'
+        # Use the `!template` YAML function to correctly handle the outputs of types map and list
+        allowed_ips: !template '{{ (atmos.Component "static-backend" .stack).outputs.allowed_ips }}'
+        tags: !template '{{ (atmos.Component "static-backend" .stack).outputs.tags }}'
 ```
 </File>
 
-When the functions are executed, Atmos detects that the `test` component has the `static` remote state configured,
-and instead of executing `terrafrom output`, it just returns the static values from the `remote_state_backend.static` section.
+When the functions are executed, Atmos detects that the `static-backend` component has the `static` remote state configured,
+and instead of executing `terraform output`, it just returns the static values from the `remote_state_backend.static` section.
 
-Executing the command `atmos describe component test2 -s <stack>` produces the following result:
+Executing the command `atmos describe component eks-cluster -s <stack>` produces the following result:
 
-<Terminal title="atmos describe component test2 -s <stack>">
+<Terminal title="atmos describe component eks-cluster -s <stack>">
 ```yaml
 vars:
-  test_1: true
-  test_2: "2"
-  test_3: 3
-  test_4: null
-  test_5:
-    - item1
-    - item2
-    - item3
-  test_6:
-    i1: 1
-    i2: 2
-    i3: 3
+  region: us-west-2
+  cluster_name: production-cluster
+  vpc_cidr: 10.0.0.0/16
+  db_type: postgresql
+  db_storage: 100
+  allowed_ips:
+    - 192.168.1.0/24
+    - 10.1.0.0/16
+  tags:
+    Environment: production
+    Owner: infra-team
 ```
 </Terminal>

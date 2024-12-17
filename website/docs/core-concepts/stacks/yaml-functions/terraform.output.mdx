@@ -173,8 +173,8 @@ components:
     test2:
       vars:
         tags:
-          test: !terraform.output test {{ .stack }} id
-          test2: !terraform.output test {{ .stack }} id
+          test: !terraform.output test id
+          test2: !terraform.output test id
           test3: !terraform.output test {{ .stack }} id
 ```
 </File>
@@ -196,56 +196,56 @@ For example:
 ```yaml
 components:
   terraform:
-    # Component `test` is configured with the remote state backend of type `static`
-    test:
+    # Component `static-backend` is configured with the remote state backend of type `static`
+    static-backend:
       remote_state_backend_type: static
       remote_state_backend:
         static:
-          val1: true
-          val2: "2"
-          val3: 3
-          val4: null
-          val5:
-           - item1
-           - item2
-           - item3
-         val6:
-           i1: 1
-           i2: 2
-           i3: 3
-    test2:
+          region: "us-west-2"
+          cluster_name: "production-cluster"
+          vpc_cidr: "10.0.0.0/16"
+          database:
+            type: "postgresql"
+            version: "12.7"
+            storage_gb: 100
+          allowed_ips:
+            - "192.168.1.0/24"
+            - "10.1.0.0/16"
+          tags:
+            Environment: "production"
+            Owner: "infra-team"
+
+    eks-cluster:
       vars:
-        test_1: !terraform.output test val1
-        test_2: !terraform.output test {{ .stack }} val1
-        test_3: !terraform.output test val2
-        test_4: !terraform.output test val3
-        test_5: !terraform.output test val4
-        test_6: !terraform.output test val5
-        test_7: !terraform.output test val6
+        region: !terraform.output static-backend region
+        cluster_name: !terraform.output static-backend cluster_name
+        vpc_cidr: !terraform.output static-backend vpc_cidr
+        db_type: !terraform.output static-backend database.type
+        db_storage: !terraform.output static-backend database.storage_gb
+        allowed_ips: !terraform.output static-backend allowed_ips
+        tags: !terraform.output static-backend tags
 ```
 </File>
 
-When the functions are executed, Atmos detects that the `test` component has the `static` remote state configured,
-and instead of executing `terrafrom output`, it just returns the static values from the `remote_state_backend.static` section.
+When the functions are executed, Atmos detects that the `static-backend` component has the `static` remote state configured,
+and instead of executing `terraform output`, it just returns the static values from the `remote_state_backend.static` section.
 
-Executing the command `atmos describe component test2 -s <stack>` produces the following result:
+Executing the command `atmos describe component eks-cluster -s <stack>` produces the following result:
 
-<Terminal title="atmos describe component test2 -s <stack>">
+<Terminal title="atmos describe component eks-cluster -s <stack>">
 ```yaml
 vars:
-  test_1: true
-  test_2: true
-  test_3: "2"
-  test_4: 3
-  test_5: null
-  test_6:
-    - item1
-    - item2
-    - item3
-  test_7:
-    i1: 1
-    i2: 2
-    i3: 3
+  region: us-west-2
+  cluster_name: production-cluster
+  vpc_cidr: 10.0.0.0/16
+  db_type: postgresql
+  db_storage: 100
+  allowed_ips:
+    - 192.168.1.0/24
+    - 10.1.0.0/16
+  tags:
+    Environment: production
+    Owner: infra-team
 ```
 </Terminal>
 
