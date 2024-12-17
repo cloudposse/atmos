@@ -82,6 +82,13 @@ var (
 			},
 		},
 		Initialized: true,
+		Version: schema.Version{
+			Check: schema.VersionCheck{
+				Enabled:   true,
+				Timeout:   1000,
+				Frequency: "daily",
+			},
+		},
 	}
 )
 
