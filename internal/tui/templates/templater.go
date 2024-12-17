@@ -3,6 +3,7 @@ package templates
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -24,34 +25,83 @@ var (
 
 	commandDescStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("7")) // White color for description
+
+	commandUnsupportedNameStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("8")).
+					Bold(true)
+	commandUnsupportedDescStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("8"))
 )
 
 // formatCommand returns a styled string for a command and its description
-func formatCommand(name string, desc string, padding int) string {
+func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
+	if IsNotSupported {
+		styledName := commandUnsupportedNameStyle.Render(paddedName)
+		styledDesc := commandUnsupportedDescStyle.Render(desc + " [unsupported]")
+		return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
+	}
 	styledName := commandNameStyle.Render(paddedName)
 	styledDesc := commandDescStyle.Render(desc)
-	return fmt.Sprintf("  %s    %s", styledName, styledDesc)
+	return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 }
 
 // formatCommands formats a slice of cobra commands with proper styling
-func formatCommands(cmds []*cobra.Command) string {
+func formatCommands(cmds []*cobra.Command, listType string) string {
 	var maxLen int
 	availableCmds := make([]*cobra.Command, 0)
 
 	// First pass: collect available commands and find max length
 	for _, cmd := range cmds {
-		if cmd.IsAvailableCommand() || cmd.Name() == "help" {
-			availableCmds = append(availableCmds, cmd)
-			if len(cmd.Name()) > maxLen {
-				maxLen = len(cmd.Name())
+		switch listType {
+		case "additionalHelpTopics":
+			if cmd.IsAdditionalHelpTopicCommand() {
+				availableCmds = append(availableCmds, cmd)
+				if len(cmd.Name()) > maxLen {
+					maxLen = len(cmd.Name())
+				}
+				continue
+			}
+		case "native":
+			if cmd.Annotations["nativeCommand"] == "true" {
+				availableCmds = append(availableCmds, cmd)
+				if len(cmd.Name()) > maxLen {
+					maxLen = len(cmd.Name())
+				}
+				continue
+			}
+		default:
+			if cmd.Annotations["nativeCommand"] == "true" {
+				continue
+			}
+			if cmd.IsAvailableCommand() || cmd.Name() == "help" {
+				availableCmds = append(availableCmds, cmd)
+				if len(cmd.Name()) > maxLen {
+					maxLen = len(cmd.Name())
+				}
 			}
 		}
 	}
 
 	var lines []string
+	// Sorting by whether "IsNotSupported" is present in the Annotations map
+	sort.Slice(availableCmds, func(i, j int) bool {
+		// Check if "IsNotSupported" is present for commands[i] and commands[j]
+		iHasKey := availableCmds[i].Annotations["IsNotSupported"] != "true"
+		jHasKey := availableCmds[j].Annotations["IsNotSupported"] != "true"
+
+		// Place commands with "IsNotSupported" at the top
+		if iHasKey && !jHasKey {
+			return true
+		}
+		if !iHasKey && jHasKey {
+			return false
+		}
+		// If both or neither have the key, maintain original order
+		return i < j
+	})
 	for _, cmd := range availableCmds {
-		lines = append(lines, formatCommand(cmd.Name(), cmd.Short, maxLen))
+		lines = append(lines, formatCommand(cmd.Name(), cmd.Short, maxLen, cmd.Annotations["IsNotSupported"] == "true"))
 	}
 
 	return strings.Join(lines, "\n")
@@ -64,7 +114,16 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 		return fmt.Errorf("command cannot be nil")
 	}
 	t := &Templater{
-		UsageTemplate: MainUsageTemplate(),
+		UsageTemplate: GenerateFromBaseTemplate(cmd.Use, []HelpTemplateSections{
+			Usage,
+			Aliases,
+			Examples,
+			AvailableCommands,
+			Flags,
+			GlobalFlags,
+			AdditionalHelpTopics,
+			Footer,
+		}),
 	}
 
 	cmd.SetUsageTemplate(t.UsageTemplate)
@@ -86,34 +145,6 @@ func getTerminalWidth() int {
 	}
 
 	return screenWidth
-}
-
-// MainUsageTemplate returns the usage template for the root command and wrap cobra flag usages to the terminal width
-func MainUsageTemplate() string {
-	return `Usage:{{if .Runnable}}
-  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
-  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
-
-Aliases:
-  {{.NameAndAliases}}{{end}}{{if .HasExample}}
-
-Examples:
-{{.Example}}{{end}}{{if .HasAvailableSubCommands}}
-
-Available Commands:
-{{formatCommands .Commands}}{{end}}{{if .HasAvailableLocalFlags}}
-
-Flags:
-{{wrappedFlagUsages .LocalFlags | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
-
-Global Flags:
-{{wrappedFlagUsages .InheritedFlags | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
-
-Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
-  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
-
-Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
-`
 }
 
 // WrappedFlagUsages formats the flag usage string to fit within the terminal width

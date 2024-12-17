@@ -138,18 +138,25 @@ func init() {
 func initConfig() {
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
-
+	oldUsageFunc := RootCmd.UsageFunc()
 	RootCmd.SetUsageFunc(b.UsageFunc)
 
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		if command.Use != "terraform" {
+			err := tuiUtils.PrintStyledText("ATMOS")
+			if err != nil {
+				u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			}
 		}
-
-		b.HelpFunc(command, strings)
+		// TODO: find a better way to do this if possible
+		if command.Use == "terraform" {
+			oldUsageFunc(command)
+			return
+		} else {
+			b.HelpFunc(command, strings)
+		}
 		command.Usage()
 	})
 }
