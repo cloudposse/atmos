@@ -2,9 +2,10 @@ package exec
 
 import (
 	"fmt"
+	"path/filepath"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"path"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -25,7 +26,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 
 	component := args[0]
 
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -74,7 +75,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Write backend config to file
-	var backendFilePath = path.Join(
+	var backendFilePath = filepath.Join(
 		cliConfig.BasePath,
 		cliConfig.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,

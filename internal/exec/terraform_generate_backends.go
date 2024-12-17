@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -17,7 +16,7 @@ import (
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -161,7 +160,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				// Path to the terraform component
-				terraformComponentPath := path.Join(
+				terraformComponentPath := filepath.Join(
 					cliConfig.BasePath,
 					cliConfig.Components.Terraform.BasePath,
 					terraformComponent,
@@ -291,7 +290,7 @@ func ExecuteTerraformGenerateBackends(
 
 						processedTerraformComponents[terraformComponent] = terraformComponent
 
-						backendFilePath = path.Join(
+						backendFilePath = filepath.Join(
 							terraformComponentPath,
 							"backend.tf",
 						)

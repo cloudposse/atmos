@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -23,7 +23,7 @@ const atmosManifestDefault = "https://atmos.tools/schemas/atmos/atmos-manifest/1
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		u.LogTrace(cliConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default schema '%s'", atmosManifestDefault))
 	}
 
-	atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
+	atmosManifestJsonSchemaFileAbsPath := filepath.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
 
 	if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
 		atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
@@ -113,8 +113,13 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
 	includedPaths := []string{"**/*"}
-	// Don't exclude any YAML files for validation
-	excludedPaths := []string{}
+	// Don't exclude any YAML files for validation except template files
+	excludedPaths := []string{
+		// Exclude template files from validation since they may contain invalid YAML before being rendered
+		"**/*.tmpl",
+		"**/*.yaml.tmpl",
+		"**/*.yml.tmpl",
+	}
 	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(cliConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
@@ -125,11 +130,11 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		return err
 	}
 
-	u.LogDebug(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders\n",
-		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
+	u.LogDebug(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
+		filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, _, err := ProcessYAMLConfigFile(
+		stackConfig, importsConfig, _, _, _, err := ProcessYAMLConfigFile(
 			cliConfig,
 			cliConfig.StacksBaseAbsolutePath,
 			filePath,
@@ -371,7 +376,7 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	if err != nil || fileName == "" {
 		return "", fmt.Errorf("failed to get the file name from the URL '%s': %w", manifestURL, err)
 	}
-	atmosManifestJsonSchemaFilePath := path.Join(tempDir, fileName)
+	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	client := &getter.Client{

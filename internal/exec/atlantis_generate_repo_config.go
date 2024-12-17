@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -19,7 +18,7 @@ import (
 
 // ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -339,7 +338,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				}
 
 				// Absolute path to the terraform component
-				terraformComponentPath := path.Join(
+				terraformComponentPath := filepath.Join(
 					cliConfig.BasePath,
 					cliConfig.Components.Terraform.BasePath,
 					terraformComponent,

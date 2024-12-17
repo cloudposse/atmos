@@ -163,7 +163,7 @@ func ProcessComponentConfig(
 }
 
 // processCommandLineArgs processes command-line args
-func processCommandLineArgs(
+func ProcessCommandLineArgs(
 	componentType string,
 	cmd *cobra.Command,
 	args []string,
@@ -221,6 +221,11 @@ func processCommandLineArgs(
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
+		// If we're dealing with `-h` or `--help`,
+		// then the SubCommand should be empty.
+		if argsAndFlagsInfo.SubCommand == "-h" || argsAndFlagsInfo.SubCommand == "--help" {
+			argsAndFlagsInfo.SubCommand = ""
+		}
 		err = processHelp(schema.CliConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -393,6 +398,13 @@ func ProcessStacks(
 			}
 		}
 
+		if foundStackCount == 0 {
+			// Allow proceeding without error if checkStack is false (e.g., for operations that don't require a stack)
+			if !checkStack {
+				return configAndStacksInfo, nil
+			}
+		}
+
 		if foundStackCount == 0 && configAndStacksInfo.ComponentIsEnabled {
 			cliConfigYaml := ""
 
@@ -556,6 +568,10 @@ func ProcessStacks(
 		if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
 			configAndStacksInfo.Command = i
 		}
+
+		if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {
+			configAndStacksInfo.TerraformWorkspace = i
+		}
 	}
 
 	// Spacelift stack
@@ -645,21 +661,18 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 	var indexesToRemove []int
 
 	// For commands like `atmos terraform clean` and `atmos terraform plan`, show the command help
-	if len(inputArgsAndFlags) == 1 {
+	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" {
 		info.SubCommand = inputArgsAndFlags[0]
 		info.NeedHelp = true
+		return info, nil
+	}
+	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "version" {
+		info.SubCommand = inputArgsAndFlags[0]
 		return info, nil
 	}
 
 	// https://github.com/roboll/helmfile#cli-reference
 	var globalOptionsFlagIndex int
-
-	// For commands like `atmos terraform clean` and `atmos terraform plan`, show the command help
-	if len(inputArgsAndFlags) == 1 {
-		info.SubCommand = inputArgsAndFlags[0]
-		info.NeedHelp = true
-		return info, nil
-	}
 
 	for i, arg := range inputArgsAndFlags {
 		if arg == cfg.GlobalOptionsFlag {
@@ -1012,7 +1025,6 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 		// Handle terraform two-words commands
 		// https://developer.hashicorp.com/terraform/cli/commands
 		if componentType == "terraform" {
-
 			// Handle the custom legacy command `terraform write varfile` (NOTE: use `terraform generate varfile` instead)
 			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
 				info.SubCommand = "write"
@@ -1049,7 +1061,20 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			}
 		} else {
 			info.SubCommand = additionalArgsAndFlags[0]
-			info.ComponentFromArg = additionalArgsAndFlags[1]
+			if len(additionalArgsAndFlags) > 1 {
+				secondArg := additionalArgsAndFlags[1]
+				if len(secondArg) == 0 {
+					return info, fmt.Errorf("invalid empty argument provided")
+				}
+				if strings.HasPrefix(secondArg, "--") {
+					if len(secondArg) <= 2 {
+						return info, fmt.Errorf("invalid option format: %s", secondArg)
+					}
+					info.AdditionalArgsAndFlags = []string{secondArg}
+				} else {
+					info.ComponentFromArg = secondArg
+				}
+			}
 			if len(additionalArgsAndFlags) > 2 {
 				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
 			}

@@ -155,8 +155,8 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
   ```yaml
   components:
     terraform:
-    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
-    auto_generate_backend_file: true
+      # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
+      auto_generate_backend_file: true
   ```
   </File>
 
@@ -209,7 +209,7 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
   </File>
 
   Note that this is optional. If you don’t add `backend.s3.workspace_key_prefix` to the component manifest, the Atmos component name will be used
-  automatically (which is this example is `vpc`). `/` (slash) in the Atmos component name will be replaced with `-` (dash).
+  automatically (which, in this example, is `vpc`). `/` (slash) in the Atmos component name will be replaced with `-` (dash).
 
   We usually don’t specify `workspace_key_prefix` for each component and let Atmos use the component name as `workspace_key_prefix`.
 

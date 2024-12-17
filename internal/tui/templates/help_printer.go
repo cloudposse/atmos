@@ -23,13 +23,14 @@ type HelpFlagPrinter struct {
 	maxFlagLen int
 }
 
-func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) *HelpFlagPrinter {
+func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) (*HelpFlagPrinter, error) {
 	if out == nil {
-		panic("output writer cannot be nil")
+		return nil, fmt.Errorf("invalid argument: output writer cannot be nil")
 	}
 	if flags == nil {
-		panic("flag set cannot be nil")
+		return nil, fmt.Errorf("invalid argument: flag set cannot be nil")
 	}
+
 	if wrapLimit < minWidth {
 		wrapLimit = minWidth
 	}
@@ -38,7 +39,7 @@ func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) *He
 		wrapLimit:  wrapLimit,
 		out:        out,
 		maxFlagLen: calculateMaxFlagLength(flags),
-	}
+	}, nil
 }
 
 func calculateMaxFlagLength(flags *pflag.FlagSet) int {
@@ -89,6 +90,15 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 		}
 	}
 
+	availWidth := int(p.wrapLimit) - p.maxFlagLen - 4
+	if availWidth < minDescWidth {
+		if _, err := fmt.Fprintf(p.out, "%s\n", flagName); err != nil {
+			return
+		}
+		flagName = strings.Repeat(" ", p.maxFlagLen)
+		availWidth = int(p.wrapLimit) - 4
+	}
+
 	flagSection := fmt.Sprintf("%-*s", p.maxFlagLen, flagName)
 	descIndent := p.maxFlagLen + 4
 
@@ -97,12 +107,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 		description = fmt.Sprintf("%s (default %q)", description, flag.DefValue)
 	}
 
-	descWidth := int(p.wrapLimit) - descIndent
-	if descWidth < minDescWidth {
-		descWidth = minDescWidth
-	}
-
-	wrapped := wordwrap.WrapString(description, uint(descWidth))
+	wrapped := wordwrap.WrapString(description, uint(availWidth))
 	lines := strings.Split(wrapped, "\n")
 
 	if _, err := fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0]); err != nil {

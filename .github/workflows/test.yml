@@ -80,15 +80,6 @@ jobs:
         run: |
           make testacc
 
-  release:
-    needs: test
-    if: github.event_name == 'push'
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
-    with:
-      publish: false
-      format: binary
-    secrets: inherit
-
   docker:
     name: "Docker Lint"
     needs: build
@@ -255,6 +246,7 @@ jobs:
           # - demo-stack-templating
           # - demo-multi-cloud
           - demo-vendoring
+          - tests
 
     timeout-minutes: 20
     steps:
@@ -361,3 +353,12 @@ jobs:
                 "examples/${{ matrix.demo-folder }}/stacks/**/*.yml"
               ]
             }
+
+  release:
+    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    if: github.event_name == 'push'
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
+    with:
+      publish: false
+      format: binary
+    secrets: inherit

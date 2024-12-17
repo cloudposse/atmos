@@ -3,7 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -37,7 +37,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 	var fullMatches []string
 	for _, match := range matches {
-		fullMatches = append(fullMatches, path.Join(base, match))
+		fullMatches = append(fullMatches, filepath.Join(base, match))
 	}
 	// Sort matches lexicographically
 	sort.Strings(fullMatches)

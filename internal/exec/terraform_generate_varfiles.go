@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -17,7 +16,7 @@ import (
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -160,7 +159,7 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				// Absolute path to the terraform component
-				terraformComponentPath := path.Join(
+				terraformComponentPath := filepath.Join(
 					cliConfig.BasePath,
 					cliConfig.Components.Terraform.BasePath,
 					terraformComponent,

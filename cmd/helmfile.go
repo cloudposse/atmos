@@ -17,8 +17,6 @@ var helmfileCmd = &cobra.Command{
 	Long:               `This command runs Helmfile commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
 
 		var argsAfterDoubleDash []string
 		var finalArgs = args
@@ -29,7 +27,20 @@ var helmfileCmd = &cobra.Command{
 			argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
 		}
 
-		err := e.ExecuteHelmfileCmd(cmd, finalArgs, argsAfterDoubleDash)
+		info, err := e.ProcessCommandLineArgs("helmfile", cmd, finalArgs, argsAfterDoubleDash)
+		if err != nil {
+			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		}
+		// Exit on help
+		if info.NeedHelp {
+			// Check for the latest Atmos release on GitHub and print update message
+			CheckForAtmosUpdateAndPrintMessage(cliConfig)
+			return
+		}
+		// Check Atmos configuration
+		checkAtmosConfig()
+
+		err = e.ExecuteHelmfile(info)
 		if err != nil {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}

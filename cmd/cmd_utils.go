@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // ValidateConfig holds configuration options for Atmos validation.
@@ -231,7 +233,7 @@ func executeCustomCommand(
 
 		// Prepare template data for flags
 		flags := cmd.Flags()
-		flagsData := map[string]string{}
+		flagsData := map[string]any{}
 		for _, fl := range commandConfig.Flags {
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
@@ -239,6 +241,12 @@ func executeCustomCommand(
 					u.LogErrorAndExit(cliConfig, err)
 				}
 				flagsData[fl.Name] = providedFlag
+			} else if fl.Type == "bool" {
+				boolFlag, err := flags.GetBool(fl.Name)
+				if err != nil {
+					u.LogErrorAndExit(cliConfig, err)
+				}
+				flagsData[fl.Name] = boolFlag
 			}
 		}
 
@@ -258,7 +266,7 @@ func executeCustomCommand(
 			}
 			if component == "" || component == "<no value>" {
 				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
+					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
@@ -268,7 +276,7 @@ func executeCustomCommand(
 			}
 			if stack == "" || stack == "<no value>" {
 				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+cfg.DefaultStackConfigFileExtension))
+					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
 			}
 
 			// Get the config for the component in the stack
@@ -396,13 +404,13 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Println(" CLI config file was not found.")
 		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		u.PrintMessageInColor(filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist in the current path.")
 	} else {
 		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		u.PrintMessageInColor(filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist.")
 	}
 
@@ -421,19 +429,60 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
 
-// printMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
-func printMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
-	c1 := color.New(color.FgCyan)
-	c2 := color.New(color.FgGreen)
+// CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
+// It loads the cache, decides if it's time to check for updates, compares the current version to the latest available release,
+// and if newer, prints the update message. It also updates the cache's timestamp after printing.
+func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
+	// If version checking is disabled in the configuration, do nothing
+	if !cliConfig.Version.Check.Enabled {
+		return
+	}
 
-	u.PrintMessageInColor(fmt.Sprintf("\nYour version of Atmos is out of date. The latest version is %s\n\n", latestVersion), c1)
-	u.PrintMessage("To upgrade Atmos, refer to the following links and documents:\n")
+	// Load the cache
+	cacheCfg, err := cfg.LoadCache()
+	if err != nil {
+		u.LogWarning(cliConfig, fmt.Sprintf("Could not load cache: %s", err))
+		return
+	}
 
-	u.PrintMessageInColor("Atmos Releases:\n", c2)
-	u.PrintMessage("https://github.com/cloudposse/atmos/releases\n")
+	// Determine if it's time to check for updates based on frequency and last_checked
+	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, cliConfig.Version.Check.Frequency) {
+		// Not due for another check yet, so return without printing anything
+		return
+	}
 
-	u.PrintMessageInColor("Install Atmos:\n", c2)
-	u.PrintMessage("https://atmos.tools/install\n")
+	// Get the latest Atmos release from GitHub
+	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
+	if err != nil {
+		u.LogWarning(cliConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		return
+	}
+
+	if latestReleaseTag == "" {
+		u.LogWarning(cliConfig, "No release information available")
+		return
+	}
+
+	// Trim "v" prefix to compare versions
+	latestVersion := strings.TrimPrefix(latestReleaseTag, "v")
+	currentVersion := strings.TrimPrefix(version.Version, "v")
+
+	// If the versions differ, print the update message
+	if latestVersion != currentVersion {
+		u.PrintMessageToUpgradeToAtmosLatestRelease(latestVersion)
+	}
+
+	// Update the cache to mark the current timestamp
+	cacheCfg.LastChecked = time.Now().Unix()
+	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
+		u.LogWarning(cliConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
+
+	}
+}
+
+func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
+	originalHelpFunc(cmd, args)
+	CheckForAtmosUpdateAndPrintMessage(cliConfig)
 }
 
 // Check Atmos is version command
