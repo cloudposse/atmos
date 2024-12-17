@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -161,7 +160,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				// Path to the terraform component
-				terraformComponentPath := path.Join(
+				terraformComponentPath := filepath.Join(
 					cliConfig.BasePath,
 					cliConfig.Components.Terraform.BasePath,
 					terraformComponent,
@@ -254,7 +253,7 @@ func ExecuteTerraformGenerateBackends(
 					u.LogErrorAndExit(cliConfig, err)
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+				componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted, stackName)
 				if err != nil {
 					return err
 				}
@@ -291,7 +290,7 @@ func ExecuteTerraformGenerateBackends(
 
 						processedTerraformComponents[terraformComponent] = terraformComponent
 
-						backendFilePath = path.Join(
+						backendFilePath = filepath.Join(
 							terraformComponentPath,
 							"backend.tf",
 						)

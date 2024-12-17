@@ -44,13 +44,27 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		return nil, err
 	}
 
-	outputProcessed, err := execTerraformOutput(cliConfig, component, stack, sections)
+	var terraformOutputs map[string]any
+
+	// Check if the component in the stack is configured with the 'static' remote state backend,
+	// in which case get the `output` from the static remote state instead of executing `terraform output`
+	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
 		return nil, err
 	}
 
+	if remoteStateBackendStaticTypeOutputs != nil {
+		terraformOutputs = remoteStateBackendStaticTypeOutputs
+	} else {
+		// Execute `terraform output`
+		terraformOutputs, err = execTerraformOutput(cliConfig, component, stack, sections)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	outputs := map[string]any{
-		"outputs": outputProcessed,
+		"outputs": terraformOutputs,
 	}
 
 	sections = lo.Assign(sections, outputs)
@@ -60,7 +74,7 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 
 	if cliConfig.Logs.Level == u.LogLevelTrace {
 		u.LogTrace(cliConfig, fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
-		y, err2 := u.ConvertToYAML(outputProcessed)
+		y, err2 := u.ConvertToYAML(terraformOutputs)
 		if err2 != nil {
 			u.LogError(cliConfig, err2)
 		} else {

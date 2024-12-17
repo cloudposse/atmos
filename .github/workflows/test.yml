@@ -246,6 +246,7 @@ jobs:
           # - demo-stack-templating
           # - demo-multi-cloud
           - demo-vendoring
+          - tests
 
     timeout-minutes: 20
     steps:

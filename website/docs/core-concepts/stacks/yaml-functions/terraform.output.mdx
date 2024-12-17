@@ -6,6 +6,7 @@ description: Read the remote state of any Atmos component
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
 
 <Intro>
 The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/components/terraform/remote-state))
@@ -14,7 +15,13 @@ of components directly in Atmos stack manifests.
 
 ## Usage
 
+The `!template` function can be called with either two or three parameters:
+
 ```yaml
+  # Get the `output` of the `component` in the current stack
+  !terraform.output <component> <output>
+
+  # Get the `output` of the `component` in the provided stack
   !terraform.output <component> <stack> <output>
 ```
 
@@ -25,7 +32,7 @@ of components directly in Atmos stack manifests.
   <dd>Atmos component name</dd>
 
   <dt>`stack`</dt>
-  <dd>Atmos stack name</dd>
+  <dd>(Optional) Atmos stack name</dd>
 
   <dt>`output`</dt>
   <dd>Terraform output</dd>
@@ -48,9 +55,11 @@ components:
       vars:
         vpc_config:
           # Output of type string
-          security_group_id: !terraform.output security-group/lambda {{ .stack }} id
+          security_group_id: !terraform.output security-group/lambda id
+          security_group_id2: !terraform.output security-group/lambda2 {{ .stack }} id
+          security_group_id3: !terraform.output security-group/lambda3 {{ .atmos_stack }} id
           # Output of type list
-          subnet_ids: !terraform.output vpc {{ .stack }} private_subnet_ids
+          subnet_ids: !terraform.output vpc private_subnet_ids
           # Output of type map
           config_map: !terraform.output config {{ .stack }} config_map
 ```
@@ -58,13 +67,12 @@ components:
 
 ## Specifying Atmos `stack`
 
-There are multiple ways you can specify the Atmos stack parameter in the `!terraform.output` function.
+If you call the `!temolate` function with three parameters, you need to specify the stack as the second argument.
 
-The `stack` argument is the second argument of the `!terraform.output` function, and it can be specified in a few different ways:
+There are multiple ways you can specify the Atmos stack parameter in the `!terraform.output` function.
 
 ### Hardcoded Stack Name
 
-Hardcoded stack name.
 Use it if you want to get an output from a component from a different (well-known and static) stack.
 For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` output from the `vpc` component from the stack `plat-ue2-prod`:
 
@@ -95,6 +103,13 @@ For example, you have a `tgw` component that requires the `vpc_id` output from t
         vars:
           vpc_id: !terraform.output vpc {{ .stack }} vpc_id
 ```
+
+:::note
+Using the `.stack` or `.atmos_stack` template identifiers to specify the stack is the same as calling the `!template`
+function with two parameters without specifying the current stack, but without using `Go` templates.
+If you need to get an output of a component in the current stack, using the `!template` function with two parameters
+is preferred because it has a simpler syntax and executes faster.
+:::
 
 ### Use a Format Function
 
@@ -158,8 +173,8 @@ components:
     test2:
       vars:
         tags:
-          test: !terraform.output test {{ .stack }} id
-          test2: !terraform.output test {{ .stack }} id
+          test: !terraform.output test id
+          test2: !terraform.output test id
           test3: !terraform.output test {{ .stack }} id
 ```
 </File>
@@ -170,6 +185,69 @@ The YAML function `!terraform.output` is executed three times (once for each tag
 After the first execution, Atmos caches the result in memory,
 and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
 In a production environment where many components are used, the speedup can be significant.
+
+## Using `!terraform.output` with `static` remote state backend
+
+Atmos supports [brownfield configuration by using the remote state of type `static`](/core-concepts/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
+
+For example:
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    # Component `static-backend` is configured with the remote state backend of type `static`
+    static-backend:
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          region: "us-west-2"
+          cluster_name: "production-cluster"
+          vpc_cidr: "10.0.0.0/16"
+          database:
+            type: "postgresql"
+            version: "12.7"
+            storage_gb: 100
+          allowed_ips:
+            - "192.168.1.0/24"
+            - "10.1.0.0/16"
+          tags:
+            Environment: "production"
+            Owner: "infra-team"
+
+    eks-cluster:
+      vars:
+        region: !terraform.output static-backend region
+        cluster_name: !terraform.output static-backend cluster_name
+        vpc_cidr: !terraform.output static-backend vpc_cidr
+        db_type: !terraform.output static-backend database.type
+        db_storage: !terraform.output static-backend database.storage_gb
+        allowed_ips: !terraform.output static-backend allowed_ips
+        tags: !terraform.output static-backend tags
+```
+</File>
+
+When the functions are executed, Atmos detects that the `static-backend` component has the `static` remote state configured,
+and instead of executing `terraform output`, it just returns the static values from the `remote_state_backend.static` section.
+
+Executing the command `atmos describe component eks-cluster -s <stack>` produces the following result:
+
+<Terminal title="atmos describe component eks-cluster -s <stack>">
+```yaml
+vars:
+  region: us-west-2
+  cluster_name: production-cluster
+  vpc_cidr: 10.0.0.0/16
+  db_type: postgresql
+  db_storage: 100
+  allowed_ips:
+    - 192.168.1.0/24
+    - 10.1.0.0/16
+  tags:
+    Environment: production
+    Owner: infra-team
+```
+</Terminal>
 
 ## Considerations
 
@@ -182,4 +260,4 @@ In a production environment where many components are used, the speedup can be s
 
 - Be mindful of disaster recovery (DR) implications when using it across regions.  
 
-- Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.  
+- Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.

@@ -2,10 +2,11 @@ package exec
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"path"
-	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -157,11 +158,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 
 		configAndStacksInfo.ComponentType = "terraform"
 		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, true)
-		shellCommandWorkingDir = path.Join(cliConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+		shellCommandWorkingDir = filepath.Join(cliConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
 			configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, true)
-			shellCommandWorkingDir = path.Join(cliConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+			shellCommandWorkingDir = filepath.Join(cliConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err
 			}

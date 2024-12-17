@@ -149,7 +149,7 @@ func ReadAndProcessVendorConfigFile(
 
 		if !fileExists {
 			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
-			pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
+			pathToVendorConfig := filepath.Join(cliConfig.BasePath, vendorConfigFile)
 
 			if !u.FileExists(pathToVendorConfig) {
 				vendorConfigFileExists = false
@@ -392,7 +392,7 @@ func ExecuteAtmosVendorInternal(
 				return err
 			}
 
-			targetPath := path.Join(vendorConfigFilePath, target)
+			targetPath := filepath.Join(vendorConfigFilePath, target)
 
 			if s.Component != "" {
 				u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'",
@@ -441,7 +441,7 @@ func ExecuteAtmosVendorInternal(
 				}
 
 				if sourceIsLocalFile {
-					tempDir = path.Join(tempDir, filepath.Base(uri))
+					tempDir = filepath.Join(tempDir, filepath.Base(uri))
 				}
 
 				if err = cp.Copy(uri, tempDir, copyOptions); err != nil {
@@ -457,7 +457,7 @@ func ExecuteAtmosVendorInternal(
 				// - https://github.com/hashicorp/go-getter?tab=readme-ov-file#subdirectories
 				// We add the `uri` to the already created `tempDir` so it does not exist to allow `go-getter` to create
 				// and correctly initialize it
-				tempDir = path.Join(tempDir, filepath.Base(uri))
+				tempDir = filepath.Join(tempDir, filepath.Base(uri))
 
 				client := &getter.Client{
 					Ctx: context.Background(),
@@ -548,7 +548,7 @@ func ExecuteAtmosVendorInternal(
 
 			if sourceIsLocalFile {
 				if filepath.Ext(targetPath) == "" {
-					targetPath = path.Join(targetPath, filepath.Base(uri))
+					targetPath = filepath.Join(targetPath, filepath.Base(uri))
 				}
 			}
 

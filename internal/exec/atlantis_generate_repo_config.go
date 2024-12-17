@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -339,7 +338,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				}
 
 				// Absolute path to the terraform component
-				terraformComponentPath := path.Join(
+				terraformComponentPath := filepath.Join(
 					cliConfig.BasePath,
 					cliConfig.Components.Terraform.BasePath,
 					terraformComponent,

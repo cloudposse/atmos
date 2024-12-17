@@ -398,14 +398,12 @@ func ProcessStacks(
 			}
 		}
 
-		if foundStackCount == 0 {
+		if foundStackCount == 0 && !checkStack {
 			// Allow proceeding without error if checkStack is false (e.g., for operations that don't require a stack)
-			if !checkStack {
-				return configAndStacksInfo, nil
-			}
+			return configAndStacksInfo, nil
 		}
 
-		if foundStackCount == 0 && configAndStacksInfo.ComponentIsEnabled {
+		if foundStackCount == 0 {
 			cliConfigYaml := ""
 
 			if cliConfig.Logs.Level == u.LogLevelTrace {
@@ -521,7 +519,7 @@ func ProcessStacks(
 			u.LogErrorAndExit(cliConfig, err)
 		}
 
-		componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+		componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted, configAndStacksInfo.Stack)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
