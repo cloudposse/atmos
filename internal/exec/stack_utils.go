@@ -54,7 +54,8 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 	return strings.Replace(workspace, "/", "-", -1), nil
 }
 
-// ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether the component is real or abstract and whether the component is disabled or not
+// ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether
+// the component is real or abstract and whether the component is disabled or not
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
@@ -195,4 +196,28 @@ func IsComponentEnabled(varsSection map[string]any) bool {
 		}
 	}
 	return true
+}
+
+// GetComponentRemoteStateBackendStaticType returns the `remote_state_backend` section for a component in a stack
+// if the `remote_state_backend_type` is `static`
+func GetComponentRemoteStateBackendStaticType(
+	sections map[string]any,
+) (map[string]any, error) {
+	var remoteStateBackend map[string]any
+	var remoteStateBackendType string
+	var ok bool
+
+	if remoteStateBackendType, ok = sections[cfg.RemoteStateBackendTypeSectionName].(string); !ok {
+		return nil, nil
+	}
+
+	if remoteStateBackendType != "static" {
+		return nil, nil
+	}
+
+	if remoteStateBackend, ok = sections[cfg.RemoteStateBackendSectionName].(map[string]any); ok {
+		return remoteStateBackend, nil
+	}
+
+	return nil, nil
 }
