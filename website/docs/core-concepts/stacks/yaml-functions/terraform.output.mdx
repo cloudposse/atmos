@@ -14,7 +14,13 @@ of components directly in Atmos stack manifests.
 
 ## Usage
 
+The `!template` function can be called with either two or three parameters:
+
 ```yaml
+  # Get the `output` of the `component` in the current stack
+  !terraform.output <component> <output>
+
+  # Get the `output` of the `component` in the provided stack
   !terraform.output <component> <stack> <output>
 ```
 
@@ -25,7 +31,7 @@ of components directly in Atmos stack manifests.
   <dd>Atmos component name</dd>
 
   <dt>`stack`</dt>
-  <dd>Atmos stack name</dd>
+  <dd>(Optional) Atmos stack name</dd>
 
   <dt>`output`</dt>
   <dd>Terraform output</dd>
@@ -48,9 +54,11 @@ components:
       vars:
         vpc_config:
           # Output of type string
-          security_group_id: !terraform.output security-group/lambda {{ .stack }} id
+          security_group_id: !terraform.output security-group/lambda id
+          security_group_id2: !terraform.output security-group/lambda2 {{ .stack }} id
+          security_group_id3: !terraform.output security-group/lambda3 {{ .atmos_stack }} id
           # Output of type list
-          subnet_ids: !terraform.output vpc {{ .stack }} private_subnet_ids
+          subnet_ids: !terraform.output vpc private_subnet_ids
           # Output of type map
           config_map: !terraform.output config {{ .stack }} config_map
 ```
@@ -58,13 +66,12 @@ components:
 
 ## Specifying Atmos `stack`
 
-There are multiple ways you can specify the Atmos stack parameter in the `!terraform.output` function.
+If you call the `!temolate` function with three parameters, you need to specify the stack as the second argument.
 
-The `stack` argument is the second argument of the `!terraform.output` function, and it can be specified in a few different ways:
+There are multiple ways you can specify the Atmos stack parameter in the `!terraform.output` function.
 
 ### Hardcoded Stack Name
 
-Hardcoded stack name.
 Use it if you want to get an output from a component from a different (well-known and static) stack.
 For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` output from the `vpc` component from the stack `plat-ue2-prod`:
 
@@ -95,6 +102,13 @@ For example, you have a `tgw` component that requires the `vpc_id` output from t
         vars:
           vpc_id: !terraform.output vpc {{ .stack }} vpc_id
 ```
+
+:::note
+Using the `.stack` or `.atmos_stack` template identifiers to specify the stack is the same as calling the `!template`
+function with two parameters without specifying the current stack, but without using `Go` templates.
+If you need to get an output of a component in the current stack, using the `!template` function with two parameters
+is preferred because it has a simpler syntax and faster execution time.
+:::
 
 ### Use a Format Function
 
