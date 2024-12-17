@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -125,7 +124,7 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		tempDir = path.Join(tempDir, filepath.Base(p.uri))
+		tempDir = filepath.Join(tempDir, filepath.Base(p.uri))
 
 		client := &getter.Client{
 			Ctx: context.Background(),
@@ -160,7 +159,7 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 
 		tempDir2 := tempDir
 		if p.sourceIsLocalFile {
-			tempDir2 = path.Join(tempDir, filepath.Base(p.uri))
+			tempDir2 = filepath.Join(tempDir, filepath.Base(p.uri))
 		}
 
 		if err = cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
@@ -190,7 +189,7 @@ func installMixin(p *pkgComponentVendor, cliConfig schema.CliConfiguration) erro
 	case pkgTypeRemote:
 		client := &getter.Client{
 			Ctx:  ctx,
-			Dst:  path.Join(tempDir, p.mixinFilename),
+			Dst:  filepath.Join(tempDir, p.mixinFilename),
 			Src:  p.uri,
 			Mode: getter.ClientModeFile,
 		}

@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -165,7 +164,7 @@ func ReadAndProcessVendorConfigFile(
 
 		if !fileExists {
 			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
-			pathToVendorConfig := path.Join(cliConfig.BasePath, vendorConfigFile)
+			pathToVendorConfig := filepath.Join(cliConfig.BasePath, vendorConfigFile)
 			foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
 
 			if !fileExists {
@@ -258,7 +257,7 @@ func ExecuteAtmosVendorInternal(
 ) error {
 
 	var err error
-	vendorConfigFilePath := path.Dir(vendorConfigFileName)
+	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 
 	logInitialMessage(cliConfig, vendorConfigFileName, tags)
 
@@ -375,7 +374,7 @@ func ExecuteAtmosVendorInternal(
 			if err != nil {
 				return err
 			}
-			targetPath := path.Join(vendorConfigFilePath, target)
+			targetPath := filepath.Join(vendorConfigFilePath, target)
 			pkgName := s.Component
 			if pkgName == "" {
 				pkgName = uri
@@ -524,7 +523,7 @@ func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string,
 
 	// Adjust the target path if it's a local file with no extension
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		targetPath = path.Join(targetPath, filepath.Base(uri))
+		targetPath = filepath.Join(targetPath, filepath.Base(uri))
 	}
 
 	return cp.Copy(tempDir, targetPath, copyOptions)

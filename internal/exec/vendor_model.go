@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -299,7 +298,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 			}
 			if p.sourceIsLocalFile {
-				tempDir = path.Join(tempDir, filepath.Base(p.uri))
+				tempDir = filepath.Join(tempDir, filepath.Base(p.uri))
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{

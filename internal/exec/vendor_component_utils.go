@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -180,7 +179,7 @@ func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, comp
 	componentPath2 := componentPath
 	if sourceIsLocalFile {
 		if filepath.Ext(componentPath) == "" {
-			componentPath2 = path.Join(componentPath, filepath.Base(uri))
+			componentPath2 = filepath.Join(componentPath, filepath.Base(uri))
 		}
 	}
 

@@ -4,7 +4,6 @@ package vender
 
 import (
 	"os"
-	"path"
 	"path/filepath"
 	"testing"
 
@@ -103,7 +102,7 @@ spec:
 	// Test Case 3: Neither vendor.yaml nor component.yaml exists
 	t.Run("no vendor.yaml or component.yaml", func(t *testing.T) {
 		// Test vendoring with component flag
-		vendorYamlPath := path.Join(testDir, "vendor.yaml")
+		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
 		_, exists, _, err := e.ReadAndProcessVendorConfigFile(cliConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
 		assert.False(t, exists)
