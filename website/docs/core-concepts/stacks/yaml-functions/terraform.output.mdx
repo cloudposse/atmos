@@ -6,6 +6,7 @@ description: Read the remote state of any Atmos component
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
 
 <Intro>
 The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/components/terraform/remote-state))
@@ -185,6 +186,69 @@ After the first execution, Atmos caches the result in memory,
 and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
 In a production environment where many components are used, the speedup can be significant.
 
+## Using `!terraform.output` with `static` remote state backend
+
+Atmos supports [brownfield configuration by using the remote state of type `static`](/core-concepts/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
+
+For example:
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    test:
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          val1: true
+          val2: "2"
+          val3: 3
+          val4: null
+          val5:
+           - item1
+           - item2
+           - item3
+         val6:
+           i1: 1
+           i2: 2
+           i3: 3
+    test2:
+      vars:
+        # Component `test` is configured with the remote state backend of type `static`
+        test_1: !terraform.output test val1
+        test_2: !terraform.output test {{ .stack }} val1
+        test_3: !terraform.output test val2
+        test_4: !terraform.output test val3
+        test_5: !terraform.output test val4
+        test_6: !terraform.output test val5
+        test_7: !terraform.output test val6
+```
+</File>
+
+When the function is executed, Atmos detects that the `test` component has the `static` remote state configured,
+and instead of executing `terrafrom output`, it just returns the static values from the `remote_state_backend.static` section.
+
+Executing the command `atmos describe component test2 -s <stack>` produces the following result:
+
+<Terminal title="atmos describe component test2 -s <stack>">
+```yaml
+vars:
+  test_1: true
+  test_2: true
+  test_3: "2"
+  test_4: 3
+  test_5: null
+  test_6:
+    - item1
+    - item2
+    - item3
+  test_7:
+    i1: 1
+    i2: 2
+    i3: 3
+```
+</Terminal>
+
 ## Considerations
 
  - Using `!terraform.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.  
@@ -196,4 +260,4 @@ In a production environment where many components are used, the speedup can be s
 
 - Be mindful of disaster recovery (DR) implications when using it across regions.  
 
-- Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.  
+- Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.
