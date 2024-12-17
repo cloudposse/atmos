@@ -220,7 +220,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 
 	// Check if `-h` or `--help` flags are specified
-	if argsAndFlagsInfo.NeedHelp {
+	if argsAndFlagsInfo.NeedHelp && configAndStacksInfo.ComponentType != "terraform" {
 		// If we're dealing with `-h` or `--help`,
 		// then the SubCommand should be empty.
 		if argsAndFlagsInfo.SubCommand == "-h" || argsAndFlagsInfo.SubCommand == "--help" {
