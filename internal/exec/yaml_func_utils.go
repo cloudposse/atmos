@@ -8,18 +8,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func ProcessCustomYamlTags(cliConfig schema.CliConfiguration, input schema.AtmosSectionMapType) (schema.AtmosSectionMapType, error) {
-	return processNodes(cliConfig, input), nil
+func ProcessCustomYamlTags(
+	cliConfig schema.CliConfiguration,
+	input schema.AtmosSectionMapType,
+	currentStack string,
+) (schema.AtmosSectionMapType, error) {
+	return processNodes(cliConfig, input, currentStack), nil
 }
 
-func processNodes(cliConfig schema.CliConfiguration, data map[string]any) map[string]any {
+func processNodes(
+	cliConfig schema.CliConfiguration,
+	data map[string]any,
+	currentStack string,
+) map[string]any {
 	newMap := make(map[string]any)
 	var recurse func(any) any
 
 	recurse = func(node any) any {
 		switch v := node.(type) {
 		case string:
-			return processCustomTags(cliConfig, v)
+			return processCustomTags(cliConfig, v, currentStack)
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
@@ -47,13 +55,17 @@ func processNodes(cliConfig schema.CliConfiguration, data map[string]any) map[st
 	return newMap
 }
 
-func processCustomTags(cliConfig schema.CliConfiguration, input string) any {
+func processCustomTags(
+	cliConfig schema.CliConfiguration,
+	input string,
+	currentStack string,
+) any {
 	if strings.HasPrefix(input, config.AtmosYamlFuncTemplate) {
-		return processTagTemplate(cliConfig, input)
+		return processTagTemplate(cliConfig, input, currentStack)
 	} else if strings.HasPrefix(input, config.AtmosYamlFuncExec) {
-		return processTagExec(cliConfig, input)
+		return processTagExec(cliConfig, input, currentStack)
 	} else if strings.HasPrefix(input, config.AtmosYamlFuncTerraformOutput) {
-		return processTagTerraformOutput(cliConfig, input)
+		return processTagTerraformOutput(cliConfig, input, currentStack)
 	}
 
 	// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
