@@ -85,7 +85,6 @@ func processTagTerraformOutput(
 
 		// Cache the result
 		terraformOutputFuncSyncMap.Store(stackSlug, terraformOutputs)
-
 		return getTerraformOutput(cliConfig, input, component, stack, terraformOutputs, output)
 	}
 }

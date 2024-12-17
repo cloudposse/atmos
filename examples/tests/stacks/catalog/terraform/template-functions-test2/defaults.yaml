@@ -31,3 +31,16 @@ components:
         test_30: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_label_id
         test_31: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_map
         test_32: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_list
+        # Call the `!terraform.output` function with two parameters
+        test_40: !terraform.output template-functions-test test_label_id
+        test_41: !terraform.output template-functions-test test_list
+        test_42: !terraform.output template-functions-test test_map
+        # Component `template-functions-test3` is configured with the remote state backend of type `static`
+        test_50: !terraform.output template-functions-test3 val1
+        test_51: !terraform.output template-functions-test3 {{ .stack }} val1
+        test_52: !terraform.output template-functions-test3 val2
+        test_53: !terraform.output template-functions-test3 val3
+        test_54: !terraform.output template-functions-test3 val4
+        test_55: !terraform.output template-functions-test3 val5
+        test_56: !terraform.output template-functions-test3 val6
+        test_57: !terraform.output does_not_exist val6
