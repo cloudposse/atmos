@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -17,18 +15,9 @@ var vendorPullCmd = &cobra.Command{
 	Long:               `This command executes 'atmos vendor pull' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		value := cmd.Context().Value(contextKey("atmos_config"))
-		if value == nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("atmos configuration not found in context"))
-		}
-		atmosConfig, ok := value.(schema.CliConfiguration)
-		if !ok {
-			u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("invalid atmos configuration type in context"))
-		}
-
 		// WithStackValidation is a functional option that enables/disables stack configuration validation
 		// based on whether the --stack flag is provided
-		checkAtmosConfig(&atmosConfig, WithStackValidation(cmd.Flag("stack").Changed))
+		checkAtmosConfig(WithStackValidation(cmd.Flag("stack").Changed))
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
@@ -19,6 +17,8 @@ var terraformCmd = &cobra.Command{
 	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
+		//checkAtmosConfig()
 
 		var argsAfterDoubleDash []string
 		var finalArgs = args
@@ -36,18 +36,11 @@ var terraformCmd = &cobra.Command{
 		// Exit on help
 		if info.NeedHelp {
 			// Check for the latest Atmos release on GitHub and print update message
-			value := cmd.Context().Value(contextKey("atmos_config"))
-			if value == nil {
-				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("atmos configuration not found in context"))
-			}
-			atmosConfig, ok := value.(schema.CliConfiguration)
-			if !ok {
-				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("invalid atmos configuration type in context"))
-			}
-
-			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+			CheckForAtmosUpdateAndPrintMessage(cliConfig)
 			return
 		}
+		// Check Atmos configuration
+		checkAtmosConfig()
 
 		err = e.ExecuteTerraform(info)
 		if err != nil {

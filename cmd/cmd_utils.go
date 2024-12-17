@@ -364,7 +364,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config
-func checkAtmosConfig(atmosConfig *schema.CliConfiguration, opts ...AtmosValidateOption) {
+func checkAtmosConfig(opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
 	}
@@ -374,10 +374,15 @@ func checkAtmosConfig(atmosConfig *schema.CliConfiguration, opts ...AtmosValidat
 		opt(vCfg)
 	}
 
+	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		u.LogErrorAndExit(cliConfig, err)
+	}
+
 	if vCfg.CheckStack {
-		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
+		atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
-			printMessageForMissingAtmosConfig(*atmosConfig)
+			printMessageForMissingAtmosConfig(cliConfig)
 			os.Exit(0)
 		}
 	}
@@ -476,17 +481,8 @@ func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
 }
 
 func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
-	value := cmd.Context().Value(contextKey("atmos_config"))
-	if value == nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("atmos configuration not found in context"))
-	}
-	atmosConfig, ok := value.(schema.CliConfiguration)
-	if !ok {
-		u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("invalid atmos configuration type in context"))
-	}
-
 	originalHelpFunc(cmd, args)
-	CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+	CheckForAtmosUpdateAndPrintMessage(cliConfig)
 }
 
 // Check Atmos is version command
