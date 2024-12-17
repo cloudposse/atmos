@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -91,7 +91,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		u.LogTrace(cliConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default schema '%s'", atmosManifestDefault))
 	}
 
-	atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
+	atmosManifestJsonSchemaFileAbsPath := filepath.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
 
 	if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
 		atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
@@ -131,7 +131,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 	}
 
 	u.LogDebug(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
-		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
+		filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
 		stackConfig, importsConfig, _, _, _, err := ProcessYAMLConfigFile(
@@ -376,7 +376,7 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	if err != nil || fileName == "" {
 		return "", fmt.Errorf("failed to get the file name from the URL '%s': %w", manifestURL, err)
 	}
-	atmosManifestJsonSchemaFilePath := path.Join(tempDir, fileName)
+	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	client := &getter.Client{

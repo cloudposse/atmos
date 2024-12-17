@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
@@ -88,7 +87,7 @@ func execTerraformOutput(cliConfig schema.CliConfiguration, component string, st
 
 		// Auto-generate backend file
 		if cliConfig.Components.Terraform.AutoGenerateBackendFile {
-			backendFileName := path.Join(componentPath, "backend.tf.json")
+			backendFileName := filepath.Join(componentPath, "backend.tf.json")
 
 			u.LogTrace(cliConfig, "\nWriting the backend config to file:")
 			u.LogTrace(cliConfig, backendFileName)
@@ -121,7 +120,7 @@ func execTerraformOutput(cliConfig schema.CliConfiguration, component string, st
 		providersSection, ok := sections["providers"].(map[string]any)
 
 		if ok && len(providersSection) > 0 {
-			providerOverrideFileName := path.Join(componentPath, "providers_override.tf.json")
+			providerOverrideFileName := filepath.Join(componentPath, "providers_override.tf.json")
 
 			u.LogTrace(cliConfig, "\nWriting the provider overrides to file:")
 			u.LogTrace(cliConfig, providerOverrideFileName)
