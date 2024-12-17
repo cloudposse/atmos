@@ -43,4 +43,5 @@ components:
         test_54: !terraform.output template-functions-test3 val4
         test_55: !terraform.output template-functions-test3 val5
         test_56: !terraform.output template-functions-test3 val6
-        test_57: !terraform.output does_not_exist val6
+        # test_57: !terraform.output does_not_exist val6
+        # test_57: !terraform.output template-functions-test3 invalid-val
