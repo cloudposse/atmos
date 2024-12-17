@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
@@ -24,6 +25,21 @@ type contextKey string
 
 // originalHelpFunc holds Cobra's original help function to avoid recursion.
 var originalHelpFunc func(*cobra.Command, []string)
+
+func setLogLevel(level string) {
+	switch level {
+	case u.LogLevelTrace:
+		log.SetLevel(log.DebugLevel)
+	case u.LogLevelDebug:
+		log.SetLevel(log.DebugLevel)
+	case u.LogLevelInfo:
+		log.SetLevel(log.InfoLevel)
+	case u.LogLevelWarning:
+		log.SetLevel(log.WarnLevel)
+	default:
+		log.SetLevel(log.InfoLevel)
+	}
+}
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -94,6 +110,8 @@ func Execute() error {
 			u.LogErrorAndExit(schema.CliConfiguration{}, err)
 		}
 	}
+
+	setLogLevel(atmosConfig.Logs.Level)
 
 	// Save the original help function to prevent infinite recursion when overriding it.
 	// This allows us to call the original help functionality within our custom help function.
