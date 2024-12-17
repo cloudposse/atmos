@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -47,7 +46,7 @@ func processTagTerraformOutput(
 		u.LogTrace(cliConfig, fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
 			"Using the current stack '%s' as the 'stack' parameter", input, currentStack))
 	} else {
-		err := errors.New(fmt.Sprintf("invalid number of arguments in the Atmos YAML function: %s", input))
+		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
