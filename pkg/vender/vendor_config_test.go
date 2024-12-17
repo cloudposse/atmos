@@ -5,6 +5,7 @@ package vender
 import (
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ func TestVendorConfigScenarios(t *testing.T) {
 	cliConfig.Logs.Level = "Trace"
 
 	// Setup test component directory
-	componentPath := path.Join(testDir, "components", "terraform", "myapp")
+	componentPath := filepath.Join(testDir, "components", "terraform", "myapp")
 	err := os.MkdirAll(componentPath, 0755)
 	assert.Nil(t, err)
 
@@ -47,7 +48,7 @@ spec:
       included_paths:
         - "**/*.tf"
 `
-		vendorYamlPath := path.Join(testDir, "vendor.yaml")
+		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
 		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0644)
 		assert.Nil(t, err)
 
@@ -84,7 +85,7 @@ spec:
     uri: github.com/cloudposse/terraform-null-label.git//exports?ref={{.Version}}
     version: 0.25.0
 `
-		componentYamlPath := path.Join(componentPath, "component.yaml")
+		componentYamlPath := filepath.Join(componentPath, "component.yaml")
 		err := os.WriteFile(componentYamlPath, []byte(componentYaml), 0644)
 		assert.Nil(t, err)
 
@@ -126,7 +127,7 @@ spec:
       source: github.com/cloudposse/terraform-null-label.git//exports?ref={{.Version}}
       version: 0.25.0
 `
-		vendorYamlPath := path.Join(testDir, "vendor.yaml")
+		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
 		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0644)
 		assert.Nil(t, err)
 
