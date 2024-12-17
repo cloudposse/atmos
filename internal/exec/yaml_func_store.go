@@ -9,7 +9,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func processTagStore(cliConfig schema.CliConfiguration, input string) any {
+func processTagStore(cliConfig schema.CliConfiguration, input string, currentStack string) any {
 	log.Debug("Executing Atmos YAML function store", "input", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
@@ -27,7 +27,6 @@ func processTagStore(cliConfig schema.CliConfiguration, input string) any {
 	key := strings.TrimSpace(parts[1])
 
 	store := cliConfig.Stores[storeName]
-	log.Info("stores", "stores", cliConfig.Stores)
 
 	if store == nil {
 		u.LogErrorAndExit(cliConfig, fmt.Errorf("invalid Atmos Store YAML function execution:: %s\nstore '%s' not found", input, storeName))

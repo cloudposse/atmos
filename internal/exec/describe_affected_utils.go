@@ -432,12 +432,12 @@ func executeDescribeAffected(
 	}
 
 	// Update paths to point to the cloned remote repo dir
-	cliConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath)
-	cliConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Terraform.BasePath)
-	cliConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Helmfile.BasePath)
+	cliConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath)
+	cliConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Terraform.BasePath)
+	cliConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Helmfile.BasePath)
 
 	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
-		path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath),
+		filepath.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath),
 		cliConfig.StackConfigFilesRelativePaths,
 	)
 	if err != nil {
@@ -1182,9 +1182,9 @@ func isComponentFolderChanged(
 
 	switch componentType {
 	case "terraform":
-		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+		componentPath = filepath.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
 	case "helmfile":
-		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
+		componentPath = filepath.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)
@@ -1220,7 +1220,7 @@ func areTerraformComponentModulesChanged(
 	changedFiles []string,
 ) (bool, error) {
 
-	componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+	componentPath := filepath.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
 
 	componentPathAbs, err := filepath.Abs(componentPath)
 	if err != nil {
@@ -1241,7 +1241,7 @@ func areTerraformComponentModulesChanged(
 				continue
 			}
 
-			modulePath := path.Join(path.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
+			modulePath := filepath.Join(path.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
 
 			modulePathAbs, err := filepath.Abs(modulePath)
 			if err != nil {

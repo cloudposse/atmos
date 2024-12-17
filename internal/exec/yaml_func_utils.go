@@ -8,18 +8,26 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func ProcessCustomYamlTags(cliConfig schema.CliConfiguration, input schema.AtmosSectionMapType) (schema.AtmosSectionMapType, error) {
-	return processNodes(cliConfig, input), nil
+func ProcessCustomYamlTags(
+	cliConfig schema.CliConfiguration,
+	input schema.AtmosSectionMapType,
+	currentStack string,
+) (schema.AtmosSectionMapType, error) {
+	return processNodes(cliConfig, input, currentStack), nil
 }
 
-func processNodes(cliConfig schema.CliConfiguration, data map[string]any) map[string]any {
+func processNodes(
+	cliConfig schema.CliConfiguration,
+	data map[string]any,
+	currentStack string,
+) map[string]any {
 	newMap := make(map[string]any)
 	var recurse func(any) any
 
 	recurse = func(node any) any {
 		switch v := node.(type) {
 		case string:
-			return processCustomTags(cliConfig, v)
+			return processCustomTags(cliConfig, v, currentStack)
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
@@ -47,18 +55,21 @@ func processNodes(cliConfig schema.CliConfiguration, data map[string]any) map[st
 	return newMap
 }
 
-func processCustomTags(cliConfig schema.CliConfiguration, input string) any {
-	//log.Info("Processing custom tags", "input", input)
+func processCustomTags(
+	cliConfig schema.CliConfiguration,
+	input string,
+	currentStack string,
+) any {
 
 	switch {
 	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate):
-		return processTagTemplate(cliConfig, input)
+		return processTagTemplate(cliConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncExec):
-		return processTagExec(cliConfig, input)
+		return processTagExec(cliConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncStore):
-		return processTagStore(cliConfig, input)
+		return processTagStore(cliConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput):
-		return processTagTerraformOutput(cliConfig, input)
+		return processTagTerraformOutput(cliConfig, input, currentStack)
 	default:
 		// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
 		return input

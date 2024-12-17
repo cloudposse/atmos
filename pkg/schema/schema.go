@@ -29,6 +29,7 @@ type CliConfiguration struct {
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
 	Default                       bool               `yaml:"default" json:"default" mapstructure:"default"`
+	Version                       Version            `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
 
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
