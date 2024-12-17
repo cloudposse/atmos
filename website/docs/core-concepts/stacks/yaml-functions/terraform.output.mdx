@@ -196,6 +196,7 @@ For example:
 ```yaml
 components:
   terraform:
+    # Component `test` is configured with the remote state backend of type `static`
     test:
       remote_state_backend_type: static
       remote_state_backend:
@@ -214,7 +215,6 @@ components:
            i3: 3
     test2:
       vars:
-        # Component `test` is configured with the remote state backend of type `static`
         test_1: !terraform.output test val1
         test_2: !terraform.output test {{ .stack }} val1
         test_3: !terraform.output test val2
@@ -225,7 +225,7 @@ components:
 ```
 </File>
 
-When the function is executed, Atmos detects that the `test` component has the `static` remote state configured,
+When the functions are executed, Atmos detects that the `test` component has the `static` remote state configured,
 and instead of executing `terrafrom output`, it just returns the static values from the `remote_state_backend.static` section.
 
 Executing the command `atmos describe component test2 -s <stack>` produces the following result:
