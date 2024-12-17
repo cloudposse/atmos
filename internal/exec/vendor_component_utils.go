@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,7 +26,7 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 	componentConfigExtensions := []string{"yaml", "yml"}
 
 	for _, ext := range componentConfigExtensions {
-		configFilePath := path.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
+		configFilePath := filepath.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
 		if u.FileExists(configFilePath) {
 			return configFilePath, nil
 		}
@@ -52,7 +51,7 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
-	componentPath := path.Join(cliConfig.BasePath, componentBasePath, component)
+	componentPath := filepath.Join(cliConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
 	if err != nil {
@@ -191,7 +190,7 @@ func ExecuteComponentVendorInternal(
 
 			tempDir2 := tempDir
 			if sourceIsLocalFile {
-				tempDir2 = path.Join(tempDir, filepath.Base(uri))
+				tempDir2 = filepath.Join(tempDir, filepath.Base(uri))
 			}
 
 			if err = cp.Copy(uri, tempDir2, copyOptions); err != nil {
@@ -207,7 +206,7 @@ func ExecuteComponentVendorInternal(
 			// - https://github.com/hashicorp/go-getter?tab=readme-ov-file#subdirectories
 			// We add the `uri` to the already created `tempDir` so it does not exist to allow `go-getter` to create
 			// and correctly initialize it
-			tempDir = path.Join(tempDir, filepath.Base(uri))
+			tempDir = filepath.Join(tempDir, filepath.Base(uri))
 
 			client := &getter.Client{
 				Ctx: context.Background(),
@@ -299,7 +298,7 @@ func ExecuteComponentVendorInternal(
 		componentPath2 := componentPath
 		if sourceIsLocalFile {
 			if filepath.Ext(componentPath) == "" {
-				componentPath2 = path.Join(componentPath, filepath.Base(uri))
+				componentPath2 = filepath.Join(componentPath, filepath.Base(uri))
 			}
 		}
 
@@ -357,7 +356,7 @@ func ExecuteComponentVendorInternal(
 				"Pulling the mixin '%s' for the component '%s' into '%s'\n",
 				uri,
 				component,
-				path.Join(componentPath, mixin.Filename),
+				filepath.Join(componentPath, mixin.Filename),
 			))
 
 			if !dryRun {
@@ -370,7 +369,7 @@ func ExecuteComponentVendorInternal(
 				if !useOciScheme {
 					client := &getter.Client{
 						Ctx:  context.Background(),
-						Dst:  path.Join(tempDir, mixin.Filename),
+						Dst:  filepath.Join(tempDir, mixin.Filename),
 						Src:  uri,
 						Mode: getter.ClientModeFile,
 					}
