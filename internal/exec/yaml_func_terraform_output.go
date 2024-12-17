@@ -65,15 +65,29 @@ func processTagTerraformOutput(
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	outputProcessed, err := execTerraformOutput(cliConfig, component, stack, sections)
+	// Check if the component in the stack is configured with the 'static' remote state backend,
+	// in which case get the `output` from the static remote state instead of executing `terraform output`
+	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
 		u.LogErrorAndExit(cliConfig, err)
 	}
 
-	// Cache the result
-	terraformOutputFuncSyncMap.Store(stackSlug, outputProcessed)
+	if remoteStateBackendStaticTypeOutputs != nil {
+		// Cache the result
+		terraformOutputFuncSyncMap.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
+		return getStaticRemoteStateOutput(cliConfig, input, component, stack, remoteStateBackendStaticTypeOutputs, output)
+	} else {
+		// Execute `terraform output`
+		terraformOutputs, err := execTerraformOutput(cliConfig, component, stack, sections)
+		if err != nil {
+			u.LogErrorAndExit(cliConfig, err)
+		}
 
-	return getTerraformOutput(cliConfig, input, component, stack, outputProcessed, output)
+		// Cache the result
+		terraformOutputFuncSyncMap.Store(stackSlug, terraformOutputs)
+
+		return getTerraformOutput(cliConfig, input, component, stack, terraformOutputs, output)
+	}
 }
 
 func getTerraformOutput(
@@ -89,6 +103,29 @@ func getTerraformOutput(
 	}
 
 	u.LogErrorAndExit(cliConfig, fmt.Errorf("invalid Atmos YAML function: %s\nthe component '%s' in the stack '%s' does not have the output '%s'",
+		funcDef,
+		component,
+		stack,
+		output,
+	))
+
+	return nil
+}
+
+func getStaticRemoteStateOutput(
+	cliConfig schema.CliConfiguration,
+	funcDef string,
+	component string,
+	stack string,
+	remoteStateSection map[string]any,
+	output string,
+) any {
+	if u.MapKeyExists(remoteStateSection, output) {
+		return remoteStateSection[output]
+	}
+
+	u.LogErrorAndExit(cliConfig, fmt.Errorf("invalid Atmos YAML function: %s\nthe component '%s' in the stack '%s' "+
+		"is configured with the 'static' remote state backend, but the remote state backend does not have the output '%s'",
 		funcDef,
 		component,
 		stack,
