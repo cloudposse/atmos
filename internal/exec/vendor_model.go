@@ -172,9 +172,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.index++
 		// Update progress bar
 		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
-		if !m.isTTY {
-			u.LogInfo(m.cliConfig, fmt.Sprintf("Pulling %s", m.packages[m.index].name))
-		}
+
 		version = grayColor.Render(version)
 		return m, tea.Batch(
 			progressCmd,
