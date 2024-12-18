@@ -11,8 +11,8 @@ import (
 // terraformGenerateVarfilesCmd generates varfiles for all terraform components in all stacks
 var terraformGenerateVarfilesCmd = &cobra.Command{
 	Use:                "varfiles",
-	Short:              "Execute 'terraform generate varfiles' command",
-	Long:               `This command generates varfiles for all atmos terraform components in all stacks`,
+	Short:              "Generate varfiles for all Terraform components in all stacks",
+	Long:               "This command generates varfiles for all Atmos Terraform components across all stacks.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration

@@ -7,7 +7,7 @@ import (
 // vendorCmd executes 'atmos vendor' CLI commands
 var vendorCmd = &cobra.Command{
 	Use:                "vendor",
-	Short:              "Execute 'vendor' commands",
+	Short:              "Manage external dependencies for components or stacks",
 	Long:               `This command executes 'atmos vendor' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
