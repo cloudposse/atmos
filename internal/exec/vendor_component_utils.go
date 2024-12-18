@@ -6,19 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	tea "github.com/charmbracelet/bubbletea"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hashicorp/go-getter"
+	"github.com/mattn/go-isatty"
 	cp "github.com/otiai10/copy"
 )
 
@@ -27,7 +25,7 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 	componentConfigExtensions := []string{"yaml", "yml"}
 
 	for _, ext := range componentConfigExtensions {
-		configFilePath := path.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
+		configFilePath := filepath.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
 		if u.FileExists(configFilePath) {
 			return configFilePath, nil
 		}
@@ -52,7 +50,7 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
-	componentPath := path.Join(cliConfig.BasePath, componentBasePath, component)
+	componentPath := filepath.Join(cliConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
 	if err != nil {
@@ -95,6 +93,101 @@ func ReadAndProcessComponentVendorConfigFile(
 // https://opencontainers.org/
 // https://github.com/google/go-containerregistry
 // https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html
+
+// ExecuteStackVendorInternal executes the command to vendor an Atmos stack
+// TODO: implement this
+func ExecuteStackVendorInternal(
+	stack string,
+	dryRun bool,
+) error {
+	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not supported yet")
+}
+func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, componentPath string, vendorComponentSpec schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
+	// Copy from the temp folder to the destination folder and skip the excluded files
+	copyOptions := cp.Options{
+		// Skip specifies which files should be skipped
+		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+			if filepath.Base(src) == ".git" {
+				return true, nil
+			}
+
+			trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
+
+			// Exclude the files that match the 'excluded_paths' patterns
+			// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+			// https://en.wikipedia.org/wiki/Glob_(programming)
+			// https://github.com/bmatcuk/doublestar#patterns
+			for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
+				excludeMatch, err := u.PathMatch(excludePath, src)
+				if err != nil {
+					return true, err
+				} else if excludeMatch {
+					// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+					u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+						trimmedSrc,
+						excludePath,
+					))
+					return true, nil
+				}
+			}
+
+			// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+			if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
+				anyMatches := false
+				for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
+					includeMatch, err := u.PathMatch(includePath, src)
+					if err != nil {
+						return true, err
+					} else if includeMatch {
+						// If the file matches ANY of the 'included_paths' patterns, include the file
+						u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+							trimmedSrc,
+							includePath,
+						))
+						anyMatches = true
+						break
+					}
+				}
+
+				if anyMatches {
+					return false, nil
+				} else {
+					u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+					return true, nil
+				}
+			}
+
+			// If 'included_paths' is not provided, include all files that were not excluded
+			u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+			return false, nil
+		},
+
+		// Preserve the atime and the mtime of the entries
+		// On linux we can preserve only up to 1 millisecond accuracy
+		PreserveTimes: false,
+
+		// Preserve the uid and the gid of all entries
+		PreserveOwner: false,
+
+		// OnSymlink specifies what to do on symlink
+		// Override the destination file if it already exists
+		OnSymlink: func(src string) cp.SymlinkAction {
+			return cp.Deep
+		},
+	}
+
+	componentPath2 := componentPath
+	if sourceIsLocalFile {
+		if filepath.Ext(componentPath) == "" {
+			componentPath2 = filepath.Join(componentPath, filepath.Base(uri))
+		}
+	}
+
+	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
+		return err
+	}
+	return nil
+}
 func ExecuteComponentVendorInternal(
 	cliConfig schema.CliConfiguration,
 	vendorComponentSpec schema.VendorComponentSpec,
@@ -102,7 +195,6 @@ func ExecuteComponentVendorInternal(
 	componentPath string,
 	dryRun bool,
 ) error {
-	var tempDir string
 	var err error
 	var t *template.Template
 	var uri string
@@ -128,7 +220,6 @@ func ExecuteComponentVendorInternal(
 	} else {
 		uri = vendorComponentSpec.Source.Uri
 	}
-
 	useOciScheme := false
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
@@ -152,162 +243,27 @@ func ExecuteComponentVendorInternal(
 			}
 		}
 	}
-
-	u.LogInfo(cliConfig, fmt.Sprintf("Pulling sources for the component '%s' from '%s' into '%s'",
-		component,
-		uri,
-		componentPath,
-	))
-
-	if !dryRun {
-		// Create temp folder
-		// We are using a temp folder for the following reasons:
-		// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
-		// 2. We have the option to skip some files we don't need and include only the files we need when copying from the temp folder to the destination folder
-		tempDir, err = os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
-		if err != nil {
-			return err
-		}
-
-		defer removeTempDir(cliConfig, tempDir)
-
-		// Download the source into the temp directory
-		if useOciScheme {
-			// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-			err = processOciImage(cliConfig, uri, tempDir)
-			if err != nil {
-				return err
-			}
-		} else if useLocalFileSystem {
-			copyOptions := cp.Options{
-				PreserveTimes: false,
-				PreserveOwner: false,
-				// OnSymlink specifies what to do on symlink
-				// Override the destination file if it already exists
-				OnSymlink: func(src string) cp.SymlinkAction {
-					return cp.Deep
-				},
-			}
-
-			tempDir2 := tempDir
-			if sourceIsLocalFile {
-				tempDir2 = path.Join(tempDir, filepath.Base(uri))
-			}
-
-			if err = cp.Copy(uri, tempDir2, copyOptions); err != nil {
-				return err
-			}
-		} else {
-			// Use `go-getter` to download the sources into the temp directory
-			// When cloning from the root of a repo w/o using modules (sub-paths), `go-getter` does the following:
-			// - If the destination directory does not exist, it creates it and runs `git init`
-			// - If the destination directory exists, it should be an already initialized Git repository (otherwise an error will be thrown)
-			// For more details, refer to
-			// - https://github.com/hashicorp/go-getter/issues/114
-			// - https://github.com/hashicorp/go-getter?tab=readme-ov-file#subdirectories
-			// We add the `uri` to the already created `tempDir` so it does not exist to allow `go-getter` to create
-			// and correctly initialize it
-			tempDir = path.Join(tempDir, filepath.Base(uri))
-
-			client := &getter.Client{
-				Ctx: context.Background(),
-				// Define the destination where the files will be stored. This will create the directory if it doesn't exist
-				Dst: tempDir,
-				// Source
-				Src:  uri,
-				Mode: getter.ClientModeAny,
-			}
-
-			if err = client.Get(); err != nil {
-				return err
-			}
-		}
-
-		// Copy from the temp folder to the destination folder and skip the excluded files
-		copyOptions := cp.Options{
-			// Skip specifies which files should be skipped
-			Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-				if strings.HasSuffix(src, ".git") {
-					return true, nil
-				}
-
-				trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-				// Exclude the files that match the 'excluded_paths' patterns
-				// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
-				// https://en.wikipedia.org/wiki/Glob_(programming)
-				// https://github.com/bmatcuk/doublestar#patterns
-				for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
-					excludeMatch, err := u.PathMatch(excludePath, src)
-					if err != nil {
-						return true, err
-					} else if excludeMatch {
-						// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-						u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
-							trimmedSrc,
-							excludePath,
-						))
-						return true, nil
-					}
-				}
-
-				// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-				if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
-					anyMatches := false
-					for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
-						includeMatch, err := u.PathMatch(includePath, src)
-						if err != nil {
-							return true, err
-						} else if includeMatch {
-							// If the file matches ANY of the 'included_paths' patterns, include the file
-							u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
-								trimmedSrc,
-								includePath,
-							))
-							anyMatches = true
-							break
-						}
-					}
-
-					if anyMatches {
-						return false, nil
-					} else {
-						u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
-						return true, nil
-					}
-				}
-
-				// If 'included_paths' is not provided, include all files that were not excluded
-				u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
-				return false, nil
-			},
-
-			// Preserve the atime and the mtime of the entries
-			// On linux we can preserve only up to 1 millisecond accuracy
-			PreserveTimes: false,
-
-			// Preserve the uid and the gid of all entries
-			PreserveOwner: false,
-
-			// OnSymlink specifies what to do on symlink
-			// Override the destination file if it already exists
-			OnSymlink: func(src string) cp.SymlinkAction {
-				return cp.Deep
-			},
-		}
-
-		componentPath2 := componentPath
-		if sourceIsLocalFile {
-			if filepath.Ext(componentPath) == "" {
-				componentPath2 = path.Join(componentPath, filepath.Base(uri))
-			}
-		}
-
-		if err = cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
-			return err
-		}
+	var pType pkgType
+	if useOciScheme {
+		pType = pkgTypeOci
+	} else if useLocalFileSystem {
+		pType = pkgTypeLocal
+	} else {
+		pType = pkgTypeRemote
 	}
 
+	componentPkg := pkgComponentVendor{
+		uri:                 uri,
+		name:                component,
+		componentPath:       componentPath,
+		sourceIsLocalFile:   sourceIsLocalFile,
+		pkgType:             pType,
+		version:             vendorComponentSpec.Source.Version,
+		vendorComponentSpec: vendorComponentSpec,
+		IsComponent:         true,
+	}
+	var packages []pkgComponentVendor
+	packages = append(packages, componentPkg)
 	// Process mixins
 	if len(vendorComponentSpec.Mixins) > 0 {
 		for _, mixin := range vendorComponentSpec.Mixins {
@@ -352,72 +308,54 @@ func ExecuteComponentVendorInternal(
 					uri = absPath
 				}
 			}
-
-			u.LogInfo(cliConfig, fmt.Sprintf(
-				"Pulling the mixin '%s' for the component '%s' into '%s'\n",
-				uri,
-				component,
-				path.Join(componentPath, mixin.Filename),
-			))
-
-			if !dryRun {
-				err = os.RemoveAll(tempDir)
-				if err != nil {
-					return err
-				}
-
-				// Download the mixin into the temp file
-				if !useOciScheme {
-					client := &getter.Client{
-						Ctx:  context.Background(),
-						Dst:  path.Join(tempDir, mixin.Filename),
-						Src:  uri,
-						Mode: getter.ClientModeFile,
-					}
-
-					if err = client.Get(); err != nil {
-						return err
-					}
-				} else {
-					// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-					err = processOciImage(cliConfig, uri, tempDir)
-					if err != nil {
-						return err
-					}
-				}
-
-				// Copy from the temp folder to the destination folder
-				copyOptions := cp.Options{
-					// Preserve the atime and the mtime of the entries
-					PreserveTimes: false,
-
-					// Preserve the uid and the gid of all entries
-					PreserveOwner: false,
-
-					// OnSymlink specifies what to do on symlink
-					// Override the destination file if it already exists
-					// Prevent the error:
-					// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
-					OnSymlink: func(src string) cp.SymlinkAction {
-						return cp.Deep
-					},
-				}
-
-				if err = cp.Copy(tempDir, componentPath, copyOptions); err != nil {
-					return err
+			// Check if it's a local file
+			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+				if u.FileExists(absPath) {
+					pType = pkgTypeLocal
+					continue
 				}
 			}
+			if useOciScheme {
+				pType = pkgTypeOci
+			} else {
+				pType = pkgTypeRemote
+			}
+
+			pkg := pkgComponentVendor{
+				uri:                 uri,
+				pkgType:             pType,
+				name:                "mixin " + uri,
+				sourceIsLocalFile:   false,
+				IsMixins:            true,
+				vendorComponentSpec: vendorComponentSpec,
+				version:             mixin.Version,
+				componentPath:       componentPath,
+				mixinFilename:       mixin.Filename,
+			}
+
+			packages = append(packages, pkg)
 		}
 	}
-
+	// Run TUI to process packages
+	if len(packages) > 0 {
+		model, err := newModelComponentVendorInternal(packages, dryRun, cliConfig)
+		if err != nil {
+			return fmt.Errorf("error initializing model: %v", err)
+		}
+		var opts []tea.ProgramOption
+		// Disable TUI if no TTY support is available
+		if !CheckTTYSupport() {
+			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+			u.LogWarning(cliConfig, "TTY is not supported. Running in non-interactive mode")
+		}
+		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
+			return fmt.Errorf("running download error: %w", err)
+		}
+	}
 	return nil
 }
 
-// ExecuteStackVendorInternal executes the command to vendor an Atmos stack
-// TODO: implement this
-func ExecuteStackVendorInternal(
-	stack string,
-	dryRun bool,
-) error {
-	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not supported yet")
+// CheckTTYSupport checks if stdout supports TTY for displaying the progress UI.
+func CheckTTYSupport() bool {
+	return isatty.IsTerminal(os.Stdout.Fd())
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"runtime"
 
 	"github.com/charmbracelet/glamour"
@@ -59,7 +59,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
-			componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, info.Component)
+			componentPath := filepath.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
 				u.LogErrorAndExit(schema.CliConfiguration{}, err)
@@ -68,7 +68,7 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
 			}
 
-			readmePath := path.Join(componentPath, "README.md")
+			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
 				if os.IsNotExist(err) {
 					u.LogErrorAndExit(schema.CliConfiguration{}, fmt.Errorf("No README found for component: %s", info.Component))
