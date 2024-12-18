@@ -5,6 +5,7 @@ type AtmosSectionMapType = map[string]any
 // CliConfiguration structure represents schema for `atmos.yaml` CLI config
 type CliConfiguration struct {
 	BasePath                      string         `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	CliConfigPath                 string         `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 	Components                    Components     `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks         `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
 	Workflows                     Workflows      `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`

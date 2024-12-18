@@ -125,7 +125,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if atmosCliConfigPathEnv := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmosCliConfigPathEnv != "" {
 		u.LogTrace(cliConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", atmosCliConfigPathEnv))
 		configFile := filepath.Join(atmosCliConfigPathEnv, CliConfigFileName)
-		found, err := processConfigFile(cliConfig, configFile, v)
+		found, configPath, err := processConfigFile(cliConfig, configFile, v)
 		if err != nil {
 			return cliConfig, err
 		}
@@ -134,6 +134,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			return cliConfig, fmt.Errorf("config not found in ATMOS_CLI_CONFIG_PATH: %s", configFile)
 		} else {
 			configFound = true
+			cliConfig.CliConfigPath = configPath
 		}
 
 		// Since ATMOS_CLI_CONFIG_PATH is to be the first and only check, we skip other paths if found
@@ -153,12 +154,13 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 		if len(configFilePathSystem) > 0 {
 			configFile := filepath.Join(configFilePathSystem, CliConfigFileName)
-			found, err := processConfigFile(cliConfig, configFile, v)
+			found, configPath, err := processConfigFile(cliConfig, configFile, v)
 			if err != nil {
 				return cliConfig, err
 			}
 			if found {
 				configFound = true
+				cliConfig.CliConfigPath = configPath
 			}
 		}
 
@@ -177,12 +179,13 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 
 		userConfigFile := filepath.Join(userConfigDir, CliConfigFileName)
-		found, err := processConfigFile(cliConfig, userConfigFile, v)
+		found, configPath, err := processConfigFile(cliConfig, userConfigFile, v)
 		if err != nil {
 			return cliConfig, err
 		}
 		if found {
 			configFound = true
+			cliConfig.CliConfigPath = configPath
 		}
 
 		// 4. Check current directory
@@ -191,23 +194,25 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			return cliConfig, err
 		}
 		configFileCwd := filepath.Join(configFilePathCwd, CliConfigFileName)
-		found, err = processConfigFile(cliConfig, configFileCwd, v)
+		found, configPath, err = processConfigFile(cliConfig, configFileCwd, v)
 		if err != nil {
 			return cliConfig, err
 		}
 		if found {
 			configFound = true
+			cliConfig.CliConfigPath = configPath
 		}
 
 		// 5. If Terraform provider specified a path
 		if configAndStacksInfo.AtmosCliConfigPath != "" {
 			configFileTfProvider := filepath.Join(configAndStacksInfo.AtmosCliConfigPath, CliConfigFileName)
-			found, err := processConfigFile(cliConfig, configFileTfProvider, v)
+			found, configPath, err := processConfigFile(cliConfig, configFileTfProvider, v)
 			if err != nil {
 				return cliConfig, err
 			}
 			if found {
 				configFound = true
+				cliConfig.CliConfigPath = configPath
 			}
 		}
 	}
@@ -403,15 +408,15 @@ func processConfigFile(
 	cliConfig schema.CliConfiguration,
 	path string,
 	v *viper.Viper,
-) (bool, error) {
+) (bool, string, error) {
 	// Check if the config file exists
 	configPath, fileExists := u.SearchConfigFile(path)
 	if !fileExists {
-		return false, nil
+		return false, "", nil
 	}
 	reader, err := os.Open(configPath)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	defer func(reader *os.File) {
@@ -423,10 +428,10 @@ func processConfigFile(
 
 	err = v.MergeConfig(reader)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
-	return true, nil
+	return true, configPath, nil
 }
 func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 	for _, importPath := range cliConfig.Import {
@@ -491,7 +496,7 @@ func processImports(cliConfig schema.CliConfiguration, v *viper.Viper) error {
 		u.LogTrace(cliConfig, fmt.Sprintf("Resolved import paths: %v", resolvedPaths))
 		for _, path := range resolvedPaths {
 			// Process each configuration file
-			_, err = processConfigFile(cliConfig, path, v)
+			_, _, err = processConfigFile(cliConfig, path, v)
 			if err != nil {
 				// Log the error but continue processing other files
 				u.LogWarning(cliConfig, fmt.Sprintf("failed to merge configuration from '%s': %v", path, err))
