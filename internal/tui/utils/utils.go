@@ -6,6 +6,7 @@ import (
 
 	"github.com/alecthomas/chroma/quick"
 	"github.com/arsham/figurine/figurine"
+	"github.com/charmbracelet/glamour"
 	"github.com/jwalton/go-supportscolor"
 )
 
@@ -26,4 +27,24 @@ func PrintStyledText(text string) error {
 		return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
 	}
 	return nil
+}
+
+// RenderMarkdown renders markdown text with terminal styling
+func RenderMarkdown(markdown string, style string) (string, error) {
+	// If no style is provided, use the default style
+	if style == "" {
+		style = "dark"
+	}
+
+	// Create a new renderer with the specified style
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	// Render the markdown
+	return r.Render(markdown)
 }
