@@ -15,15 +15,15 @@ var (
 )
 
 func processTagTerraformOutput(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 ) any {
-	u.LogTrace(cliConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
 	str, err := getStringAfterTag(input, config.AtmosYamlFuncTerraformOutput)
 	if err != nil {
-		u.LogErrorAndExit(cliConfig, err)
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	var component string
@@ -43,11 +43,11 @@ func processTagTerraformOutput(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		u.LogTrace(cliConfig, fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
+		u.LogTrace(atmosConfig, fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
 			"Using the current stack '%s' as the 'stack' parameter", input, currentStack))
 	} else {
 		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
-		u.LogErrorAndExit(cliConfig, err)
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
@@ -55,41 +55,41 @@ func processTagTerraformOutput(
 	// If the result for the component in the stack already exists in the cache, return it
 	cachedOutputs, found := terraformOutputFuncSyncMap.Load(stackSlug)
 	if found && cachedOutputs != nil {
-		u.LogTrace(cliConfig, fmt.Sprintf("Found the result of the Atmos YAML function '!terraform.output %s %s %s' in the cache", component, stack, output))
-		return getTerraformOutput(cliConfig, input, component, stack, cachedOutputs.(map[string]any), output)
+		u.LogTrace(atmosConfig, fmt.Sprintf("Found the result of the Atmos YAML function '!terraform.output %s %s %s' in the cache", component, stack, output))
+		return getTerraformOutput(atmosConfig, input, component, stack, cachedOutputs.(map[string]any), output)
 	}
 
 	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
-		u.LogErrorAndExit(cliConfig, err)
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend,
 	// in which case get the `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
-		u.LogErrorAndExit(cliConfig, err)
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformOutputFuncSyncMap.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		return getStaticRemoteStateOutput(cliConfig, input, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		return getStaticRemoteStateOutput(atmosConfig, input, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
-		terraformOutputs, err := execTerraformOutput(cliConfig, component, stack, sections)
+		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
-			u.LogErrorAndExit(cliConfig, err)
+			u.LogErrorAndExit(atmosConfig, err)
 		}
 
 		// Cache the result
 		terraformOutputFuncSyncMap.Store(stackSlug, terraformOutputs)
-		return getTerraformOutput(cliConfig, input, component, stack, terraformOutputs, output)
+		return getTerraformOutput(atmosConfig, input, component, stack, terraformOutputs, output)
 	}
 }
 
 func getTerraformOutput(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	funcDef string,
 	component string,
 	stack string,
@@ -100,7 +100,7 @@ func getTerraformOutput(
 		return outputs[output]
 	}
 
-	u.LogErrorAndExit(cliConfig, fmt.Errorf("invalid Atmos YAML function: %s\nthe component '%s' in the stack '%s' does not have the output '%s'",
+	u.LogErrorAndExit(atmosConfig, fmt.Errorf("invalid Atmos YAML function: %s\nthe component '%s' in the stack '%s' does not have the output '%s'",
 		funcDef,
 		component,
 		stack,
@@ -111,7 +111,7 @@ func getTerraformOutput(
 }
 
 func getStaticRemoteStateOutput(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	funcDef string,
 	component string,
 	stack string,
@@ -122,7 +122,7 @@ func getStaticRemoteStateOutput(
 		return remoteStateSection[output]
 	}
 
-	u.LogErrorAndExit(cliConfig, fmt.Errorf("invalid Atmos YAML function: %s\nthe component '%s' in the stack '%s' "+
+	u.LogErrorAndExit(atmosConfig, fmt.Errorf("invalid Atmos YAML function: %s\nthe component '%s' in the stack '%s' "+
 		"is configured with the 'static' remote state backend, but the remote state backend does not have the output '%s'",
 		funcDef,
 		component,

@@ -9,15 +9,15 @@ import (
 )
 
 func ProcessCustomYamlTags(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	input schema.AtmosSectionMapType,
 	currentStack string,
 ) (schema.AtmosSectionMapType, error) {
-	return processNodes(cliConfig, input, currentStack), nil
+	return processNodes(atmosConfig, input, currentStack), nil
 }
 
 func processNodes(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	data map[string]any,
 	currentStack string,
 ) map[string]any {
@@ -27,7 +27,7 @@ func processNodes(
 	recurse = func(node any) any {
 		switch v := node.(type) {
 		case string:
-			return processCustomTags(cliConfig, v, currentStack)
+			return processCustomTags(atmosConfig, v, currentStack)
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
@@ -56,20 +56,20 @@ func processNodes(
 }
 
 func processCustomTags(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 ) any {
 
 	switch {
 	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate):
-		return processTagTemplate(cliConfig, input, currentStack)
+		return processTagTemplate(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncExec):
-		return processTagExec(cliConfig, input, currentStack)
+		return processTagExec(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncStore):
-		return processTagStore(cliConfig, input, currentStack)
+		return processTagStore(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput):
-		return processTagTerraformOutput(cliConfig, input, currentStack)
+		return processTagTerraformOutput(atmosConfig, input, currentStack)
 	default:
 		// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
 		return input

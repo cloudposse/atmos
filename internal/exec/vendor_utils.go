@@ -34,7 +34,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(info, processStacks)
+	atmosConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
 		return fmt.Errorf("failed to initialize CLI config: %w", err)
 	}
@@ -94,7 +94,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check `vendor.yaml`
-	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(cliConfig, cfg.AtmosVendorConfigFileName, true)
+	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(atmosConfig, cfg.AtmosVendorConfigFileName, true)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	}
 	if vendorConfigExists {
 		// Process `vendor.yaml`
-		return ExecuteAtmosVendorInternal(cliConfig, foundVendorConfigFile, vendorConfig.Spec, component, tags, dryRun)
+		return ExecuteAtmosVendorInternal(atmosConfig, foundVendorConfigFile, vendorConfig.Spec, component, tags, dryRun)
 	} else {
 		// Check and process `component.yaml`
 		if component != "" {
@@ -117,12 +117,12 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 				componentType = "terraform"
 			}
 
-			componentConfig, componentPath, err := ReadAndProcessComponentVendorConfigFile(cliConfig, component, componentType)
+			componentConfig, componentPath, err := ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
 			if err != nil {
 				return err
 			}
 
-			return ExecuteComponentVendorInternal(cliConfig, componentConfig.Spec, component, componentPath, dryRun)
+			return ExecuteComponentVendorInternal(atmosConfig, componentConfig.Spec, component, componentPath, dryRun)
 		}
 	}
 
@@ -138,7 +138,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
 func ReadAndProcessVendorConfigFile(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
 	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
@@ -151,11 +151,11 @@ func ReadAndProcessVendorConfigFile(
 	var foundVendorConfigFile string
 
 	// Check if vendor config is specified in atmos.yaml
-	if checkGlobalConfig && cliConfig.Vendor.BasePath != "" {
-		if !filepath.IsAbs(cliConfig.Vendor.BasePath) {
-			foundVendorConfigFile = filepath.Join(cliConfig.BasePath, cliConfig.Vendor.BasePath)
+	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
+		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
+			foundVendorConfigFile = filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
 		} else {
-			foundVendorConfigFile = cliConfig.Vendor.BasePath
+			foundVendorConfigFile = atmosConfig.Vendor.BasePath
 		}
 	} else {
 		// Path is not defined in atmos.yaml, proceed with existing logic
@@ -164,12 +164,12 @@ func ReadAndProcessVendorConfigFile(
 
 		if !fileExists {
 			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
-			pathToVendorConfig := filepath.Join(cliConfig.BasePath, vendorConfigFile)
+			pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
 			foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
 
 			if !fileExists {
 				vendorConfigFileExists = false
-				u.LogWarning(cliConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+				u.LogWarning(atmosConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
 				return vendorConfig, vendorConfigFileExists, "", nil
 			}
 		}
@@ -248,7 +248,7 @@ func ReadAndProcessVendorConfigFile(
 
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets
 func ExecuteAtmosVendorInternal(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFileName string,
 	atmosVendorSpec schema.AtmosVendorSpec,
 	component string,
@@ -259,7 +259,7 @@ func ExecuteAtmosVendorInternal(
 	var err error
 	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 
-	logInitialMessage(cliConfig, vendorConfigFileName, tags)
+	logInitialMessage(atmosConfig, vendorConfigFileName, tags)
 
 	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
@@ -267,7 +267,7 @@ func ExecuteAtmosVendorInternal(
 
 	// Process imports and return all sources from all the imports and from `vendor.yaml`
 	sources, _, err := processVendorImports(
-		cliConfig,
+		atmosConfig,
 		vendorConfigFileName,
 		atmosVendorSpec.Imports,
 		atmosVendorSpec.Sources,
@@ -402,10 +402,10 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(cliConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+			u.LogWarning(atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 
-		model, err := newModelAtmosVendorInternal(packages, dryRun, cliConfig)
+		model, err := newModelAtmosVendorInternal(packages, dryRun, atmosConfig)
 		if err != nil {
 			return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
 		}
@@ -419,7 +419,7 @@ func ExecuteAtmosVendorInternal(
 
 // processVendorImports processes all imports recursively and returns a list of sources
 func processVendorImports(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
 	imports []string,
 	sources []schema.AtmosVendorSource,
@@ -437,7 +437,7 @@ func processVendorImports(
 
 		allImports = append(allImports, imp)
 
-		vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(cliConfig, imp, false)
+		vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(atmosConfig, imp, false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -450,7 +450,7 @@ func processVendorImports(
 			return nil, nil, fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", imp)
 		}
 
-		mergedSources, allImports, err = processVendorImports(cliConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
+		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -465,12 +465,12 @@ func processVendorImports(
 	return append(mergedSources, sources...), allImports, nil
 }
 
-func logInitialMessage(cliConfig schema.CliConfiguration, vendorConfigFileName string, tags []string) {
+func logInitialMessage(atmosConfig schema.AtmosConfiguration, vendorConfigFileName string, tags []string) {
 	logMessage := fmt.Sprintf("Vendoring from '%s'", vendorConfigFileName)
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
-	u.LogInfo(cliConfig, logMessage)
+	u.LogInfo(atmosConfig, logMessage)
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
@@ -513,9 +513,9 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
 }
 
-func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
+func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
 	copyOptions := cp.Options{
-		Skip:          generateSkipFunction(cliConfig, tempDir, s),
+		Skip:          generateSkipFunction(atmosConfig, tempDir, s),
 		PreserveTimes: false,
 		PreserveOwner: false,
 		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
@@ -534,12 +534,12 @@ func copyToTarget(cliConfig schema.CliConfiguration, tempDir, targetPath string,
 // and IncludedPaths to filter files during the copy operation.
 //
 // Parameters:
-//   - cliConfig: The CLI configuration for logging
+//   - atmosConfig: The CLI configuration for logging
 //   - tempDir: The temporary directory containing the files to copy
 //   - s: The vendor source configuration containing exclusion/inclusion patterns
 //
 // Returns a function that determines if a file should be skipped during copying
-func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
+func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 		if filepath.Base(src) == ".git" {
 			return true, nil
@@ -557,7 +557,7 @@ func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *
 				return true, err
 			} else if excludeMatch {
 				// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-				u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 					trimmedSrc,
 					excludePath,
 				))
@@ -574,7 +574,7 @@ func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *
 					return true, err
 				} else if includeMatch {
 					// If the file matches ANY of the 'included_paths' patterns, include the file
-					u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+					u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 						trimmedSrc,
 						includePath,
 					))
@@ -586,13 +586,13 @@ func generateSkipFunction(cliConfig schema.CliConfiguration, tempDir string, s *
 			if anyMatches {
 				return false, nil
 			} else {
-				u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 				return true, nil
 			}
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+		u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
 }

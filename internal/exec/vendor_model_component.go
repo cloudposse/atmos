@@ -30,7 +30,7 @@ type pkgComponentVendor struct {
 	mixinFilename       string
 }
 
-func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, cliConfig schema.CliConfiguration) (modelVendor, error) {
+func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) (modelVendor, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(30),
@@ -53,16 +53,16 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, cli
 	}
 	tty := CheckTTYSupport()
 	return modelVendor{
-		packages:  vendorPks,
-		spinner:   s,
-		progress:  p,
-		dryRun:    dryRun,
-		cliConfig: cliConfig,
-		isTTY:     tty,
+		packages:    vendorPks,
+		spinner:     s,
+		progress:    p,
+		dryRun:      dryRun,
+		atmosConfig: atmosConfig,
+		isTTY:       tty,
 	}, nil
 }
 
-func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, cliConfig schema.CliConfiguration) tea.Cmd {
+func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			// Simulate the action
@@ -73,7 +73,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, cliConfig s
 			}
 		}
 		if p.IsComponent {
-			err := installComponent(p, cliConfig)
+			err := installComponent(p, atmosConfig)
 			if err != nil {
 				return installedPkgMsg{
 					err:  err,
@@ -87,7 +87,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, cliConfig s
 			}
 		}
 		if p.IsMixins {
-			err := installMixin(p, cliConfig)
+			err := installMixin(p, atmosConfig)
 			if err != nil {
 				return installedPkgMsg{
 					err:  err,
@@ -106,7 +106,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, cliConfig s
 		}
 	}
 }
-func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) error {
+func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
 
 	// Create temp folder
 	// We are using a temp folder for the following reasons:
@@ -120,7 +120,7 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 	if err := os.Chmod(tempDir, 0700); err != nil {
 		return fmt.Errorf("failed to set temp directory permissions: %w", err)
 	}
-	defer removeTempDir(cliConfig, tempDir)
+	defer removeTempDir(atmosConfig, tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
@@ -141,7 +141,7 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(cliConfig, p.uri, tempDir)
+		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
 		}
@@ -169,20 +169,20 @@ func installComponent(p *pkgComponentVendor, cliConfig schema.CliConfiguration) 
 		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
 
 	}
-	if err = copyComponentToDestination(cliConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
+	if err = copyComponentToDestination(atmosConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
 		return fmt.Errorf("failed to copy package %s error %s", p.name, err)
 	}
 
 	return nil
 
 }
-func installMixin(p *pkgComponentVendor, cliConfig schema.CliConfiguration) error {
+func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
 		return fmt.Errorf("Failed to create temp directory %s", err)
 	}
 
-	defer removeTempDir(cliConfig, tempDir)
+	defer removeTempDir(atmosConfig, tempDir)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	switch p.pkgType {
@@ -199,7 +199,7 @@ func installMixin(p *pkgComponentVendor, cliConfig schema.CliConfiguration) erro
 		}
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(cliConfig, p.uri, tempDir)
+		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
 		}

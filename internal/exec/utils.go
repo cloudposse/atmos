@@ -226,7 +226,7 @@ func ProcessCommandLineArgs(
 		if argsAndFlagsInfo.SubCommand == "-h" || argsAndFlagsInfo.SubCommand == "--help" {
 			argsAndFlagsInfo.SubCommand = ""
 		}
-		err = processHelp(schema.CliConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
+		err = processHelp(schema.AtmosConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -244,18 +244,18 @@ func ProcessCommandLineArgs(
 }
 
 // FindStacksMap processes stack config and returns a map of all stacks
-func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
+func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
 	error,
 ) {
 	// Process stack config file(s)
 	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
-		cliConfig,
-		cliConfig.StacksBaseAbsolutePath,
-		cliConfig.TerraformDirAbsolutePath,
-		cliConfig.HelmfileDirAbsolutePath,
-		cliConfig.StackConfigFilesAbsolutePaths,
+		atmosConfig,
+		atmosConfig.StacksBaseAbsolutePath,
+		atmosConfig.TerraformDirAbsolutePath,
+		atmosConfig.HelmfileDirAbsolutePath,
+		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,
 		ignoreMissingFiles,
@@ -270,7 +270,7 @@ func FindStacksMap(cliConfig schema.CliConfiguration, ignoreMissingFiles bool) (
 
 // ProcessStacks processes stack config
 func ProcessStacks(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
 	processTemplates bool,
@@ -290,28 +290,28 @@ func ProcessStacks(
 
 	configAndStacksInfo.StackFromArg = configAndStacksInfo.Stack
 
-	stacksMap, rawStackConfigs, err := FindStacksMap(cliConfig, false)
+	stacksMap, rawStackConfigs, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 
 	// Print the stack config files
-	if cliConfig.Logs.Level == u.LogLevelTrace {
+	if atmosConfig.Logs.Level == u.LogLevelTrace {
 		var msg string
-		if cliConfig.StackType == "Directory" {
+		if atmosConfig.StackType == "Directory" {
 			msg = "\nFound stack manifest:"
 		} else {
 			msg = "\nFound stack manifests:"
 		}
-		u.LogTrace(cliConfig, msg)
-		err = u.PrintAsYAMLToFileDescriptor(cliConfig, cliConfig.StackConfigFilesRelativePaths)
+		u.LogTrace(atmosConfig, msg)
+		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
 	}
 
 	// Check and process stacks
-	if cliConfig.StackType == "Directory" {
+	if atmosConfig.StackType == "Directory" {
 		err = ProcessComponentConfig(
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
@@ -332,7 +332,7 @@ func ProcessStacks(
 
 		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 			configAndStacksInfo.Context,
-			GetStackNamePattern(cliConfig),
+			GetStackNamePattern(atmosConfig),
 			configAndStacksInfo.Stack,
 		)
 		if err != nil {
@@ -356,19 +356,19 @@ func ProcessStacks(
 				continue
 			}
 
-			if cliConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+			if atmosConfig.Stacks.NameTemplate != "" {
+				tmpl, err2 := ProcessTmpl("name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
 				configAndStacksInfo.ContextPrefix = tmpl
-			} else if cliConfig.Stacks.NamePattern != "" {
+			} else if atmosConfig.Stacks.NamePattern != "" {
 				// Process context
 				configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
 				configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
 					configAndStacksInfo.Context,
-					GetStackNamePattern(cliConfig),
+					GetStackNamePattern(atmosConfig),
 					stackName,
 				)
 				if err != nil {
@@ -389,7 +389,7 @@ func ProcessStacks(
 				foundStacks = append(foundStacks, stackName)
 
 				u.LogDebug(
-					cliConfig,
+					atmosConfig,
 					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
@@ -406,8 +406,8 @@ func ProcessStacks(
 		if foundStackCount == 0 {
 			cliConfigYaml := ""
 
-			if cliConfig.Logs.Level == u.LogLevelTrace {
-				y, _ := u.ConvertToYAML(cliConfig)
+			if atmosConfig.Logs.Level == u.LogLevelTrace {
+				y, _ := u.ConvertToYAML(atmosConfig)
 				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
 			}
 
@@ -426,7 +426,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			u.LogErrorAndExit(cliConfig, err)
+			u.LogErrorAndExit(atmosConfig, err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -444,10 +444,10 @@ func ProcessStacks(
 
 	// Add Atmos CLI config
 	atmosCliConfig := map[string]any{}
-	atmosCliConfig["base_path"] = cliConfig.BasePath
-	atmosCliConfig["components"] = cliConfig.Components
-	atmosCliConfig["stacks"] = cliConfig.Stacks
-	atmosCliConfig["workflows"] = cliConfig.Workflows
+	atmosCliConfig["base_path"] = atmosConfig.BasePath
+	atmosCliConfig["components"] = atmosConfig.Components
+	atmosCliConfig["stacks"] = atmosConfig.Stacks
+	atmosCliConfig["workflows"] = atmosConfig.Workflows
 	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
@@ -472,7 +472,7 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
 	// Terraform workspace
-	workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+	workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -495,7 +495,7 @@ func ProcessStacks(
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
-			cliConfig,
+			atmosConfig,
 			settingsSectionStruct,
 			"all-atmos-sections",
 			componentSectionStr,
@@ -504,22 +504,22 @@ func ProcessStacks(
 		)
 		if err != nil {
 			// If any error returned from the templates processing, log it and exit
-			u.LogErrorAndExit(cliConfig, err)
+			u.LogErrorAndExit(atmosConfig, err)
 		}
 
 		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 		if err != nil {
-			if !cliConfig.Templates.Settings.Enabled {
+			if !atmosConfig.Templates.Settings.Enabled {
 				if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 					errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
 						"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
 					err = errors.Join(err, errors.New(errorMessage))
 				}
 			}
-			u.LogErrorAndExit(cliConfig, err)
+			u.LogErrorAndExit(atmosConfig, err)
 		}
 
-		componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted, configAndStacksInfo.Stack)
+		componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, configAndStacksInfo.Stack)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -573,7 +573,7 @@ func ProcessStacks(
 	}
 
 	// Spacelift stack
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -582,7 +582,7 @@ func ProcessStacks(
 	}
 
 	// Atlantis project
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
@@ -638,12 +638,12 @@ func ProcessStacks(
 	componentInfo["component_type"] = configAndStacksInfo.ComponentType
 
 	if configAndStacksInfo.ComponentType == "terraform" {
-		componentPath := constructTerraformComponentWorkingDir(cliConfig, configAndStacksInfo)
+		componentPath := constructTerraformComponentWorkingDir(atmosConfig, configAndStacksInfo)
 		componentInfo["component_path"] = componentPath
 		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
 		componentInfo["terraform_config"] = terraformConfiguration
 	} else if configAndStacksInfo.ComponentType == "helmfile" {
-		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(cliConfig, configAndStacksInfo)
+		componentInfo["component_path"] = constructHelmfileComponentWorkingDir(atmosConfig, configAndStacksInfo)
 	}
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo

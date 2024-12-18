@@ -4,8 +4,8 @@ import "github.com/cloudposse/atmos/pkg/store"
 
 type AtmosSectionMapType = map[string]any
 
-// CliConfiguration structure represents schema for `atmos.yaml` CLI config
-type CliConfiguration struct {
+// AtmosConfiguration structure represents schema for `atmos.yaml` CLI config
+type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
@@ -16,7 +16,7 @@ type CliConfiguration struct {
 	Integrations                  Integrations       `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 	Schemas                       Schemas            `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates          `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
-	Settings                      CliSettings        `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Settings                      AtmosSettings      `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
@@ -37,7 +37,7 @@ type CliConfiguration struct {
 	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
 }
 
-type CliSettings struct {
+type AtmosSettings struct {
 	ListMergeStrategy string `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 	Docs              Docs   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 }

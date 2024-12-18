@@ -36,12 +36,12 @@ func PrintAsYAML(data any) error {
 }
 
 // PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
-func PrintAsYAMLToFileDescriptor(cliConfig schema.CliConfiguration, data any) error {
+func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
 	y, err := ConvertToYAML(data)
 	if err != nil {
 		return err
 	}
-	LogInfo(cliConfig, y)
+	LogInfo(atmosConfig, y)
 	return nil
 }
 

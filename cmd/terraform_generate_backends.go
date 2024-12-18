@@ -20,7 +20,7 @@ var terraformGenerateBackendsCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateBackendsCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }

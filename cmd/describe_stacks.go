@@ -20,7 +20,7 @@ var describeStacksCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
