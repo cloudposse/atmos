@@ -11,5 +11,3 @@ This folder contains the website powering official [Atmos](https://atmos.tools) 
 4. Start the local web server by running `npm run start`
 
 The shortcut for running all these commands is just to run `make all`
-
-
