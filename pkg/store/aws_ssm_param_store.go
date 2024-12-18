@@ -38,7 +38,11 @@ func NewSSMStore(options SSMStoreOptions) (Store, error) {
 		return nil, fmt.Errorf("failed to load AWS configuration: %w", err)
 	}
 
-	awsConfig.Region = options.Region
+	if options.Region != "" {
+		awsConfig.Region = options.Region
+	} else {
+		return nil, fmt.Errorf("region is required in ssm store configuration")
+	}
 
 	// Create the SSM client
 	client := ssm.NewFromConfig(awsConfig)
