@@ -1,0 +1,7 @@
+# Custom CLI commands
+commands:
+  - name: "test"
+    description: "Run all tests"
+    steps:
+      - atmos describe config  
+

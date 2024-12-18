@@ -28,12 +28,29 @@ the base path location of the components, and so forth.
 ## Configuration File (`atmos.yaml`)
 
 The CLI config is loaded from the following locations (from lowest to highest priority):
-
+- Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name . if is set the CLI will only look for the config file in the specified folder)
 - System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- $XDG_CONFIG_HOME/atmos/atmos.yaml (if `$XDG_CONFIG_HOME` is set)
 - Home directory (`~/.atmos/atmos.yaml`)
 - Current directory (`./atmos.yaml`)
-- Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name)
-
+- `atmos.d/` directory form base path (if `import` section is not set in the config) For an example, see [`examples/demo-atmos.d`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos.d)
+Additionally, Atmos supports `imports` of other CLI configurations. Use imports to break large Atmos CLI configurations into smaller ones, such as organized by top-level section. Imports are relative to the base path (if `import`  section is set in the config). For an example, see [`examples/demo-atmos-cli-imports`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos-cli-imports)
+Imports can be:
+- Remote URL (if `import` section is set in the config)
+- Specific Path (if `import` section is set in the config)
+- Wildcard Globs
+For example, we can import from multiple locations like this:
+```
+import:
+  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"  
+  - "configs.d/**/*"                                                                
+  - "./logs.yaml"  
+```
+:::warning Be Careful with Remote Imports
+- Always use HTTPS URLs (currently correctly demonstrated in the example). 
+- Verify the authenticity of remote sources. 
+- Consider pinning to specific commit hashes instead of branch references
+:::
 Each configuration file discovered is deep-merged with the preceding configurations.
 
 :::tip Pro-Tip
@@ -47,7 +64,7 @@ If `atmos.yaml` is not found in any of the searched locations, Atmos will use th
 
 <File title="atmos.yaml">
 ```yaml
-base_path: "."
+base_path: "." 
 vendor:
   base_path: "./vendor.yaml"
 components:

@@ -244,6 +244,8 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if cliConfig.Components.Helmfile.UseEKS {
 		envVars = append(envVars, envVarsEKS...)
 	}
+	envVars = append(envVars, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", cliConfig.CliConfigPath))
+	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", cliConfig.BasePath))
 
 	u.LogTrace(cliConfig, "Using ENV vars:")
 	for _, v := range envVars {
