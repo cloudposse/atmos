@@ -34,6 +34,8 @@ func (m *MockSSMClient) GetParameter(ctx context.Context, params *ssm.GetParamet
 }
 
 func TestSSMStore_Set(t *testing.T) {
+	mockFnOverwrite := true
+
 	tests := []struct {
 		name    string
 		key     string
@@ -50,7 +52,7 @@ func TestSSMStore_Set(t *testing.T) {
 					Name:      aws.String("/test/key"),
 					Value:     aws.String("test-value"),
 					Type:      types.ParameterTypeString,
-					Overwrite: true,
+					Overwrite: &mockFnOverwrite,
 				}).Return(&ssm.PutParameterOutput{}, nil)
 			},
 			wantErr: false,
@@ -93,12 +95,14 @@ func TestSSMStore_Set(t *testing.T) {
 }
 
 func TestSSMStore_Get(t *testing.T) {
+	mockFnWithDecryption := true
+
 	tests := []struct {
-		name     string
-		key      string
-		mockFn   func(*MockSSMClient)
-		want     interface{}
-		wantErr  bool
+		name    string
+		key     string
+		mockFn  func(*MockSSMClient)
+		want    interface{}
+		wantErr bool
 	}{
 		{
 			name: "successful get",
@@ -106,7 +110,7 @@ func TestSSMStore_Get(t *testing.T) {
 			mockFn: func(m *MockSSMClient) {
 				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
 					Name:           aws.String("/test/key"),
-					WithDecryption: true,
+					WithDecryption: &mockFnWithDecryption,
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String("test-value"),
@@ -145,4 +149,4 @@ func TestSSMStore_Get(t *testing.T) {
 			mockClient.AssertExpectations(t)
 		})
 	}
-} 
+}
