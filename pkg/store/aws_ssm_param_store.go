@@ -64,7 +64,7 @@ func (s *SSMStore) Set(key string, value interface{}) error {
 		Name:      aws.String(key),
 		Value:     aws.String(strValue),
 		Type:      types.ParameterTypeString,
-		Overwrite: true, // Allow overwriting existing keys
+		Overwrite: aws.Bool(true), // Allow overwriting existing keys
 	})
 
 	if err != nil {
@@ -81,7 +81,7 @@ func (s *SSMStore) Get(key string) (interface{}, error) {
 	// Get the parameter from SSM Parameter Store
 	result, err := s.client.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(key),
-		WithDecryption: true, // Decrypt secure parameters if necessary
+		WithDecryption: aws.Bool(true), // Decrypt secure parameters if necessary
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parameter '%s': %w", key, err)
