@@ -20,7 +20,7 @@ var proUnlockCmd = &cobra.Command{
 
 		err := e.ExecuteProUnlockCommand(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }

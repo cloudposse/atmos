@@ -48,14 +48,14 @@ func TestNewLogger(t *testing.T) {
 }
 
 func TestNewLoggerFromCliConfig(t *testing.T) {
-	cliConfig := schema.CliConfiguration{
+	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{
 			Level: "Info",
 			File:  "/dev/stdout",
 		},
 	}
 
-	logger, err := NewLoggerFromCliConfig(cliConfig)
+	logger, err := NewLoggerFromCliConfig(atmosConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 	assert.Equal(t, LogLevelInfo, logger.LogLevel)

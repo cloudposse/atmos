@@ -20,7 +20,7 @@ var terraformGenerateVarfilesCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -58,7 +58,7 @@ func init() {
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateVarfilesCmd)

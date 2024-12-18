@@ -35,7 +35,7 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 
 // ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`
 func ReadAndProcessComponentVendorConfigFile(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	component string,
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
@@ -43,14 +43,14 @@ func ReadAndProcessComponentVendorConfigFile(
 	var componentConfig schema.VendorComponentConfig
 
 	if componentType == "terraform" {
-		componentBasePath = cliConfig.Components.Terraform.BasePath
+		componentBasePath = atmosConfig.Components.Terraform.BasePath
 	} else if componentType == "helmfile" {
-		componentBasePath = cliConfig.Components.Helmfile.BasePath
+		componentBasePath = atmosConfig.Components.Helmfile.BasePath
 	} else {
 		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
-	componentPath := filepath.Join(cliConfig.BasePath, componentBasePath, component)
+	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
 	if err != nil {
@@ -102,7 +102,7 @@ func ExecuteStackVendorInternal(
 ) error {
 	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not supported yet")
 }
-func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, componentPath string, vendorComponentSpec schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
+func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, componentPath string, vendorComponentSpec schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
 	// Copy from the temp folder to the destination folder and skip the excluded files
 	copyOptions := cp.Options{
 		// Skip specifies which files should be skipped
@@ -123,7 +123,7 @@ func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, comp
 					return true, err
 				} else if excludeMatch {
 					// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-					u.LogTrace(cliConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+					u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 						trimmedSrc,
 						excludePath,
 					))
@@ -140,7 +140,7 @@ func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, comp
 						return true, err
 					} else if includeMatch {
 						// If the file matches ANY of the 'included_paths' patterns, include the file
-						u.LogTrace(cliConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+						u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 							trimmedSrc,
 							includePath,
 						))
@@ -152,13 +152,13 @@ func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, comp
 				if anyMatches {
 					return false, nil
 				} else {
-					u.LogTrace(cliConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+					u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 					return true, nil
 				}
 			}
 
 			// If 'included_paths' is not provided, include all files that were not excluded
-			u.LogTrace(cliConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+			u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 			return false, nil
 		},
 
@@ -189,7 +189,7 @@ func copyComponentToDestination(cliConfig schema.CliConfiguration, tempDir, comp
 	return nil
 }
 func ExecuteComponentVendorInternal(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	vendorComponentSpec schema.VendorComponentSpec,
 	component string,
 	componentPath string,
@@ -338,7 +338,7 @@ func ExecuteComponentVendorInternal(
 	}
 	// Run TUI to process packages
 	if len(packages) > 0 {
-		model, err := newModelComponentVendorInternal(packages, dryRun, cliConfig)
+		model, err := newModelComponentVendorInternal(packages, dryRun, atmosConfig)
 		if err != nil {
 			return fmt.Errorf("error initializing model: %v", err)
 		}
@@ -346,7 +346,7 @@ func ExecuteComponentVendorInternal(
 		// Disable TUI if no TTY support is available
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(cliConfig, "TTY is not supported. Running in non-interactive mode")
+			u.LogWarning(atmosConfig, "TTY is not supported. Running in non-interactive mode")
 		}
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)

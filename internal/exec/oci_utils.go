@@ -20,14 +20,14 @@ import (
 )
 
 // processOciImage downloads an Image from an OCI-compatible registry, extracts the layers from the tarball, and writes to the destination directory
-func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDir string) error {
+func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, destDir string) error {
 	// Temp directory for the tarball files
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
 	if err != nil {
 		return err
 	}
 
-	defer removeTempDir(cliConfig, tempDir)
+	defer removeTempDir(atmosConfig, tempDir)
 
 	// Temp tarball file name
 	tempTarFileName := filepath.Join(tempDir, uuid.New().String()) + ".tar"
@@ -60,7 +60,7 @@ func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDi
 	m, err := tarball.LoadManifest(func() (io.ReadCloser, error) {
 		f, err := os.Open(tempTarFileName)
 		if err != nil {
-			u.LogError(cliConfig, err)
+			u.LogError(atmosConfig, err)
 			return nil, err
 		}
 		return f, nil
@@ -84,7 +84,7 @@ func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDi
 
 	// Extract the tarball layers into the temp directory
 	// The tarball layers are tarballs themselves
-	err = extractTarball(cliConfig, tempTarFileName, tempDir)
+	err = extractTarball(atmosConfig, tempTarFileName, tempDir)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDi
 	for _, l := range manifest.Layers {
 		layerPath := filepath.Join(tempDir, l)
 
-		err = extractTarball(cliConfig, layerPath, destDir)
+		err = extractTarball(atmosConfig, layerPath, destDir)
 		if err != nil {
 			return err
 		}

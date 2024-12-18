@@ -18,7 +18,7 @@ import (
 
 // ExecuteWorkflow executes an Atmos workflow
 func ExecuteWorkflow(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	workflow string,
 	workflowPath string,
 	workflowDefinition *schema.WorkflowDefinition,
@@ -40,10 +40,10 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
-	logFunc(cliConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
+	logFunc(atmosConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
-	if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
-		err := u.PrintAsYAMLToFileDescriptor(cliConfig, workflowDefinition)
+	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		err := u.PrintAsYAMLToFileDescriptor(atmosConfig, workflowDefinition)
 		if err != nil {
 			return err
 		}
@@ -64,7 +64,7 @@ func ExecuteWorkflow(
 		var command = strings.TrimSpace(step.Command)
 		var commandType = strings.TrimSpace(step.Type)
 
-		logFunc(cliConfig, fmt.Sprintf("Executing workflow step: %s", command))
+		logFunc(atmosConfig, fmt.Sprintf("Executing workflow step: %s", command))
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -73,7 +73,7 @@ func ExecuteWorkflow(
 		var err error
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(cliConfig, command, commandName, ".", []string{}, dryRun)
+			err = ExecuteShell(atmosConfig, command, commandName, ".", []string{}, dryRun)
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
@@ -97,10 +97,10 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				logFunc(cliConfig, fmt.Sprintf("Stack: %s", finalStack))
+				logFunc(atmosConfig, fmt.Sprintf("Stack: %s", finalStack))
 			}
 
-			err = ExecuteShellCommand(cliConfig, "atmos", args, ".", []string{}, dryRun, "")
+			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
 			return fmt.Errorf("invalid workflow step type '%s'. Supported types are 'atmos' and 'shell'", commandType)
 		}
@@ -111,8 +111,8 @@ func ExecuteWorkflow(
 
 			failedMsg := color.New(color.FgRed).Sprintf("\nStep '%s' failed!", step.Name)
 
-			u.LogDebug(cliConfig, fmt.Sprintf("\nCommand failed: %s", command))
-			u.LogDebug(cliConfig, fmt.Sprintf("Error: %v", err))
+			u.LogDebug(atmosConfig, fmt.Sprintf("\nCommand failed: %s", command))
+			u.LogDebug(atmosConfig, fmt.Sprintf("Error: %v", err))
 
 			resumeMsg := color.New(color.FgGreen).Sprintf(
 				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",
@@ -130,23 +130,23 @@ func ExecuteWorkflow(
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command
 func ExecuteDescribeWorkflows(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 ) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
 
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
 	allResult := make(map[string]schema.WorkflowManifest)
 
-	if cliConfig.Workflows.BasePath == "" {
+	if atmosConfig.Workflows.BasePath == "" {
 		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
 	}
 
 	// If `workflows.base_path` is a relative path, join it with `stacks.base_path`
 	var workflowsDir string
-	if u.IsPathAbsolute(cliConfig.Workflows.BasePath) {
-		workflowsDir = cliConfig.Workflows.BasePath
+	if u.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
+		workflowsDir = atmosConfig.Workflows.BasePath
 	} else {
-		workflowsDir = filepath.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath)
+		workflowsDir = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
 	}
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
@@ -157,15 +157,15 @@ func ExecuteDescribeWorkflows(
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %v",
-			cliConfig.Workflows.BasePath, err)
+			atmosConfig.Workflows.BasePath, err)
 	}
 
 	for _, f := range files {
 		var workflowPath string
-		if u.IsPathAbsolute(cliConfig.Workflows.BasePath) {
-			workflowPath = filepath.Join(cliConfig.Workflows.BasePath, f)
+		if u.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
+			workflowPath = filepath.Join(atmosConfig.Workflows.BasePath, f)
 		} else {
-			workflowPath = filepath.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, f)
+			workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, f)
 		}
 
 		fileContent, err := os.ReadFile(workflowPath)
@@ -231,8 +231,8 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 	}
 }
 
-func ExecuteWorkflowUI(cliConfig schema.CliConfiguration) (string, string, string, error) {
-	_, _, allWorkflows, err := ExecuteDescribeWorkflows(cliConfig)
+func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, string, error) {
+	_, _, allWorkflows, err := ExecuteDescribeWorkflows(atmosConfig)
 	if err != nil {
 		return "", "", "", err
 	}

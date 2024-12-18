@@ -34,12 +34,12 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	info.Stack = stack
 	info.ComponentType = "terraform"
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
 
-	info, err = ProcessStacks(cliConfig, info, true, true)
+	info, err = ProcessStacks(atmosConfig, info, true, true)
 	if err != nil {
 		return err
 	}
@@ -55,22 +55,22 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	if len(varFileNameFromArg) > 0 {
 		varFilePath = varFileNameFromArg
 	} else {
-		varFilePath = constructTerraformComponentVarfilePath(cliConfig, info)
+		varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
 	}
 
 	// Print the component variables
-	u.LogDebug(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+	u.LogDebug(atmosConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 
-	if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(cliConfig, info.ComponentVarsSection)
+	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Write the variables to file
-	u.LogDebug(cliConfig, "Writing the variables to file:")
-	u.LogDebug(cliConfig, varFilePath)
+	u.LogDebug(atmosConfig, "Writing the variables to file:")
+	u.LogDebug(atmosConfig, varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
