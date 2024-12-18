@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -482,6 +484,19 @@ func processCommandLineArgs(cliConfig *schema.CliConfiguration, configAndStacksI
 		cliConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
 		u.LogTrace(*cliConfig, fmt.Sprintf("Using command line argument '%s=%s'", SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy))
 	}
+
+	return nil
+}
+
+// processStoreConfig creates a store registry from the provided stores config and assigns it to the cliConfig
+func processStoreConfig(cliConfig *schema.CliConfiguration) error {
+	log.Debug("processStoreConfig", "cliConfig.StoresConfig", fmt.Sprintf("%v", cliConfig.StoresConfig))
+
+	storeRegistry, err := store.NewStoreRegistry(&cliConfig.StoresConfig)
+	if err != nil {
+		return err
+	}
+	cliConfig.Stores = storeRegistry
 
 	return nil
 }
