@@ -68,7 +68,11 @@ jobs:
           BRANCH_NAME="chore/update-build-screengrabs-for-$VERSION"
           git checkout -b "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
           git add -A
-          git commit -m "chore: update screengrabs for $VERSION" || echo "No changes to commit"
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update screengrabs for $VERSION"
+          fi
           git push origin "$BRANCH_NAME"
 
       - name: Create or update PR
@@ -113,7 +117,11 @@ jobs:
           BRANCH_NAME="chore/update-$JOB_NAME-for-$VERSION"
           git checkout -b "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
           git add -A
-          git commit -m "chore: update $JOB_NAME for $VERSION" || echo "No changes to commit"
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update $JOB_NAME for $VERSION"
+          fi
           git push origin "$BRANCH_NAME"
 
       - name: Create or update PR
