@@ -1,0 +1,126 @@
+name: demo
+
+on:
+  workflow_dispatch:
+
+env:
+  TERM: "xterm-256color"
+  COLORTERM: "truecolor"
+  LANG: "en_US.UTF-8"
+  ATMOS_LOGS_LEVEL: "Info"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get Atmos version
+        id: get-version
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: List all .tape files
+        id: list-tapes
+        run: |
+          files=$(find . -type f -name '*.tape')
+          echo "matrix=$(echo -n \"$files\" | jq -R -s -c 'split(\"\\n\") | map(select(. != \"\"))')" >> $GITHUB_OUTPUT
+
+    outputs:
+      matrix: ${{ steps.list-tapes.outputs.matrix }}
+      version: ${{ steps.get-version.outputs.version }}
+
+  screengrabs:
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aha script make jq
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Atmos
+        uses: jaxxstorm/action-install-gh-release@v1.11.0
+        with:
+          repo: cloudposse/atmos
+          tag: ${{ needs.prepare.outputs.version }}
+          chmod: 0755
+          extension-matching: disable
+          rename-to: atmos
+
+      - name: Run make build-all install
+        run: |
+          make -C demo/screengrabs build-all install
+
+      - name: Push changes to branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          BRANCH_NAME="chore/update-build-screengrabs-for-$VERSION"
+          git checkout -b "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
+          git add -A
+          git commit -m "chore: update screengrabs for $VERSION" || echo "No changes to commit"
+          git push origin "$BRANCH_NAME"
+
+      - name: Create or update PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          BRANCH_NAME="chore/update-build-screengrabs-for-$VERSION"
+          PR_TITLE="Update screengrabs for $VERSION"
+          PR_BODY="This PR updates the screengrabs for Atmos version $VERSION."
+          gh pr view "$BRANCH_NAME" > /dev/null 2>&1 || \
+          gh pr create --base main --head "$BRANCH_NAME" --title "$PR_TITLE" --body "$PR_BODY"
+          gh pr edit "$BRANCH_NAME" --add-label "no-release"
+
+  vhs:
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        file: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.file }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Atmos
+        uses: jaxxstorm/action-install-gh-release@v1.11.0
+        with:
+          repo: cloudposse/atmos
+          tag: ${{ needs.prepare.outputs.version }}
+          chmod: 0755
+          extension-matching: disable
+          rename-to: atmos
+
+      - name: Push changes to branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          JOB_NAME=$(basename "${{ matrix.file }}" | sed 's/.tape$//')
+          BRANCH_NAME="chore/update-$JOB_NAME-for-$VERSION"
+          git checkout -b "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
+          git add -A
+          git commit -m "chore: update $JOB_NAME for $VERSION" || echo "No changes to commit"
+          git push origin "$BRANCH_NAME"
+
+      - name: Create or update PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          JOB_NAME=$(basename "${{ matrix.file }}" | sed 's/.tape$//')
+          BRANCH_NAME="chore/update-$JOB_NAME-for-$VERSION"
+          PR_TITLE="Update $JOB_NAME for $VERSION"
+          PR_BODY="This PR updates the demo gif for $JOB_NAME with Atmos version $VERSION."
+          gh pr view "$BRANCH_NAME" > /dev/null 2>&1 || \
+          gh pr create --base main --head "$BRANCH_NAME" --title "$PR_TITLE" --body "$PR_BODY"
+          gh pr edit "$BRANCH_NAME" --add-label "no-release"
