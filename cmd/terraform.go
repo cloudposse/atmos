@@ -17,9 +17,6 @@ var terraformCmd = &cobra.Command{
 	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		//checkAtmosConfig()
-
 		var argsAfterDoubleDash []string
 		var finalArgs = args
 
@@ -36,11 +33,10 @@ var terraformCmd = &cobra.Command{
 		// Exit on help
 		if info.NeedHelp {
 			// Check for the latest Atmos release on GitHub and print update message
-			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+			atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(schema.AtmosConfiguration)
+			CheckForAtmosUpdateAndPrintMessage(&atmosConfig)
 			return
 		}
-		// Check Atmos configuration
-		checkAtmosConfig()
 
 		err = e.ExecuteTerraform(info)
 		if err != nil {
