@@ -22,7 +22,7 @@ env:
 
 jobs:
   # ensure the code builds...
-  build-linux:
+  build:
     name: Build (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -75,11 +75,11 @@ jobs:
 
       - name: Build
         run: |
-          make build
+          make build-windows
 
       - name: Version
         run: |
-          make version
+          make version-windows
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
