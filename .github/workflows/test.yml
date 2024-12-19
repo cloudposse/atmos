@@ -22,7 +22,7 @@ env:
 
 jobs:
   # ensure the code builds...
-  build:
+  build-linux:
     name: Build (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 5
