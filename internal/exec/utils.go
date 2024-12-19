@@ -319,6 +319,7 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentType,
 			configAndStacksInfo.ComponentFromArg,
 		)
+
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -430,6 +431,10 @@ func ProcessStacks(
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
+	}
+
+	if configAndStacksInfo.ComponentSection == nil {
+		configAndStacksInfo.ComponentSection = make(map[string]any)
 	}
 
 	// Add imports
