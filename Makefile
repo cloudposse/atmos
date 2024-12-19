@@ -1,4 +1,6 @@
-TEST ?= $$(go list ./... | grep -v 'vendor')
+# This works because `go list ./...` excludes vendor directories by default in modern versions of Go (1.11+).
+# No need for grep or additional filtering.
+TEST ?= $$(go list ./...)
 SHELL := /bin/bash
 #GOOS=darwin
 #GOOS=linux
@@ -17,12 +19,24 @@ lint:
 get:
 	go get
 
-build: get
-	env $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH)) go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=${VERSION}'"
+build: build-linux
 
-version: build
+version: version-linux
+
+build-linux: get
+    env $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH)) go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=${VERSION}'"
+
+build-windows: GOOS=windows
+build-windows: GOARCH=amd64
+build-windows: get
+	go build -o build/atmos.exe -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=${VERSION}'"
+
+version-linux: build-linux
 	chmod +x ./build/atmos
 	./build/atmos version
+
+version-windows: build-windows
+	./build/atmos.exe version
 
 deps:
 	go mod download
@@ -31,4 +45,4 @@ deps:
 testacc: get
 	go test $(TEST) -v $(TESTARGS) -timeout 2m
 
-.PHONY: lint get build deps version testacc
+.PHONY: lint get build version build-linux build-windows deps version-linux version-windows testacc

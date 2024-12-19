@@ -90,7 +90,7 @@ jobs:
 
   # run acceptance tests
   test-linux:
-    name: Acceptance Tests
+    name: Acceptance Tests (Linux)
     needs: build-linux
     runs-on: ubuntu-latest
     timeout-minutes: 15
