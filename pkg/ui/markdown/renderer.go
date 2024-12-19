@@ -1,6 +1,9 @@
 package markdown
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/glamour"
 	"github.com/muesli/termenv"
 )
@@ -59,6 +62,43 @@ func (r *Renderer) RenderWithStyle(content string, style []byte) (string, error)
 	}
 
 	return renderer.Render(content)
+}
+
+// RenderWorkflow renders workflow documentation with specific styling
+func (r *Renderer) RenderWorkflow(content string) (string, error) {
+	// Add workflow header
+	content = "# Workflow\n\n" + content
+	return r.Render(content)
+}
+
+// RenderError renders an error message with specific styling
+func (r *Renderer) RenderError(title, details, examples string) (string, error) {
+	var content string
+
+	if details != "" {
+		content += fmt.Sprintf("%s\n\n", details)
+	}
+
+	if examples != "" {
+		if !strings.Contains(examples, "## Examples") {
+			content += fmt.Sprintf("## Examples\n\n%s", examples)
+		} else {
+			content += examples
+		}
+	}
+
+	return r.Render(content)
+}
+
+// RenderSuccess renders a success message with specific styling
+func (r *Renderer) RenderSuccess(title, details string) (string, error) {
+	content := fmt.Sprintf("# %s\n\n", title)
+
+	if details != "" {
+		content += fmt.Sprintf("## Details\n%s\n\n", details)
+	}
+
+	return r.Render(content)
 }
 
 // Option is a function that configures the renderer
