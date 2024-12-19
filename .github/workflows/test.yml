@@ -22,8 +22,8 @@ env:
 
 jobs:
   # ensure the code builds...
-  build:
-    name: Build
+  build-linux:
+    name: Build (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -55,11 +55,68 @@ jobs:
           path: |
             ./build/
 
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go
+
+      - name: Get dependencies
+        run: |
+          make deps
+
+      - name: Build
+        run: |
+          make build
+
+      - name: Version
+        run: |
+          make version
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-windows
+          path: |
+            ./build/
+
   # run acceptance tests
-  test:
+  test-linux:
     name: Acceptance Tests
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go
+
+      - name: Get dependencies
+        run: |
+          make deps
+
+      - name: Acceptance tests
+        timeout-minutes: 10
+        run: |
+          make testacc
+
+  test-windows:
+    name: Acceptance Tests (Windows)
+    needs: [build-windows]
+    runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - name: Check out code into the Go module directory
@@ -82,7 +139,7 @@ jobs:
 
   docker:
     name: "Docker Lint"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -112,7 +169,7 @@ jobs:
   # run localstack demo tests
   localstack:
     name: "[localstack] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
 
     services:
@@ -164,7 +221,7 @@ jobs:
   # run k3s demo tests
   k3s:
     name: "[k3s] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     env:
       KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/kubeconfig.yaml
@@ -221,9 +278,9 @@ jobs:
           atmos test
 
   # run other demo tests
-  mock:
+  mock-linux:
     name: "[mock] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -272,10 +329,46 @@ jobs:
           cd examples/${{ matrix.demo-folder }}
           atmos test
 
+  mock-windows:
+    name: "[mock] ${{ matrix.demo-folder }} (Windows)"
+    needs: build-windows
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        demo-folder:
+          - demo-atlantis
+          - demo-component-versions
+          - demo-context
+          - demo-vendoring
+          - tests
+    timeout-minutes: 20
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-windows
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Run tests for ${{ matrix.demo-folder }}
+        run: |
+          cd examples/${{ matrix.demo-folder }}
+          atmos test
+
   # run other demo tests
   lint:
     name: "[lint] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -325,7 +418,7 @@ jobs:
   # run other demo tests
   validate:
     name: "[validate] ${{ matrix.demo-folder }}"
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -355,7 +448,18 @@ jobs:
             }
 
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    needs:
+      [
+        test-linux,
+        test-windws,
+        lint,
+        mock-linux,
+        mock-windows,
+        k3s,
+        localstack,
+        docker,
+        validate,
+      ]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
