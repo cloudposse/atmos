@@ -29,7 +29,7 @@ build-linux: get
 build-windows: GOOS=windows
 build-windows: GOARCH=amd64
 build-windows: get
-	go build -o build/atmos.exe -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)'"
+	go build -o build/atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)"
 
 version-linux: build-linux
 	chmod +x ./build/atmos
