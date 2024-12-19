@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -18,7 +19,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var cliConfig schema.CliConfiguration
+// contextKey is a type alias for a string to avoid collisions with other context keys
+type contextKey string
 
 // originalHelpFunc holds Cobra's original help function to avoid recursion.
 var originalHelpFunc func(*cobra.Command, []string)
@@ -45,19 +47,17 @@ var RootCmd = &cobra.Command{
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
 
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
 		err = e.ExecuteAtmosCmd()
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -80,21 +80,28 @@ func Execute() error {
 		fmt.Println()
 		err = tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	}
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
-	var initErr error
-	cliConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, initErr := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
-			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", initErr))
+			u.LogTrace(schema.AtmosConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", initErr))
 		} else {
-			u.LogErrorAndExit(schema.CliConfiguration{}, initErr)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, initErr)
 		}
 	}
+
+	// Check Atmos configuration now that we have fully parsed it
+	checkAtmosConfig(&atmosConfig)
+
+	// Now that we have validated the Atmos config, add it to the context so it can be used by subcommands
+	ctx := context.WithValue(context.Background(), contextKey("atmos_config"), atmosConfig)
+	RootCmd.SetContext(ctx)
 
 	// Save the original help function to prevent infinite recursion when overriding it.
 	// This allows us to call the original help functionality within our custom help function.
@@ -106,14 +113,14 @@ func Execute() error {
 
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
-		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
+		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
-		err = processCommandAliases(cliConfig, cliConfig.CommandAliases, RootCmd, true)
+		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	}
 
@@ -146,7 +153,7 @@ func initConfig() {
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
 		b.HelpFunc(command, strings)

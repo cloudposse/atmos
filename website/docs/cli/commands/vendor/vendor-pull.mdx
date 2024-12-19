@@ -29,7 +29,8 @@ With Atmos vendoring, you can copy components and other artifacts from the follo
 Execute the `vendor pull` command like this:
 
 ```shell
-atmos vendor pull
+atmos vendor pull 
+atmos vendor pull --everything
 atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
 atmos vendor pull --tags <tag1>,<tag2> [options]
@@ -114,7 +115,8 @@ Run `atmos vendor pull --help` to see all the available options
 ## Examples
 
 ```shell
-atmos vendor pull
+atmos vendor pull 
+atmos vendor pull --everything
 atmos vendor pull --component vpc
 atmos vendor pull -c vpc-flow-logs-bucket
 atmos vendor pull -c echo-server --type helmfile

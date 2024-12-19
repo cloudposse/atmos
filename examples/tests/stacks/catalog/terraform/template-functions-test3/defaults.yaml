@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    template-functions-test3:
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          val1: true
+          val2: "2"
+          val3: 3
+          val4: null
+          val5:
+            - item1
+            - item2
+            - item3
+          val6:
+            i1: 1
+            i2: 2
+            i3: 3

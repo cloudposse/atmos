@@ -9,17 +9,17 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func removeTempDir(cliConfig schema.CliConfiguration, path string) {
+func removeTempDir(atmosConfig schema.AtmosConfiguration, path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
-		u.LogWarning(cliConfig, err.Error())
+		u.LogWarning(atmosConfig, err.Error())
 	}
 }
 
 func closeFile(fileName string, file io.ReadCloser) {
 	err := file.Close()
 	if err != nil {
-		u.LogError(schema.CliConfiguration{}, fmt.Errorf("error closing the file '%s': %v", fileName, err))
+		u.LogError(schema.AtmosConfiguration{}, fmt.Errorf("error closing the file '%s': %v", fileName, err))
 	}
 }
 

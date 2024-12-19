@@ -17,11 +17,12 @@ var vendorPullCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// WithStackValidation is a functional option that enables/disables stack configuration validation
 		// based on whether the --stack flag is provided
-		checkAtmosConfig(WithStackValidation(cmd.Flag("stack").Changed))
+		atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(schema.AtmosConfiguration)
+		checkAtmosConfig(&atmosConfig, WithStackValidation(cmd.Flag("stack").Changed))
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -32,6 +33,6 @@ func init() {
 	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "atmos vendor pull --component <component> --type=terraform|helmfile")
 	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "atmos vendor pull --component <component> --dry-run")
 	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags: atmos vendor pull --tags=dev,test")
-
+	vendorPullCmd.PersistentFlags().Bool("everything", false, "Vendor all components: atmos vendor pull --everything")
 	vendorCmd.AddCommand(vendorPullCmd)
 }

@@ -34,12 +34,12 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return ProLockUnlockCmdArgs{}, err
 	}
 
-	logger, err := l.NewLoggerFromCliConfig(cliConfig)
+	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 	if err != nil {
 		return ProLockUnlockCmdArgs{}, err
 	}

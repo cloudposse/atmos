@@ -15,13 +15,13 @@ import (
 func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
 	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../examples/tests",
 	// which will be wrong for the remote repo which is cloned into a temp dir.
 	// Set the correct base path for the cloned remote repo
-	cliConfig.BasePath = "./examples/tests"
+	atmosConfig.BasePath = "./examples/tests"
 
 	// Git reference and commit SHA
 	// Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details
@@ -29,7 +29,7 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 	sha := ""
 
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefClone(
-		cliConfig,
+		atmosConfig,
 		ref,
 		sha,
 		"",
@@ -50,20 +50,20 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
 	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../examples/tests",
 	// which will be wrong for the remote repo which is cloned into a temp dir.
 	// Set the correct base path for the cloned remote repo
-	cliConfig.BasePath = "./examples/tests"
+	atmosConfig.BasePath = "./examples/tests"
 
 	// Point to the same local repository
 	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
 	repoPath := "../../"
 
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
-		cliConfig,
+		atmosConfig,
 		repoPath,
 		true,
 		true,

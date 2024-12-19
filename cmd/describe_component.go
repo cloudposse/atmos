@@ -15,12 +15,9 @@ var describeComponentCmd = &cobra.Command{
 	Long:               `This command shows configuration for an Atmos component in an Atmos stack: atmos describe component <component> -s <stack>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
-
 		err := e.ExecuteDescribeComponentCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -34,7 +31,7 @@ func init() {
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 
 	describeCmd.AddCommand(describeComponentCmd)

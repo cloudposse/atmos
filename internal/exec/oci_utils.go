@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
+	"path/filepath"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -20,17 +20,17 @@ import (
 )
 
 // processOciImage downloads an Image from an OCI-compatible registry, extracts the layers from the tarball, and writes to the destination directory
-func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDir string) error {
+func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, destDir string) error {
 	// Temp directory for the tarball files
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
 	if err != nil {
 		return err
 	}
 
-	defer removeTempDir(cliConfig, tempDir)
+	defer removeTempDir(atmosConfig, tempDir)
 
 	// Temp tarball file name
-	tempTarFileName := path.Join(tempDir, uuid.New().String()) + ".tar"
+	tempTarFileName := filepath.Join(tempDir, uuid.New().String()) + ".tar"
 
 	// Get the image reference from the OCI registry
 	ref, err := name.ParseReference(imageName)
@@ -60,7 +60,7 @@ func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDi
 	m, err := tarball.LoadManifest(func() (io.ReadCloser, error) {
 		f, err := os.Open(tempTarFileName)
 		if err != nil {
-			u.LogError(cliConfig, err)
+			u.LogError(atmosConfig, err)
 			return nil, err
 		}
 		return f, nil
@@ -84,16 +84,16 @@ func processOciImage(cliConfig schema.CliConfiguration, imageName string, destDi
 
 	// Extract the tarball layers into the temp directory
 	// The tarball layers are tarballs themselves
-	err = extractTarball(cliConfig, tempTarFileName, tempDir)
+	err = extractTarball(atmosConfig, tempTarFileName, tempDir)
 	if err != nil {
 		return err
 	}
 
 	// Extract the layers into the destination directory
 	for _, l := range manifest.Layers {
-		layerPath := path.Join(tempDir, l)
+		layerPath := filepath.Join(tempDir, l)
 
-		err = extractTarball(cliConfig, layerPath, destDir)
+		err = extractTarball(atmosConfig, layerPath, destDir)
 		if err != nil {
 			return err
 		}

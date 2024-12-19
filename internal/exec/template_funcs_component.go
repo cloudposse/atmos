@@ -14,24 +14,24 @@ var (
 	componentFuncSyncMap = sync.Map{}
 )
 
-func componentFunc(cliConfig schema.CliConfiguration, component string, stack string) (any, error) {
-	u.LogTrace(cliConfig, fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
+func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stack string) (any, error) {
+	u.LogTrace(atmosConfig, fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
 
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
-		if cliConfig.Logs.Level == u.LogLevelTrace {
-			u.LogTrace(cliConfig, fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
+		if atmosConfig.Logs.Level == u.LogLevelTrace {
+			u.LogTrace(atmosConfig, fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
 
 			if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
-				u.LogTrace(cliConfig, "'outputs' section:")
+				u.LogTrace(atmosConfig, "'outputs' section:")
 				y, err2 := u.ConvertToYAML(outputsSection)
 				if err2 != nil {
-					u.LogError(cliConfig, err2)
+					u.LogError(atmosConfig, err2)
 				} else {
-					u.LogTrace(cliConfig, y)
+					u.LogTrace(atmosConfig, y)
 				}
 			}
 		}
@@ -44,13 +44,27 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 		return nil, err
 	}
 
-	outputProcessed, err := execTerraformOutput(cliConfig, component, stack, sections)
+	var terraformOutputs map[string]any
+
+	// Check if the component in the stack is configured with the 'static' remote state backend,
+	// in which case get the `output` from the static remote state instead of executing `terraform output`
+	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
 		return nil, err
 	}
 
+	if remoteStateBackendStaticTypeOutputs != nil {
+		terraformOutputs = remoteStateBackendStaticTypeOutputs
+	} else {
+		// Execute `terraform output`
+		terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	outputs := map[string]any{
-		"outputs": outputProcessed,
+		"outputs": terraformOutputs,
 	}
 
 	sections = lo.Assign(sections, outputs)
@@ -58,13 +72,13 @@ func componentFunc(cliConfig schema.CliConfiguration, component string, stack st
 	// Cache the result
 	componentFuncSyncMap.Store(stackSlug, sections)
 
-	if cliConfig.Logs.Level == u.LogLevelTrace {
-		u.LogTrace(cliConfig, fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
-		y, err2 := u.ConvertToYAML(outputProcessed)
+	if atmosConfig.Logs.Level == u.LogLevelTrace {
+		u.LogTrace(atmosConfig, fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
+		y, err2 := u.ConvertToYAML(terraformOutputs)
 		if err2 != nil {
-			u.LogError(cliConfig, err2)
+			u.LogError(atmosConfig, err2)
 		} else {
-			u.LogTrace(cliConfig, y)
+			u.LogTrace(atmosConfig, y)
 		}
 	}
 

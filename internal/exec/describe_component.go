@@ -67,16 +67,16 @@ func ExecuteDescribeComponent(
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, processTemplates)
+	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, processTemplates)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates)
 		if err != nil {
 			return nil, err
 		}

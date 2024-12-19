@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -22,7 +21,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
@@ -63,18 +62,18 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 		format = "hcl"
 	}
 
-	return ExecuteTerraformGenerateBackends(cliConfig, fileTemplate, format, stacks, components)
+	return ExecuteTerraformGenerateBackends(atmosConfig, fileTemplate, format, stacks, components)
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components
 func ExecuteTerraformGenerateBackends(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	fileTemplate string,
 	format string,
 	stacks []string,
 	components []string,
 ) error {
-	stacksMap, _, err := FindStacksMap(cliConfig, false)
+	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -161,9 +160,9 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				// Path to the terraform component
-				terraformComponentPath := path.Join(
-					cliConfig.BasePath,
-					cliConfig.Components.Terraform.BasePath,
+				terraformComponentPath := filepath.Join(
+					atmosConfig.BasePath,
+					atmosConfig.Components.Terraform.BasePath,
 					terraformComponent,
 				)
 
@@ -200,13 +199,13 @@ func ExecuteTerraformGenerateBackends(
 
 				// Stack name
 				var stackName string
-				if cliConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl("terraform-generate-backends-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				if atmosConfig.Stacks.NameTemplate != "" {
+					stackName, err = ProcessTmpl("terraform-generate-backends-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 					if err != nil {
 						return err
 					}
 				} else {
-					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 					if err != nil {
 						return err
 					}
@@ -231,7 +230,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
-					cliConfig,
+					atmosConfig,
 					settingsSectionStruct,
 					"terraform-generate-backends",
 					componentSectionStr,
@@ -244,17 +243,17 @@ func ExecuteTerraformGenerateBackends(
 
 				componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 				if err != nil {
-					if !cliConfig.Templates.Settings.Enabled {
+					if !atmosConfig.Templates.Settings.Enabled {
 						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 							errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
 								"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(cliConfig, err)
+					u.LogErrorAndExit(atmosConfig, err)
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
 				if err != nil {
 					return err
 				}
@@ -291,7 +290,7 @@ func ExecuteTerraformGenerateBackends(
 
 						processedTerraformComponents[terraformComponent] = terraformComponent
 
-						backendFilePath = path.Join(
+						backendFilePath = filepath.Join(
 							terraformComponentPath,
 							"backend.tf",
 						)
@@ -321,7 +320,7 @@ func ExecuteTerraformGenerateBackends(
 					}
 
 					// Write the backend config to the file
-					u.LogDebug(cliConfig, fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
+					u.LogDebug(atmosConfig, fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
 
 					if format == "json" {
 						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "")
@@ -334,12 +333,12 @@ func ExecuteTerraformGenerateBackends(
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteTerraformBackendConfigToFileAsHcl(cliConfig, backendFileAbsolutePath, backendTypeSection, backendSection)
+						err = u.WriteTerraformBackendConfigToFileAsHcl(atmosConfig, backendFileAbsolutePath, backendTypeSection, backendSection)
 						if err != nil {
 							return err
 						}
 					} else if format == "backend-config" {
-						err = u.WriteToFileAsHcl(cliConfig, backendFileAbsolutePath, backendSection, 0644)
+						err = u.WriteToFileAsHcl(atmosConfig, backendFileAbsolutePath, backendSection, 0644)
 						if err != nil {
 							return err
 						}

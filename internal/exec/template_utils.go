@@ -31,7 +31,7 @@ func ProcessTmpl(
 	ctx := context.TODO()
 
 	// Add Gomplate, Sprig and Atmos template functions
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(schema.CliConfiguration{}, ctx, &d))
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(schema.AtmosConfiguration{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -62,26 +62,26 @@ func ProcessTmpl(
 
 // ProcessTmplWithDatasources parses and executes Go templates with datasources
 func ProcessTmplWithDatasources(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	settingsSection schema.Settings,
 	tmplName string,
 	tmplValue string,
 	tmplData any,
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
-	if !cliConfig.Templates.Settings.Enabled {
-		u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabled in 'atmos.yaml'", tmplName))
+	if !atmosConfig.Templates.Settings.Enabled {
+		u.LogTrace(atmosConfig, fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabled in 'atmos.yaml'", tmplName))
 		return tmplValue, nil
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processing template '%s'", tmplName))
+	u.LogTrace(atmosConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processing template '%s'", tmplName))
 
 	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
 	var cliConfigTemplateSettingsMap map[string]any
 	var stackManifestTemplateSettingsMap map[string]any
 	var templateSettings schema.TemplatesSettings
 
-	err := mapstructure.Decode(cliConfig.Templates.Settings, &cliConfigTemplateSettingsMap)
+	err := mapstructure.Decode(atmosConfig.Templates.Settings, &cliConfigTemplateSettingsMap)
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +91,7 @@ func ProcessTmplWithDatasources(
 		return "", err
 	}
 
-	templateSettingsMerged, err := merge.Merge(cliConfig, []map[string]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
+	templateSettingsMerged, err := merge.Merge(atmosConfig, []map[string]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
 	if err != nil {
 		return "", err
 	}
@@ -105,16 +105,16 @@ func ProcessTmplWithDatasources(
 	funcs := make(map[string]any)
 
 	// Number of processing evaluations/passes
-	evaluations, _ := lo.Coalesce(cliConfig.Templates.Settings.Evaluations, 1)
+	evaluations, _ := lo.Coalesce(atmosConfig.Templates.Settings.Evaluations, 1)
 	result := tmplValue
 
 	for i := 0; i < evaluations; i++ {
-		u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources(): template '%s' - evaluation %d", tmplName, i+1))
+		u.LogTrace(atmosConfig, fmt.Sprintf("ProcessTmplWithDatasources(): template '%s' - evaluation %d", tmplName, i+1))
 
 		d := data.Data{}
 
 		// Gomplate functions and datasources
-		if cliConfig.Templates.Settings.Gomplate.Enabled {
+		if atmosConfig.Templates.Settings.Gomplate.Enabled {
 			// If timeout is not provided in `atmos.yaml` nor in `settings.templates.settings` stack manifest, use 5 seconds
 			timeoutSeconds, _ := lo.Coalesce(templateSettings.Gomplate.Timeout, 5)
 
@@ -140,12 +140,12 @@ func ProcessTmplWithDatasources(
 		}
 
 		// Sprig functions
-		if cliConfig.Templates.Settings.Sprig.Enabled {
+		if atmosConfig.Templates.Settings.Sprig.Enabled {
 			funcs = lo.Assign(funcs, sprig.FuncMap())
 		}
 
 		// Atmos functions
-		funcs = lo.Assign(funcs, FuncMap(cliConfig, context.TODO(), &d))
+		funcs = lo.Assign(funcs, FuncMap(atmosConfig, context.TODO(), &d))
 
 		// Process and add environment variables
 		for k, v := range templateSettings.Env {
@@ -162,25 +162,25 @@ func ProcessTmplWithDatasources(
 		leftDelimiter := "{{"
 		rightDelimiter := "}}"
 
-		if len(cliConfig.Templates.Settings.Delimiters) > 0 {
+		if len(atmosConfig.Templates.Settings.Delimiters) > 0 {
 			delimiterError := fmt.Errorf("invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
 				"'delimiters' must be an array with two string items: left and right delimiter\n"+
-				"the left and right delimiters must not be an empty string", cliConfig.Templates.Settings.Delimiters)
+				"the left and right delimiters must not be an empty string", atmosConfig.Templates.Settings.Delimiters)
 
-			if len(cliConfig.Templates.Settings.Delimiters) != 2 {
+			if len(atmosConfig.Templates.Settings.Delimiters) != 2 {
 				return "", delimiterError
 			}
 
-			if cliConfig.Templates.Settings.Delimiters[0] == "" {
+			if atmosConfig.Templates.Settings.Delimiters[0] == "" {
 				return "", delimiterError
 			}
 
-			if cliConfig.Templates.Settings.Delimiters[1] == "" {
+			if atmosConfig.Templates.Settings.Delimiters[1] == "" {
 				return "", delimiterError
 			}
 
-			leftDelimiter = cliConfig.Templates.Settings.Delimiters[0]
-			rightDelimiter = cliConfig.Templates.Settings.Delimiters[1]
+			leftDelimiter = atmosConfig.Templates.Settings.Delimiters[0]
+			rightDelimiter = atmosConfig.Templates.Settings.Delimiters[1]
 		}
 
 		t.Delims(leftDelimiter, rightDelimiter)
@@ -229,7 +229,7 @@ func ProcessTmplWithDatasources(
 		}
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processed template '%s'", tmplName))
+	u.LogTrace(atmosConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processed template '%s'", tmplName))
 
 	return result, nil
 }

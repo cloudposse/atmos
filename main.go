@@ -9,6 +9,6 @@ import (
 func main() {
 	err := cmd.Execute()
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 }

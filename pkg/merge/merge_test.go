@@ -10,7 +10,7 @@ import (
 )
 
 func TestMergeBasic(t *testing.T) {
-	cliConfig := schema.CliConfiguration{}
+	atmosConfig := schema.AtmosConfiguration{}
 
 	map1 := map[string]any{"foo": "bar"}
 	map2 := map[string]any{"baz": "bat"}
@@ -18,13 +18,13 @@ func TestMergeBasic(t *testing.T) {
 	inputs := []map[string]any{map1, map2}
 	expected := map[string]any{"foo": "bar", "baz": "bat"}
 
-	result, err := Merge(cliConfig, inputs)
+	result, err := Merge(atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 }
 
 func TestMergeBasicOverride(t *testing.T) {
-	cliConfig := schema.CliConfiguration{}
+	atmosConfig := schema.AtmosConfiguration{}
 
 	map1 := map[string]any{"foo": "bar"}
 	map2 := map[string]any{"baz": "bat"}
@@ -33,14 +33,14 @@ func TestMergeBasicOverride(t *testing.T) {
 	inputs := []map[string]any{map1, map2, map3}
 	expected := map[string]any{"foo": "ood", "baz": "bat"}
 
-	result, err := Merge(cliConfig, inputs)
+	result, err := Merge(atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 }
 
 func TestMergeListReplace(t *testing.T) {
-	cliConfig := schema.CliConfiguration{
-		Settings: schema.CliSettings{
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
 			ListMergeStrategy: ListMergeStrategyReplace,
 		},
 	}
@@ -56,7 +56,7 @@ func TestMergeListReplace(t *testing.T) {
 	inputs := []map[string]any{map1, map2}
 	expected := map[string]any{"list": []any{"4", "5", "6"}}
 
-	result, err := Merge(cliConfig, inputs)
+	result, err := Merge(atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 
@@ -66,8 +66,8 @@ func TestMergeListReplace(t *testing.T) {
 }
 
 func TestMergeListAppend(t *testing.T) {
-	cliConfig := schema.CliConfiguration{
-		Settings: schema.CliSettings{
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
 			ListMergeStrategy: ListMergeStrategyAppend,
 		},
 	}
@@ -83,7 +83,7 @@ func TestMergeListAppend(t *testing.T) {
 	inputs := []map[string]any{map1, map2}
 	expected := map[string]any{"list": []any{"1", "2", "3", "4", "5", "6"}}
 
-	result, err := Merge(cliConfig, inputs)
+	result, err := Merge(atmosConfig, inputs)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, result)
 
@@ -93,8 +93,8 @@ func TestMergeListAppend(t *testing.T) {
 }
 
 func TestMergeListMerge(t *testing.T) {
-	cliConfig := schema.CliConfiguration{
-		Settings: schema.CliSettings{
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
 			ListMergeStrategy: ListMergeStrategyMerge,
 		},
 	}
@@ -123,7 +123,7 @@ func TestMergeListMerge(t *testing.T) {
 
 	inputs := []map[string]any{map1, map2}
 
-	result, err := Merge(cliConfig, inputs)
+	result, err := Merge(atmosConfig, inputs)
 	assert.Nil(t, err)
 
 	var mergedList []any

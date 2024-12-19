@@ -24,7 +24,7 @@ func TestStackProcessor(t *testing.T) {
 	processStackDeps := true
 	processComponentDeps := true
 
-	cliConfig := schema.CliConfiguration{
+	atmosConfig := schema.AtmosConfiguration{
 		Templates: schema.Templates{
 			Settings: schema.TemplatesSettings{
 				Enabled: true,
@@ -39,7 +39,7 @@ func TestStackProcessor(t *testing.T) {
 	}
 
 	var listResult, mapResult, _, err = ProcessYAMLConfigFiles(
-		cliConfig,
+		atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,

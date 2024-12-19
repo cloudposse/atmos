@@ -23,7 +23,7 @@ import (
 
 // ExecuteShellCommand prints and executes the provided command with args and flags
 func ExecuteShellCommand(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	command string,
 	args []string,
 	dir string,
@@ -50,22 +50,22 @@ func ExecuteShellCommand(
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
-			u.LogWarning(cliConfig, err.Error())
+			u.LogWarning(atmosConfig, err.Error())
 			return err
 		}
 
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.LogWarning(cliConfig, err.Error())
+				u.LogWarning(atmosConfig, err.Error())
 			}
 		}(f)
 
 		cmd.Stderr = f
 	}
 
-	u.LogDebug(cliConfig, "\nExecuting command:")
-	u.LogDebug(cliConfig, cmd.String())
+	u.LogDebug(atmosConfig, "\nExecuting command:")
+	u.LogDebug(atmosConfig, cmd.String())
 
 	if dryRun {
 		return nil
@@ -76,15 +76,15 @@ func ExecuteShellCommand(
 
 // ExecuteShell runs a shell script
 func ExecuteShell(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	command string,
 	name string,
 	dir string,
 	env []string,
 	dryRun bool,
 ) error {
-	u.LogDebug(cliConfig, "\nExecuting command:")
-	u.LogDebug(cliConfig, command)
+	u.LogDebug(atmosConfig, "\nExecuting command:")
+	u.LogDebug(atmosConfig, command)
 
 	if dryRun {
 		return nil
@@ -95,7 +95,7 @@ func ExecuteShell(
 
 // ExecuteShellAndReturnOutput runs a shell script and capture its standard output
 func ExecuteShellAndReturnOutput(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	command string,
 	name string,
 	dir string,
@@ -104,8 +104,8 @@ func ExecuteShellAndReturnOutput(
 ) (string, error) {
 	var b bytes.Buffer
 
-	u.LogDebug(cliConfig, "\nExecuting command:")
-	u.LogDebug(cliConfig, command)
+	u.LogDebug(atmosConfig, "\nExecuting command:")
+	u.LogDebug(atmosConfig, command)
 
 	if dryRun {
 		return "", nil
@@ -142,7 +142,7 @@ func shellRunner(command string, name string, dir string, env []string, out io.W
 
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
 func execTerraformShellCommand(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	component string,
 	stack string,
 	componentEnvList []string,
@@ -172,7 +172,7 @@ func execTerraformShellCommand(
 		}
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			u.LogWarning(cliConfig, fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			u.LogWarning(atmosConfig, fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
 			return
 		}
 		// Prevent negative values
@@ -181,7 +181,7 @@ func execTerraformShellCommand(
 			newVal = 0
 		}
 		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
-			u.LogWarning(cliConfig, fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+			u.LogWarning(atmosConfig, fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
 		}
 	}()
 
@@ -199,10 +199,10 @@ func execTerraformShellCommand(
 	componentEnvList = append(componentEnvList, fmt.Sprintf("ATMOS_SHELL_WORKING_DIR=%s", workingDir))
 	componentEnvList = append(componentEnvList, fmt.Sprintf("ATMOS_TERRAFORM_WORKSPACE=%s", workspaceName))
 
-	hasCustomShellPrompt := cliConfig.Components.Terraform.Shell.Prompt != ""
+	hasCustomShellPrompt := atmosConfig.Components.Terraform.Shell.Prompt != ""
 	if hasCustomShellPrompt {
 		// Template for the custom shell prompt
-		tmpl := cliConfig.Components.Terraform.Shell.Prompt
+		tmpl := atmosConfig.Components.Terraform.Shell.Prompt
 
 		// Data for the template
 		data := struct {
@@ -221,14 +221,14 @@ func execTerraformShellCommand(
 		}
 	}
 
-	u.LogDebug(cliConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
-	u.LogDebug(cliConfig, fmt.Sprintf("Component: %s\n", component))
-	u.LogDebug(cliConfig, fmt.Sprintf("Stack: %s\n", stack))
-	u.LogDebug(cliConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
-	u.LogDebug(cliConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
-	u.LogDebug(cliConfig, "\nSetting the ENV vars in the shell:\n")
+	u.LogDebug(atmosConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
+	u.LogDebug(atmosConfig, fmt.Sprintf("Component: %s\n", component))
+	u.LogDebug(atmosConfig, fmt.Sprintf("Stack: %s\n", stack))
+	u.LogDebug(atmosConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
+	u.LogDebug(atmosConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
+	u.LogDebug(atmosConfig, "\nSetting the ENV vars in the shell:\n")
 	for _, v := range componentEnvList {
-		u.LogDebug(cliConfig, v)
+		u.LogDebug(atmosConfig, v)
 	}
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
@@ -274,7 +274,7 @@ func execTerraformShellCommand(
 		}
 	}
 
-	u.LogDebug(cliConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
+	u.LogDebug(atmosConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
 
 	args := strings.Fields(shellCommand)
 
@@ -289,6 +289,6 @@ func execTerraformShellCommand(
 		return err
 	}
 
-	u.LogDebug(cliConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
+	u.LogDebug(atmosConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
 	return nil
 }

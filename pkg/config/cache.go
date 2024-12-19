@@ -105,7 +105,7 @@ func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	interval, err := parseFrequency(frequency)
 	if err != nil {
 		// Log warning and default to daily if we can’t parse
-		u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Unsupported frequency '%s' encountered. Defaulting to daily.", frequency))
+		u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Unsupported frequency '%s' encountered. Defaulting to daily.", frequency))
 		interval = 86400 // daily
 	}
 	return now-lastChecked >= interval

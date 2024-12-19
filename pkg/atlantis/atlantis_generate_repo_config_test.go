@@ -12,13 +12,13 @@ import (
 )
 
 func TestAtlantisGenerateRepoConfig(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	err = u.PrintAsYAML(cliConfig)
+	err = u.PrintAsYAML(atmosConfig)
 	assert.Nil(t, err)
 
-	atlantisConfig := cliConfig.Integrations.Atlantis
+	atlantisConfig := atmosConfig.Integrations.Atlantis
 	configTemplateName := "config-1"
 	configTemplate := atlantisConfig.ConfigTemplates[configTemplateName]
 	projectTemplateName := "project-1"
@@ -42,11 +42,11 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	err = e.ExecuteAtlantisGenerateRepoConfig(
-		cliConfig,
+		atmosConfig,
 		"/dev/stdout",
 		"config-1",
 		"project-1",
@@ -58,11 +58,11 @@ func TestExecuteAtlantisGenerateRepoConfig(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	err = e.ExecuteAtlantisGenerateRepoConfig(
-		cliConfig,
+		atmosConfig,
 		"/dev/stdout",
 		"",
 		"",
@@ -74,11 +74,11 @@ func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	err = e.ExecuteAtlantisGenerateRepoConfigAffectedOnly(
-		cliConfig,
+		atmosConfig,
 		"/dev/stdout",
 		"",
 		"",

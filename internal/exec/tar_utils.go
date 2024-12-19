@@ -14,7 +14,7 @@ import (
 )
 
 // extractTarball extracts the tarball file into the destination directory
-func extractTarball(cliConfig schema.CliConfiguration, sourceFile, extractPath string) error {
+func extractTarball(atmosConfig schema.AtmosConfiguration, sourceFile, extractPath string) error {
 	file, err := os.Open(sourceFile)
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func extractTarball(cliConfig schema.CliConfiguration, sourceFile, extractPath s
 		}
 
 		if strings.Contains(header.Name, "..") {
-			u.LogTrace(cliConfig, fmt.Sprintf("the header '%s' in the tarball '%s' contains '..', "+
+			u.LogTrace(atmosConfig, fmt.Sprintf("the header '%s' in the tarball '%s' contains '..', "+
 				"which can lead to directory traversal attacks or overriding arbitrary files and directories.",
 				header.Name, sourceFile))
 			continue
@@ -84,7 +84,7 @@ func extractTarball(cliConfig schema.CliConfiguration, sourceFile, extractPath s
 			}
 
 		default:
-			u.LogTrace(cliConfig, fmt.Sprintf("the header '%s' in the tarball '%s' has unsupported header type '%v'. "+
+			u.LogTrace(atmosConfig, fmt.Sprintf("the header '%s' in the tarball '%s' has unsupported header type '%v'. "+
 				"Supported header types are 'Directory' and 'File'",
 				header.Name, sourceFile, header.Typeflag))
 		}

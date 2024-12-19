@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -28,7 +28,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
@@ -41,23 +41,23 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if schemasAtmosManifestFlag != "" {
-		cliConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
+		atmosConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
 	}
 
-	return ValidateStacks(cliConfig)
+	return ValidateStacks(atmosConfig)
 }
 
 // ValidateStacks validates Atmos stack configuration
-func ValidateStacks(cliConfig schema.CliConfiguration) error {
+func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	var validationErrorMessages []string
 
 	// 1. Process top-level stack manifests and detect duplicate components in the same stack
-	stacksMap, _, err := FindStacksMap(cliConfig, false)
+	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
 
-	terraformComponentStackMap, err := createComponentStackMap(cliConfig, stacksMap, cfg.TerraformSectionName)
+	terraformComponentStackMap, err := createComponentStackMap(atmosConfig, stacksMap, cfg.TerraformSectionName)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 	}
 	validationErrorMessages = append(validationErrorMessages, errorList...)
 
-	helmfileComponentStackMap, err := createComponentStackMap(cliConfig, stacksMap, cfg.HelmfileSectionName)
+	helmfileComponentStackMap, err := createComponentStackMap(atmosConfig, stacksMap, cfg.HelmfileSectionName)
 	if err != nil {
 		return err
 	}
@@ -86,19 +86,19 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
 	var atmosManifestJsonSchemaFilePath string
 
-	if cliConfig.Schemas.Atmos.Manifest == "" {
-		cliConfig.Schemas.Atmos.Manifest = atmosManifestDefault
-		u.LogTrace(cliConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default schema '%s'", atmosManifestDefault))
+	if atmosConfig.Schemas.Atmos.Manifest == "" {
+		atmosConfig.Schemas.Atmos.Manifest = atmosManifestDefault
+		u.LogTrace(atmosConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default schema '%s'", atmosManifestDefault))
 	}
 
-	atmosManifestJsonSchemaFileAbsPath := path.Join(cliConfig.BasePath, cliConfig.Schemas.Atmos.Manifest)
+	atmosManifestJsonSchemaFileAbsPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.Atmos.Manifest)
 
-	if u.FileExists(cliConfig.Schemas.Atmos.Manifest) {
-		atmosManifestJsonSchemaFilePath = cliConfig.Schemas.Atmos.Manifest
+	if u.FileExists(atmosConfig.Schemas.Atmos.Manifest) {
+		atmosManifestJsonSchemaFilePath = atmosConfig.Schemas.Atmos.Manifest
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
 		atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
-	} else if u.IsURL(cliConfig.Schemas.Atmos.Manifest) {
-		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(cliConfig.Schemas.Atmos.Manifest)
+	} else if u.IsURL(atmosConfig.Schemas.Atmos.Manifest) {
+		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(atmosConfig.Schemas.Atmos.Manifest)
 		if err != nil {
 			return err
 		}
@@ -108,7 +108,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 			"2. ATMOS_SCHEMAS_ATMOS_MANIFEST env var\n"+
 			"3. --schemas-atmos-manifest flag\n\n"+
 			"Accepts: absolute path, paths relative to base_path, or URL",
-			cliConfig.Schemas.Atmos.Manifest)
+			atmosConfig.Schemas.Atmos.Manifest)
 	}
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
@@ -120,23 +120,23 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 		"**/*.yaml.tmpl",
 		"**/*.yml.tmpl",
 	}
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(cliConfig.StacksBaseAbsolutePath, includedPaths)
+	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
 	}
 
-	stackConfigFilesAbsolutePaths, _, err := cfg.FindAllStackConfigsInPaths(cliConfig, includeStackAbsPaths, excludedPaths)
+	stackConfigFilesAbsolutePaths, _, err := cfg.FindAllStackConfigsInPaths(atmosConfig, includeStackAbsPaths, excludedPaths)
 	if err != nil {
 		return err
 	}
 
-	u.LogDebug(cliConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
-		path.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath)))
+	u.LogDebug(atmosConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
+		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
 		stackConfig, importsConfig, _, _, _, err := ProcessYAMLConfigFile(
-			cliConfig,
-			cliConfig.StacksBaseAbsolutePath,
+			atmosConfig,
+			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
 			map[string]map[string]any{},
 			nil,
@@ -154,10 +154,10 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 
 		// Process and validate the stack manifest
 		_, err = ProcessStackConfig(
-			cliConfig,
-			cliConfig.StacksBaseAbsolutePath,
-			cliConfig.TerraformDirAbsolutePath,
-			cliConfig.HelmfileDirAbsolutePath,
+			atmosConfig,
+			atmosConfig.StacksBaseAbsolutePath,
+			atmosConfig.TerraformDirAbsolutePath,
+			atmosConfig.HelmfileDirAbsolutePath,
 			filePath,
 			stackConfig,
 			false,
@@ -180,7 +180,7 @@ func ValidateStacks(cliConfig schema.CliConfiguration) error {
 }
 
 func createComponentStackMap(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	stacksMap map[string]any,
 	componentType string,
 ) (map[string]map[string][]string, error) {
@@ -263,15 +263,15 @@ func createComponentStackMap(
 					}
 
 					// Find Atmos stack name
-					if cliConfig.Stacks.NameTemplate != "" {
-						stackName, err = ProcessTmpl("validate-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					if atmosConfig.Stacks.NameTemplate != "" {
+						stackName, err = ProcessTmpl("validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 						if err != nil {
 							return nil, err
 						}
 					} else {
 						context := cfg.GetContextFromVars(varsSection)
 						configAndStacksInfo.Context = context
-						stackName, err = cfg.GetContextPrefix(stackManifest, context, GetStackNamePattern(cliConfig), stackManifest)
+						stackName, err = cfg.GetContextPrefix(stackManifest, context, GetStackNamePattern(atmosConfig), stackManifest)
 						if err != nil {
 							return nil, err
 						}
@@ -376,7 +376,7 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	if err != nil || fileName == "" {
 		return "", fmt.Errorf("failed to get the file name from the URL '%s': %w", manifestURL, err)
 	}
-	atmosManifestJsonSchemaFilePath := path.Join(tempDir, fileName)
+	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	client := &getter.Client{

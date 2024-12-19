@@ -18,10 +18,10 @@ const (
 func TestListStacks(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	stacksMap, err := e.ExecuteDescribeStacks(cliConfig, "", nil, nil,
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
 		nil, false, false, false)
 	assert.Nil(t, err)
 
@@ -34,11 +34,11 @@ func TestListStacks(t *testing.T) {
 func TestListStacksWithComponent(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 	component := testComponent
 
-	stacksMap, err := e.ExecuteDescribeStacks(cliConfig, component, nil, nil,
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, component, nil, nil,
 		nil, false, false, false)
 	assert.Nil(t, err)
 

@@ -24,7 +24,7 @@ var workflowCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }

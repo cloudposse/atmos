@@ -17,12 +17,9 @@ var ValidateStacksCmd = &cobra.Command{
 	Example:            "validate stacks",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		checkAtmosConfig()
-
 		err := e.ExecuteValidateStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
 		u.PrintMessageInColor("all stacks validated successfully\n", color.New(color.FgGreen))

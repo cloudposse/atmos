@@ -29,12 +29,12 @@ func PrintAsJSON(data any) error {
 }
 
 // PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
-func PrintAsJSONToFileDescriptor(cliConfig schema.CliConfiguration, data any) error {
+func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
 	j, err := ConvertToJSON(data)
 	if err != nil {
 		return err
 	}
-	LogInfo(cliConfig, j)
+	LogInfo(atmosConfig, j)
 	return nil
 }
 

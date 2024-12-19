@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -22,7 +21,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
@@ -63,18 +62,18 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		format = "json"
 	}
 
-	return ExecuteTerraformGenerateVarfiles(cliConfig, fileTemplate, format, stacks, components)
+	return ExecuteTerraformGenerateVarfiles(atmosConfig, fileTemplate, format, stacks, components)
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
 func ExecuteTerraformGenerateVarfiles(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	fileTemplate string,
 	format string,
 	stacks []string,
 	components []string,
 ) error {
-	stacksMap, _, err := FindStacksMap(cliConfig, false)
+	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -160,9 +159,9 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				// Absolute path to the terraform component
-				terraformComponentPath := path.Join(
-					cliConfig.BasePath,
-					cliConfig.Components.Terraform.BasePath,
+				terraformComponentPath := filepath.Join(
+					atmosConfig.BasePath,
+					atmosConfig.Components.Terraform.BasePath,
 					terraformComponent,
 				)
 
@@ -199,13 +198,13 @@ func ExecuteTerraformGenerateVarfiles(
 
 				// Stack name
 				var stackName string
-				if cliConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl("terraform-generate-varfiles-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+				if atmosConfig.Stacks.NameTemplate != "" {
+					stackName, err = ProcessTmpl("terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 					if err != nil {
 						return err
 					}
 				} else {
-					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 					if err != nil {
 						return err
 					}
@@ -220,7 +219,7 @@ func ExecuteTerraformGenerateVarfiles(
 				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 				// Terraform workspace
-				workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+				workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 				if err != nil {
 					return err
 				}
@@ -247,7 +246,7 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
-					cliConfig,
+					atmosConfig,
 					settingsSectionStruct,
 					"terraform-generate-varfiles",
 					componentSectionStr,
@@ -260,17 +259,17 @@ func ExecuteTerraformGenerateVarfiles(
 
 				componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 				if err != nil {
-					if !cliConfig.Templates.Settings.Enabled {
+					if !atmosConfig.Templates.Settings.Enabled {
 						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 							errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
 								"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(cliConfig, err)
+					u.LogErrorAndExit(atmosConfig, err)
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(cliConfig, componentSectionConverted)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
 				if err != nil {
 					return err
 				}
@@ -316,7 +315,7 @@ func ExecuteTerraformGenerateVarfiles(
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(cliConfig, fileAbsolutePath, varsSection, 0644)
+						err = u.WriteToFileAsHcl(atmosConfig, fileAbsolutePath, varsSection, 0644)
 						if err != nil {
 							return err
 						}
@@ -324,11 +323,11 @@ func ExecuteTerraformGenerateVarfiles(
 						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
-					u.LogDebug(cliConfig, fmt.Sprintf("varfile: %s", fileName))
-					u.LogDebug(cliConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
-					u.LogDebug(cliConfig, fmt.Sprintf("atmos component: %s", componentName))
-					u.LogDebug(cliConfig, fmt.Sprintf("atmos stack: %s", stackName))
-					u.LogDebug(cliConfig, fmt.Sprintf("stack config file: %s", stackFileName))
+					u.LogDebug(atmosConfig, fmt.Sprintf("varfile: %s", fileName))
+					u.LogDebug(atmosConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
+					u.LogDebug(atmosConfig, fmt.Sprintf("atmos component: %s", componentName))
+					u.LogDebug(atmosConfig, fmt.Sprintf("atmos stack: %s", stackName))
+					u.LogDebug(atmosConfig, fmt.Sprintf("stack config file: %s", stackFileName))
 				}
 			}
 		}

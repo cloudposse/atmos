@@ -20,12 +20,12 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
 
-	err = ValidateStacks(cliConfig)
+	err = ValidateStacks(atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	dependents, err := ExecuteDescribeDependents(cliConfig, component, stack, false)
+	dependents, err := ExecuteDescribeDependents(atmosConfig, component, stack, false)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 
 // ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
 func ExecuteDescribeDependents(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	component string,
 	stack string,
 	includeSettings bool,
@@ -78,7 +78,7 @@ func ExecuteDescribeDependents(
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, true, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func ExecuteDescribeDependents(
 
 					dependent := schema.Dependent{
 						Component:     stackComponentName,
-						ComponentPath: BuildComponentPath(cliConfig, stackComponentMap, stackComponentType),
+						ComponentPath: BuildComponentPath(atmosConfig, stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
 						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.Replace(stackComponentName, "/", "-", -1)),
@@ -248,14 +248,14 @@ func ExecuteDescribeDependents(
 							},
 						}
 
-						spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
+						spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 						if err != nil {
 							return nil, err
 						}
 						dependent.SpaceliftStack = spaceliftStackName
 
 						// Atlantis project
-						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
+						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 						if err != nil {
 							return nil, err
 						}

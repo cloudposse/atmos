@@ -14,13 +14,13 @@ import (
 func TestDescribeDependents(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
 	component := "test/test-component"
 	stack := "tenant1-ue2-test-1"
 
-	dependents, err := e.ExecuteDescribeDependents(cliConfig, component, stack, false)
+	dependents, err := e.ExecuteDescribeDependents(atmosConfig, component, stack, false)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(dependents))
 
@@ -32,13 +32,13 @@ func TestDescribeDependents(t *testing.T) {
 func TestDescribeDependents2(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
 	component := "test/test-component"
 	stack := "tenant1-ue2-dev"
 
-	dependents, err := e.ExecuteDescribeDependents(cliConfig, component, stack, false)
+	dependents, err := e.ExecuteDescribeDependents(atmosConfig, component, stack, false)
 	assert.Nil(t, err)
 	assert.Equal(t, 4, len(dependents))
 

@@ -29,20 +29,19 @@ var helmfileCmd = &cobra.Command{
 
 		info, err := e.ProcessCommandLineArgs("helmfile", cmd, finalArgs, argsAfterDoubleDash)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 		// Exit on help
 		if info.NeedHelp {
 			// Check for the latest Atmos release on GitHub and print update message
-			CheckForAtmosUpdateAndPrintMessage(cliConfig)
+			atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(schema.AtmosConfiguration)
+			CheckForAtmosUpdateAndPrintMessage(&atmosConfig)
 			return
 		}
-		// Check Atmos configuration
-		checkAtmosConfig()
 
 		err = e.ExecuteHelmfile(info)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
