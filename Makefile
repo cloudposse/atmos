@@ -24,7 +24,7 @@ build: build-linux
 version: version-linux
 
 build-linux: get
-    env $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH)) go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=${VERSION}'"
+	env $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH)) go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=${VERSION}'"
 
 build-windows: GOOS=windows
 build-windows: GOARCH=amd64
