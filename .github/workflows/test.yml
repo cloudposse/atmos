@@ -451,7 +451,7 @@ jobs:
     needs:
       [
         test-linux,
-        test-windws,
+        test-windows,
         lint,
         mock-linux,
         mock-windows,
