@@ -143,3 +143,54 @@ spec:
 		assert.Nil(t, err)
 	})
 }
+
+// New separate test function that directly calls ExecuteAtmosVendorInternal
+// after setting a GitHub token and reading a vendor.yaml referencing a GitHub source.
+func TestExecuteAtmosVendorInternalWithToken(t *testing.T) {
+	testDir := t.TempDir()
+
+	// Set the GitHub token environment variable
+	os.Setenv("GITHUB_TOKEN", "my-test-token")
+	defer os.Unsetenv("GITHUB_TOKEN")
+
+	// Create a vendor.yaml file referencing a GitHub source
+	vendorYaml := `
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: test-vendor-config-with-token
+spec:
+  sources:
+    - component: github-component
+      source: https://github.com/example/repo/blob/main/test-file.yaml
+      included_paths:
+        - "**/*.yaml"
+      targets:
+        - vendor/github-component
+`
+	vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
+	err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0644)
+	assert.Nil(t, err)
+
+	// Initialize CLI configuration for this test
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: testDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+	atmosConfig.Logs.Level = "Trace"
+
+	// Read the vendor config
+	vendorConfig, exists, foundVendorConfigFile, err := e.ReadAndProcessVendorConfigFile(atmosConfig, vendorYamlPath, true)
+	assert.Nil(t, err)
+	assert.True(t, exists)
+	assert.NotEmpty(t, foundVendorConfigFile)
+
+	// Now call ExecuteAtmosVendorInternal directly
+	// We use dryRun to avoid downloading and writing files
+	err = e.ExecuteAtmosVendorInternal(atmosConfig, foundVendorConfigFile, vendorConfig.Spec, "github-component", []string{}, true)
+	assert.Nil(t, err, "ExecuteAtmosVendorInternal should run without errors using the token in dry-run mode")
+}
