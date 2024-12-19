@@ -74,8 +74,13 @@ jobs:
           make deps
 
       - name: Build
+        env:
+          GOOS: windows
+          GOARCH: amd64
         run: |
-          make build-windows
+          go build -o build/atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=${{ env.VERSION }}"
+
+          #make build-windows
 
       - name: Version
         run: |
