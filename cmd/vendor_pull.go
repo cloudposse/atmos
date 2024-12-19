@@ -17,7 +17,8 @@ var vendorPullCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// WithStackValidation is a functional option that enables/disables stack configuration validation
 		// based on whether the --stack flag is provided
-		checkAtmosConfig(WithStackValidation(cmd.Flag("stack").Changed))
+		atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(schema.AtmosConfiguration)
+		checkAtmosConfig(&atmosConfig, WithStackValidation(cmd.Flag("stack").Changed))
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
