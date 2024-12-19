@@ -1,7 +1,11 @@
-name: demo
+name: Demo
 
 on:
   workflow_dispatch:
+  pull_request:
+    types: [labeled, opened, synchronize]
+    paths:
+      - ".github/workflows/demo.yml"
 
 env:
   TERM: "xterm-256color"
