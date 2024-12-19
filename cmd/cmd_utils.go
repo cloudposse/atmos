@@ -364,7 +364,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 }
 
 // checkAtmosConfig checks Atmos config
-func checkAtmosConfig(opts ...AtmosValidateOption) {
+func checkAtmosConfig(atmosConfig *schema.AtmosConfiguration, opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
 	}
@@ -374,15 +374,10 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		opt(vCfg)
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
-	}
-
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
-			printMessageForMissingAtmosConfig(atmosConfig)
+			printMessageForMissingAtmosConfig(*atmosConfig)
 			os.Exit(0)
 		}
 	}
@@ -432,7 +427,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
 // It loads the cache, decides if it's time to check for updates, compares the current version to the latest available release,
 // and if newer, prints the update message. It also updates the cache's timestamp after printing.
-func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
+func CheckForAtmosUpdateAndPrintMessage(atmosConfig *schema.AtmosConfiguration) {
 	// If version checking is disabled in the configuration, do nothing
 	if !atmosConfig.Version.Check.Enabled {
 		return
@@ -441,7 +436,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Could not load cache: %s", err))
+		u.LogWarning(*atmosConfig, fmt.Sprintf("Could not load cache: %s", err))
 		return
 	}
 
@@ -454,12 +449,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		u.LogWarning(*atmosConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
 		return
 	}
 
 	if latestReleaseTag == "" {
-		u.LogWarning(atmosConfig, "No release information available")
+		u.LogWarning(*atmosConfig, "No release information available")
 		return
 	}
 
@@ -475,14 +470,15 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Update the cache to mark the current timestamp
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
+		u.LogWarning(*atmosConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
 
 	}
 }
 
 func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
+	atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(schema.AtmosConfiguration)
 	originalHelpFunc(cmd, args)
-	CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+	CheckForAtmosUpdateAndPrintMessage(&atmosConfig)
 }
 
 // Check Atmos is version command
