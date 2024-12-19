@@ -662,7 +662,6 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			inputArgsAndFlags = append(inputArgsAndFlags, everythingFlag)
 		}
 	}
-	fmt.Println(inputArgsAndFlags)
 
 	// For commands like `atmos terraform plan`, show the command help
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" {
