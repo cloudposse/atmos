@@ -30,7 +30,7 @@ the base path location of the components, and so forth.
 The CLI config is loaded from the following locations (from lowest to highest priority):
 - Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name . if is set the CLI will only look for the config file in the specified folder)
 - System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
-- $XDG_CONFIG_HOME/atmos/atmos.yaml (if `$XDG_CONFIG_HOME` is set)
+- `$XDG_CONFIG_HOME/atmos/atmos.yaml` (if `$XDG_CONFIG_HOME` is set)
 - Home directory (`~/.atmos/atmos.yaml`)
 - Current directory (`./atmos.yaml`)
 - `atmos.d/` directory form base path (if `import` section is not set in the config) For an example, see [`examples/demo-atmos.d`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos.d)
