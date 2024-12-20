@@ -28,8 +28,7 @@ the base path location of the components, and so forth.
 
 The base path defines the root directory for components, stacks, workflows, and Atmos configurations. It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory, as Atmos executes commands that may change the working directory (e.g., Terraform).
 
-When the `base_path` is explicitly provided:
-- Relative paths such as `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, `workflows.base_path`, `schemas.jsonschema.base_path`, and `schemas.opa.base_path` are resolved relative to the specified `base_path`. If any of these settings are absolute paths, they will be respected and treated as-is.
+When the `base_path` is explicitly provided, if it is not an absolute path, then it is resolved to the absolute path relative to the current working directory.
 
 When the `base_path` is not explicitly provided or is empty, Atmos will attempt to infer the appropriate path using the following strategy, in order of precedence:
 1. If the current working directory contains any of the following files or directories: `atmos.yaml`, `.atmos.yaml`, `.github/atmos.yaml`, or `atmos.d/**/*`, Atmos will use the directory containing these files as the `base_path`.
