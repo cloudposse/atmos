@@ -35,7 +35,8 @@ The CLI config is loaded from the following locations (from lowest to highest pr
 - Current directory (`./atmos.yaml`)
 - `atmos.d/` directory form base path (if `import` section is not set in the config) For an example, see [`examples/demo-atmos.d`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos.d)
 Additionally, Atmos supports `imports` of other CLI configurations. Use imports to break large Atmos CLI configurations into smaller ones, such as organized by top-level section. Imports are relative to the base path (if `import`  section is set in the config). For an example, see [`examples/demo-atmos-cli-imports`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos-cli-imports)
-Imports can be:
+
+Imports can be any of the following:
 - Remote URL (if `import` section is set in the config)
 - Specific Path (if `import` section is set in the config)
 - Wildcard Globs
