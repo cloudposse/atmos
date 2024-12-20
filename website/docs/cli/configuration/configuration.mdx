@@ -26,9 +26,9 @@ you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/conf
 the base path location of the components, and so forth.
 ## Base Path
 
-The base path defines the root directory for components, stacks, workflows, and Atmos configurations. It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory, as Atmos executes commands that may change the working directory (e.g., Terraform).
+The base path defines the root directory for components, stacks, workflows, and Atmos configurations. It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. If both are set, the `--base-path` will take precedence. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory, as Atmos executes commands that may change the working directory (e.g., Terraform).
 
-When the `base_path` is explicitly provided, if it is not an absolute path, then it is resolved to the absolute path relative to the current working directory.
+When the `base_path` is explicitly defined, it will always be resolved to the absolute path relative to the current working directory, if an absolute path was not already set.
 
 When the `base_path` is not explicitly provided or is empty, Atmos will attempt to infer the appropriate path using the following strategy, in order of precedence:
 1. If the current working directory contains any of the following files or directories: `atmos.yaml`, `.atmos.yaml`, `.github/atmos.yaml`, or `atmos.d/**/*`, Atmos will use the directory containing these files as the `base_path`.
@@ -51,7 +51,6 @@ The Atmos (CLI) configuration is loaded from the following locations, in order o
   - `.github/atmos.yaml`
   - `atmos.d/**/*`
   - `.atmos.d/**/*`
-- `$XDG_CONFIG_HOME/atmos/atmos.yaml` (if `$XDG_CONFIG_HOME` is set)
 - Home directory (`~/.atmos/atmos.yaml`)
 - `atmos.d/` directory form base path (if `import` section is not set in the config) For an example, see [`examples/demo-atmos.d`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos.d)
 - System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows). This has the lowest precedence of all configuration files.
