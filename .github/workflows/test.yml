@@ -163,7 +163,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts-ubuntu-latest
+          name: build-artifacts-linux
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
@@ -216,7 +216,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts-ubuntu-latest
+          name: build-artifacts-linux
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
@@ -278,7 +278,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.flavor.os }}
+          name: build-artifacts-${{ matrix.flavor.target }}
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
