@@ -35,7 +35,9 @@ When the `base_path` is not explicitly provided or is empty, Atmos will attempt 
 2. If a Git repository is detected, Atmos uses the root of the Git repository as the `base_path`.
 3. If neither of the above applies, Atmos defaults to the absolute path of `./` as the `base_path`.
 
-Each setting (`components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, and `workflows.base_path`) is treated independently and can accept either an absolute or a relative path.
+Relative paths, such as `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, `workflows.base_path`, `schemas.jsonschema.base_path`, and `schemas.opa.base_path`, are resolved relative to the specified `base_path`. Absolute paths for these settings will be respected and used as-is. 
+
+Each setting (`components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, and `workflows.base_path`) operates independently and can accept either an absolute or a relative path.
 ## Configuration File (`atmos.yaml`)
 
 The Atmos (CLI) configuration is loaded from the following locations, in order of precedence, and deep-merged: configurations listed earlier have higher priority, meaning they override any conflicting sections defined in subsequent locations:
