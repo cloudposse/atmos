@@ -279,13 +279,17 @@ jobs:
 
     timeout-minutes: 20
     steps:
-      - name: Download build artifacts
+      - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
-          path: /usr/local/bin
+          path: ${{ matrix.flavor.target == 'windows' && 'D:\\a\\_temp' || '/usr/local/bin' }}
 
-      - name: Set execute permissions on atmos
+      - name: Add build artifacts directory to PATH for ${{ matrix.flavor.target }}
+        run: |
+          echo "${{ matrix.flavor.target == 'windows' && 'D:\\a\\_temp' || '/usr/local/bin' }}" >> $GITHUB_PATH
+
+      - name: Set execute permissions on atmos for ${{ matrix.flavor.target }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: chmod +x /usr/local/bin/atmos
 
