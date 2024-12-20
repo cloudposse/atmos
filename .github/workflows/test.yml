@@ -279,15 +279,19 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      - name: Determine build artifacts path
+        id: determine-path
+        run: echo "artifact_path=${{ matrix.flavor.target == 'windows' && 'D:\\a\\_temp' || '/usr/local/bin' }}" >> $GITHUB_ENV
+
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
-          path: ${{ matrix.flavor.target == 'windows' && 'D:\\a\\_temp' || '/usr/local/bin' }}
+          path: ${{ env.artifact_path }}
 
       - name: Add build artifacts directory to PATH for ${{ matrix.flavor.target }}
         run: |
-          echo "${{ matrix.flavor.target == 'windows' && 'D:\\a\\_temp' || '/usr/local/bin' }}" >> $GITHUB_PATH
+          echo "${{ env.artifact_path }}" >> $GITHUB_PATH
 
       - name: Set execute permissions on atmos for ${{ matrix.flavor.target }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
