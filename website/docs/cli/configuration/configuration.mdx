@@ -27,7 +27,7 @@ the base path location of the components, and so forth.
 
 ## Configuration File (`atmos.yaml`)
 
-The CLI config is loaded from the following locations (from lowest to highest priority):
+The Atmos (CLI) configuration is loaded from the following locations, in order of precedence:
 - The `--config` parameter is the relative or absolute path to a valid configuration file.
 - The Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name. If it is set, Atmos will only look for the config file in the specified folder). Note, that the `.yaml` and `.yml` extensions are interchangeable and loaded in lexicographical order. Atmos will look for the following files, in order, relative to the `ATMOS_CLI_CONFIG_PATH` environment variable.
   - `atmos.yaml`
