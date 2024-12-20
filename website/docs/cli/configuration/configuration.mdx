@@ -40,7 +40,7 @@ Each setting (`components.terraform.base_path`, `components.helmfile.base_path`,
 ## Configuration File (`atmos.yaml`)
 
 The Atmos (CLI) configuration is loaded from the following locations, in order of precedence, and deep-merged: configurations listed earlier have higher priority, meaning they override any conflicting sections defined in subsequent locations:
-- The `--config` parameter is the relative or absolute path to a valid configuration file or directory containing strictly atmos configuration file(s).
+- The `--config` parameter is the relative or absolute path to a valid configuration file or directory containing strictly atmos configuration file(s). It has the highest precedence.
 - The Environment variable `ATMOS_CLI_CONFIG_PATH` (the ENV var should point to a folder without specifying the file name. If it is set, Atmos will only look for the config file in the specified folder). Note, that the `.yaml` and `.yml` extensions are interchangeable and loaded in lexicographical order. Atmos will look for the following files, in order, relative to the `ATMOS_CLI_CONFIG_PATH` environment variable.
   From the current directory:
   - `atmos.yaml`
