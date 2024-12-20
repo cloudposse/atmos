@@ -279,26 +279,23 @@ jobs:
 
     timeout-minutes: 20
     steps:
-      - name: Determine build artifacts path
-        id: determine-path
-        run: echo "artifact_path=${{ matrix.flavor.target == 'windows' && 'D:\\a\\_temp' || '/usr/local/bin' }}" >> $GITHUB_ENV
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
-          path: ${{ env.artifact_path }}
+          path: ${{ github.workspace }}
 
       - name: Add build artifacts directory to PATH for ${{ matrix.flavor.target }}
         run: |
-          echo "${{ env.artifact_path }}" >> $GITHUB_PATH
+          ls "${{ github.workspace }}"
+          echo "${{ github.workspace }}" >> $GITHUB_PATH
 
       - name: Set execute permissions on atmos for ${{ matrix.flavor.target }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
-        run: chmod +x /usr/local/bin/atmos
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        run: chmod +x "${{ github.workspace }}/atmos"
 
       - uses: hashicorp/setup-terraform@v3
         with:
