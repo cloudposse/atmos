@@ -24,7 +24,19 @@ Think of this file as where you [bootstrap the settings or configuration of your
 [terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior)
 you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)),
 the base path location of the components, and so forth.
+## Base Path
 
+The base path defines the root directory for components, stacks, workflows, and Atmos configurations. It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory, as Atmos executes commands that may change the working directory (e.g., Terraform).
+
+When the `base_path` is explicitly provided:
+- Relative paths such as `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, `workflows.base_path`, `schemas.jsonschema.base_path`, and `schemas.opa.base_path` are resolved relative to the specified `base_path`. If any of these settings are absolute paths, they will be respected and treated as-is.
+
+When the `base_path` is not explicitly provided or is empty, Atmos will attempt to infer the appropriate path using the following strategy, in order of precedence:
+1. If the current working directory contains any of the following files or directories: `atmos.yaml`, `.atmos.yaml`, `.github/atmos.yaml`, or `atmos.d/**/*`, Atmos will use the directory containing these files as the `base_path`.
+2. If a Git repository is detected, Atmos uses the root of the Git repository as the `base_path`.
+3. If neither of the above applies, Atmos defaults to the absolute path of `./` as the `base_path`.
+
+Each setting (`components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, and `workflows.base_path`) is treated independently and can accept either an absolute or a relative path.
 ## Configuration File (`atmos.yaml`)
 
 The Atmos (CLI) configuration is loaded from the following locations, in order of precedence:
