@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -265,6 +266,8 @@ func ExecuteAtmosVendorInternal(
 		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
 	}
 
+	var tempDir string
+
 	// Process imports and return all sources from all the imports and from `vendor.yaml`
 	sources, _, err := processVendorImports(
 		atmosConfig,
@@ -314,6 +317,16 @@ func ExecuteAtmosVendorInternal(
 		)
 	}
 
+	tempDir, err = os.MkdirTemp("", "atmos_vendor_")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			u.LogWarning(atmosConfig, fmt.Sprintf("failed to clean up temp directory %s: %v", tempDir, err))
+		}
+	}()
+
 	// Allow having duplicate targets in different sources.
 	// This can be used to vendor mixins (from local and remote sources) and write them to the same targets.
 	// TODO: consider adding a flag to `atmos vendor pull` to specify if duplicate targets are allowed or not.
@@ -356,7 +369,24 @@ func ExecuteAtmosVendorInternal(
 			return err
 		}
 
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(&uri, vendorConfigFilePath)
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, isGitHubSource := determineSourceType(&uri, vendorConfigFilePath)
+
+		// Handle GitHub source
+		if isGitHubSource {
+			u.LogDebug(atmosConfig, fmt.Sprintf("Fetching GitHub source: %s", uri))
+			fileContents, err := u.DownloadFileFromGitHub(uri)
+			if err != nil {
+				return fmt.Errorf("failed to download GitHub file: %w", err)
+			}
+			// Save the downloaded file to the existing tempDir
+			tempGitHubFile := filepath.Join(tempDir, filepath.Base(uri))
+			err = os.WriteFile(tempGitHubFile, fileContents, os.ModePerm)
+			if err != nil {
+				return fmt.Errorf("failed to save GitHub file to temp location: %w", err)
+			}
+			// Update the URI to point to the saved file in the temp directory
+			uri = tempGitHubFile
+		}
 
 		// Determine package type
 		var pType pkgType
@@ -494,8 +524,8 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool) {
-	// Determine if the URI is an OCI scheme, a local file, or remote
+func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, bool) {
+	// Determine if the URI is an OCI scheme, a local file, a remote GitHub source, or a generic remote
 	useOciScheme := strings.HasPrefix(*uri, "oci://")
 	if useOciScheme {
 		*uri = strings.TrimPrefix(*uri, "oci://")
@@ -503,14 +533,26 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
+	isGitHubSource := false
+
+	// If not OCI, we proceed with checks
 	if !useOciScheme {
-		if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, *uri); err == nil {
-			uri = &absPath
-			useLocalFileSystem = true
-			sourceIsLocalFile = u.FileExists(*uri)
+		parsedURL, err := url.Parse(*uri)
+		if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+			// Not a valid URL or no host: consider local filesystem
+			if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, *uri); err == nil {
+				uri = &absPath
+				useLocalFileSystem = true
+				sourceIsLocalFile = u.FileExists(*uri)
+			}
+		} else {
+			if parsedURL.Host == "github.com" && parsedURL.Scheme == "https" {
+				isGitHubSource = true
+			}
 		}
 	}
-	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
+
+	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, isGitHubSource
 }
 
 func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {

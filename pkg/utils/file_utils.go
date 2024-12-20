@@ -242,3 +242,24 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 	}
 	return fileName, nil
 }
+
+// ParseGitHubURL parses a GitHub URL and returns the owner, repo, file path and branch
+func ParseGitHubURL(rawURL string) (owner, repo, filePath, branch string, err error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// Expected format: https://github.com/owner/repo/blob/branch/path/to/file
+	parts := strings.Split(u.Path, "/")
+	if len(parts) < 5 || (parts[3] != "blob" && parts[3] != "raw") {
+		return "", "", "", "", fmt.Errorf("invalid GitHub URL format")
+	}
+
+	owner = parts[1]
+	repo = parts[2]
+	branch = parts[4]
+	filePath = strings.Join(parts[5:], "/")
+
+	return owner, repo, filePath, branch, nil
+}
