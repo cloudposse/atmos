@@ -286,6 +286,7 @@ jobs:
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
@@ -296,10 +297,17 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Run tests for ${{ matrix.demo-folder }}
+      - name: Run tests for ${{ matrix.demo-folder }} with ${{ matrix.flavor.target }}
+        working-directory: examples/${{ matrix.demo-folder }}
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
-          cd examples/${{ matrix.demo-folder }}
           atmos test
+
+      - name: Run tests for ${{ matrix.demo-folder }} with ${{ matrix.flavor.target }}
+        working-directory: examples/${{ matrix.demo-folder }}
+        if: matrix.flavor.target == 'windows'
+        run: |
+          atmos.exe test
 
   # run other demo tests
   lint:
