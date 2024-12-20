@@ -19,19 +19,30 @@ lint:
 get:
 	go get
 
-build: build-linux
+build: build-default
 
-version: version-linux
+version: version-default
 
-build-linux: get
+build-linux: GOOS=linux
+build-linux: build-default
+
+build-default: get
+	@echo "Building atmos $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH))"
 	env $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH)) go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)'"
 
 build-windows: GOOS=windows
-build-windows: GOARCH=amd64
 build-windows: get
+	@echo "Building atmos for $(GOOS) ($(GOARCH))"
 	go build -o build/atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)"
 
-version-linux: build-linux
+build-macos: GOOS=darwin
+build-macos: build-default
+
+version-linux: version-default
+
+version-macos: version-default
+
+version-default:
 	chmod +x ./build/atmos
 	./build/atmos version
 
@@ -45,4 +56,4 @@ deps:
 testacc: get
 	go test $(TEST) -v $(TESTARGS) -timeout 2m
 
-.PHONY: lint get build version build-linux build-windows deps version-linux version-windows testacc
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc
