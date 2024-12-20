@@ -80,8 +80,8 @@ jobs:
           VERSION: test
         run: |
           mkdir build
-          go build -o build\\atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=${{ env.VERSION }}"
-
+          go build
+          #go build -o build\\atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=${{ env.VERSION }}"
           #make build-windows
 
       - name: Version
