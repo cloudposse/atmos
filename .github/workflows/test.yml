@@ -77,8 +77,10 @@ jobs:
         env:
           GOOS: windows
           GOARCH: amd64
+          VERSION: test
         run: |
-          go build -o build/atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=${{ env.VERSION }}"
+          mkdir build
+          go build -o build\\atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=${{ env.VERSION }}"
 
           #make build-windows
 
