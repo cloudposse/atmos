@@ -245,24 +245,21 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 
 // ParseGitHubURL parses a GitHub URL and returns the owner, repo, file path and branch
 func ParseGitHubURL(rawURL string) (owner, repo, filePath, branch string, err error) {
-	parsedURL, err := url.Parse(rawURL)
+	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("invalid URL: %w", err)
 	}
 
-	if !strings.Contains(parsedURL.Host, "github.com") {
-		return "", "", "", "", fmt.Errorf("URL is not a GitHub URL")
+	// Expected format: https://github.com/owner/repo/blob/branch/path/to/file
+	parts := strings.Split(u.Path, "/")
+	if len(parts) < 5 || (parts[3] != "blob" && parts[3] != "raw") {
+		return "", "", "", "", fmt.Errorf("invalid GitHub URL format")
 	}
 
-	pathParts := strings.Split(strings.Trim(parsedURL.Path, "/"), "/")
-	if len(pathParts) < 4 || pathParts[2] != "blob" {
-		return "", "", "", "", fmt.Errorf("URL format not supported. Expected: /owner/repo/blob/branch/filepath")
-	}
-
-	owner = pathParts[0]
-	repo = pathParts[1]
-	branch = pathParts[3]
-	filePath = strings.Join(pathParts[4:], "/")
+	owner = parts[1]
+	repo = parts[2]
+	branch = parts[4]
+	filePath = strings.Join(parts[5:], "/")
 
 	return owner, repo, filePath, branch, nil
 }
