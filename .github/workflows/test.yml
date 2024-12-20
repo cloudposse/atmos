@@ -248,7 +248,7 @@ jobs:
     runs-on: ${{ matrix.flavor.os }}
     strategy:
       matrix:
-        flavors:
+        flavor:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
