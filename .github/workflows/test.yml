@@ -282,6 +282,10 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
+      - name: Add GNU tar to PATH (significantly faster than windows tar)
+        if: matrix.flavor.target == 'windows'
+        run: echo "C:\Program Files\Git\usr\bin" >> $GITHUB_PATH
+
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
         with:
