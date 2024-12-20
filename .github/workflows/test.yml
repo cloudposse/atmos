@@ -26,6 +26,7 @@ jobs:
     name: Build
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -72,6 +73,7 @@ jobs:
     name: Acceptance Tests
     needs: build
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -154,6 +156,7 @@ jobs:
           - /var/run/docker.sock:/var/run/docker.sock
 
     strategy:
+      fail-fast: false
       matrix:
         demo-folder:
           - demo-localstack
@@ -247,6 +250,7 @@ jobs:
     needs: build
     runs-on: ${{ matrix.flavor.os }}
     strategy:
+      fail-fast: false
       matrix:
         flavor:
           - { os: ubuntu-latest, target: linux }
@@ -303,6 +307,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         demo-folder:
           # - demo-component-manifest
@@ -355,6 +360,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         demo-folder:
           - demo-context
