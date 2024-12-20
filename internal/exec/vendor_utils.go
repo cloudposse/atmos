@@ -375,7 +375,7 @@ func ExecuteAtmosVendorInternal(
 
 		// Handle GitHub source
 		if isGitHubSource {
-			u.LogInfo(atmosConfig, fmt.Sprintf("Fetching GitHub source: %s", uri))
+			u.LogDebug(atmosConfig, fmt.Sprintf("Fetching GitHub source: %s", uri))
 			fileContents, err := u.DownloadFileFromGitHub(uri)
 			if err != nil {
 				return fmt.Errorf("failed to download GitHub file: %w", err)
@@ -537,16 +537,19 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	sourceIsLocalFile := false
 	isGitHubSource := false
 
+	// If not OCI, we proceed with checks
 	if !useOciScheme {
-		if strings.Contains(*uri, "github.com") {
-			// Check if the URL is a GitHub source
-			isGitHubSource = true
-		} else {
-			// Handle local file system sources
+		parsedURL, err := url.Parse(*uri)
+		if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+			// Not a valid URL or no host: consider local filesystem
 			if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, *uri); err == nil {
 				uri = &absPath
 				useLocalFileSystem = true
 				sourceIsLocalFile = u.FileExists(*uri)
+			}
+		} else {
+			if parsedURL.Host == "github.com" && parsedURL.Scheme == "https" {
+				isGitHubSource = true
 			}
 		}
 	}
