@@ -75,6 +75,10 @@ func (r *Renderer) RenderWorkflow(content string) (string, error) {
 func (r *Renderer) RenderError(title, details, examples string) (string, error) {
 	var content string
 
+	if title != "" {
+		content += fmt.Sprintf("# %s\n\n", title)
+	}
+
 	if details != "" {
 		content += fmt.Sprintf("%s\n\n", details)
 	}

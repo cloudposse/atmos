@@ -35,13 +35,18 @@ var DefaultStyle = []byte(`{
     "block_suffix": "\n",
     "color": "#00A3E0",
     "bold": true,
-    "margin": 0
+    "margin": 0,
+    "style_override": true
   },
   "h1": {
-    "prefix": "# ",
-    "color": "#00A3E0",
+    "prefix": "",
+    "color": "#FFFFFF",
+    "background_color": "#9B51E0",
     "bold": true,
-    "margin": 1
+    "margin": 2,
+    "block_prefix": "\n",
+    "block_suffix": "\n",
+    "padding": 1
   },
   "h2": {
     "prefix": "## ",
