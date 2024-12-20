@@ -7,8 +7,8 @@ import (
 // awsCmd executes 'aws' CLI commands
 var awsCmd = &cobra.Command{
 	Use:                "aws",
-	Short:              "Execute 'aws' commands",
-	Long:               `This command executes 'aws' CLI commands`,
+	Short:              "Run AWS-specific commands for interacting with cloud resources",
+	Long:               `This command allows interaction with AWS resources through various CLI commands.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
