@@ -22,7 +22,10 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		return strings.Split(existingMatches.(string), ","), nil
 	}
 
-	base, cleanPattern := doublestar.SplitPattern(pattern)
+	// Conver the pattern to use / as the separatoratorator regardless of platform
+	allOsSafePattern := filepath.ToSlash(pattern)
+
+	base, cleanPattern := doublestar.SplitPattern(allOsSafePattern)
 	f := os.DirFS(base)
 
 	matches, err := doublestar.Glob(f, cleanPattern)
