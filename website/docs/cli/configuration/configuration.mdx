@@ -39,7 +39,7 @@ Additionally, Atmos supports `imports` of other CLI configurations. Use imports 
 Imports can be any of the following:
 - Remote URL (if `import` section is set in the config)
 - Specific Path (if `import` section is set in the config)
-- Wildcard Globs
+- Wildcard globs (`*`), including recursive globs (`**`), can be combined (e.g., `**/*` matches all files and subfolders recursively). Only files ending in `.yml` or `.yaml` will be considered for import when using globs.
 For example, we can import from multiple locations like this:
 ```yaml
 import:
