@@ -40,14 +40,14 @@ Imports can be any of the following:
 - Remote URL (if `import` section is set in the config)
 - Specific Path (if `import` section is set in the config)
 - Wildcard globs (`*`), including recursive globs (`**`), can be combined (e.g., `**/*` matches all files and subfolders recursively). Only files ending in `.yml` or `.yaml` will be considered for import when using globs.
+
 For example, we can import from multiple locations like this:
+
 ```yaml
 import:
   - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"  
   - "configs.d/**/*"                                                                
   - "./logs.yaml"  
-```
-:::warning Be Careful with Remote Imports
 - Always use HTTPS URLs (currently correctly demonstrated in the example). 
 - Verify the authenticity of remote sources. 
 - Consider pinning to specific commit hashes instead of branch references
