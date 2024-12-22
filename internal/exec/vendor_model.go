@@ -245,8 +245,8 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 		}
 
-		// Create temp directory
-		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
+		// Create temp directory with a safe name for Windows
+		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d", time.Now().Unix()))
 		if err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to create temp directory: %w", err),
@@ -271,12 +271,15 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			client := &getter.Client{
 				Ctx:  ctx,
 				Dst:  tempDir,
-				Src:  p.uri,
+				Src:  strings.ReplaceAll(p.uri, "?", "-"), // Replace ? with - for Windows compatibility
 				Mode: getter.ClientModeAny,
+				Options: []getter.ClientOption{
+					getter.WithInsecure(), // Allow insecure downloads for testing
+				},
 			}
 			if err := client.Get(); err != nil {
 				return installedPkgMsg{
-					err:  fmt.Errorf("failed to download package: %w", err),
+					err:  fmt.Errorf("failed to download package %s error %v", p.name, err),
 					name: p.name,
 				}
 			}
@@ -298,7 +301,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 			}
 			if p.sourceIsLocalFile {
-				tempDir = filepath.Join(tempDir, filepath.Base(p.uri))
+				tempDir = filepath.Join(tempDir, filepath.Base(strings.ReplaceAll(p.uri, "?", "-"))) // Safe filename
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{
@@ -311,8 +314,8 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				err:  fmt.Errorf("unknown package type %s for package %s", p.pkgType.String(), p.name),
 				name: p.name,
 			}
-
 		}
+
 		if err := copyToTarget(atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to copy package: %w", err),

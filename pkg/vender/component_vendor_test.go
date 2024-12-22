@@ -21,7 +21,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	componentType := "terraform"
 
 	// Test 'infra/vpc-flow-logs-bucket' component
-	component := "infra/vpc-flow-logs-bucket"
+	component := filepath.FromSlash("infra/vpc-flow-logs-bucket")
 	componentConfig, componentPath, err := e.ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
 	assert.Nil(t, err)
 
@@ -29,15 +29,31 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
-	assert.FileExists(t, filepath.Join(componentPath, "context.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "outputs.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "providers.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "variables.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "versions.tf"))
+	filesToCheck := []string{
+		"context.tf",
+		"main.tf",
+		"outputs.tf",
+		"providers.tf",
+		"variables.tf",
+		"versions.tf",
+	}
+
+	for _, file := range filesToCheck {
+		filePath := filepath.Join(componentPath, file)
+		if !assert.FileExists(t, filePath) {
+			t.Logf("Failed to find file: %s", filePath)
+			t.Logf("Component path: %s", componentPath)
+			if files, err := os.ReadDir(componentPath); err == nil {
+				t.Log("Available files:")
+				for _, f := range files {
+					t.Logf("  - %s", f.Name())
+				}
+			}
+		}
+	}
 
 	// Test 'infra/account-map' component
-	component = "infra/account-map"
+	component = filepath.FromSlash("infra/account-map")
 	componentConfig, componentPath, err = e.ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
 	assert.Nil(t, err)
 
@@ -45,7 +61,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
-	filesToCheck := []string{
+	filesToCheck = []string{
 		"context.tf",
 		"dynamic-roles.tf",
 		"main.tf",
@@ -73,13 +89,13 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Check module files
 	moduleFiles := map[string][]string{
-		filepath.Join("modules", "iam-roles"): {
+		filepath.FromSlash("modules/iam-roles"): {
 			"context.tf",
 			"main.tf",
 			"outputs.tf",
 			"variables.tf",
 		},
-		filepath.Join("modules", "roles-to-principals"): {
+		filepath.FromSlash("modules/roles-to-principals"): {
 			"context.tf",
 			"main.tf",
 			"outputs.tf",
