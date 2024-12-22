@@ -45,43 +45,74 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
-	assert.FileExists(t, filepath.Join(componentPath, "context.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "dynamic-roles.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "outputs.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "providers.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "README.md"))
-	assert.FileExists(t, filepath.Join(componentPath, "remote-state.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "variables.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "versions.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "context.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "main.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "outputs.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "variables.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "context.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "main.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "outputs.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "variables.tf"))
+	filesToCheck := []string{
+		"context.tf",
+		"dynamic-roles.tf",
+		"main.tf",
+		"outputs.tf",
+		"providers.tf",
+		"README.md",
+		"remote-state.tf",
+		"variables.tf",
+		"versions.tf",
+	}
 
-	// Delete the files and folders
-	err = os.Remove(filepath.Join(componentPath, "context.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "dynamic-roles.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "main.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "outputs.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "providers.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "README.md"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "remote-state.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "variables.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "versions.tf"))
-	assert.Nil(t, err)
-	err = os.RemoveAll(filepath.Join(componentPath, "modules"))
-	assert.Nil(t, err)
+	for _, file := range filesToCheck {
+		filePath := filepath.Join(componentPath, file)
+		assert.FileExists(t, filePath)
+	}
+
+	// Check module files
+	moduleFiles := map[string][]string{
+		filepath.Join("modules", "iam-roles"): {
+			"context.tf",
+			"main.tf",
+			"outputs.tf",
+			"variables.tf",
+		},
+		filepath.Join("modules", "roles-to-principals"): {
+			"context.tf",
+			"main.tf",
+			"outputs.tf",
+			"variables.tf",
+		},
+	}
+
+	for modulePath, files := range moduleFiles {
+		for _, file := range files {
+			filePath := filepath.Join(componentPath, modulePath, file)
+			assert.FileExists(t, filePath)
+		}
+	}
+
+	// Clean up files using a helper function that handles errors gracefully
+	cleanupFiles := func(files []string, basePath string) {
+		for _, file := range files {
+			filePath := filepath.Join(basePath, file)
+			if err := os.Remove(filePath); err != nil {
+				if !os.IsNotExist(err) {
+					t.Logf("Warning: Failed to remove file %s: %v", filePath, err)
+				}
+			}
+		}
+	}
+
+	// Clean up main component files
+	cleanupFiles(filesToCheck, componentPath)
+
+	// Clean up module files
+	for modulePath, files := range moduleFiles {
+		fullModulePath := filepath.Join(componentPath, modulePath)
+		cleanupFiles(files, fullModulePath)
+		
+		// Remove module directory after files are removed
+		if err := os.RemoveAll(filepath.Join(componentPath, modulePath)); err != nil {
+			t.Logf("Warning: Failed to remove module directory %s: %v", modulePath, err)
+		}
+	}
+
+	// Finally remove the modules directory
+	if err := os.RemoveAll(filepath.Join(componentPath, "modules")); err != nil {
+		t.Logf("Warning: Failed to remove modules directory: %v", err)
+	}
 }

@@ -3,6 +3,7 @@ package component
 import (
 	"testing"
 	"path/filepath"
+	"strings"
 
 	"github.com/stretchr/testify/assert"
 
@@ -45,9 +46,26 @@ func TestComponentProcessor(t *testing.T) {
 		"orgs/cp/tenant1/dev/us-east-2",
 	}
 
-	// Convert actual paths to forward slashes for comparison
+	// Helper function to extract relative path
+	getRelativePath := func(path string) string {
+		// Split the path by common test directories
+		parts := []string{
+			"examples/tests/stacks/",
+			"examples\\tests\\stacks\\",
+		}
+		
+		normalizedPath := filepath.ToSlash(path)
+		for _, part := range parts {
+			if idx := strings.Index(normalizedPath, part); idx >= 0 {
+				return normalizedPath[idx+len(part):]
+			}
+		}
+		return normalizedPath
+	}
+
+	// Convert actual paths to forward slashes and extract relative paths for comparison
 	for i, dep := range tenant1Ue2DevTestTestComponentDeps {
-		actualPath := filepath.ToSlash(dep.(string))
+		actualPath := getRelativePath(dep.(string))
 		assert.Equal(t, expectedPaths[i], actualPath, "Path mismatch at index %d", i)
 	}
 
@@ -82,9 +100,9 @@ func TestComponentProcessor(t *testing.T) {
 		"orgs/cp/tenant1/dev/us-east-2",
 	}
 
-	// Convert actual paths to forward slashes for comparison
+	// Convert actual paths to forward slashes and extract relative paths for comparison
 	for i, dep := range tenant1Ue2DevTestTestComponentDeps2 {
-		actualPath := filepath.ToSlash(dep.(string))
+		actualPath := getRelativePath(dep.(string))
 		assert.Equal(t, expectedPaths[i], actualPath, "Path mismatch at index %d", i)
 	}
 
@@ -124,9 +142,9 @@ func TestComponentProcessor(t *testing.T) {
 		"orgs/cp/tenant1/dev/us-east-2",
 	}
 
-	// Convert actual paths to forward slashes for comparison
+	// Convert actual paths to forward slashes and extract relative paths for comparison
 	for i, dep := range tenant1Ue2DevTestTestComponentOverrideComponentDeps {
-		actualPath := filepath.ToSlash(dep.(string))
+		actualPath := getRelativePath(dep.(string))
 		assert.Equal(t, expectedPaths[i], actualPath, "Path mismatch at index %d", i)
 	}
 
@@ -188,9 +206,9 @@ func TestComponentProcessor(t *testing.T) {
 		"orgs/cp/tenant1/dev/us-east-2",
 	}
 
-	// Convert actual paths to forward slashes for comparison
+	// Convert actual paths to forward slashes and extract relative paths for comparison
 	for i, dep := range tenant1Ue2DevTestTestComponentOverrideComponent3Deps {
-		actualPath := filepath.ToSlash(dep.(string))
+		actualPath := getRelativePath(dep.(string))
 		assert.Equal(t, expectedPaths[i], actualPath, "Path mismatch at index %d", i)
 	}
 }
