@@ -279,13 +279,35 @@ jobs:
 
     timeout-minutes: 20
     steps:
+      - name: Create atmos directory (Windows)
+        if: matrix.flavor.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          mkdir -Force "D:\atmos"
+
       - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.flavor.target }}
+          path: D:\atmos
+
+      - name: Setup atmos (Windows)
+        if: matrix.flavor.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Rename-Item -Path "D:\atmos\atmos" -NewName "atmos.exe"
+          $env:PATH = "D:\atmos;" + $env:PATH
+          [Environment]::SetEnvironmentVariable("Path", $env:PATH, [System.EnvironmentVariableTarget]::User)
+
+      - name: Download build artifacts (Unix)
+        if: matrix.flavor.os != 'windows-latest'
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: /usr/local/bin
 
-      - name: Set execute permissions on atmos
+      - name: Setup atmos (Unix)
+        if: matrix.flavor.os != 'windows-latest'
         run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
@@ -296,7 +318,15 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Run tests for ${{ matrix.demo-folder }}
+      - name: Run tests (Windows)
+        if: matrix.flavor.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd examples/${{ matrix.demo-folder }}
+          D:\atmos\atmos.exe test
+
+      - name: Run tests (Unix)
+        if: matrix.flavor.os != 'windows-latest'
         run: |
           cd examples/${{ matrix.demo-folder }}
           atmos test
