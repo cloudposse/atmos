@@ -352,6 +352,8 @@ jobs:
       - name: Run tests (Windows)
         if: matrix.flavor.os == 'windows-latest'
         shell: pwsh
+        env:
+          PATH: D:\atmos;${{ env.PATH }}
         run: |
           Write-Host "Verifying atmos.exe exists:"
           if (Test-Path "D:\atmos\atmos.exe") {
@@ -362,14 +364,27 @@ jobs:
               Write-Error "atmos.exe not found!"
               exit 1
           }
+          Write-Host "Current PATH: $env:PATH"
+          Write-Host "Testing atmos command..."
+          & "D:\atmos\atmos.exe" version
           cd examples/${{ matrix.demo-folder }}
-          D:\atmos\atmos.exe test
+          & "D:\atmos\atmos.exe" test
 
       - name: Run tests (Unix)
         if: matrix.flavor.os != 'windows-latest'
         run: |
           cd examples/${{ matrix.demo-folder }}
           atmos test
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.flavor.target }}-${{ matrix.demo-folder }}
+          path: |
+            examples/${{ matrix.demo-folder }}/**/*.log
+            examples/${{ matrix.demo-folder }}/**/terraform.tfstate
+            examples/${{ matrix.demo-folder }}/**/terraform.tfstate.backup
 
   # run other demo tests
   lint:
