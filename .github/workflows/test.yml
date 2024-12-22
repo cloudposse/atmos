@@ -284,33 +284,48 @@ jobs:
         shell: pwsh
         run: |
           mkdir -Force "D:\atmos"
+          Write-Host "Created D:\atmos directory"
+          Write-Host "Current directory contents:"
+          Get-ChildItem "D:\"
 
-      - name: Download build artifacts
+      - name: Download build artifacts (Windows)
+        if: matrix.flavor.os == 'windows-latest'
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: D:\atmos
 
-      - name: Debug Windows Files
+      - name: List Windows artifacts
         if: matrix.flavor.os == 'windows-latest'
         shell: pwsh
         run: |
-          Write-Host "Listing D:\atmos directory:"
+          Write-Host "D:\atmos contents:"
           Get-ChildItem -Path "D:\atmos" -Recurse
-          Write-Host "Current PATH:"
-          $env:PATH
+          Write-Host "Current PATH: $env:PATH"
 
       - name: Setup atmos (Windows)
         if: matrix.flavor.os == 'windows-latest'
         shell: pwsh
         run: |
-          $atmosFile = Get-ChildItem -Path "D:\atmos" -Filter "atmos" -Recurse | Select-Object -First 1
+          $atmosFile = Get-ChildItem -Path "D:\atmos" -Filter "atmos*" -Recurse | Select-Object -First 1
           if ($atmosFile) {
               Write-Host "Found atmos at: $($atmosFile.FullName)"
+              Write-Host "File details:"
+              $atmosFile | Format-List *
               Move-Item -Path $atmosFile.FullName -Destination "D:\atmos\atmos.exe" -Force
               $env:PATH = "D:\atmos;" + $env:PATH
               [Environment]::SetEnvironmentVariable("Path", $env:PATH, [System.EnvironmentVariableTarget]::User)
+              Write-Host "Moved atmos to D:\atmos\atmos.exe"
+              Write-Host "Updated PATH: $env:PATH"
+              if (Test-Path "D:\atmos\atmos.exe") {
+                  Write-Host "Successfully created atmos.exe"
+              } else {
+                  Write-Error "Failed to create atmos.exe"
+                  exit 1
+              }
           } else {
+              Write-Host "Contents of D:\atmos:"
+              Get-ChildItem -Path "D:\atmos" -Recurse
               Write-Error "Could not find atmos executable"
               exit 1
           }
@@ -341,6 +356,8 @@ jobs:
           Write-Host "Verifying atmos.exe exists:"
           if (Test-Path "D:\atmos\atmos.exe") {
               Write-Host "atmos.exe found at D:\atmos\atmos.exe"
+              Write-Host "File details:"
+              Get-Item "D:\atmos\atmos.exe" | Format-List *
           } else {
               Write-Error "atmos.exe not found!"
               exit 1
