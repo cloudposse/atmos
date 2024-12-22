@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -17,7 +19,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
-	"runtime"
 )
 
 type pkgType int
@@ -370,7 +371,20 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig schema.AtmosCo
 }
 
 func runGitClone(ctx context.Context, repoURL, ref, destPath string) error {
+	// Initialize git command
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", ref, repoURL, destPath)
 	cmd.Env = os.Environ()
-	return cmd.Run()
+
+	// Capture both stdout and stderr
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git clone failed: %w\nOutput: %s", err, string(output))
+	}
+
+	// Verify the clone was successful
+	if _, err := os.Stat(filepath.Join(destPath, ".git")); err != nil {
+		return fmt.Errorf("git clone appeared to succeed but .git directory not found: %w", err)
+	}
+
+	return nil
 }
