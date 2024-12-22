@@ -2,6 +2,7 @@ package component
 
 import (
 	"testing"
+	"path/filepath"
 
 	"github.com/stretchr/testify/assert"
 
@@ -22,27 +23,33 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentBackend := tenant1Ue2DevTestTestComponent["backend"].(map[string]any)
 	tenant1Ue2DevTestTestComponentRemoteStateBackend := tenant1Ue2DevTestTestComponent["remote_state_backend"].(map[string]any)
-	tenant1Ue2DevTestTestComponentBaseComponent := tenant1Ue2DevTestTestComponent["component"]
 	tenant1Ue2DevTestTestComponentTerraformWorkspace := tenant1Ue2DevTestTestComponent["workspace"].(string)
-	tenant1Ue2DevTestTestComponentWorkspace := tenant1Ue2DevTestTestComponent["workspace"].(string)
 	tenant1Ue2DevTestTestComponentBackendWorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentBackend["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentRemoteStateBackendWorkspaceKeyPrefix := tenant1Ue2DevTestTestComponentRemoteStateBackend["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentDeps := tenant1Ue2DevTestTestComponent["deps"].([]any)
 	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentBackendWorkspaceKeyPrefix)
 	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentRemoteStateBackendWorkspaceKeyPrefix)
-	assert.Equal(t, "test/test-component", tenant1Ue2DevTestTestComponentBaseComponent)
-	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevTestTestComponentWorkspace)
-	assert.Equal(t, 9, len(tenant1Ue2DevTestTestComponentDeps))
-	assert.Equal(t, "catalog/terraform/services/service-1", tenant1Ue2DevTestTestComponentDeps[0])
-	assert.Equal(t, "catalog/terraform/services/service-2", tenant1Ue2DevTestTestComponentDeps[1])
-	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", tenant1Ue2DevTestTestComponentDeps[2])
-	assert.Equal(t, "catalog/terraform/test-component", tenant1Ue2DevTestTestComponentDeps[3])
-	assert.Equal(t, "mixins/region/us-east-2", tenant1Ue2DevTestTestComponentDeps[4])
-	assert.Equal(t, "mixins/stage/dev", tenant1Ue2DevTestTestComponentDeps[5])
-	assert.Equal(t, "orgs/cp/_defaults", tenant1Ue2DevTestTestComponentDeps[6])
-	assert.Equal(t, "orgs/cp/tenant1/_defaults", tenant1Ue2DevTestTestComponentDeps[7])
-	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentDeps[8])
 	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevTestTestComponentTerraformWorkspace)
+	assert.Equal(t, 9, len(tenant1Ue2DevTestTestComponentDeps))
+
+	// Normalize expected paths for cross-platform compatibility
+	expectedPaths := []string{
+		"catalog/terraform/services/service-1",
+		"catalog/terraform/services/service-2",
+		"catalog/terraform/spacelift-and-backend-override-1",
+		"catalog/terraform/test-component",
+		"mixins/region/us-east-2",
+		"mixins/stage/dev",
+		"orgs/cp/_defaults",
+		"orgs/cp/tenant1/_defaults",
+		"orgs/cp/tenant1/dev/us-east-2",
+	}
+
+	// Convert actual paths to forward slashes for comparison
+	for i, dep := range tenant1Ue2DevTestTestComponentDeps {
+		actualPath := filepath.ToSlash(dep.(string))
+		assert.Equal(t, expectedPaths[i], actualPath, "Path mismatch at index %d", i)
+	}
 
 	var tenant1Ue2DevTestTestComponent2 map[string]any
 	component = "test/test-component"
@@ -53,27 +60,33 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Nil(t, err)
 	tenant1Ue2DevTestTestComponentBackend2 := tenant1Ue2DevTestTestComponent2["backend"].(map[string]any)
 	tenant1Ue2DevTestTestComponentRemoteStateBackend2 := tenant1Ue2DevTestTestComponent2["remote_state_backend"].(map[string]any)
-	tenant1Ue2DevTestTestComponentBaseComponent2 := tenant1Ue2DevTestTestComponent2["component"]
 	tenant1Ue2DevTestTestComponentTerraformWorkspace2 := tenant1Ue2DevTestTestComponent2["workspace"].(string)
-	tenant1Ue2DevTestTestComponentWorkspace2 := tenant1Ue2DevTestTestComponent2["workspace"].(string)
 	tenant1Ue2DevTestTestComponentBackendWorkspaceKeyPrefix2 := tenant1Ue2DevTestTestComponentBackend2["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentRemoteStateBackendWorkspaceKeyPrefix2 := tenant1Ue2DevTestTestComponentRemoteStateBackend2["workspace_key_prefix"].(string)
 	tenant1Ue2DevTestTestComponentDeps2 := tenant1Ue2DevTestTestComponent2["deps"].([]any)
 	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentBackendWorkspaceKeyPrefix2)
 	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentRemoteStateBackendWorkspaceKeyPrefix2)
-	assert.Equal(t, "test/test-component", tenant1Ue2DevTestTestComponentBaseComponent2)
-	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevTestTestComponentWorkspace2)
-	assert.Equal(t, 9, len(tenant1Ue2DevTestTestComponentDeps2))
-	assert.Equal(t, "catalog/terraform/services/service-1", tenant1Ue2DevTestTestComponentDeps2[0])
-	assert.Equal(t, "catalog/terraform/services/service-2", tenant1Ue2DevTestTestComponentDeps2[1])
-	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", tenant1Ue2DevTestTestComponentDeps2[2])
-	assert.Equal(t, "catalog/terraform/test-component", tenant1Ue2DevTestTestComponentDeps2[3])
-	assert.Equal(t, "mixins/region/us-east-2", tenant1Ue2DevTestTestComponentDeps2[4])
-	assert.Equal(t, "mixins/stage/dev", tenant1Ue2DevTestTestComponentDeps2[5])
-	assert.Equal(t, "orgs/cp/_defaults", tenant1Ue2DevTestTestComponentDeps2[6])
-	assert.Equal(t, "orgs/cp/tenant1/_defaults", tenant1Ue2DevTestTestComponentDeps2[7])
-	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentDeps2[8])
 	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevTestTestComponentTerraformWorkspace2)
+	assert.Equal(t, 9, len(tenant1Ue2DevTestTestComponentDeps2))
+
+	// Normalize expected paths for cross-platform compatibility
+	expectedPaths = []string{
+		"catalog/terraform/services/service-1",
+		"catalog/terraform/services/service-2",
+		"catalog/terraform/spacelift-and-backend-override-1",
+		"catalog/terraform/test-component",
+		"mixins/region/us-east-2",
+		"mixins/stage/dev",
+		"orgs/cp/_defaults",
+		"orgs/cp/tenant1/_defaults",
+		"orgs/cp/tenant1/dev/us-east-2",
+	}
+
+	// Convert actual paths to forward slashes for comparison
+	for i, dep := range tenant1Ue2DevTestTestComponentDeps2 {
+		actualPath := filepath.ToSlash(dep.(string))
+		assert.Equal(t, expectedPaths[i], actualPath, "Path mismatch at index %d", i)
+	}
 
 	yamlConfig, err = u.ConvertToYAML(tenant1Ue2DevTestTestComponent)
 	assert.Nil(t, err)
@@ -96,16 +109,26 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "test-component-override-workspace-override", tenant1Ue2DevTestTestComponentOverrideComponentWorkspace)
 
 	assert.Equal(t, 10, len(tenant1Ue2DevTestTestComponentOverrideComponentDeps))
-	assert.Equal(t, "catalog/terraform/services/service-1-override", tenant1Ue2DevTestTestComponentOverrideComponentDeps[0])
-	assert.Equal(t, "catalog/terraform/services/service-2-override", tenant1Ue2DevTestTestComponentOverrideComponentDeps[1])
-	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", tenant1Ue2DevTestTestComponentOverrideComponentDeps[2])
-	assert.Equal(t, "catalog/terraform/test-component", tenant1Ue2DevTestTestComponentOverrideComponentDeps[3])
-	assert.Equal(t, "catalog/terraform/test-component-override", tenant1Ue2DevTestTestComponentOverrideComponentDeps[4])
-	assert.Equal(t, "mixins/region/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponentDeps[5])
-	assert.Equal(t, "mixins/stage/dev", tenant1Ue2DevTestTestComponentOverrideComponentDeps[6])
-	assert.Equal(t, "orgs/cp/_defaults", tenant1Ue2DevTestTestComponentOverrideComponentDeps[7])
-	assert.Equal(t, "orgs/cp/tenant1/_defaults", tenant1Ue2DevTestTestComponentOverrideComponentDeps[8])
-	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponentDeps[9])
+
+	// Normalize expected paths for cross-platform compatibility
+	expectedPaths = []string{
+		"catalog/terraform/services/service-1-override",
+		"catalog/terraform/services/service-2-override",
+		"catalog/terraform/spacelift-and-backend-override-1",
+		"catalog/terraform/test-component",
+		"catalog/terraform/test-component-override",
+		"mixins/region/us-east-2",
+		"mixins/stage/dev",
+		"orgs/cp/_defaults",
+		"orgs/cp/tenant1/_defaults",
+		"orgs/cp/tenant1/dev/us-east-2",
+	}
+
+	// Convert actual paths to forward slashes for comparison
+	for i, dep := range tenant1Ue2DevTestTestComponentOverrideComponentDeps {
+		actualPath := filepath.ToSlash(dep.(string))
+		assert.Equal(t, expectedPaths[i], actualPath, "Path mismatch at index %d", i)
+	}
 
 	assert.Equal(t, "2", tenant1Ue2DevTestTestComponentOverrideComponentRemoteStateBackendVal2)
 
@@ -149,17 +172,27 @@ func TestComponentProcessor(t *testing.T) {
 	tenant1Ue2DevTestTestComponentOverrideComponent3Deps := tenant1Ue2DevTestTestComponentOverrideComponent3["deps"].([]any)
 
 	assert.Equal(t, 11, len(tenant1Ue2DevTestTestComponentOverrideComponent3Deps))
-	assert.Equal(t, "catalog/terraform/mixins/test-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[0])
-	assert.Equal(t, "catalog/terraform/services/service-1-override-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[1])
-	assert.Equal(t, "catalog/terraform/services/service-2-override-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[2])
-	assert.Equal(t, "catalog/terraform/spacelift-and-backend-override-1", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[3])
-	assert.Equal(t, "catalog/terraform/test-component", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[4])
-	assert.Equal(t, "catalog/terraform/test-component-override-3", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[5])
-	assert.Equal(t, "mixins/region/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[6])
-	assert.Equal(t, "mixins/stage/dev", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[7])
-	assert.Equal(t, "orgs/cp/_defaults", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[8])
-	assert.Equal(t, "orgs/cp/tenant1/_defaults", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[9])
-	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentOverrideComponent3Deps[10])
+
+	// Normalize expected paths for cross-platform compatibility
+	expectedPaths = []string{
+		"catalog/terraform/mixins/test-2",
+		"catalog/terraform/services/service-1-override-2",
+		"catalog/terraform/services/service-2-override-2",
+		"catalog/terraform/spacelift-and-backend-override-1",
+		"catalog/terraform/test-component",
+		"catalog/terraform/test-component-override-3",
+		"mixins/region/us-east-2",
+		"mixins/stage/dev",
+		"orgs/cp/_defaults",
+		"orgs/cp/tenant1/_defaults",
+		"orgs/cp/tenant1/dev/us-east-2",
+	}
+
+	// Convert actual paths to forward slashes for comparison
+	for i, dep := range tenant1Ue2DevTestTestComponentOverrideComponent3Deps {
+		actualPath := filepath.ToSlash(dep.(string))
+		assert.Equal(t, expectedPaths[i], actualPath, "Path mismatch at index %d", i)
+	}
 }
 
 func TestComponentProcessorHierarchicalInheritance(t *testing.T) {

@@ -26,6 +26,8 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	pattern = filepath.ToSlash(pattern)
 
 	base, cleanPattern := doublestar.SplitPattern(pattern)
+	// Ensure base path is normalized for the OS
+	base = filepath.FromSlash(base)
 	f := os.DirFS(base)
 
 	matches, err := doublestar.Glob(f, cleanPattern)
@@ -39,11 +41,14 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 	var fullMatches []string
 	for _, match := range matches {
-		// Convert back to system-specific path separator
-		fullMatch := filepath.FromSlash(filepath.Join(base, match))
-		fullMatches = append(fullMatches, fullMatch)
+		// First join with forward slashes for consistency
+		fullPath := filepath.Join(base, match)
+		// Then normalize for the current OS
+		fullPath = filepath.FromSlash(fullPath)
+		fullMatches = append(fullMatches, fullPath)
 	}
 
+	// Store normalized paths
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
 
 	return fullMatches, nil
