@@ -59,7 +59,16 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	for _, file := range filesToCheck {
 		filePath := filepath.Join(componentPath, file)
-		assert.FileExists(t, filePath)
+		if !assert.FileExists(t, filePath) {
+			t.Logf("Failed to find file: %s", filePath)
+			t.Logf("Component path: %s", componentPath)
+			if files, err := os.ReadDir(componentPath); err == nil {
+				t.Log("Available files:")
+				for _, f := range files {
+					t.Logf("  - %s", f.Name())
+				}
+			}
+		}
 	}
 
 	// Check module files
@@ -79,9 +88,23 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	}
 
 	for modulePath, files := range moduleFiles {
+		moduleDirPath := filepath.Join(componentPath, modulePath)
+		// Ensure module directory exists
+		if err := os.MkdirAll(moduleDirPath, 0755); err != nil {
+			t.Logf("Warning: Failed to create module directory %s: %v", moduleDirPath, err)
+		}
 		for _, file := range files {
-			filePath := filepath.Join(componentPath, modulePath, file)
-			assert.FileExists(t, filePath)
+			filePath := filepath.Join(moduleDirPath, file)
+			if !assert.FileExists(t, filePath) {
+				t.Logf("Failed to find module file: %s", filePath)
+				t.Logf("Module path: %s", moduleDirPath)
+				if files, err := os.ReadDir(moduleDirPath); err == nil {
+					t.Log("Available files in module:")
+					for _, f := range files {
+						t.Logf("  - %s", f.Name())
+					}
+				}
+			}
 		}
 	}
 
@@ -102,17 +125,11 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Clean up module files
 	for modulePath, files := range moduleFiles {
-		fullModulePath := filepath.Join(componentPath, modulePath)
-		cleanupFiles(files, fullModulePath)
-		
-		// Remove module directory after files are removed
-		if err := os.RemoveAll(filepath.Join(componentPath, modulePath)); err != nil {
-			t.Logf("Warning: Failed to remove module directory %s: %v", modulePath, err)
+		moduleDirPath := filepath.Join(componentPath, modulePath)
+		cleanupFiles(files, moduleDirPath)
+		// Try to remove the module directory
+		if err := os.RemoveAll(moduleDirPath); err != nil {
+			t.Logf("Warning: Failed to remove module directory %s: %v", moduleDirPath, err)
 		}
-	}
-
-	// Finally remove the modules directory
-	if err := os.RemoveAll(filepath.Join(componentPath, "modules")); err != nil {
-		t.Logf("Warning: Failed to remove modules directory: %v", err)
 	}
 }
