@@ -17,6 +17,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
+	"runtime"
 )
 
 type pkgType int
@@ -234,6 +235,7 @@ func max(a, b int) int {
 	}
 	return b
 }
+
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
@@ -253,6 +255,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				name: p.name,
 			}
 		}
+
 		// Ensure directory permissions are restricted
 		if err := os.Chmod(tempDir, 0700); err != nil {
 			return installedPkgMsg{
@@ -265,28 +268,45 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
+		// Handle Windows path separators
+		uri := p.uri
+		if runtime.GOOS == "windows" {
+			uri = strings.ReplaceAll(uri, "\\", "/")
+			// Extract ref from URL if present
+			if strings.Contains(uri, "?ref=") {
+				parts := strings.Split(uri, "?ref=")
+				uri = parts[0]
+				tempDir = filepath.Join(tempDir, filepath.Base(uri))
+				// Set up git clone with specific ref
+				if err := runGitClone(ctx, parts[0], parts[1], tempDir); err != nil {
+					return installedPkgMsg{
+						err:  fmt.Errorf("failed to clone repository: %w", err),
+						name: p.name,
+					}
+				}
+				goto CopyToTarget
+			}
+		}
+
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
 			client := &getter.Client{
 				Ctx:  ctx,
 				Dst:  tempDir,
-				Src:  strings.ReplaceAll(p.uri, "?", "-"), // Replace ? with - for Windows compatibility
+				Src:  uri,
 				Mode: getter.ClientModeAny,
-				Options: []getter.ClientOption{
-					getter.WithInsecure(), // Allow insecure downloads for testing
-				},
 			}
 			if err := client.Get(); err != nil {
 				return installedPkgMsg{
-					err:  fmt.Errorf("failed to download package %s error %v", p.name, err),
+					err:  fmt.Errorf("failed to download package %s: %w", p.name, err),
 					name: p.name,
 				}
 			}
 
 		case pkgTypeOci:
 			// Process OCI images
-			if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
+			if err := processOciImage(atmosConfig, uri, tempDir); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to process OCI image: %w", err),
 					name: p.name,
@@ -301,9 +321,9 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 			}
 			if p.sourceIsLocalFile {
-				tempDir = filepath.Join(tempDir, filepath.Base(strings.ReplaceAll(p.uri, "?", "-"))) // Safe filename
+				tempDir = filepath.Join(tempDir, filepath.Base(uri))
 			}
-			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
+			if err := cp.Copy(uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to copy package: %w", err),
 					name: p.name,
@@ -316,7 +336,8 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 		}
 
-		if err := copyToTarget(atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
+	CopyToTarget:
+		if err := copyToTarget(atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, uri); err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to copy package: %w", err),
 				name: p.name,
@@ -346,4 +367,10 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig schema.AtmosCo
 			name: installer.name,
 		}
 	}
+}
+
+func runGitClone(ctx context.Context, repoURL, ref, destPath string) error {
+	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", ref, repoURL, destPath)
+	cmd.Env = os.Environ()
+	return cmd.Run()
 }
