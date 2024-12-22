@@ -291,13 +291,29 @@ jobs:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: D:\atmos
 
+      - name: Debug Windows Files
+        if: matrix.flavor.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "Listing D:\atmos directory:"
+          Get-ChildItem -Path "D:\atmos" -Recurse
+          Write-Host "Current PATH:"
+          $env:PATH
+
       - name: Setup atmos (Windows)
         if: matrix.flavor.os == 'windows-latest'
         shell: pwsh
         run: |
-          Rename-Item -Path "D:\atmos\atmos" -NewName "atmos.exe"
-          $env:PATH = "D:\atmos;" + $env:PATH
-          [Environment]::SetEnvironmentVariable("Path", $env:PATH, [System.EnvironmentVariableTarget]::User)
+          $atmosFile = Get-ChildItem -Path "D:\atmos" -Filter "atmos" -Recurse | Select-Object -First 1
+          if ($atmosFile) {
+              Write-Host "Found atmos at: $($atmosFile.FullName)"
+              Move-Item -Path $atmosFile.FullName -Destination "D:\atmos\atmos.exe" -Force
+              $env:PATH = "D:\atmos;" + $env:PATH
+              [Environment]::SetEnvironmentVariable("Path", $env:PATH, [System.EnvironmentVariableTarget]::User)
+          } else {
+              Write-Error "Could not find atmos executable"
+              exit 1
+          }
 
       - name: Download build artifacts (Unix)
         if: matrix.flavor.os != 'windows-latest'
@@ -322,6 +338,13 @@ jobs:
         if: matrix.flavor.os == 'windows-latest'
         shell: pwsh
         run: |
+          Write-Host "Verifying atmos.exe exists:"
+          if (Test-Path "D:\atmos\atmos.exe") {
+              Write-Host "atmos.exe found at D:\atmos\atmos.exe"
+          } else {
+              Write-Error "atmos.exe not found!"
+              exit 1
+          }
           cd examples/${{ matrix.demo-folder }}
           D:\atmos\atmos.exe test
 
