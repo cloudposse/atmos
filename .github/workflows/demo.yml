@@ -99,7 +99,7 @@ jobs:
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@0404882bc4666c0ff2f6fd8b3d32af69a730183c
         with:
-          swap-size-gb: 10
+          swap-size-gb: 15
 
       - name: Install Atmos
         uses: jaxxstorm/action-install-gh-release@v1.11.0
