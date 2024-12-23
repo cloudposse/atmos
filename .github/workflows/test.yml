@@ -107,7 +107,12 @@ jobs:
 
       - name: Add build artifacts directory to PATH for windows
         if: matrix.flavor.target == 'windows'
+        shell: pwsh
         run: |
+          $atmosPath = Join-Path ${{ github.workspace }} "atmos.exe"
+          if (-not (Test-Path $atmosPath)) {
+            throw "atmos.exe not found at: $atmosPath"
+          }
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - uses: hashicorp/setup-terraform@v3
