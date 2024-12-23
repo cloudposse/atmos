@@ -66,7 +66,8 @@ jobs:
         with:
           author_name: "GitHub Actions"
           author_email: "github-actions[bot]@users.noreply.github.com"
-          message: "chore: update screengrabs for ${{ needs.prepare.outputs.version }}"
+          message: |
+            chore: update screengrabs for ${{ needs.prepare.outputs.version }}
           new_branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
           push: --force-with-lease
 
@@ -116,7 +117,8 @@ jobs:
         with:
           author_name: "GitHub Actions"
           author_email: "github-actions[bot]@users.noreply.github.com"
-          message: chore: update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
+          message: |
+            chore: update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
           new_branch: ${{ steps.vars.outputs.branch_name }}
           push: true
 
