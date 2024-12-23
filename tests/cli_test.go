@@ -53,36 +53,43 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 	return &suite, nil
 }
 
-func prependPath(envVars []string, dirs ...string) []string {
-	// Resolve absolute paths for the directories
-	var resolvedPaths []string
+type PathManager struct {
+	OriginalPath string
+	Prepended    []string
+}
+
+// NewPathManager initializes a PathManager with the current PATH.
+func NewPathManager() *PathManager {
+	return &PathManager{
+		OriginalPath: os.Getenv("PATH"),
+		Prepended:    []string{},
+	}
+}
+
+// Prepend adds directories to the PATH with precedence.
+func (pm *PathManager) Prepend(dirs ...string) {
 	for _, dir := range dirs {
 		absPath, err := filepath.Abs(dir)
 		if err != nil {
 			fmt.Printf("Failed to resolve absolute path for %q: %v\n", dir, err)
 			continue
 		}
-		resolvedPaths = append(resolvedPaths, absPath)
+		pm.Prepended = append(pm.Prepended, absPath)
 	}
+}
 
-	// Create the new PATH variable with precedence order
-	currentPath := os.Getenv("PATH")
-	newPath := fmt.Sprintf("%s%c%s",
-		strings.Join(resolvedPaths, string(os.PathListSeparator)),
+// GetPath returns the updated PATH.
+func (pm *PathManager) GetPath() string {
+	return fmt.Sprintf("%s%c%s",
+		strings.Join(pm.Prepended, string(os.PathListSeparator)),
 		os.PathListSeparator,
-		currentPath,
+		pm.OriginalPath,
 	)
+}
 
-	// Replace the PATH in envVars
-	for i, env := range envVars {
-		if len(env) > 5 && env[:5] == "PATH=" {
-			envVars[i] = fmt.Sprintf("PATH=%s", newPath)
-			return envVars
-		}
-	}
-
-	// If PATH is not found, add it
-	return append(envVars, fmt.Sprintf("PATH=%s", newPath))
+// Apply updates the PATH environment variable globally.
+func (pm *PathManager) Apply() error {
+	return os.Setenv("PATH", pm.GetPath())
 }
 
 func TestCLICommands(t *testing.T) {
@@ -91,6 +98,15 @@ func TestCLICommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
+
+	// Initialize PathManager and update PATH
+	pathManager := NewPathManager()
+	pathManager.Prepend("../build", "..")
+	err = pathManager.Apply()
+	if err != nil {
+		t.Fatalf("Failed to apply updated PATH: %v", err)
+	}
+	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
 
 	testSuite, err := loadTestSuite("test_cases.yaml")
 	if err != nil {
@@ -120,12 +136,17 @@ func TestCLICommands(t *testing.T) {
 				}
 			}
 
+			// Check if the binary exists
+			binaryPath, err := exec.LookPath(tc.Command)
+			if err != nil {
+				t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, pathManager.GetPath())
+			}
+
 			// Prepare the command
-			cmd := exec.Command(tc.Command, tc.Args...)
+			cmd := exec.Command(binaryPath, tc.Args...)
 
 			// Set environment variables
 			envVars := os.Environ()
-			envVars = prependPath(envVars, "./build", ".") // Add ./build and . to PATH in precedence order
 			for key, value := range tc.Env {
 				envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 			}
@@ -136,7 +157,7 @@ func TestCLICommands(t *testing.T) {
 			cmd.Stderr = &stderr
 
 			// Run the command
-			err := cmd.Run()
+			err = cmd.Run()
 
 			// Validate exit code
 			exitCode := 0
