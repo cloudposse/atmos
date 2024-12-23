@@ -35,7 +35,7 @@ func terraformRun(cmd *cobra.Command, args []string) {
 	}
 	info, err := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 
 	// Exit on help
@@ -64,7 +64,7 @@ func terraformRun(cmd *cobra.Command, args []string) {
 		})
 
 		cmd.Help()
-		CheckForAtmosUpdateAndPrintMessage(cliConfig)
+		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 		return
 	}
 	// Check Atmos configuration
@@ -72,9 +72,8 @@ func terraformRun(cmd *cobra.Command, args []string) {
 
 	err = e.ExecuteTerraform(info)
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
-
 }
 
 func init() {

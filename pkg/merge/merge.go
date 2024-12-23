@@ -77,28 +77,28 @@ func MergeWithOptions(
 
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
 func Merge(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	inputs []map[string]any,
 ) (map[string]any, error) {
-	if cliConfig.Settings.ListMergeStrategy == "" {
-		cliConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
+	if atmosConfig.Settings.ListMergeStrategy == "" {
+		atmosConfig.Settings.ListMergeStrategy = ListMergeStrategyReplace
 	}
 
-	if cliConfig.Settings.ListMergeStrategy != ListMergeStrategyReplace &&
-		cliConfig.Settings.ListMergeStrategy != ListMergeStrategyAppend &&
-		cliConfig.Settings.ListMergeStrategy != ListMergeStrategyMerge {
+	if atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyReplace &&
+		atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyAppend &&
+		atmosConfig.Settings.ListMergeStrategy != ListMergeStrategyMerge {
 		return nil, fmt.Errorf("invalid Atmos manifests list merge strategy '%s'.\n"+
 			"Supported list merge strategies are: %s.",
-			cliConfig.Settings.ListMergeStrategy,
+			atmosConfig.Settings.ListMergeStrategy,
 			fmt.Sprintf("%s, %s, %s", ListMergeStrategyReplace, ListMergeStrategyAppend, ListMergeStrategyMerge))
 	}
 
 	sliceDeepCopy := false
 	appendSlice := false
 
-	if cliConfig.Settings.ListMergeStrategy == ListMergeStrategyMerge {
+	if atmosConfig.Settings.ListMergeStrategy == ListMergeStrategyMerge {
 		sliceDeepCopy = true
-	} else if cliConfig.Settings.ListMergeStrategy == ListMergeStrategyAppend {
+	} else if atmosConfig.Settings.ListMergeStrategy == ListMergeStrategyAppend {
 		appendSlice = true
 	}
 

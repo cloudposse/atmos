@@ -32,7 +32,7 @@ var (
 // ExecuteDescribeAffectedWithTargetRefClone clones the remote reference,
 // processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRefClone(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	ref string,
 	sha string,
 	sshKeyPath string,
@@ -44,7 +44,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
-		cliConfig.Logs.Level = u.LogLevelTrace
+		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
 
 	localRepo, err := g.GetLocalRepo()
@@ -72,9 +72,9 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		return nil, nil, nil, "", err
 	}
 
-	defer removeTempDir(cliConfig, tempDir)
+	defer removeTempDir(atmosConfig, tempDir)
 
-	u.LogTrace(cliConfig, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", localRepoInfo.RepoUrl, tempDir))
+	u.LogTrace(atmosConfig, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", localRepoInfo.RepoUrl, tempDir))
 
 	cloneOptions := git.CloneOptions{
 		URL:          localRepoInfo.RepoUrl,
@@ -85,9 +85,9 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// If `ref` flag is not provided, it will clone the HEAD of the default branch
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		u.LogTrace(cliConfig, fmt.Sprintf("\nCloning Git ref '%s' ...\n", ref))
+		u.LogTrace(atmosConfig, fmt.Sprintf("\nCloning Git ref '%s' ...\n", ref))
 	} else {
-		u.LogTrace(cliConfig, "\nCloned the HEAD of the default branch ...\n")
+		u.LogTrace(atmosConfig, "\nCloned the HEAD of the default branch ...\n")
 	}
 
 	if verbose {
@@ -127,14 +127,14 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	}
 
 	if ref != "" {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", ref))
+		u.LogTrace(atmosConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", ref))
 	} else {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", remoteRepoHead.Name()))
+		u.LogTrace(atmosConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", remoteRepoHead.Name()))
 	}
 
 	// Check if a commit SHA was provided and checkout the repo at that commit SHA
 	if sha != "" {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+		u.LogTrace(atmosConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -153,11 +153,11 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
+		u.LogTrace(atmosConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
-		cliConfig,
+		atmosConfig,
 		localRepoInfo.LocalWorktreePath,
 		tempDir,
 		localRepo,
@@ -177,7 +177,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 // ExecuteDescribeAffectedWithTargetRefCheckout checks out the target reference,
 // processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRefCheckout(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	ref string,
 	sha string,
 	verbose bool,
@@ -187,7 +187,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 
 	if verbose {
-		cliConfig.Logs.Level = u.LogLevelTrace
+		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
 
 	localRepo, err := g.GetLocalRepo()
@@ -206,10 +206,10 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	defer removeTempDir(cliConfig, tempDir)
+	defer removeTempDir(atmosConfig, tempDir)
 
 	// Copy the local repo into the temp directory
-	u.LogTrace(cliConfig, fmt.Sprintf("\nCopying the local repo into the temp directory '%s' ...", tempDir))
+	u.LogTrace(atmosConfig, fmt.Sprintf("\nCopying the local repo into the temp directory '%s' ...", tempDir))
 
 	copyOptions := cp.Options{
 		PreserveTimes: false,
@@ -237,7 +237,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
 
 	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -254,7 +254,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	}
 
 	if sha != "" {
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+		u.LogTrace(atmosConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -273,14 +273,14 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
+		u.LogTrace(atmosConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
 	} else {
 		// If `ref` is not provided, use the HEAD of the remote origin
 		if ref == "" {
 			ref = "refs/remotes/origin/HEAD"
 		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
+		u.LogTrace(atmosConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -305,11 +305,11 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(cliConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
+		u.LogTrace(atmosConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
-		cliConfig,
+		atmosConfig,
 		localRepoInfo.LocalWorktreePath,
 		tempDir,
 		localRepo,
@@ -329,7 +329,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
 // and returns a list of the affected Atmos components and stacks given two Git commits
 func ExecuteDescribeAffectedWithTargetRepoPath(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	targetRefPath string,
 	verbose bool,
 	includeSpaceliftAdminStacks bool,
@@ -362,7 +362,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
-		cliConfig,
+		atmosConfig,
 		localRepoInfo.LocalWorktreePath,
 		targetRefPath,
 		localRepo,
@@ -380,7 +380,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 }
 
 func executeDescribeAffected(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	localRepoFileSystemPath string,
 	remoteRepoFileSystemPath string,
 	localRepo *git.Repository,
@@ -392,7 +392,7 @@ func executeDescribeAffected(
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 
 	if verbose {
-		cliConfig.Logs.Level = u.LogLevelTrace
+		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
 
 	localRepoHead, err := localRepo.Head()
@@ -405,10 +405,10 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
-	u.LogTrace(cliConfig, fmt.Sprintf("BASE: %s", remoteRepoHead))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
+	u.LogTrace(atmosConfig, fmt.Sprintf("BASE: %s", remoteRepoHead))
 
-	currentStacks, err := ExecuteDescribeStacks(cliConfig, stack, nil, nil, nil, false, true, false)
+	currentStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, true, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -418,7 +418,7 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	basePath := cliConfig.BasePath
+	basePath := atmosConfig.BasePath
 
 	// Handle `atmos` absolute base path.
 	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
@@ -432,56 +432,56 @@ func executeDescribeAffected(
 	}
 
 	// Update paths to point to the cloned remote repo dir
-	cliConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath)
-	cliConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Terraform.BasePath)
-	cliConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Components.Helmfile.BasePath)
+	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath)
+	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
+	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
 
-	cliConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
-		path.Join(remoteRepoFileSystemPath, basePath, cliConfig.Stacks.BasePath),
-		cliConfig.StackConfigFilesRelativePaths,
+	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
+		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
+		atmosConfig.StackConfigFilesRelativePaths,
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	remoteStacks, err := ExecuteDescribeStacks(cliConfig, stack, nil, nil, nil, true, true, false)
+	remoteStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, true, true, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("\nGetting current working repo commit object..."))
+	u.LogTrace(atmosConfig, fmt.Sprintf("\nGetting current working repo commit object..."))
 
 	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Got current working repo commit object"))
-	u.LogTrace(cliConfig, fmt.Sprintf("Getting current working repo commit tree..."))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Got current working repo commit object"))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Getting current working repo commit tree..."))
 
 	localTree, err := localCommit.Tree()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Got current working repo commit tree"))
-	u.LogTrace(cliConfig, fmt.Sprintf("Getting remote repo commit object..."))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Got current working repo commit tree"))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Getting remote repo commit object..."))
 
 	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Got remote repo commit object"))
-	u.LogTrace(cliConfig, fmt.Sprintf("Getting remote repo commit tree..."))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Got remote repo commit object"))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Getting remote repo commit tree..."))
 
 	remoteTree, err := remoteCommit.Tree()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(cliConfig, fmt.Sprintf("Got remote repo commit tree"))
-	u.LogTrace(cliConfig, fmt.Sprintf("Finding difference between the current working branch and remote target branch ..."))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Got remote repo commit tree"))
+	u.LogTrace(atmosConfig, fmt.Sprintf("Finding difference between the current working branch and remote target branch ..."))
 
 	// Find a slice of Patch objects with all the changes between the current working and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -492,22 +492,22 @@ func executeDescribeAffected(
 	var changedFiles []string
 
 	if len(patch.Stats()) > 0 {
-		u.LogTrace(cliConfig, fmt.Sprintf("Found difference between the current working branch and remote target branch"))
-		u.LogTrace(cliConfig, "\nChanged files:\n")
+		u.LogTrace(atmosConfig, fmt.Sprintf("Found difference between the current working branch and remote target branch"))
+		u.LogTrace(atmosConfig, "\nChanged files:\n")
 
 		for _, fileStat := range patch.Stats() {
-			u.LogTrace(cliConfig, fileStat.Name)
+			u.LogTrace(atmosConfig, fileStat.Name)
 			changedFiles = append(changedFiles, fileStat.Name)
 		}
-		u.LogTrace(cliConfig, "")
+		u.LogTrace(atmosConfig, "")
 	} else {
-		u.LogTrace(cliConfig, fmt.Sprintf("The current working branch and remote target branch are the same"))
+		u.LogTrace(atmosConfig, fmt.Sprintf("The current working branch and remote target branch are the same"))
 	}
 
 	affected, err := findAffected(
 		currentStacks,
 		remoteStacks,
-		cliConfig,
+		atmosConfig,
 		changedFiles,
 		includeSpaceliftAdminStacks,
 		includeSettings,
@@ -524,7 +524,7 @@ func executeDescribeAffected(
 func findAffected(
 	currentStacks map[string]any,
 	remoteStacks map[string]any,
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	changedFiles []string,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
@@ -563,7 +563,7 @@ func findAffected(
 										Affected:      "stack.metadata",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -583,7 +583,7 @@ func findAffected(
 							// Check the Terraform configuration of the component
 							if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
 								// Check if the component uses some external modules (on the local filesystem) that have changed
-								changed, err := areTerraformComponentModulesChanged(component, cliConfig, changedFiles)
+								changed, err := areTerraformComponentModulesChanged(component, atmosConfig, changedFiles)
 								if err != nil {
 									return nil, err
 								}
@@ -596,7 +596,7 @@ func findAffected(
 										Affected:      "component.module",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -613,7 +613,7 @@ func findAffected(
 								}
 
 								// Check if any files in the component's folder have changed
-								changed, err = isComponentFolderChanged(component, "terraform", cliConfig, changedFiles)
+								changed, err = isComponentFolderChanged(component, "terraform", atmosConfig, changedFiles)
 								if err != nil {
 									return nil, err
 								}
@@ -626,7 +626,7 @@ func findAffected(
 										Affected:      "component",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -652,7 +652,7 @@ func findAffected(
 										Affected:      "stack.vars",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -678,7 +678,7 @@ func findAffected(
 										Affected:      "stack.env",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -704,7 +704,7 @@ func findAffected(
 										Affected:      "stack.settings",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -763,7 +763,7 @@ func findAffected(
 										Folder:        changedFolder,
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -803,7 +803,7 @@ func findAffected(
 										Affected:      "stack.metadata",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -823,7 +823,7 @@ func findAffected(
 							// Check the Helmfile configuration of the component
 							if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
 								// Check if any files in the component's folder have changed
-								changed, err := isComponentFolderChanged(component, "helmfile", cliConfig, changedFiles)
+								changed, err := isComponentFolderChanged(component, "helmfile", atmosConfig, changedFiles)
 								if err != nil {
 									return nil, err
 								}
@@ -836,7 +836,7 @@ func findAffected(
 										Affected:      "component",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -862,7 +862,7 @@ func findAffected(
 										Affected:      "stack.vars",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -888,7 +888,7 @@ func findAffected(
 										Affected:      "stack.env",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -914,7 +914,7 @@ func findAffected(
 										Affected:      "stack.settings",
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -973,7 +973,7 @@ func findAffected(
 										Folder:        changedFolder,
 									}
 									res, err = appendToAffected(
-										cliConfig,
+										atmosConfig,
 										componentName,
 										stackName,
 										componentSection,
@@ -1001,7 +1001,7 @@ func findAffected(
 
 // appendToAffected adds an item to the affected list, and adds the Spacelift stack and Atlantis project (if configured)
 func appendToAffected(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	componentName string,
 	stackName string,
 	componentSection map[string]any,
@@ -1048,14 +1048,14 @@ func appendToAffected(
 		}
 
 		// Affected Spacelift stack
-		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(cliConfig, configAndStacksInfo)
+		spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 		if err != nil {
 			return nil, err
 		}
 		affected.SpaceliftStack = spaceliftStackName
 
 		// Affected Atlantis project
-		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(cliConfig, configAndStacksInfo)
+		atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -1063,7 +1063,7 @@ func appendToAffected(
 
 		if includeSpaceliftAdminStacks {
 			affectedList, err = addAffectedSpaceliftAdminStack(
-				cliConfig,
+				atmosConfig,
 				affectedList,
 				settingsSection,
 				stacks,
@@ -1079,7 +1079,7 @@ func appendToAffected(
 	}
 
 	// Check `component` section and add `ComponentPath` to the output
-	affected.ComponentPath = BuildComponentPath(cliConfig, componentSection, affected.ComponentType)
+	affected.ComponentPath = BuildComponentPath(atmosConfig, componentSection, affected.ComponentType)
 	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.Replace(componentName, "/", "-", -1))
 
 	return append(affectedList, affected), nil
@@ -1174,7 +1174,7 @@ func isComponentDependentFolderOrFileChanged(
 func isComponentFolderChanged(
 	component string,
 	componentType string,
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	changedFiles []string,
 ) (bool, error) {
 
@@ -1182,9 +1182,9 @@ func isComponentFolderChanged(
 
 	switch componentType {
 	case "terraform":
-		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
 	case "helmfile":
-		componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, component)
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)
@@ -1216,11 +1216,11 @@ func isComponentFolderChanged(
 // areTerraformComponentModulesChanged checks if any of the external Terraform modules (but on the local filesystem) that the component uses have changed
 func areTerraformComponentModulesChanged(
 	component string,
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	changedFiles []string,
 ) (bool, error) {
 
-	componentPath := path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, component)
+	componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
 
 	componentPathAbs, err := filepath.Abs(componentPath)
 	if err != nil {
@@ -1241,7 +1241,7 @@ func areTerraformComponentModulesChanged(
 				continue
 			}
 
-			modulePath := path.Join(path.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
+			modulePath := filepath.Join(path.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
 
 			modulePathAbs, err := filepath.Abs(modulePath)
 			if err != nil {
@@ -1266,7 +1266,7 @@ func areTerraformComponentModulesChanged(
 
 // addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack
 func addAffectedSpaceliftAdminStack(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	affectedList []schema.Affected,
 	settingsSection map[string]any,
 	stacks map[string]any,
@@ -1310,13 +1310,13 @@ func addAffectedSpaceliftAdminStack(
 
 	var adminStackContextPrefix string
 
-	if cliConfig.Stacks.NameTemplate != "" {
-		adminStackContextPrefix, err = ProcessTmpl("spacelift-admin-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+	if atmosConfig.Stacks.NameTemplate != "" {
+		adminStackContextPrefix, err = ProcessTmpl("spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		adminStackContextPrefix, err = cfg.GetContextPrefix(currentStackName, adminStackContext, GetStackNamePattern(cliConfig), currentStackName)
+		adminStackContextPrefix, err = cfg.GetContextPrefix(currentStackName, adminStackContext, GetStackNamePattern(atmosConfig), currentStackName)
 		if err != nil {
 			return nil, err
 		}
@@ -1346,13 +1346,13 @@ func addAffectedSpaceliftAdminStack(
 
 							var contextPrefix string
 
-							if cliConfig.Stacks.NameTemplate != "" {
-								contextPrefix, err = ProcessTmpl("spacelift-stack-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+							if atmosConfig.Stacks.NameTemplate != "" {
+								contextPrefix, err = ProcessTmpl("spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 								if err != nil {
 									return nil, err
 								}
 							} else {
-								contextPrefix, err = cfg.GetContextPrefix(stackName, context, GetStackNamePattern(cliConfig), stackName)
+								contextPrefix, err = cfg.GetContextPrefix(stackName, context, GetStackNamePattern(atmosConfig), stackName)
 								if err != nil {
 									return nil, err
 								}
@@ -1389,7 +1389,7 @@ func addAffectedSpaceliftAdminStack(
 								}
 
 								affectedList, err = appendToAffected(
-									cliConfig,
+									atmosConfig,
 									componentName,
 									stackName,
 									componentSection,
@@ -1415,21 +1415,21 @@ func addAffectedSpaceliftAdminStack(
 
 // addDependentsToAffected adds dependent components and stacks to each affected component
 func addDependentsToAffected(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	affected *[]schema.Affected,
 	includeSettings bool,
 ) error {
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
 
-		deps, err := ExecuteDescribeDependents(cliConfig, a.Component, a.Stack, includeSettings)
+		deps, err := ExecuteDescribeDependents(atmosConfig, a.Component, a.Stack, includeSettings)
 		if err != nil {
 			return err
 		}
 
 		if len(deps) > 0 {
 			a.Dependents = deps
-			err = addDependentsToDependents(cliConfig, &deps, includeSettings)
+			err = addDependentsToDependents(atmosConfig, &deps, includeSettings)
 			if err != nil {
 				return err
 			}
@@ -1444,21 +1444,21 @@ func addDependentsToAffected(
 
 // addDependentsToDependents recursively adds dependent components and stacks to each dependent component
 func addDependentsToDependents(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
 	includeSettings bool,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
 
-		deps, err := ExecuteDescribeDependents(cliConfig, d.Component, d.Stack, includeSettings)
+		deps, err := ExecuteDescribeDependents(atmosConfig, d.Component, d.Stack, includeSettings)
 		if err != nil {
 			return err
 		}
 
 		if len(deps) > 0 {
 			d.Dependents = deps
-			err = addDependentsToDependents(cliConfig, &deps, includeSettings)
+			err = addDependentsToDependents(atmosConfig, &deps, includeSettings)
 			if err != nil {
 				return err
 			}

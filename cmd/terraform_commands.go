@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -249,7 +248,7 @@ Arguments:
 func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().String("append-user-agent", "", "Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.")
 	commands := getTerraformCommands()
-	fmt.Println(os.Args)
+
 	for _, cmd := range commands {
 		if setFlags, ok := commandMaps[cmd.Use]; ok {
 			setFlags(cmd)

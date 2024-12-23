@@ -2,7 +2,7 @@ package exec
 
 import (
 	"fmt"
-	"path"
+	"path/filepath"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -11,19 +11,19 @@ import (
 )
 
 // BuildTerraformWorkspace builds Terraform workspace
-func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	var contextPrefix string
 	var err error
 	var tmpl string
 
-	if cliConfig.Stacks.NameTemplate != "" {
-		tmpl, err = ProcessTmpl("terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+	if atmosConfig.Stacks.NameTemplate != "" {
+		tmpl, err = ProcessTmpl("terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
 		contextPrefix = tmpl
-	} else if cliConfig.Stacks.NamePattern != "" {
-		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, cliConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
+	} else if atmosConfig.Stacks.NamePattern != "" {
+		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, atmosConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
 		if err != nil {
 			return "", err
 		}
@@ -54,7 +54,8 @@ func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksI
 	return strings.Replace(workspace, "/", "-", -1), nil
 }
 
-// ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether the component is real or abstract and whether the component is disabled or not
+// ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether
+// the component is real or abstract and whether the component is disabled or not
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
@@ -154,7 +155,7 @@ func BuildDependentStackNameFromDependsOn(
 
 // BuildComponentPath builds component path (path to the component's physical location on disk)
 func BuildComponentPath(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	componentSectionMap map[string]any,
 	componentType string,
 ) string {
@@ -163,9 +164,9 @@ func BuildComponentPath(
 
 	if stackComponentSection, ok := componentSectionMap[cfg.ComponentSectionName].(string); ok {
 		if componentType == "terraform" {
-			componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
+			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, stackComponentSection)
 		} else if componentType == "helmfile" {
-			componentPath = path.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
+			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, stackComponentSection)
 		}
 	}
 
@@ -173,8 +174,8 @@ func BuildComponentPath(
 }
 
 // GetStackNamePattern returns stack name pattern
-func GetStackNamePattern(cliConfig schema.CliConfiguration) string {
-	return cliConfig.Stacks.NamePattern
+func GetStackNamePattern(atmosConfig schema.AtmosConfiguration) string {
+	return atmosConfig.Stacks.NamePattern
 }
 
 // IsComponentAbstract returns 'true' if the component is abstract
@@ -195,4 +196,28 @@ func IsComponentEnabled(varsSection map[string]any) bool {
 		}
 	}
 	return true
+}
+
+// GetComponentRemoteStateBackendStaticType returns the `remote_state_backend` section for a component in a stack
+// if the `remote_state_backend_type` is `static`
+func GetComponentRemoteStateBackendStaticType(
+	sections map[string]any,
+) (map[string]any, error) {
+	var remoteStateBackend map[string]any
+	var remoteStateBackendType string
+	var ok bool
+
+	if remoteStateBackendType, ok = sections[cfg.RemoteStateBackendTypeSectionName].(string); !ok {
+		return nil, nil
+	}
+
+	if remoteStateBackendType != "static" {
+		return nil, nil
+	}
+
+	if remoteStateBackend, ok = sections[cfg.RemoteStateBackendSectionName].(map[string]any); ok {
+		return remoteStateBackend, nil
+	}
+
+	return nil, nil
 }

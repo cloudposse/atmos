@@ -24,9 +24,22 @@ jobs:
   # ensure the code builds...
   build:
     name: Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
+    runs-on: ${{ matrix.os }}
     steps:
+      - name: Build
+        run: echo "Building on ${{ matrix.os }}"
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
@@ -42,16 +55,16 @@ jobs:
 
       - name: Build
         run: |
-          make build
+          make build-${{ matrix.target }}
 
       - name: Version
         run: |
-          make version
+          make version-${{ matrix.target }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
+          name: build-artifacts-${{ matrix.target }}
           path: |
             ./build/
 
@@ -59,8 +72,18 @@ jobs:
   test:
     name: Acceptance Tests
     needs: build
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
     timeout-minutes: 15
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
@@ -133,6 +156,7 @@ jobs:
           - /var/run/docker.sock:/var/run/docker.sock
 
     strategy:
+      fail-fast: false
       matrix:
         demo-folder:
           - demo-localstack
@@ -142,7 +166,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts
+          name: build-artifacts-linux
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
@@ -195,7 +219,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts
+          name: build-artifacts-linux
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
@@ -222,11 +246,16 @@ jobs:
 
   # run other demo tests
   mock:
-    name: "[mock] ${{ matrix.demo-folder }}"
+    name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.flavor.os }}
     strategy:
+      fail-fast: false
       matrix:
+        flavor:
+          - { os: ubuntu-latest, target: linux }
+          - { os: windows-latest, target: windows }
+          - { os: macos-latest, target: macos }
         demo-folder:
           - demo-atlantis
           # - demo-component-manifest
@@ -246,13 +275,14 @@ jobs:
           # - demo-stack-templating
           # - demo-multi-cloud
           - demo-vendoring
+          - tests
 
     timeout-minutes: 20
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts
+          name: build-artifacts-${{ matrix.flavor.target }}
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
@@ -277,6 +307,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         demo-folder:
           # - demo-component-manifest
@@ -296,6 +327,8 @@ jobs:
           # - demo-mock-architecture
           # - demo-stack-templating
           # - demo-multi-cloud
+          - quick-start-advanced
+          #- quick-start-simple
 
     timeout-minutes: 20
     steps:
@@ -327,6 +360,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         demo-folder:
           - demo-context

@@ -9,7 +9,7 @@ import (
 
 // processHelp processes help commands
 func processHelp(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	componentType string,
 	command string,
 ) error {
