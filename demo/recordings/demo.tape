@@ -1,7 +1,7 @@
 # Demo of Atmos
-Source style.tape
+Source demo/recordings/style.tape
 
-Output ../../docs/demo.gif
+Output docs/demo.gif
 
 Sleep 500ms
 Type "# First check you have Atmos installed" Sleep 500ms Enter
