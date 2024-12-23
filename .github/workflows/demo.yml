@@ -66,7 +66,12 @@ jobs:
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
           BRANCH_NAME="chore/update-build-screengrabs-for-$VERSION"
+
+          # Ensure the branch exists or create it
+          git fetch origin "$BRANCH_NAME" || true
           git checkout -b "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
+
+          # Add changes
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -75,7 +80,13 @@ jobs:
             git config --global user.name "GitHub Actions"
             git commit -m "chore: update screengrabs for $VERSION"
           fi
-          git push origin "$BRANCH_NAME"
+
+          # Rebase on top of the remote branch if it exists
+          git fetch origin "$BRANCH_NAME" || true
+          git rebase origin/"$BRANCH_NAME" || git pull --rebase origin "$BRANCH_NAME"
+
+          # Push changes
+          git push origin "$BRANCH_NAME" --force-with-lease
 
       - name: Create or update PR
         env:
