@@ -107,7 +107,7 @@ jobs:
       - name: Test Atmos
         run: |
           which atmos
-          atmos --version
+          atmos version
           atmos --help
 
       - name: Prepare variables
@@ -124,6 +124,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ matrix.file }}
           install-fonts: true
+        env:
+          PATH: ${{ env.PATH }}
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
