@@ -2,7 +2,7 @@ package vender
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +13,7 @@ import (
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
+	// Initialize the CLI configuration
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
@@ -29,12 +30,12 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
-	assert.FileExists(t, path.Join(componentPath, "context.tf"))
-	assert.FileExists(t, path.Join(componentPath, "main.tf"))
-	assert.FileExists(t, path.Join(componentPath, "outputs.tf"))
-	assert.FileExists(t, path.Join(componentPath, "providers.tf"))
-	assert.FileExists(t, path.Join(componentPath, "variables.tf"))
-	assert.FileExists(t, path.Join(componentPath, "versions.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "context.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "outputs.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "providers.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "variables.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "versions.tf"))
 
 	// Test 'infra/account-map' component
 	component = "infra/account-map"
@@ -45,43 +46,33 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
-	assert.FileExists(t, path.Join(componentPath, "context.tf"))
-	assert.FileExists(t, path.Join(componentPath, "dynamic-roles.tf"))
-	assert.FileExists(t, path.Join(componentPath, "main.tf"))
-	assert.FileExists(t, path.Join(componentPath, "outputs.tf"))
-	assert.FileExists(t, path.Join(componentPath, "providers.tf"))
-	assert.FileExists(t, path.Join(componentPath, "README.md"))
-	assert.FileExists(t, path.Join(componentPath, "remote-state.tf"))
-	assert.FileExists(t, path.Join(componentPath, "variables.tf"))
-	assert.FileExists(t, path.Join(componentPath, "versions.tf"))
-	assert.FileExists(t, path.Join(componentPath, "modules", "iam-roles", "context.tf"))
-	assert.FileExists(t, path.Join(componentPath, "modules", "iam-roles", "main.tf"))
-	assert.FileExists(t, path.Join(componentPath, "modules", "iam-roles", "outputs.tf"))
-	assert.FileExists(t, path.Join(componentPath, "modules", "iam-roles", "variables.tf"))
-	assert.FileExists(t, path.Join(componentPath, "modules", "roles-to-principals", "context.tf"))
-	assert.FileExists(t, path.Join(componentPath, "modules", "roles-to-principals", "main.tf"))
-	assert.FileExists(t, path.Join(componentPath, "modules", "roles-to-principals", "outputs.tf"))
-	assert.FileExists(t, path.Join(componentPath, "modules", "roles-to-principals", "variables.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "context.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "dynamic-roles.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "outputs.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "providers.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "README.md"))
+	assert.FileExists(t, filepath.Join(componentPath, "remote-state.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "variables.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "versions.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "context.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "main.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "outputs.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "variables.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "context.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "main.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "outputs.tf"))
+	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "variables.tf"))
 
 	// Delete the files and folders
-	err = os.Remove(path.Join(componentPath, "context.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "dynamic-roles.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "main.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "outputs.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "providers.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "README.md"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "remote-state.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "variables.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(path.Join(componentPath, "versions.tf"))
-	assert.Nil(t, err)
-	err = os.RemoveAll(path.Join(componentPath, "modules"))
-	assert.Nil(t, err)
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "context.tf")))
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "dynamic-roles.tf")))
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "main.tf")))
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "outputs.tf")))
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "providers.tf")))
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "README.md")))
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "remote-state.tf")))
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "variables.tf")))
+	assert.Nil(t, os.Remove(filepath.Join(componentPath, "versions.tf")))
+	assert.Nil(t, os.RemoveAll(filepath.Join(componentPath, "modules")))
 }
