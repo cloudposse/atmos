@@ -42,7 +42,7 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows'
-        run: echo "C:\Program Files\Git\usr\bin" >> "${{env.GITHUB_PATH}}"
+        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
@@ -288,7 +288,7 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows'
-        run: echo "C:\Program Files\Git\usr\bin" >> "${{env.GITHUB_PATH}}"
+        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
@@ -297,13 +297,15 @@ jobs:
           path: ${{ github.workspace }}
 
       - name: Add build artifacts directory to PATH for ${{ matrix.flavor.target }}
-        run: |
-          ls "${{ github.workspace }}"
-          echo "${{ github.workspace }}" >> "${{env.GITHUB_PATH}}"
-
-      - name: Set execute permissions on atmos for ${{ matrix.flavor.target }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
-        run: chmod +x "${{ github.workspace }}/atmos"
+        run: |
+          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          chmod +x "${{ github.workspace }}/atmos
+
+      - name: Add build artifacts directory to PATH for ${{ matrix.flavor.target }}
+        if: matrix.flavor.target == 'windows'
+        run: |
+          echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -329,8 +331,9 @@ jobs:
       - name: Run tests for ${{ matrix.demo-folder }} with ${{ matrix.flavor.target }}
         working-directory: examples/${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'windows'
+        shell: pwsh
         run: |
-          "${{ github.workspace }}\atmos.exe" test
+          ${{ github.workspace }}\atmos.exe test
 
   # run other demo tests
   lint:
