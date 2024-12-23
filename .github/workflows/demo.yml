@@ -28,7 +28,7 @@ jobs:
       - name: List all .tape files
         id: list-tapes
         run: |
-          files=$(find . -type f -name '*.tape')
+          files=$(git ls-files  | grep 'demo.tape$')
           echo "matrix=$(echo -n \"$files\" | jq -R -s -c 'split(\"\\n\") | map(select(. != \"\"))')" >> $GITHUB_OUTPUT
 
     outputs:
