@@ -60,45 +60,26 @@ jobs:
         run: |
           make -C demo/screengrabs build-all install
 
-      - name: Push changes to branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          BRANCH_NAME="chore/update-build-screengrabs-for-$VERSION"
-
-          # Ensure the branch exists or create it
-          git fetch origin "$BRANCH_NAME" || true
-          git checkout -b "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
-
-          # Add changes
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git config --global user.name "GitHub Actions"
-            git commit -m "chore: update screengrabs for $VERSION"
-          fi
-
-          # Rebase on top of the remote branch if it exists
-          git fetch origin "$BRANCH_NAME" || true
-          git rebase origin/"$BRANCH_NAME" || git pull --rebase origin "$BRANCH_NAME"
-
-          # Push changes
-          git push origin "$BRANCH_NAME" --force-with-lease
+      # Commit, push changes, and create/update PR
+      - name: Commit and push changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: "GitHub Actions"
+          author_email: "github-actions[bot]@users.noreply.github.com"
+          message: "chore: update screengrabs for ${{ needs.prepare.outputs.version }}"
+          new_branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
+          push: --force-with-lease
 
       - name: Create or update PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          BRANCH_NAME="chore/update-build-screengrabs-for-$VERSION"
-          PR_TITLE="Update screengrabs for $VERSION"
-          PR_BODY="This PR updates the screengrabs for Atmos version $VERSION."
-          gh pr view "$BRANCH_NAME" > /dev/null 2>&1 || \
-          gh pr create --base main --head "$BRANCH_NAME" --title "$PR_TITLE" --body "$PR_BODY"
-          gh pr edit "$BRANCH_NAME" --add-label "no-release"
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
+          title: "Update screengrabs for ${{ needs.prepare.outputs.version }}"
+          body: |
+            This PR updates the screengrabs for Atmos version ${{ needs.prepare.outputs.version }}.
+          base: main
+          labels: "no-release"
 
   vhs:
     needs: [prepare]
@@ -121,31 +102,31 @@ jobs:
           extension-matching: disable
           rename-to: atmos
 
-      - name: Push changes to branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare variables
+        id: vars
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
           JOB_NAME=$(basename "${{ matrix.file }}" | sed 's/.tape$//')
-          BRANCH_NAME="chore/update-$JOB_NAME-for-$VERSION"
-          git checkout -b "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: update $JOB_NAME for $VERSION"
-          fi
-          git push origin "$BRANCH_NAME"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "job_name=${JOB_NAME}" >> $GITHUB_OUTPUT
+          echo "branch_name=chore/update-${JOB_NAME}-for-${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Commit and push changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: "GitHub Actions"
+          author_email: "github-actions[bot]@users.noreply.github.com"
+          message: chore: update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
+          new_branch: ${{ steps.vars.outputs.branch_name }}
+          push: true
 
       - name: Create or update PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          JOB_NAME=$(basename "${{ matrix.file }}" | sed 's/.tape$//')
-          BRANCH_NAME="chore/update-$JOB_NAME-for-$VERSION"
-          PR_TITLE="Update $JOB_NAME for $VERSION"
-          PR_BODY="This PR updates the demo gif for $JOB_NAME with Atmos version $VERSION."
-          gh pr view "$BRANCH_NAME" > /dev/null 2>&1 || \
-          gh pr create --base main --head "$BRANCH_NAME" --title "$PR_TITLE" --body "$PR_BODY"
-          gh pr edit "$BRANCH_NAME" --add-label "no-release"
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.vars.outputs.branch_name }}
+          title: Update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
+          body: |
+            This PR updates the demo gif for ${{ steps.vars.outputs.job_name }} with Atmos version ${{ steps.vars.outputs.version }}.
+          base: main
+          labels: no-release
