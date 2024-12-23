@@ -8,7 +8,7 @@ tests:
       stdout:
         - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
         - "but the directory does not exist."
-      exit: 0
+      exit_code: 0
 
   - name: atmos --help
     enabled: true
