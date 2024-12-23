@@ -300,7 +300,7 @@ jobs:
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
           echo "${{ github.workspace }}" >> $GITHUB_PATH
-          chmod +x "${{ github.workspace }}/atmos
+          chmod +x "${{ github.workspace }}/atmos"
 
       - name: Add build artifacts directory to PATH for ${{ matrix.flavor.target }}
         if: matrix.flavor.target == 'windows'
