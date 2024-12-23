@@ -196,7 +196,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		u.LogDebug(atmosConfig, "Stack: "+info.StackFromArg)
 	} else {
 		u.LogDebug(atmosConfig, "Stack: "+info.StackFromArg)
-		u.LogDebug(atmosConfig, "Stack path: "+path.Join(cliConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
+		u.LogDebug(atmosConfig, "Stack path: "+path.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
 	workingDir := constructHelmfileComponentWorkingDir(atmosConfig, info)

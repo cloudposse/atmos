@@ -438,7 +438,7 @@ func executeDescribeAffected(
 
 	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
-		cliConfig.StackConfigFilesRelativePaths,
+		atmosConfig.StackConfigFilesRelativePaths,
 	)
 	if err != nil {
 		return nil, nil, nil, err
