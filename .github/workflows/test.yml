@@ -386,7 +386,7 @@ jobs:
             --minimum-failure-severity=warning
             --recursive
             --config=${{ github.workspace }}/examples/.tflint.hcl
-          fail_on_error: true
+          fail_level: error
 
   # run other demo tests
   validate:
