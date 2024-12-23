@@ -299,7 +299,7 @@ jobs:
       - name: Add build artifacts directory to PATH for ${{ matrix.flavor.target }}
         run: |
           ls "${{ github.workspace }}"
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
 
       - name: Set execute permissions on atmos for ${{ matrix.flavor.target }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
