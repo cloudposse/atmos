@@ -104,6 +104,12 @@ jobs:
           extension-matching: disable
           rename-to: atmos
 
+      - name: Test Atmos
+        run: |
+          which atmos
+          atmos --version
+          atmos --help
+
       - name: Prepare variables
         id: vars
         run: |
