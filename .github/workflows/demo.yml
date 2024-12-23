@@ -96,6 +96,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@0404882bc4666c0ff2f6fd8b3d32af69a730183c
+        with:
+          swap-size-gb: 10
+
       - name: Install Atmos
         uses: jaxxstorm/action-install-gh-release@v1.11.0
         with:
