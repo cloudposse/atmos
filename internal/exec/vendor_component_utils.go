@@ -50,6 +50,8 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
+	// Normalize component path for cross-platform compatibility
+	component = filepath.FromSlash(component)
 	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)

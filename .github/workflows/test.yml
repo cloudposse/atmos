@@ -279,13 +279,66 @@ jobs:
 
     timeout-minutes: 20
     steps:
-      - name: Download build artifacts
+      - name: Create atmos directory (Windows)
+        if: matrix.flavor.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          mkdir -Force "D:\atmos"
+          Write-Host "Created D:\atmos directory"
+          Write-Host "Current directory contents:"
+          Get-ChildItem "D:\"
+
+      - name: Download build artifacts (Windows)
+        if: matrix.flavor.os == 'windows-latest'
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.flavor.target }}
+          path: D:\atmos
+
+      - name: List Windows artifacts
+        if: matrix.flavor.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "D:\atmos contents:"
+          Get-ChildItem -Path "D:\atmos" -Recurse
+          Write-Host "Current PATH: $env:PATH"
+
+      - name: Setup atmos (Windows)
+        if: matrix.flavor.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $atmosFile = Get-ChildItem -Path "D:\atmos" -Filter "atmos*" -Recurse | Select-Object -First 1
+          if ($atmosFile) {
+              Write-Host "Found atmos at: $($atmosFile.FullName)"
+              Write-Host "File details:"
+              $atmosFile | Format-List *
+              Move-Item -Path $atmosFile.FullName -Destination "D:\atmos\atmos.exe" -Force
+              $env:PATH = "D:\atmos;" + $env:PATH
+              [Environment]::SetEnvironmentVariable("Path", $env:PATH, [System.EnvironmentVariableTarget]::User)
+              Write-Host "Moved atmos to D:\atmos\atmos.exe"
+              Write-Host "Updated PATH: $env:PATH"
+              if (Test-Path "D:\atmos\atmos.exe") {
+                  Write-Host "Successfully created atmos.exe"
+              } else {
+                  Write-Error "Failed to create atmos.exe"
+                  exit 1
+              }
+          } else {
+              Write-Host "Contents of D:\atmos:"
+              Get-ChildItem -Path "D:\atmos" -Recurse
+              Write-Error "Could not find atmos executable"
+              exit 1
+          }
+
+      - name: Download build artifacts (Unix)
+        if: matrix.flavor.os != 'windows-latest'
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: /usr/local/bin
 
-      - name: Set execute permissions on atmos
+      - name: Setup atmos (Unix)
+        if: matrix.flavor.os != 'windows-latest'
         run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
@@ -296,10 +349,42 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Run tests for ${{ matrix.demo-folder }}
+      - name: Run tests (Windows)
+        if: matrix.flavor.os == 'windows-latest'
+        shell: pwsh
+        env:
+          PATH: D:\atmos;${{ env.PATH }}
+        run: |
+          Write-Host "Verifying atmos.exe exists:"
+          if (Test-Path "D:\atmos\atmos.exe") {
+              Write-Host "atmos.exe found at D:\atmos\atmos.exe"
+              Write-Host "File details:"
+              Get-Item "D:\atmos\atmos.exe" | Format-List *
+          } else {
+              Write-Error "atmos.exe not found!"
+              exit 1
+          }
+          Write-Host "Current PATH: $env:PATH"
+          Write-Host "Testing atmos command..."
+          & "D:\atmos\atmos.exe" version
+          cd examples/${{ matrix.demo-folder }}
+          & "D:\atmos\atmos.exe" test
+
+      - name: Run tests (Unix)
+        if: matrix.flavor.os != 'windows-latest'
         run: |
           cd examples/${{ matrix.demo-folder }}
           atmos test
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.flavor.target }}-${{ matrix.demo-folder }}
+          path: |
+            examples/${{ matrix.demo-folder }}/**/*.log
+            examples/${{ matrix.demo-folder }}/**/terraform.tfstate
+            examples/${{ matrix.demo-folder }}/**/terraform.tfstate.backup
 
   # run other demo tests
   lint:
