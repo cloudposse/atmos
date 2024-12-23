@@ -59,6 +59,7 @@ jobs:
       - name: Run make build-all install
         run: |
           make -C demo/screengrabs build-all install
+          git status
 
       # Commit, push changes, and create/update PR
       - name: Commit and push changes
