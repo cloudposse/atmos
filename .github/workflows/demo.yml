@@ -113,8 +113,15 @@ jobs:
           echo "job_name=${JOB_NAME}" >> $GITHUB_OUTPUT
           echo "branch_name=chore/update-${JOB_NAME}-for-${VERSION}" >> $GITHUB_OUTPUT
 
+      - uses: charmbracelet/vhs-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ matrix.file }}
+          install-fonts: true
+
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
+        id: auto-commit
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ steps.vars.outputs.branch_name }}
@@ -126,3 +133,14 @@ jobs:
             This PR updates the demo gif for ${{ steps.vars.outputs.job_name }} with Atmos version ${{ steps.vars.outputs.version }}.
           base: main
           labels: no-release
+
+      - name: Add Image to Job Summary
+        if: steps.auto-commit.outputs.pull-request-operation == 'created' || steps.auto-commit.outputs.pull-request-operation == 'updated'
+        run: |
+          echo "## Demo GIF" >> $GITHUB_STEP_SUMMARY
+          echo "![Demo GIF](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
+
+      - name: No changes
+        if: steps.auto-commit.outputs.pull-request-operation == 'none' || steps.auto-commit.outputs.pull-request-operation == 'closed'
+        run: |
+          echo "No changes to demo" >> $GITHUB_STEP_SUMMARY
