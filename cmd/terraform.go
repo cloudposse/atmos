@@ -42,6 +42,8 @@ var terraformCmd = &cobra.Command{
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
+
+		info.SubCommand = "output"
 	},
 }
 
