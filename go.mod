@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alecthomas/chroma v0.10.0
 	github.com/arsham/figurine v1.3.0
-	github.com/aws/aws-sdk-go-v2 v1.32.6
+	github.com/aws/aws-sdk-go-v2 v1.32.7
 	github.com/aws/aws-sdk-go-v2/config v1.28.6
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.56.1
 	github.com/bmatcuk/doublestar/v4 v4.7.1
