@@ -84,7 +84,7 @@ jobs:
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
     timeout-minutes: 15
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
