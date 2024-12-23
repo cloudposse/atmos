@@ -2,6 +2,8 @@ package component
 
 import (
 	"github.com/pkg/errors"
+	"path/filepath"
+	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -38,6 +40,22 @@ func ProcessComponentInStack(
 			u.LogError(atmosConfig, err)
 			return nil, err
 		}
+	}
+
+	// Convert any absolute paths in deps to relative paths
+	if deps, ok := configAndStacksInfo.ComponentSection["deps"].([]any); ok {
+		for i, dep := range deps {
+			if depStr, ok := dep.(string); ok {
+				// Convert absolute path to relative path if it starts with the base path
+				if atmosBasePath != "" && strings.HasPrefix(depStr, atmosBasePath) {
+					relPath, err := filepath.Rel(atmosBasePath, depStr)
+					if err == nil {
+						deps[i] = relPath
+					}
+				}
+			}
+		}
+		configAndStacksInfo.ComponentSection["deps"] = deps
 	}
 
 	return configAndStacksInfo.ComponentSection, nil
