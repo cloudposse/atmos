@@ -28,8 +28,14 @@ jobs:
       - name: List all .tape files
         id: list-tapes
         run: |
-          files=$(git ls-files  | grep 'demo.tape$')
-          echo "matrix=$(echo -n \"$files\" | jq -R -s -c 'split(\"\\n\") | map(select(. != \"\"))')" >> $GITHUB_OUTPUT
+          files=$(git ls-files | grep 'demo.tape$' || true)
+          if [ -z "$files" ]; then
+            echo "matrix=[]" >> $GITHUB_OUTPUT
+          else
+            echo "matrix=$(echo -n \"$files\" | jq -R -s -c 'split(\"\\n\") | map(select(. != \"\"))')" >> $GITHUB_OUTPUT
+          fi
+
+          cat $GITHUB_OUTPUT
 
     outputs:
       matrix: ${{ steps.list-tapes.outputs.matrix }}
