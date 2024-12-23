@@ -1,4 +1,16 @@
 tests:
+  - name: "which atmos"
+    enabled: true
+    description: "Ensure atmos CLI is installed and we're using the one that was built."
+    workdir: "../"
+    command: "which"
+    args:
+      - "atmos"
+    expect:
+      stdout:
+        - '(build[/\\]atmos|atmos[/\\]atmos)'
+      exit_code: 0
+
   - name: "atmos"
     enabled: true
     description: "Verify atmos CLI reports missing stacks directory."
@@ -47,7 +59,7 @@ tests:
       - "version"
     expect:
       stdout:
-        - '👽 Atmos \d+\.\d+\.\d+ on [a-z]+/[a-z0-9]+'
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr: []
       exit_code: 0
 
@@ -61,7 +73,7 @@ tests:
       - "--check"
     expect:
       stdout:
-        - '👽 Atmos \d+\.\d+\.\d+ on [a-z]+/[a-z0-9]+'
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr: []
       exit_code: 0
 
@@ -125,7 +137,7 @@ tests:
       - "yaml"
     expect:
       stdout:
-        - 'append_user_agent: Atmos/\d+\.\d+\.\d+ \(Cloud Posse; \+https:\/\/atmos\.tools\)'
+        - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       exit_code: 0
 
   - name: atmos describe config
@@ -138,5 +150,5 @@ tests:
       - "config"
     expect:
       stdout:
-        - '"append_user_agent": "Atmos/\d+\.\d+\.\d+ \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
+        - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       exit_code: 0

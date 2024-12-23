@@ -7,7 +7,9 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath" // For resolving absolute paths
 	"regexp"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -51,6 +53,38 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 	return &suite, nil
 }
 
+func prependPath(envVars []string, dirs ...string) []string {
+	// Resolve absolute paths for the directories
+	var resolvedPaths []string
+	for _, dir := range dirs {
+		absPath, err := filepath.Abs(dir)
+		if err != nil {
+			fmt.Printf("Failed to resolve absolute path for %q: %v\n", dir, err)
+			continue
+		}
+		resolvedPaths = append(resolvedPaths, absPath)
+	}
+
+	// Create the new PATH variable with precedence order
+	currentPath := os.Getenv("PATH")
+	newPath := fmt.Sprintf("%s%c%s",
+		strings.Join(resolvedPaths, string(os.PathListSeparator)),
+		os.PathListSeparator,
+		currentPath,
+	)
+
+	// Replace the PATH in envVars
+	for i, env := range envVars {
+		if len(env) > 5 && env[:5] == "PATH=" {
+			envVars[i] = fmt.Sprintf("PATH=%s", newPath)
+			return envVars
+		}
+	}
+
+	// If PATH is not found, add it
+	return append(envVars, fmt.Sprintf("PATH=%s", newPath))
+}
+
 func TestCLICommands(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -91,6 +125,7 @@ func TestCLICommands(t *testing.T) {
 
 			// Set environment variables
 			envVars := os.Environ()
+			envVars = prependPath(envVars, "./build", ".") // Add ./build and . to PATH in precedence order
 			for key, value := range tc.Env {
 				envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 			}
@@ -116,69 +151,79 @@ func TestCLICommands(t *testing.T) {
 			}
 
 			// Validate stdout
-			if !verifyOutput(stdout.String(), tc.Expect.Stdout) {
+			if !verifyOutput(t, "stdout", stdout.String(), tc.Expect.Stdout) {
 				t.Errorf("Description: %s", tc.Description)
-				t.Errorf("Reason: Stdout did not match expected patterns.")
-				t.Errorf("Output: %q", stdout.String())
 			}
 
 			// Validate stderr
-			if !verifyOutput(stderr.String(), tc.Expect.Stderr) {
+			if !verifyOutput(t, "stderr", stderr.String(), tc.Expect.Stderr) {
 				t.Errorf("Description: %s", tc.Description)
-				t.Errorf("Reason: Stderr did not match expected patterns.")
-				t.Errorf("Output: %q", stderr.String())
 			}
 
 			// Validate file existence
-			if !verifyFileExists(tc.Expect.FileExists) {
+			if !verifyFileExists(t, tc.Expect.FileExists) {
 				t.Errorf("Description: %s", tc.Description)
 			}
 
 			// Validate file contents
-			if !verifyFileContains(tc.Expect.FileContains) {
+			if !verifyFileContains(t, tc.Expect.FileContains) {
 				t.Errorf("Description: %s", tc.Description)
 			}
 		})
 	}
 }
 
-func verifyOutput(output string, patterns []string) bool {
+func verifyOutput(t *testing.T, outputType, output string, patterns []string) bool {
+	success := true
 	for _, pattern := range patterns {
 		re, err := regexp.Compile(pattern)
 		if err != nil {
-			return false
+			t.Errorf("Invalid %s regex: %q, error: %v", outputType, pattern, err)
+			success = false
+			continue
 		}
 		if !re.MatchString(output) {
-			return false
+			t.Errorf("Reason: %s did not match pattern %q.", outputType, pattern)
+			t.Errorf("Output: %q", output)
+			success = false
 		}
 	}
-	return true
+	return success
 }
 
-func verifyFileExists(files []string) bool {
+func verifyFileExists(t *testing.T, files []string) bool {
+	success := true
 	for _, file := range files {
 		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
-			return false
+			t.Errorf("Reason: Expected file does not exist: %q", file)
+			success = false
 		}
 	}
-	return true
+	return success
 }
 
-func verifyFileContains(filePatterns map[string][]string) bool {
+func verifyFileContains(t *testing.T, filePatterns map[string][]string) bool {
+	success := true
 	for file, patterns := range filePatterns {
 		content, err := ioutil.ReadFile(file)
 		if err != nil {
-			return false
+			t.Errorf("Reason: Failed to read file %q: %v", file, err)
+			success = false
+			continue
 		}
 		for _, pattern := range patterns {
 			re, err := regexp.Compile(pattern)
 			if err != nil {
-				return false
+				t.Errorf("Invalid regex for file %q: %q, error: %v", file, pattern, err)
+				success = false
+				continue
 			}
 			if !re.Match(content) {
-				return false
+				t.Errorf("Reason: File %q did not match pattern %q.", file, pattern)
+				t.Errorf("Content: %q", string(content))
+				success = false
 			}
 		}
 	}
-	return true
+	return success
 }
