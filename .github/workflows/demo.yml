@@ -127,8 +127,6 @@ jobs:
       - name: Record screencast
         run: |
           vhs ${{ matrix.file }}
-        env:
-          PATH: ${{ env.PATH }}
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
