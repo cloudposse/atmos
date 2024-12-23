@@ -122,8 +122,11 @@ jobs:
       - uses: charmbracelet/vhs-action@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          path: ${{ matrix.file }}
           install-fonts: true
+
+      - name: Record screencast
+        run: |
+          vhs ${{ matrix.file }}
         env:
           PATH: ${{ env.PATH }}
 
