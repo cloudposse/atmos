@@ -9,6 +9,8 @@ tests:
     expect:
       stdout:
         - '(build[/\\]atmos|atmos[/\\]atmos)'
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: "atmos"
@@ -20,6 +22,8 @@ tests:
       stdout:
         - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
         - "but the directory does not exist."
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: atmos --help
@@ -48,6 +52,8 @@ tests:
         - "\\bworkflow\\b"
         - "Flags:"
         - "for more information about a command"
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: atmos version
@@ -60,7 +66,8 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
-      stderr: []
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: atmos version --check
@@ -74,7 +81,8 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
-      stderr: []
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: atmos docs
@@ -86,6 +94,8 @@ tests:
       - "docs"
     expect:
       exit_code: 0
+      stderr:
+        - "^$"
 
   - name: atmos docs myapp
     enabled: true
@@ -98,6 +108,8 @@ tests:
     expect:
       stdout:
         - "Example Terraform Weather Component"
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: atmos non-existent
@@ -138,6 +150,8 @@ tests:
     expect:
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: atmos describe config
@@ -151,4 +165,6 @@ tests:
     expect:
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
+      stderr:
+        - "^$"
       exit_code: 0
