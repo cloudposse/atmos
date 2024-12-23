@@ -5,7 +5,7 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -78,20 +78,20 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if the component exists as a helmfile component
-	componentPath := filepath.Join(atmosConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath := path.Join(atmosConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			filepath.Join(atmosConfig.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
+			path.Join(atmosConfig.Components.Helmfile.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute)
 	if (info.SubCommand == "sync" || info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
 		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
+			"by 'metadata.type: abstract' attribute", path.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
 	// Print component variables
@@ -196,7 +196,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		u.LogDebug(atmosConfig, "Stack: "+info.StackFromArg)
 	} else {
 		u.LogDebug(atmosConfig, "Stack: "+info.StackFromArg)
-		u.LogDebug(atmosConfig, "Stack path: "+filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
+		u.LogDebug(atmosConfig, "Stack path: "+path.Join(cliConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
 	workingDir := constructHelmfileComponentWorkingDir(atmosConfig, info)

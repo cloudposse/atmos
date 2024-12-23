@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -25,7 +26,7 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 	componentConfigExtensions := []string{"yaml", "yml"}
 
 	for _, ext := range componentConfigExtensions {
-		configFilePath := filepath.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
+		configFilePath := path.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
 		if u.FileExists(configFilePath) {
 			return configFilePath, nil
 		}
@@ -50,7 +51,7 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", fmt.Errorf("type '%s' is not supported. Valid types are 'terraform' and 'helmfile'", componentType)
 	}
 
-	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
+	componentPath := path.Join(atmosConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
 	if err != nil {
