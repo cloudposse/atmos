@@ -142,8 +142,7 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 10
-        run: |
-          make testacc
+        uses: robherley/go-test-action@v0
 
   docker:
     name: "Docker Lint"
