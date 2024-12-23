@@ -42,7 +42,7 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows'
-        run: echo "C:\Program Files\Git\usr\bin" >> "$GITHUB_PATH"
+        run: echo "C:\Program Files\Git\usr\bin" >> "${{env.GITHUB_PATH}}"
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
@@ -288,7 +288,7 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows'
-        run: echo "C:\Program Files\Git\usr\bin" >> $GITHUB_PATH
+        run: echo "C:\Program Files\Git\usr\bin" >> "${{env.GITHUB_PATH}}"
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
@@ -299,7 +299,7 @@ jobs:
       - name: Add build artifacts directory to PATH for ${{ matrix.flavor.target }}
         run: |
           ls "${{ github.workspace }}"
-          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
+          echo "${{ github.workspace }}" >> "${{env.GITHUB_PATH}}"
 
       - name: Set execute permissions on atmos for ${{ matrix.flavor.target }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
@@ -318,10 +318,13 @@ jobs:
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows'
+        shell: pwsh
         run: |
-          echo $PATH
-          dir "${{ github.workspace }}"
+          Write-Output "PATH=$Env:PATH"
+          Write-Output "PATHEXT=$Env:PATHEXT"
+          Get-ChildItem "${{ github.workspace }}"
           Get-Command "${{ github.workspace }}\atmos.exe"
+          .\atmos.exe version
 
       - name: Run tests for ${{ matrix.demo-folder }} with ${{ matrix.flavor.target }}
         working-directory: examples/${{ matrix.demo-folder }}
