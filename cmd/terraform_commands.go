@@ -32,29 +32,37 @@ func getTerraformCommands() []*cobra.Command {
 		{
 			Use:   "workspace",
 			Short: "Manage Terraform workspaces",
-			Long:  "Create, list, select, or delete Terraform workspaces, which allow for separate states within the same configuration. Note, Atmos will automatically select the workspace, if configured.",
+			Long: `The 'atmos terraform workspace' command initializes Terraform for the current configuration, selects the specified workspace, and creates it if it does not already exist.
+			
+It runs the following sequence of Terraform commands:
+1. 'terraform init -reconfigure' to initialize the working directory.
+2. 'terraform workspace select' to switch to the specified workspace.
+3. If the workspace does not exist, it runs 'terraform workspace new' to create and select it.
+
+This ensures that the workspace is properly set up for Terraform operations.`,
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
 		},
 		{
 			Use:   "clean",
-			Short: "Clean up resources",
-			Long:  "Remove unused or outdated resources to keep the infrastructure clean and reduce costs.",
-			Run:   terraformRun,
+			Short: "Clean up Terraform state and artifacts.",
+			Long: `The 'atmos terraform clean' command removes temporary files, state locks, and other artifacts created during Terraform operations. This helps reset the environment and ensures no leftover data interferes with subsequent runs.
+
+Common use cases:
+- Releasing locks on Terraform state files.
+- Cleaning up temporary workspaces or plans.
+- Preparing the environment for a fresh deployment.`,
 		},
 		{
 			Use:   "deploy",
 			Short: "Deploy the specified infrastructure using Terraform",
-			Long: `Deploy the specified infrastructure by running the Terraform plan and apply commands.
-This command automates the deployment process, integrates configuration, and ensures streamlined execution.`,
-			Run: terraformRun,
+			Long:  `Deploys infrastructure by running the Terraform apply command with automatic approval. This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
 		},
 		{
 			Use:   "shell",
-			Short: "Configures an 'atmos' environment and starts a shell for native Terraform commands.",
-			Long:  "command configures an environment for an 'atmos' component in a stack and starts a new shell allowing executing all native terraform commands inside the shell without using atmos-specific arguments and flag",
-			Run:   terraformRun,
+			Short: "Configure an environment for an Atmos component and start a new shell.",
+			Long:  `The 'atmos terraform shell' command configures an environment for a specific Atmos component in a stack and then starts a new shell. In this shell, you can execute all native Terraform commands directly without the need to use Atmos-specific arguments and flags. This allows you to interact with Terraform as you would in a typical setup, but within the configured Atmos environment.`,
 		},
 		{
 			Use:   "version",
@@ -142,7 +150,17 @@ This command automates the deployment process, integrates configuration, and ens
 		},
 		{
 			Use:   "import",
-			Short: "Associate existing infrastructure with a Terraform resource",
+			Short: "Import existing infrastructure into Terraform state.",
+			Long: `The 'atmos terraform import' command imports existing infrastructure resources into Terraform's state.
+			
+Before executing the command, it searches for the 'region' variable in the specified component and stack configuration.
+If the 'region' variable is found, it sets the 'AWS_REGION' environment variable with the corresponding value before executing the import command.
+	
+The import command runs: 'terraform import [ADDRESS] [ID]'
+	
+Arguments:
+- ADDRESS: The Terraform address of the resource to import.
+- ID: The ID of the resource to import.`,
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
@@ -229,9 +247,13 @@ This command automates the deployment process, integrates configuration, and ens
 
 // attachTerraformCommands attaches static Terraform commands to a provided parent command
 func attachTerraformCommands(parentCmd *cobra.Command) {
+	parentCmd.PersistentFlags().String("append-user-agent", "", "Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.")
 	commands := getTerraformCommands()
 	fmt.Println(os.Args)
 	for _, cmd := range commands {
+		if setFlags, ok := commandMaps[cmd.Use]; ok {
+			setFlags(cmd)
+		}
 		cmd.Run = func(cmd_ *cobra.Command, args []string) {
 			if len(os.Args) > 3 {
 				args = os.Args[2:]
@@ -240,4 +262,21 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		}
 		parentCmd.AddCommand(cmd)
 	}
+}
+
+var commandMaps = map[string]func(cmd *cobra.Command){
+	"deploy": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().Bool("deploy-run-init", false, "If set atmos will run `terraform init` before executing the command")
+		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
+		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
+	},
+	"apply": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
+		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
+	},
+	"clean": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().Bool("everything", false, "If set atmos will also delete the Terraform state files and directories for the component.")
+		cmd.PersistentFlags().Bool("force", false, "Forcefully delete Terraform state files and directories without interaction")
+		cmd.PersistentFlags().Bool("skip-lock-file", false, "Skip deleting the `.terraform.lock.hcl` file")
+	},
 }
