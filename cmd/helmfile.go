@@ -34,10 +34,11 @@ var helmfileCmd = &cobra.Command{
 		// Exit on help
 		if info.NeedHelp {
 			// Check for the latest Atmos release on GitHub and print update message
-			atmosConfig := cmd.Context().Value(contextKey("atmos_config")).(schema.AtmosConfiguration)
-			CheckForAtmosUpdateAndPrintMessage(&atmosConfig)
+			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 			return
 		}
+		// Check Atmos configuration
+		checkAtmosConfig()
 
 		err = e.ExecuteHelmfile(info)
 		if err != nil {
