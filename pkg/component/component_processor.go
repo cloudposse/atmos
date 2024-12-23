@@ -11,6 +11,33 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+func convertPathsToRelative(v any, atmosBasePath string) any {
+	switch val := v.(type) {
+	case string:
+		if atmosBasePath != "" && strings.HasPrefix(val, atmosBasePath) {
+			relPath, err := filepath.Rel(atmosBasePath, val)
+			if err == nil {
+				return relPath
+			}
+		}
+		return val
+	case []any:
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = convertPathsToRelative(item, atmosBasePath)
+		}
+		return result
+	case map[string]any:
+		result := make(map[string]any)
+		for k, v := range val {
+			result[k] = convertPathsToRelative(v, atmosBasePath)
+		}
+		return result
+	default:
+		return v
+	}
+}
+
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
 func ProcessComponentInStack(
 	component string,
@@ -18,7 +45,6 @@ func ProcessComponentInStack(
 	atmosCliConfigPath string,
 	atmosBasePath string,
 ) (map[string]any, error) {
-
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -42,21 +68,8 @@ func ProcessComponentInStack(
 		}
 	}
 
-	// Convert any absolute paths in deps to relative paths
-	if deps, ok := configAndStacksInfo.ComponentSection["deps"].([]any); ok {
-		for i, dep := range deps {
-			if depStr, ok := dep.(string); ok {
-				// Convert absolute path to relative path if it starts with the base path
-				if atmosBasePath != "" && strings.HasPrefix(depStr, atmosBasePath) {
-					relPath, err := filepath.Rel(atmosBasePath, depStr)
-					if err == nil {
-						deps[i] = relPath
-					}
-				}
-			}
-		}
-		configAndStacksInfo.ComponentSection["deps"] = deps
-	}
+	// Convert paths in the entire component section
+	configAndStacksInfo.ComponentSection = convertPathsToRelative(configAndStacksInfo.ComponentSection, atmosBasePath).(map[string]any)
 
 	return configAndStacksInfo.ComponentSection, nil
 }
