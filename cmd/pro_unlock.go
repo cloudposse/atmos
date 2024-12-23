@@ -15,6 +15,9 @@ var proUnlockCmd = &cobra.Command{
 	Long:               `This command calls the atmos pro API and unlocks a stack`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
+		checkAtmosConfig()
+
 		err := e.ExecuteProUnlockCommand(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
