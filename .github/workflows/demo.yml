@@ -86,6 +86,7 @@ jobs:
   vhs:
     needs: [prepare]
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     strategy:
       matrix:
         file: ${{ fromJson(needs.prepare.outputs.matrix) }}
@@ -119,7 +120,8 @@ jobs:
           echo "job_name=${JOB_NAME}" >> $GITHUB_OUTPUT
           echo "branch_name=chore/update-${JOB_NAME}-for-${VERSION}" >> $GITHUB_OUTPUT
 
-      - uses: charmbracelet/vhs-action@v2
+      - name: Setup VHS
+        uses: charmbracelet/vhs-action@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           install-fonts: true

@@ -17,7 +17,7 @@ Sleep 1s
 
 Type "# We will start by installing some 3rd-party components and other artifacts..." Sleep 500ms Enter
 Type "atmos vendor pull" Sleep 500ms Enter
-Sleep 8s
+Sleep 9s
 
 Type "# In Atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
 Type "atmos" Sleep 500ms Enter
@@ -41,11 +41,15 @@ Type "# Let's see what components we have available!" Sleep 500ms Enter
 Type "atmos list components" Sleep 500ms Enter
 Sleep 1s
 
-Type "# Let's see where they can be deployed" Sleep 500ms Enter
+Type "# Then we can learn about the VPC component" Sleep 500ms Enter
+Type "atmos docs vpc" Sleep 500ms Enter
+Sleep 1s
+
+Type "# Now, let's see where they are deployed" Sleep 500ms Enter
 Type "atmos list stacks" Sleep 500ms Enter
 Sleep 2s
 
-Type "# Let's validate the stack configurations" Sleep 500ms Enter
+Type "# And validate the stack configurations" Sleep 500ms Enter
 Type "atmos validate stacks" Sleep 500ms Enter
 Sleep 2s
 
@@ -90,5 +94,5 @@ Sleep 5s
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
 Sleep 2s
 
-Type "# or join us in #atmos at https://slack.cloudposse.com!" Sleep 500ms Enter
+Type "# or join us in #atmos at https://cloudposse.com/slack!" Sleep 500ms Enter
 Sleep 3s
