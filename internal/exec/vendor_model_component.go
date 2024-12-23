@@ -124,14 +124,16 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		tempDir = filepath.Join(tempDir, filepath.Base(p.uri))
+		// Convert Windows backslashes to forward slashes for go-getter
+		uri := filepath.ToSlash(p.uri)
+		tempDir = filepath.Join(tempDir, filepath.Base(uri))
 
 		client := &getter.Client{
 			Ctx: context.Background(),
 			// Define the destination where the files will be stored. This will create the directory if it doesn't exist
 			Dst: tempDir,
 			// Source
-			Src:  p.uri,
+			Src:  uri,
 			Mode: getter.ClientModeAny,
 		}
 
@@ -187,10 +189,12 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 	defer cancel()
 	switch p.pkgType {
 	case pkgTypeRemote:
+		// Convert Windows backslashes to forward slashes for go-getter
+		uri := filepath.ToSlash(p.uri)
 		client := &getter.Client{
 			Ctx:  ctx,
 			Dst:  filepath.Join(tempDir, p.mixinFilename),
-			Src:  p.uri,
+			Src:  uri,
 			Mode: getter.ClientModeFile,
 		}
 
