@@ -2,41 +2,12 @@ package component
 
 import (
 	"github.com/pkg/errors"
-	"path/filepath"
-	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-func convertPathsToRelative(v any, atmosBasePath string) any {
-	switch val := v.(type) {
-	case string:
-		if atmosBasePath != "" && strings.HasPrefix(val, atmosBasePath) {
-			relPath, err := filepath.Rel(atmosBasePath, val)
-			if err == nil {
-				return relPath
-			}
-		}
-		return val
-	case []any:
-		result := make([]any, len(val))
-		for i, item := range val {
-			result[i] = convertPathsToRelative(item, atmosBasePath)
-		}
-		return result
-	case map[string]any:
-		result := make(map[string]any)
-		for k, v := range val {
-			result[k] = convertPathsToRelative(v, atmosBasePath)
-		}
-		return result
-	default:
-		return v
-	}
-}
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
 func ProcessComponentInStack(
@@ -45,6 +16,7 @@ func ProcessComponentInStack(
 	atmosCliConfigPath string,
 	atmosBasePath string,
 ) (map[string]any, error) {
+
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -67,9 +39,6 @@ func ProcessComponentInStack(
 			return nil, err
 		}
 	}
-
-	// Convert paths in the entire component section
-	configAndStacksInfo.ComponentSection = convertPathsToRelative(configAndStacksInfo.ComponentSection, atmosBasePath).(map[string]any)
 
 	return configAndStacksInfo.ComponentSection, nil
 }
