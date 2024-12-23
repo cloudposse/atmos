@@ -62,23 +62,16 @@ jobs:
           git add -A
           git status
 
-      # Commit, push changes, and create/update PR
-      - name: Commit and push changes
-        uses: EndBug/add-and-commit@v9
-        with:
-          author_name: "GitHub Actions"
-          author_email: "github-actions[bot]@users.noreply.github.com"
-          message: |
-            chore: update screengrabs for ${{ needs.prepare.outputs.version }}
-          new_branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
-          push: --force-with-lease
-
       - name: Create or update PR
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
           title: "Update screengrabs for ${{ needs.prepare.outputs.version }}"
+          delete-branch: true
+          sign-commits: true
+          commit-message: |
+            chore: update screengrabs for ${{ needs.prepare.outputs.version }}
           body: |
             This PR updates the screengrabs for Atmos version ${{ needs.prepare.outputs.version }}.
           base: main
@@ -114,21 +107,14 @@ jobs:
           echo "job_name=${JOB_NAME}" >> $GITHUB_OUTPUT
           echo "branch_name=chore/update-${JOB_NAME}-for-${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Commit and push changes
-        uses: EndBug/add-and-commit@v9
-        with:
-          author_name: "GitHub Actions"
-          author_email: "github-actions[bot]@users.noreply.github.com"
-          message: |
-            chore: update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
-          new_branch: ${{ steps.vars.outputs.branch_name }}
-          push: true
-
       - name: Create or update PR
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ steps.vars.outputs.branch_name }}
+          sign-commits: true
+          commit-message: |
+            chore: update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
           title: Update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
           body: |
             This PR updates the demo gif for ${{ steps.vars.outputs.job_name }} with Atmos version ${{ steps.vars.outputs.version }}.
