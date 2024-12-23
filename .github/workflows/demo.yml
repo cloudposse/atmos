@@ -32,9 +32,9 @@ jobs:
           if [ -z "$files" ]; then
             echo "matrix=[]" >> $GITHUB_OUTPUT
           else
-            echo "matrix=$(echo -n \"$files\" | jq -R -s -c 'split(\"\\n\") | map(select(. != \"\"))')" >> $GITHUB_OUTPUT
+            matrix=$(echo "$files" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo "matrix=$matrix" >> $GITHUB_OUTPUT
           fi
-
           cat $GITHUB_OUTPUT
 
     outputs:
