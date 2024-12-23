@@ -316,11 +316,18 @@ jobs:
         run: |
           atmos test
 
+      - name: Check atmos.exe integrity
+        if: matrix.flavor.target == 'windows'
+        run: |
+          echo $PATH
+          dir "${{ github.workspace }}"
+          Get-Command "${{ github.workspace }}\atmos.exe"
+
       - name: Run tests for ${{ matrix.demo-folder }} with ${{ matrix.flavor.target }}
         working-directory: examples/${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'windows'
         run: |
-          atmos.exe test
+          "${{ github.workspace }}\atmos.exe" test
 
   # run other demo tests
   lint:
