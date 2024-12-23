@@ -326,14 +326,14 @@ jobs:
           Write-Output "PATHEXT=$Env:PATHEXT"
           Get-ChildItem "${{ github.workspace }}"
           Get-Command "${{ github.workspace }}\atmos.exe"
-          .\atmos.exe version
+          atmos version
 
       - name: Run tests for ${{ matrix.demo-folder }} with ${{ matrix.flavor.target }}
         working-directory: examples/${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'windows'
         shell: pwsh
         run: |
-          ${{ github.workspace }}\atmos.exe test
+          atmos test
 
   # run other demo tests
   lint:
