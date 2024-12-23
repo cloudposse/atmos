@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/fatih/color"
@@ -147,7 +148,9 @@ func TestLogger_Error(t *testing.T) {
 }
 
 func TestLogger_FileLogging(t *testing.T) {
-	tempFile := "/tmp/test.log"
+	tempDir := t.TempDir()
+	tempFile := filepath.Join(tempDir, "test.log")
+
 	defer os.Remove(tempFile)
 
 	logger, _ := NewLogger(LogLevelInfo, tempFile)

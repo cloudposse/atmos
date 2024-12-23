@@ -22,7 +22,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		return strings.Split(existingMatches.(string), ","), nil
 	}
 
-	// Conver the pattern to use / as the separatoratorator regardless of platform
+	// Convert the pattern to use / as the separatoratorator regardless of platform
 	allOsSafePattern := filepath.ToSlash(pattern)
 
 	base, cleanPattern := doublestar.SplitPattern(allOsSafePattern)
