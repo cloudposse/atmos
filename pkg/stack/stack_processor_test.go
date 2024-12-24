@@ -20,6 +20,7 @@ func TestStackProcessor(t *testing.T) {
 		"../../examples/tests/stacks/orgs/cp/tenant1/staging/us-east-2.yaml",
 		"../../examples/tests/stacks/orgs/cp/tenant1/test1/us-east-2.yaml",
 		"../../examples/tests/stacks/orgs/cp/tenant1/test2/us-east-2.yaml",
+		"../../examples/tests/stacks/orgs/cp/tenant1/test2/us-west-1.yaml",
 	}
 
 	processStackDeps := true
@@ -51,8 +52,8 @@ func TestStackProcessor(t *testing.T) {
 	)
 
 	assert.Nil(t, err)
-	assert.Equal(t, 4, len(listResult))
-	assert.Equal(t, 4, len(mapResult))
+	assert.Equal(t, 6, len(listResult))
+	assert.Equal(t, 6, len(mapResult))
 
 	mapResultKeys := u.StringKeysFromMap(mapResult)
 	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", mapResultKeys[0])
@@ -60,7 +61,7 @@ func TestStackProcessor(t *testing.T) {
 	assert.Equal(t, "orgs/cp/tenant1/staging/us-east-2", mapResultKeys[2])
 	assert.Equal(t, "orgs/cp/tenant1/test1/us-east-2", mapResultKeys[3])
 	assert.Equal(t, "orgs/cp/tenant1/test2/us-east-2", mapResultKeys[4])
-
+	assert.Equal(t, "orgs/cp/tenant1/test2/us-west-1", mapResultKeys[5])
 	mapConfig1, err := u.UnmarshalYAML[schema.AtmosSectionMapType](listResult[0])
 	assert.Nil(t, err)
 
