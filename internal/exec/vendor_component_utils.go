@@ -180,7 +180,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 	componentPath2 := componentPath
 	if sourceIsLocalFile {
 		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, filepath.Base(uri))
+			componentPath2 = filepath.Join(componentPath, sanitizeFileName(uri))
 		}
 	}
 
