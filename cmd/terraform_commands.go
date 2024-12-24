@@ -275,10 +275,14 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 	"apply": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
 		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
+		cmd.PersistentFlags().Bool("auto-approve", false, "Set to automatically approve and apply changes without confirmation")
 	},
 	"clean": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("everything", false, "If set atmos will also delete the Terraform state files and directories for the component.")
 		cmd.PersistentFlags().Bool("force", false, "Forcefully delete Terraform state files and directories without interaction")
 		cmd.PersistentFlags().Bool("skip-lock-file", false, "Skip deleting the `.terraform.lock.hcl` file")
+	},
+	"destroy": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().Bool("auto-approve", false, "Set to automatically approve and apply changes without confirmation")
 	},
 }
