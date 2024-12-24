@@ -17,6 +17,10 @@
 # are considered paths relative to 'base_path'.
 base_path: "."
 
+docs:
+  max-width: 30
+  pagination: true
+
 components:
   terraform:
     # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands

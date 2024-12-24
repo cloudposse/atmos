@@ -25,6 +25,7 @@ spec:
       # https://github.com/bmatcuk/doublestar#patterns
       included_paths:
         - "**/*.tf"
+        - "**/README.md"
       excluded_paths:
         - "**/providers.tf"
       # Tags can be used to vendor component that have the specific tags
@@ -39,6 +40,7 @@ spec:
         - "components/terraform/vpc-flow-logs-bucket"
       included_paths:
         - "**/*.tf"
+        - "**/README.md"
       excluded_paths:
         - "**/providers.tf"
       # Tags can be used to vendor component that have the specific tags
