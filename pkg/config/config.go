@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -100,6 +102,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
 	// current directory
+	// ENV var ATMOS_CLI_CONFIG_PATH
+	// ENV var ATMOS_REMOTE_CONFIG_URL from GITHUB
 	// ENV vars
 	// Command-line arguments
 
@@ -197,6 +201,18 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			if found {
 				configFound = true
 			}
+		}
+	}
+
+	// Process remote config from a GITHUB URL from the path in ENV var `ATMOS_REMOTE_CONFIG_URL`
+	configFilePath6 := os.Getenv("ATMOS_REMOTE_CONFIG_URL")
+	if len(configFilePath6) > 0 {
+		found, err = processRemoteConfigFile(atmosConfig, configFilePath6, v)
+		if err != nil {
+			return atmosConfig, err
+		}
+		if found {
+			configFound = true
 		}
 	}
 
@@ -379,6 +395,37 @@ func processConfigFile(
 	err = v.MergeConfig(reader)
 	if err != nil {
 		return false, err
+	}
+
+	return true, nil
+}
+
+// processRemoteConfigFile attempts to download and merge a remote atmos.yaml
+// from a URL. It currently only supports GitHub URLs.
+func processRemoteConfigFile(
+	atmosConfig schema.AtmosConfiguration,
+	rawURL string,
+	v *viper.Viper,
+) (bool, error) {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		u.LogWarning(atmosConfig, fmt.Sprintf("Failed to parse remote config URL '%s': %s", rawURL, err.Error()))
+		return false, nil
+	}
+
+	if parsedURL.Scheme != "https" || parsedURL.Host != "github.com" {
+		return false, nil
+	}
+
+	data, err := utils.DownloadFileFromGitHub(rawURL)
+	if err != nil {
+		u.LogWarning(atmosConfig, fmt.Sprintf("Failed to download remote config from GitHub '%s': %s", rawURL, err.Error()))
+		return false, nil
+	}
+
+	err = v.MergeConfig(bytes.NewReader(data))
+	if err != nil {
+		return false, fmt.Errorf("failed to merge remote config from GitHub '%s': %w", rawURL, err)
 	}
 
 	return true, nil
