@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -514,6 +515,34 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
 }
 
+// sanitizeFileName replaces invalid characters and query strings with underscores for Windows.
+func sanitizeFileName(uri string) string {
+	// This logic applies only to Windows
+	if runtime.GOOS != "windows" {
+		return filepath.Base(uri)
+	}
+
+	// Extract the path part (ignoring query strings)
+	if idx := strings.Index(uri, "?"); idx != -1 {
+		uri = strings.ReplaceAll(uri, "?", "_")
+	}
+
+	// Extract the base name (last segment of the path)
+	base := filepath.Base(uri)
+
+	// Replace invalid characters for Windows
+	base = strings.Map(func(r rune) rune {
+		switch r {
+		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
+			return '_'
+		default:
+			return r
+		}
+	}, base)
+
+	return base
+}
+
 func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
 	copyOptions := cp.Options{
 		Skip:          generateSkipFunction(atmosConfig, tempDir, s),
@@ -524,7 +553,9 @@ func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath str
 
 	// Adjust the target path if it's a local file with no extension
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		targetPath = filepath.Join(targetPath, filepath.Base(uri))
+		// Sanitize the URI for safe filenames, especially on Windows
+		sanitizedBase := sanitizeFileName(uri)
+		targetPath = filepath.Join(targetPath, sanitizedBase)
 	}
 
 	return cp.Copy(tempDir, targetPath, copyOptions)
