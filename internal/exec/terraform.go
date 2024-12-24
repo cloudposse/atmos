@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	autoApproveFlag           = "-auto-approve"
+	autoApproveFlag           = "--auto-approve"
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
