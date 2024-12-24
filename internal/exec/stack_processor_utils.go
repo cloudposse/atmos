@@ -1786,6 +1786,14 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 		}
 
+		// NEW: Handle relative paths
+		if !filepath.IsAbs(s) && !strings.Contains(s, "://") {
+			// Get the directory of the current file
+			baseDir := filepath.Dir(filePath)
+			// Join the base directory with the relative path
+			s = filepath.Join(baseDir, s)
+		}
+
 		result = append(result, schema.StackImport{Path: s})
 	}
 
