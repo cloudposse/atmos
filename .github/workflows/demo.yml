@@ -12,6 +12,7 @@ env:
   COLORTERM: "truecolor"
   LANG: "en_US.UTF-8"
   ATMOS_LOGS_LEVEL: "Info"
+  TERRAFORM_VERSION: "1.9.7"
 
 jobs:
   prepare:
@@ -62,6 +63,11 @@ jobs:
           extension-matching: disable
           rename-to: atmos
 
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
       - name: Run make build-all install
         run: |
           make -C demo/screengrabs build-all install
@@ -109,6 +115,11 @@ jobs:
           chmod: 0755
           extension-matching: disable
           rename-to: atmos
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
 
       - name: Test Atmos
         run: |
