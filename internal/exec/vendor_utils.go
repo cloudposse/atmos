@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -517,18 +518,21 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 
 // sanitizeFileName replaces invalid characters and query strings with underscores for Windows.
 func sanitizeFileName(uri string) string {
-	// This logic applies only to Windows
-	if runtime.GOOS != "windows" {
+
+	// Parse the URI to handle paths and query strings properly
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		// Fallback to basic filepath.Base if URI parsing fails
 		return filepath.Base(uri)
 	}
 
-	// Extract the path part (ignoring query strings)
-	if idx := strings.Index(uri, "?"); idx != -1 {
-		uri = strings.ReplaceAll(uri, "?", "_")
-	}
+	// Extract the path component of the URI
+	base := filepath.Base(parsed.Path)
 
-	// Extract the base name (last segment of the path)
-	base := filepath.Base(uri)
+	// This logic applies only to Windows
+	if runtime.GOOS != "windows" {
+		return base
+	}
 
 	// Replace invalid characters for Windows
 	base = strings.Map(func(r rune) rune {
