@@ -4,7 +4,8 @@ package vender
 
 import (
 	"os"
-	"path"
+
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ func TestVendorConfigScenarios(t *testing.T) {
 	atmosConfig.Logs.Level = "Trace"
 
 	// Setup test component directory
-	componentPath := path.Join(testDir, "components", "terraform", "myapp")
+	componentPath := filepath.Join(testDir, "components", "terraform", "myapp")
 	err := os.MkdirAll(componentPath, 0755)
 	assert.Nil(t, err)
 
@@ -47,7 +48,7 @@ spec:
       included_paths:
         - "**/*.tf"
 `
-		vendorYamlPath := path.Join(testDir, "vendor.yaml")
+		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
 		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0644)
 		assert.Nil(t, err)
 
@@ -84,7 +85,7 @@ spec:
     uri: github.com/cloudposse/terraform-null-label.git//exports?ref={{.Version}}
     version: 0.25.0
 `
-		componentYamlPath := path.Join(componentPath, "component.yaml")
+		componentYamlPath := filepath.Join(componentPath, "component.yaml")
 		err := os.WriteFile(componentYamlPath, []byte(componentYaml), 0644)
 		assert.Nil(t, err)
 
@@ -102,7 +103,7 @@ spec:
 	// Test Case 3: Neither vendor.yaml nor component.yaml exists
 	t.Run("no vendor.yaml or component.yaml", func(t *testing.T) {
 		// Test vendoring with component flag
-		vendorYamlPath := path.Join(testDir, "vendor.yaml")
+		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
 		_, exists, _, err := e.ReadAndProcessVendorConfigFile(atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
 		assert.False(t, exists)
@@ -126,7 +127,7 @@ spec:
       source: github.com/cloudposse/terraform-null-label.git//exports?ref={{.Version}}
       version: 0.25.0
 `
-		vendorYamlPath := path.Join(testDir, "vendor.yaml")
+		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
 		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0644)
 		assert.Nil(t, err)
 
