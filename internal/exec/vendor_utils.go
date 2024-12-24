@@ -375,19 +375,23 @@ func ExecuteAtmosVendorInternal(
 
 		// Handle GitHub source
 		if isGitHubSource {
-			u.LogDebug(atmosConfig, fmt.Sprintf("Fetching GitHub source: %s", uri))
-			fileContents, err := u.DownloadFileFromGitHub(uri)
-			if err != nil {
-				return fmt.Errorf("failed to download GitHub file: %w", err)
+			if dryRun {
+				u.LogInfo(atmosConfig, fmt.Sprintf("Dry run: Fetching GitHub source: %s", uri))
+			} else {
+				u.LogDebug(atmosConfig, fmt.Sprintf("Fetching GitHub source: %s", uri))
+				fileContents, err := u.DownloadFileFromGitHub(uri)
+				if err != nil {
+					return fmt.Errorf("failed to download GitHub file: %w", err)
+				}
+				// Save the downloaded file to the existing tempDir
+				tempGitHubFile := filepath.Join(tempDir, filepath.Base(uri))
+				err = os.WriteFile(tempGitHubFile, fileContents, os.ModePerm)
+				if err != nil {
+					return fmt.Errorf("failed to save GitHub file to temp location: %w", err)
+				}
+				// Update the URI to point to the saved file in the temp directory
+				uri = tempGitHubFile
 			}
-			// Save the downloaded file to the existing tempDir
-			tempGitHubFile := filepath.Join(tempDir, filepath.Base(uri))
-			err = os.WriteFile(tempGitHubFile, fileContents, os.ModePerm)
-			if err != nil {
-				return fmt.Errorf("failed to save GitHub file to temp location: %w", err)
-			}
-			// Update the URI to point to the saved file in the temp directory
-			uri = tempGitHubFile
 		}
 
 		// Determine package type
