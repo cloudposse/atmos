@@ -1773,6 +1773,15 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		var importObj schema.StackImport
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
+			// Handle relative paths in StackImport.Path
+			if strings.HasPrefix(importObj.Path, "./") || strings.HasPrefix(importObj.Path, "../") {
+				// Get the directory of the current file
+				baseDir := filepath.Dir(filePath)
+				// Join the base directory with the relative path
+				importObj.Path = filepath.Join(baseDir, importObj.Path)
+				// Clean the path to resolve any .. segments
+				importObj.Path = filepath.Clean(importObj.Path)
+			}
 			result = append(result, importObj)
 			continue
 		}
@@ -1786,12 +1795,11 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 		}
 
-		// Handle relative paths - only if they explicitly start with "./"
-		if strings.HasPrefix(s, "./") {
-			// Get the directory of the current file
+		// Handle relative paths in string imports
+		if strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") {
 			baseDir := filepath.Dir(filePath)
-			// Join the base directory with the relative path (removing the "./" prefix)
-			s = filepath.Join(baseDir, s[2:])
+			s = filepath.Join(baseDir, s)
+			s = filepath.Clean(s)
 		}
 
 		result = append(result, schema.StackImport{Path: s})

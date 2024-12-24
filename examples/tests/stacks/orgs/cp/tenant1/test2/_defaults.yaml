@@ -2,4 +2,4 @@
 
 import:
   - mixins/stage/test2
-  - ./../_defaults # validate relative paths
+  - ../_defaults # validate relative paths
