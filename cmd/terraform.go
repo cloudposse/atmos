@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
@@ -16,7 +18,7 @@ var terraformCmd = &cobra.Command{
 	Short:              "Execute Terraform commands",
 	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		//checkAtmosConfig()
 
@@ -35,9 +37,14 @@ var terraformCmd = &cobra.Command{
 
 		// Exit on help
 		if info.NeedHelp {
+			if info.SubCommand != "" {
+				fmt.Printf(`Error: Unknkown command %q for %q`+"\n", args[0], cmd.CommandPath())
+				fmt.Printf(`Run '%s --help' for usage`+"\n", cmd.CommandPath())
+				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+			}
 			// Check for the latest Atmos release on GitHub and print update message
 			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
-			return
+			return nil
 		}
 		// Check Atmos configuration
 		checkAtmosConfig()
@@ -46,6 +53,7 @@ var terraformCmd = &cobra.Command{
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
+		return nil
 	},
 }
 
