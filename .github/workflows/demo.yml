@@ -50,6 +50,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y aha util-linux make jq bat
+          sudo ln -s /usr/bin/batcat /usr/bin/bat
 
       - name: Checkout repository
         uses: actions/checkout@v4
