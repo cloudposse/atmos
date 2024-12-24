@@ -657,8 +657,13 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 	var indexesToRemove []int
+	if len(inputArgsAndFlags) > 1 && inputArgsAndFlags[0] == "clean" {
+		if !u.SliceContainsString(inputArgsAndFlags, everythingFlag) {
+			inputArgsAndFlags = append(inputArgsAndFlags, everythingFlag)
+		}
+	}
 
-	// For commands like `atmos terraform clean` and `atmos terraform plan`, show the command help
+	// For commands like `atmos terraform plan`, show the command help
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" {
 		info.SubCommand = inputArgsAndFlags[0]
 		info.NeedHelp = true
