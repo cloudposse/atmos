@@ -7,8 +7,8 @@ import (
 // atlantisCmd executes Atlantis commands
 var atlantisCmd = &cobra.Command{
 	Use:                "atlantis",
-	Short:              "Execute 'atlantis' commands",
-	Long:               `This command executes Atlantis integration commands`,
+	Short:              "Generate and manage Atlantis configurations",
+	Long:               `This command enables integration with Atlantis, allowing users to generate configurations for Terraform workflows.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 

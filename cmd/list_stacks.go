@@ -15,8 +15,8 @@ import (
 // listStacksCmd lists atmos stacks
 var listStacksCmd = &cobra.Command{
 	Use:   "stacks",
-	Short: "Execute 'list stacks' command",
-	Long:  `This command lists all Atmos stacks or all stacks for the specified component: atmos list stacks -c <component>`,
+	Short: "List all Atmos stacks or stacks for a specific component",
+	Long:  "This command lists all Atmos stacks, or filters the list to show only the stacks associated with a specified component.",
 	Example: "atmos list stacks\n" +
 		"atmos list stacks -c <component>",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
