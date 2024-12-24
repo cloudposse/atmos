@@ -1,6 +1,6 @@
 # VHS Defaults for Recordings
 
-Set Framerate 20
+Set Framerate 10
 Set CursorBlink true
 Set Margin 20
 Set MarginFill "#674EFF"
