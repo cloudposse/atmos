@@ -253,11 +253,14 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		if setFlags, ok := commandMaps[cmd.Use]; ok {
 			setFlags(cmd)
 		}
-		cmd.Run = func(cmd_ *cobra.Command, args []string) {
+		cmd.RunE = func(cmd_ *cobra.Command, args []string) error {
 			if len(os.Args) > 3 {
 				args = os.Args[2:]
 			}
-			parentCmd.Run(parentCmd, args)
+			if parentCmd.Run != nil {
+				return parentCmd.RunE(parentCmd, args)
+			}
+			return nil
 		}
 		parentCmd.AddCommand(cmd)
 	}

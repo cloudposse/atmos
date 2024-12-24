@@ -43,7 +43,15 @@ func terraformRun(cmd *cobra.Command, args []string) error {
 	// Exit on help
 	if info.NeedHelp {
 		if info.SubCommand != "" {
-			fmt.Printf(`Error: Unknkown command %q for %q`+"\n", args[0], cmd.CommandPath())
+			suggestions := cmd.SuggestionsFor(args[0])
+			if len(suggestions) > 0 {
+				fmt.Printf("Unknown command: '%s'\n\nDid you mean this?\n", args[0])
+				for _, suggestion := range suggestions {
+					fmt.Printf("  %s\n", suggestion)
+				}
+			} else {
+				fmt.Printf(`Error: Unknkown command %q for %q`+"\n", args[0], cmd.CommandPath())
+			}
 			fmt.Printf(`Run '%s --help' for usage`+"\n", cmd.CommandPath())
 			return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
 		}
