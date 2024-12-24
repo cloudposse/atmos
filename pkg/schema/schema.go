@@ -19,6 +19,7 @@ type AtmosConfiguration struct {
 	Settings                      AtmosSettings      `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
+	Registry                      Registry           `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	StacksBaseAbsolutePath        string             `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string           `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
@@ -587,4 +588,26 @@ type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+type Registry struct {
+	// Path to registry configuration file or directory containing registry configuration file
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+type AtmosRegistryConfig struct {
+	ApiVersion string           `yaml:"apiVersion" json:"apiVersion" mapstructure:"apiVersion"`
+	Kind       string           `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Registry   CloudPosseConfig `yaml:"registry" json:"registry" mapstructure:"registry"`
+	CloudPosse CloudPosseConfig `json:"cloudposse" yaml:"cloudposse"`
+}
+
+type RegistryConfig struct {
+	CloudPosse CloudPosseConfig `json:"cloudposse" yaml:"cloudposse"`
+}
+
+type CloudPosseConfig struct {
+	Enabled     bool     `json:"enabled" yaml:"enabled"`
+	Source      string   `json:"source" yaml:"source"`
+	Destination string   `json:"destination" yaml:"destination"`
+	Include     []string `json:"include" yaml:"include"`
+	Description string   `json:"description" yaml:"description"`
 }

@@ -1,0 +1,12 @@
+registry:
+  cloudposse:
+    # flag to enable/disable components
+    enabled: true
+    # github organization containing components
+    source: https://github.com/cloudposse-terraform-components
+    # location to store components downloaded
+    destination: components/terraform
+    # list of component repositories to include
+    include:
+    - .*
+    description: Cloud Posse registry of Terraform components for AWS
