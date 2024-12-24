@@ -8,7 +8,7 @@ shared:
 
   # Default branches
   is_default_branch: &is_default_branch
-    - and:
+    - or:
         - "base=main"
         - "base=master"
 
