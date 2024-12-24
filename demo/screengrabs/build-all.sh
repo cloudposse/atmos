@@ -57,9 +57,9 @@ postprocess_ansi() {
   $SED '/guarantee to make the same selections by default when/d' $file
   $SED '/you run "terraform init" in the future/d' $file
   $SED 's/Resource actions are indicated with the following symbols.*//' $file
-	$SED 'Workspace .* doesn.t exist./d' $file
-	$SED 'You can create this workspace with the .* subcommand/d' $file
-	$SED 'or include the .* flag with the .* subcommand./d' $file
+	$SED '/Workspace .* doesn.t exist./d' $file
+	$SED '/You can create this workspace with the .* subcommand/d' $file
+	$SED '/or include the .* flag with the .* subcommand./d' $file
 
   $SED 's/^ *EOT/\n/g' $file
   $SED 's/ *<<EOT/\n/g' $file
