@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -23,11 +22,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		return strings.Split(existingMatches.(string), ","), nil
 	}
 
-	// Convert the pattern to use / as the separator regardless of platform
-	allOsSafePattern := filepath.ToSlash(pattern)
-
-	base, cleanPattern := doublestar.SplitPattern(allOsSafePattern)
-
+	base, cleanPattern := doublestar.SplitPattern(pattern)
 	f := os.DirFS(base)
 
 	matches, err := doublestar.Glob(f, cleanPattern)
