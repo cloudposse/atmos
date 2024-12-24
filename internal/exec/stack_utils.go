@@ -2,7 +2,7 @@ package exec
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -164,9 +164,9 @@ func BuildComponentPath(
 
 	if stackComponentSection, ok := componentSectionMap[cfg.ComponentSectionName].(string); ok {
 		if componentType == "terraform" {
-			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, stackComponentSection)
+			componentPath = path.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, stackComponentSection)
 		} else if componentType == "helmfile" {
-			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, stackComponentSection)
+			componentPath = path.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, stackComponentSection)
 		}
 	}
 

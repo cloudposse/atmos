@@ -2,7 +2,7 @@ package generate
 
 import (
 	"os"
-	"path/filepath"
+	"path"
 	"strconv"
 	"testing"
 	"time"
@@ -28,7 +28,7 @@ func TestTerraformGenerateVarfiles(t *testing.T) {
 
 	var stacks []string
 	var components []string
-	filePattern := filepath.Join(tempDir, "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars")
+	filePattern := path.Join(tempDir, "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars")
 	format := "hcl"
 
 	err = e.ExecuteTerraformGenerateVarfiles(atmosConfig, filePattern, format, stacks, components)

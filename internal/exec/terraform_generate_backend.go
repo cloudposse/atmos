@@ -2,7 +2,7 @@ package exec
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -75,7 +75,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Write backend config to file
-	var backendFilePath = filepath.Join(
+	var backendFilePath = path.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,

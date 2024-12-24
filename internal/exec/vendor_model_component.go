@@ -124,7 +124,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		tempDir = filepath.Join(tempDir, filepath.Base(p.uri))
+		tempDir = filepath.Join(tempDir, sanitizeFileName(p.uri))
 
 		client := &getter.Client{
 			Ctx: context.Background(),
@@ -159,7 +159,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 
 		tempDir2 := tempDir
 		if p.sourceIsLocalFile {
-			tempDir2 = filepath.Join(tempDir, filepath.Base(p.uri))
+			tempDir2 = filepath.Join(tempDir, sanitizeFileName(p.uri))
 		}
 
 		if err = cp.Copy(p.uri, tempDir2, copyOptions); err != nil {

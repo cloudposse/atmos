@@ -142,8 +142,7 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 10
-        run: |
-          make testacc
+        run: make testacc
 
   docker:
     name: "Docker Lint"
