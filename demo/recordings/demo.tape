@@ -1,6 +1,6 @@
 # Demo of Atmos
 Source demo/defaults.tape
-#Source demo/recordings/style.tape
+Source demo/recordings/style.tape
 
 Output docs/demo.gif
 
