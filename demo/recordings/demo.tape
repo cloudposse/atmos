@@ -1,13 +1,13 @@
 # Demo of Atmos
-Source demo/defaults.tape
-Source demo/recordings/style.tape
+#Source demo/defaults.tape
+#Source demo/recordings/style.tape
 
 Output docs/demo.gif
 
 Sleep 500ms
 Type "# First check you have Atmos installed" Sleep 500ms Enter
-Type "atmos version" Sleep 500ms Enter
-Sleep 1s
+#Type "atmos version" Sleep 500ms Enter
+#Sleep 1s
 
 #Type "# Now let's explore the Quick Start example" Sleep 500ms Enter
 #Type "cd examples/quick-start-advanced" Sleep 500ms Enter
