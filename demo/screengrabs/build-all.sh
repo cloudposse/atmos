@@ -2,6 +2,9 @@
 set -e
 export TERM=xterm-256color
 
+# Ensure that the output is not paginated
+export LESS=-X
+
 # Determine the correct sed syntax based on the operating system
 if [ "$(uname)" = "Darwin" ]; then
 		SED="$SED" # macOS requires '' for in-place editing
