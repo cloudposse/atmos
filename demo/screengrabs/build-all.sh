@@ -2,8 +2,6 @@
 set -e
 export TERM=xterm-256color
 
-set -x
-
 # Ensure that the output is not paginated
 export LESS=-X
 

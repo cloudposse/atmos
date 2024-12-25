@@ -1,6 +1,6 @@
 # Demo of Atmos
-Source demo/defaults.tape
-Source demo/recordings/style.tape
+#Source demo/defaults.tape
+#Source demo/recordings/style.tape
 
 Output docs/demo.gif
 
@@ -48,7 +48,8 @@ Sleep 1s
 
 Type "# Then we can learn about the VPC component" Sleep 500ms Enter
 Type "atmos docs vpc" Sleep 500ms Enter
-Sleep 1s
+Sleep 2s
+Type "q" Sleep 500ms Enter
 
 Type "# Now, let's see where they are deployed" Sleep 500ms Enter
 Type "atmos list stacks" Sleep 500ms Enter
