@@ -4,6 +4,11 @@ Source demo/recordings/style.tape
 
 Output docs/demo.gif
 
+Hide
+Type "alias ls='ls --color=force'" Enter Slep 500ms
+Type "clear" Enter Sleep 500ms
+Show
+
 Sleep 500ms
 Type "# First check you have Atmos installed" Sleep 500ms Enter
 Type "atmos version" Sleep 500ms Enter
@@ -12,7 +17,7 @@ Sleep 1s
 Type "# Now let's explore the Quick Start example" Sleep 500ms Enter
 Type "cd examples/quick-start-advanced" Sleep 500ms Enter
 
-Type "ls -al --color=force" Sleep 500ms Enter
+Type "ls -al" Sleep 500ms Enter
 Sleep 1s
 
 Type "# We will start by installing some 3rd-party components and other artifacts..." Sleep 500ms Enter
