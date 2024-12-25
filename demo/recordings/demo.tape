@@ -9,15 +9,15 @@ Type "# First check you have Atmos installed" Sleep 500ms Enter
 Type "atmos version" Sleep 500ms Enter
 Sleep 1s
 
-Type "# Now let's explore the Quick Start example" Sleep 500ms Enter
-Type "cd examples/quick-start-advanced" Sleep 500ms Enter
+#Type "# Now let's explore the Quick Start example" Sleep 500ms Enter
+#Type "cd examples/quick-start-advanced" Sleep 500ms Enter
 
-Type "ls -al --color=force" Sleep 500ms Enter
-Sleep 1s
+#Type "ls -al --color=force" Sleep 500ms Enter
+#Sleep 1s
 
-Type "# We will start by installing some 3rd-party components and other artifacts..." Sleep 500ms Enter
-Type "atmos vendor pull" Sleep 500ms Enter
-Sleep 9s
+#Type "# We will start by installing some 3rd-party components and other artifacts..." Sleep 500ms Enter
+#Type "atmos vendor pull" Sleep 500ms Enter
+#Sleep 9s
 
 #Type "# In Atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
 #Type "atmos" Sleep 500ms Enter
