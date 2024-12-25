@@ -16,7 +16,7 @@ Set Margin 0
 
 Set Padding 10
 
-Set Width 1400
-Set Height 800
+#Set Width 1400
+#Set Height 800
 
 Set Shell "bash"
