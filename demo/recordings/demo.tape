@@ -5,7 +5,7 @@ Source demo/recordings/style.tape
 Output docs/demo.gif
 
 Hide
-Type "alias ls='ls --color=force'" Enter Slep 500ms
+Type "alias ls='ls --color=force'" Enter Sleep 500ms
 Type "clear" Enter Sleep 500ms
 Show
 
