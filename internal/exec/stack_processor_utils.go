@@ -3,6 +3,7 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -1927,6 +1928,22 @@ func GetFileContent(filePath string) (string, error) {
 	existingContent, found := getFileContentSyncMap.Load(filePath)
 	if found && existingContent != nil {
 		return fmt.Sprintf("%s", existingContent), nil
+	}
+
+	//Check if its Github remote URL to single file
+	parsedURL, err := url.Parse(filePath) // Parse the URL
+	if err != nil {
+		u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to parse the URL: %s", filePath))
+		return "", nil
+	}
+	if parsedURL.Host == "github.com" && parsedURL.Scheme == "https" {
+		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Fetching GitHub source: %s", filePath))
+		fileContents, err := u.DownloadFileFromGitHub(filePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to download GitHub file: %w", err)
+		}
+		getFileContentSyncMap.Store(filePath, fileContents)
+		return string(fileContents), nil
 	}
 
 	content, err := os.ReadFile(filePath)

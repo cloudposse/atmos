@@ -77,7 +77,8 @@ func DownloadFileFromGitHub(rawURL string) ([]byte, error) {
 	}
 	data, err := base64.StdEncoding.DecodeString(content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode file content: %w", err)
+		// fallback to raw content
+		data = []byte(content)
 	}
 
 	return data, nil
