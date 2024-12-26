@@ -1933,8 +1933,7 @@ func GetFileContent(filePath string) (string, error) {
 	//Check if its Github remote URL to single file
 	parsedURL, err := url.Parse(filePath) // Parse the URL
 	if err != nil {
-		u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to parse the URL: %s", filePath))
-		return "", nil
+		u.LogInfo(schema.AtmosConfiguration{}, fmt.Sprintf("Filepath is local: %s", filePath))
 	}
 	if parsedURL.Host == "github.com" && parsedURL.Scheme == "https" {
 		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Fetching GitHub source: %s", filePath))
