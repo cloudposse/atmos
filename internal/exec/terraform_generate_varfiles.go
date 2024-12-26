@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -159,7 +160,7 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				// Absolute path to the terraform component
-				terraformComponentPath := filepath.Join(
+				terraformComponentPath := path.Join(
 					atmosConfig.BasePath,
 					atmosConfig.Components.Terraform.BasePath,
 					terraformComponent,
