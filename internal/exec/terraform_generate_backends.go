@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -160,7 +161,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				// Path to the terraform component
-				terraformComponentPath := filepath.Join(
+				terraformComponentPath := path.Join(
 					atmosConfig.BasePath,
 					atmosConfig.Components.Terraform.BasePath,
 					terraformComponent,
@@ -290,7 +291,7 @@ func ExecuteTerraformGenerateBackends(
 
 						processedTerraformComponents[terraformComponent] = terraformComponent
 
-						backendFilePath = filepath.Join(
+						backendFilePath = path.Join(
 							terraformComponentPath,
 							"backend.tf",
 						)
