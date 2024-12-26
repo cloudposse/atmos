@@ -26,20 +26,7 @@ jobs:
           VERSION=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: List all .tape files
-        id: list-tapes
-        run: |
-          files=$(git ls-files | grep 'demo.tape$' || true)
-          if [ -z "$files" ]; then
-            echo "matrix=[]" >> $GITHUB_OUTPUT
-          else
-            matrix=$(echo "$files" | jq -R -s -c 'split("\n") | map(select(length > 0))')
-            echo "matrix=$matrix" >> $GITHUB_OUTPUT
-          fi
-          cat $GITHUB_OUTPUT
-
     outputs:
-      matrix: ${{ steps.list-tapes.outputs.matrix }}
       version: ${{ steps.get-version.outputs.version }}
 
   screengrabs:
@@ -94,12 +81,6 @@ jobs:
     needs: [prepare]
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    strategy:
-      matrix:
-        file: ${{ fromJson(needs.prepare.outputs.matrix) }}
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.file }}
-      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
 
@@ -132,7 +113,6 @@ jobs:
         id: vars
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
-          JOB_NAME=$(basename "${{ matrix.file }}" | sed 's/.tape$//')
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "job_name=${JOB_NAME}" >> $GITHUB_OUTPUT
           echo "branch_name=chore/update-${JOB_NAME}-for-${VERSION}" >> $GITHUB_OUTPUT
@@ -145,7 +125,8 @@ jobs:
 
       - name: Record screencast
         run: |
-          vhs ${{ matrix.file }}
+          demo/recordings/build.sh
+          mv demo/recordings/gif/atmos.gif docs/demo.gif
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
@@ -167,6 +148,9 @@ jobs:
         run: |
           echo "## Demo GIF" >> $GITHUB_STEP_SUMMARY
           echo "![Demo GIF](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Demo Video" >> $GITHUB_STEP_SUMMARY
+          echo "![Demo Video](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/demo/recordings/mp4/atmos-with-audio.mp4?raw=true)" >> $GITHUB_STEP_SUMMARY
 
       - name: No changes
         if: steps.auto-commit.outputs.pull-request-operation == 'none' || steps.auto-commit.outputs.pull-request-operation == 'closed'
