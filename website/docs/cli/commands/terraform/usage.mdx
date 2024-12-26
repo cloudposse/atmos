@@ -59,7 +59,7 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
 
 - `atmos terraform clean` command deletes the `.terraform` folder, `.terraform.lock.hcl` lock file, and the previously generated `planfile`
   and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file. 
-  Use the `--everything` flag is the default behavior to delete all the local Terraform state files and directories (including `terraform.tfstate.d`) for all components and stacks. 
+  The `--everything` flag is the default behavior. It deletes all local Terraform state files and directories (including `terraform.tfstate.d/`) for all components and stacks. 
   Use the `--force` flag to bypass the safety confirmation prompt and force the deletion (use with caution).
 
   :::warning
