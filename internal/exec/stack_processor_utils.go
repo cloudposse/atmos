@@ -1934,15 +1934,16 @@ func GetFileContent(filePath string) (string, error) {
 	parsedURL, err := url.Parse(filePath) // Parse the URL
 	if err != nil {
 		u.LogInfo(schema.AtmosConfiguration{}, fmt.Sprintf("Filepath is local: %s", filePath))
-	}
-	if parsedURL.Host == "github.com" && parsedURL.Scheme == "https" {
-		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Fetching GitHub source: %s", filePath))
-		fileContents, err := u.DownloadFileFromGitHub(filePath)
-		if err != nil {
-			return "", fmt.Errorf("failed to download GitHub file: %w", err)
+	} else {
+		if parsedURL.Host == "github.com" && parsedURL.Scheme == "https" {
+			u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Fetching GitHub source: %s", filePath))
+			fileContents, err := u.DownloadFileFromGitHub(filePath)
+			if err != nil {
+				return "", fmt.Errorf("failed to download GitHub file: %w", err)
+			}
+			getFileContentSyncMap.Store(filePath, fileContents)
+			return string(fileContents), nil
 		}
-		getFileContentSyncMap.Store(filePath, fileContents)
-		return string(fileContents), nil
 	}
 
 	content, err := os.ReadFile(filePath)
