@@ -152,7 +152,9 @@ func initConfig() {
 		}
 		// TODO: find a better way to do this if possible
 		if command.Use == "terraform" {
-			oldUsageFunc(command)
+			if err := oldUsageFunc(command); err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
 			return
 		} else {
 			b.HelpFunc(command, strings)
