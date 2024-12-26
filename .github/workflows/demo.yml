@@ -150,7 +150,7 @@ jobs:
           echo "![Demo GIF](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
 
           echo "## Demo Video" >> $GITHUB_STEP_SUMMARY
-          echo "![Demo Video](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/demo/recordings/mp4/atmos-with-audio.mp4?raw=true)" >> $GITHUB_STEP_SUMMARY
+          echo "https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/demo/recordings/mp4/atmos-with-audio.mp4?raw=true" >> $GITHUB_STEP_SUMMARY
 
       - name: No changes
         if: steps.auto-commit.outputs.pull-request-operation == 'none' || steps.auto-commit.outputs.pull-request-operation == 'closed'

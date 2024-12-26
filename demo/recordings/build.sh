@@ -65,7 +65,7 @@ for scene_file in "${SCENE_FILES[@]}"; do
   ffmpeg -i "$MP4_OUTDIR/$scene_name.mp4" -i "$AUDIO_FILE" \
     -filter_complex "[1:a]afade=t=out:st=${FADE_START}:d=5[aout]" \
     -map 0:v -map "[aout]" \
-    -c:v copy -shortest -c:a aac "$MP4_OUTDIR/$scene_name-with-audio.mp4"
+    -c:v copy -c:a aac "$MP4_OUTDIR/$scene_name-with-audio.mp4"
 
   # Create GIF
   echo "      Creating GIF -> $GIF_OUTDIR/$scene_name.gif"
