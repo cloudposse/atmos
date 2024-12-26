@@ -247,9 +247,12 @@ Arguments:
 // attachTerraformCommands attaches static Terraform commands to a provided parent command
 func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().String("append-user-agent", "", "Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.")
+	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running 'terraform init' before executing the command")
+
 	commands := getTerraformCommands()
 
 	for _, cmd := range commands {
+		cmd.FParseErrWhitelist.UnknownFlags = true
 		if setFlags, ok := commandMaps[cmd.Use]; ok {
 			setFlags(cmd)
 		}
@@ -257,7 +260,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 			if len(os.Args) > 3 {
 				args = os.Args[2:]
 			}
-			if parentCmd.Run != nil {
+			if parentCmd.RunE != nil {
 				return parentCmd.RunE(parentCmd, args)
 			}
 			return nil
@@ -275,14 +278,10 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 	"apply": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
 		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
-		cmd.PersistentFlags().Bool("auto-approve", false, "Set to automatically approve and apply changes without confirmation")
 	},
 	"clean": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("everything", false, "If set atmos will also delete the Terraform state files and directories for the component.")
 		cmd.PersistentFlags().Bool("force", false, "Forcefully delete Terraform state files and directories without interaction")
 		cmd.PersistentFlags().Bool("skip-lock-file", false, "Skip deleting the `.terraform.lock.hcl` file")
-	},
-	"destroy": func(cmd *cobra.Command) {
-		cmd.PersistentFlags().Bool("auto-approve", false, "Set to automatically approve and apply changes without confirmation")
 	},
 }

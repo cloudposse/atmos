@@ -34,16 +34,16 @@ commands:
   - atmos validate stacks
   # Test dev stack
   - atmos terraform plan demo -s dev
-  - atmos terraform apply demo -s dev --auto-approve
-  - atmos terraform destroy demo -s dev --auto-approve
+  - atmos terraform apply demo -s dev -auto-approve
+  - atmos terraform destroy demo -s dev -auto-approve
   # Test staging stack
   - atmos terraform plan demo -s staging
-  - atmos terraform apply demo -s staging --auto-approve
-  - atmos terraform destroy demo -s staging --auto-approve
+  - atmos terraform apply demo -s staging -auto-approve
+  - atmos terraform destroy demo -s staging -auto-approve
   # Test prod stack
   - atmos terraform plan demo -s prod
-  - atmos terraform apply demo -s prod --auto-approve
-  - atmos terraform destroy demo -s prod --auto-approve
+  - atmos terraform apply demo -s prod -auto-approve
+  - atmos terraform destroy demo -s prod -auto-approve
 
 # Use Nested Custom Commands to provide easier interface for Docker Compose
 - name: "localstack"

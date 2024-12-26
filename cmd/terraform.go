@@ -42,7 +42,7 @@ func terraformRun(cmd *cobra.Command, args []string) error {
 
 	// Exit on help
 	if info.NeedHelp {
-		if info.SubCommand != "" {
+		if info.SubCommand != "" && info.SubCommand != "--help" && info.SubCommand != "help" {
 			suggestions := cmd.SuggestionsFor(args[0])
 			if len(suggestions) > 0 {
 				fmt.Printf("Unknown command: '%s'\n\nDid you mean this?\n", args[0])

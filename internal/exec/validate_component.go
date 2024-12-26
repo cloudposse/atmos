@@ -3,7 +3,7 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -197,11 +197,11 @@ func validateComponentInternal(
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.JsonSchema.BasePath, schemaPath)
+				filePath = path.Join(atmosConfig.BasePath, atmosConfig.Schemas.JsonSchema.BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.Opa.BasePath, schemaPath)
+				filePath = path.Join(atmosConfig.BasePath, atmosConfig.Schemas.Opa.BasePath, schemaPath)
 			}
 		}
 
@@ -228,7 +228,7 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.Opa.BasePath), modulePaths)
+			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(path.Join(atmosConfig.BasePath, atmosConfig.Schemas.Opa.BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}
