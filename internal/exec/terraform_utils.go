@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -87,7 +88,7 @@ func execTerraformOutput(atmosConfig schema.AtmosConfiguration, component string
 
 		// Auto-generate backend file
 		if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
-			backendFileName := filepath.Join(componentPath, "backend.tf.json")
+			backendFileName := path.Join(componentPath, "backend.tf.json")
 
 			u.LogTrace(atmosConfig, "\nWriting the backend config to file:")
 			u.LogTrace(atmosConfig, backendFileName)
@@ -120,7 +121,7 @@ func execTerraformOutput(atmosConfig schema.AtmosConfiguration, component string
 		providersSection, ok := sections["providers"].(map[string]any)
 
 		if ok && len(providersSection) > 0 {
-			providerOverrideFileName := filepath.Join(componentPath, "providers_override.tf.json")
+			providerOverrideFileName := path.Join(componentPath, "providers_override.tf.json")
 
 			u.LogTrace(atmosConfig, "\nWriting the provider overrides to file:")
 			u.LogTrace(atmosConfig, providerOverrideFileName)

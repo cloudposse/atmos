@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -30,7 +30,7 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 	defer removeTempDir(atmosConfig, tempDir)
 
 	// Temp tarball file name
-	tempTarFileName := filepath.Join(tempDir, uuid.New().String()) + ".tar"
+	tempTarFileName := path.Join(tempDir, uuid.New().String()) + ".tar"
 
 	// Get the image reference from the OCI registry
 	ref, err := name.ParseReference(imageName)
@@ -91,7 +91,7 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 
 	// Extract the layers into the destination directory
 	for _, l := range manifest.Layers {
-		layerPath := filepath.Join(tempDir, l)
+		layerPath := path.Join(tempDir, l)
 
 		err = extractTarball(atmosConfig, layerPath, destDir)
 		if err != nil {
