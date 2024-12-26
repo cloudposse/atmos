@@ -357,7 +357,7 @@ func ProcessYAMLConfigFile(
 
 			found := false
 			for _, extension := range extensions {
-				testPath := filepath.Join(basePath, imp+extension)
+				testPath := path.Join(basePath, imp+extension)
 				if _, err := os.Stat(testPath); err == nil {
 					impWithExt = imp + extension
 					found = true
@@ -372,12 +372,12 @@ func ProcessYAMLConfigFile(
 		} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
 			// Check if there's a template version of this file
 			templatePath := impWithExt + u.TemplateExtension
-			if _, err := os.Stat(filepath.Join(basePath, templatePath)); err == nil {
+			if _, err := os.Stat(path.Join(basePath, templatePath)); err == nil {
 				impWithExt = templatePath
 			}
 		}
 
-		impWithExtPath := filepath.Join(basePath, impWithExt)
+		impWithExtPath := path.Join(basePath, impWithExt)
 
 		if impWithExtPath == filePath {
 			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
@@ -2180,7 +2180,7 @@ func ProcessBaseComponentConfig(
 		if checkBaseComponentExists {
 			// Check if the base component exists as Terraform/Helmfile component
 			// If it does exist, don't throw errors if it is not defined in YAML config
-			componentPath := filepath.Join(componentBasePath, baseComponent)
+			componentPath := path.Join(componentBasePath, baseComponent)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
 				return errors.New("The component '" + component + "' inherits from the base component '" +

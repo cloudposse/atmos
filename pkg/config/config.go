@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 
@@ -132,7 +133,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	if len(configFilePath1) > 0 {
-		configFile1 := filepath.Join(configFilePath1, CliConfigFileName)
+		configFile1 := path.Join(configFilePath1, CliConfigFileName)
 		found, err = processConfigFile(atmosConfig, configFile1, v)
 		if err != nil {
 			return atmosConfig, err
@@ -147,7 +148,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if err != nil {
 		return atmosConfig, err
 	}
-	configFile2 := filepath.Join(configFilePath2, ".atmos", CliConfigFileName)
+	configFile2 := path.Join(configFilePath2, ".atmos", CliConfigFileName)
 	found, err = processConfigFile(atmosConfig, configFile2, v)
 	if err != nil {
 		return atmosConfig, err
@@ -161,7 +162,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if err != nil {
 		return atmosConfig, err
 	}
-	configFile3 := filepath.Join(configFilePath3, CliConfigFileName)
+	configFile3 := path.Join(configFilePath3, CliConfigFileName)
 	found, err = processConfigFile(atmosConfig, configFile3, v)
 	if err != nil {
 		return atmosConfig, err
@@ -174,7 +175,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
 	if len(configFilePath4) > 0 {
 		u.LogTrace(atmosConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
-		configFile4 := filepath.Join(configFilePath4, CliConfigFileName)
+		configFile4 := path.Join(configFilePath4, CliConfigFileName)
 		found, err = processConfigFile(atmosConfig, configFile4, v)
 		if err != nil {
 			return atmosConfig, err
@@ -188,7 +189,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if configAndStacksInfo.AtmosCliConfigPath != "" {
 		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
 		if len(configFilePath5) > 0 {
-			configFile5 := filepath.Join(configFilePath5, CliConfigFileName)
+			configFile5 := path.Join(configFilePath5, CliConfigFileName)
 			found, err = processConfigFile(atmosConfig, configFile5, v)
 			if err != nil {
 				return atmosConfig, err
@@ -270,7 +271,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Convert stacks base path to absolute path
-	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	stacksBasePath := path.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
 		return atmosConfig, err
@@ -292,7 +293,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	atmosConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert terraform dir to absolute path
-	terraformBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
+	terraformBasePath := path.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
 		return atmosConfig, err
@@ -300,7 +301,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	atmosConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert helmfile dir to absolute path
-	helmfileBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
+	helmfileBasePath := path.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return atmosConfig, err
