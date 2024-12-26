@@ -79,7 +79,7 @@ func processHelp(
 			" - generated 'backend.tf.json' file\n" +
 			" - 'terraform.tfstate.d' folder (if '--everything' flag is used)\n\n" +
 			"Usage: atmos terraform clean <component> -s <stack> <flags>\n\n" +
-			"Use '--everything' flag —everything is the default behavior to delete the Terraform state files and and directories with confirm message.\n\n" +
+			"Use the `--everything` flag to remove all Terraform state files and directories, prompting you for confirmation before proceeding. This is the default behavior.\n\n" +
 			"Use --force to forcefully delete Terraform state files and directories for the component.\n\n" +
 			"- If no component is specified, the command will apply to all components and stacks.\n" +
 			"- If no stack is specified, the command will apply to all stacks for the specified component.\n" +
