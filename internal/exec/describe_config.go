@@ -20,12 +20,12 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, false)
+	atmosConfig, err := cfg.InitCliConfig(info, false)
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, "", cliConfig)
+	err = printOrWriteToFile(format, "", atmosConfig)
 	if err != nil {
 		return err
 	}

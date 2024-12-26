@@ -4,22 +4,30 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func ProcessCustomYamlTags(cliConfig schema.CliConfiguration, input schema.AtmosSectionMapType) (schema.AtmosSectionMapType, error) {
-	return processNodes(cliConfig, input), nil
+func ProcessCustomYamlTags(
+	atmosConfig schema.AtmosConfiguration,
+	input schema.AtmosSectionMapType,
+	currentStack string,
+) (schema.AtmosSectionMapType, error) {
+	return processNodes(atmosConfig, input, currentStack), nil
 }
 
-func processNodes(cliConfig schema.CliConfiguration, data map[string]any) map[string]any {
+func processNodes(
+	atmosConfig schema.AtmosConfiguration,
+	data map[string]any,
+	currentStack string,
+) map[string]any {
 	newMap := make(map[string]any)
 	var recurse func(any) any
 
 	recurse = func(node any) any {
 		switch v := node.(type) {
 		case string:
-			return processCustomTags(cliConfig, v)
+			return processCustomTags(atmosConfig, v, currentStack)
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
@@ -47,20 +55,28 @@ func processNodes(cliConfig schema.CliConfiguration, data map[string]any) map[st
 	return newMap
 }
 
-func processCustomTags(cliConfig schema.CliConfiguration, input string) any {
-	if strings.HasPrefix(input, config.AtmosYamlFuncTemplate) {
-		return processTagTemplate(cliConfig, input)
-	} else if strings.HasPrefix(input, config.AtmosYamlFuncExec) {
-		return processTagExec(cliConfig, input)
-	} else if strings.HasPrefix(input, config.AtmosYamlFuncTerraformOutput) {
-		return processTagTerraformOutput(cliConfig, input)
-	}
+func processCustomTags(
+	atmosConfig schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+) any {
 
-	// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
-	return input
+	switch {
+	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate):
+		return processTagTemplate(atmosConfig, input, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncExec):
+		return processTagExec(atmosConfig, input, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncStore):
+		return processTagStore(atmosConfig, input, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput):
+		return processTagTerraformOutput(atmosConfig, input, currentStack)
+	default:
+		// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
+		return input
+	}
 }
 
-func getStringAfterTag(cliConfig schema.CliConfiguration, input string, tag string) (string, error) {
+func getStringAfterTag(input string, tag string) (string, error) {
 	str := strings.TrimPrefix(input, tag)
 	str = strings.TrimSpace(str)
 

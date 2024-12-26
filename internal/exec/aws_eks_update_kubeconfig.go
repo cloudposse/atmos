@@ -2,10 +2,11 @@ package exec
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"path"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -122,18 +123,18 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	shellCommandWorkingDir := ""
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo
-	var cliConfig schema.CliConfiguration
+	var atmosConfig schema.AtmosConfiguration
 	var err error
 
 	if !requiredParamsProvided {
 		// If stack is not provided, calculate the stack name from the context (tenant, environment, stage)
 		if kubeconfigContext.Stack == "" {
-			cliConfig, err = cfg.InitCliConfig(configAndStacksInfo, true)
+			atmosConfig, err = cfg.InitCliConfig(configAndStacksInfo, true)
 			if err != nil {
 				return err
 			}
 
-			if len(GetStackNamePattern(cliConfig)) < 1 {
+			if len(GetStackNamePattern(atmosConfig)) < 1 {
 				return errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 			}
 
@@ -142,7 +143,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 				kubeconfigContext.Tenant,
 				kubeconfigContext.Environment,
 				kubeconfigContext.Stage,
-				GetStackNamePattern(cliConfig),
+				GetStackNamePattern(atmosConfig),
 			)
 			if err != nil {
 				return err
@@ -156,12 +157,12 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		configAndStacksInfo.Stack = kubeconfigContext.Stack
 
 		configAndStacksInfo.ComponentType = "terraform"
-		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, true)
-		shellCommandWorkingDir = path.Join(cliConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
+		shellCommandWorkingDir = path.Join(atmosConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
-			configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, true)
-			shellCommandWorkingDir = path.Join(cliConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
+			shellCommandWorkingDir = path.Join(atmosConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err
 			}
@@ -174,16 +175,16 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 
 		// `kubeconfig` can be overridden on the command line
 		if kubeconfigPath == "" {
-			kubeconfigPath = fmt.Sprintf("%s/%s-kubecfg", cliConfig.Components.Helmfile.KubeconfigPath, kubeconfigContext.Stack)
+			kubeconfigPath = fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, kubeconfigContext.Stack)
 		}
 		// `clusterName` can be overridden on the command line
 		if clusterName == "" {
-			clusterName = cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.ClusterNamePattern)
+			clusterName = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
 		}
 		// `profile` can be overridden on the command line
 		// `--role-arn` suppresses `profile` being automatically set
 		if profile == "" && roleArn == "" {
-			profile = cfg.ReplaceContextTokens(context, cliConfig.Components.Helmfile.HelmAwsProfilePattern)
+			profile = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
 		}
 		// `region` can be overridden on the command line
 		if region == "" {
@@ -223,14 +224,14 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err = ExecuteShellCommand(cliConfig, "aws", args, shellCommandWorkingDir, nil, dryRun, "")
+	err = ExecuteShellCommand(atmosConfig, "aws", args, shellCommandWorkingDir, nil, dryRun, "")
 	if err != nil {
 		return err
 	}
 
 	if kubeconfigPath != "" {
 		message := fmt.Sprintf("\n'kubeconfig' has been downloaded to '%s'\nYou can set 'KUBECONFIG' ENV var to use in other scripts\n", kubeconfigPath)
-		u.LogDebug(cliConfig, message)
+		u.LogDebug(atmosConfig, message)
 	}
 
 	return nil

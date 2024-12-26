@@ -36,7 +36,7 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return err
 		}
 
-		err = processHelp(cliConfig, "terraform", "")
+		err = processHelp(atmosConfig, "terraform", "")
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 	if info.SubCommand == "version" {
-		return ExecuteShellCommand(cliConfig,
+		return ExecuteShellCommand(atmosConfig,
 			"terraform",
 			[]string{info.SubCommand},
 			"",
@@ -87,7 +87,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if shouldProcessStacks {
-		info, err = ProcessStacks(cliConfig, info, shouldCheckStack, true)
+		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, true)
 		if err != nil {
 			return err
 		}
@@ -97,22 +97,22 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !info.ComponentIsEnabled {
-		u.LogInfo(cliConfig, fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		u.LogInfo(atmosConfig, fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
 		return nil
 	}
 
-	err = checkTerraformConfig(cliConfig)
+	err = checkTerraformConfig(atmosConfig)
 	if err != nil {
 		return err
 	}
 	// Check if the component (or base component) exists as Terraform component
-	componentPath := filepath.Join(cliConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
-			filepath.Join(cliConfig.Components.Terraform.BasePath, info.ComponentFolderPrefix),
+			filepath.Join(atmosConfig.Components.Terraform.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
@@ -123,9 +123,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "clean" {
-		err := handleCleanSubCommand(info, componentPath, cliConfig)
+		err := handleCleanSubCommand(info, componentPath, atmosConfig)
 		if err != nil {
-			u.LogTrace(cliConfig, fmt.Errorf("error cleaning the terraform component: %v", err).Error())
+			u.LogTrace(atmosConfig, fmt.Errorf("error cleaning the terraform component: %v", err).Error())
 			return err
 		}
 		return nil
@@ -137,10 +137,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
-		u.LogDebug(cliConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+		u.LogDebug(atmosConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 
-		if cliConfig.Logs.Level == u.LogLevelTrace || cliConfig.Logs.Level == u.LogLevelDebug {
-			err = u.PrintAsYAMLToFileDescriptor(cliConfig, info.ComponentVarsSection)
+		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
 			if err != nil {
 				return err
 			}
@@ -163,11 +163,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			if len(varFileNameFromArg) > 0 {
 				varFilePath = varFileNameFromArg
 			} else {
-				varFilePath = constructTerraformComponentVarfilePath(cliConfig, info)
+				varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
 			}
 
-			u.LogDebug(cliConfig, "Writing the variables to file:")
-			u.LogDebug(cliConfig, varFilePath)
+			u.LogDebug(atmosConfig, "Writing the variables to file:")
+			u.LogDebug(atmosConfig, varFilePath)
 
 			if !info.DryRun {
 				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
@@ -184,7 +184,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if component 'settings.validation' section is specified and validate the component
-	valid, err := ValidateComponent(cliConfig, info.ComponentFromArg, info.ComponentSection, "", "", nil, 0)
+	valid, err := ValidateComponent(atmosConfig, info.ComponentFromArg, info.ComponentSection, "", "", nil, 0)
 	if err != nil {
 		return err
 	}
@@ -193,14 +193,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Component working directory
-	workingDir := constructTerraformComponentWorkingDir(cliConfig, info)
+	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
 
 	// Auto-generate backend file
-	if cliConfig.Components.Terraform.AutoGenerateBackendFile {
+	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
-		u.LogDebug(cliConfig, "\nWriting the backend config to file:")
-		u.LogDebug(cliConfig, backendFileName)
+		u.LogDebug(atmosConfig, "\nWriting the backend config to file:")
+		u.LogDebug(atmosConfig, backendFileName)
 
 		if !info.DryRun {
 			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -219,8 +219,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
-		u.LogDebug(cliConfig, "\nWriting the provider overrides to file:")
-		u.LogDebug(cliConfig, providerOverrideFileName)
+		u.LogDebug(atmosConfig, "\nWriting the provider overrides to file:")
+		u.LogDebug(atmosConfig, providerOverrideFileName)
 
 		if !info.DryRun {
 			var providerOverrides = generateComponentProviderOverrides(info.ComponentProvidersSection)
@@ -237,7 +237,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Set 'TF_APPEND_USER_AGENT' ENV var based on precedence
 	// Precedence: Environment Variable > atmos.yaml > Default
-	appendUserAgent := cliConfig.Components.Terraform.AppendUserAgent
+	appendUserAgent := atmosConfig.Components.Terraform.AppendUserAgent
 	if envUA, exists := os.LookupEnv("TF_APPEND_USER_AGENT"); exists && envUA != "" {
 		appendUserAgent = envUA
 	}
@@ -247,9 +247,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
-		u.LogDebug(cliConfig, "\nUsing ENV vars:")
+		u.LogDebug(atmosConfig, "\nUsing ENV vars:")
 		for _, v := range info.ComponentEnvList {
-			u.LogDebug(cliConfig, v)
+			u.LogDebug(atmosConfig, v)
 		}
 	}
 
@@ -257,26 +257,26 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
 		info.SubCommand == "clean" ||
-		(info.SubCommand == "deploy" && !cliConfig.Components.Terraform.DeployRunInit) {
+		(info.SubCommand == "deploy" && !atmosConfig.Components.Terraform.DeployRunInit) {
 		runTerraformInit = false
 	}
 
 	if info.SkipInit {
-		u.LogDebug(cliConfig, "Skipping over 'terraform init' due to '--skip-init' flag being passed")
+		u.LogDebug(atmosConfig, "Skipping over 'terraform init' due to '--skip-init' flag being passed")
 		runTerraformInit = false
 	}
 
 	if runTerraformInit {
 		initCommandWithArguments := []string{"init"}
-		if info.SubCommand == "workspace" || cliConfig.Components.Terraform.InitRunReconfigure {
+		if info.SubCommand == "workspace" || atmosConfig.Components.Terraform.InitRunReconfigure {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(cliConfig, componentPath)
+		cleanTerraformWorkspace(atmosConfig, componentPath)
 
 		err = ExecuteShellCommand(
-			cliConfig,
+			atmosConfig,
 			info.Command,
 			initCommandWithArguments,
 			componentPath,
@@ -297,42 +297,42 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Handle cliConfig.Components.Terraform.ApplyAutoApprove flag
-	if info.SubCommand == "apply" && cliConfig.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
+	// Handle atmosConfig.Components.Terraform.ApplyAutoApprove flag
+	if info.SubCommand == "apply" && atmosConfig.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
 
 	// Print command info
-	u.LogDebug(cliConfig, "\nCommand info:")
-	u.LogDebug(cliConfig, "Terraform binary: "+info.Command)
+	u.LogDebug(atmosConfig, "\nCommand info:")
+	u.LogDebug(atmosConfig, "Terraform binary: "+info.Command)
 
 	if info.SubCommand2 == "" {
-		u.LogDebug(cliConfig, fmt.Sprintf("Terraform command: %s", info.SubCommand))
+		u.LogDebug(atmosConfig, fmt.Sprintf("Terraform command: %s", info.SubCommand))
 	} else {
-		u.LogDebug(cliConfig, fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
+		u.LogDebug(atmosConfig, fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
 	}
 
-	u.LogDebug(cliConfig, fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
-	u.LogDebug(cliConfig, "Component: "+info.ComponentFromArg)
+	u.LogDebug(atmosConfig, fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	u.LogDebug(atmosConfig, "Component: "+info.ComponentFromArg)
 
 	if len(info.BaseComponentPath) > 0 {
-		u.LogDebug(cliConfig, "Terraform component: "+info.BaseComponentPath)
+		u.LogDebug(atmosConfig, "Terraform component: "+info.BaseComponentPath)
 	}
 
 	if len(info.ComponentInheritanceChain) > 0 {
-		u.LogDebug(cliConfig, "Inheritance: "+info.ComponentFromArg+" -> "+strings.Join(info.ComponentInheritanceChain, " -> "))
+		u.LogDebug(atmosConfig, "Inheritance: "+info.ComponentFromArg+" -> "+strings.Join(info.ComponentInheritanceChain, " -> "))
 	}
 
 	if info.Stack == info.StackFromArg {
-		u.LogDebug(cliConfig, "Stack: "+info.StackFromArg)
+		u.LogDebug(atmosConfig, "Stack: "+info.StackFromArg)
 	} else {
-		u.LogDebug(cliConfig, "Stack: "+info.StackFromArg)
-		u.LogDebug(cliConfig, "Stack path: "+filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath, info.Stack))
+		u.LogDebug(atmosConfig, "Stack: "+info.StackFromArg)
+		u.LogDebug(atmosConfig, "Stack path: "+filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
-	u.LogDebug(cliConfig, fmt.Sprintf("Working dir: %s", workingDir))
+	u.LogDebug(atmosConfig, fmt.Sprintf("Working dir: %s", workingDir))
 
 	allArgsAndFlags := strings.Fields(info.SubCommand)
 
@@ -357,9 +357,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	case "init":
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(cliConfig, componentPath)
+		cleanTerraformWorkspace(atmosConfig, componentPath)
 
-		if cliConfig.Components.Terraform.InitRunReconfigure {
+		if atmosConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
 	case "workspace":
@@ -399,7 +399,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			}
 
 			err = ExecuteShellCommand(
-				cliConfig,
+				atmosConfig,
 				info.Command,
 				[]string{"workspace", "select", info.TerraformWorkspace},
 				componentPath,
@@ -415,7 +415,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					return err
 				}
 				err = ExecuteShellCommand(
-					cliConfig,
+					atmosConfig,
 					info.Command,
 					[]string{"workspace", "new", info.TerraformWorkspace},
 					componentPath,
@@ -455,7 +455,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Execute `terraform shell` command
 	if info.SubCommand == "shell" {
 		err = execTerraformShellCommand(
-			cliConfig,
+			atmosConfig,
 			info.ComponentFromArg,
 			info.Stack,
 			info.ComponentEnvList,
@@ -473,7 +473,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Execute the provided command (except for `terraform workspace` which was executed above)
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
 		err = ExecuteShellCommand(
-			cliConfig,
+			atmosConfig,
 			info.Command,
 			allArgsAndFlags,
 			componentPath,
@@ -488,12 +488,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Clean up
 	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" {
-		planFilePath := constructTerraformComponentPlanfilePath(cliConfig, info)
+		planFilePath := constructTerraformComponentPlanfilePath(atmosConfig, info)
 		_ = os.Remove(planFilePath)
 	}
 
 	if info.SubCommand == "apply" {
-		varFilePath := constructTerraformComponentVarfilePath(cliConfig, info)
+		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
 		_ = os.Remove(varFilePath)
 	}
 

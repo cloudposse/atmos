@@ -28,15 +28,15 @@ func CreateSpaceliftStacks(
 	stackConfigPathTemplate string,
 ) (map[string]any, error) {
 
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
-		u.LogError(cliConfig, err)
+		u.LogError(atmosConfig, err)
 		return nil, err
 	}
 
 	if len(filePaths) > 0 {
 		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
-			cliConfig,
+			atmosConfig,
 			stacksBasePath,
 			terraformComponentsBasePath,
 			helmfileComponentsBasePath,
@@ -46,12 +46,12 @@ func CreateSpaceliftStacks(
 			false,
 		)
 		if err != nil {
-			u.LogError(cliConfig, err)
+			u.LogError(atmosConfig, err)
 			return nil, err
 		}
 
 		return TransformStackConfigToSpaceliftStacks(
-			cliConfig,
+			atmosConfig,
 			stacks,
 			stackConfigPathTemplate,
 			"",
@@ -60,25 +60,25 @@ func CreateSpaceliftStacks(
 		)
 	} else {
 		_, stacks, rawStackConfigs, err := s.ProcessYAMLConfigFiles(
-			cliConfig,
-			cliConfig.StacksBaseAbsolutePath,
-			cliConfig.TerraformDirAbsolutePath,
-			cliConfig.HelmfileDirAbsolutePath,
-			cliConfig.StackConfigFilesAbsolutePaths,
+			atmosConfig,
+			atmosConfig.StacksBaseAbsolutePath,
+			atmosConfig.TerraformDirAbsolutePath,
+			atmosConfig.HelmfileDirAbsolutePath,
+			atmosConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,
 			false,
 		)
 		if err != nil {
-			u.LogError(cliConfig, err)
+			u.LogError(atmosConfig, err)
 			return nil, err
 		}
 
 		return TransformStackConfigToSpaceliftStacks(
-			cliConfig,
+			atmosConfig,
 			stacks,
 			stackConfigPathTemplate,
-			e.GetStackNamePattern(cliConfig),
+			e.GetStackNamePattern(atmosConfig),
 			processImports,
 			rawStackConfigs,
 		)
@@ -87,7 +87,7 @@ func CreateSpaceliftStacks(
 
 // TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	stacks map[string]any,
 	stackConfigPathTemplate string,
 	stackNamePattern string,
@@ -187,7 +187,7 @@ func TransformStackConfigToSpaceliftStacks(
 					if stackNamePattern != "" {
 						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
-							u.LogError(cliConfig, err)
+							u.LogError(atmosConfig, err)
 							return nil, err
 						}
 					} else {
@@ -255,9 +255,9 @@ func TransformStackConfigToSpaceliftStacks(
 					spaceliftConfig["deps_all"] = componentDepsAll
 
 					// Terraform workspace
-					workspace, err := e.BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+					workspace, err := e.BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 					if err != nil {
-						u.LogError(cliConfig, err)
+						u.LogError(atmosConfig, err)
 						return nil, err
 					}
 					spaceliftConfig["workspace"] = workspace
@@ -300,7 +300,7 @@ func TransformStackConfigToSpaceliftStacks(
 							component,
 						)
 						if err != nil {
-							u.LogError(cliConfig, err)
+							u.LogError(atmosConfig, err)
 							return nil, err
 						}
 						spaceliftStackNameDependsOnLabels1 = append(spaceliftStackNameDependsOnLabels1, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -360,7 +360,7 @@ func TransformStackConfigToSpaceliftStacks(
 							allStackNames,
 						)
 						if err != nil {
-							u.LogError(cliConfig, err)
+							u.LogError(atmosConfig, err)
 							return nil, err
 						}
 						spaceliftStackNameDependsOnLabels2 = append(spaceliftStackNameDependsOnLabels2, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -378,7 +378,7 @@ func TransformStackConfigToSpaceliftStacks(
 					// Spacelift stack name
 					spaceliftStackName, spaceliftStackNamePattern, err := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 					if err != nil {
-						u.LogError(cliConfig, err)
+						u.LogError(atmosConfig, err)
 						return nil, err
 					}
 
@@ -397,7 +397,7 @@ func TransformStackConfigToSpaceliftStacks(
 							spaceliftStackNamePattern,
 						)
 						er := errors.New(errorMessage)
-						u.LogError(cliConfig, er)
+						u.LogError(atmosConfig, er)
 						return nil, er
 					}
 				}

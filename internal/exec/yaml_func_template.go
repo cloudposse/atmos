@@ -9,13 +9,17 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func processTagTemplate(cliConfig schema.CliConfiguration, input string) any {
-	u.LogTrace(cliConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
+func processTagTemplate(
+	atmosConfig schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+) any {
+	u.LogTrace(atmosConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
-	str, err := getStringAfterTag(cliConfig, input, config.AtmosYamlFuncTemplate)
+	str, err := getStringAfterTag(input, config.AtmosYamlFuncTemplate)
 
 	if err != nil {
-		u.LogErrorAndExit(cliConfig, err)
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	var decoded any

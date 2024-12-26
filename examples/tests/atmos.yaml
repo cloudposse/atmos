@@ -90,6 +90,12 @@ logs:
 
 # Custom CLI commands
 commands:
+  # No arguments or flags are required
+  - name: "test"
+    description: "Run all tests"
+    steps:
+      - atmos vendor pull
+
   - name: tf
     description: Execute 'terraform' commands
     # subcommands
@@ -196,7 +202,7 @@ commands:
       Example usage:
         atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
         atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
-    verbose: false  # Set to `true` to see verbose outputs
+    verbose: false # Set to `true` to see verbose outputs
     arguments:
       - name: component
         description: Name of the component
@@ -233,7 +239,6 @@ commands:
 
 # Integrations
 integrations:
-
   # Atlantis integration
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
