@@ -29,12 +29,12 @@ func PrintAsJSON(data any) error {
 }
 
 // PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
-func PrintAsJSONToFileDescriptor(cliConfig schema.CliConfiguration, data any) error {
+func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
 	j, err := ConvertToJSON(data)
 	if err != nil {
 		return err
 	}
-	LogInfo(cliConfig, j)
+	LogInfo(atmosConfig, j)
 	return nil
 }
 
@@ -49,6 +49,13 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 	indentedJSON, err := json.MarshalIndent(json.RawMessage(j), "", "  ")
 	if err != nil {
 		return err
+	}
+
+	const newlineByte = '\n'
+
+	// Ensure that the JSON content ends with a newline
+	if len(indentedJSON) == 0 || indentedJSON[len(indentedJSON)-1] != newlineByte {
+		indentedJSON = append(indentedJSON, newlineByte)
 	}
 
 	err = os.WriteFile(filePath, indentedJSON, fileMode)

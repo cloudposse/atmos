@@ -16,7 +16,7 @@ import (
 )
 
 type DescribeAffectedCmdArgs struct {
-	CLIConfig                   schema.CliConfiguration
+	CLIConfig                   schema.AtmosConfiguration
 	CloneTargetRef              bool
 	Format                      string
 	IncludeDependents           bool
@@ -35,21 +35,21 @@ type DescribeAffectedCmdArgs struct {
 }
 
 func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
-	logger, err := l.NewLoggerFromCliConfig(cliConfig)
+	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
 
-	err = ValidateStacks(cliConfig)
+	err = ValidateStacks(atmosConfig)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
@@ -146,7 +146,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 
 	if verbose {
-		cliConfig.Logs.Level = u.LogLevelTrace
+		atmosConfig.Logs.Level = u.LogLevelTrace
 		err := logger.SetLogLevel(l.LogLevelTrace)
 		if err != nil {
 			return DescribeAffectedCmdArgs{}, err
@@ -154,7 +154,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 
 	result := DescribeAffectedCmdArgs{
-		CLIConfig:                   cliConfig,
+		CLIConfig:                   atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
 		Format:                      format,
 		IncludeDependents:           includeDependents,

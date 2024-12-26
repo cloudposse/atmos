@@ -2,11 +2,12 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path"
+
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"os"
-	"path"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -15,12 +16,12 @@ import (
 
 // ExecuteValidateComponentCmd executes `validate component` command
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return "", "", err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return "", "", err
 	}
@@ -58,7 +59,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 		return "", "", err
 	}
 
-	_, err = ExecuteValidateComponent(cliConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
+	_, err = ExecuteValidateComponent(atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
 		return "", "", err
 	}
@@ -68,7 +69,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
 func ExecuteValidateComponent(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	componentName string,
 	stack string,
@@ -81,10 +82,10 @@ func ExecuteValidateComponent(
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err := ProcessStacks(cliConfig, configAndStacksInfo, true, true)
+	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, true)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
 		if err != nil {
 			return false, err
 		}
@@ -92,12 +93,12 @@ func ExecuteValidateComponent(
 
 	componentSection := configAndStacksInfo.ComponentSection
 
-	return ValidateComponent(cliConfig, componentName, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
+	return ValidateComponent(atmosConfig, componentName, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 }
 
 // ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
 func ValidateComponent(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	componentName string,
 	componentSection any,
 	schemaPath string,
@@ -109,9 +110,9 @@ func ValidateComponent(
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
-		u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+		u.LogDebug(atmosConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
-		ok, err = validateComponentInternal(cliConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
+		ok, err = validateComponentInternal(atmosConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 		if err != nil {
 			return false, err
 		}
@@ -156,13 +157,13 @@ func ValidateComponent(
 				finalTimeoutSeconds = v.Timeout
 			}
 
-			u.LogDebug(cliConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
+			u.LogDebug(atmosConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
 
 			if v.Description != "" {
-				u.LogDebug(cliConfig, v.Description)
+				u.LogDebug(atmosConfig, v.Description)
 			}
 
-			ok2, err := validateComponentInternal(cliConfig, componentSection, finalSchemaPath, finalSchemaType, finalModulePaths, finalTimeoutSeconds)
+			ok2, err := validateComponentInternal(atmosConfig, componentSection, finalSchemaPath, finalSchemaType, finalModulePaths, finalTimeoutSeconds)
 			if err != nil {
 				return false, err
 			}
@@ -176,7 +177,7 @@ func ValidateComponent(
 }
 
 func validateComponentInternal(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	componentSection any,
 	schemaPath string,
 	schemaType string,
@@ -196,11 +197,11 @@ func validateComponentInternal(
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.JsonSchema.BasePath, schemaPath)
+				filePath = path.Join(atmosConfig.BasePath, atmosConfig.Schemas.JsonSchema.BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = path.Join(cliConfig.BasePath, cliConfig.Schemas.Opa.BasePath, schemaPath)
+				filePath = path.Join(atmosConfig.BasePath, atmosConfig.Schemas.Opa.BasePath, schemaPath)
 			}
 		}
 
@@ -227,7 +228,7 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(path.Join(cliConfig.BasePath, cliConfig.Schemas.Opa.BasePath), modulePaths)
+			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(path.Join(atmosConfig.BasePath, atmosConfig.Schemas.Opa.BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}

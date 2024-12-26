@@ -16,12 +16,15 @@ var workflowCmd = &cobra.Command{
 	Example: "atmos workflow\n" +
 		"atmos workflow <name> -f <file>\n" +
 		"atmos workflow <name> -f <file> -s <stack>\n" +
-		"atmos workflow <name> -f <file> --from-step <step-name>",
+		"atmos workflow <name> -f <file> --from-step <step-name>\n\n" +
+		"To resume the workflow from this step, run:\n" +
+		"atmos workflow deploy-infra -f workflow1 --from-step deploy-vpc\n\n" +
+		"For more details refer to https://atmos.tools/cli/commands/workflow/",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }

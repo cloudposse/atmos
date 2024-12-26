@@ -20,7 +20,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -32,7 +32,7 @@ func init() {
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 
 	helmfileGenerateCmd.AddCommand(helmfileGenerateVarfileCmd)

@@ -371,6 +371,40 @@ The Atmos stack used by the workflow commands of type `atmos` can be specified i
   atmos workflow my-workflow -f workflow1 -s tenant1-ue2-dev
   ```
 
+## Workflow Failure Handling and Resume
+
+When a workflow step fails, Atmos will:
+1. Display which step failed
+2. Show the exact command that failed 
+3. Provide a ready-to-use command to resume the workflow from the failed step
+
+Given this workflow:
+
+```yaml title="stacks/workflows/networking.yaml"
+workflows:
+  provision-vpcs:
+    description: "Deploy vpc components"
+    steps:
+      - command: terraform plan vpc -s plat-ue2-dev
+        name: step-1
+      - command: terraform plan vpc -s plat-ue2-staging
+        name: step-2
+      - command: terraform plan vpc -s plat-ue2-prod
+        name: step-3
+```
+
+If step-2 fails, you'll see:
+
+```console
+Step 'step-2' failed!
+
+Command failed: 
+terraform plan vpc -s plat-ue2-staging
+
+To resume the workflow from this step, run:
+atmos workflow provision-vpcs -f networking --from-step step-2
+```
+
 ### Stack Precedence
 
 The stack defined inline in the command itself has the lowest priority, it can and will be overridden by any other stack definition.

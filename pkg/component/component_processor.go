@@ -23,19 +23,19 @@ func ProcessComponentInStack(
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.LogError(cliConfig, err)
+		u.LogError(atmosConfig, err)
 		return nil, err
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true, true)
+	configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = e.ProcessStacks(cliConfig, configAndStacksInfo, true, true)
+		configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
 		if err != nil {
-			u.LogError(cliConfig, err)
+			u.LogError(atmosConfig, err)
 			return nil, err
 		}
 	}
@@ -59,21 +59,21 @@ func ProcessComponentFromContext(
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
 	configAndStacksInfo.AtmosBasePath = atmosBasePath
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.LogError(cliConfig, err)
+		u.LogError(atmosConfig, err)
 		return nil, err
 	}
 
-	if len(e.GetStackNamePattern(cliConfig)) < 1 {
+	if len(e.GetStackNamePattern(atmosConfig)) < 1 {
 		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-		u.LogError(cliConfig, er)
+		u.LogError(atmosConfig, er)
 		return nil, er
 	}
 
-	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, e.GetStackNamePattern(cliConfig))
+	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, e.GetStackNamePattern(atmosConfig))
 	if err != nil {
-		u.LogError(cliConfig, err)
+		u.LogError(atmosConfig, err)
 		return nil, err
 	}
 

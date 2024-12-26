@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/fatih/color"
@@ -48,14 +49,14 @@ func TestNewLogger(t *testing.T) {
 }
 
 func TestNewLoggerFromCliConfig(t *testing.T) {
-	cliConfig := schema.CliConfiguration{
+	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{
 			Level: "Info",
 			File:  "/dev/stdout",
 		},
 	}
 
-	logger, err := NewLoggerFromCliConfig(cliConfig)
+	logger, err := NewLoggerFromCliConfig(atmosConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 	assert.Equal(t, LogLevelInfo, logger.LogLevel)
@@ -147,13 +148,15 @@ func TestLogger_Error(t *testing.T) {
 }
 
 func TestLogger_FileLogging(t *testing.T) {
-	tempFile := "/tmp/test.log"
-	defer os.Remove(tempFile)
+	tempDir := os.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
 
-	logger, _ := NewLogger(LogLevelInfo, tempFile)
+	defer os.Remove(logFile)
+
+	logger, _ := NewLogger(LogLevelInfo, logFile)
 	logger.Info("File logging test")
 
-	data, err := os.ReadFile(tempFile)
+	data, err := os.ReadFile(logFile)
 	assert.NoError(t, err)
 	assert.Contains(t, string(data), "File logging test")
 }

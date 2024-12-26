@@ -20,7 +20,7 @@ var describeAffectedCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeAffectedCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }

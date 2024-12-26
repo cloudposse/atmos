@@ -15,7 +15,7 @@ import (
 )
 
 func TestTerraformGenerateVarfiles(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
@@ -31,6 +31,6 @@ func TestTerraformGenerateVarfiles(t *testing.T) {
 	filePattern := path.Join(tempDir, "varfiles/{tenant}-{environment}-{stage}-{component}.tfvars")
 	format := "hcl"
 
-	err = e.ExecuteTerraformGenerateVarfiles(cliConfig, filePattern, format, stacks, components)
+	err = e.ExecuteTerraformGenerateVarfiles(atmosConfig, filePattern, format, stacks, components)
 	assert.Nil(t, err)
 }
