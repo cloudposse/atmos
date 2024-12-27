@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	u "github.com/cloudposse/atmos/pkg/utils"
+
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -36,6 +38,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 
 // initializeConfig breaks the initialization cycle by separating the config setup
 func initializeConfig() {
+	u.LogInfo(atmosConfig, fmt.Sprintf("EditorConfig Checker CLI Version: %s", editorConfigVersion))
 	if configFilePath == "" {
 		configFilePath = defaultConfigFilePath
 	}
@@ -59,8 +62,8 @@ func initializeConfig() {
 // runMainLogic contains the main logic
 func runMainLogic() {
 	config := *currentConfig
-	config.Logger.Debug(config.GetAsString())
-	config.Logger.Verbose("Exclude Regexp: %s", config.GetExcludesAsRegularExpression())
+	u.LogDebug(atmosConfig, config.GetAsString())
+	u.LogTrace(atmosConfig, fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
 	if utils.FileExists(config.Path) && config.Version != "" && config.Version != editorConfigVersion {
 		config.Logger.Error("Version from config file is not the same as the version of the binary")
@@ -95,6 +98,7 @@ func runMainLogic() {
 	}
 
 	config.Logger.Verbose("%d files checked", len(filePaths))
+	u.LogInfo(atmosConfig, "No errors found")
 }
 
 // handleReturnableFlags handles early termination flags

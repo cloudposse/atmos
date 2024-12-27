@@ -136,7 +136,21 @@ tests:
       stderr:
         - 'unknown command "non-existent" for "atmos"'
       exit_code: 1
-
+  - name: atmos validate editorconfig-check
+    enabled: true
+    description: "Ensure atmos CLI validates based on the .ecrc file."
+    workdir: "../examples/demo-stacks/"
+    command: "atmos"
+    args:
+      - "validate"
+      - "editorconfig-checker"
+    expect:
+      stdout:
+        - "EditorConfig Checker CLI Version: v3.0.0"
+        - "No errors found"
+      stderr:
+        - "^$"
+      exit_code: 0
   - name: atmos describe config -f yaml
     enabled: true
     description: "Ensure atmos CLI outputs the Atmos configuration in YAML."
