@@ -263,3 +263,12 @@ func ParseGitHubURL(rawURL string) (owner, repo, filePath, branch string, err er
 
 	return owner, repo, filePath, branch, nil
 }
+
+// ParseFilenameFromURL extracts the file name from a URL
+func ParseFilenameFromURL(url string) string {
+	parts := strings.Split(url, "/")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1] // e.g. "dev.yaml"
+}

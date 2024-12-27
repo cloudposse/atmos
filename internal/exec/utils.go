@@ -21,6 +21,7 @@ var (
 	commonFlags = []string{
 		"--stack",
 		"-s",
+		"--folder",
 		cfg.DryRunFlag,
 		cfg.SkipInitFlag,
 		cfg.KubeConfigConfigFlag,

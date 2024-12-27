@@ -3,7 +3,6 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -1931,7 +1930,8 @@ func GetFileContent(filePath string) (string, error) {
 	}
 
 	//Check if its Github remote URL to single file
-	parsedURL, err := url.Parse(filePath) // Parse the URL
+	// Shoudl be decommised as the direct hook into map does not work
+	/*parsedURL, err := url.Parse(filePath) // Parse the URL
 	if err != nil {
 		u.LogInfo(schema.AtmosConfiguration{}, fmt.Sprintf("Filepath is local: %s", filePath))
 	} else {
@@ -1945,7 +1945,7 @@ func GetFileContent(filePath string) (string, error) {
 			return string(fileContents), nil
 		}
 	}
-
+	*/
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -82,4 +83,13 @@ func DownloadFileFromGitHub(rawURL string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// IsGithubURL checks if a URL is a valid GitHub URL.
+func IsGithubURL(rawURL string) bool {
+	parsedURL, err := url.Parse(rawURL)
+	if err == nil && parsedURL.Host == "github.com" && parsedURL.Scheme == "https" {
+		return true
+	}
+	return false
 }

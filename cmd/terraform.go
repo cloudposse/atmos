@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
@@ -42,6 +46,29 @@ var terraformCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
+		//Load stack from Github
+		folderFlag, _ := cmd.Flags().GetString("folder")
+		if folderFlag != "" && u.IsGithubURL(info.Stack) {
+
+			data, err := u.DownloadFileFromGitHub(info.Stack)
+			if err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
+			fileName := u.ParseFilenameFromURL(info.Stack)
+			if fileName == "" {
+				fileName = "stack.yaml" // fallback
+			}
+			localPath := filepath.Join(folderFlag, fileName)
+
+			// Overwrite if it exists
+			err = os.WriteFile(localPath, data, 0o644)
+			if err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
+			shortStackName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+			info.Stack = shortStackName
+		}
+
 		err = e.ExecuteTerraform(info)
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
@@ -53,5 +80,10 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
+	terraformCmd.PersistentFlags().String(
+		"folder",
+		"",
+		"If set, download the remote stack file into this folder, then treat it as a local stack",
+	)
 	RootCmd.AddCommand(terraformCmd)
 }
