@@ -9,7 +9,6 @@ import (
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
-	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/logger"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/utils"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/validation"
 	"github.com/spf13/cobra"
@@ -46,7 +45,7 @@ func initializeConfig() {
 	var err error
 	currentConfig, err = config.NewConfig(configFilePath)
 	if err != nil {
-		logger.Error(err.Error())
+		u.LogError(atmosConfig, err)
 		os.Exit(1)
 	}
 
@@ -66,8 +65,8 @@ func runMainLogic() {
 	u.LogTrace(atmosConfig, fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
 	if utils.FileExists(config.Path) && config.Version != "" && config.Version != editorConfigVersion {
-		config.Logger.Error("Version from config file is not the same as the version of the binary")
-		config.Logger.Error("Binary: %s, Config: %s", editorConfigVersion, config.Version)
+		u.LogError(atmosConfig, fmt.Errorf("Version from config file is not the same as the version of the binary"))
+		u.LogError(atmosConfig, fmt.Errorf("Binary: %s, Config: %s", editorConfigVersion, config.Version))
 		os.Exit(1)
 	}
 
@@ -77,13 +76,13 @@ func runMainLogic() {
 
 	filePaths, err := files.GetFiles(config)
 	if err != nil {
-		config.Logger.Error(err.Error())
+		u.LogError(atmosConfig, err)
 		os.Exit(1)
 	}
 
 	if config.DryRun {
 		for _, file := range filePaths {
-			config.Logger.Output(file)
+			u.LogInfo(atmosConfig, file)
 		}
 		os.Exit(0)
 	}
@@ -93,11 +92,11 @@ func runMainLogic() {
 
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
-		config.Logger.Error(fmt.Sprintf("\n%d errors found", errorCount))
+		u.LogError(atmosConfig, fmt.Errorf("\n%d errors found", errorCount))
 		os.Exit(1)
 	}
 
-	config.Logger.Verbose("%d files checked", len(filePaths))
+	u.LogTrace(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
 	u.LogInfo(atmosConfig, "No errors found")
 }
 
