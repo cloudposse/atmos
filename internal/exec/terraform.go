@@ -245,10 +245,23 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_APPEND_USER_AGENT=%s", appendUserAgent))
 	}
 
+	// Check for existing var-file arguments in TF_CLI environment variables
+	tfCommands := []string{"plan", "apply", "refresh", "import", "destroy", "console"}
+	for _, cmd := range tfCommands {
+		envVar := fmt.Sprintf("TF_CLI_ARGS_%s", cmd)
+		existing := os.Getenv(envVar)
+		if existing != "" && strings.Contains(existing, "-var-file=") {
+			u.LogWarning(atmosConfig, "Found var-file in environment! This may be overwritten by Atmos")
+		}
+	}
+
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
 		u.LogDebug(atmosConfig, "\nUsing ENV vars:")
 		for _, v := range info.ComponentEnvList {
+			if strings.Contains(v, "-var-file=") {
+				u.LogWarning(atmosConfig, "Found var-file in component environment! This may be overwritten by Atmos")
+			}
 			u.LogDebug(atmosConfig, v)
 		}
 	}
