@@ -1759,7 +1759,7 @@ func resolveRelativePath(path string, currentFilePath string) string {
 	if firstElement == "." || firstElement == ".." {
 		// Join the current local path with the current stack file path
 		baseDir := filepath.Dir(currentFilePath)
-		result := filepath.Clean(filepath.Join(baseDir, path))
+		result := filepath.ToSlash(filepath.Clean(filepath.Join(baseDir, path)))
 		return result
 	}
 	return path
