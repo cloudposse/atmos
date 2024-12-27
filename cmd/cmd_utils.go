@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -37,7 +38,7 @@ func WithStackValidation(check bool) AtmosValidateOption {
 
 // processCustomCommands processes and executes custom commands
 func processCustomCommands(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
 	parentCommand *cobra.Command,
 	topLevel bool,
@@ -69,7 +70,7 @@ func processCustomCommands(
 					preCustomCommand(cmd, args, parentCommand, commandConfig)
 				},
 				Run: func(cmd *cobra.Command, args []string) {
-					executeCustomCommand(cliConfig, cmd, args, parentCommand, commandConfig)
+					executeCustomCommand(atmosConfig, cmd, args, parentCommand, commandConfig)
 				},
 			}
 
@@ -102,7 +103,7 @@ func processCustomCommands(
 			command = customCommand
 		}
 
-		err = processCustomCommands(cliConfig, commandConfig.Commands, command, false)
+		err = processCustomCommands(atmosConfig, commandConfig.Commands, command, false)
 		if err != nil {
 			return err
 		}
@@ -113,7 +114,7 @@ func processCustomCommands(
 
 // processCommandAliases processes the command aliases
 func processCommandAliases(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	aliases schema.CommandAliases,
 	parentCommand *cobra.Command,
 	topLevel bool,
@@ -139,13 +140,13 @@ func processCommandAliases(
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
 					if err != nil {
-						u.LogErrorAndExit(cliConfig, err)
+						u.LogErrorAndExit(atmosConfig, err)
 					}
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
-					err = e.ExecuteShell(cliConfig, commandToRun, commandToRun, ".", nil, false)
+					err = e.ExecuteShell(atmosConfig, commandToRun, commandToRun, ".", nil, false)
 					if err != nil {
-						u.LogErrorAndExit(cliConfig, err)
+						u.LogErrorAndExit(atmosConfig, err)
 					}
 				},
 			}
@@ -170,25 +171,25 @@ func preCustomCommand(
 	var sb strings.Builder
 	if len(args) != len(commandConfig.Arguments) {
 		if len(commandConfig.Arguments) == 0 {
-			u.LogError(schema.CliConfiguration{}, errors.New("invalid command"))
+			u.LogError(schema.AtmosConfiguration{}, errors.New("invalid command"))
 			sb.WriteString("Available command(s):\n")
 			for i, c := range commandConfig.Commands {
 				sb.WriteString(fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name))
 			}
-			u.LogInfo(schema.CliConfiguration{}, sb.String())
+			u.LogInfo(schema.AtmosConfiguration{}, sb.String())
 			os.Exit(1)
 		}
 		sb.WriteString(fmt.Sprintf("Command requires %d argument(s):\n", len(commandConfig.Arguments)))
 		for i, arg := range commandConfig.Arguments {
 			if arg.Name == "" {
-				u.LogErrorAndExit(schema.CliConfiguration{}, errors.New("invalid argument configuration: empty argument name"))
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, errors.New("invalid argument configuration: empty argument name"))
 			}
 			sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, arg.Name))
 		}
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s", len(args), strings.Join(args, ", ")))
 		}
-		u.LogErrorAndExit(schema.CliConfiguration{}, errors.New(sb.String()))
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, errors.New(sb.String()))
 	}
 
 	// no "steps" means a sub command should be specified
@@ -211,7 +212,7 @@ func getTopLevelCommands() map[string]*cobra.Command {
 
 // executeCustomCommand executes a custom command
 func executeCustomCommand(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	cmd *cobra.Command,
 	args []string,
 	parentCommand *cobra.Command,
@@ -220,7 +221,7 @@ func executeCustomCommand(
 	var err error
 
 	if commandConfig.Verbose {
-		cliConfig.Logs.Level = u.LogLevelTrace
+		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
 
 	// Execute custom command's steps
@@ -238,13 +239,13 @@ func executeCustomCommand(
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
 				if err != nil {
-					u.LogErrorAndExit(cliConfig, err)
+					u.LogErrorAndExit(atmosConfig, err)
 				}
 				flagsData[fl.Name] = providedFlag
 			} else if fl.Type == "bool" {
 				boolFlag, err := flags.GetBool(fl.Name)
 				if err != nil {
-					u.LogErrorAndExit(cliConfig, err)
+					u.LogErrorAndExit(atmosConfig, err)
 				}
 				flagsData[fl.Name] = boolFlag
 			}
@@ -262,27 +263,27 @@ func executeCustomCommand(
 			// Process Go templates in the command's 'component_config.component'
 			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			if err != nil {
-				u.LogErrorAndExit(cliConfig, err)
+				u.LogErrorAndExit(atmosConfig, err)
 			}
 			if component == "" || component == "<no value>" {
-				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+				u.LogErrorAndExit(atmosConfig, fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
 					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			if err != nil {
-				u.LogErrorAndExit(cliConfig, err)
+				u.LogErrorAndExit(atmosConfig, err)
 			}
 			if stack == "" || stack == "<no value>" {
-				u.LogErrorAndExit(cliConfig, fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+				u.LogErrorAndExit(atmosConfig, fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
 			}
 
 			// Get the config for the component in the stack
 			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true)
 			if err != nil {
-				u.LogErrorAndExit(cliConfig, err)
+				u.LogErrorAndExit(atmosConfig, err)
 			}
 			data["ComponentConfig"] = componentConfig
 		}
@@ -299,36 +300,36 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				u.LogErrorAndExit(cliConfig, err)
+				u.LogErrorAndExit(atmosConfig, err)
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := e.ExecuteShellAndReturnOutput(cliConfig, valCommand, valCommandName, ".", nil, false)
+				res, err := e.ExecuteShellAndReturnOutput(atmosConfig, valCommand, valCommandName, ".", nil, false)
 				if err != nil {
-					u.LogErrorAndExit(cliConfig, err)
+					u.LogErrorAndExit(atmosConfig, err)
 				}
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
 				if err != nil {
-					u.LogErrorAndExit(cliConfig, err)
+					u.LogErrorAndExit(atmosConfig, err)
 				}
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
 			err = os.Setenv(key, value)
 			if err != nil {
-				u.LogErrorAndExit(cliConfig, err)
+				u.LogErrorAndExit(atmosConfig, err)
 			}
 		}
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
-			u.LogDebug(cliConfig, "\nUsing ENV vars:")
+			u.LogDebug(atmosConfig, "\nUsing ENV vars:")
 			for _, v := range envVarsList {
-				u.LogDebug(cliConfig, v)
+				u.LogDebug(atmosConfig, v)
 			}
 		}
 
@@ -336,14 +337,14 @@ func executeCustomCommand(
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
 		if err != nil {
-			u.LogErrorAndExit(cliConfig, err)
+			u.LogErrorAndExit(atmosConfig, err)
 		}
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(cliConfig, commandToRun, commandName, ".", envVarsList, false)
+		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, ".", envVarsList, false)
 		if err != nil {
-			u.LogErrorAndExit(cliConfig, err)
+			u.LogErrorAndExit(atmosConfig, err)
 		}
 	}
 }
@@ -374,43 +375,43 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		opt(vCfg)
 	}
 
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		u.LogErrorAndExit(cliConfig, err)
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	if vCfg.CheckStack {
-		atmosConfigExists, err := u.IsDirectory(cliConfig.StacksBaseAbsolutePath)
+		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
-			printMessageForMissingAtmosConfig(cliConfig)
+			printMessageForMissingAtmosConfig(atmosConfig)
 			os.Exit(0)
 		}
 	}
 }
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
-func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
+func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	c1 := color.New(color.FgCyan)
 	c2 := color.New(color.FgGreen)
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	if err != nil {
-		u.LogErrorAndExit(cliConfig, err)
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
-	if cliConfig.Default {
+	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Println(" CLI config file was not found.")
 		fmt.Print("\nThe default Atmos stacks directory is set to ")
-		u.PrintMessageInColor(filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		u.PrintMessageInColor(path.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist in the current path.")
 	} else {
 		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
-		u.PrintMessageInColor(filepath.Join(cliConfig.BasePath, cliConfig.Stacks.BasePath), c1)
+		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist.")
 	}
 
@@ -432,21 +433,21 @@ func printMessageForMissingAtmosConfig(cliConfig schema.CliConfiguration) {
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
 // It loads the cache, decides if it's time to check for updates, compares the current version to the latest available release,
 // and if newer, prints the update message. It also updates the cache's timestamp after printing.
-func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
+func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// If version checking is disabled in the configuration, do nothing
-	if !cliConfig.Version.Check.Enabled {
+	if !atmosConfig.Version.Check.Enabled {
 		return
 	}
 
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(cliConfig, fmt.Sprintf("Could not load cache: %s", err))
+		u.LogWarning(atmosConfig, fmt.Sprintf("Could not load cache: %s", err))
 		return
 	}
 
 	// Determine if it's time to check for updates based on frequency and last_checked
-	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, cliConfig.Version.Check.Frequency) {
+	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency) {
 		// Not due for another check yet, so return without printing anything
 		return
 	}
@@ -454,12 +455,12 @@ func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
 	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
-		u.LogWarning(cliConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		u.LogWarning(atmosConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
 		return
 	}
 
 	if latestReleaseTag == "" {
-		u.LogWarning(cliConfig, "No release information available")
+		u.LogWarning(atmosConfig, "No release information available")
 		return
 	}
 
@@ -475,14 +476,14 @@ func CheckForAtmosUpdateAndPrintMessage(cliConfig schema.CliConfiguration) {
 	// Update the cache to mark the current timestamp
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		u.LogWarning(cliConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
+		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
 
 	}
 }
 
 func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
 	originalHelpFunc(cmd, args)
-	CheckForAtmosUpdateAndPrintMessage(cliConfig)
+	CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 }
 
 // Check Atmos is version command

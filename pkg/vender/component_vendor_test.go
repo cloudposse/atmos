@@ -13,75 +13,72 @@ import (
 )
 
 func TestVendorComponentPullCommand(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Initialize the CLI configuration
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	cliConfig.Logs.Level = "Trace"
+	atmosConfig.Logs.Level = "Trace"
 
 	componentType := "terraform"
 
+	// Helper function to ensure all paths are absolute
+	ensureAbsPath := func(path string) string {
+		absPath, err := filepath.Abs(path)
+		assert.Nil(t, err)
+		return absPath
+	}
+
 	// Test 'infra/vpc-flow-logs-bucket' component
 	component := "infra/vpc-flow-logs-bucket"
-	componentConfig, componentPath, err := e.ReadAndProcessComponentVendorConfigFile(cliConfig, component, componentType)
+	componentConfig, componentPath, err := e.ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
 	assert.Nil(t, err)
 
-	err = e.ExecuteComponentVendorInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
+	componentPath = ensureAbsPath(componentPath)
+
+	err = e.ExecuteComponentVendorInternal(atmosConfig, componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
-	assert.FileExists(t, filepath.Join(componentPath, "context.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "outputs.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "providers.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "variables.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "versions.tf"))
+	filesToCheck := []string{
+		"context.tf", "main.tf", "outputs.tf",
+		"providers.tf", "variables.tf", "versions.tf",
+	}
+
+	for _, file := range filesToCheck {
+		assert.FileExists(t, filepath.Join(componentPath, file))
+	}
 
 	// Test 'infra/account-map' component
 	component = "infra/account-map"
-	componentConfig, componentPath, err = e.ReadAndProcessComponentVendorConfigFile(cliConfig, component, componentType)
+	componentConfig, componentPath, err = e.ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
 	assert.Nil(t, err)
 
-	err = e.ExecuteComponentVendorInternal(cliConfig, componentConfig.Spec, component, componentPath, false)
+	componentPath = ensureAbsPath(componentPath)
+
+	err = e.ExecuteComponentVendorInternal(atmosConfig, componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
-	// Check if the correct files were pulled and written to the correct folder
-	assert.FileExists(t, filepath.Join(componentPath, "context.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "dynamic-roles.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "outputs.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "providers.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "README.md"))
-	assert.FileExists(t, filepath.Join(componentPath, "remote-state.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "variables.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "versions.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "context.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "main.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "outputs.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "iam-roles", "variables.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "context.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "main.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "outputs.tf"))
-	assert.FileExists(t, filepath.Join(componentPath, "modules", "roles-to-principals", "variables.tf"))
+	// Additional files to check
+	filesToCheck = append(filesToCheck,
+		"dynamic-roles.tf", "README.md", "remote-state.tf",
+		"modules/iam-roles/context.tf", "modules/iam-roles/main.tf",
+		"modules/iam-roles/outputs.tf", "modules/iam-roles/variables.tf",
+		"modules/roles-to-principals/context.tf", "modules/roles-to-principals/main.tf",
+		"modules/roles-to-principals/outputs.tf", "modules/roles-to-principals/variables.tf",
+	)
+
+	for _, file := range filesToCheck {
+		assert.FileExists(t, filepath.Join(componentPath, file))
+	}
 
 	// Delete the files and folders
-	err = os.Remove(filepath.Join(componentPath, "context.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "dynamic-roles.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "main.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "outputs.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "providers.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "README.md"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "remote-state.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "variables.tf"))
-	assert.Nil(t, err)
-	err = os.Remove(filepath.Join(componentPath, "versions.tf"))
-	assert.Nil(t, err)
+	for _, file := range filesToCheck {
+		err := os.Remove(filepath.Join(componentPath, file))
+		if err != nil && !os.IsNotExist(err) {
+			assert.Failf(t, "Failed to delete file", "Error: %v", err)
+		}
+	}
+
 	err = os.RemoveAll(filepath.Join(componentPath, "modules"))
 	assert.Nil(t, err)
 }

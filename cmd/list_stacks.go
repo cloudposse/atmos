@@ -27,13 +27,13 @@ var listStacksCmd = &cobra.Command{
 		componentFlag, _ := cmd.Flags().GetString("component")
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		cliConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), color.New(color.FgRed))
 			return
 		}
 
-		stacksMap, err := e.ExecuteDescribeStacks(cliConfig, "", nil, nil, nil, false, false, false)
+		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), color.New(color.FgRed))
 			return

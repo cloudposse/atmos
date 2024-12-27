@@ -12,7 +12,7 @@ import (
 
 // BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from the component config
 func BuildAtlantisProjectNameFromComponentConfig(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
 
@@ -27,7 +27,7 @@ func BuildAtlantisProjectNameFromComponentConfig(
 				return "", err
 			}
 		} else if atlantisSettingsProjectTemplateName, ok := atlantisSettingsSection["project_template_name"].(string); ok && atlantisSettingsProjectTemplateName != "" {
-			if pt, ok := cliConfig.Integrations.Atlantis.ProjectTemplates[atlantisSettingsProjectTemplateName]; ok {
+			if pt, ok := atmosConfig.Integrations.Atlantis.ProjectTemplates[atlantisSettingsProjectTemplateName]; ok {
 				atlantisProjectTemplate = pt
 			}
 		}

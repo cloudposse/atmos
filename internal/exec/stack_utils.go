@@ -2,7 +2,7 @@ package exec
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -11,19 +11,19 @@ import (
 )
 
 // BuildTerraformWorkspace builds Terraform workspace
-func BuildTerraformWorkspace(cliConfig schema.CliConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	var contextPrefix string
 	var err error
 	var tmpl string
 
-	if cliConfig.Stacks.NameTemplate != "" {
-		tmpl, err = ProcessTmpl("terraform-workspace-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+	if atmosConfig.Stacks.NameTemplate != "" {
+		tmpl, err = ProcessTmpl("terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
 		contextPrefix = tmpl
-	} else if cliConfig.Stacks.NamePattern != "" {
-		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, cliConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
+	} else if atmosConfig.Stacks.NamePattern != "" {
+		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, atmosConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
 		if err != nil {
 			return "", err
 		}
@@ -155,7 +155,7 @@ func BuildDependentStackNameFromDependsOn(
 
 // BuildComponentPath builds component path (path to the component's physical location on disk)
 func BuildComponentPath(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	componentSectionMap map[string]any,
 	componentType string,
 ) string {
@@ -164,9 +164,9 @@ func BuildComponentPath(
 
 	if stackComponentSection, ok := componentSectionMap[cfg.ComponentSectionName].(string); ok {
 		if componentType == "terraform" {
-			componentPath = filepath.Join(cliConfig.BasePath, cliConfig.Components.Terraform.BasePath, stackComponentSection)
+			componentPath = path.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, stackComponentSection)
 		} else if componentType == "helmfile" {
-			componentPath = filepath.Join(cliConfig.BasePath, cliConfig.Components.Helmfile.BasePath, stackComponentSection)
+			componentPath = path.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, stackComponentSection)
 		}
 	}
 
@@ -174,8 +174,8 @@ func BuildComponentPath(
 }
 
 // GetStackNamePattern returns stack name pattern
-func GetStackNamePattern(cliConfig schema.CliConfiguration) string {
-	return cliConfig.Stacks.NamePattern
+func GetStackNamePattern(atmosConfig schema.AtmosConfiguration) string {
+	return atmosConfig.Stacks.NamePattern
 }
 
 // IsComponentAbstract returns 'true' if the component is abstract

@@ -1,1 +1,38 @@
 extends: .github
+
+shared:
+  # Automated pull requests from bot users
+  is_a_bot: &is_a_bot
+    - or:
+        - "author=github-actions[bot]"
+
+  # Default branches
+  is_default_branch: &is_default_branch
+    - or:
+        - "base=main"
+        - "base=master"
+
+  # It's not closed or merged
+  is_open: &is_open
+    - and:
+        - -merged
+        - -closed
+
+pull_request_rules:
+  - name: Trigger workflow dispatch on PR synchronized by github-actions[bot]
+    conditions:
+      - and: *is_a_bot
+      - and: *is_open
+      - and: *is_default_branch
+
+    actions:
+      comment:
+        message: |
+          Triggering the workflow dispatch for preview build...
+      github_actions:
+        workflow:
+          dispatch:
+            - workflow: website-preview-build.yml
+              ref: "{{ pull_request.head.ref }}"
+            - workflow: test.yml
+              ref: "{{ pull_request.head.ref }}"

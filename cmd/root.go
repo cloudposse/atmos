@@ -18,7 +18,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var cliConfig schema.CliConfiguration
+var atmosConfig schema.AtmosConfiguration
 
 // originalHelpFunc holds Cobra's original help function to avoid recursion.
 var originalHelpFunc func(*cobra.Command, []string)
@@ -52,12 +52,12 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
 		err = e.ExecuteAtmosCmd()
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -80,19 +80,19 @@ func Execute() error {
 		fmt.Println()
 		err = tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	}
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
 	var initErr error
-	cliConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
-			u.LogTrace(schema.CliConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", initErr))
+			u.LogTrace(schema.AtmosConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", initErr))
 		} else {
-			u.LogErrorAndExit(schema.CliConfiguration{}, initErr)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, initErr)
 		}
 	}
 
@@ -106,14 +106,14 @@ func Execute() error {
 
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
-		err = processCustomCommands(cliConfig, cliConfig.Commands, RootCmd, true)
+		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
-		err = processCommandAliases(cliConfig, cliConfig.CommandAliases, RootCmd, true)
+		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	}
 
@@ -146,7 +146,7 @@ func initConfig() {
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
 		b.HelpFunc(command, strings)

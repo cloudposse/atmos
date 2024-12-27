@@ -12,10 +12,10 @@ import (
 )
 
 func TestWorkflowCommand(t *testing.T) {
-	cliConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	cliConfig.Logs.Level = u.LogLevelTrace
+	atmosConfig.Logs.Level = u.LogLevelTrace
 
 	workflow := "test-1"
 	workflowPath := "stacks/workflows/workflow1.yaml"
@@ -47,7 +47,7 @@ func TestWorkflowCommand(t *testing.T) {
 	}
 
 	err = e.ExecuteWorkflow(
-		cliConfig,
+		atmosConfig,
 		workflow,
 		workflowPath,
 		&workflowDefinition,
@@ -60,7 +60,7 @@ func TestWorkflowCommand(t *testing.T) {
 	assert.Nil(t, err)
 
 	err = e.ExecuteWorkflow(
-		cliConfig,
+		atmosConfig,
 		workflow,
 		workflowPath,
 		&workflowDefinition,

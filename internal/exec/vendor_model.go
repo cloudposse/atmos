@@ -53,17 +53,17 @@ type pkgAtmosVendor struct {
 }
 
 type modelVendor struct {
-	packages  []pkgVendor
-	index     int
-	width     int
-	height    int
-	spinner   spinner.Model
-	progress  progress.Model
-	done      bool
-	dryRun    bool
-	failedPkg int
-	cliConfig schema.CliConfiguration
-	isTTY     bool
+	packages    []pkgVendor
+	index       int
+	width       int
+	height      int
+	spinner     spinner.Model
+	progress    progress.Model
+	done        bool
+	dryRun      bool
+	failedPkg   int
+	atmosConfig schema.AtmosConfiguration
+	isTTY       bool
 }
 
 var (
@@ -74,7 +74,7 @@ var (
 	grayColor           = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
-func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfiguration) (modelVendor, error) {
+func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) (modelVendor, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(30),
@@ -96,12 +96,12 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, cliConfig s
 		vendorPks = append(vendorPks, p)
 	}
 	return modelVendor{
-		packages:  vendorPks,
-		spinner:   s,
-		progress:  p,
-		dryRun:    dryRun,
-		cliConfig: cliConfig,
-		isTTY:     tty,
+		packages:    vendorPks,
+		spinner:     s,
+		progress:    p,
+		dryRun:      dryRun,
+		atmosConfig: atmosConfig,
+		isTTY:       tty,
 	}, nil
 }
 
@@ -110,7 +110,7 @@ func (m *modelVendor) Init() tea.Cmd {
 		m.done = true
 		return nil
 	}
-	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.cliConfig), m.spinner.Tick)
+	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.atmosConfig), m.spinner.Tick)
 }
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -137,7 +137,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
 			if !m.isTTY {
-				u.LogError(m.cliConfig, errors.New(errMsg))
+				u.LogError(m.atmosConfig, errors.New(errMsg))
 			}
 			mark = xMark
 			m.failedPkg++
@@ -150,14 +150,14 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Everything's been installed. We're done!
 			m.done = true
 			if !m.isTTY {
-				u.LogInfo(m.cliConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+				u.LogInfo(m.atmosConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 				if m.dryRun {
-					u.LogInfo(m.cliConfig, "Done! Dry run completed. No components vendored.\n")
+					u.LogInfo(m.atmosConfig, "Done! Dry run completed. No components vendored.\n")
 				}
 				if m.failedPkg > 0 {
-					u.LogInfo(m.cliConfig, fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
+					u.LogInfo(m.atmosConfig, fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
 				}
-				u.LogInfo(m.cliConfig, fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
+				u.LogInfo(m.atmosConfig, fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
 			}
 			version := grayColor.Render(version)
 			return m, tea.Sequence(
@@ -166,7 +166,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 		if !m.isTTY {
-			u.LogInfo(m.cliConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+			u.LogInfo(m.atmosConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 		}
 		m.index++
 		// Update progress bar
@@ -175,8 +175,8 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		version = grayColor.Render(version)
 		return m, tea.Batch(
 			progressCmd,
-			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg), // print message above our program
-			ExecuteInstall(m.packages[m.index], m.dryRun, m.cliConfig), // download the next package
+			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),   // print message above our program
+			ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig), // download the next package
 		)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -234,7 +234,7 @@ func max(a, b int) int {
 	}
 	return b
 }
-func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConfiguration) tea.Cmd {
+func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			// Simulate the action
@@ -261,7 +261,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 			}
 		}
 
-		defer removeTempDir(cliConfig, tempDir)
+		defer removeTempDir(atmosConfig, tempDir)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
@@ -283,7 +283,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 
 		case pkgTypeOci:
 			// Process OCI images
-			if err := processOciImage(cliConfig, p.uri, tempDir); err != nil {
+			if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to process OCI image: %w", err),
 					name: p.name,
@@ -298,7 +298,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 			}
 			if p.sourceIsLocalFile {
-				tempDir = filepath.Join(tempDir, filepath.Base(p.uri))
+				tempDir = filepath.Join(tempDir, sanitizeFileName(p.uri))
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{
@@ -313,7 +313,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 			}
 
 		}
-		if err := copyToTarget(cliConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
+		if err := copyToTarget(atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to copy package: %w", err),
 				name: p.name,
@@ -326,13 +326,13 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, cliConfig schema.CliConf
 	}
 }
 
-func ExecuteInstall(installer pkgVendor, dryRun bool, cliConfig schema.CliConfiguration) tea.Cmd {
+func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	if installer.atmosPackage != nil {
-		return downloadAndInstall(installer.atmosPackage, dryRun, cliConfig)
+		return downloadAndInstall(installer.atmosPackage, dryRun, atmosConfig)
 	}
 
 	if installer.componentPackage != nil {
-		return downloadComponentAndInstall(installer.componentPackage, dryRun, cliConfig)
+		return downloadComponentAndInstall(installer.componentPackage, dryRun, atmosConfig)
 	}
 
 	// No valid package provided
