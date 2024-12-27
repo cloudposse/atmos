@@ -1750,16 +1750,12 @@ func resolveRelativePath(path string, currentFilePath string) string {
 		return path
 	}
 
-	// Normalize input path to support multiple OS types
-	path = filepath.FromSlash(path)
-	currentFilePath = filepath.FromSlash(currentFilePath)
-
 	// Check if the path starts with "." or ".."
 	firstElement := strings.Split(path, string(filepath.Separator))[0]
 	if firstElement == "." || firstElement == ".." {
 		// Join the current local path with the current stack file path
 		baseDir := filepath.Dir(currentFilePath)
-		result := filepath.ToSlash(filepath.Clean(filepath.Join(baseDir, path)))
+		result := filepath.Clean(filepath.Join(baseDir, path))
 		return result
 	}
 	return path
