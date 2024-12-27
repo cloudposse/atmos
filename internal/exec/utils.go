@@ -1051,6 +1051,14 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 				info.SubCommand = fmt.Sprintf("state %s", additionalArgsAndFlags[1])
 				twoWordsCommand = true
 			}
+
+			// `terraform providers` commands
+			// https://developer.hashicorp.com/terraform/cli/commands/providers
+			if additionalArgsAndFlags[0] == "providers" &&
+				u.SliceContainsString([]string{"lock", "mirror", "schema"}, additionalArgsAndFlags[1]) {
+				info.SubCommand = fmt.Sprintf("providers %s", additionalArgsAndFlags[1])
+				twoWordsCommand = true
+			}
 		}
 
 		if twoWordsCommand {
