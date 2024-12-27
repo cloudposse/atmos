@@ -115,7 +115,7 @@ func processHelp(
 			"If the workspace does not exist, the command creates it by executing the 'terraform workspace new' command.\n\n" +
 			"Usage: atmos terraform workspace <component> -s <stack>\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/workspace\n")
-	} else {
+	} else if componentType == "terraform" || componentType == "helmfile" {
 		u.PrintMessage(fmt.Sprintf("\nAtmos supports native '%s' commands with all the options, arguments and flags.\n", componentType))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
 		u.PrintMessage(fmt.Sprintf("atmos %s <subcommand> <component> -s <stack> [options]", componentType))
