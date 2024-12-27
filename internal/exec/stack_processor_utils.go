@@ -1743,11 +1743,26 @@ func FindComponentDependenciesLegacy(
 	return unique, nil
 }
 
+// resolveRelativePath checks if a path is relative to the current directory and if so,
+// resolves it relative to the current file's directory
+func resolveRelativePath(path string, currentFilePath string) string {
+	// Get the first element of the path
+	firstElement := filepath.Clean(strings.Split(path, string(filepath.Separator))[0])
+
+	// Check if the path starts with "." or ".."
+	if firstElement == "." || firstElement == ".." {
+		baseDir := filepath.Dir(currentFilePath)
+		result := filepath.ToSlash(filepath.Clean(filepath.Join(baseDir, path)))
+		return result
+	}
+	return path
+}
+
 // ProcessImportSection processes the `import` section in stack manifests
 // The `import` section can contain:
 // 1. Project-relative paths (e.g. "mixins/region/us-east-2")
-// 2. Paths relative to the current file (starting with "./" or "../")
-// 3. StackImport structs containing either of the above path types
+// 2. Paths relative to the current stack file (e.g. "./_defaults")
+// 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2")
 func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.StackImport, error) {
 	stackImports, ok := stackMap[cfg.ImportSectionName]
 
@@ -1773,15 +1788,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		var importObj schema.StackImport
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
-			// Handle paths relative to current file (starting with ./ or ../)
-			if strings.HasPrefix(importObj.Path, "./") || strings.HasPrefix(importObj.Path, "../") {
-				// Get the directory of the current file
-				baseDir := filepath.Dir(filePath)
-				// Join the base directory with the relative path
-				importObj.Path = filepath.Join(baseDir, importObj.Path)
-				// Clean the path to resolve any .. segments
-				importObj.Path = filepath.Clean(importObj.Path)
-			}
+			importObj.Path = resolveRelativePath(importObj.Path, filePath)
 			result = append(result, importObj)
 			continue
 		}
@@ -1795,13 +1802,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 		}
 
-		// Handle paths relative to current file (starting with ./ or ../)
-		if strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") {
-			baseDir := filepath.Dir(filePath)
-			s = filepath.Join(baseDir, s)
-			s = filepath.Clean(s)
-		}
-
+		s = resolveRelativePath(s, filePath)
 		result = append(result, schema.StackImport{Path: s})
 	}
 
