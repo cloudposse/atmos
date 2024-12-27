@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	editorConfigVersion   = "v3.0.0"
+	editorConfigVersion   = "v3.0.3"
 	defaultConfigFilePath = ".ecrc"
 	currentConfig         *config.Config
 	cliConfig             config.Config
@@ -49,7 +49,10 @@ func initializeConfig() {
 		os.Exit(1)
 	}
 
-	_ = currentConfig.Parse()
+	if err := currentConfig.Parse(); err != nil {
+		u.LogError(atmosConfig, fmt.Errorf("failed to parse config: %w", err))
+		os.Exit(1)
+	}
 
 	if tmpExclude != "" {
 		currentConfig.Exclude = append(currentConfig.Exclude, tmpExclude)
@@ -64,9 +67,8 @@ func runMainLogic() {
 	u.LogDebug(atmosConfig, config.GetAsString())
 	u.LogTrace(atmosConfig, fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
-	if utils.FileExists(config.Path) && config.Version != "" && config.Version != editorConfigVersion {
-		u.LogError(atmosConfig, fmt.Errorf("Version from config file is not the same as the version of the binary"))
-		u.LogError(atmosConfig, fmt.Errorf("Binary: %s, Config: %s", editorConfigVersion, config.Version))
+	if err := checkVersion(config); err != nil {
+		u.LogError(atmosConfig, err)
 		os.Exit(1)
 	}
 
@@ -98,6 +100,17 @@ func runMainLogic() {
 
 	u.LogTrace(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
 	u.LogInfo(atmosConfig, "No errors found")
+}
+
+func checkVersion(config config.Config) error {
+	if !utils.FileExists(config.Path) || config.Version == "" {
+		return nil
+	}
+	if config.Version != editorConfigVersion {
+		return fmt.Errorf("version mismatch: binary=%s, config=%s",
+			editorConfigVersion, config.Version)
+	}
+	return nil
 }
 
 // handleReturnableFlags handles early termination flags
