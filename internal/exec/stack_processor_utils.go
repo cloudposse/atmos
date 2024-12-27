@@ -1744,10 +1744,10 @@ func FindComponentDependenciesLegacy(
 }
 
 // ProcessImportSection processes the `import` section in stack manifests
-// The `import` section` can be of the following types:
-// 1. list of `StackImport` structs
-// 2. list of strings
-// 3. List of strings and `StackImport` structs in the same file
+// The `import` section can contain:
+// 1. Project-relative paths (e.g. "mixins/region/us-east-2")
+// 2. Paths relative to the current file (starting with "./" or "../")
+// 3. StackImport structs containing either of the above path types
 func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.StackImport, error) {
 	stackImports, ok := stackMap[cfg.ImportSectionName]
 
@@ -1773,7 +1773,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		var importObj schema.StackImport
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
-			// Handle relative paths in StackImport.Path
+			// Handle paths relative to current file (starting with ./ or ../)
 			if strings.HasPrefix(importObj.Path, "./") || strings.HasPrefix(importObj.Path, "../") {
 				// Get the directory of the current file
 				baseDir := filepath.Dir(filePath)
@@ -1795,7 +1795,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 		}
 
-		// Handle relative paths in string imports
+		// Handle paths relative to current file (starting with ./ or ../)
 		if strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") {
 			baseDir := filepath.Dir(filePath)
 			s = filepath.Join(baseDir, s)
