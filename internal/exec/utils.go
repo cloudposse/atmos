@@ -162,7 +162,7 @@ func ProcessComponentConfig(
 	return nil
 }
 
-// processCommandLineArgs processes command-line args
+// ProcessCommandLineArgs processes command-line args
 func ProcessCommandLineArgs(
 	componentType string,
 	cmd *cobra.Command,
@@ -657,7 +657,10 @@ func ProcessStacks(
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
-func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (schema.ArgsAndFlagsInfo, error) {
+func processArgsAndFlags(
+	componentType string,
+	inputArgsAndFlags []string,
+) (schema.ArgsAndFlagsInfo, error) {
 	var info schema.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
@@ -669,6 +672,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 		info.NeedHelp = true
 		return info, nil
 	}
+
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "version" {
 		info.SubCommand = inputArgsAndFlags[0]
 		return info, nil
