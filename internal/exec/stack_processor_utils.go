@@ -1746,16 +1746,30 @@ func FindComponentDependenciesLegacy(
 // resolveRelativePath checks if a path is relative to the current directory and if so,
 // resolves it relative to the current file's directory
 func resolveRelativePath(path string, currentFilePath string) string {
-	// Get the first element of the path
-	firstElement := filepath.Clean(strings.Split(path, string(filepath.Separator))[0])
+    if path == "" {
+        return path
+    }
+    
+    // Normalize input path
+    path = filepath.FromSlash(path)
+    currentFilePath = filepath.FromSlash(currentFilePath)
 
-	// Check if the path starts with "." or ".."
-	if firstElement == "." || firstElement == ".." {
-		baseDir := filepath.Dir(currentFilePath)
-		result := filepath.ToSlash(filepath.Clean(filepath.Join(baseDir, path)))
-		return result
-	}
-	return path
+    // Get the first element of the path
+    firstElement := strings.Split(path, string(filepath.Separator))[0]
+
+    // Check if the path starts with "." or ".."
+    if firstElement == "." || firstElement == ".." {
+        baseDir := filepath.Dir(currentFilePath)
+        // Clean the path and convert to forward slashes
+        result := filepath.ToSlash(filepath.Clean(filepath.Join(baseDir, path)))
+        
+        // Ensure the resolved path is still under the base directory
+        if !strings.HasPrefix(result, filepath.ToSlash(filepath.Clean(baseDir))) {
+            return path
+        }
+        return result
+    }
+    return path
 }
 
 // ProcessImportSection processes the `import` section in stack manifests
