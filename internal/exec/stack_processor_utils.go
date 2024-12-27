@@ -1751,7 +1751,7 @@ func resolveRelativePath(path string, currentFilePath string) string {
 	}
 
 	// Check if the path starts with "." or ".."
-	firstElement := strings.Split(path, string(filepath.Separator))[0]
+	firstElement := filepath.Clean(strings.Split(path, string(filepath.Separator))[0])
 	if firstElement == "." || firstElement == ".." {
 		// Join the current local path with the current stack file path
 		baseDir := filepath.Dir(currentFilePath)
