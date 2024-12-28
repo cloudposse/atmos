@@ -139,11 +139,11 @@ tests:
   - name: atmos validate editorconfig-check
     enabled: true
     description: "Ensure atmos CLI validates based on the .ecrc file."
-    workdir: "../examples/demo-stacks/"
+    workdir: "../examples/quick-start-simple/"
     command: "atmos"
     args:
       - "validate"
-      - "editorconfig-checker"
+      - "editorconfig"
     expect:
       stdout:
         - "EditorConfig Checker CLI Version: v3.0.0"

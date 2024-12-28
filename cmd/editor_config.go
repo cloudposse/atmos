@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
@@ -25,9 +24,9 @@ var (
 )
 
 var editorConfigCmd *cobra.Command = &cobra.Command{
-	Use:   "editorconfig-checker",
-	Short: "EditorConfig Checker CLI",
-	Long:  "A command-line tool to check your files against the EditorConfig rules",
+	Use:   "editorconfig",
+	Short: "Validate all files against the EditorConfig",
+	Long:  "Validate all files against the project's EditorConfig rules",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		initializeConfig()
 	},
@@ -38,7 +37,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 
 // initializeConfig breaks the initialization cycle by separating the config setup
 func initializeConfig() {
-	u.LogInfo(schema.AtmosConfiguration{}, fmt.Sprintf("EditorConfig Checker CLI Version: %s", editorConfigVersion))
+	u.LogInfo(atmosConfig, fmt.Sprintf("EditorConfig Checker CLI Version: %s", editorConfigVersion))
 	if configFilePath == "" {
 		configFilePath = defaultConfigFilePath
 	}
@@ -67,8 +66,7 @@ func runMainLogic() {
 
 	if utils.FileExists(config.Path) && config.Version != "" && config.Version != editorConfigVersion {
 		u.LogError(atmosConfig, fmt.Errorf("Version from config file is not the same as the version of the binary"))
-		u.LogError(atmosConfig, fmt.Errorf("Binary: %s, Config: %s", editorConfigVersion, config.Version))
-		os.Exit(1)
+		u.LogErrorAndExit(atmosConfig, fmt.Errorf("Binary: %s, Config: %s", editorConfigVersion, config.Version))
 	}
 
 	if handleReturnableFlags(config) {
@@ -77,8 +75,7 @@ func runMainLogic() {
 
 	filePaths, err := files.GetFiles(config)
 	if err != nil {
-		u.LogError(atmosConfig, err)
-		os.Exit(1)
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	if config.DryRun {
@@ -93,12 +90,11 @@ func runMainLogic() {
 
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
-		u.LogError(atmosConfig, fmt.Errorf("\n%d errors found", errorCount))
-		os.Exit(1)
+		u.LogErrorAndExit(atmosConfig, fmt.Errorf("\n%d errors found", errorCount))
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
-	u.LogInfo(schema.AtmosConfiguration{}, "No errors found")
+	u.LogDebug(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
+	u.LogInfo(atmosConfig, "No errors found")
 }
 
 // handleReturnableFlags handles early termination flags
