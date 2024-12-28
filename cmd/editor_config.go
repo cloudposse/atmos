@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
@@ -32,12 +33,18 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 		initializeConfig()
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		if cliConfig.Help {
+			cmd.Help()
+			os.Exit(0)
+		}
 		runMainLogic()
 	},
 }
 
 // initializeConfig breaks the initialization cycle by separating the config setup
 func initializeConfig() {
+	replaceAtmosConfigInConfig(atmosConfig)
+
 	u.LogInfo(atmosConfig, fmt.Sprintf("EditorConfig Checker CLI Version: %s", editorConfigVersion))
 	if configFilePath == "" {
 		configFilePath = defaultConfigFilePath
@@ -47,7 +54,6 @@ func initializeConfig() {
 	currentConfig, err = config.NewConfig(configFilePath)
 	if err != nil {
 		u.LogErrorAndExit(atmosConfig, err)
-		os.Exit(1)
 	}
 
 	if initEditorConfig {
@@ -64,6 +70,51 @@ func initializeConfig() {
 	}
 
 	currentConfig.Merge(cliConfig)
+}
+
+func replaceAtmosConfigInConfig(atmosConfig schema.AtmosConfiguration) {
+	if atmosConfig.Validate.EditorConfig.ConfigFilePath != "" {
+		configFilePath = atmosConfig.Validate.EditorConfig.ConfigFilePath
+	}
+	if atmosConfig.Validate.EditorConfig.Exclude != "" {
+		tmpExclude = atmosConfig.Validate.EditorConfig.Exclude
+	}
+	if atmosConfig.Validate.EditorConfig.Init {
+		initEditorConfig = atmosConfig.Validate.EditorConfig.Init
+	}
+	if atmosConfig.Validate.EditorConfig.IgnoreDefaults {
+		cliConfig.IgnoreDefaults = atmosConfig.Validate.EditorConfig.IgnoreDefaults
+	}
+	if atmosConfig.Validate.EditorConfig.DryRun {
+		cliConfig.DryRun = atmosConfig.Validate.EditorConfig.DryRun
+	}
+	if atmosConfig.Validate.EditorConfig.Format != "" {
+		cliConfig.Format = atmosConfig.Validate.EditorConfig.Format
+	}
+	if atmosConfig.Logs.Level == "trace" {
+		cliConfig.Verbose = true
+	}
+	if atmosConfig.Validate.EditorConfig.NoColor {
+		cliConfig.NoColor = atmosConfig.Validate.EditorConfig.NoColor
+	}
+	if atmosConfig.Validate.EditorConfig.Disable.TrimTrailingWhitespace {
+		cliConfig.Disable.TrimTrailingWhitespace = atmosConfig.Validate.EditorConfig.Disable.TrimTrailingWhitespace
+	}
+	if atmosConfig.Validate.EditorConfig.Disable.EndOfLine {
+		cliConfig.Disable.EndOfLine = atmosConfig.Validate.EditorConfig.Disable.EndOfLine
+	}
+	if atmosConfig.Validate.EditorConfig.Disable.InsertFinalNewline {
+		cliConfig.Disable.InsertFinalNewline = atmosConfig.Validate.EditorConfig.Disable.InsertFinalNewline
+	}
+	if atmosConfig.Validate.EditorConfig.Disable.Indentation {
+		cliConfig.Disable.Indentation = atmosConfig.Validate.EditorConfig.Disable.Indentation
+	}
+	if atmosConfig.Validate.EditorConfig.Disable.IndentSize {
+		cliConfig.Disable.IndentSize = atmosConfig.Validate.EditorConfig.Disable.IndentSize
+	}
+	if atmosConfig.Validate.EditorConfig.Disable.MaxLineLength {
+		cliConfig.Disable.MaxLineLength = atmosConfig.Validate.EditorConfig.Disable.MaxLineLength
+	}
 }
 
 // runMainLogic contains the main logic
@@ -133,12 +184,12 @@ func handleReturnableFlags(config config.Config) bool {
 func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&configFilePath, "config", "", "Path to the configuration file")
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
+	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "creates an initial configuration")
+
 	cmd.PersistentFlags().BoolVar(&cliConfig.IgnoreDefaults, "ignore-defaults", false, "Ignore default excludes")
 	cmd.PersistentFlags().BoolVar(&cliConfig.DryRun, "dry-run", false, "Show which files would be checked")
 	cmd.PersistentFlags().BoolVar(&cliConfig.ShowVersion, "version", false, "Print the version number")
-	cmd.PersistentFlags().BoolVar(&cliConfig.Help, "help", false, "Print help information")
 	cmd.PersistentFlags().StringVar(&cliConfig.Format, "format", "default", "Specify the output format: default, gcc")
-	cmd.PersistentFlags().BoolVar(&cliConfig.Verbose, "verbose", false, "Print debugging information")
 	cmd.PersistentFlags().BoolVar(&cliConfig.NoColor, "no-color", false, "Don't print colors")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.TrimTrailingWhitespace, "disable-trim-trailing-whitespace", false, "Disable trailing whitespace check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.EndOfLine, "disable-end-of-line", false, "Disable end-of-line check")
@@ -146,7 +197,6 @@ func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.Indentation, "disable-indentation", false, "Disable indentation check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.IndentSize, "disable-indent-size", false, "Disable indent size check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.MaxLineLength, "disable-max-line-length", false, "Disable max line length check")
-	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "creates an initial configuration")
 }
 
 func init() {

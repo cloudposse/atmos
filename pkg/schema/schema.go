@@ -1,6 +1,8 @@
 package schema
 
-import "github.com/cloudposse/atmos/pkg/store"
+import (
+	"github.com/cloudposse/atmos/pkg/store"
+)
 
 type AtmosSectionMapType = map[string]any
 
@@ -30,11 +32,37 @@ type AtmosConfiguration struct {
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
 	Default                       bool               `yaml:"default" json:"default" mapstructure:"default"`
 	Version                       Version            `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
-
+	Validate                      Validate           `yaml:"validate,omitempty" json:"validate,omitempty" mapstructure:"validate"`
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
 	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+}
+
+type Validate struct {
+	EditorConfig EditorConfig `yaml:"editorconfig,omitempty" json:"editorconfig,omitempty" mapstructure:"editorconfig"`
+}
+
+type EditorConfig struct {
+	IgnoreDefaults bool           `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
+	DryRun         bool           `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
+	Format         string         `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	NoColor        bool           `yaml:"no_color,omitempty" json:"no_color,omitempty" mapstructure:"no_color"`
+	Disable        DisabledChecks `yaml:"disable,omitempty" json:"disable,omitempty" mapstructure:"disable"`
+
+	ConfigFilePath string `yaml:"config_file_path,omitempty" json:"config_file_path,omitempty" mapstructure:"config_file_path"`
+	Exclude        string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
+	Init           bool   `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
+}
+
+// DisabledChecks is a Struct which represents disabled checks
+type DisabledChecks struct {
+	EndOfLine              bool `yaml:"end_of_line,omitempty" json:"end_of_line,omitempty" mapstructure:"end_of_line"`
+	InsertFinalNewline     bool `yaml:"insert_final_newline,omitempty" json:"insert_final_newline,omitempty" mapstructure:"insert_final_newline"`
+	Indentation            bool `yaml:"indentation,omitempty" json:"indentation,omitempty" mapstructure:"indentation"`
+	IndentSize             bool `yaml:"indent_size,omitempty" json:"indent_size,omitempty" mapstructure:"indent_size"`
+	MaxLineLength          bool `yaml:"max_line_length,omitempty" json:"max_line_length,omitempty" mapstructure:"max_line_length"`
+	TrimTrailingWhitespace bool `yaml:"trim_trailing_whitespace,omitempty" json:"trim_trailing_whitespace,omitempty" mapstructure:"trim_trailing_whitespace"`
 }
 
 type AtmosSettings struct {
