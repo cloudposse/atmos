@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
@@ -37,7 +38,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 
 // initializeConfig breaks the initialization cycle by separating the config setup
 func initializeConfig() {
-	u.LogInfo(atmosConfig, fmt.Sprintf("EditorConfig Checker CLI Version: %s", editorConfigVersion))
+	u.LogInfo(schema.AtmosConfiguration{}, fmt.Sprintf("EditorConfig Checker CLI Version: %s", editorConfigVersion))
 	if configFilePath == "" {
 		configFilePath = defaultConfigFilePath
 	}
@@ -97,7 +98,7 @@ func runMainLogic() {
 	}
 
 	u.LogTrace(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
-	u.LogInfo(atmosConfig, "No errors found")
+	u.LogInfo(schema.AtmosConfiguration{}, "No errors found")
 }
 
 // handleReturnableFlags handles early termination flags
