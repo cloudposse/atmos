@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	editorConfigVersion   = "v3.0.0"
-	defaultConfigFilePath = ".ecrc"
+	editorConfigVersion   = "v3.0.3"
+	defaultConfigFilePath = ".editorconfig"
+	initEditorConfig      bool
 	currentConfig         *config.Config
 	cliConfig             config.Config
 	configFilePath        string
@@ -45,8 +46,15 @@ func initializeConfig() {
 	var err error
 	currentConfig, err = config.NewConfig(configFilePath)
 	if err != nil {
-		u.LogError(atmosConfig, err)
+		u.LogErrorAndExit(atmosConfig, err)
 		os.Exit(1)
+	}
+
+	if initEditorConfig {
+		err := currentConfig.Save(editorConfigVersion)
+		if err != nil {
+			u.LogErrorAndExit(atmosConfig, err)
+		}
 	}
 
 	_ = currentConfig.Parse()
@@ -64,9 +72,8 @@ func runMainLogic() {
 	u.LogDebug(atmosConfig, config.GetAsString())
 	u.LogTrace(atmosConfig, fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
-	if utils.FileExists(config.Path) && config.Version != "" && config.Version != editorConfigVersion {
-		u.LogError(atmosConfig, fmt.Errorf("Version from config file is not the same as the version of the binary"))
-		u.LogErrorAndExit(atmosConfig, fmt.Errorf("Binary: %s, Config: %s", editorConfigVersion, config.Version))
+	if err := checkVersion(config); err != nil {
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	if handleReturnableFlags(config) {
@@ -95,6 +102,18 @@ func runMainLogic() {
 
 	u.LogDebug(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
 	u.LogInfo(atmosConfig, "No errors found")
+}
+
+func checkVersion(config config.Config) error {
+	if !utils.FileExists(config.Path) || config.Version == "" {
+		return nil
+	}
+	if config.Version != editorConfigVersion {
+		return fmt.Errorf("version mismatch: binary=%s, config=%s",
+			editorConfigVersion, config.Version)
+	}
+
+	return nil
 }
 
 // handleReturnableFlags handles early termination flags
@@ -127,6 +146,7 @@ func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.Indentation, "disable-indentation", false, "Disable indentation check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.IndentSize, "disable-indent-size", false, "Disable indent size check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.MaxLineLength, "disable-max-line-length", false, "Disable max line length check")
+	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "creates an initial configuration")
 }
 
 func init() {
