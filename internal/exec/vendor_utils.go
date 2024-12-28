@@ -185,6 +185,7 @@ func ReadAndProcessVendorConfigFile(
 
 	var configFiles []string
 	if fileInfo.IsDir() {
+		foundVendorConfigFile = filepath.ToSlash(foundVendorConfigFile)
 		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "*.{yaml,yml}")
 		if err != nil {
 			return vendorConfig, false, "", err
