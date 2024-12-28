@@ -468,8 +468,7 @@ func ProcessYAMLConfigFile(
 			if err != nil {
 				return nil, nil, nil, nil, nil, err
 			}
-
-			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
+			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
 				ext2 = u.DefaultStackConfigFileExtension
