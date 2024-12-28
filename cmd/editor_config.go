@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
@@ -16,7 +17,6 @@ import (
 )
 
 var (
-	editorConfigVersion   = "v3.0.3"
 	defaultConfigFilePath = ".editorconfig"
 	initEditorConfig      bool
 	currentConfig         *config.Config
@@ -45,7 +45,6 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 func initializeConfig() {
 	replaceAtmosConfigInConfig(atmosConfig)
 
-	u.LogInfo(atmosConfig, fmt.Sprintf("EditorConfig Checker CLI Version: %s", editorConfigVersion))
 	if configFilePath == "" {
 		configFilePath = defaultConfigFilePath
 	}
@@ -57,7 +56,7 @@ func initializeConfig() {
 	}
 
 	if initEditorConfig {
-		err := currentConfig.Save(editorConfigVersion)
+		err := currentConfig.Save(version.Version)
 		if err != nil {
 			u.LogErrorAndExit(atmosConfig, err)
 		}
@@ -127,10 +126,6 @@ func runMainLogic() {
 		u.LogErrorAndExit(atmosConfig, err)
 	}
 
-	if handleReturnableFlags(config) {
-		return
-	}
-
 	filePaths, err := files.GetFiles(config)
 	if err != nil {
 		u.LogErrorAndExit(atmosConfig, err)
@@ -159,25 +154,12 @@ func checkVersion(config config.Config) error {
 	if !utils.FileExists(config.Path) || config.Version == "" {
 		return nil
 	}
-	if config.Version != editorConfigVersion {
+	if config.Version != version.Version {
 		return fmt.Errorf("version mismatch: binary=%s, config=%s",
-			editorConfigVersion, config.Version)
+			version.Version, config.Version)
 	}
 
 	return nil
-}
-
-// handleReturnableFlags handles early termination flags
-func handleReturnableFlags(config config.Config) bool {
-	if config.ShowVersion {
-		config.Logger.Output(editorConfigVersion)
-		return true
-	}
-	if config.Help {
-		config.Logger.Output("USAGE:")
-		return true
-	}
-	return false
 }
 
 // addPersistentFlags adds flags to the root command

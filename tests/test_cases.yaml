@@ -146,7 +146,6 @@ tests:
       - "editorconfig"
     expect:
       stdout:
-        - "EditorConfig Checker CLI Version: v3.0.3"
         - "No errors found"
       stderr:
         - "^$"
