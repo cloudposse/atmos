@@ -637,11 +637,6 @@ func validateURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("URI cannot be empty")
 	}
-	// Maximum length check
-	if len(uri) > 2048 {
-		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
-	}
-
 	if strings.Contains(uri, " ") {
 		return fmt.Errorf("URI cannot contain spaces")
 	}
