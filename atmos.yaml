@@ -91,6 +91,44 @@ logs:
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
 
+validate:
+  # The configuration settings for the editorconfig-checker.
+
+  editorconfig:
+    # A comma-separated list of file paths or patterns to exclude from checks.
+    exclude: ""
+
+    # If set to true, the default ignore patterns (like .git/*) will not be applied.
+    ignore_defaults: false
+
+    # Runs the checker without making any changes or producing output, useful for testing configuration.
+    dry_run: false
+
+    # Specifies the output format. Options: "default", "json".
+    format: "default"
+
+    # Disables colored output in the terminal.
+    no_color: false
+
+    disable:
+      # Disables checking for trailing whitespace at the end of lines.
+      trim_trailing_whitespace: false
+
+      # Disables checking for consistent line endings (e.g., LF vs. CRLF).
+      end_of_line: false
+
+      # Disables checking for the presence of a newline at the end of files.
+      insert_final_newline: false
+
+      # Disables checking for consistent indentation style (e.g., tabs or spaces).
+      indentation: false
+
+      # Disables checking for consistent indentation size (e.g., 2 spaces or 4 spaces).
+      indent_size: false
+
+      # Disables checking for lines exceeding a maximum length.
+      max_line_length: false
+
 # Custom CLI commands
 commands:
   - name: tf
