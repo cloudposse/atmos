@@ -641,6 +641,7 @@ func validateURI(uri string) error {
 	if len(uri) > 2048 {
 		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
 	}
+
 	if strings.Contains(uri, " ") {
 		return fmt.Errorf("URI cannot contain spaces")
 	}
@@ -652,11 +653,6 @@ func validateURI(uri string) error {
 	if strings.HasPrefix(uri, "oci://") {
 		if !strings.Contains(uri[6:], "/") {
 			return fmt.Errorf("invalid OCI URI format")
-		}
-	} else if strings.Contains(uri, "://") {
-		scheme := strings.Split(uri, "://")[0]
-		if !isValidScheme(scheme) {
-			return fmt.Errorf("unsupported URI scheme: %s", scheme)
 		}
 	}
 	return nil
