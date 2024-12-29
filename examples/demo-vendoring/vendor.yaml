@@ -9,7 +9,7 @@ spec:
 
   sources:
     - component: "github/stargazers"
-      source: "git::https://github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
       version: "main"
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
