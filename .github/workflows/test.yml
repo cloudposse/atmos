@@ -86,6 +86,11 @@ jobs:
     timeout-minutes: 15
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      - name: Set Git Preferences for windows
+        if: matrix.flavor.target == 'windows'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
