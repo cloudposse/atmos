@@ -76,6 +76,8 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 
 // TrimBasePathFromPath trims the base path prefix from the path
 func TrimBasePathFromPath(basePath string, path string) string {
+	basePath = filepath.ToSlash(basePath)
+	path = filepath.ToSlash(path)
 	return strings.TrimPrefix(path, basePath)
 }
 
