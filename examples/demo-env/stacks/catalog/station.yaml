@@ -2,8 +2,7 @@
 
 components:
   terraform:
-    station:
+    example:
       metadata:
         component: test
-      vars:
-        location: Los Angeles
+      vars: {}

@@ -4,10 +4,9 @@ vars:
   stage: staging
 
 import:
-  - catalog/station
+  - catalog/example
 
 components:
   terraform:
-    station:
-      vars:
-        location: Los Angeles
+    example:
+      vars: {}

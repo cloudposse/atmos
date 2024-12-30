@@ -49,9 +49,9 @@ The Atmos (CLI) configuration is loaded from the following locations, in order o
   From the current directory:
   - `atmos.yaml`
   - `.atmos.yaml`
-  - `.github/atmos.yaml`
   - `atmos.d/**/*`
   - `.atmos.d/**/*`
+  - `.github/atmos.yaml`
 - Home directory (`~/.atmos/atmos.yaml`)
 - The `atmos.d/` directory is loaded relative to the `base_path`. For an example, see [`examples/demo-atmos.d`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos.d)
 - System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows). This has the lowest precedence of all configuration files.
