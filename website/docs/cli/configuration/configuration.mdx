@@ -26,7 +26,7 @@ you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/conf
 the base path location of the components, and so forth.
 ## Base Path
 
-The base path defines the root directory for components, stacks, workflows, and Atmos configurations. It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. If both are set, the `--base-path` will take precedence. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory, as Atmos executes commands that may change the working directory (e.g., Terraform).
+The base path defines the root directory for components, stacks, workflows, and Atmos configurations. It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. If both are set, the `--base-path` will take precedence. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory. This is because Atmos executes commands that may change the working directory (e.g., Terraform).
 
 When the `base_path` is explicitly defined, it will always be resolved to the absolute path relative to the current working directory, if an absolute path was not already set.
 
