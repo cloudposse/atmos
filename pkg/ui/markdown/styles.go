@@ -196,8 +196,11 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr("#9B51E0"),
+				Color:  stringPtr("#9B51E0"),
+				Prefix: " ",
+				Bold:   boolPtr(true),
 			},
+			Margin: uintPtr(0),
 		},
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{

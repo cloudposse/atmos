@@ -78,26 +78,56 @@ func (r *Renderer) RenderWorkflow(content string) (string, error) {
 }
 
 // RenderError renders an error message with specific styling
-func (r *Renderer) RenderError(title, details, examples string) (string, error) {
+func (r *Renderer) RenderError(title, details, suggestion string) (string, error) {
 	var content string
 
 	if title != "" {
-		content += fmt.Sprintf("# %s\n\n", title)
+		content += fmt.Sprintf("\n# %s\n\n", title)
 	}
 
 	if details != "" {
 		content += fmt.Sprintf("%s\n\n", details)
 	}
 
-	if examples != "" {
-		if !strings.Contains(examples, "## Examples") {
-			content += fmt.Sprintf("## Examples\n\n%s", examples)
+	if suggestion != "" {
+		if strings.HasPrefix(suggestion, "http") {
+			content += fmt.Sprintf("For more information, refer to the **docs**\n%s\n", suggestion)
 		} else {
-			content += examples
+			content += suggestion
 		}
 	}
 
-	return r.Render(content)
+	rendered, err := r.Render(content)
+	if err != nil {
+		return "", err
+	}
+
+	// Remove duplicate URLs and trailing newlines
+	lines := strings.Split(rendered, "\n")
+	var result []string
+	seenURL := false
+
+	// Create a purple style
+	purpleStyle := termenv.Style{}.Foreground(r.profile.Color("#9B51E0")).Bold()
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "https://") {
+			if !seenURL {
+				seenURL = true
+				result = append(result, line)
+			}
+		} else if strings.HasPrefix(trimmed, "$") {
+			// Add custom styling for command examples
+			styled := purpleStyle.Styled(strings.TrimSpace(line))
+			result = append(result, " "+styled)
+		} else if trimmed != "" {
+			result = append(result, line)
+		}
+	}
+
+	// Add a single newline at the end plus extra spacing
+	return "\n" + strings.Join(result, "\n") + "\n\n", nil
 }
 
 // RenderSuccess renders a success message with specific styling

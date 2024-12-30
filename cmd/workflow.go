@@ -3,6 +3,7 @@ package cmd
 import (
 	_ "embed"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -77,39 +78,61 @@ var workflowCmd = &cobra.Command{
 			return
 		}
 
-		// Check if the workflow name is "list" (invalid command)
-		if args[0] == "list" {
-			details, suggestion := getMarkdownSection("Invalid Command")
-			err := renderError(ErrorMessage{
-				Title:      "Invalid Command",
-				Details:    details,
-				Suggestion: suggestion,
-			})
-			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-			}
-			return
+		// List any known subcommands here
+		knownSubcommands := map[string]bool{
+			"help":   true,
+			"-h":     true,
+			"--help": true,
 		}
 
-		// Get the --file flag value
-		workflowFile, _ := cmd.Flags().GetString("file")
-		if workflowFile == "" {
-			details, suggestion := getMarkdownSection("Missing Required Flag")
-			err := renderError(ErrorMessage{
-				Title:      "Missing Required Flag",
-				Details:    details,
-				Suggestion: suggestion,
-			})
-			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+		if !knownSubcommands[args[0]] {
+			// Get the --file flag value
+			workflowFile, _ := cmd.Flags().GetString("file")
+
+			// If no file is provided, show invalid command error with usage information
+			if workflowFile == "" {
+				renderer, err := markdown.NewRenderer(
+					markdown.WithWidth(80),
+				)
+				if err != nil {
+					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to create markdown renderer: %w", err))
+				}
+
+				// Generate the error message dynamically using H1 styling
+				errorMsg := fmt.Sprintf("# Invalid Command\n\nThe command `atmos workflow %s` is not valid.\n\n", args[0])
+				content := errorMsg + workflowMarkdown
+				rendered, err := renderer.Render(content)
+				if err != nil {
+					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to render markdown: %w", err))
+				}
+
+				// Remove duplicate URLs and format output
+				lines := strings.Split(rendered, "\n")
+				var result []string
+				seenURL := false
+
+				for _, line := range lines {
+					trimmed := strings.TrimSpace(line)
+					if strings.Contains(trimmed, "https://") {
+						if !seenURL {
+							seenURL = true
+							result = append(result, line)
+						}
+					} else if strings.HasPrefix(trimmed, "$") {
+						result = append(result, " "+strings.TrimSpace(line))
+					} else if trimmed != "" {
+						result = append(result, line)
+					}
+				}
+
+				fmt.Print("\n" + strings.Join(result, "\n") + "\n\n")
+				os.Exit(1)
 			}
-			return
 		}
 
 		// Execute the workflow command
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 			// Format common error messages
 			if strings.Contains(err.Error(), "does not exist") {
 				details, suggestion := getMarkdownSection("Workflow File Not Found")
