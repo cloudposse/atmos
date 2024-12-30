@@ -1,0 +1,204 @@
+---
+title: Markdown Styling
+sidebar_label: Markdown Styling
+sidebar_position: 7
+description: Configure custom markdown styling for Atmos CLI output
+---
+
+# Markdown Styling Configuration
+
+Atmos CLI supports custom markdown styling for its command outputs, allowing you to personalize the appearance of messages, help text, and error outputs. This feature enables you to match your terminal's theme or create a more visually appealing and accessible CLI experience.
+
+## Configuration
+
+The markdown styling is configured in your `atmos.yaml` file under the `settings.markdown` section. Here's a complete example:
+
+```yaml
+settings:
+  markdown:
+    # Base document styling
+    document:
+      color: "#FFFFFF"  # Default text color
+      
+    # General heading styles
+    heading:
+      color: "#FF6B6B"  # Color for all headings
+      bold: true
+      
+    # Level 1 heading (H1)
+    h1:
+      color: "#FFFFFF"
+      background_color: "#FF0000"  # Background color for H1
+      bold: true
+      margin: 2
+      
+    # Level 2 heading (H2)
+    h2:
+      color: "#FFD700"  # Golden yellow
+      bold: true
+      
+    # Level 3 heading (H3)
+    h3:
+      color: "#00FF00"  # Bright green
+      bold: true
+      
+    # Code blocks
+    code_block:
+      color: "#00FFFF"  # Cyan
+      margin: 1
+      
+    # Block quotes
+    block_quote:
+      color: "#FF69B4"  # Hot pink
+      indent: 2
+      
+    # Links
+    link:
+      color: "#FFD700"  # Golden yellow
+      underline: true
+      
+    # Bold text
+    strong:
+      color: "#00FF00"  # Bright green
+      bold: true
+      
+    # Italic text
+    emph:
+      color: "#00FFFF"  # Cyan
+      italic: true
+```
+
+## Style Properties
+
+Each markdown element supports the following properties:
+
+### Common Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `color` | string | Text color in hex format (e.g., "#FFFFFF") |
+| `background_color` | string | Background color in hex format |
+| `bold` | boolean | Whether to make the text bold |
+| `italic` | boolean | Whether to make the text italic |
+| `underline` | boolean | Whether to underline the text |
+| `margin` | number | Space around the element |
+| `indent` | number | Indentation level |
+
+### Element-Specific Properties
+
+#### Document
+- Base styling for all text content
+- Supports all common properties
+
+#### Headings (H1-H6)
+- Individual styling for each heading level
+- H1 supports additional `background_color` property
+- All heading levels support `margin` for vertical spacing
+
+#### Code Blocks
+- Styling for multi-line code blocks
+- Supports `margin` for visual separation
+- Color applies to the entire block
+
+#### Block Quotes
+- Styling for quoted text
+- `indent` property controls quote indentation
+- Supports all common properties
+
+#### Links
+- Styling for hyperlinks
+- `underline` property specifically for links
+- Color applies to both link text and underline
+
+## Default Styles
+
+If no custom styles are configured, Atmos uses a built-in default theme related to the default atmos brand colors:
+
+```yaml
+# Built-in default theme
+document:
+  color: "#FFFFFF"  # White text
+heading:
+  color: "#00A3E0"  # Blue headings
+  bold: true
+h1:
+  color: "#FFFFFF"
+  background_color: "#9B51E0"  # Purple background
+  bold: true
+code_block:
+  color: "#00A3E0"  # Blue code
+link:
+  color: "#00A3E0"
+  underline: true
+```
+
+## Terminal Compatibility
+
+The markdown styling feature requires a terminal that supports:
+- 24-bit true color (for hex color codes)
+- ANSI escape sequences
+- Unicode characters
+
+Most modern terminals support these features. For terminals with limited color support, Atmos will automatically adjust colors to the closest available match.
+
+## Examples
+
+### Error Messages
+Custom styling makes error messages more readable:
+
+```yaml
+settings:
+  markdown:
+    h1:
+      color: "#FFFFFF"
+      background_color: "#FF0000"  # Red background for errors
+      bold: true
+    code_block:
+      color: "#00FFFF"  # Cyan for code examples
+```
+
+### Help Text
+Enhance help text readability:
+
+```yaml
+settings:
+  markdown:
+    heading:
+      color: "#FFD700"  # Golden headings
+      bold: true
+    code_block:
+      color: "#00FFFF"  # Cyan code examples
+    link:
+      color: "#FFD700"
+      underline: true
+```
+
+## Best Practices
+
+1. **Color Contrast**: Ensure sufficient contrast between text and background colors for readability.
+2. **Consistent Styling**: Use a consistent color scheme across different elements.
+3. **Terminal Support**: Test your styling in different terminals to ensure compatibility.
+4. **Accessibility**: Consider color-blind users when choosing your color scheme.
+
+## Troubleshooting
+
+If styles aren't applying correctly:
+
+1. Verify your terminal supports true color:
+```bash
+$ echo $COLORTERM
+```
+Should output `truecolor` or `24bit`.
+
+2. Check your `atmos.yaml` is properly formatted:
+- Colors must be in hex format
+- Boolean values must be `true` or `false`
+- Numbers must be integers
+
+3. Try removing custom styles to see if default styles work.
+
+## See Also
+
+- [CLI Configuration](/cli/configuration)
+- [Command Reference](/cli/commands)
+- [Terminal Support](/cli/terminal-support) 
