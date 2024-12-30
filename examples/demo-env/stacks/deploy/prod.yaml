@@ -8,7 +8,7 @@ import:
 
 components:
   terraform:
-    station:
+    example:
       vars:
         location: Los Angeles
         lang: en
