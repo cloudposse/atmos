@@ -24,7 +24,7 @@ Think of this file as where you [bootstrap the settings or configuration of your
 [terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior)
 you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)),
 the base path location of the components, and so forth.
-## Base Path
+## Configuration File (`atmos.yaml`)
 
 The base path defines the root directory for components, stacks, workflows, and Atmos configurations. It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. If both are set, the `--base-path` will take precedence. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory. This is because Atmos executes commands that may change the working directory (e.g., Terraform).
 
@@ -39,14 +39,14 @@ Relative paths, such as `components.terraform.base_path`, `components.helmfile.b
 
 Each setting (`components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, and `workflows.base_path`) operates independently and can accept either an absolute or a relative path.
 
-## Configuration File (`atmos.yaml`)
+## Base Path
 
 The Atmos (CLI) configuration is loaded from the following locations, in order of precedence, and deep-merged: configurations listed earlier have higher priority, meaning they override any conflicting sections defined in subsequent locations:
 - The `--config` flag lets you provide a relative or absolute path to a valid configuration file or a directory that only contains Atmos configuration files. If a relative path is supplied, it will be relative to your current working directory. The `--config` flag has the highest priority, meaning it overrides all other configuration sources. When you use the `--config` flag, any other search paths, like those in `XDG_CONFIG_HOME`, are ignored, making it the exclusive configuration source. You can pass the `--config` flag multiple times in a single command; the configurations will be deep merged in the order you provide them. The first config you specify is the lowest priority, and the last one is the highest, allowing later configs to override settings from earlier ones. Additionally, Atmos will update the `ATMOS_CLI_CONFIG_PATH` environment variable to contain a list of the specified configuration paths in order, separated by the system's standard path separator (`:` on Unix-like systems and `;` on Windows). This ensures that subshells and tools like `terraform-provider-utils` can access and process the merged configurations consistently across different operating systems.
 
 - The `$XDG_CONFIG_HOME/atmos/atmos.yaml` file (if `$XDG_CONFIG_HOME` is set) allows the user to specify their preferences and overrides. It is only superseded by the `--config` flag.
 - The environment variable `ATMOS_CLI_CONFIG_PATH` should point to a folder (or a specific file). This is mutually exclusive with the `--config` parameter. If `--config` is specified, then the `ATMOS_CLI_CONFIG_PATH` is ignored. Atmos will only search for the configuration file in the specified folder. Note that `.yaml` and `.yml` file extensions are treated interchangeably and are loaded in lexicographical order. Atmos will search for the following files, in order, relative to the `ATMOS_CLI_CONFIG_PATH` environment variable.
-  From the current directory:
+  Relative to the repository root: (in order from highest to lowest priority)
   - `atmos.yaml`
   - `.atmos.yaml`
   - `atmos.d/**/*`
@@ -72,6 +72,7 @@ import:
   - "./logs.yaml"  
 
 Note, templated imports of Atmos configuration are not supported (unlike with stacks).
+
 :::warning Be Careful with Remote Imports
 - Always use HTTPS URLs (currently correctly demonstrated in the example). 
 - Verify the authenticity of remote sources. 

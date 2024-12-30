@@ -15,8 +15,3 @@ provider "environment" {}
 data "environment_variables" "required" {
   filter = "ATMOS_.*" # Fetches all variables starting with "ATMOS_"
 }
-variable "location" {
-  description = "Location for which the weather."
-  type        = string
-  default     = "Los Angeles"
-}
