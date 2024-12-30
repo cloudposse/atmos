@@ -3,7 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -21,7 +21,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	if found && existingMatches != nil {
 		return strings.Split(existingMatches.(string), ","), nil
 	}
-
+	pattern = filepath.ToSlash(pattern)
 	base, cleanPattern := doublestar.SplitPattern(pattern)
 	f := os.DirFS(base)
 
@@ -36,7 +36,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 	var fullMatches []string
 	for _, match := range matches {
-		fullMatches = append(fullMatches, path.Join(base, match))
+		fullMatches = append(fullMatches, filepath.Join(base, match))
 	}
 
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))

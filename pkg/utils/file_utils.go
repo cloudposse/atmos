@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -69,7 +68,7 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 	res := []string{}
 
 	for _, p := range paths {
-		res = append(res, path.Join(basePath, p))
+		res = append(res, filepath.Join(basePath, p))
 	}
 
 	return res, nil
@@ -77,6 +76,8 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 
 // TrimBasePathFromPath trims the base path prefix from the path
 func TrimBasePathFromPath(basePath string, path string) string {
+	basePath = filepath.ToSlash(basePath)
+	path = filepath.ToSlash(path)
 	return strings.TrimPrefix(path, basePath)
 }
 
@@ -93,7 +94,7 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 	}
 
 	// Join the base path with the provided path
-	joinedPath := path.Join(basePath, providedPath)
+	joinedPath := filepath.Join(basePath, providedPath)
 
 	// If the joined path is an absolute path and exists in the file system, return it
 	if filepath.IsAbs(joinedPath) {
@@ -133,7 +134,7 @@ func EnsureDir(fileName string) error {
 // SliceOfPathsContainsPath checks if a slice of file paths contains a path
 func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	for _, v := range paths {
-		dir := path.Dir(v)
+		dir := filepath.Dir(v)
 		if dir == checkPath {
 			return true
 		}
@@ -236,7 +237,7 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 	urlPath := parsedURL.Path
 
 	// Get the base name of the path
-	fileName := path.Base(urlPath)
+	fileName := filepath.Base(urlPath)
 	if fileName == "/" || fileName == "." {
 		return "", fmt.Errorf("unable to extract filename from URL: %s", rawURL)
 	}
