@@ -67,7 +67,7 @@ func FindAllStackConfigsInPathsForStack(
 			matchedFileRelativePath := u.TrimBasePathFromPath(atmosConfig.StacksBaseAbsolutePath+"/", matchedFileAbsolutePath)
 
 			// Check if the provided stack matches a file in the config folders (excluding the files from `excludeStackPaths`)
-			stackMatch := matchesStackFilePattern(matchedFileAbsolutePath, stack)
+			stackMatch := matchesStackFilePattern(filepath.ToSlash(matchedFileAbsolutePath), stack)
 
 			if stackMatch {
 				allExcluded := true
