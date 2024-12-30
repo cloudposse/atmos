@@ -27,11 +27,17 @@ func NewRenderer(opts ...Option) (*Renderer, error) {
 		opt(r)
 	}
 
+	// Get default style
+	style, err := GetDefaultStyle()
+	if err != nil {
+		return nil, err
+	}
+
 	// Initialize glamour renderer
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(int(r.width)),
-		glamour.WithStylesFromJSONBytes(DefaultStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),
 	)
