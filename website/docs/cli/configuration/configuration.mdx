@@ -10,6 +10,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Admonition from '@theme/Admonition';
 
 # CLI Configuration
 
@@ -23,7 +24,9 @@ Think of this file as where you [bootstrap the settings or configuration of your
 
 ## Configuration File (`atmos.yaml`)
 
-The Atmos configuration is processed in 3 stages, enabling you to define settings at different levels of precedence.
+The Atmos configuration is processed in three stages, allowing you to define settings at different levels of precedence.
+
+As part of this process, Atmos updates the `ATMOS_CLI_CONFIG_PATH` environment variable to include a list of the absolute configuration paths in the order they were processed. These paths are separated by the system's standard path separator (`:` on Unix-like systems and `;` on Windows). This ensures that subshells and Terraform providers like `terraform-provider-utils` can consistently access and process the merged configurations across different operating systems.
 
 ### Stage 1: Load Explicit or System-Wide Configurations
 
@@ -35,15 +38,18 @@ Atmos will search for the configuration file in the following locations, in orde
   <dd>
     The `--config` flag lets you provide a relative or absolute path to a valid configuration file or a directory that only contains Atmos configuration files. If a relative path is supplied, it will be relative to your current working directory. The `--config` flag has the highest priority, meaning it overrides all other configuration sources.
 
-    When you use the `--config` flag, any other search paths, like those in `XDG_CONFIG_HOME`, are ignored, making it the flag the exclusive configuration source.
+    <Admonition type="important">
+      When you use the `--config` flag, all subsequent stages are skipped, and only the configuration files specified by the `--config` flag are loaded.
+    </Admonition>
 
     You can pass the `--config` flag multiple times in a single command; the configurations will be deep merged in the order you provide them. The first config you specify is the lowest priority, and the last one is the highest, allowing later configs to override settings from earlier ones.
+
+    For example, to load multiple configuration files, you would run:
 
     ```bash
     atmos --config /path/to/config1.yaml --config /path/to/config2.yaml ...
     ```
 
-    Additionally, Atmos will update the `ATMOS_CLI_CONFIG_PATH` environment variable to contain a list of the specified configuration paths in order, separated by the system's standard path separator (`:` on Unix-like systems and `;` on Windows). This ensures that subshells and Terraform providers like `terraform-provider-utils` can access and process the merged configurations consistently across different operating systems.
   </dd>
 
   <dt>
@@ -59,8 +65,6 @@ Atmos will search for the configuration file in the following locations, in orde
     **On Linux or macOS:**
     - `/usr/local/etc/atmos/atmos.yaml`
     - `/etc/atmos/atmos.yaml`
-
-
   </dd>
 </dl>
 
@@ -77,18 +81,14 @@ Atmos will search for additional configuration files in the following locations,
   `ATMOS_CLI_CONFIG_PATH` environment variable
   </dt>
   <dd>
-    The environment variable `ATMOS_CLI_CONFIG_PATH` should point to a folder (or a specific file). This is mutually exclusive with the `--config` parameter. If `--config` is specified, then the `ATMOS_CLI_CONFIG_PATH` is ignored.
+    The environment variable `ATMOS_CLI_CONFIG_PATH` should point to a folder (or a specific file). Multiple paths can be specified, separated by the system's standard path separator (`:` on Unix-like systems and `;` on Windows).
 
     Atmos will only search for the configuration file in the specified folder. Note that `.yaml` and `.yml` file extensions are treated interchangeably and are loaded in lexicographical order. Atmos will search for the following files, in order, relative to the `ATMOS_CLI_CONFIG_PATH` environment variable.
-
-    Atmos processes each path specified by the `ATMOS_CLI_CONFIG_PATH` environment variable in the order they are listed, separated by the system's standard path separator (`:` on Unix-like systems and `;` on Windows).
 
     If a path is a directory, Atmos will search for the following files in the directory, in order: (in order from highest to lowest priority):
 
       - `atmos.yaml`
-      - `.atmos.yaml`
       - `atmos.d/**/*`
-      - `.atmos.d/**/*`
   </dd>
 
   <dt>
@@ -120,7 +120,7 @@ Atmos will search for additional configuration files in the following locations,
 If the `--config` flag is used, this stage is skipped.
 :::
 
-Additionally, after processing all the configuration files, Atmos will apply user preferences. Since user preferences are applied last, they have the highest precedence.
+After processing all configuration files, Atmos applies user preferences. Since user preferences are applied last, they have the highest precedence. This allows you to override any settings from previous stages to suit your specific needs, such as adjusting logging levels, configuring aliases, tweaking colors, or even adding your own custom commands.
 
 Preferences are deep-merged, meaning they override any conflicting sections defined in subsequent locations:
 
