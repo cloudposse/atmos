@@ -17,46 +17,143 @@ import Intro from '@site/src/components/Intro'
 Use the `atmos.yaml` configuration file to control the behavior of the [`atmos` CLI](/cli)
 </Intro>
 
-Everything in the [`atmos` CLI](/cli) is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not
-be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
+Everything in the [`atmos` CLI](/cli) is configurable. The defaults are established in the `atmos.yaml` configuration file. The CLI configuration should not be confused with [Stack configurations](/core-concepts/stacks/), which have a different schema.
 
-Think of this file as where you [bootstrap the settings or configuration of your project](/core-concepts/projects). If you'll be using
-[terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior)
-you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)),
-the base path location of the components, and so forth.
+Think of this file as where you [bootstrap the settings or configuration of your project](/core-concepts/projects). If you'll be using [terraform](/core-concepts/components/terraform), then [this is where](/cli/configuration/components#terraform-component-behavior) you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/configuration/opentofu)), the base path location of the components, and so forth.
+
 ## Configuration File (`atmos.yaml`)
 
-The base path defines the root directory for components, stacks, workflows, and Atmos configurations. It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. If both are set, the `--base-path` will take precedence. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory. This is because Atmos executes commands that may change the working directory (e.g., Terraform).
+The Atmos configuration is processed in 3 stages, enabling you to define settings at different levels of precedence.
 
-When the `base_path` is explicitly defined, it will always be resolved to the absolute path relative to the current working directory, if an absolute path was not already set.
+### Stage 1: Load Explicit or System-Wide Configurations
 
-When the `base_path` is not explicitly provided or is empty, Atmos will attempt to infer the appropriate path using the following strategy, in order of precedence:
-1. If the current working directory contains any of the following files or directories: `atmos.yaml`, `.atmos.yaml`, `.github/atmos.yaml`, or `atmos.d/**/*`, Atmos will use the directory containing these files as the `base_path`.
-2. If a Git repository is detected, Atmos uses the root of the Git repository as the `base_path`.
-3. If neither of the above applies, Atmos defaults to the absolute path of `./` as the `base_path`.
+Atmos will search for the configuration file in the following locations, in order of precedence. The first location found is used:
+<dl>
+  <dt>
+    `--config <path>` flag
+  </dt>
+  <dd>
+    The `--config` flag lets you provide a relative or absolute path to a valid configuration file or a directory that only contains Atmos configuration files. If a relative path is supplied, it will be relative to your current working directory. The `--config` flag has the highest priority, meaning it overrides all other configuration sources.
 
-Relative paths, such as `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, `workflows.base_path`, `schemas.jsonschema.base_path`, and `schemas.opa.base_path`, are resolved relative to the specified `base_path`. Absolute paths for these settings will be respected and used as-is. 
+    When you use the `--config` flag, any other search paths, like those in `XDG_CONFIG_HOME`, are ignored, making it the flag the exclusive configuration source.
 
-Each setting (`components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, and `workflows.base_path`) operates independently and can accept either an absolute or a relative path.
+    You can pass the `--config` flag multiple times in a single command; the configurations will be deep merged in the order you provide them. The first config you specify is the lowest priority, and the last one is the highest, allowing later configs to override settings from earlier ones.
 
-## Base Path
+    ```bash
+    atmos --config /path/to/config1.yaml --config /path/to/config2.yaml ...
+    ```
 
-The Atmos (CLI) configuration is loaded from the following locations, in order of precedence, and deep-merged: configurations listed earlier have higher priority, meaning they override any conflicting sections defined in subsequent locations:
-- The `--config` flag lets you provide a relative or absolute path to a valid configuration file or a directory that only contains Atmos configuration files. If a relative path is supplied, it will be relative to your current working directory. The `--config` flag has the highest priority, meaning it overrides all other configuration sources. When you use the `--config` flag, any other search paths, like those in `XDG_CONFIG_HOME`, are ignored, making it the exclusive configuration source. You can pass the `--config` flag multiple times in a single command; the configurations will be deep merged in the order you provide them. The first config you specify is the lowest priority, and the last one is the highest, allowing later configs to override settings from earlier ones. Additionally, Atmos will update the `ATMOS_CLI_CONFIG_PATH` environment variable to contain a list of the specified configuration paths in order, separated by the system's standard path separator (`:` on Unix-like systems and `;` on Windows). This ensures that subshells and tools like `terraform-provider-utils` can access and process the merged configurations consistently across different operating systems.
+    Additionally, Atmos will update the `ATMOS_CLI_CONFIG_PATH` environment variable to contain a list of the specified configuration paths in order, separated by the system's standard path separator (`:` on Unix-like systems and `;` on Windows). This ensures that subshells and Terraform providers like `terraform-provider-utils` can access and process the merged configurations consistently across different operating systems.
+  </dd>
 
-- The `$XDG_CONFIG_HOME/atmos/atmos.yaml` file (if `$XDG_CONFIG_HOME` is set) allows the user to specify their preferences and overrides. It is only superseded by the `--config` flag.
-- The environment variable `ATMOS_CLI_CONFIG_PATH` should point to a folder (or a specific file). This is mutually exclusive with the `--config` parameter. If `--config` is specified, then the `ATMOS_CLI_CONFIG_PATH` is ignored. Atmos will only search for the configuration file in the specified folder. Note that `.yaml` and `.yml` file extensions are treated interchangeably and are loaded in lexicographical order. Atmos will search for the following files, in order, relative to the `ATMOS_CLI_CONFIG_PATH` environment variable.
-  Relative to the repository root: (in order from highest to lowest priority)
-  - `atmos.yaml`
-  - `.atmos.yaml`
-  - `atmos.d/**/*`
-  - `.atmos.d/**/*`
-  - `.github/atmos.yaml`
-- Home directory (`~/.atmos/atmos.yaml`)
-- The `atmos.d/` directory is loaded relative to the `base_path`. For an example, see [`examples/demo-atmos.d`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos.d)
-- System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows). This has the lowest precedence of all configuration files.
+  <dt>
+    System directory
+  </dt>
+  <dd>
+    When no `--config` flag is specified, Atmos will attempt to load the system-wide Atmos configuration (if found).
+    The system configuration has the lowest precedence of all configuration files, since it is loaded first.
 
-Additionally, Atmos supports `imports` of other CLI configurations. Use imports to break large Atmos CLI configurations into smaller ones, such as organized by top-level section. File imports are relative to the base path (if `import`  section is set in the config). All imports are processed and deep-merged in order, so that the last file in the list supersedes settings in the preceding imports. For an example, see [`examples/demo-atmos-cli-imports`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos-cli-imports).
+    **On Windows:**
+    - `%PROGRAMDATA%/atmos/atmos.yaml` (e.g. `C:\ProgramData\atmos\atmos.yaml`)
+
+    **On Linux or macOS:**
+    - `/usr/local/etc/atmos/atmos.yaml`
+    - `/etc/atmos/atmos.yaml`
+
+
+  </dd>
+</dl>
+
+### Stage 2: Discover Additional Configurations
+
+:::important
+If the `--config` flag is used, this stage is skipped.
+:::
+
+Atmos will search for additional configuration files in the following locations, in order of precedence, and deep merged the current configuration. The first location found is used:
+<dl>
+
+  <dt>
+  `ATMOS_CLI_CONFIG_PATH` environment variable
+  </dt>
+  <dd>
+    The environment variable `ATMOS_CLI_CONFIG_PATH` should point to a folder (or a specific file). This is mutually exclusive with the `--config` parameter. If `--config` is specified, then the `ATMOS_CLI_CONFIG_PATH` is ignored.
+
+    Atmos will only search for the configuration file in the specified folder. Note that `.yaml` and `.yml` file extensions are treated interchangeably and are loaded in lexicographical order. Atmos will search for the following files, in order, relative to the `ATMOS_CLI_CONFIG_PATH` environment variable.
+
+    Atmos processes each path specified by the `ATMOS_CLI_CONFIG_PATH` environment variable in the order they are listed, separated by the system's standard path separator (`:` on Unix-like systems and `;` on Windows).
+
+    If a path is a directory, Atmos will search for the following files in the directory, in order: (in order from highest to lowest priority):
+
+      - `atmos.yaml`
+      - `.atmos.yaml`
+      - `atmos.d/**/*`
+      - `.atmos.d/**/*`
+  </dd>
+
+  <dt>
+    Git Repository Root
+  </dt>
+  <dd>
+    If a Git repository is detected, Atmos uses the root of the Git repository as the `ATMOS_CLI_CONFIG_PATH`.
+
+    Atmos will search for the following files relative to the repository root, in order from highest to lowest priority:
+
+      - `atmos.yaml`
+      - `.atmos.yaml`
+      - `atmos.d/**/*`
+      - `.atmos.d/**/*`
+      - `.github/atmos.yaml`
+
+    Alternatively, set `ATMOS_CLI_CONFIG_PATH` to `!repo-root` to enforce this behavior.
+
+    ```bash
+    export ATMOS_CLI_CONFIG_PATH="!repo-root"
+    ```
+
+  </dd>
+</dl>
+
+### Stage 3: Apply User Preferences
+
+:::important
+If the `--config` flag is used, this stage is skipped.
+:::
+
+Additionally, after processing all the configuration files, Atmos will apply user preferences. Since user preferences are applied last, they have the highest precedence.
+
+Preferences are deep-merged, meaning they override any conflicting sections defined in subsequent locations:
+
+<dl>
+  <dt>
+    `$XDG_CONFIG_HOME/atmos/atmos.yaml`
+  </dt>
+  <dd>
+    The `$XDG_CONFIG_HOME/atmos/atmos.yaml` file (if `$XDG_CONFIG_HOME` is set) allows the user to specify their preferences and overrides.
+  </dd>
+
+  <dt>
+    User's Home Directory
+  </dt>
+  <dd>
+    **On Windows:**
+    - `%LOCALAPPDATA%/atmos/atmos.yaml`  (e.g., `C:\Users\<User>\AppData\Roaming\atmos\atmos.yaml`)
+
+    **On Linux or macOS:**
+    - `~/.config/atmos/atmos.yaml`
+    - `~/.atmos/atmos.yaml`
+  </dd>
+</dl>
+
+
+## Imports
+
+Additionally, Atmos supports `imports` of other CLI configurations. Use imports to break large Atmos CLI configurations into smaller ones, such as organized by top-level section. File imports are relative to the base path (if `import`  section is set in the config). All imports are processed at the time the configuration is loaded, and then deep-merged in order, so that the last file in the list supersedes settings in the preceding imports. For an example, see [`examples/demo-atmos-cli-imports`](https://github.com/cloudposse/atmos/tree/main/examples/demo-atmos-cli-imports).
+
+:::tip Pro-Tip
+Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
+names/paths (double-star/globstar `**` is supported as well)
+:::
 
 Imports can be any of the following:
 - Remote URL (if `import` section is set in the config)
@@ -67,25 +164,56 @@ For example, we can import from multiple locations like this:
 
 ```yaml
 import:
-  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"  
-  - "configs.d/**/*"                                                                
-  - "./logs.yaml"  
+  # Load the Atmos configuration from the main branch of the 'cloudposse/atmos' repository
+  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"
+  # Then load the repository root's configuration
+  - !repo-root
+  # Then merge the configs
+  - "configs.d/**/*"
+  # Finally, override some logging settings
+  - "./logs.yaml"
+```
 
-Note, templated imports of Atmos configuration are not supported (unlike with stacks).
+See [`examples/demo-configuration`](https://github.com/cloudposse/atmos/tree/main/examples/demo-configuration) for a demonstration.
+
+Note, templated imports of Atmos configuration are not supported (unlike stacks).
 
 :::warning Be Careful with Remote Imports
-- Always use HTTPS URLs (currently correctly demonstrated in the example). 
-- Verify the authenticity of remote sources. 
+- Always use HTTPS URLs (currently correctly demonstrated in the example).
+- Verify the authenticity of remote sources.
 - Consider pinning to specific commit hashes instead of branch references
-
 :::
 
 Each configuration file discovered is deep-merged with the preceding configurations.
 
-:::tip Pro-Tip
-Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
-names/paths (double-star/globstar `**` is supported as well)
-:::
+## Base Path
+
+The base path serves as the root directory for components, stacks, workflows, and Atmos configurations. It is determined only after all configuration files have been loaded and deep-merged. This sequence is essential because the configuration itself defines the base path.
+
+It can be set using the `ATMOS_BASE_PATH` environment variable or by passing the `--base-path` command-line argument. If both are set, the `--base-path` will take precedence. Both absolute and relative paths are supported. When a relative path is provided, it will be expanded to an absolute path relative to the current working directory. This is because Atmos executes commands that may change the working directory (e.g., Terraform).
+
+When `base_path` is explicitly set in the Atmos configuration, it is always resolved to an absolute path based on the current working directory from which `atmos` is executed, unless an absolute path is already provided.
+
+Atmos provides a function `!repo-root` to enforce that the root of the git repository is always used.
+
+For example, this will ensure Atmos always uses the root of the git repository as the base path:
+
+```yaml
+base_path: !repo-root
+```
+
+When the `base_path` is not explicitly provided or is empty, Atmos will attempt to infer the appropriate path using the following strategy, in order of precedence:
+
+  1. Atmos will use the first matching condition to determine the `base_path`. If the current working directory contains any of the following files or directories: `atmos.yaml`, `.atmos.yaml`, any files matching the pattern `atmos.d/**/*`, or `.github/atmos.yaml`, Atmos will set the `base_path` to the directory that contains the first matching file or directory (e.g., the parent directory of `.github` if `.github/atmos.yaml` is the first match found).
+  2. If a Git repository is detected, Atmos uses the root of the Git repository as the `base_path` (alternatively, use `!repo-root` to enforce this behavior).
+  3. Lastly, Atmos defaults to the absolute path of `./` as the `base_path`.
+
+Once the `base_path` is determined, Atmos will use it as the root directory for components, stacks, workflows, and Atmos configurations and set the `ATMOS_BASE_PATH` environment variable to the resolved absolute path.
+
+Relative paths, such as `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, `workflows.base_path`, `schemas.jsonschema.base_path`, and `schemas.opa.base_path`, are resolved relative to the specified `base_path`. Absolute paths for these settings will be respected and used as-is.
+
+Each setting (`components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, and `workflows.base_path`) operates independently and can accept either an absolute or a relative path.
+
 
 ## Default CLI Configuration
 
@@ -163,22 +291,6 @@ If Atmos does not find an `atmos.yaml` file and the default CLI config is used, 
 
 What follows are all the sections of the `atmos.yaml` configuration file.
 
-## Base Path
-
-The base path for components, stacks, workflows and validation configurations.
-It can also be set using `ATMOS_BASE_PATH` environment variable, or by passing the `--base-path` command-line argument.
-It supports both absolute and relative paths.
-
-If not provided or is an empty string, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path` and `workflows.base_path`
-are independent settings (supporting both absolute and relative paths).
-
-If `base_path` is provided, `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, `workflows.base_path`,
-`schemas.jsonschema.base_path` and `schemas.opa.base_path` are considered paths relative to `base_path`.
-
-```yaml
-base_path: "."
-```
-
 ## Settings
 
 The `settings` section configures Atmos global settings.
@@ -224,7 +336,7 @@ The `settings` section configures Atmos global settings.
       <dd>The items in the destination list are deep-merged with the items in the source list. The items in the source list take precedence. The items are processed starting from the first up to the length of the source list (the remaining items are not processed). If the source and destination lists have the same length, all items in the destination lists are deep-merged with all items in the source list.</dd>
     </dl>
   </dd>
-  
+
   <dt>`settings.docs`</dt>
   <dd>
     Specifies how component documentation is displayed in the terminal.
@@ -670,7 +782,7 @@ Most YAML settings can also be defined by environment variables. This is helpful
 setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local development folder, will enable you to rapidly iterate.
 
 | Variable                                              | YAML Path                                       | Description                                                                                                                                                                                                                  |
-|:------------------------------------------------------|:------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| :---------------------------------------------------- | :---------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                                                                                                  |
 | ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                                                                                                               |
 | ATMOS_VENDOR_BASE_PATH                                | vendor.base_path                                | Path to vendor configuration file or directory containing vendor files. If a directory is specified, all .yaml files in the directory will be processed in lexicographical order. Supports both absolute and relative paths. |
@@ -694,26 +806,26 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                                                                                                                 |
 | ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                                                                                                           |
 | ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           | Base path to OPA policies for component validation                                                                                                                                                                           |
-| ATMOS_SCHEMAS_ATMOS_MANIFEST                          | schemas.atmos.manifest                          | Path to JSON Schema to validate Atmos stack manifests. For more details, refer to [Atmos Manifest JSON Schema](/cli/schemas)                                                                                           |
+| ATMOS_SCHEMAS_ATMOS_MANIFEST                          | schemas.atmos.manifest                          | Path to JSON Schema to validate Atmos stack manifests. For more details, refer to [Atmos Manifest JSON Schema](/cli/schemas)                                                                                                 |
 | ATMOS_LOGS_FILE                                       | logs.file                                       | The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`). If omitted, `/dev/stdout` will be used                            |
 | ATMOS_LOGS_LEVEL                                      | logs.level                                      | Logs level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging) |
 | ATMOS_SETTINGS_LIST_MERGE_STRATEGY                    | settings.list_merge_strategy                    | Specifies how lists are merged in Atmos stack manifests. The following strategies are supported: `replace`, `append`, `merge`                                                                                                |
-| ATMOS_VERSION_CHECK_ENABLED                           | version.check.enabled                           | Enable/disable Atmos version checks for updates to the newest release                                                                                                                                                                    |
+| ATMOS_VERSION_CHECK_ENABLED                           | version.check.enabled                           | Enable/disable Atmos version checks for updates to the newest release                                                                                                                                                        |
 
 ### Context
 
 Some commands, like [`atmos terraform shell`](/cli/commands/terraform/shell),
 spawn an interactive shell with certain environment variables set, in order to enable the user to use other tools
-(in the case of `atmos terraform shell`, the Terraform or Tofu CLI) natively, while still being configured for a 
-specific component and stack. To accomplish this, and to provide visibility and context to the user regarding the 
+(in the case of `atmos terraform shell`, the Terraform or Tofu CLI) natively, while still being configured for a
+specific component and stack. To accomplish this, and to provide visibility and context to the user regarding the
 configuration, Atmos may set the following environment variables in the spawned shell:
 
-| Variable                | Description                                                                                            |
-|:------------------------|:-------------------------------------------------------------------------------------------------------|
-| ATMOS_COMPONENT         | The name of the active component                                                                       |
-| ATMOS_SHELL_WORKING_DIR | The directory from which native commands should be run                                                 |
-| ATMOS_SHLVL | The depth of Atmos shell nesting. When present, it indicates that the shell has been spawned by Atmos. |
-| ATMOS_STACK             | The name of the active stack                                                                           |
+| Variable                  | Description                                                                                            |
+| :------------------------ | :----------------------------------------------------------------------------------------------------- |
+| ATMOS_COMPONENT           | The name of the active component                                                                       |
+| ATMOS_SHELL_WORKING_DIR   | The directory from which native commands should be run                                                 |
+| ATMOS_SHLVL               | The depth of Atmos shell nesting. When present, it indicates that the shell has been spawned by Atmos. |
+| ATMOS_STACK               | The name of the active stack                                                                           |
 | ATMOS_TERRAFORM_WORKSPACE | The name of the Terraform workspace in which Terraform comamnds should be run                          |
-| PS1                     | When a custom shell prompt has been configured in Atmos, the prompt will be set via `PS1`              |
-| TF_CLI_ARGS_*           | Terraform CLI arguments to be passed to Terraform commands                                             |
+| PS1                       | When a custom shell prompt has been configured in Atmos, the prompt will be set via `PS1`              |
+| TF_CLI_ARGS_*             | Terraform CLI arguments to be passed to Terraform commands                                             |
