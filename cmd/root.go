@@ -130,6 +130,8 @@ func init() {
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
+	RootCmd.PersistentFlags().String("overrides", "", "Override attributes in Atmos sections including 'vars', 'settings', 'backend': atmos terraform plan <component> -s <stack> --overrides \"vars: {a: 1}\"")
+
 	// Set custom usage template
 	templates.SetCustomUsageFunc(RootCmd)
 	cobra.OnInitialize(initConfig)

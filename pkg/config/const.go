@@ -65,6 +65,8 @@ const (
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
 
+	OverridesFlag = "--overrides"
+
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro
