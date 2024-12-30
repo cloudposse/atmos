@@ -28,6 +28,7 @@ var terraformCmd = &cobra.Command{
 			finalArgs = lo.Slice(args, 0, doubleDashIndex)
 			argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
 		}
+
 		info, err := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
@@ -39,6 +40,7 @@ var terraformCmd = &cobra.Command{
 			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 			return
 		}
+
 		// Check Atmos configuration
 		checkAtmosConfig()
 

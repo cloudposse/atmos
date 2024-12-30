@@ -49,6 +49,7 @@ var (
 		cfg.RedirectStdErrFlag,
 		cfg.LogsLevelFlag,
 		cfg.LogsFileFlag,
+		cfg.OverridesFlag,
 	}
 )
 
@@ -218,6 +219,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
+	configAndStacksInfo.Overrides = argsAndFlagsInfo.Overrides
 
 	// Check if `-h` or `--help` flags are specified
 	if argsAndFlagsInfo.NeedHelp {
@@ -974,6 +976,19 @@ func processArgsAndFlags(
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
+		}
+
+		if arg == cfg.OverridesFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.Overrides = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.OverridesFlag) {
+			var parts = strings.Split(arg, "=")
+			if len(parts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.Overrides = parts[1]
 		}
 
 		if arg == cfg.FromPlanFlag {
