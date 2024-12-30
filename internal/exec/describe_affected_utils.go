@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -424,7 +423,7 @@ func executeDescribeAffected(
 	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
 	// If the `atmos` base path is absolute, find the relative path between the local repo path and the `atmos` base path.
 	// This relative path (the difference) is then used below to join with the remote (cloned) target repo path.
-	if path.IsAbs(basePath) {
+	if filepath.IsAbs(basePath) {
 		basePath, err = filepath.Rel(localRepoFileSystemPathAbs, basePath)
 		if err != nil {
 			return nil, nil, nil, err
@@ -432,9 +431,9 @@ func executeDescribeAffected(
 	}
 
 	// Update paths to point to the cloned remote repo dir
-	atmosConfig.StacksBaseAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath)
-	atmosConfig.TerraformDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
-	atmosConfig.HelmfileDirAbsolutePath = path.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
+	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath)
+	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
+	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
 
 	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
@@ -1182,9 +1181,9 @@ func isComponentFolderChanged(
 
 	switch componentType {
 	case "terraform":
-		componentPath = path.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
 	case "helmfile":
-		componentPath = path.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)
@@ -1220,7 +1219,7 @@ func areTerraformComponentModulesChanged(
 	changedFiles []string,
 ) (bool, error) {
 
-	componentPath := path.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
+	componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
 
 	componentPathAbs, err := filepath.Abs(componentPath)
 	if err != nil {
@@ -1241,7 +1240,7 @@ func areTerraformComponentModulesChanged(
 				continue
 			}
 
-			modulePath := path.Join(path.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
+			modulePath := filepath.Join(filepath.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
 
 			modulePathAbs, err := filepath.Abs(modulePath)
 			if err != nil {
