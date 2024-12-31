@@ -81,19 +81,29 @@ jobs:
     needs: [prepare]
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    environment:
+      name: demo
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          owner: cloudposse-corp
+          repositories: assets
+
       - uses: actions/checkout@v4
 
       - name: Checkout cloudposse-corp/assets
         uses: actions/checkout@v4
         with:
           repository: cloudposse-corp/assets
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.github-app.outputs.token }}
           path: assets
 
       - name: Install audio track
         run: |
-          cp assets/artlist/background-1.mp3 demo/recordings
+          cp assets/artlist/background-1.mp3 demo/recordings/background.mp3
 
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@0404882bc4666c0ff2f6fd8b3d32af69a730183c
