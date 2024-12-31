@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -174,7 +175,7 @@ func ProcessCommandLineArgs(
 	cmd.DisableFlagParsing = false
 
 	err := cmd.ParseFlags(args)
-	if err != nil {
+	if err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return configAndStacksInfo, err
 	}
 

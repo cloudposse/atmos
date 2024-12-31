@@ -253,6 +253,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 	for _, cmd := range commands {
 		cmd.FParseErrWhitelist.UnknownFlags = true
+		cmd.DisableFlagParsing = true
 		if setFlags, ok := commandMaps[cmd.Use]; ok {
 			setFlags(cmd)
 		}
@@ -260,10 +261,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 			if len(os.Args) > 3 {
 				args = os.Args[2:]
 			}
-			if parentCmd.RunE != nil {
-				return parentCmd.RunE(parentCmd, args)
-			}
-			return nil
+			return terraformRun(parentCmd, cmd_, args)
 		}
 		parentCmd.AddCommand(cmd)
 	}

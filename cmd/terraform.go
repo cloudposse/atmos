@@ -20,13 +20,22 @@ var terraformCmd = &cobra.Command{
 	Short:              "Execute Terraform commands",
 	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE:               terraformRun,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return terraformRun(cmd, cmd, args)
+	},
 }
 
-func terraformRun(cmd *cobra.Command, args []string) error {
-	// Check Atmos configuration
-	//checkAtmosConfig()
+// Contains checks if a slice of strings contains an exact match for the target string.
+func Contains(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
 
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
 	var argsAfterDoubleDash []string
 	var finalArgs = args
 
@@ -35,28 +44,27 @@ func terraformRun(cmd *cobra.Command, args []string) error {
 		finalArgs = lo.Slice(args, 0, doubleDashIndex)
 		argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
 	}
-	info, err := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
-	if err != nil {
-		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-	}
 
+	info, _ := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
 	// Exit on help
 	if info.NeedHelp {
 		if info.SubCommand != "" && info.SubCommand != "--help" && info.SubCommand != "help" {
 			suggestions := cmd.SuggestionsFor(args[0])
-			if len(suggestions) > 0 {
-				fmt.Printf("Unknown command: '%s'\n\nDid you mean this?\n", args[0])
-				for _, suggestion := range suggestions {
-					fmt.Printf("  %s\n", suggestion)
+			if !Contains(suggestions, args[0]) {
+				if len(suggestions) > 0 {
+					fmt.Printf("Unknown command: '%s'\n\nDid you mean this?\n", args[0])
+					for _, suggestion := range suggestions {
+						fmt.Printf("  %s\n", suggestion)
+					}
+				} else {
+					fmt.Printf(`Error: Unknkown command %q for %q`+"\n", args[0], cmd.CommandPath())
 				}
-			} else {
-				fmt.Printf(`Error: Unknkown command %q for %q`+"\n", args[0], cmd.CommandPath())
+				fmt.Printf(`Run '%s --help' for usage`+"\n", cmd.CommandPath())
+				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
 			}
-			fmt.Printf(`Run '%s --help' for usage`+"\n", cmd.CommandPath())
-			return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
 		}
 		// Check for the latest Atmos release on GitHub and print update message
-		template := templates.GenerateFromBaseTemplate(cmd.Use, []templates.HelpTemplateSections{
+		template := templates.GenerateFromBaseTemplate(actualCmd.Use, []templates.HelpTemplateSections{
 			templates.LongDescription,
 			templates.Usage,
 			templates.Aliases,
@@ -65,12 +73,13 @@ func terraformRun(cmd *cobra.Command, args []string) error {
 			templates.Flags,
 			templates.GlobalFlags,
 			templates.NativeCommands,
+			templates.DoubleDashHelp,
 			templates.Footer,
 		})
 
-		cmd.SetUsageTemplate(template)
+		actualCmd.SetUsageTemplate(template)
 		cc.Init(&cc.Config{
-			RootCmd:  cmd,
+			RootCmd:  actualCmd,
 			Headings: cc.HiCyan + cc.Bold + cc.Underline,
 			Commands: cc.HiGreen + cc.Bold,
 			Example:  cc.Italic,
@@ -78,14 +87,13 @@ func terraformRun(cmd *cobra.Command, args []string) error {
 			Flags:    cc.Bold,
 		})
 
-		cmd.Help()
-		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+		actualCmd.Help()
 		return nil
 	}
 	// Check Atmos configuration
 	checkAtmosConfig()
 
-	err = e.ExecuteTerraform(info)
+	err := e.ExecuteTerraform(info)
 	if err != nil {
 		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}

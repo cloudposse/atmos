@@ -14,6 +14,7 @@ const (
 	GlobalFlags
 	AdditionalHelpTopics
 	NativeCommands
+	DoubleDashHelp
 	Footer
 )
 
@@ -70,6 +71,13 @@ Global Flags:
 		return `Usage:{{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [command]{{end}}`
+	case DoubleDashHelp:
+		return fmt.Sprintf(`
+The '--' (double-dash) can be used to signify the end of Atmos-specific options 
+and the beginning of additional native arguments and flags for the specific command being run.
+
+Example:
+  atmos %s <subcommand> <component> -s <stack> -- <native-flags>`, commandName)
 	case Footer:
 		return `{{if .HasAvailableSubCommands}}
 

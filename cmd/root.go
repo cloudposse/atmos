@@ -144,22 +144,19 @@ func initConfig() {
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		if command.Use != "terraform" {
+		if command.Use != "atmos" {
+			if err := oldUsageFunc(command); err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
+		} else {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 			}
-		}
-		// TODO: find a better way to do this if possible
-		if command.Use == "terraform" {
-			if err := oldUsageFunc(command); err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-			}
-			return
-		} else {
 			b.HelpFunc(command, strings)
+			command.Usage()
 		}
-		command.Usage()
+		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }
 
