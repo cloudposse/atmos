@@ -116,20 +116,24 @@ If no custom styles are configured, Atmos uses a built-in default theme related 
 
 ```yaml
 # Built-in default theme
-document:
-  color: "#FFFFFF"  # White text
-heading:
-  color: "#00A3E0"  # Blue headings
-  bold: true
-h1:
-  color: "#FFFFFF"
-  background_color: "#9B51E0"  # Purple background
-  bold: true
-code_block:
-  color: "#00A3E0"  # Blue code
-link:
-  color: "#00A3E0"
-  underline: true
+settings:
+  markdown:
+    document:
+      color: "#FFFFFF"  # White text
+    heading:
+      color: "#00A3E0"  # Blue headings
+      bold: true
+    h1:
+      color: "#FFFFFF"  # White text
+      background_color: "#9B51E0"  # Purple background
+      bold: true
+      margin: 2
+    code_block:
+      color: "#00A3E0"  # Blue code
+      margin: 1
+    link:
+      color: "#00A3E0"  # Blue links
+      underline: true
 ```
 
 ## Terminal Compatibility
