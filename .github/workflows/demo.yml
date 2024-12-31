@@ -84,6 +84,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Checkout cloudposse-corp/assets
+        uses: actions/checkout@v4
+        with:
+          repository: cloudposse-corp/assets
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install audio track
+        run: |
+          cp assets/artlist/background-1.mp3 demo/recordings
+
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@0404882bc4666c0ff2f6fd8b3d32af69a730183c
         with:
