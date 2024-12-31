@@ -174,12 +174,29 @@ settings:
 
 ## Terminal Compatibility
 
-The markdown styling feature requires a terminal that supports:
-- 24-bit true color (for hex color codes)
-- ANSI escape sequences
-- Unicode characters
+Atmos uses [termenv](https://github.com/muesli/termenv) and [glamour](https://github.com/charmbracelet/glamour) to automatically detect and adapt to your terminal's capabilities:
 
-Most modern terminals support these features. For terminals with limited color support, Atmos will automatically adjust colors to the closest available match.
+- **Full Color Support (24-bit)**
+  - Renders exact hex colors as specified in your config
+  - Detected via `$COLORTERM=truecolor` or `$TERM` containing `24bit`/`truecolor`
+  - Examples: iTerm2, Terminal.app, Windows Terminal
+
+- **256 Color Support**
+  - Automatically maps hex colors to nearest ANSI 256 colors
+  - Detected via `$TERM` containing `256color`
+  - Examples: xterm-256color terminals
+
+- **Basic Color Support (8/16 colors)**
+  - Automatically maps to basic ANSI colors
+  - Used when `$TERM` indicates basic terminal
+  - Examples: xterm, vt100, basic SSH sessions
+
+- **No Color Support**
+  - Falls back to plain text with basic formatting
+  - Used when `$TERM=dumb` or no color support detected
+  - Examples: Basic terminals, some CI environments
+
+The color degradation is handled automatically by termenv's color profile detection. You don't need to configure anything - your styles will work everywhere, automatically adjusting to each terminal's capabilities.
 
 ## Examples
 
@@ -246,7 +263,7 @@ settings:
       ```bash
       export TERM=xterm-256color
       ```
-      Add this to your shell’s configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
+      Add this to your shell's configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
 
 4. **Validate `atmos.yaml` Configuration:**
 
