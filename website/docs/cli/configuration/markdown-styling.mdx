@@ -87,26 +87,62 @@ Each markdown element supports the following properties:
 ### Element-Specific Properties
 
 #### Document
-- Base styling for all text content
-- Supports all common properties
+
+Base styling for all text content.
+
+Supports all common properties.
 
 #### Headings (H1-H6)
-- Individual styling for each heading level
+
+Individual styling for each heading level (1-6).
+
+  ```markdown
+  # Heading 1
+  ## Heading 2
+  ### Heading 3
+  etc...
+  ```
+
+**Supports:**
 - H1 supports additional `background_color` property
 - All heading levels support `margin` for vertical spacing
 
 #### Code Blocks
-- Styling for multi-line code blocks
-- Supports `margin` for visual separation
+
+Styling for multi-line code blocks (aka code fences).
+
+````markdown
+```
+this is a codeblock
+```
+````
+
+**Supports:**
+- `margin` for visual separation
 - Color applies to the entire block
 
 #### Block Quotes
-- Styling for quoted text
-- `indent` property controls quote indentation
-- Supports all common properties
+
+Styling for quoted text. Supports all common properties.
+
+```markdown
+> 
+> This is quoted text
+>
+```
+
+**Supports:**
+- `indent` property controls quote indentation 
 
 #### Links
-- Styling for hyperlinks
+
+Styling for hyperlinks. 
+
+```
+[This is a link](https://example.com/)
+```
+
+**Supports:**
 - `underline` property specifically for links
 - Color applies to both link text and underline
 
