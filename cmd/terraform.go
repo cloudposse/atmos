@@ -63,29 +63,31 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
 			}
 		}
-		// Check for the latest Atmos release on GitHub and print update message
-		template := templates.GenerateFromBaseTemplate(actualCmd.Use, []templates.HelpTemplateSections{
-			templates.LongDescription,
-			templates.Usage,
-			templates.Aliases,
-			templates.Examples,
-			templates.AvailableCommands,
-			templates.Flags,
-			templates.GlobalFlags,
-			templates.NativeCommands,
-			templates.DoubleDashHelp,
-			templates.Footer,
-		})
+		// check if this is terraform --help command. TODO: check if this is the best way to do
+		if cmd == actualCmd {
+			template := templates.GenerateFromBaseTemplate(actualCmd.Use, []templates.HelpTemplateSections{
+				templates.LongDescription,
+				templates.Usage,
+				templates.Aliases,
+				templates.Examples,
+				templates.AvailableCommands,
+				templates.Flags,
+				templates.GlobalFlags,
+				templates.NativeCommands,
+				templates.DoubleDashHelp,
+				templates.Footer,
+			})
+			actualCmd.SetUsageTemplate(template)
+			cc.Init(&cc.Config{
+				RootCmd:  actualCmd,
+				Headings: cc.HiCyan + cc.Bold + cc.Underline,
+				Commands: cc.HiGreen + cc.Bold,
+				Example:  cc.Italic,
+				ExecName: cc.Bold,
+				Flags:    cc.Bold,
+			})
 
-		actualCmd.SetUsageTemplate(template)
-		cc.Init(&cc.Config{
-			RootCmd:  actualCmd,
-			Headings: cc.HiCyan + cc.Bold + cc.Underline,
-			Commands: cc.HiGreen + cc.Bold,
-			Example:  cc.Italic,
-			ExecName: cc.Bold,
-			Flags:    cc.Bold,
-		})
+		}
 
 		actualCmd.Help()
 		return nil

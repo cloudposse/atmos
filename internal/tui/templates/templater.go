@@ -122,6 +122,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 			Flags,
 			GlobalFlags,
 			AdditionalHelpTopics,
+			DoubleDashHelp,
 			Footer,
 		}),
 	}

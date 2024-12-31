@@ -73,6 +73,7 @@ Global Flags:
   {{.CommandPath}} [command]{{end}}`
 	case DoubleDashHelp:
 		return fmt.Sprintf(`
+
 The '--' (double-dash) can be used to signify the end of Atmos-specific options 
 and the beginning of additional native arguments and flags for the specific command being run.
 
