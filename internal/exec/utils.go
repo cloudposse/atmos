@@ -220,20 +220,6 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 
-	// Check if `-h` or `--help` flags are specified
-	if argsAndFlagsInfo.NeedHelp && configAndStacksInfo.ComponentType != "terraform" {
-		// If we're dealing with `-h` or `--help`,
-		// then the SubCommand should be empty.
-		if argsAndFlagsInfo.SubCommand == "-h" || argsAndFlagsInfo.SubCommand == "--help" {
-			argsAndFlagsInfo.SubCommand = ""
-		}
-		err = processHelp(schema.AtmosConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
-		if err != nil {
-			return configAndStacksInfo, err
-		}
-		return configAndStacksInfo, nil
-	}
-
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")

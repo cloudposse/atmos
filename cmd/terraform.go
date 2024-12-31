@@ -47,7 +47,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	info, _ := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
 	// Exit on help
-	if info.NeedHelp {
+	if info.NeedHelp || (info.SubCommand == "" && info.SubCommand2 == "") {
 		if info.SubCommand != "" && info.SubCommand != "--help" && info.SubCommand != "help" {
 			suggestions := cmd.SuggestionsFor(args[0])
 			if !Contains(suggestions, args[0]) {

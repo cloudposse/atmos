@@ -32,9 +32,9 @@ var helmfileCmd = &cobra.Command{
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 		// Exit on help
-		if info.NeedHelp {
+		if info.NeedHelp || (info.SubCommand == "" && info.SubCommand2 == "") {
 			// Check for the latest Atmos release on GitHub and print update message
-			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+			cmd.Help()
 			return
 		}
 		// Check Atmos configuration
