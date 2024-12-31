@@ -29,7 +29,7 @@ func processHelp(
 			u.PrintMessage(" - double-dash '--' can be used to signify the end of the options for Atmos and the start of the additional " +
 				"native arguments and flags for the 'helmfile' commands")
 		}
-	} else {
+	} else if componentType == "terraform" || componentType == "helmfile" {
 		u.PrintMessage(fmt.Sprintf("\nAtmos supports native '%s' commands with all the options, arguments and flags.\n", componentType))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
 		u.PrintMessage(fmt.Sprintf("atmos %s <subcommand> <component> -s <stack> [options]", componentType))
