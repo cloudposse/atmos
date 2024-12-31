@@ -63,6 +63,7 @@ Global Flags:
 {{wrappedFlagUsages .InheritedFlags | trimTrailingWhitespaces}}{{end}}`
 	case NativeCommands:
 		return fmt.Sprintf(`
+
 {{HeadingStyle "Native %s Commands:"}}
 
 {{formatCommands .Commands "native"}}
