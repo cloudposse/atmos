@@ -92,69 +92,66 @@ var workflowCmd = &cobra.Command{
 			return
 		}
 
-		helpFlags := map[string]bool{
-			"help":   true,
-			"-h":     true,
-			"--help": true,
+		if args[0] == "help" {
+			cmd.Help()
+			return
 		}
 
-		if !helpFlags[args[0]] {
-			// Get the --file flag value
-			workflowFile, _ := cmd.Flags().GetString("file")
+		// Get the --file flag value
+		workflowFile, _ := cmd.Flags().GetString("file")
 
-			// If no file is provided, show invalid command error with usage information
-			if workflowFile == "" {
-				// Get atmos configuration
-				atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-				if err != nil {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to initialize atmos config: %w", err))
-				}
+		// If no file is provided, show invalid command error with usage information
+		if workflowFile == "" {
+			// Get atmos configuration
+			atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			if err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to initialize atmos config: %w", err))
+			}
 
-				// Create a terminal writer to get the optimal width
-				termWriter := termwriter.NewResponsiveWriter(os.Stdout)
-				screenWidth := termWriter.(*termwriter.TerminalWriter).GetWidth()
+			// Create a terminal writer to get the optimal width
+			termWriter := termwriter.NewResponsiveWriter(os.Stdout)
+			screenWidth := termWriter.(*termwriter.TerminalWriter).GetWidth()
 
-				if atmosConfig.Settings.Docs.MaxWidth > 0 {
-					screenWidth = uint(min(atmosConfig.Settings.Docs.MaxWidth, int(screenWidth)))
-				}
+			if atmosConfig.Settings.Docs.MaxWidth > 0 {
+				screenWidth = uint(min(atmosConfig.Settings.Docs.MaxWidth, int(screenWidth)))
+			}
 
-				renderer, err := markdown.NewRenderer(
-					markdown.WithWidth(screenWidth),
-				)
-				if err != nil {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to create markdown renderer: %w", err))
-				}
+			renderer, err := markdown.NewRenderer(
+				markdown.WithWidth(screenWidth),
+			)
+			if err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to create markdown renderer: %w", err))
+			}
 
-				// Generate the error message dynamically using H1 styling
-				errorMsg := fmt.Sprintf("# Invalid Command\n\nThe command `atmos workflow %s` is not valid.\n\n", args[0])
-				content := errorMsg + workflowMarkdown
-				rendered, err := renderer.Render(content)
-				if err != nil {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to render markdown: %w", err))
-				}
+			// Generate the error message dynamically using H1 styling
+			errorMsg := fmt.Sprintf("# Invalid Command\n\nThe command `atmos workflow %s` is not valid.\n\n", args[0])
+			content := errorMsg + workflowMarkdown
+			rendered, err := renderer.Render(content)
+			if err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to render markdown: %w", err))
+			}
 
-				// Remove duplicate URLs and format output
-				lines := strings.Split(rendered, "\n")
-				var result []string
-				seenURL := false
+			// Remove duplicate URLs and format output
+			lines := strings.Split(rendered, "\n")
+			var result []string
+			seenURL := false
 
-				for _, line := range lines {
-					trimmed := strings.TrimSpace(line)
-					if strings.Contains(trimmed, "https://") {
-						if !seenURL {
-							seenURL = true
-							result = append(result, line)
-						}
-					} else if strings.HasPrefix(trimmed, "$") {
-						result = append(result, " "+strings.TrimSpace(line))
-					} else if trimmed != "" {
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				if strings.Contains(trimmed, "https://") {
+					if !seenURL {
+						seenURL = true
 						result = append(result, line)
 					}
+				} else if strings.HasPrefix(trimmed, "$") {
+					result = append(result, " "+strings.TrimSpace(line))
+				} else if trimmed != "" {
+					result = append(result, line)
 				}
-
-				fmt.Print("\n" + strings.Join(result, "\n") + "\n\n")
-				os.Exit(1)
 			}
+
+			fmt.Print("\n" + strings.Join(result, "\n") + "\n\n")
+			os.Exit(1)
 		}
 
 		// Execute the workflow command
