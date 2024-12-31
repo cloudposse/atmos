@@ -98,13 +98,13 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
 				BlockSuffix: "\n",
-				Color:       stringPtr("#FFFFFF"),
+				Color:       stringPtr(White),
 			},
 			Margin: uintPtr(0),
 		},
 		BlockQuote: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color: stringPtr("#9B51E0"),
+				Color: stringPtr(Purple),
 			},
 			Indent:      uintPtr(1),
 			IndentToken: stringPtr("│ "),
@@ -113,7 +113,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
 				BlockSuffix: "",
-				Color:       stringPtr("#FFFFFF"),
+				Color:       stringPtr(White),
 			},
 		},
 		List: ansi.StyleList{
@@ -123,7 +123,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 			StylePrimitive: ansi.StylePrimitive{
 				BlockPrefix: "",
 				BlockSuffix: "\n",
-				Color:       stringPtr("#00A3E0"),
+				Color:       stringPtr(Blue),
 				Bold:        boolPtr(true),
 			},
 			Margin: uintPtr(0),
@@ -131,8 +131,8 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix:          "",
-				Color:           stringPtr("#FFFFFF"),
-				BackgroundColor: stringPtr("#9B51E0"),
+				Color:           stringPtr(White),
+				BackgroundColor: stringPtr(Purple),
 				Bold:            boolPtr(true),
 			},
 			Margin: uintPtr(2),
@@ -140,7 +140,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		H2: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "## ",
-				Color:  stringPtr("#9B51E0"),
+				Color:  stringPtr(Purple),
 				Bold:   boolPtr(true),
 			},
 			Margin: uintPtr(1),
@@ -148,44 +148,44 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		H3: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "### ",
-				Color:  stringPtr("#00A3E0"),
+				Color:  stringPtr(Blue),
 				Bold:   boolPtr(true),
 			},
 		},
 		H4: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "#### ",
-				Color:  stringPtr("#00A3E0"),
+				Color:  stringPtr(Blue),
 				Bold:   boolPtr(true),
 			},
 		},
 		H5: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "##### ",
-				Color:  stringPtr("#00A3E0"),
+				Color:  stringPtr(Blue),
 				Bold:   boolPtr(true),
 			},
 		},
 		H6: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Prefix: "###### ",
-				Color:  stringPtr("#00A3E0"),
+				Color:  stringPtr(Blue),
 				Bold:   boolPtr(true),
 			},
 		},
 		Text: ansi.StylePrimitive{
-			Color: stringPtr("#FFFFFF"),
+			Color: stringPtr(White),
 		},
 		Strong: ansi.StylePrimitive{
-			Color: stringPtr("#9B51E0"),
+			Color: stringPtr(Purple),
 			Bold:  boolPtr(true),
 		},
 		Emph: ansi.StylePrimitive{
-			Color:  stringPtr("#9B51E0"),
+			Color:  stringPtr(Purple),
 			Italic: boolPtr(true),
 		},
 		HorizontalRule: ansi.StylePrimitive{
-			Color:  stringPtr("#9B51E0"),
+			Color:  stringPtr(Purple),
 			Format: "\n--------\n",
 		},
 		Item: ansi.StylePrimitive{
@@ -196,7 +196,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color:  stringPtr("#9B51E0"),
+				Color:  stringPtr(Purple),
 				Prefix: " ",
 				Bold:   boolPtr(true),
 			},
@@ -205,31 +205,31 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
-					Color: stringPtr("#00A3E0"),
+					Color: stringPtr(Blue),
 				},
 				Margin: uintPtr(1),
 			},
 			Chroma: &ansi.Chroma{
 				Text: ansi.StylePrimitive{
-					Color: stringPtr("#00A3E0"),
+					Color: stringPtr(Blue),
 				},
 				Keyword: ansi.StylePrimitive{
-					Color: stringPtr("#9B51E0"),
+					Color: stringPtr(Purple),
 				},
 				Literal: ansi.StylePrimitive{
-					Color: stringPtr("#00A3E0"),
+					Color: stringPtr(Blue),
 				},
 				LiteralString: ansi.StylePrimitive{
-					Color: stringPtr("#00A3E0"),
+					Color: stringPtr(Blue),
 				},
 				Name: ansi.StylePrimitive{
-					Color: stringPtr("#00A3E0"),
+					Color: stringPtr(Blue),
 				},
 				LiteralNumber: ansi.StylePrimitive{
-					Color: stringPtr("#00A3E0"),
+					Color: stringPtr(Blue),
 				},
 				Comment: ansi.StylePrimitive{
-					Color: stringPtr("#9B51E0"),
+					Color: stringPtr(Purple),
 				},
 			},
 		},
@@ -247,11 +247,11 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		HTMLBlock: ansi.StyleBlock{},
 		HTMLSpan:  ansi.StyleBlock{},
 		Link: ansi.StylePrimitive{
-			Color:     stringPtr("#00A3E0"),
+			Color:     stringPtr(Blue),
 			Underline: boolPtr(true),
 		},
 		LinkText: ansi.StylePrimitive{
-			Color: stringPtr("#9B51E0"),
+			Color: stringPtr(Purple),
 			Bold:  boolPtr(true),
 		},
 	}
