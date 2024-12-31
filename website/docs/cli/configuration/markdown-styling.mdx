@@ -186,20 +186,39 @@ settings:
 
 ## Troubleshooting
 
-If styles aren't applying correctly:
+1. **Verify Terminal Supports True Color:**
 
-1. Verify your terminal supports true color:
-```bash
-$ echo $COLORTERM
-```
-Should output `truecolor` or `24bit`.
+    - **Check `$COLORTERM`:**
+      ```bash
+      echo $COLORTERM
+      ```
+      **Expected Output:** `truecolor` or `24bit`
 
-2. Check your `atmos.yaml` is properly formatted:
-- Colors must be in hex format
-- Boolean values must be `true` or `false`
-- Numbers must be integers
+    - **Check `$TERM`:**
+      ```bash
+      echo $TERM
+      ```
+      **Recommended Values:** `xterm-256color`, `xterm-direct`, `xterm-truecolor`
 
-3. Try removing custom styles to see if default styles work.
+2. **Ensure Your Terminal Emulator Supports True Color:**
+
+    - Use a terminal emulator known for true color support (e.g., Terminal.app, iTerm2, Windows Terminal, etc).
+
+3. **Configure Environment Variables Correctly:**
+
+    - Set `$TERM` to a value that supports true color:
+      ```bash
+      export TERM=xterm-256color
+      ```
+      Add this to your shell’s configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
+
+4. **Validate `atmos.yaml` Configuration:**
+
+    - Ensure colors are in hex format, boolean values are `true`/`false` (not quoted strings), and numbers are integers.
+    - Use a YAML linter to validate the syntax.
+    - Try removing custom styles to see if default styles work.
+
+
 
 ## See Also
 
