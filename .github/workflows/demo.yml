@@ -89,6 +89,7 @@ jobs:
         with:
           repository: cloudposse-corp/assets
           token: ${{ secrets.GITHUB_TOKEN }}
+          path: assets
 
       - name: Install audio track
         run: |
