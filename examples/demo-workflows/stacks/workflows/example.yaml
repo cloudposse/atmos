@@ -1,0 +1,21 @@
+workflows:
+  example:
+    name: "Example Workflow"
+    description: "This is a sample workflow to test markdown styling"
+
+    steps:
+      - name: "List Components"
+        description: "List available components"
+        command: "list"
+        args:
+          - "components"
+
+      - name: "List Stacks"
+        description: "List available stacks"
+        command: "list"
+        args:
+          - "stacks"
+
+      - name: "Show Version"
+        description: "Display Atmos version"
+        command: "version" 
