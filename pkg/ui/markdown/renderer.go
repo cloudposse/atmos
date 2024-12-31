@@ -108,7 +108,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	seenURL := false
 
 	// Create a purple style
-	purpleStyle := termenv.Style{}.Foreground(r.profile.Color("#9B51E0")).Bold()
+	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
