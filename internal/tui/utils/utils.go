@@ -7,6 +7,7 @@ import (
 	"github.com/alecthomas/chroma/quick"
 	"github.com/arsham/figurine/figurine"
 	"github.com/charmbracelet/glamour"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/jwalton/go-supportscolor"
 )
 
@@ -36,15 +37,17 @@ func RenderMarkdown(markdown string, style string) (string, error) {
 		style = "dark"
 	}
 
+	termWriter := term.NewResponsiveWriter(os.Stdout)
+	screenWidth := termWriter.(*term.TerminalWriter).GetWidth()
+
 	// Create a new renderer with the specified style
 	r, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
+		glamour.WithWordWrap(int(screenWidth)),
 	)
 	if err != nil {
 		return "", err
 	}
 
-	// Render the markdown
 	return r.Render(markdown)
 }
