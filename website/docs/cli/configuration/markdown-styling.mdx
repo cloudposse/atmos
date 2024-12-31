@@ -5,67 +5,73 @@ sidebar_position: 7
 description: Configure custom markdown styling for Atmos CLI output
 ---
 
-# Markdown Styling Configuration
+# Terminal Styling Configuration
 
-Atmos CLI supports custom markdown styling for its command outputs, allowing you to personalize the appearance of messages, help text, and error outputs. This feature enables you to match your terminal's theme or create a more visually appealing and accessible CLI experience.
+Atmos provides a unified styling system for all terminal output. This includes documentation, command help text, error messages, and syntax highlighting.
 
 ## Configuration
 
-The markdown styling is configured in your `atmos.yaml` file under the `settings.markdown` section. Here's a complete example:
+The styling is configured in your `atmos.yaml` file under the `settings.terminal` section:
 
 ```yaml
 settings:
-  markdown:
-    # Base document styling
-    document:
-      color: "#FFFFFF"  # Default text color
+  terminal:
+    # Color theme configuration
+    theme:
+      # Base colors used throughout the application
+      colors:
+        primary: "#00A3E0"    # Atmos blue
+        secondary: "#9B51E0"  # Purple
+        success: "#48BB78"    # Green
+        warning: "#ECC94B"    # Yellow
+        error: "#F56565"      # Red
+        text: "#FFFFFF"       # White
+        muted: "#4A5568"      # Gray
       
-    # General heading styles
-    heading:
-      color: "#FF6B6B"  # Color for all headings
-      bold: true
+      # Dark mode variants
+      dark:
+        text: "#F7FAFC"      # Off white
+        muted: "#A0AEC0"     # Light gray
+        background: "#1A202C" # Dark slate
+
+    # Documentation and help text styling
+    docs:
+      max_width: 120  # Maximum width for documentation
+      pager: true     # Use pager for long output
       
-    # Level 1 heading (H1)
-    h1:
-      color: "#FFFFFF"
-      background_color: "#FF0000"  # Background color for H1
-      bold: true
-      margin: 2
+      # Markdown element styling
+      markdown:
+        document:
+          color: "${colors.text}"
+        heading:
+          color: "${colors.primary}"
+          bold: true
+        code_block:
+          color: "${colors.secondary}"
+          margin: 1
+        link:
+          color: "${colors.primary}"
+          underline: true
+        strong:
+          color: "${colors.secondary}"
+          bold: true
+        emph:
+          color: "${colors.muted}"
+          italic: true
+
+    # Syntax highlighting configuration
+    syntax:
+      enabled: true
+      theme: "dracula"      # or use custom colors from theme
+      line_numbers: true
+      wrap: false
       
-    # Level 2 heading (H2)
-    h2:
-      color: "#FFD700"  # Golden yellow
-      bold: true
-      
-    # Level 3 heading (H3)
-    h3:
-      color: "#00FF00"  # Bright green
-      bold: true
-      
-    # Code blocks
-    code_block:
-      color: "#00FFFF"  # Cyan
-      margin: 1
-      
-    # Block quotes
-    block_quote:
-      color: "#FF69B4"  # Hot pink
-      indent: 2
-      
-    # Links
-    link:
-      color: "#FFD700"  # Golden yellow
-      underline: true
-      
-    # Bold text
-    strong:
-      color: "#00FF00"  # Bright green
-      bold: true
-      
-    # Italic text
-    emph:
-      color: "#00FFFF"  # Cyan
-      italic: true
+    # Console output configuration
+    console:
+      pager: true           # Enable pager for long output
+      timestamps: false     # Show timestamps in logs
+      colors: true         # Enable colored output
+      unicode: true        # Use unicode characters
 ```
 
 ## Style Properties
