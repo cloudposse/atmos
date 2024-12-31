@@ -201,17 +201,30 @@ The color degradation is handled automatically by termenv's color profile detect
 ## Examples
 
 ### Error Messages
-Custom styling makes error messages more readable:
+Custom styling can help distinguish different types of messages:
 
 ```yaml
 settings:
   markdown:
-    h1:
-      color: "#FFFFFF"
-      background_color: "#FF0000"  # Red background for errors
+    # General heading styles
+    heading:
+      color: "#00A3E0"  # Blue for standard headings
       bold: true
+      
+    # Code blocks for command examples
     code_block:
       color: "#00FFFF"  # Cyan for code examples
+      margin: 1
+      
+    # Emphasized text for warnings/errors
+    emph:
+      color: "#FF6B6B"  # Red for emphasis in error messages
+      italic: true
+      
+    # Strong text for important messages
+    strong:
+      color: "#FF6B6B"  # Red for important parts
+      bold: true
 ```
 
 ### Help Text
