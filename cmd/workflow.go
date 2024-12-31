@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	termwriter "github.com/cloudposse/atmos/internal/tui/templates/term"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -26,8 +28,20 @@ type ErrorMessage struct {
 
 // renderError renders an error message using the markdown renderer
 func renderError(msg ErrorMessage) error {
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return fmt.Errorf("failed to initialize atmos config: %w", err)
+	}
+
+	termWriter := termwriter.NewResponsiveWriter(os.Stdout)
+	screenWidth := termWriter.(*termwriter.TerminalWriter).GetWidth()
+
+	if atmosConfig.Settings.Docs.MaxWidth > 0 {
+		screenWidth = uint(min(atmosConfig.Settings.Docs.MaxWidth, int(screenWidth)))
+	}
+
 	renderer, err := markdown.NewRenderer(
-		markdown.WithWidth(80),
+		markdown.WithWidth(screenWidth),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create markdown renderer: %w", err)
@@ -78,21 +92,34 @@ var workflowCmd = &cobra.Command{
 			return
 		}
 
-		// List any known subcommands here
-		knownSubcommands := map[string]bool{
+		helpFlags := map[string]bool{
 			"help":   true,
 			"-h":     true,
 			"--help": true,
 		}
 
-		if !knownSubcommands[args[0]] {
+		if !helpFlags[args[0]] {
 			// Get the --file flag value
 			workflowFile, _ := cmd.Flags().GetString("file")
 
 			// If no file is provided, show invalid command error with usage information
 			if workflowFile == "" {
+				// Get atmos configuration
+				atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+				if err != nil {
+					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to initialize atmos config: %w", err))
+				}
+
+				// Create a terminal writer to get the optimal width
+				termWriter := termwriter.NewResponsiveWriter(os.Stdout)
+				screenWidth := termWriter.(*termwriter.TerminalWriter).GetWidth()
+
+				if atmosConfig.Settings.Docs.MaxWidth > 0 {
+					screenWidth = uint(min(atmosConfig.Settings.Docs.MaxWidth, int(screenWidth)))
+				}
+
 				renderer, err := markdown.NewRenderer(
-					markdown.WithWidth(80),
+					markdown.WithWidth(screenWidth),
 				)
 				if err != nil {
 					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to create markdown renderer: %w", err))
