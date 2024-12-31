@@ -143,7 +143,9 @@ func initConfig() {
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 			}
 			b.HelpFunc(command, strings)
-			command.Usage()
+			if err := command.Usage(); err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})

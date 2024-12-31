@@ -34,7 +34,9 @@ var helmfileCmd = &cobra.Command{
 		// Exit on help
 		if info.NeedHelp || (info.SubCommand == "" && info.SubCommand2 == "") {
 			// Check for the latest Atmos release on GitHub and print update message
-			cmd.Help()
+			if err := cmd.Help(); err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
 			return
 		}
 		// Check Atmos configuration
