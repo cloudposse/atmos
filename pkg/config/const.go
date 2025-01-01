@@ -65,7 +65,8 @@ const (
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
 
-	OverridesFlag = "--overrides"
+	OverrideFlag = "--override"
+	QueryFlag    = "--query"
 
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
