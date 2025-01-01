@@ -179,7 +179,8 @@ type ArgsAndFlagsInfo struct {
 	LogsLevel                 string
 	LogsFile                  string
 	SettingsListMergeStrategy string
-	Overrides                 string
+	Override                  string
+	Query                     string
 }
 
 type ConfigAndStacksInfo struct {
@@ -244,7 +245,8 @@ type ConfigAndStacksInfo struct {
 	LogsLevel                     string
 	LogsFile                      string
 	SettingsListMergeStrategy     string
-	Overrides                     string
+	Override                      string
+	Query                         string
 }
 
 // Workflows
