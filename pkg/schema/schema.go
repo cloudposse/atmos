@@ -37,8 +37,14 @@ type AtmosConfiguration struct {
 	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
 }
 
+type Terminal struct {
+	MaxWidth int  `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
+	Pager    bool `yaml:"pager" json:"pager" mapstructure:"pager"`
+}
+
 type AtmosSettings struct {
 	ListMergeStrategy string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
 	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
 }

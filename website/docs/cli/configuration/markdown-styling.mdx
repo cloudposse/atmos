@@ -5,39 +5,28 @@ sidebar_position: 7
 description: Configure custom markdown styling for Atmos CLI output
 ---
 
-# Terminal Styling Configuration
+# Markdown Styling
 
-Atmos provides a unified styling system for all terminal output. This includes documentation, command help text, error messages, and syntax highlighting.
+<Intro>
+Configure how Atmos displays markdown content in the terminal.
+</Intro>
 
 ## Configuration
 
-The styling is configured in your `atmos.yaml` file under the `settings.terminal` section:
+Configure markdown styling in your `atmos.yaml` configuration file:
 
+<File title="atmos.yaml">
 ```yaml
 settings:
-  terminal:
-    # Color theme configuration
-    theme:
-      # Base colors used throughout the application
-      colors:
-        primary: "#00A3E0"    # Atmos blue
-        secondary: "#9B51E0"  # Purple
-        success: "#48BB78"    # Green
-        warning: "#ECC94B"    # Yellow
-        error: "#F56565"      # Red
-        text: "#FFFFFF"       # White
-        muted: "#4A5568"      # Gray
-      
-      # Dark mode variants
-      dark:
-        text: "#F7FAFC"       # Off white
-        muted: "#A0AEC0"      # Light gray
-        background: "#1A202C" # Dark slate
-
-    # Documentation and help text styling
-    docs:
-      max_width: 120  # Maximum width for documentation
+    # Terminal settings for displaying content
+    terminal:
+      max_width: 120  # Maximum width for terminal output
       pager: true     # Use pager for long output
+
+    # DEPRECATED: Use settings.terminal instead
+    docs:
+      max_width: 120  # DEPRECATED: Use settings.terminal.max_width instead
+      pager: true     # DEPRECATED: Use settings.terminal.pager instead
       
       # Markdown element styling
       markdown:
@@ -73,6 +62,7 @@ settings:
       colors: true         # Enable colored output
       unicode: true        # Use unicode characters
 ```
+</File>
 
 ## Style Properties
 
