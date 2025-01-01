@@ -73,4 +73,40 @@ vars:
 	assert.Equal(t, true, res)
 	err = PrintAsYAML(res)
 	assert.Nil(t, err)
+
+	yq = ".vars.enabled = false"
+	res, err = EvaluateYqExpression(data, yq)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	yq = ".vars.enabled"
+	res, err = EvaluateYqExpression(res, yq)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, false, res)
+	err = PrintAsYAML(res)
+	assert.Nil(t, err)
+
+	yq = ".vars.ipv4_primary_cidr_block = \"10.8.8.0/20\""
+	res, err = EvaluateYqExpression(data, yq)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	yq = ".vars.ipv4_primary_cidr_block"
+	res, err = EvaluateYqExpression(res, yq)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, "10.8.8.0/20", res)
+	err = PrintAsYAML(res)
+	assert.Nil(t, err)
+
+	yq = ".vars.availability_zones.0 = \"us-east-2d\""
+	res, err = EvaluateYqExpression(data, yq)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	yq = ".vars.availability_zones.0"
+	res, err = EvaluateYqExpression(res, yq)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, "us-east-2d", res)
+	err = PrintAsYAML(res)
+	assert.Nil(t, err)
 }

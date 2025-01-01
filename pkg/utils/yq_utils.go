@@ -10,7 +10,7 @@ import (
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 )
 
-func EvaluateYqExpression(data map[string]any, expression string) (any, error) {
+func EvaluateYqExpression(data any, yq string) (any, error) {
 	evaluator := yqlib.NewStringEvaluator()
 
 	yaml, err := ConvertToYAML(data)
@@ -30,9 +30,9 @@ func EvaluateYqExpression(data map[string]any, expression string) (any, error) {
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
-	result, err := evaluator.Evaluate(expression, yaml, encoder, decoder)
+	result, err := evaluator.Evaluate(yq, yaml, encoder, decoder)
 	if err != nil {
-		return nil, fmt.Errorf("EvaluateYqExpression: failed to evaluate YQ expression '%s': %w", expression, err)
+		return nil, fmt.Errorf("EvaluateYqExpression: failed to evaluate YQ expression '%s': %w", yq, err)
 	}
 
 	res, err := UnmarshalYAML[any](result)
