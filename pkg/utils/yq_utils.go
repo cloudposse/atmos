@@ -15,7 +15,7 @@ func EvaluateYqExpression(data map[string]any, expression string) (any, error) {
 
 	yaml, err := ConvertToYAML(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert data to YAML: %w", err)
+		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert data to YAML: %w", err)
 	}
 
 	pref := yqlib.YamlPreferences{
@@ -32,12 +32,12 @@ func EvaluateYqExpression(data map[string]any, expression string) (any, error) {
 
 	result, err := evaluator.Evaluate(expression, yaml, encoder, decoder)
 	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate YQ expression '%s': %w", expression, err)
+		return nil, fmt.Errorf("EvaluateYqExpression: failed to evaluate YQ expression '%s': %w", expression, err)
 	}
 
 	res, err := UnmarshalYAML[any](result)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert data to YAML: %w", err)
+		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert YAML to Go type: %w", err)
 	}
 
 	return res, nil
