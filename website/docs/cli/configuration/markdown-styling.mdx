@@ -234,20 +234,17 @@ settings:
 ```
 
 ### Help Text
-Enhance help text readability:
 
-```yaml
-settings:
-  markdown:
-    heading:
-      color: "#FFD700"  # Golden headings
-      bold: true
-    code_block:
-      color: "#00FFFF"  # Cyan code examples
-    link:
-      color: "#FFD700"
-      underline: true
-```
+Atmos uses the [Glamour](https://github.com/charmbracelet/glamour) library for markdown rendering and styling. The styling is handled automatically based on your terminal's capabilities and color profile.
+
+Key features of the markdown rendering:
+
+- **Auto-styling**: Adapts to your terminal's color scheme
+- **Word wrapping**: Automatically adjusts to terminal width
+- **Emoji support**: Renders emoji characters when available
+- **Rich formatting**: Supports headings, code blocks, links, and other markdown elements
+
+The styling is managed internally by Glamour and does not require manual configuration in your atmos settings.
 
 ## Best Practices
 
