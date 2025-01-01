@@ -171,7 +171,6 @@ func preCustomCommand(
 
 	//checking for zero arguments in config
 	if len(commandConfig.Arguments) == 0 {
-		// If it still has steps, we allow it:
 		if len(commandConfig.Steps) > 0 {
 			// do nothing here; let the code proceed
 		} else if len(commandConfig.Commands) > 0 {
@@ -231,7 +230,7 @@ func preCustomCommand(
 			if arg.Default != "" {
 				finalArgs[i] = fmt.Sprintf("%v", arg.Default)
 			} else {
-				// This theoretically shouldn't happen if we've checked requiredNoDefaultCount above but just in case:
+				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, errors.New(sb.String()))
 			}
