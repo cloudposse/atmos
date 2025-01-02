@@ -192,11 +192,15 @@ func execTerraformShellCommand(
 	for _, cmd := range tfCommands {
 		envVar := fmt.Sprintf("TF_CLI_ARGS_%s", cmd)
 		existing := os.Getenv(envVar)
-		if existing != "" && strings.Contains(existing, "-var-file=") {
-			u.LogWarning(atmosConfig, "Found var-file in environment! This may be overwritten by Atmos")
+		if existing != "" {
+			// Remove any surrounding quotes from existing value
+			existing = strings.Trim(existing, "\"")
+			// Create new value by combining existing and new var-file argument
+			newValue := fmt.Sprintf("%s -var-file=%s", existing, varFile)
+			componentEnvList = append(componentEnvList, fmt.Sprintf("%s=%s", envVar, newValue))
+		} else {
+			componentEnvList = append(componentEnvList, fmt.Sprintf("%s=-var-file=%s", envVar, varFile))
 		}
-		// Set the Terraform environment variable to reference the var file
-		componentEnvList = append(componentEnvList, fmt.Sprintf("%s=-var-file=%s", envVar, varFile))
 	}
 
 	// Set environment variables to indicate the details of the Atmos shell configuration
