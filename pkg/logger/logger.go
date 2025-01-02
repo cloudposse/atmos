@@ -31,7 +31,7 @@ func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
 	}, nil
 }
 
-func NewLoggerFromCliConfig(cfg schema.CliConfiguration) (*Logger, error) {
+func NewLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
 	logLevel, err := ParseLogLevel(cfg.Logs.Level)
 	if err != nil {
 		return nil, err

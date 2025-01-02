@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -20,21 +19,21 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	var workflowFile string
 	var fromStep string
 
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
 
 	// If the `workflow` argument is not passed, start the workflow UI
 	if len(args) != 1 {
-		workflowFile, workflow, fromStep, err = ExecuteWorkflowUI(cliConfig)
+		workflowFile, workflow, fromStep, err = ExecuteWorkflowUI(atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -80,13 +79,13 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	if u.IsPathAbsolute(workflowFile) {
 		workflowPath = workflowFile
 	} else {
-		workflowPath = path.Join(cliConfig.BasePath, cliConfig.Workflows.BasePath, workflowFile)
+		workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, workflowFile)
 	}
 
 	// If the workflow file is specified without an extension, use the default extension
 	ext := filepath.Ext(workflowPath)
 	if ext == "" {
-		ext = cfg.DefaultStackConfigFileExtension
+		ext = u.DefaultStackConfigFileExtension
 		workflowPath = workflowPath + ext
 	}
 
@@ -120,7 +119,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowDefinition = i
 	}
 
-	err = ExecuteWorkflow(cliConfig, workflow, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
+	err = ExecuteWorkflow(atmosConfig, workflow, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
 	if err != nil {
 		return err
 	}

@@ -10,7 +10,7 @@ import (
 
 // processHelp processes help commands
 func processHelp(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	componentType string,
 	command string,
 ) error {
@@ -33,8 +33,13 @@ func processHelp(
 			u.PrintMessage(" - 'atmos terraform apply' and 'atmos terraform deploy' commands commands support '--planfile' flag to specify the path " +
 				"to a planfile. The '--planfile' flag should be used instead of the planfile argument in the native 'terraform apply <planfile>' command")
 			u.PrintMessage(" - 'atmos terraform clean' command deletes the '.terraform' folder, '.terraform.lock.hcl' lock file, " +
-				"and the previously generated 'planfile', 'varfile' and 'backend.tf.json' file for the specified component and stack. " +
-				"Use --skip-lock-file flag to skip deleting the lock file.")
+				"and the previously generated 'planfile', 'varfile', and 'backend.tf.json' file for the specified component and stack. " +
+				"Use the --everything flag to also delete the Terraform state files and directories for the component. " +
+				"Note: State files store the local state of your infrastructure and should be handled with care, if not using a remote backend.\n\n" +
+				"Additional flags:\n" +
+				"  --force Forcefully delete Terraform state files and directories without interaction\n" +
+				"  --skip-lock-file Skip deleting the '.terraform.lock.hcl' file\n\n" +
+				"If no component or stack is specified, the clean operation will apply globally to all components.")
 			u.PrintMessage(" - 'atmos terraform workspace' command first runs 'terraform init -reconfigure', then 'terraform workspace select', " +
 				"and if the workspace was not created before, it then runs 'terraform workspace new'")
 			u.PrintMessage(" - 'atmos terraform import' command searches for 'region' in the variables for the specified component and stack, " +
@@ -71,10 +76,17 @@ func processHelp(
 			" - '.terraform.lock.hcl' file\n" +
 			" - generated varfile for the component in the stack\n" +
 			" - generated planfile for the component in the stack\n" +
-			" - generated 'backend.tf.json' file\n\n" +
+			" - generated 'backend.tf.json' file\n" +
+			" - 'terraform.tfstate.d' folder (if '--everything' flag is used)\n\n" +
 			"Usage: atmos terraform clean <component> -s <stack> <flags>\n\n" +
-			"Use '--skip-lock-file' flag to skip deleting the lock file.\n\n" +
+			"Use '--everything' flag to also delete the Terraform state files and and directories with confirm message.\n\n" +
+			"Use --force to forcefully delete Terraform state files and directories for the component.\n\n" +
+			"- If no component is specified, the command will apply to all components and stacks.\n" +
+			"- If no stack is specified, the command will apply to all stacks for the specified component.\n" +
+			"Use '--skip-lock-file' flag to skip deleting the '.terraform.lock.hcl' file.\n\n" +
+			"If no component or stack is specified, the clean operation will apply globally to all components.\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/clean\n")
+
 	} else if componentType == "terraform" && command == "deploy" {
 		u.PrintMessage("\n'atmos terraform deploy' command executes 'terraform apply -auto-approve' on an Atmos component in an Atmos stack.\n\n" +
 			"Usage: atmos terraform deploy <component> -s <stack> <flags>\n\n" +
@@ -103,7 +115,7 @@ func processHelp(
 			"If the workspace does not exist, the command creates it by executing the 'terraform workspace new' command.\n\n" +
 			"Usage: atmos terraform workspace <component> -s <stack>\n\n" +
 			"For more details refer to https://atmos.tools/cli/commands/terraform/workspace\n")
-	} else {
+	} else if componentType == "terraform" || componentType == "helmfile" {
 		u.PrintMessage(fmt.Sprintf("\nAtmos supports native '%s' commands with all the options, arguments and flags.\n", componentType))
 		u.PrintMessage("In addition, 'component' and 'stack' are required in order to generate variables for the component in the stack.\n")
 		u.PrintMessage(fmt.Sprintf("atmos %s <subcommand> <component> -s <stack> [options]", componentType))

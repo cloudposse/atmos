@@ -15,8 +15,16 @@ import SecondaryCTA from '@site/src/components/SecondaryCTA'
 <PillBox>Advanced</PillBox>
 
 <Intro>
-Use templates as an _escape hatch_, when standard [inheritance](/core-concepts/stacks/inheritance) as insufficient. Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations _prior_ to interpreting them as YAML.
+    Use templates as an _escape hatch_, when standard [inheritance](/core-concepts/stacks/inheritance) or
+    [Atmos Functions](/core-concepts/stacks/yaml-functions) are insufficient.
+    Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations.
 </Intro>
+
+:::note Template File Validation
+Template files (`.yaml.tmpl`, `.yml.tmpl`, `.tmpl`) are automatically detected and processed during normal operations (imports, etc.).
+However, they are excluded from YAML validation (`atmos validate stacks`) since they may contain template placeholders that are invalid YAML before being rendered.
+This ensures that template files can contain valid Go template syntax without causing validation errors.
+:::
 
 ### Enable Templating
 
@@ -242,8 +250,8 @@ You can use `Go` templates in the following Atmos sections to refer to values in
   - `overrides`
   - `backend`
   - `backend_type`
+  - `metadata`
   - `component`
-  - `metadata.component`
   - `command`
 
 :::tip

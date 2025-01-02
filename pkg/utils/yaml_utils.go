@@ -8,6 +8,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// Atmos YAML functions
+	AtmosYamlFuncExec            = "!exec"
+	AtmosYamlFuncStore           = "!store"
+	AtmosYamlFuncTemplate        = "!template"
+	AtmosYamlFuncTerraformOutput = "!terraform.output"
+)
+
+var (
+	AtmosYamlTags = []string{
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
+	}
+)
+
 // PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(data any) error {
 	y, err := ConvertToYAML(data)
@@ -19,12 +36,12 @@ func PrintAsYAML(data any) error {
 }
 
 // PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
-func PrintAsYAMLToFileDescriptor(cliConfig schema.CliConfiguration, data any) error {
+func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
 	y, err := ConvertToYAML(data)
 	if err != nil {
 		return err
 	}
-	LogInfo(cliConfig, y)
+	LogInfo(atmosConfig, y)
 	return nil
 }
 
@@ -50,13 +67,44 @@ func ConvertToYAML(data any) (string, error) {
 	return string(y), nil
 }
 
-// UnmarshalYAML takes a YAML string as input and unmarshals it into a Go type
+func processCustomTags(node *yaml.Node) error {
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		return processCustomTags(node.Content[0])
+	}
+
+	for i := 0; i < len(node.Content); i++ {
+		n := node.Content[i]
+
+		if SliceContainsString(AtmosYamlTags, n.Tag) {
+			n.Value = n.Tag + " " + n.Value
+		}
+
+		if err := processCustomTags(n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func UnmarshalYAML[T any](input string) (T, error) {
-	var data T
+	var zeroValue T
+	var node yaml.Node
 	b := []byte(input)
 
-	if err := yaml.Unmarshal(b, &data); err != nil {
-		return data, err
+	// Unmarshal into yaml.Node
+	if err := yaml.Unmarshal(b, &node); err != nil {
+		return zeroValue, err
 	}
+
+	if err := processCustomTags(&node); err != nil {
+		return zeroValue, err
+	}
+
+	// Decode the yaml.Node into the desired type T
+	var data T
+	if err := node.Decode(&data); err != nil {
+		return zeroValue, err
+	}
+
 	return data, nil
 }

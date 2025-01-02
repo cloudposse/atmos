@@ -15,16 +15,16 @@
 # are independent settings (supporting both absolute and relative paths).
 # If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
 # are considered paths relative to 'base_path'.
-base_path: "./"
+base_path: "."
 
 vendor:
   # Path to vendor configuration file or directory containing vendor files
   # Supports both absolute and relative paths
-  # If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
+  # If a directory is specified, all `.yaml` and `.yaml` files in the directory will be processed in lexicographical order
   # Can also be set using 'ATMOS_VENDOR_BASE_PATH' ENV var, or '--vendor-base-path' command-line argument
   # Examples:
   #   base_path: "./vendor.yaml"          # Single file
-  #   base_path: "./vendor.d/"            # Directory containing multiple .yaml files
+  #   base_path: "./vendor.d/"            # Directory containing multiple vendor configuration files
   base_path: "./vendor.yaml"
 
 components:
@@ -191,59 +191,6 @@ commands:
           - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
           - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
           - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
-  - name: list
-    description: Execute 'atmos list' commands
-    # subcommands
-    commands:
-      - name: stacks
-        description: |
-          List all Atmos stacks.
-        steps:
-          - >
-            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
-      - name: components
-        description: |
-          List all Atmos components in all stacks or in a single stack.
-
-          Example usage:
-            atmos list components
-            atmos list components -s plat-ue2-dev
-            atmos list components --stack plat-uw2-prod
-            atmos list components -s plat-ue2-dev --type abstract
-            atmos list components -s plat-ue2-dev -t enabled
-            atmos list components -s plat-ue2-dev -t disabled
-        flags:
-          - name: stack
-            shorthand: s
-            description: Name of the stack
-            required: false
-          - name: type
-            shorthand: t
-            description: Component types - abstract, enabled, or disabled
-            required: false
-        steps:
-          - >
-            {{ if .Flags.stack }}
-              {{ if eq .Flags.type "enabled" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r .key
-              {{ else if eq .Flags.type "disabled" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r .key
-              {{ else if eq .Flags.type "abstract" }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r .key
-              {{ else }}
-                atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-              {{ end }}
-            {{ else }}
-              {{ if eq .Flags.type "enabled" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == true)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else if eq .Flags.type "disabled" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.vars.enabled == false)' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else if eq .Flags.type "abstract" }}
-                atmos describe stacks --format json | jq '.[].components.terraform | to_entries[] | select(.value.metadata.type == "abstract")' | jq -r '[.key]' | jq -s 'add' | jq 'unique | sort' | jq -r "values[]"
-              {{ else }}
-                atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-              {{ end }}
-            {{ end }}
 
 # Integrations
 integrations:
@@ -368,3 +315,9 @@ settings:
   #            If the source and destination lists have the same length, all items in the destination lists are
   #            deep-merged with all items in the source list.
   list_merge_strategy: replace
+
+version:
+  check:
+    enabled: true
+    timeout: 1000 # ms
+    frequency: 1h

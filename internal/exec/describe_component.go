@@ -2,6 +2,7 @@ package exec
 
 import (
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -66,20 +67,49 @@ func ExecuteDescribeComponent(
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
 
-	cliConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, processTemplates)
+	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(cliConfig, configAndStacksInfo, true, processTemplates)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return configAndStacksInfo.ComponentSection, nil
+}
+
+// FilterAbstractComponents This function removes abstract components and returns the list of components
+func FilterAbstractComponents(componentsMap map[string]any) []string {
+	if componentsMap == nil {
+		return []string{}
+	}
+	components := make([]string, 0)
+	for _, k := range lo.Keys(componentsMap) {
+		componentMap, ok := componentsMap[k].(map[string]any)
+		if !ok {
+			components = append(components, k)
+			continue
+		}
+
+		metadata, ok := componentMap["metadata"].(map[string]any)
+		if !ok {
+			components = append(components, k)
+			continue
+		}
+		if componentType, ok := metadata["type"].(string); ok && componentType == "abstract" {
+			continue
+		}
+		if componentEnabled, ok := metadata["enabled"].(bool); ok && !componentEnabled {
+			continue
+		}
+		components = append(components, k)
+	}
+	return components
 }

@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -39,8 +38,13 @@ func FileOrDirExists(filename string) bool {
 
 // IsYaml checks if the file has YAML extension (does not check file schema, nor validates the file)
 func IsYaml(file string) bool {
-	yamlExtensions := []string{".yaml", ".yml"}
+	yamlExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	ext := filepath.Ext(file)
+	if ext == ".tmpl" {
+		// For .tmpl files, we check if the full extension is .yaml.tmpl or .yml.tmpl
+		baseExt := filepath.Ext(strings.TrimSuffix(file, ext))
+		ext = baseExt + ext
+	}
 	return SliceContainsString(yamlExtensions, ext)
 }
 
@@ -64,7 +68,7 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 	res := []string{}
 
 	for _, p := range paths {
-		res = append(res, path.Join(basePath, p))
+		res = append(res, filepath.Join(basePath, p))
 	}
 
 	return res, nil
@@ -72,6 +76,8 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 
 // TrimBasePathFromPath trims the base path prefix from the path
 func TrimBasePathFromPath(basePath string, path string) string {
+	basePath = filepath.ToSlash(basePath)
+	path = filepath.ToSlash(path)
 	return strings.TrimPrefix(path, basePath)
 }
 
@@ -88,7 +94,7 @@ func JoinAbsolutePathWithPath(basePath string, providedPath string) (string, err
 	}
 
 	// Join the base path with the provided path
-	joinedPath := path.Join(basePath, providedPath)
+	joinedPath := filepath.Join(basePath, providedPath)
 
 	// If the joined path is an absolute path and exists in the file system, return it
 	if filepath.IsAbs(joinedPath) {
@@ -128,7 +134,7 @@ func EnsureDir(fileName string) error {
 // SliceOfPathsContainsPath checks if a slice of file paths contains a path
 func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	for _, v := range paths {
-		dir := path.Dir(v)
+		dir := filepath.Dir(v)
 		if dir == checkPath {
 			return true
 		}
@@ -180,18 +186,20 @@ func IsSocket(path string) (bool, error) {
 // If the path has a file extension, it checks if the file exists.
 // If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions
 func SearchConfigFile(path string) (string, bool) {
-	// check if the provided has a file extension
+	// Check if the provided path has a file extension and the file exists
 	if filepath.Ext(path) != "" {
 		return path, FileExists(path)
 	}
-	// Define the possible config file extensions
-	configExtensions := []string{".yaml", ".yml"}
+
+	// Check the possible config file extensions
+	configExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	for _, ext := range configExtensions {
 		filePath := path + ext
 		if FileExists(filePath) {
 			return filePath, true
 		}
 	}
+
 	return "", false
 }
 
@@ -229,7 +237,7 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 	urlPath := parsedURL.Path
 
 	// Get the base name of the path
-	fileName := path.Base(urlPath)
+	fileName := filepath.Base(urlPath)
 	if fileName == "/" || fileName == "." {
 		return "", fmt.Errorf("unable to extract filename from URL: %s", rawURL)
 	}

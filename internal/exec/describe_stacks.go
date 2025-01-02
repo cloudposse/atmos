@@ -15,17 +15,17 @@ import (
 
 // ExecuteDescribeStacksCmd executes `describe stacks` command
 func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
-	info, err := processCommandLineArgs("", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
 
-	err = ValidateStacks(cliConfig)
+	err = ValidateStacks(atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	finalStacksMap, err := ExecuteDescribeStacks(
-		cliConfig,
+		atmosConfig,
 		filterByStack,
 		components,
 		componentTypes,
@@ -118,7 +118,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
 func ExecuteDescribeStacks(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	filterByStack string,
 	components []string,
 	componentTypes []string,
@@ -128,7 +128,7 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 ) (map[string]any, error) {
 
-	stacksMap, _, err := FindStacksMap(cliConfig, ignoreMissingFiles)
+	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -266,15 +266,15 @@ func ExecuteDescribeStacks(
 						}
 
 						// Stack name
-						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						if atmosConfig.Stacks.NameTemplate != "" {
+							stackName, err = ProcessTmpl("describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
 						} else {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
-							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
@@ -318,7 +318,7 @@ func ExecuteDescribeStacks(
 							componentSection["atmos_manifest"] = stackFileName
 
 							// Terraform workspace
-							workspace, err := BuildTerraformWorkspace(cliConfig, configAndStacksInfo)
+							workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 							if err != nil {
 								return nil, err
 							}
@@ -339,7 +339,7 @@ func ExecuteDescribeStacks(
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
-									cliConfig,
+									atmosConfig,
 									settingsSectionStruct,
 									"describe-stacks-all-sections",
 									componentSectionStr,
@@ -352,17 +352,22 @@ func ExecuteDescribeStacks(
 
 								componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 								if err != nil {
-									if !cliConfig.Templates.Settings.Enabled {
+									if !atmosConfig.Templates.Settings.Enabled {
 										if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 											errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
 												"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(cliConfig, err)
+									u.LogErrorAndExit(atmosConfig, err)
 								}
 
-								componentSection = componentSectionConverted
+								componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSection = componentSectionFinal
 							}
 
 							// Add sections
@@ -454,15 +459,15 @@ func ExecuteDescribeStacks(
 						}
 
 						// Stack name
-						if cliConfig.Stacks.NameTemplate != "" {
-							stackName, err = ProcessTmpl("describe-stacks-name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						if atmosConfig.Stacks.NameTemplate != "" {
+							stackName, err = ProcessTmpl("describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
 						} else {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
-							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(cliConfig), stackFileName)
+							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
@@ -519,7 +524,7 @@ func ExecuteDescribeStacks(
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
-									cliConfig,
+									atmosConfig,
 									settingsSectionStruct,
 									"describe-stacks-all-sections",
 									componentSectionStr,
@@ -532,17 +537,22 @@ func ExecuteDescribeStacks(
 
 								componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
 								if err != nil {
-									if !cliConfig.Templates.Settings.Enabled {
+									if !atmosConfig.Templates.Settings.Enabled {
 										if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
 											errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
 												"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates"
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(cliConfig, err)
+									u.LogErrorAndExit(atmosConfig, err)
 								}
 
-								componentSection = componentSectionConverted
+								componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
+								if err != nil {
+									return nil, err
+								}
+
+								componentSection = componentSectionFinal
 							}
 
 							// Add sections

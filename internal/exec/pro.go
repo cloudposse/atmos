@@ -27,19 +27,19 @@ type ProUnlockCmdArgs struct {
 }
 
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
-	info, err := processCommandLineArgs("terraform", cmd, args, nil)
+	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return ProLockUnlockCmdArgs{}, err
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return ProLockUnlockCmdArgs{}, err
 	}
 
-	logger, err := l.NewLoggerFromCliConfig(cliConfig)
+	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 	if err != nil {
 		return ProLockUnlockCmdArgs{}, err
 	}
