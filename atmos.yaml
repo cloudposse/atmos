@@ -321,3 +321,48 @@ version:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
+
+  # Terminal settings for displaying content
+  terminal:
+    max_width: 120      # Maximum width for terminal output
+    pager: true         # Use pager for long output
+    timestamps: false   # Show timestamps in logs
+    colors: true       # Enable colored output
+    unicode: true      # Use unicode characters
+
+  # Markdown element styling
+  markdown:
+    document:
+      color: "${colors.text}"
+    heading:
+      color: "${colors.primary}"
+      bold: true
+    code_block:
+      color: "${colors.secondary}"
+      margin: 1
+    link:
+      color: "${colors.primary}"
+      underline: true
+    strong:
+      color: "${colors.secondary}"
+      bold: true
+    emph:
+      color: "${colors.muted}"
+      italic: true
+
+  # Syntax highlighting configuration
+  syntax:
+    enabled: true
+    theme: "dracula"      # or use custom colors from theme
+    line_numbers: true
+    wrap: false
+
+  # DEPRECATED: settings.docs and settings.console are now consolidated under settings.terminal
+  # docs:
+  #   max_width: 120  # DEPRECATED: Use settings.terminal.max_width instead
+  #   pager: true     # DEPRECATED: Use settings.terminal.pager instead
+  # console:
+  #   pager: true           # DEPRECATED: Use settings.terminal.pager instead
+  #   timestamps: false     # DEPRECATED: Use settings.terminal.timestamps instead
+  #   colors: true         # DEPRECATED: Use settings.terminal.colors instead
+  #   unicode: true        # DEPRECATED: Use settings.terminal.unicode instead
