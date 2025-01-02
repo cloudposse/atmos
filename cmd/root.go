@@ -73,12 +73,8 @@ func Execute() error {
 
 	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
 	err := RootCmd.ParseFlags(os.Args)
-	if err != nil && errors.Is(err, pflag.ErrHelp) {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
+	if err != nil && !errors.Is(err, pflag.ErrHelp) {
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
@@ -121,10 +117,10 @@ func init() {
 
 	// Set custom usage template
 	templates.SetCustomUsageFunc(RootCmd)
-	cobra.OnInitialize(initConfig)
+	initCobraConfig()
 }
 
-func initConfig() {
+func initCobraConfig() {
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 	oldUsageFunc := RootCmd.UsageFunc()
@@ -134,17 +130,21 @@ func initConfig() {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		if command.Use != "atmos" {
+			err := tuiUtils.PrintStyledText("ATMOS")
+			if err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
 			if err := oldUsageFunc(command); err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(atmosConfig, err)
 			}
 		} else {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(atmosConfig, err)
 			}
 			b.HelpFunc(command, strings)
 			if err := command.Usage(); err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(atmosConfig, err)
 			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
