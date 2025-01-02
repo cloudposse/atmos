@@ -132,7 +132,7 @@ This document defines the standards for printing **usage** and **help** informat
 | **When Displayed**      | After a command misuse or error         | Explicitly requested by the user   |
 | **Content**             | Syntax and required arguments only      | Detailed descriptions and examples |
 | **Exit Code**           | Non-zero (when accompanied by an error) | Zero                               |
-| **Includes Logo**       | No                                      | Yes (optional for subcommands)     |
+| **Includes Logo**       | No                                      | Yes                                 |
 | **Triggers Validation** | No                                      | No                                 |
 
 ---
