@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -147,7 +146,7 @@ func ExecuteDescribeWorkflows(
 	if u.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
 		workflowsDir = atmosConfig.Workflows.BasePath
 	} else {
-		workflowsDir = path.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
+		workflowsDir = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
 	}
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
@@ -164,9 +163,9 @@ func ExecuteDescribeWorkflows(
 	for _, f := range files {
 		var workflowPath string
 		if u.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
-			workflowPath = path.Join(atmosConfig.Workflows.BasePath, f)
+			workflowPath = filepath.Join(atmosConfig.Workflows.BasePath, f)
 		} else {
-			workflowPath = path.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, f)
+			workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, f)
 		}
 
 		fileContent, err := os.ReadFile(workflowPath)
