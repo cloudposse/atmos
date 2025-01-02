@@ -109,4 +109,21 @@ vars:
 	assert.Equal(t, "us-east-2d", res)
 	err = PrintAsYAML(res)
 	assert.Nil(t, err)
+
+	yq = ".vars.enabled = false | .vars.tags.terraform_workspace = \"plat-ue2-prod-override\""
+	res, err = EvaluateYqExpression(data, yq)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	yq = ".vars.enabled"
+	res1, err := EvaluateYqExpression(res, yq)
+	assert.Nil(t, err)
+	assert.Equal(t, false, res1)
+	err = PrintAsYAML(res1)
+	assert.Nil(t, err)
+	yq = ".vars.tags.terraform_workspace"
+	res2, err := EvaluateYqExpression(res, yq)
+	assert.Nil(t, err)
+	assert.Equal(t, "plat-ue2-prod-override", res2)
+	err = PrintAsYAML(res2)
+	assert.Nil(t, err)
 }
