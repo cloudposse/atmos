@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -60,7 +59,7 @@ func ProcessYAMLConfigFiles(
 
 			stackBasePath := stacksBasePath
 			if len(stackBasePath) < 1 {
-				stackBasePath = path.Dir(p)
+				stackBasePath = filepath.Dir(p)
 			}
 
 			stackFileName := strings.TrimSuffix(
@@ -1858,7 +1857,7 @@ func CreateComponentStackMap(
 	componentStackMap["terraform"] = map[string][]string{}
 	componentStackMap["helmfile"] = map[string][]string{}
 
-	dir := path.Dir(filePath)
+	dir := filepath.Dir(filePath)
 
 	err := filepath.Walk(dir,
 		func(p string, info os.FileInfo, err error) error {
