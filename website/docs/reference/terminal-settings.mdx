@@ -42,21 +42,47 @@ settings:
 
 ### Configuration Options
 
-- `enabled`: Enable or disable syntax highlighting (default: `true`)
-- `lexer`: Specify the lexer to use for syntax highlighting:
-  - `yaml`: For YAML output
-  - `json`: For JSON output
-- `formatter`: Output formatter (default: `terminal`)
-- `style`: Color scheme for syntax highlighting. Available options include:
-  - `vim`
-  - `monokai`
-  - `github`
-  - `dracula`
-  - And many other standard styles
-- `pager`: Whether to use a pager for long output (default: `false`)
-- `options`:
-  - `line_numbers`: Show line numbers in output (default: `false`)
-  - `wrap`: Wrap long lines (default: `false`)
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Enable or disable syntax highlighting (default: `true`)</dd>
+  
+  <dt>`lexer`</dt>
+  <dd>Specify the lexer to use for syntax highlighting:
+    <dl>
+      <dt>`yaml`</dt>
+      <dd>For YAML output</dd>
+      <dt>`json`</dt>
+      <dd>For JSON output</dd>
+    </dl>
+  </dd>
+  
+  <dt>`formatter`</dt>
+  <dd>Output formatter (default: `terminal`)</dd>
+  
+  <dt>`style`</dt>
+  <dd>Color scheme for syntax highlighting. Available options include:
+    <ul>
+      <li>`vim`</li>
+      <li>`monokai`</li>
+      <li>`github`</li>
+      <li>`dracula`</li>
+      <li>And many other standard styles</li>
+    </ul>
+  </dd>
+  
+  <dt>`pager`</dt>
+  <dd>Whether to use a pager for long output (default: `false`)</dd>
+  
+  <dt>`options`</dt>
+  <dd>
+    <dl>
+      <dt>`line_numbers`</dt>
+      <dd>Show line numbers in output (default: `false`)</dd>
+      <dt>`wrap`</dt>
+      <dd>Wrap long lines (default: `false`)</dd>
+    </dl>
+  </dd>
+</dl>
 
 ### Example Usage
 
