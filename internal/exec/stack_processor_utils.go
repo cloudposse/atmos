@@ -1748,12 +1748,6 @@ func resolveRelativePath(path string, currentFilePath string) string {
 		return path
 	}
 
-	// Store original path format (using \ or /)
-	originalPathSeparator := "/"
-	if strings.Contains(path, "\\") {
-		originalPathSeparator = "\\"
-	}
-
 	// Convert all paths to use forward slashes for consistency in processing
 	normalizedPath := filepath.ToSlash(path)
 	normalizedCurrentFilePath := filepath.ToSlash(currentFilePath)
@@ -1768,7 +1762,7 @@ func resolveRelativePath(path string, currentFilePath string) string {
 		// Convert to forward slashes for consistency in processing
 		normalizedResult := filepath.ToSlash(relativePath)
 		// Return in original format
-		if originalPathSeparator == "\\" {
+		if filepath.Separator == '\\' {
 			return strings.ReplaceAll(normalizedResult, "/", "\\")
 		}
 		return normalizedResult
