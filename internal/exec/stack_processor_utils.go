@@ -1763,10 +1763,8 @@ func resolveRelativePath(path string, currentFilePath string) string {
 		// Join the current local path with the current stack file path
 		baseDir := filepath.Dir(normalizedCurrentFilePath)
 		relativePath := filepath.Join(baseDir, normalizedPath)
-		// Convert to forward slashes for consistency in processing
-		normalizedResult := filepath.ToSlash(relativePath)
 		// Return in original format, OS-specific
-		return filepath.FromSlash(normalizedResult)
+		return filepath.FromSlash(relativePath)
 	}
 	// For non-relative paths, return as-is in original format
 	return path
