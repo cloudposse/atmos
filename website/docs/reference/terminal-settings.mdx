@@ -1,0 +1,102 @@
+---
+title: Terminal Settings
+sidebar_position: 4
+description: Configure terminal output settings including syntax highlighting
+---
+
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Note from '@site/src/components/Note'
+import File from '@site/src/components/File'
+
+<Intro>
+Atmos provides configurable terminal settings that allow you to customize the output appearance, including syntax highlighting for YAML and JSON outputs. These settings can be configured in your `atmos.yaml` configuration file.
+</Intro>
+
+<KeyPoints>
+- Configure syntax highlighting for terminal output
+- Customize color schemes and formatting options
+- Control output pagination and line wrapping
+- Set display preferences for different output formats
+</KeyPoints>
+
+## Syntax Highlighting
+
+You can customize the syntax highlighting behavior for terminal output using the following settings in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  terminal:
+    syntax_highlighting:
+      enabled: true        # Enable/disable syntax highlighting
+      lexer: yaml         # Lexer to use (yaml or json)
+      formatter: terminal # Output formatter
+      style: dracula     # Color scheme to use
+      pager: false       # Whether to use a pager for output
+      options:
+        line_numbers: false # Show line numbers
+        wrap: false        # Wrap long lines
+```
+</File>
+
+### Configuration Options
+
+- `enabled`: Enable or disable syntax highlighting (default: `true`)
+- `lexer`: Specify the lexer to use for syntax highlighting:
+  - `yaml`: For YAML output
+  - `json`: For JSON output
+- `formatter`: Output formatter (default: `terminal`)
+- `style`: Color scheme for syntax highlighting. Available options include:
+  - `vim`
+  - `monokai`
+  - `github`
+  - `dracula`
+  - And many other standard styles
+- `pager`: Whether to use a pager for long output (default: `false`)
+- `options`:
+  - `line_numbers`: Show line numbers in output (default: `false`)
+  - `wrap`: Wrap long lines (default: `false`)
+
+### Example Usage
+
+The syntax highlighting is automatically applied when using commands that output YAML or JSON, such as:
+
+```bash
+# Display config in YAML format with syntax highlighting
+atmos describe config -f yaml
+
+# Display config in JSON format with syntax highlighting
+atmos describe config
+```
+
+<Note>
+When the output is piped to another command, syntax highlighting is automatically disabled to ensure compatibility:
+
+```bash
+# Syntax highlighting is disabled when piping
+atmos describe config | grep base_path
+```
+</Note>
+
+## Default Settings
+
+If not specified in your `atmos.yaml`, Atmos uses these default settings:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  terminal:
+    syntax_highlighting:
+      enabled: true
+      lexer: yaml
+      formatter: terminal
+      style: dracula
+      pager: false
+      options:
+        line_numbers: false
+        wrap: false
+```
+</File>
+
+You can override any of these settings in your [Atmos CLI configuration](/cli/configuration) file. 

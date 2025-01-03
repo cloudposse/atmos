@@ -16,7 +16,7 @@ type AtmosConfiguration struct {
 	Integrations                  Integrations       `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 	Schemas                       Schemas            `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates          `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
-	Settings                      AtmosSettings      `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Settings                      *AtmosSettings     `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
@@ -50,6 +50,32 @@ type AtmosSettings struct {
 	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
 	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
+}
+type SyntaxHighlightOptions struct {
+	LineNumbers bool `yaml:"line_numbers" json:"line_numbers" mapstructure:"line_numbers"`
+	Wrap        bool `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
+}
+
+type SyntaxHighlightingSettings struct {
+	Enabled   bool                    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Lexer     string                  `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
+	Formatter string                  `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
+	Style     string                  `yaml:"style" json:"style" mapstructure:"style"`
+	Pager     bool                    `yaml:"pager" json:"pager" mapstructure:"pager"`
+	Options   *SyntaxHighlightOptions `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`
+}
+
+type TerminalSettings struct {
+	SyntaxHighlighting *SyntaxHighlightingSettings `yaml:"syntax_highlighting,omitempty" json:"syntax_highlighting,omitempty" mapstructure:"syntax_highlighting"`
+}
+
+type Settings struct {
+	DependsOn         DependsOn         `yaml:"depends_on,omitempty" json:"depends_on,omitempty" mapstructure:"depends_on"`
+	Spacelift         SettingsSpacelift `yaml:"spacelift,omitempty" json:"spacelift,omitempty" mapstructure:"spacelift"`
+	Templates         Templates         `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	ListMergeStrategy string            `yaml:"list_merge_strategy,omitempty" json:"list_merge_strategy,omitempty"`
+	Terminal          *TerminalSettings `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	Docs              *Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 }
 
 type Docs struct {
@@ -540,12 +566,6 @@ type Dependent struct {
 // Settings
 
 type SettingsSpacelift AtmosSectionMapType
-
-type Settings struct {
-	DependsOn DependsOn         `yaml:"depends_on,omitempty" json:"depends_on,omitempty" mapstructure:"depends_on"`
-	Spacelift SettingsSpacelift `yaml:"spacelift,omitempty" json:"spacelift,omitempty" mapstructure:"spacelift"`
-	Templates Templates         `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
-}
 
 // ConfigSourcesStackDependency defines schema for sources of config sections
 type ConfigSourcesStackDependency struct {
