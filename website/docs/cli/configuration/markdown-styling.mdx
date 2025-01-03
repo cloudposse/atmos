@@ -21,33 +21,33 @@ Configure markdown styling in your `atmos.yaml` configuration file:
 <File title="atmos.yaml">
 ```yaml
 settings:
-    # Terminal settings for displaying content
-    terminal:
-      max_width: 120  # Maximum width for terminal output
-      pager: true     # Use pager for long output
-      timestamps: false
-      colors: true
-      unicode: true
-      
-      # Markdown element styling
-      markdown:
-        document:
-          color: "${colors.text}"
-        heading:
-          color: "${colors.primary}"
-          bold: true
-        code_block:
-          color: "${colors.secondary}"
-          margin: 1
-        link:
-          color: "${colors.primary}"
-          underline: true
-        strong:
-          color: "${colors.secondary}"
-          bold: true
-        emph:
-          color: "${colors.muted}"
-          italic: true
+  # Terminal settings for displaying content
+  terminal:
+    max_width: 120  # Maximum width for terminal output
+    pager: true     # Use pager for long output
+    timestamps: false
+    colors: true
+    unicode: true
+    
+    # Markdown element styling
+    markdown:
+      document:
+        color: "${colors.text}"
+      heading:
+        color: "${colors.primary}"
+        bold: true
+      code_block:
+        color: "${colors.secondary}"
+        margin: 1
+      link:
+        color: "${colors.primary}"
+        underline: true
+      strong:
+        color: "${colors.secondary}"
+        bold: true
+      emph:
+        color: "${colors.muted}"
+        italic: true
       
 ```
 </File>
@@ -270,4 +270,4 @@ The styling is managed internally by Glamour and does not require manual configu
 ## See Also
 
 - [CLI Configuration](/cli/configuration)
-- [Command Reference](/cli/commands) 
+- [Command Reference](/cli/commands)
