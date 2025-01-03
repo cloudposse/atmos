@@ -347,6 +347,8 @@ type Command struct {
 type CommandArgument struct {
 	Name        string `yaml:"name" json:"name" mapstructure:"name"`
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+	Default     string `yaml:"default" json:"default" mapstructure:"default"`
 }
 
 type CommandFlag struct {
