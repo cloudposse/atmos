@@ -25,15 +25,7 @@ var (
 
 	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
 	processYAMLConfigFilesLock = &sync.Mutex{}
-
-	// Add at the top of the file with other global variables
-	globalStacksBasePath string
 )
-
-// Add a setter function to initialize the global variable
-func SetGlobalStacksBasePath(basePath string) {
-	globalStacksBasePath = basePath
-}
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
 // and returns a list of stack configs
@@ -52,9 +44,6 @@ func ProcessYAMLConfigFiles(
 	map[string]map[string]any,
 	error,
 ) {
-	// Set the global stacks base path at the start of processing
-	SetGlobalStacksBasePath(stacksBasePath)
-
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
@@ -478,7 +467,7 @@ func ProcessYAMLConfigFile(
 				return nil, nil, nil, nil, nil, err
 			}
 
-			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
+			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
 				ext2 = u.DefaultStackConfigFileExtension
