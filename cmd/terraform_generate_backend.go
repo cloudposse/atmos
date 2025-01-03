@@ -20,7 +20,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateBackendCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -31,7 +31,7 @@ func init() {
 
 	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateBackendCmd)

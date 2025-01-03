@@ -21,7 +21,7 @@ var describeDependentsCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeDependentsCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -35,7 +35,7 @@ func init() {
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 
 	describeCmd.AddCommand(describeDependentsCmd)

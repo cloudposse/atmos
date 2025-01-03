@@ -14,7 +14,7 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cliConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		outputType = "list"
 	}
 
-	describeWorkflowsList, describeWorkflowsMap, describeWorkflowsAll, err := ExecuteDescribeWorkflows(cliConfig)
+	describeWorkflowsList, describeWorkflowsMap, describeWorkflowsAll, err := ExecuteDescribeWorkflows(atmosConfig)
 	if err != nil {
 		return err
 	}

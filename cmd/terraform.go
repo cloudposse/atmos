@@ -30,13 +30,13 @@ var terraformCmd = &cobra.Command{
 		}
 		info, err := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
 		// Exit on help
 		if info.NeedHelp {
 			// Check for the latest Atmos release on GitHub and print update message
-			CheckForAtmosUpdateAndPrintMessage(cliConfig)
+			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 			return
 		}
 		// Check Atmos configuration
@@ -44,7 +44,7 @@ var terraformCmd = &cobra.Command{
 
 		err = e.ExecuteTerraform(info)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }

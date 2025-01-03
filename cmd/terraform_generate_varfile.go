@@ -20,7 +20,7 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 	},
 }
@@ -32,7 +32,7 @@ func init() {
 
 	err := terraformGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(schema.CliConfiguration{}, err)
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateVarfileCmd)

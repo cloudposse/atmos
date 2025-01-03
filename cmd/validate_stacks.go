@@ -22,7 +22,7 @@ var ValidateStacksCmd = &cobra.Command{
 
 		err := e.ExecuteValidateStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
 		u.PrintMessageInColor("all stacks validated successfully\n", color.New(color.FgGreen))

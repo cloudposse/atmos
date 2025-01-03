@@ -25,7 +25,7 @@ var versionCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.CliConfiguration{}, err)
+			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
 		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", version.Version, runtime.GOOS, runtime.GOARCH))
@@ -36,11 +36,11 @@ var versionCmd = &cobra.Command{
 			latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 			if err == nil && latestReleaseTag != "" {
 				if err != nil {
-					u.LogWarning(schema.CliConfiguration{}, fmt.Sprintf("Failed to check for updates: %v", err))
+					u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to check for updates: %v", err))
 					return
 				}
 				if latestReleaseTag == "" {
-					u.LogWarning(schema.CliConfiguration{}, "No release information available")
+					u.LogWarning(schema.AtmosConfiguration{}, "No release information available")
 					return
 				}
 				latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
@@ -53,7 +53,7 @@ var versionCmd = &cobra.Command{
 		}
 
 		// Check for the cache and print update message
-		CheckForAtmosUpdateAndPrintMessage(cliConfig)
+		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	},
 }
 
