@@ -193,7 +193,7 @@ func execTerraformShellCommand(
 		envVar := fmt.Sprintf("TF_CLI_ARGS_%s", cmd)
 		existing := os.Getenv(envVar)
 		if existing != "" {
-			u.LogWarning(atmosConfig, fmt.Sprintf("Found Terraform environment variable '%s' which may conflict with or be overwritten by Atmos", envVar))
+			u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", envVar))
 			// Remove any surrounding quotes from existing value
 			existing = strings.Trim(existing, "\"")
 			// Create new value by combining existing and new var-file argument

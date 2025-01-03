@@ -235,7 +235,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	for _, envVar := range os.Environ() {
 		if strings.HasPrefix(envVar, "TF_") {
 			varName := strings.Split(envVar, "=")[0]
-			u.LogWarning(atmosConfig, fmt.Sprintf("Found Terraform environment variable '%s' which may conflict with or be overwritten by Atmos", varName))
+			u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
 		}
 	}
 
