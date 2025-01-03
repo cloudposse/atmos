@@ -93,7 +93,9 @@ var workflowCmd = &cobra.Command{
 		}
 
 		if args[0] == "help" {
-			cmd.Help()
+			if err := cmd.Help(); err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
 			return
 		}
 

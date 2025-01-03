@@ -62,6 +62,7 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create markdown renderer: %w", err)
 	}
+	defer r.Close()
 
 	out, err := r.Render(markdownText)
 	if err != nil {
