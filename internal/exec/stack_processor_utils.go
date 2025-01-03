@@ -1748,16 +1748,32 @@ func resolveRelativePath(path string, currentFilePath string) string {
 		return path
 	}
 
+	// Store original path format (using \ or /)
+	originalPathSeparator := "/"
+	if strings.Contains(path, "\\") {
+		originalPathSeparator = "\\"
+	}
+
+	// Convert all paths to use forward slashes for consistency in processing
+	normalizedPath := filepath.ToSlash(path)
+	normalizedCurrentFilePath := filepath.ToSlash(currentFilePath)
+
 	// Determine if this is a relative path by checking if the path starts with "." or ".."
-	parts := strings.Split(path, string(filepath.Separator))
+	parts := strings.Split(normalizedPath, "/")
 	firstElement := filepath.Clean(parts[0])
 	if firstElement == "." || firstElement == ".." {
 		// Join the current local path with the current stack file path
-		baseDir := filepath.Dir(currentFilePath)
-		relativePath := filepath.Clean(filepath.Join(baseDir, path))
-		return relativePath
+		baseDir := filepath.Dir(normalizedCurrentFilePath)
+		relativePath := filepath.Join(baseDir, normalizedPath)
+		// Convert to forward slashes for consistency in processing
+		normalizedResult := filepath.ToSlash(relativePath)
+		// Return in original format
+		if originalPathSeparator == "\\" {
+			return strings.ReplaceAll(normalizedResult, "/", "\\")
+		}
+		return normalizedResult
 	}
-	// For non-relative paths, return as-is
+	// For non-relative paths, return as-is in original format
 	return path
 }
 
