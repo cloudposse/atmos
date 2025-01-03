@@ -316,12 +316,6 @@ settings:
   #            deep-merged with all items in the source list.
   list_merge_strategy: replace
 
-version:
-  check:
-    enabled: true
-    timeout: 1000 # ms
-    frequency: 1h
-
   # Terminal settings for displaying content
   terminal:
     max_width: 120      # Maximum width for terminal output
@@ -356,4 +350,10 @@ version:
     theme: "dracula"      # or use custom colors from theme
     line_numbers: true
     wrap: false
+
+version:
+  check:
+    enabled: true
+    timeout: 1000 # ms
+    frequency: 1h
 
