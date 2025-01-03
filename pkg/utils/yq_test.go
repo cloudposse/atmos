@@ -129,7 +129,7 @@ vars:
 	err = PrintAsYAML(res)
 	assert.Nil(t, err)
 
-	yq = ".vars.enabled = false | .vars.tags.terraform_workspace = \"plat-ue2-prod-override\" | .vars.max_subnet_count = 2"
+	yq = ".vars.enabled = false | .vars.tags.terraform_workspace = \"plat-ue2-prod-override\" | .vars.max_subnet_count = 2 | .settings.test = false"
 	res, err = EvaluateYqExpression(data, yq)
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
@@ -150,5 +150,11 @@ vars:
 	assert.Nil(t, err)
 	assert.Equal(t, 2, res3)
 	err = PrintAsYAML(res3)
+	assert.Nil(t, err)
+	yq = ".settings.test"
+	res4, err := EvaluateYqExpression(res, yq)
+	assert.Nil(t, err)
+	assert.Equal(t, false, res4)
+	err = PrintAsYAML(res4)
 	assert.Nil(t, err)
 }
