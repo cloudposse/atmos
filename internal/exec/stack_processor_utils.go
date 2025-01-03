@@ -25,7 +25,15 @@ var (
 
 	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
 	processYAMLConfigFilesLock = &sync.Mutex{}
+
+	// Add at the top of the file with other global variables
+	globalStacksBasePath string
 )
+
+// Add a setter function to initialize the global variable
+func SetGlobalStacksBasePath(basePath string) {
+	globalStacksBasePath = basePath
+}
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
 // and returns a list of stack configs
@@ -44,6 +52,8 @@ func ProcessYAMLConfigFiles(
 	map[string]map[string]any,
 	error,
 ) {
+	// Set the global stacks base path at the start of processing
+	SetGlobalStacksBasePath(stacksBasePath)
 
 	count := len(filePaths)
 	listResult := make([]string, count)
@@ -171,7 +181,7 @@ func ProcessYAMLConfigFile(
 	error,
 ) {
 	// Validate the file path is within allowed base path
-	if err := validateImportPath(filePath, basePath); err != nil {
+	if err := validateImportPath(filePath); err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
@@ -1796,7 +1806,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		if err == nil {
 			importObj.Path = resolveRelativePath(importObj.Path, filePath)
 			// Validate the resolved path
-			if err := validateImportPath(importObj.Path, filepath.Dir(filePath)); err != nil {
+			if err := validateImportPath(importObj.Path); err != nil {
 				return nil, fmt.Errorf("invalid import path '%s' in file '%s': %v", importObj.Path, filePath, err)
 			}
 			result = append(result, importObj)
@@ -1814,7 +1824,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 
 		s = resolveRelativePath(s, filePath)
 		// Validate the resolved path
-		if err := validateImportPath(s, filepath.Dir(filePath)); err != nil {
+		if err := validateImportPath(s); err != nil {
 			return nil, fmt.Errorf("invalid import path '%s' in file '%s': %v", s, filePath, err)
 		}
 		result = append(result, schema.StackImport{Path: s})
@@ -2258,15 +2268,30 @@ func FindComponentsDerivedFromBaseComponents(
 // imported stack manifests can only reference files within the allowed stacks directory.
 // Without these checks, malicious stack manifests could potentially access sensitive files
 // outside of the stacks directory through directory traversal or symlinks.
-func validateImportPath(path string, stacksBasePath string) error {
+// The function allows traversal within stacksBasePath but prevents escaping above it.
+func validateImportPath(path string) error {
 	// Ensure path is not empty
 	if path == "" {
-		return fmt.Errorf("Empty path")
+		return fmt.Errorf("empty path")
 	}
 
-	// Prevent directory traversal attempts
-	if strings.Contains(path, "..") {
-		return fmt.Errorf("Resolved path contains forbidden directory traversal pattern: %s", path)
+	// Join the base path with the given path
+	fullPath := filepath.Join(globalStacksBasePath, path)
+
+	// Get absolute paths to properly check containment
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return fmt.Errorf("unable to resolve absolute path for %s: %v", fullPath, err)
+	}
+
+	absBasePath, err := filepath.Abs(globalStacksBasePath)
+	if err != nil {
+		return fmt.Errorf("unable to resolve absolute path for stacks base path %s: %v", globalStacksBasePath, err)
+	}
+
+	// Check if the resolved path is within stacksBasePath
+	if !strings.HasPrefix(absPath, absBasePath) {
+		return fmt.Errorf("path %s is outside of allowed stacks directory %s", path, globalStacksBasePath)
 	}
 
 	return nil
