@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -59,7 +60,7 @@ func ProcessYAMLConfigFiles(
 
 			stackBasePath := stacksBasePath
 			if len(stackBasePath) < 1 {
-				stackBasePath = filepath.Dir(p)
+				stackBasePath = path.Dir(p)
 			}
 
 			stackFileName := strings.TrimSuffix(
@@ -170,6 +171,10 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
+	// Validate the file path is within allowed base path
+	if err := validateImportPath(filePath, basePath); err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
 
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
@@ -356,7 +361,7 @@ func ProcessYAMLConfigFile(
 
 			found := false
 			for _, extension := range extensions {
-				testPath := filepath.Join(basePath, imp+extension)
+				testPath := path.Join(basePath, imp+extension)
 				if _, err := os.Stat(testPath); err == nil {
 					impWithExt = imp + extension
 					found = true
@@ -371,12 +376,12 @@ func ProcessYAMLConfigFile(
 		} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
 			// Check if there's a template version of this file
 			templatePath := impWithExt + u.TemplateExtension
-			if _, err := os.Stat(filepath.Join(basePath, templatePath)); err == nil {
+			if _, err := os.Stat(path.Join(basePath, templatePath)); err == nil {
 				impWithExt = templatePath
 			}
 		}
 
-		impWithExtPath := filepath.Join(basePath, impWithExt)
+		impWithExtPath := path.Join(basePath, impWithExt)
 
 		if impWithExtPath == filePath {
 			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
@@ -468,7 +473,8 @@ func ProcessYAMLConfigFile(
 			if err != nil {
 				return nil, nil, nil, nil, nil, err
 			}
-			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
+
+			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
 				ext2 = u.DefaultStackConfigFileExtension
@@ -1741,21 +1747,15 @@ func FindComponentDependenciesLegacy(
 	return unique, nil
 }
 
-// resolveRelativePath checks if a path is relative to the current directory and if so, resolves it relative to the current file's directory
+// resolveRelativePath checks if a path is relative to the current directory and if so,
+// resolves it relative to the current file's directory
 func resolveRelativePath(path string, currentFilePath string) string {
 	if path == "" {
 		return path
 	}
 
-	// Check if the path starts with "." or ".." by splitting on either forward or back slashes
-	parts := strings.FieldsFunc(path, func(c rune) bool {
-		return c == '/' || c == '\\'
-	})
-	if len(parts) == 0 {
-		return path
-	}
-
-	firstElement := filepath.Clean(parts[0])
+	// Check if the path starts with "." or ".."
+	firstElement := filepath.Clean(strings.Split(path, string(filepath.Separator))[0])
 	if firstElement == "." || firstElement == ".." {
 		// Join the current local path with the current stack file path
 		baseDir := filepath.Dir(currentFilePath)
@@ -1796,6 +1796,10 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
 			importObj.Path = resolveRelativePath(importObj.Path, filePath)
+			// Validate the resolved path
+			if err := validateImportPath(importObj.Path, filepath.Dir(filePath)); err != nil {
+				return nil, fmt.Errorf("invalid import path '%s' in file '%s': %v", importObj.Path, filePath, err)
+			}
 			result = append(result, importObj)
 			continue
 		}
@@ -1810,6 +1814,10 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		}
 
 		s = resolveRelativePath(s, filePath)
+		// Validate the resolved path
+		if err := validateImportPath(s, filepath.Dir(filePath)); err != nil {
+			return nil, fmt.Errorf("invalid import path '%s' in file '%s': %v", s, filePath, err)
+		}
 		result = append(result, schema.StackImport{Path: s})
 	}
 
@@ -1850,7 +1858,7 @@ func CreateComponentStackMap(
 	componentStackMap["terraform"] = map[string][]string{}
 	componentStackMap["helmfile"] = map[string][]string{}
 
-	dir := filepath.Dir(filePath)
+	dir := path.Dir(filePath)
 
 	err := filepath.Walk(dir,
 		func(p string, info os.FileInfo, err error) error {
@@ -2204,7 +2212,7 @@ func ProcessBaseComponentConfig(
 		if checkBaseComponentExists {
 			// Check if the base component exists as Terraform/Helmfile component
 			// If it does exist, don't throw errors if it is not defined in YAML config
-			componentPath := filepath.Join(componentBasePath, baseComponent)
+			componentPath := path.Join(componentBasePath, baseComponent)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
 				return errors.New("The component '" + component + "' inherits from the base component '" +
@@ -2246,24 +2254,20 @@ func FindComponentsDerivedFromBaseComponents(
 	return res, nil
 }
 
-// validateImportPath performs security checks on import paths to prevent path traversal attacks and ensure paths are valid.
-// This is important when processing imports in stack manifests since they can reference external files that could potentially
-// be malicious if not properly validated. The function checks for empty paths, invalid filesystem characters, and directory
-// traversal attempts that could access files outside the intended directory structure.
-func validateImportPath(path string) error {
+// validateImportPath checks if a path is valid and within stacksBasePath.
+// This validation is necessary to prevent path traversal attacks and ensure that
+// imported stack manifests can only reference files within the allowed stacks directory.
+// Without these checks, malicious stack manifests could potentially access sensitive files
+// outside of the stacks directory through directory traversal or symlinks.
+func validateImportPath(path string, stacksBasePath string) error {
 	// Ensure path is not empty
 	if path == "" {
-		return fmt.Errorf("empty path")
-	}
-
-	// Check for invalid characters
-	if strings.ContainsAny(path, "<>:\"\\|?*") {
-		return fmt.Errorf("path contains invalid characters: %s", path)
+		return fmt.Errorf("Empty path")
 	}
 
 	// Prevent directory traversal attempts
 	if strings.Contains(path, "..") {
-		return fmt.Errorf("path contains forbidden directory traversal pattern: %s", path)
+		return fmt.Errorf("Resolved path contains forbidden directory traversal pattern: %s", path)
 	}
 
 	return nil
