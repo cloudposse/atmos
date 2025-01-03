@@ -194,8 +194,6 @@ func execTerraformShellCommand(
 		existing := os.Getenv(envVar)
 		if existing != "" {
 			u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", envVar))
-			// Remove any surrounding quotes from existing value
-			existing = strings.Trim(existing, "\"")
 			// Create new value by combining existing and new var-file argument
 			newValue := fmt.Sprintf("\"%s -var-file=%s\"", existing, varFile)
 			componentEnvList = append(componentEnvList, fmt.Sprintf("%s=%s", envVar, newValue))
