@@ -96,6 +96,13 @@ commands:
     steps:
       - atmos vendor pull
 
+  # test for infinite loop
+  - name: loop
+    description: This command tests curcuit breaker for infinite loop
+    steps:
+      - "echo Hello world!"
+      - atmos loop
+
   - name: tf
     description: Execute 'terraform' commands
     # subcommands

@@ -82,10 +82,3 @@ commands:
       required: true
   steps:
     - curl -s https://wttr.in/{{ .Flags.location }}
-
-# test for infinite loop
-- name: loop
-  description: This command says Hello world
-  steps:
-    - "echo Hello world!"
-    - atmos loop

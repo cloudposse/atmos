@@ -197,3 +197,15 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
+
+  - name: atmos curcuit-breaker
+    enabled: true
+    description: "Ensure atmos breaks the infinit loop with the depth of 10."
+    workdir: "../examples/tests/"
+    command: "atmos"
+    args:
+      - "loop"
+    expect:
+      stderr:
+        - "ATMOS_SHLVL.*exceeds maximum allowed depth.*(\r?\n)+exit status 1(\r?\n)+exit status 1.*"
+      exit_code: 1
