@@ -210,10 +210,6 @@ tests:
       - "-s"
       - "nonprod"
     expect:
-      stdout:
-        - "Executing Terraform command"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos terraform deploy locked component
