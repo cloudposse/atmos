@@ -344,13 +344,6 @@ settings:
       color: "${colors.muted}"
       italic: true
 
-  # Syntax highlighting configuration
-  syntax:
-    enabled: true
-    theme: "dracula"      # or use custom colors from theme
-    line_numbers: true
-    wrap: false
-
 version:
   check:
     enabled: true
