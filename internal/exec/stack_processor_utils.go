@@ -1752,7 +1752,11 @@ func resolveRelativePath(path string, currentFilePath string) string {
 	normalizedPath := filepath.ToSlash(path)
 	normalizedCurrentFilePath := filepath.ToSlash(currentFilePath)
 
-	// Determine if this is a relative path by checking if the path starts with "." or ".."
+	// Atmos import paths are always relative paths, but they can be relative to either:
+	// 1. The base path (most common) - e.g. "mixins/region/us-east-2"
+	// 2. The current file's directory (less common) - e.g. "./_defaults"
+	// Here we check if the path starts with "." or ".." to identify if it's relative to the current file.
+	// If it is, we'll convert it to be relative to the base path instead, to maintain consistency.
 	parts := strings.Split(normalizedPath, "/")
 	firstElement := filepath.Clean(parts[0])
 	if firstElement == "." || firstElement == ".." {
@@ -1761,11 +1765,8 @@ func resolveRelativePath(path string, currentFilePath string) string {
 		relativePath := filepath.Join(baseDir, normalizedPath)
 		// Convert to forward slashes for consistency in processing
 		normalizedResult := filepath.ToSlash(relativePath)
-		// Return in original format
-		if filepath.Separator == '\\' {
-			return strings.ReplaceAll(normalizedResult, "/", "\\")
-		}
-		return normalizedResult
+		// Return in original format, OS-specific
+		return filepath.FromSlash(normalizedResult)
 	}
 	// For non-relative paths, return as-is in original format
 	return path
