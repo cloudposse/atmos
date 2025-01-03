@@ -231,6 +231,7 @@ type ConfigAndStacksInfo struct {
 	NeedHelp                      bool
 	ComponentIsAbstract           bool
 	ComponentIsEnabled            bool
+	ComponentIsLocked             bool
 	ComponentMetadataSection      AtmosSectionMapType
 	TerraformWorkspace            string
 	JsonSchemaDir                 string
