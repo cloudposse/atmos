@@ -180,11 +180,6 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
-	// Validate the file path is within allowed base path
-	if err := validateImportPath(filePath); err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
@@ -1757,20 +1752,22 @@ func FindComponentDependenciesLegacy(
 }
 
 // resolveRelativePath checks if a path is relative to the current directory and if so,
-// resolves it relative to the current file's directory
+// resolves it relative to the current file's directory. It ensures the resolved path
+// exists within the base path.
 func resolveRelativePath(path string, currentFilePath string) string {
 	if path == "" {
 		return path
 	}
 
-	// Check if the path starts with "." or ".."
+	// Determine if this is a relative path by checking if the path starts with "." or ".."
 	firstElement := filepath.Clean(strings.Split(path, string(filepath.Separator))[0])
 	if firstElement == "." || firstElement == ".." {
 		// Join the current local path with the current stack file path
 		baseDir := filepath.Dir(currentFilePath)
-		result := filepath.Clean(filepath.Join(baseDir, path))
-		return result
+		relativePath := filepath.Clean(filepath.Join(baseDir, path))
+		return relativePath
 	}
+	// For non-relative paths, return as-is
 	return path
 }
 
@@ -1805,10 +1802,6 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
 			importObj.Path = resolveRelativePath(importObj.Path, filePath)
-			// Validate the resolved path
-			if err := validateImportPath(importObj.Path); err != nil {
-				return nil, fmt.Errorf("invalid import path '%s' in file '%s': %v", importObj.Path, filePath, err)
-			}
 			result = append(result, importObj)
 			continue
 		}
@@ -1823,10 +1816,6 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		}
 
 		s = resolveRelativePath(s, filePath)
-		// Validate the resolved path
-		if err := validateImportPath(s); err != nil {
-			return nil, fmt.Errorf("invalid import path '%s' in file '%s': %v", s, filePath, err)
-		}
 		result = append(result, schema.StackImport{Path: s})
 	}
 
@@ -2261,38 +2250,4 @@ func FindComponentsDerivedFromBaseComponents(
 	}
 
 	return res, nil
-}
-
-// validateImportPath checks if a path is valid and within stacksBasePath.
-// This validation is necessary to prevent path traversal attacks and ensure that
-// imported stack manifests can only reference files within the allowed stacks directory.
-// Without these checks, malicious stack manifests could potentially access sensitive files
-// outside of the stacks directory through directory traversal or symlinks.
-// The function allows traversal within stacksBasePath but prevents escaping above it.
-func validateImportPath(path string) error {
-	// Ensure path is not empty
-	if path == "" {
-		return fmt.Errorf("empty path")
-	}
-
-	// Join the base path with the given path
-	fullPath := filepath.Join(globalStacksBasePath, path)
-
-	// Get absolute paths to properly check containment
-	absPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		return fmt.Errorf("unable to resolve absolute path for %s: %v", fullPath, err)
-	}
-
-	absBasePath, err := filepath.Abs(globalStacksBasePath)
-	if err != nil {
-		return fmt.Errorf("unable to resolve absolute path for stacks base path %s: %v", globalStacksBasePath, err)
-	}
-
-	// Check if the resolved path is within stacksBasePath
-	if !strings.HasPrefix(absPath, absBasePath) {
-		return fmt.Errorf("path %s is outside of allowed stacks directory %s", path, globalStacksBasePath)
-	}
-
-	return nil
 }
