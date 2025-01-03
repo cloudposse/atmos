@@ -1741,15 +1741,21 @@ func FindComponentDependenciesLegacy(
 	return unique, nil
 }
 
-// resolveRelativePath checks if a path is relative to the current directory and if so,
-// resolves it relative to the current file's directory
+// resolveRelativePath checks if a path is relative to the current directory and if so, resolves it relative to the current file's directory
 func resolveRelativePath(path string, currentFilePath string) string {
 	if path == "" {
 		return path
 	}
 
-	// Check if the path starts with "." or ".."
-	firstElement := filepath.Clean(strings.Split(path, string(filepath.Separator))[0])
+	// Check if the path starts with "." or ".." by splitting on either forward or back slashes
+	parts := strings.FieldsFunc(path, func(c rune) bool {
+		return c == '/' || c == '\\'
+	})
+	if len(parts) == 0 {
+		return path
+	}
+
+	firstElement := filepath.Clean(parts[0])
 	if firstElement == "." || firstElement == ".." {
 		// Join the current local path with the current stack file path
 		baseDir := filepath.Dir(currentFilePath)
@@ -2238,4 +2244,27 @@ func FindComponentsDerivedFromBaseComponents(
 	}
 
 	return res, nil
+}
+
+// validateImportPath performs security checks on import paths to prevent path traversal attacks and ensure paths are valid.
+// This is important when processing imports in stack manifests since they can reference external files that could potentially
+// be malicious if not properly validated. The function checks for empty paths, invalid filesystem characters, and directory
+// traversal attempts that could access files outside the intended directory structure.
+func validateImportPath(path string) error {
+	// Ensure path is not empty
+	if path == "" {
+		return fmt.Errorf("empty path")
+	}
+
+	// Check for invalid characters
+	if strings.ContainsAny(path, "<>:\"\\|?*") {
+		return fmt.Errorf("path contains invalid characters: %s", path)
+	}
+
+	// Prevent directory traversal attempts
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("path contains forbidden directory traversal pattern: %s", path)
+	}
+
+	return nil
 }
