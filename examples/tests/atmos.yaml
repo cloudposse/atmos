@@ -98,7 +98,7 @@ commands:
 
   # test for infinite loop
   - name: loop
-    description: This command tests curcuit breaker for infinite loop
+    description: This command tests circuit breaker for infinite loop
     steps:
       - "echo Hello world!"
       - atmos loop

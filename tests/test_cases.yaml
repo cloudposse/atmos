@@ -198,9 +198,9 @@ tests:
         - "^$"
       exit_code: 0
 
-  - name: atmos curcuit-breaker
+  - name: atmos circuit-breaker
     enabled: true
-    description: "Ensure atmos breaks the infinit loop with the depth of 10."
+    description: "Ensure atmos breaks the infinite loop when shell depth exceeds maximum (10)."
     workdir: "../examples/tests/"
     command: "atmos"
     args:
