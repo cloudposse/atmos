@@ -29,14 +29,14 @@ You can customize the syntax highlighting behavior for terminal output using the
 settings:
   terminal:
     syntax_highlighting:
-      enabled: true        # Enable/disable syntax highlighting
-      lexer: yaml         # Lexer to use (yaml or json)
-      formatter: terminal # Output formatter
-      style: dracula     # Color scheme to use
-      pager: false       # Whether to use a pager for output
+      enabled: true         # Enable/disable syntax highlighting
+      lexer: yaml           # Lexer to use (yaml or json)
+      formatter: terminal   # Output formatter
+      style: dracula        # Color scheme to use; see list of supported themes bellow
+      pager: false          # Whether to use a pager for output
       options:
         line_numbers: false # Show line numbers
-        wrap: false        # Wrap long lines
+        wrap: false         # Wrap long lines
 ```
 </File>
 
@@ -126,3 +126,7 @@ settings:
 </File>
 
 You can override any of these settings in your [Atmos CLI configuration](/cli/configuration) file. 
+
+## Supported Themes
+
+Atmos supports a wide range of themes for syntax highlighting. You can find the full list of supported themes [here](https://xyproto.github.io/splash/docs/).
