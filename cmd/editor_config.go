@@ -147,7 +147,7 @@ func runMainLogic() {
 	}
 
 	u.LogDebug(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
-	u.LogInfo(atmosConfig, "No errors found")
+	u.PrintMessage("No errors found")
 }
 
 func checkVersion(config config.Config) error {
