@@ -138,7 +138,7 @@ tests:
       exit_code: 1
   - name: atmos validate editorconfig
     enabled: true
-    description: "Ensure atmos CLI validates based on the .ecrc file."
+    description: "Ensure atmos CLI validates success case"
     workdir: "../examples/quick-start-simple/"
     command: "atmos"
     args:
@@ -150,6 +150,19 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
+  - name: atmos validate editorconfig error
+    enabled: true
+    description: "Ensure atmos CLI gives error during validation based on editorconfig"
+    workdir: "../examples/quick-start-advanced/"
+    command: "atmos"
+    args:
+      - "validate"
+      - "editorconfig"
+    expect:
+      stderr:
+        - "4 errors found"
+      exit_code: 1
+
   - name: atmos describe config -f yaml
     enabled: true
     description: "Ensure atmos CLI outputs the Atmos configuration in YAML."
