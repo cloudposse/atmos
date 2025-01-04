@@ -105,6 +105,11 @@ templates:
     # https://docs.gomplate.ca
     gomplate:
       enabled: true
+settings:
+  list_merge_strategy: replace
+  terminal:
+    max_width: 120  # Maximum width for terminal output
+    pager: true     # Use pager for long output
 ```
 </File>
 
@@ -151,13 +156,11 @@ The `settings` section configures Atmos global settings.
       #            If the source and destination lists have the same length, all items in the destination lists are
       #            deep-merged with all items in the source list.
       list_merge_strategy: replace
-      # `docs` specifies how component documentation is displayed in the terminal.
-      # The following documentation display settings are supported:
-      # `max-width`: The maximum width for displaying component documentation in the terminal.
-      # 'pagination`: When enabled, displays component documentation in a pager instead of directly in the terminal.
-      docs:
-        max-width: 80
-        pagination: true
+
+      # Terminal settings for displaying content
+      terminal:
+        max_width: 120  # Maximum width for terminal output
+        pager: true     # Use pager for long output
     ```
 </File>
 
@@ -179,17 +182,32 @@ The `settings` section configures Atmos global settings.
     </dl>
   </dd>
   
-  <dt>`settings.docs`</dt>
+  <dt>`settings.terminal`</dt>
   <dd>
-    Specifies how component documentation is displayed in the terminal.
+    Specifies how content is displayed in the terminal.
 
     The following settings are supported:
     <dl>
-      <dt>`max-width`</dt>
-      <dd>The maximum width for displaying component documentation in the terminal.</dd>
+      <dt>`max_width`</dt>
+      <dd>The maximum width for displaying content in the terminal.</dd>
 
-      <dt>`pagination`</dt>
-      <dd>When enabled, displays component documentation in a pager instead of directly in the terminal.</dd>
+      <dt>`pager`</dt>
+      <dd>When enabled, displays long content in a pager instead of directly in the terminal.</dd>
+    </dl>
+  </dd>
+
+  <dt>`settings.docs` (Deprecated)</dt>
+  <dd>
+    :::warning Deprecated
+    The `settings.docs` section is deprecated and will be removed in a future version. Please use `settings.terminal` instead.
+    :::
+
+    <dl>
+      <dt>`max-width` (Deprecated)</dt>
+      <dd>Use `settings.terminal.max_width` instead.</dd>
+
+      <dt>`pagination` (Deprecated)</dt>
+      <dd>Use `settings.terminal.pager` instead.</dd>
     </dl>
   </dd>
 </dl>
