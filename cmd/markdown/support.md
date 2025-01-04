@@ -26,4 +26,4 @@ Included with sponsorship, we host **30-minute workshops twice a week** to:
 Workshops are tailored to help you succeed with Atmos, our AWS Reference Architectures, and related tools.  
 
 > **Note**: Paid support includes priority responses.
->           https://github.com/sponsors/cloudposse 
+>           [](https://github.com/sponsors/cloudposse)
