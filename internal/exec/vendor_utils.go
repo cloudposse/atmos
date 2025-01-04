@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -167,7 +166,7 @@ func ReadAndProcessVendorConfigFile(
 
 		if !fileExists {
 			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
-			pathToVendorConfig := path.Join(atmosConfig.BasePath, vendorConfigFile)
+			pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
 			foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
 
 			if !fileExists {
@@ -186,6 +185,7 @@ func ReadAndProcessVendorConfigFile(
 
 	var configFiles []string
 	if fileInfo.IsDir() {
+		foundVendorConfigFile = filepath.ToSlash(foundVendorConfigFile)
 		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "*.{yaml,yml}")
 		if err != nil {
 			return vendorConfig, false, "", err
