@@ -21,7 +21,6 @@ const (
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
-	everythingFlag            = "--everything"
 	forceFlag                 = "--force"
 )
 

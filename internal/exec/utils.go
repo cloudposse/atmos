@@ -665,14 +665,12 @@ func processArgsAndFlags(
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 	var indexesToRemove []int
-	if len(inputArgsAndFlags) > 1 && inputArgsAndFlags[0] == "clean" {
-		if !u.SliceContainsString(inputArgsAndFlags, everythingFlag) {
-			inputArgsAndFlags = append(inputArgsAndFlags, everythingFlag)
-		}
+	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "clean" {
+		info.SubCommand = inputArgsAndFlags[0]
 	}
 
 	// For commands like `atmos terraform plan`, show the command help
-	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" {
+	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" && info.SubCommand == "" {
 		info.SubCommand = inputArgsAndFlags[0]
 		info.NeedHelp = true
 		return info, nil
