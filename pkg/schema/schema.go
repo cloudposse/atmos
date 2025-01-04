@@ -46,11 +46,12 @@ type Terminal struct {
 }
 
 type AtmosSettings struct {
-	ListMergeStrategy string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
-	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
+	ListMergeStrategy string            `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          *TerminalSettings `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	Docs              Docs              `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Markdown          MarkdownSettings  `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
 }
+
 type SyntaxHighlightOptions struct {
 	LineNumbers bool `yaml:"line_numbers" json:"line_numbers" mapstructure:"line_numbers"`
 	Wrap        bool `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
@@ -66,6 +67,11 @@ type SyntaxHighlightingSettings struct {
 }
 
 type TerminalSettings struct {
+	MaxWidth           int                         `yaml:"max_width,omitempty" json:"max_width,omitempty" mapstructure:"max_width"`
+	Pager              bool                        `yaml:"pager,omitempty" json:"pager,omitempty" mapstructure:"pager"`
+	Timestamps         bool                        `yaml:"timestamps,omitempty" json:"timestamps,omitempty" mapstructure:"timestamps"`
+	Colors             bool                        `yaml:"colors,omitempty" json:"colors,omitempty" mapstructure:"colors"`
+	Unicode            bool                        `yaml:"unicode,omitempty" json:"unicode,omitempty" mapstructure:"unicode"`
 	SyntaxHighlighting *SyntaxHighlightingSettings `yaml:"syntax_highlighting,omitempty" json:"syntax_highlighting,omitempty" mapstructure:"syntax_highlighting"`
 }
 
