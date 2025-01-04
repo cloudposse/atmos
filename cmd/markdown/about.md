@@ -19,4 +19,4 @@ and automate complex workflows across environments.
 Atmos reduces complexity, promotes consistency, and accelerates delivery, making it an ideal choice
 for organizations managing large-scale AWS infrastructure.
 
-Learn more at https://atmos.tools 
+Learn more [here](https://atmos.tools)
