@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath" // For resolving absolute paths
@@ -39,7 +40,13 @@ type TestSuite struct {
 }
 
 func loadTestSuite(filePath string) (*TestSuite, error) {
-	data, err := ioutil.ReadFile(filePath)
+	// Open the file
+	f, err := os.Open(filePath)
+	if err != nil {
+		log.Fatalf("Failed to open file: %v", err)
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +176,7 @@ func TestCLICommands(t *testing.T) {
 			if exitCode != tc.Expect.ExitCode {
 				t.Errorf("Description: %s", tc.Description)
 				t.Errorf("Reason: Expected exit code %d, got %d", tc.Expect.ExitCode, exitCode)
+				t.Errorf("error: %v", cmd.Stderr)
 			}
 
 			// Validate stdout
@@ -211,12 +219,17 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []string) bo
 	}
 	return success
 }
-
 func verifyFileExists(t *testing.T, files []string) bool {
 	success := true
 	for _, file := range files {
-		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
-			t.Errorf("Reason: Expected file does not exist: %q", file)
+		fileAbs, err := filepath.Abs(file)
+		if err != nil {
+			log.Println(err)
+			return false
+		}
+
+		if _, err := os.Stat(fileAbs); errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Reason: Expected file does not exist: %q", fileAbs)
 			success = false
 		}
 	}
@@ -226,7 +239,13 @@ func verifyFileExists(t *testing.T, files []string) bool {
 func verifyFileContains(t *testing.T, filePatterns map[string][]string) bool {
 	success := true
 	for file, patterns := range filePatterns {
-		content, err := ioutil.ReadFile(file)
+		// Open the file
+		f, err := os.Open(file)
+		if err != nil {
+			log.Fatalf("Failed to open file: %v", err)
+		}
+		defer f.Close()
+		content, err := io.ReadAll(f)
 		if err != nil {
 			t.Errorf("Reason: Failed to read file %q: %v", file, err)
 			success = false
