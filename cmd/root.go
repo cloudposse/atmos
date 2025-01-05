@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/elewis787/boa"
 	cc "github.com/ivanpirog/coloredcobra"
@@ -114,6 +115,7 @@ func init() {
 }
 
 func initCobraConfig() {
+	RootCmd.SetOut(os.Stdout)
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 	oldUsageFunc := RootCmd.UsageFunc()
