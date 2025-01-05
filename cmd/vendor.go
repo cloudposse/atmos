@@ -13,5 +13,6 @@ var vendorCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(vendorCmd, false)
 	RootCmd.AddCommand(vendorCmd)
 }

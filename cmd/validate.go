@@ -13,5 +13,6 @@ var validateCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(validateCmd, false)
 	RootCmd.AddCommand(validateCmd)
 }

@@ -13,5 +13,6 @@ var awsEksCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(awsEksCmd, false)
 	awsCmd.AddCommand(awsEksCmd)
 }

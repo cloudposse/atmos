@@ -35,6 +35,7 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args, false)
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)

@@ -13,5 +13,6 @@ var atlantisGenerateCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(atlantisGenerateCmd, false)
 	atlantisCmd.AddCommand(atlantisGenerateCmd)
 }

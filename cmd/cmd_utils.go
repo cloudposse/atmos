@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -484,4 +486,102 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 // Check Atmos is version command
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && os.Args[1] == "version"
+}
+
+// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h"
+func handleHelpRequest(cmd *cobra.Command, args []string, isNativeCommandsAvailable bool) {
+	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
+		if isNativeCommandsAvailable {
+			template := templates.GenerateFromBaseTemplate(cmd.Use, []templates.HelpTemplateSections{
+				templates.LongDescription,
+				templates.Usage,
+				templates.Aliases,
+				templates.Examples,
+				templates.AvailableCommands,
+				templates.Flags,
+				templates.GlobalFlags,
+				templates.NativeCommands,
+				templates.DoubleDashHelp,
+				templates.Footer,
+			})
+			cmd.SetUsageTemplate(template)
+			cc.Init(&cc.Config{
+				RootCmd:  cmd,
+				Headings: cc.HiCyan + cc.Bold + cc.Underline,
+				Commands: cc.HiGreen + cc.Bold,
+				Example:  cc.Italic,
+				ExecName: cc.Bold,
+				Flags:    cc.Bold,
+			})
+		}
+		cmd.Help()
+		os.Exit(0)
+	}
+}
+
+func showUsageAndExit(cmd *cobra.Command, args []string, isNativeCommandsAvailable bool) {
+
+	var suggestions []string
+	var subCommand string = ""
+	unkonwnCommand := fmt.Sprintf("Unknown command: %q", cmd.CommandPath())
+
+	if len(args) > 0 {
+		// Show help if the first argument is "help"
+		handleHelpRequest(cmd, args, isNativeCommandsAvailable)
+		suggestions = cmd.SuggestionsFor(args[0])
+		subCommand = args[0]
+		unkonwnCommand = fmt.Sprintf(`Error: Unknkown command %q for %q`+"\n", subCommand, cmd.CommandPath())
+	}
+	if len(suggestions) > 0 {
+		u.PrintMessage(fmt.Sprintf("%s\n\nDid you mean this?", unkonwnCommand))
+		for _, suggestion := range suggestions {
+			u.PrintMessage(fmt.Sprintf("  %s\n", suggestion))
+		}
+	} else {
+		// Retrieve valid subcommands dynamically
+		validSubcommands := []string{}
+		for _, subCmd := range cmd.Commands() {
+			validSubcommands = append(validSubcommands, subCmd.Name())
+		}
+		u.PrintMessage(unkonwnCommand)
+		if len(validSubcommands) > 0 {
+			u.PrintMessage("Valid subcommands are:")
+			for _, sub := range validSubcommands {
+				u.PrintMessage(fmt.Sprintf("  %s", sub))
+			}
+		} else {
+			u.PrintMessage("No valid subcommands found")
+		}
+	}
+	u.PrintMessage(fmt.Sprintf(`Run '%s --help' for usage`, cmd.CommandPath()))
+	u.LogErrorAndExit(atmosConfig, errors.New(unkonwnCommand))
+}
+
+func addUsageCommand(cmd *cobra.Command, isNativeCommandsAvailable bool) {
+	cmd.Run = func(cmd *cobra.Command, args []string) {
+		showUsageAndExit(cmd, args, isNativeCommandsAvailable)
+	}
+}
+
+// hasPositionalArgs checks if a slice of strings contains an exact match for the target string.
+func hasPositionalArgs(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		if strings.HasPrefix(arg, "-") {
+			// Handle "--flag=value" syntax
+			if strings.Contains(arg, "=") {
+				continue
+			}
+
+			// Skip the next argument if it looks like a value for a flag
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++ // Skip the value
+			}
+		} else {
+			// If it's not a flag and not a value for a flag, it's positional
+			return true
+		}
+	}
+	return false
 }

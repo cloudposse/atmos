@@ -15,6 +15,7 @@ var describeComponentCmd = &cobra.Command{
 	Long:               `This command shows configuration for an Atmos component in an Atmos stack: atmos describe component <component> -s <stack>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args, false)
 		// Check Atmos configuration
 		checkAtmosConfig()
 

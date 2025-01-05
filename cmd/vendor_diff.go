@@ -15,6 +15,9 @@ var vendorDiffCmd = &cobra.Command{
 	Long:               `This command executes 'atmos vendor diff' CLI commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args, false)
+		// TODO: There was no documentation here:https://atmos.tools/cli/commands/vendor we need to know what this command requires to check if we should add usage help
+
 		// Check Atmos configuration
 		checkAtmosConfig()
 

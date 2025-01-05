@@ -13,5 +13,6 @@ var describeCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(describeCmd, false)
 	RootCmd.AddCommand(describeCmd)
 }

@@ -13,5 +13,6 @@ var helmfileGenerateCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(helmfileGenerateCmd, false)
 	helmfileCmd.AddCommand(helmfileGenerateCmd)
 }

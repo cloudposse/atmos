@@ -15,6 +15,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 	Long:               `This command generates a varfile for an atmos helmfile component: atmos helmfile generate varfile <component> -s <stack> -f <file>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args, false)
 		// Check Atmos configuration
 		checkAtmosConfig()
 

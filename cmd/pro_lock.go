@@ -15,6 +15,10 @@ var proLockCmd = &cobra.Command{
 	Long:               `This command calls the atmos pro API and locks a stack`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args, false)
+		if hasPositionalArgs(args) {
+			showUsageAndExit(cmd, args, false)
+		}
 		// Check Atmos configuration
 		checkAtmosConfig()
 

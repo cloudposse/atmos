@@ -13,5 +13,6 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(listCmd, false)
 	RootCmd.AddCommand(listCmd)
 }

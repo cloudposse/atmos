@@ -124,8 +124,15 @@ func initCobraConfig() {
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 	oldUsageFunc := RootCmd.UsageFunc()
-	RootCmd.SetUsageFunc(b.UsageFunc)
-
+	RootCmd.SetUsageFunc(func(c *cobra.Command) error {
+		fmt.Println("Usage:", c.Use)
+		if c.Use == "atmos" {
+			b.UsageFunc(c)
+			return nil
+		}
+		oldUsageFunc(c)
+		return nil
+	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()

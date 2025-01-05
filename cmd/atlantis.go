@@ -13,5 +13,6 @@ var atlantisCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(atlantisCmd, false)
 	RootCmd.AddCommand(atlantisCmd)
 }

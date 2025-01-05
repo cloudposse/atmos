@@ -13,5 +13,6 @@ var awsCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(awsCmd, false)
 	RootCmd.AddCommand(awsCmd)
 }

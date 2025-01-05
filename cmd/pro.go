@@ -13,5 +13,6 @@ var proCmd = &cobra.Command{
 }
 
 func init() {
+	addUsageCommand(proCmd, false)
 	RootCmd.AddCommand(proCmd)
 }

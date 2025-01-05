@@ -15,6 +15,11 @@ var describeConfigCmd = &cobra.Command{
 	Long:               `This command shows the final (deep-merged) CLI configuration: atmos describe config`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args, false)
+		if hasPositionalArgs(args) {
+			showUsageAndExit(cmd, args, false)
+		}
+
 		err := e.ExecuteDescribeConfigCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
