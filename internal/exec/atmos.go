@@ -5,12 +5,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -99,7 +99,7 @@ func ExecuteAtmosCmd() error {
 	fmt.Println()
 	u.PrintMessageInColor(fmt.Sprintf(
 		"Executing command:\n"+os.Args[0]+" %s %s --stack %s\n", selectedCommand, selectedComponent, selectedStack),
-		color.New(color.FgCyan),
+		theme.Colors.Info,
 	)
 	fmt.Println()
 
@@ -134,7 +134,8 @@ func ExecuteAtmosCmd() error {
 		}
 
 		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", selectedComponent, selectedStack)
-		u.PrintMessageInColor(m, color.New(color.FgGreen))
+		u.PrintMessageInColor(m, theme.Colors.Info)
+		u.PrintMessageInColor(m, theme.Colors.Success)
 		return nil
 	}
 
