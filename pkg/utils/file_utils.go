@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -77,6 +76,8 @@ func JoinAbsolutePathWithPaths(basePath string, paths []string) ([]string, error
 
 // TrimBasePathFromPath trims the base path prefix from the path
 func TrimBasePathFromPath(basePath string, path string) string {
+	basePath = filepath.ToSlash(basePath)
+	path = filepath.ToSlash(path)
 	return strings.TrimPrefix(path, basePath)
 }
 
@@ -133,7 +134,7 @@ func EnsureDir(fileName string) error {
 // SliceOfPathsContainsPath checks if a slice of file paths contains a path
 func SliceOfPathsContainsPath(paths []string, checkPath string) bool {
 	for _, v := range paths {
-		dir := path.Dir(v)
+		dir := filepath.Dir(v)
 		if dir == checkPath {
 			return true
 		}
@@ -185,11 +186,12 @@ func IsSocket(path string) (bool, error) {
 // If the path has a file extension, it checks if the file exists.
 // If the path does not have a file extension, it checks for the existence of the file with the provided path and the possible config file extensions
 func SearchConfigFile(path string) (string, bool) {
-	// check if the provided path has a file extension
+	// Check if the provided path has a file extension and the file exists
 	if filepath.Ext(path) != "" {
 		return path, FileExists(path)
 	}
-	// Define the possible config file extensions
+
+	// Check the possible config file extensions
 	configExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
 	for _, ext := range configExtensions {
 		filePath := path + ext
@@ -197,6 +199,7 @@ func SearchConfigFile(path string) (string, bool) {
 			return filePath, true
 		}
 	}
+
 	return "", false
 }
 
@@ -234,7 +237,7 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 	urlPath := parsedURL.Path
 
 	// Get the base name of the path
-	fileName := path.Base(urlPath)
+	fileName := filepath.Base(urlPath)
 	if fileName == "/" || fileName == "." {
 		return "", fmt.Errorf("unable to extract filename from URL: %s", rawURL)
 	}

@@ -1,39 +1,55 @@
 package schema
 
+import "github.com/cloudposse/atmos/pkg/store"
+
 type AtmosSectionMapType = map[string]any
 
-// CliConfiguration structure represents schema for `atmos.yaml` CLI config
-type CliConfiguration struct {
-	BasePath                      string         `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	CliConfigPath                 string         `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Components                    Components     `yaml:"components" json:"components" mapstructure:"components"`
-	Stacks                        Stacks         `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
-	Workflows                     Workflows      `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
-	Logs                          Logs           `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
-	Commands                      []Command      `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
-	CommandAliases                CommandAliases `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
-	Integrations                  Integrations   `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
-	Schemas                       Schemas        `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
-	Templates                     Templates      `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
-	Settings                      CliSettings    `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
-	Vendor                        Vendor         `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
-	Initialized                   bool           `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
-	StacksBaseAbsolutePath        string         `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
-	IncludeStackAbsolutePaths     []string       `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
-	ExcludeStackAbsolutePaths     []string       `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
-	TerraformDirAbsolutePath      string         `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
-	HelmfileDirAbsolutePath       string         `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
-	StackConfigFilesRelativePaths []string       `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
-	StackConfigFilesAbsolutePaths []string       `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
-	StackType                     string         `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
-	Default                       bool           `yaml:"default" json:"default" mapstructure:"default"`
-	Import                        []string       `yaml:"import" json:"import" mapstructure:"import"`
-	Version                       Version        `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+// AtmosConfiguration structure represents schema for `atmos.yaml` CLI config
+type AtmosConfiguration struct {
+	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
+	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
+	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Commands                      []Command          `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
+	CommandAliases                CommandAliases     `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	Integrations                  Integrations       `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
+	Schemas                       Schemas            `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
+	Templates                     Templates          `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Settings                      AtmosSettings      `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
+	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
+	StacksBaseAbsolutePath        string             `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
+	IncludeStackAbsolutePaths     []string           `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
+	ExcludeStackAbsolutePaths     []string           `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
+	TerraformDirAbsolutePath      string             `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
+	HelmfileDirAbsolutePath       string             `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
+	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
+	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
+	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
+	Default                       bool               `yaml:"default" json:"default" mapstructure:"default"`
+	Version                       Version            `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+
+	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
+	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
+	// functions to be able to call stores from within hooks.
+	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
 }
 
-type CliSettings struct {
-	ListMergeStrategy string `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Docs              Docs   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+type Terminal struct {
+	MaxWidth   int  `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
+	Pager      bool `yaml:"pager" json:"pager" mapstructure:"pager"`
+	Timestamps bool `yaml:"timestamps" json:"timestamps" mapstructure:"timestamps"`
+	Colors     bool `yaml:"colors" json:"colors" mapstructure:"colors"`
+	Unicode    bool `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
+}
+
+type AtmosSettings struct {
+	ListMergeStrategy string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
 }
 
 type Docs struct {
@@ -195,6 +211,7 @@ type ConfigAndStacksInfo struct {
 	ComponentSettingsSection      AtmosSectionMapType
 	ComponentOverridesSection     AtmosSectionMapType
 	ComponentProvidersSection     AtmosSectionMapType
+	ComponentHooksSection         AtmosSectionMapType
 	ComponentEnvSection           AtmosSectionMapType
 	ComponentEnvList              []string
 	ComponentBackendSection       AtmosSectionMapType
@@ -336,6 +353,8 @@ type Command struct {
 type CommandArgument struct {
 	Name        string `yaml:"name" json:"name" mapstructure:"name"`
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+	Default     string `yaml:"default" json:"default" mapstructure:"default"`
 }
 
 type CommandFlag struct {
@@ -478,6 +497,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings                  AtmosSectionMapType
 	BaseComponentEnv                       AtmosSectionMapType
 	BaseComponentProviders                 AtmosSectionMapType
+	BaseComponentHooks                     AtmosSectionMapType
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string
@@ -579,4 +599,58 @@ type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+
+type MarkdownSettings struct {
+	Document              MarkdownStyle `yaml:"document,omitempty" json:"document,omitempty" mapstructure:"document"`
+	BlockQuote            MarkdownStyle `yaml:"block_quote,omitempty" json:"block_quote,omitempty" mapstructure:"block_quote"`
+	Paragraph             MarkdownStyle `yaml:"paragraph,omitempty" json:"paragraph,omitempty" mapstructure:"paragraph"`
+	List                  MarkdownStyle `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	ListItem              MarkdownStyle `yaml:"list_item,omitempty" json:"list_item,omitempty" mapstructure:"list_item"`
+	Heading               MarkdownStyle `yaml:"heading,omitempty" json:"heading,omitempty" mapstructure:"heading"`
+	H1                    MarkdownStyle `yaml:"h1,omitempty" json:"h1,omitempty" mapstructure:"h1"`
+	H2                    MarkdownStyle `yaml:"h2,omitempty" json:"h2,omitempty" mapstructure:"h2"`
+	H3                    MarkdownStyle `yaml:"h3,omitempty" json:"h3,omitempty" mapstructure:"h3"`
+	H4                    MarkdownStyle `yaml:"h4,omitempty" json:"h4,omitempty" mapstructure:"h4"`
+	H5                    MarkdownStyle `yaml:"h5,omitempty" json:"h5,omitempty" mapstructure:"h5"`
+	H6                    MarkdownStyle `yaml:"h6,omitempty" json:"h6,omitempty" mapstructure:"h6"`
+	Text                  MarkdownStyle `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`
+	Strong                MarkdownStyle `yaml:"strong,omitempty" json:"strong,omitempty" mapstructure:"strong"`
+	Emph                  MarkdownStyle `yaml:"emph,omitempty" json:"emph,omitempty" mapstructure:"emph"`
+	Hr                    MarkdownStyle `yaml:"hr,omitempty" json:"hr,omitempty" mapstructure:"hr"`
+	Item                  MarkdownStyle `yaml:"item,omitempty" json:"item,omitempty" mapstructure:"item"`
+	Enumeration           MarkdownStyle `yaml:"enumeration,omitempty" json:"enumeration,omitempty" mapstructure:"enumeration"`
+	Code                  MarkdownStyle `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"`
+	CodeBlock             MarkdownStyle `yaml:"code_block,omitempty" json:"code_block,omitempty" mapstructure:"code_block"`
+	Table                 MarkdownStyle `yaml:"table,omitempty" json:"table,omitempty" mapstructure:"table"`
+	DefinitionList        MarkdownStyle `yaml:"definition_list,omitempty" json:"definition_list,omitempty" mapstructure:"definition_list"`
+	DefinitionTerm        MarkdownStyle `yaml:"definition_term,omitempty" json:"definition_term,omitempty" mapstructure:"definition_term"`
+	DefinitionDescription MarkdownStyle `yaml:"definition_description,omitempty" json:"definition_description,omitempty" mapstructure:"definition_description"`
+	HtmlBlock             MarkdownStyle `yaml:"html_block,omitempty" json:"html_block,omitempty" mapstructure:"html_block"`
+	HtmlSpan              MarkdownStyle `yaml:"html_span,omitempty" json:"html_span,omitempty" mapstructure:"html_span"`
+	Link                  MarkdownStyle `yaml:"link,omitempty" json:"link,omitempty" mapstructure:"link"`
+	LinkText              MarkdownStyle `yaml:"link_text,omitempty" json:"link_text,omitempty" mapstructure:"link_text"`
+}
+
+type MarkdownStyle struct {
+	BlockPrefix     string                 `yaml:"block_prefix,omitempty" json:"block_prefix,omitempty" mapstructure:"block_prefix"`
+	BlockSuffix     string                 `yaml:"block_suffix,omitempty" json:"block_suffix,omitempty" mapstructure:"block_suffix"`
+	Color           string                 `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
+	BackgroundColor string                 `yaml:"background_color,omitempty" json:"background_color,omitempty" mapstructure:"background_color"`
+	Bold            bool                   `yaml:"bold,omitempty" json:"bold,omitempty" mapstructure:"bold"`
+	Italic          bool                   `yaml:"italic,omitempty" json:"italic,omitempty" mapstructure:"italic"`
+	Underline       bool                   `yaml:"underline,omitempty" json:"underline,omitempty" mapstructure:"underline"`
+	Margin          int                    `yaml:"margin,omitempty" json:"margin,omitempty" mapstructure:"margin"`
+	Padding         int                    `yaml:"padding,omitempty" json:"padding,omitempty" mapstructure:"padding"`
+	Indent          int                    `yaml:"indent,omitempty" json:"indent,omitempty" mapstructure:"indent"`
+	IndentToken     string                 `yaml:"indent_token,omitempty" json:"indent_token,omitempty" mapstructure:"indent_token"`
+	LevelIndent     int                    `yaml:"level_indent,omitempty" json:"level_indent,omitempty" mapstructure:"level_indent"`
+	Format          string                 `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	Prefix          string                 `yaml:"prefix,omitempty" json:"prefix,omitempty" mapstructure:"prefix"`
+	StyleOverride   bool                   `yaml:"style_override,omitempty" json:"style_override,omitempty" mapstructure:"style_override"`
+	Chroma          map[string]ChromaStyle `yaml:"chroma,omitempty" json:"chroma,omitempty" mapstructure:"chroma"`
+}
+
+type ChromaStyle struct {
+	Color string `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
 }

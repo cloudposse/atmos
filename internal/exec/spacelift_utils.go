@@ -83,7 +83,7 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 
 // BuildSpaceliftStackNameFromComponentConfig builds Spacelift stack name from the component config
 func BuildSpaceliftStackNameFromComponentConfig(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
 
@@ -101,13 +101,13 @@ func BuildSpaceliftStackNameFromComponentConfig(
 		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
 
-		if cliConfig.Stacks.NameTemplate != "" {
-			contextPrefix, err = ProcessTmpl("name-template", cliConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		if atmosConfig.Stacks.NameTemplate != "" {
+			contextPrefix, err = ProcessTmpl("name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 			if err != nil {
 				return "", err
 			}
 		} else {
-			contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, context, GetStackNamePattern(cliConfig), configAndStacksInfo.Stack)
+			contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, context, GetStackNamePattern(atmosConfig), configAndStacksInfo.Stack)
 			if err != nil {
 				return "", err
 			}

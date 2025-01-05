@@ -7,7 +7,7 @@ import (
 
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
 func ExecuteDescribeStacks(
-	cliConfig schema.CliConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	filterByStack string,
 	components []string,
 	componentTypes []string,
@@ -16,5 +16,5 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 ) (map[string]any, error) {
 
-	return e.ExecuteDescribeStacks(cliConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, true, includeEmptyStacks)
+	return e.ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, true, includeEmptyStacks)
 }
