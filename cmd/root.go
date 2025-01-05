@@ -122,7 +122,7 @@ func initCobraConfig() {
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		if command.Use != "atmos" {
+		if command.Use != "atmos" || command.Flags().Changed("help") {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
 				u.LogErrorAndExit(atmosConfig, err)
