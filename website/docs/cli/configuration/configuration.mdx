@@ -213,6 +213,7 @@ Once the `base_path` is determined, Atmos will use it as the root directory for 
 Relative paths, such as `components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, `workflows.base_path`, `schemas.jsonschema.base_path`, and `schemas.opa.base_path`, are resolved relative to the specified `base_path`. Absolute paths for these settings will be respected and used as-is.
 
 Each setting (`components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, and `workflows.base_path`) operates independently and can accept either an absolute or a relative path.
+<File title="atmos config">
 
 ```mermaid
 flowchart TD
@@ -251,6 +252,8 @@ flowchart TD
     style U fill:#8D99AE,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
     style V fill:#8D99AE,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
 ```
+</File>
+
 ## Default CLI Configuration
 
 If `atmos.yaml` is not found in any of the searched locations, Atmos will use the following default CLI configuration:
