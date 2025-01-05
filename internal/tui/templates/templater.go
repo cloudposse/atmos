@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
@@ -19,18 +20,14 @@ type Templater struct {
 
 // commandStyle defines the styles for command formatting
 var (
-	commandNameStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("2")). // Green color for command name
-				Bold(true)
+	commandNameStyle = theme.Styles.CommandName
+	commandDescStyle = theme.Styles.Description
 
-	commandDescStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("7")) // White color for description
-
-	commandUnsupportedNameStyle = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("8")).
+	commandUnsupportedNameStyle = theme.Styles.CommandName.
+					Foreground(lipgloss.Color(theme.ColorGray)).
 					Bold(true)
-	commandUnsupportedDescStyle = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("8"))
+	commandUnsupportedDescStyle = theme.Styles.Description.
+					Foreground(lipgloss.Color(theme.ColorGray))
 )
 
 // formatCommand returns a styled string for a command and its description
