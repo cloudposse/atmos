@@ -98,9 +98,9 @@ stacks:
 	require.NoError(t, err)
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	cliConfig, err := InitCliConfig(configAndStacksInfo, false)
+	atmosConfig, err := InitCliConfig(configAndStacksInfo, false)
 	require.NoError(t, err)
-	require.True(t, cliConfig.Initialized)
+	require.True(t, atmosConfig.Initialized)
 }
 
 // Imports from atmos.d directory are processed automatically when no explicit imports defined
@@ -129,10 +129,10 @@ imports:
 	require.NoError(t, err)
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	cliConfig, err := InitCliConfig(configAndStacksInfo, false)
+	atmosConfig, err := InitCliConfig(configAndStacksInfo, false)
 	require.NoError(t, err)
 
-	if len(cliConfig.Import) == 0 {
+	if len(atmosConfig.Import) == 0 {
 		t.Fatalf("Expected imports to be processed from atmos.d directory")
 	}
 }
