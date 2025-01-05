@@ -294,7 +294,10 @@ func TestCLITerraformClean(t *testing.T) {
 		t.Fatalf("Failed to run terraform apply station -s dev: %v", stderr.String())
 		return
 	}
-	cmd = exec.Command(binaryPath, "terraform", "apply", "station", "-s", "dev")
+	cmd = exec.Command(binaryPath, "terraform", "apply", "station", "-s", "prod")
+	envVars = append(envVars, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
+	cmd.Env = envVars
+
 	err = cmd.Run()
 	if err != nil {
 		t.Log(stdout.String())
