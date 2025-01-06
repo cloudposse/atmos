@@ -13,6 +13,7 @@ Need help? Join the [Atmos community!](https://cloudposse.com/slack)
 We hold **office hours every Wednesday at 11:30 AM PST**. Join us for live Q&A sessions.
 
 [](https://cloudposse.com/office-hours)
+
 ## Paid Support  
 
 We offer priority support to GitHub Sponsors (Enterprise Tier).
