@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -424,7 +423,7 @@ func executeDescribeAffected(
 	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
 	// If the `atmos` base path is absolute, find the relative path between the local repo path and the `atmos` base path.
 	// This relative path (the difference) is then used below to join with the remote (cloned) target repo path.
-	if path.IsAbs(basePath) {
+	if filepath.IsAbs(basePath) {
 		basePath, err = filepath.Rel(localRepoFileSystemPathAbs, basePath)
 		if err != nil {
 			return nil, nil, nil, err
@@ -1241,7 +1240,7 @@ func areTerraformComponentModulesChanged(
 				continue
 			}
 
-			modulePath := filepath.Join(path.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
+			modulePath := filepath.Join(filepath.Dir(moduleConfig.Pos.Filename), moduleConfig.Source)
 
 			modulePathAbs, err := filepath.Abs(modulePath)
 			if err != nil {

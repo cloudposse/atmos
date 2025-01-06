@@ -168,28 +168,79 @@ func preCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var sb strings.Builder
-	if len(args) != len(commandConfig.Arguments) {
-		if len(commandConfig.Arguments) == 0 {
-			u.LogError(schema.AtmosConfiguration{}, errors.New("invalid command"))
+
+	//checking for zero arguments in config
+	if len(commandConfig.Arguments) == 0 {
+		if len(commandConfig.Steps) > 0 {
+			// do nothing here; let the code proceed
+		} else if len(commandConfig.Commands) > 0 {
+			// show sub-commands
 			sb.WriteString("Available command(s):\n")
 			for i, c := range commandConfig.Commands {
-				sb.WriteString(fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name))
+				sb.WriteString(
+					fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name),
+				)
 			}
 			u.LogInfo(schema.AtmosConfiguration{}, sb.String())
 			os.Exit(1)
+		} else {
+			// truly invalid, nothing to do
+			u.LogError(schema.AtmosConfiguration{}, errors.New(
+				"invalid command: no args, no steps, no sub-commands",
+			))
+			os.Exit(1)
 		}
-		sb.WriteString(fmt.Sprintf("Command requires %d argument(s):\n", len(commandConfig.Arguments)))
-		for i, arg := range commandConfig.Arguments {
-			if arg.Name == "" {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, errors.New("invalid argument configuration: empty argument name"))
+	}
+
+	//Check on many arguments required and have no default value
+	requiredNoDefaultCount := 0
+	for _, arg := range commandConfig.Arguments {
+		if arg.Required && arg.Default == "" {
+			requiredNoDefaultCount++
+		}
+	}
+
+	// Check if the number of arguments provided is less than the required number of arguments
+	if len(args) < requiredNoDefaultCount {
+		sb.WriteString(
+			fmt.Sprintf("Command requires at least %d argument(s) (no defaults provided for them):\n",
+				requiredNoDefaultCount))
+
+		// List out which arguments are missing
+		missingIndex := 1
+		for _, arg := range commandConfig.Arguments {
+			if arg.Required && arg.Default == "" {
+				sb.WriteString(fmt.Sprintf("  %d. %s\n", missingIndex, arg.Name))
+				missingIndex++
 			}
-			sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, arg.Name))
 		}
 		if len(args) > 0 {
-			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s", len(args), strings.Join(args, ", ")))
+			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
 		u.LogErrorAndExit(schema.AtmosConfiguration{}, errors.New(sb.String()))
 	}
+
+	// Merge user-supplied arguments with defaults
+	finalArgs := make([]string, len(commandConfig.Arguments))
+
+	for i, arg := range commandConfig.Arguments {
+		if i < len(args) {
+			finalArgs[i] = args[i]
+		} else {
+			if arg.Default != "" {
+				finalArgs[i] = fmt.Sprintf("%v", arg.Default)
+			} else {
+				// This theoretically shouldn't happen:
+				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, errors.New(sb.String()))
+			}
+		}
+	}
+	// Set the resolved arguments as annotations on the command
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	cmd.Annotations["resolvedArgs"] = strings.Join(finalArgs, ",")
 
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
@@ -223,12 +274,19 @@ func executeCustomCommand(
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
 
+	mergedArgsStr := cmd.Annotations["resolvedArgs"]
+	finalArgs := strings.Split(mergedArgsStr, ",")
+	if mergedArgsStr == "" {
+		// If for some reason no annotation was set, just fallback
+		finalArgs = args
+	}
+
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
 		// Prepare template data for arguments
 		argumentsData := map[string]string{}
 		for ix, arg := range commandConfig.Arguments {
-			argumentsData[arg.Name] = args[ix]
+			argumentsData[arg.Name] = finalArgs[ix]
 		}
 
 		// Prepare template data for flags
@@ -404,6 +462,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		u.PrintMessageInColor("atmos.yaml", c1)
 		fmt.Println(" CLI config file was not found.")
 		fmt.Print("\nThe default Atmos stacks directory is set to ")
+
 		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
 		fmt.Println(",\nbut the directory does not exist in the current path.")
 	} else {

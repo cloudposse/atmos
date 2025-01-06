@@ -118,6 +118,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 			// https://en.wikipedia.org/wiki/Glob_(programming)
 			// https://github.com/bmatcuk/doublestar#patterns
 			for _, excludePath := range vendorComponentSpec.Source.ExcludedPaths {
+				excludePath := filepath.Clean(excludePath)
 				excludeMatch, err := u.PathMatch(excludePath, src)
 				if err != nil {
 					return true, err
@@ -135,6 +136,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 			if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
 				anyMatches := false
 				for _, includePath := range vendorComponentSpec.Source.IncludedPaths {
+					includePath := filepath.Clean(includePath)
 					includeMatch, err := u.PathMatch(includePath, src)
 					if err != nil {
 						return true, err
@@ -179,7 +181,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 	componentPath2 := componentPath
 	if sourceIsLocalFile {
 		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, filepath.Base(uri))
+			componentPath2 = filepath.Join(componentPath, sanitizeFileName(uri))
 		}
 	}
 

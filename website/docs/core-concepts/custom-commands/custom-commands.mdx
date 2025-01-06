@@ -39,18 +39,22 @@ atmos hello
 
 ## Positional Arguments
 
-Atmos also can support positional arguments. Arguments do not support default values and are required if defined.
+Atmos also supports positional arguments. If a positional argument is required but not provided by the user, 
+the command will fail—unless you define a default in your config. 
 
-If we add the following to `atmos.yaml`, will introduce a new `hello` command that accepts one `name` argument.
+For the example, adding the following to `atmos.yaml` will introduce a new `greet` command that accepts one `name` argument,
+but uses a default of "John Doe" if none is provided. 
 
 ```yaml
 # subcommands
 commands:
-  - name: hello
+  - name: greet
     description: This command says hello to the provided name
     arguments:
       - name: name
         description: Name to greet
+        required: true
+        default: John Doe
     steps:
       - "echo Hello {{ .Arguments.name }}!"
 ```
@@ -58,7 +62,12 @@ commands:
 We can run this example like this:
 
 ```shell
-atmos hello world
+atmos greet Alice
+```
+or defaulting to "John Doe"
+
+```shell
+atmos greet
 ```
 
 ## Passing Flags

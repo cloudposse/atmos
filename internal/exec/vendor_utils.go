@@ -2,8 +2,10 @@ package exec
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -183,6 +185,7 @@ func ReadAndProcessVendorConfigFile(
 
 	var configFiles []string
 	if fileInfo.IsDir() {
+		foundVendorConfigFile = filepath.ToSlash(foundVendorConfigFile)
 		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "*.{yaml,yml}")
 		if err != nil {
 			return vendorConfig, false, "", err
@@ -513,6 +516,37 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
 }
 
+// sanitizeFileName replaces invalid characters and query strings with underscores for Windows.
+func sanitizeFileName(uri string) string {
+
+	// Parse the URI to handle paths and query strings properly
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		// Fallback to basic filepath.Base if URI parsing fails
+		return filepath.Base(uri)
+	}
+
+	// Extract the path component of the URI
+	base := filepath.Base(parsed.Path)
+
+	// This logic applies only to Windows
+	if runtime.GOOS != "windows" {
+		return base
+	}
+
+	// Replace invalid characters for Windows
+	base = strings.Map(func(r rune) rune {
+		switch r {
+		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
+			return '_'
+		default:
+			return r
+		}
+	}, base)
+
+	return base
+}
+
 func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
 	copyOptions := cp.Options{
 		Skip:          generateSkipFunction(atmosConfig, tempDir, s),
@@ -523,7 +557,9 @@ func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath str
 
 	// Adjust the target path if it's a local file with no extension
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		targetPath = filepath.Join(targetPath, filepath.Base(uri))
+		// Sanitize the URI for safe filenames, especially on Windows
+		sanitizedBase := sanitizeFileName(uri)
+		targetPath = filepath.Join(targetPath, sanitizedBase)
 	}
 
 	return cp.Copy(tempDir, targetPath, copyOptions)

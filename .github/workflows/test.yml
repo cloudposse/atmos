@@ -40,6 +40,10 @@ jobs:
       - name: Build
         run: echo "Building on ${{ matrix.os }}"
 
+      - name: Add GNU tar to PATH (significantly faster than windows tar)
+        if: matrix.target == 'windows'
+        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
@@ -75,18 +79,56 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            target: linux
-          - os: windows-latest
-            target: windows
-          - os: macos-latest
-            target: macos
+        flavor:
+          - { os: ubuntu-latest, target: linux }
+          - { os: windows-latest, target: windows }
+          - { os: macos-latest, target: macos }
     timeout-minutes: 15
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
+
+      - name: Add GNU tar to PATH (significantly faster than windows tar)
+        if: matrix.flavor.target == 'windows'
+        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+
+      - name: Download build artifacts for ${{ matrix.flavor.target }}
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.flavor.target }}
+          path: ${{ github.workspace }}
+
+      - name: Add build artifacts directory to PATH for linux or macos
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
+        run: |
+          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          chmod +x "${{ github.workspace }}/atmos"
+
+      - name: Add build artifacts directory to PATH for windows
+        if: matrix.flavor.target == 'windows'
+        shell: pwsh
+        run: |
+          $atmosPath = Join-Path ${{ github.workspace }} "atmos.exe"
+          if (-not (Test-Path $atmosPath)) {
+            throw "atmos.exe not found at: $atmosPath"
+          }
+          echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Check atmos.exe integrity
+        if: matrix.flavor.target == 'windows'
+        shell: pwsh
+        run: |
+          Write-Output "PATH=$Env:PATH"
+          Write-Output "PATHEXT=$Env:PATHEXT"
+          Get-ChildItem "${{ github.workspace }}"
+          Get-Command "${{ github.workspace }}\atmos.exe"
+          atmos version
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -100,8 +142,7 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 10
-        run: |
-          make testacc
+        run: make testacc
 
   docker:
     name: "Docker Lint"
@@ -279,26 +320,56 @@ jobs:
 
     timeout-minutes: 20
     steps:
-      - name: Download build artifacts
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Add GNU tar to PATH (significantly faster than windows tar)
+        if: matrix.flavor.target == 'windows'
+        run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
+
+      - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
-          path: /usr/local/bin
+          path: ${{ github.workspace }}
 
-      - name: Set execute permissions on atmos
-        run: chmod +x /usr/local/bin/atmos
+      - name: Add build artifacts directory to PATH for linux or macos
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
+        run: |
+          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          chmod +x "${{ github.workspace }}/atmos"
 
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+      - name: Add build artifacts directory to PATH for windows
+        if: matrix.flavor.target == 'windows'
+        run: |
+          echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Run tests for ${{ matrix.demo-folder }}
+      - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
+        working-directory: examples/${{ matrix.demo-folder }}
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
-          cd examples/${{ matrix.demo-folder }}
+          atmos test
+
+      - name: Check atmos.exe integrity
+        if: matrix.flavor.target == 'windows'
+        shell: pwsh
+        run: |
+          Write-Output "PATH=$Env:PATH"
+          Write-Output "PATHEXT=$Env:PATHEXT"
+          Get-ChildItem "${{ github.workspace }}"
+          Get-Command "${{ github.workspace }}\atmos.exe"
+          atmos version
+
+      - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
+        working-directory: examples/${{ matrix.demo-folder }}
+        if: matrix.flavor.target == 'windows'
+        shell: pwsh
+        run: |
           atmos test
 
   # run other demo tests
@@ -352,7 +423,7 @@ jobs:
             --minimum-failure-severity=warning
             --recursive
             --config=${{ github.workspace }}/examples/.tflint.hcl
-          fail_on_error: true
+          fail_level: error
 
   # run other demo tests
   validate:

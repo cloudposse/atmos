@@ -184,7 +184,7 @@ func ProcessComponentConfig(
 	return nil
 }
 
-// processCommandLineArgs processes command-line args
+// ProcessCommandLineArgs processes command-line args
 func ProcessCommandLineArgs(
 	componentType string,
 	cmd *cobra.Command,
@@ -341,6 +341,7 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentType,
 			configAndStacksInfo.ComponentFromArg,
 		)
+
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -452,6 +453,10 @@ func ProcessStacks(
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
+	}
+
+	if configAndStacksInfo.ComponentSection == nil {
+		configAndStacksInfo.ComponentSection = make(map[string]any)
 	}
 
 	// Add imports
@@ -674,7 +679,10 @@ func ProcessStacks(
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
-func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (schema.ArgsAndFlagsInfo, error) {
+func processArgsAndFlags(
+	componentType string,
+	inputArgsAndFlags []string,
+) (schema.ArgsAndFlagsInfo, error) {
 	var info schema.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
@@ -686,6 +694,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 		info.NeedHelp = true
 		return info, nil
 	}
+
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "version" {
 		info.SubCommand = inputArgsAndFlags[0]
 		return info, nil
@@ -1066,6 +1075,14 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			if additionalArgsAndFlags[0] == "state" &&
 				u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
 				info.SubCommand = fmt.Sprintf("state %s", additionalArgsAndFlags[1])
+				twoWordsCommand = true
+			}
+
+			// `terraform providers` commands
+			// https://developer.hashicorp.com/terraform/cli/commands/providers
+			if additionalArgsAndFlags[0] == "providers" &&
+				u.SliceContainsString([]string{"lock", "mirror", "schema"}, additionalArgsAndFlags[1]) {
+				info.SubCommand = fmt.Sprintf("providers %s", additionalArgsAndFlags[1])
 				twoWordsCommand = true
 			}
 		}
