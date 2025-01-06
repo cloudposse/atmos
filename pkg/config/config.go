@@ -88,6 +88,21 @@ var (
 				Frequency: "daily",
 			},
 		},
+		Settings: &schema.AtmosSettings{
+			Terminal: &schema.TerminalSettings{
+				SyntaxHighlighting: &schema.SyntaxHighlightingSettings{
+					Enabled:   true,
+					Lexer:     "yaml",
+					Formatter: "terminal",
+					Style:     "dracula",
+					Pager:     false,
+					Options: &schema.SyntaxHighlightOptions{
+						LineNumbers: false,
+						Wrap:        false,
+					},
+				},
+			},
+		},
 	}
 )
 
@@ -110,6 +125,17 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v := viper.New()
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
+
+	// Load default configuration first
+	defaultConfigJSON, err := json.Marshal(defaultCliConfig)
+	if err != nil {
+		return atmosConfig, err
+	}
+
+	defaultReader := bytes.NewReader(defaultConfigJSON)
+	if err := v.ReadConfig(defaultReader); err != nil {
+		return atmosConfig, err
+	}
 
 	// Default configuration values
 	v.SetDefault("components.helmfile.use_eks", true)
@@ -263,6 +289,31 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		atmosConfig.Components.Terraform.AppendUserAgent = fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version)
 	}
 
+	// Initialize settings with defaults if not set
+	if atmosConfig.Settings == nil {
+		atmosConfig.Settings = defaultCliConfig.Settings
+	} else {
+		// Only initialize nil fields with defaults
+		if atmosConfig.Settings.Terminal == nil {
+			atmosConfig.Settings.Terminal = defaultCliConfig.Settings.Terminal
+		} else if atmosConfig.Settings.Terminal.SyntaxHighlighting == nil {
+			atmosConfig.Settings.Terminal.SyntaxHighlighting = defaultCliConfig.Settings.Terminal.SyntaxHighlighting
+		} else {
+			// Update settings from viper
+			atmosConfig.Settings.Terminal.SyntaxHighlighting.Enabled = v.GetBool("settings.terminal.syntax_highlighting.enabled")
+			atmosConfig.Settings.Terminal.SyntaxHighlighting.Lexer = v.GetString("settings.terminal.syntax_highlighting.lexer")
+			atmosConfig.Settings.Terminal.SyntaxHighlighting.Formatter = v.GetString("settings.terminal.syntax_highlighting.formatter")
+			atmosConfig.Settings.Terminal.SyntaxHighlighting.Style = v.GetString("settings.terminal.syntax_highlighting.style")
+			atmosConfig.Settings.Terminal.SyntaxHighlighting.Pager = v.GetBool("settings.terminal.syntax_highlighting.pager")
+
+			if atmosConfig.Settings.Terminal.SyntaxHighlighting.Options == nil {
+				atmosConfig.Settings.Terminal.SyntaxHighlighting.Options = &schema.SyntaxHighlightOptions{}
+			}
+			atmosConfig.Settings.Terminal.SyntaxHighlighting.Options.LineNumbers = v.GetBool("settings.terminal.syntax_highlighting.options.line_numbers")
+			atmosConfig.Settings.Terminal.SyntaxHighlighting.Options.Wrap = v.GetBool("settings.terminal.syntax_highlighting.options.wrap")
+		}
+	}
+
 	// Check config
 	err = checkConfig(atmosConfig)
 	if err != nil {
@@ -375,9 +426,55 @@ func processConfigFile(
 		}
 	}(reader)
 
-	err = v.MergeConfig(reader)
-	if err != nil {
+	// Create a new viper instance for this config file
+	fileViper := viper.New()
+	fileViper.SetConfigType("yaml")
+
+	// Read the config file
+	if err := fileViper.ReadConfig(reader); err != nil {
 		return false, err
+	}
+
+	// Get all settings from the file
+	settings := fileViper.AllSettings()
+
+	// Merge settings into the main viper instance
+	for key, value := range settings {
+		if key == "settings" {
+			// Handle settings section separately to preserve nested values
+			if settingsMap, ok := value.(map[string]interface{}); ok {
+				if terminalMap, ok := settingsMap["terminal"].(map[string]interface{}); ok {
+					if syntaxMap, ok := terminalMap["syntax_highlighting"].(map[string]interface{}); ok {
+						// Set each field individually to preserve nested values
+						if enabled, ok := syntaxMap["enabled"].(bool); ok {
+							v.Set("settings.terminal.syntax_highlighting.enabled", enabled)
+						}
+						if lexer, ok := syntaxMap["lexer"].(string); ok {
+							v.Set("settings.terminal.syntax_highlighting.lexer", lexer)
+						}
+						if formatter, ok := syntaxMap["formatter"].(string); ok {
+							v.Set("settings.terminal.syntax_highlighting.formatter", formatter)
+						}
+						if style, ok := syntaxMap["style"].(string); ok {
+							v.Set("settings.terminal.syntax_highlighting.style", style)
+						}
+						if pager, ok := syntaxMap["pager"].(bool); ok {
+							v.Set("settings.terminal.syntax_highlighting.pager", pager)
+						}
+						if options, ok := syntaxMap["options"].(map[string]interface{}); ok {
+							if lineNumbers, ok := options["line_numbers"].(bool); ok {
+								v.Set("settings.terminal.syntax_highlighting.options.line_numbers", lineNumbers)
+							}
+							if wrap, ok := options["wrap"].(bool); ok {
+								v.Set("settings.terminal.syntax_highlighting.options.wrap", wrap)
+							}
+						}
+					}
+				}
+			}
+		} else {
+			v.Set(key, value)
+		}
 	}
 
 	return true, nil
