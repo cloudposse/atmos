@@ -208,6 +208,7 @@ tests:
     expect:
       stderr:
         - "ATMOS_SHLVL.*exceeds maximum allowed depth.*(\r?\n)+exit status 1(\r?\n)+exit status 1.*"
+      exit_code: 1
 
   - name: atmos terraform deploy unlocked component
     enabled: true
