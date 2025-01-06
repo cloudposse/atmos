@@ -53,7 +53,7 @@ func (s *InMemoryStore) Get(stack, component, key string) (interface{}, error) {
 	fullKey := s.getKey(stack, component, key)
 	value, exists := s.data[fullKey]
 	if !exists {
-		return nil, fmt.Errorf("key not found: %s", fullKey)
+		return nil, fmt.Errorf("key '%s' not found", key)
 	}
 	return value, nil
 }
