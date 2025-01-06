@@ -17,7 +17,7 @@ We hold **office hours every Wednesday at 11:30 AM PST**. Join us for live Q&A s
 
 We offer priority support to GitHub Sponsors (Enterprise Tier).
 
-[🔗](https://github.com/sponsors/cloudposse)
+[](https://github.com/sponsors/cloudposse)
 
 Included with sponsorship, we host **30-minute workshops twice a week** to:  
 - Answer your questions.  
