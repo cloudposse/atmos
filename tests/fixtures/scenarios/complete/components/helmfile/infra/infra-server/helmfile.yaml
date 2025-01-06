@@ -1,0 +1,118 @@
+bases:
+  - environments.yaml
+---
+repositories:
+  # Repo of new Kubernetes charts in development
+  - name: "kubernetes-incubator"
+    url: "https://charts.helm.sh/incubator"
+
+releases:
+  ###############################################################################
+  ## Use Kubernetes raw chart to deploy the echo server                         #
+  ## https://github.com/helm/charts/tree/master/incubator/raw                   #
+  ###############################################################################
+  - name: {{ .Values.server_name }}
+    chart: "kubernetes-incubator/raw"
+    namespace: "echo"
+    createNamespace: true
+    version: "0.2.3"
+    wait: true
+    atomic: true
+    cleanupOnFail: true
+    installed: {{ .Values.installed }}
+    values:
+      - resources:
+          - apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: {{ .Values.server_name }}
+              labels:
+                app: {{ .Values.server_name }}
+            spec:
+              replicas: 1
+              selector:
+                matchLabels:
+                  app: {{ .Values.server_name }}
+              template:
+                metadata:
+                  name: {{ .Values.server_name }}
+                  labels:
+                    app: {{ .Values.server_name }}
+                spec:
+                  containers:
+                    - name: {{ .Values.server_name }}
+                      image: gcr.io/google_containers/echoserver:1.10
+                      imagePullPolicy: Always
+                      ports:
+                        - name: default
+                          containerPort: 8080
+                          protocol: TCP
+          - apiVersion: v1
+            kind: Service
+            metadata:
+              name: {{ .Values.server_name }}
+            spec:
+              type: {{ index .Values "service_type" | default "NodePort" }}
+              ports:
+                - targetPort: default
+                  port: 80
+                  protocol: TCP
+                  name: http
+              selector:
+                app: {{ .Values.server_name }}
+
+          - apiVersion: {{ .Values.ingress_api }}
+            kind: Ingress
+            metadata:
+              annotations:
+                kubernetes.io/ingress.class: {{ .Values.ingress_class | quote }}
+                {{- if eq (printf "%v" .Values.aws_load_balancer_controller_enabled) "true" }}
+                alb.ingress.kubernetes.io/group.name: {{ index .Values "alb_group_name" | default "common" }}
+                alb.ingress.kubernetes.io/scheme: internet-facing
+                {{- if eq (printf "%v" .Values.alb_ssl_redirect_enabled) "true" }}
+                alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+                {{- end }}
+                {{- if eq (printf "%v" .Values.tls_enabled) "true" }}
+                alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80},{"HTTPS":443}]'
+                {{- else }}
+                alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+                {{- end }}
+                {{- end }}
+                {{- if (index .Values "tls_certificate_cluster_issuer") }}
+                cert-manager.io/cluster-issuer: {{ .Values.tls_certificate_cluster_issuer | quote }}
+                {{- end }}
+              name: {{ .Values.server_name }}
+            spec:
+              rules:
+                - host: {{ printf .Values.hostname_template .Values.stage .Values.environment }}
+                  http:
+                    paths:
+                    {{- if eq (printf "%v" .Values.aws_load_balancer_controller_enabled) "true" }}
+                    # Must use implementation specific wildcard paths
+                    # https://github.com/kubernetes-sigs/aws-load-balancer-controller/issues/1702#issuecomment-736890777
+                    {{- if eq (printf "%v" .Values.alb_ssl_redirect_enabled) "true" }}
+                    - path: /*
+                      backend:
+                        serviceName: ssl-redirect
+                        servicePort: use-annotation
+                      {{- end }}
+                    - path: /*
+                      backend:
+                        serviceName: {{ .Values.server_name }}
+                        servicePort: http
+                    {{- else }}
+                    - path: /
+                      backend:
+                        serviceName: {{ .Values.server_name }}
+                        servicePort: http
+                    {{- end }}
+              {{- if eq (printf "%v" .Values.tls_enabled) "true" }}
+              tls: # < placing a host in the TLS config will indicate a certificate should be created
+                - hosts:
+                    - {{ printf .Values.hostname_template .Values.stage .Values.environment | quote }}
+                  {{- if eq (printf "%v" .Values.alb_certificate_autodiscovery_enabled) "false" }}
+                  {{- with .Values.tls_secret_name }}
+                  secretName: {{ . | quote }} # < cert-manager will store the created certificate in this secret.
+                    {{- end }}
+                  {{- end }}
+              {{- end }}
