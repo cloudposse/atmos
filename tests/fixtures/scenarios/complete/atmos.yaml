@@ -31,7 +31,7 @@ components:
     command: terraform
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
     # Supports both absolute and relative paths
-    base_path: "components/terraform"
+    base_path: "../../components/terraform"
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
     apply_auto_approve: false
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
@@ -43,7 +43,7 @@ components:
   helmfile:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_BASE_PATH' ENV var, or '--helmfile-dir' command-line argument
     # Supports both absolute and relative paths
-    base_path: "components/helmfile"
+    base_path: "../../components/helmfile"
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_USE_EKS' ENV var
     # If not specified, defaults to 'true'
     use_eks: true
