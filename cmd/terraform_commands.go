@@ -261,6 +261,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 			if len(os.Args) > 3 {
 				args = os.Args[2:]
 			}
+			handleHelpRequest(cmd_, args, false)
 			return terraformRun(parentCmd, cmd_, args)
 		}
 		parentCmd.AddCommand(cmd)
