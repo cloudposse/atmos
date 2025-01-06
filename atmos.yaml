@@ -315,6 +315,8 @@ settings:
   #            If the source and destination lists have the same length, all items in the destination lists are
   #            deep-merged with all items in the source list.
   list_merge_strategy: replace
+
+  # Terminal settings for displaying content
   terminal:
     syntax_highlighting:
       enabled: true
@@ -325,9 +327,6 @@ settings:
       options:
         line_numbers: true  # Display line numbers
         wrap: false         # Wrap long lines
-
-  # Terminal settings for displaying content
-  terminal:
     max_width: 120      # Maximum width for terminal output
     pager: true         # Use pager for long output
     timestamps: false   # Show timestamps in logs
