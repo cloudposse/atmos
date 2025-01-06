@@ -14,9 +14,13 @@ var supportMarkdown string
 
 // supportCmd represents the support command
 var supportCmd = &cobra.Command{
-	Use:   "support",
-	Short: "Show Atmos support options",
-	Long:  `Display information about Atmos support options, including community resources and paid support.`,
+	Use:                "support",
+	Short:              "Show Atmos support options",
+	Long:               `Display information about Atmos support options, including community resources and paid support.`,
+	Args:               cobra.NoArgs,
+	DisableSuggestions: true,
+	SilenceUsage:       true,
+	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		renderer, err := glamour.NewTermRenderer(
 			glamour.WithAutoStyle(),
