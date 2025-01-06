@@ -21,6 +21,30 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// MaxShellDepth is the maximum number of nested shell commands that can be executed
+const MaxShellDepth = 10
+
+// getNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded
+func getNextShellLevel() (int, error) {
+	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+	shellVal := 0
+	if atmosShellLvl != "" {
+		val, err := strconv.Atoi(atmosShellLvl)
+		if err != nil {
+			return 0, fmt.Errorf("invalid ATMOS_SHLVL value: %s", atmosShellLvl)
+		}
+		shellVal = val
+	}
+
+	shellVal++
+
+	if shellVal > MaxShellDepth {
+		return 0, fmt.Errorf("ATMOS_SHLVL (%d) exceeds maximum allowed depth (%d). Infinite recursion?",
+			shellVal, MaxShellDepth)
+	}
+	return shellVal, nil
+}
+
 // ExecuteShellCommand prints and executes the provided command with args and flags
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -31,8 +55,14 @@ func ExecuteShellCommand(
 	dryRun bool,
 	redirectStdError string,
 ) error {
+	newShellLevel, err := getNextShellLevel()
+	if err != nil {
+		return err
+	}
+	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+
 	cmd := exec.Command(command, args...)
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(os.Environ(), updatedEnv...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -83,6 +113,12 @@ func ExecuteShell(
 	env []string,
 	dryRun bool,
 ) error {
+	newShellLevel, err := getNextShellLevel()
+	if err != nil {
+		return err
+	}
+	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+
 	u.LogDebug(atmosConfig, "\nExecuting command:")
 	u.LogDebug(atmosConfig, command)
 
@@ -90,7 +126,7 @@ func ExecuteShell(
 		return nil
 	}
 
-	return shellRunner(command, name, dir, env, os.Stdout)
+	return shellRunner(command, name, dir, updatedEnv, os.Stdout)
 }
 
 // ExecuteShellAndReturnOutput runs a shell script and capture its standard output
@@ -104,6 +140,12 @@ func ExecuteShellAndReturnOutput(
 ) (string, error) {
 	var b bytes.Buffer
 
+	newShellLevel, err := getNextShellLevel()
+	if err != nil {
+		return "", err
+	}
+	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+
 	u.LogDebug(atmosConfig, "\nExecuting command:")
 	u.LogDebug(atmosConfig, command)
 
@@ -111,7 +153,7 @@ func ExecuteShellAndReturnOutput(
 		return "", nil
 	}
 
-	err := shellRunner(command, name, dir, env, &b)
+	err = shellRunner(command, name, dir, updatedEnv, &b)
 	if err != nil {
 		return "", err
 	}
