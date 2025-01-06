@@ -8,7 +8,6 @@ import (
 	"github.com/elewis787/boa"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
@@ -72,11 +71,6 @@ func Execute() error {
 		Flags:    cc.Bold,
 	})
 
-	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
-	err := RootCmd.ParseFlags(os.Args)
-	if err != nil && !errors.Is(err, pflag.ErrHelp) {
-		u.LogErrorAndExit(atmosConfig, err)
-	}
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
@@ -89,7 +83,7 @@ func Execute() error {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, initErr)
 		}
 	}
-
+	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
@@ -122,6 +116,7 @@ func init() {
 }
 
 func initCobraConfig() {
+	RootCmd.SetOut(os.Stdout)
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 	oldUsageFunc := RootCmd.UsageFunc()
@@ -137,7 +132,7 @@ func initCobraConfig() {
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		if command.Use != "atmos" {
+		if command.Use != "atmos" || command.Flags().Changed("help") {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
 				u.LogErrorAndExit(atmosConfig, err)
