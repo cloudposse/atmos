@@ -24,19 +24,21 @@ func getParams(input string, currentStack string) (params, error) {
 		return params{}, fmt.Errorf("invalid Atmos Store YAML function execution:: %s\ninvalid parameters: store_name, {stack}, component, key", input)
 	}
 
-	params := params{storeName: strings.TrimSpace(parts[0])}
+	retParams := params{storeName: strings.TrimSpace(parts[0])}
 
 	if partsLength == 4 {
-		params.stack = strings.TrimSpace(parts[1])
-		params.component = strings.TrimSpace(parts[2])
-		params.key = strings.TrimSpace(parts[3])
+		retParams.stack = strings.TrimSpace(parts[1])
+		retParams.component = strings.TrimSpace(parts[2])
+		retParams.key = strings.TrimSpace(parts[3])
+	} else if partsLength == 3 {
+		retParams.stack = currentStack
+		retParams.component = strings.TrimSpace(parts[1])
+		retParams.key = strings.TrimSpace(parts[2])
 	} else {
-		params.stack = currentStack
-		params.component = strings.TrimSpace(parts[1])
-		params.key = strings.TrimSpace(parts[2])
+		return params{}, fmt.Errorf("invalid Atmos Store YAML function execution:: %s\ninvalid parameters: store_name, {stack}, component, key", input)
 	}
 
-	return params, nil
+	return retParams, nil
 }
 
 func processTagStore(atmosConfig schema.AtmosConfiguration, input string, currentStack string) any {
@@ -60,7 +62,8 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 
 	value, err := store.Get(params.stack, params.component, params.key)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+
+		u.LogErrorAndExit(atmosConfig, fmt.Errorf("an error occurred while looking up key %s in stack %s and component %s from store %s\n%v", params.key, params.stack, params.component, params.storeName, err))
 	}
 
 	return value
