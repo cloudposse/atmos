@@ -377,7 +377,7 @@ func ExecuteAtmosVendorInternal(
 			if err != nil {
 				return err
 			}
-			targetPath := filepath.Join(vendorConfigFilePath, target)
+			targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
 			pkgName := s.Component
 			if pkgName == "" {
 				pkgName = uri
@@ -507,12 +507,22 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
 	if !useOciScheme {
-		if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, *uri); err == nil {
+		if absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri); err == nil {
 			uri = &absPath
 			useLocalFileSystem = true
 			sourceIsLocalFile = u.FileExists(*uri)
 		}
+		u, err := url.Parse(*uri)
+		if err == nil && u.Scheme != "" {
+			if u.Scheme == "file" {
+				trimmedPath := strings.TrimPrefix(filepath.ToSlash(u.Path), "/")
+				*uri = filepath.Clean(trimmedPath)
+				useLocalFileSystem = true
+			}
+		}
+
 	}
+
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
 }
 
@@ -580,6 +590,8 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
+		tempDir = filepath.ToSlash(tempDir)
+		src = filepath.ToSlash(src)
 
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
@@ -637,31 +649,13 @@ func validateURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("URI cannot be empty")
 	}
-	// Maximum length check
-	if len(uri) > 2048 {
-		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
-	}
-	// Add more validation as needed
-	// Validate URI format
-	if strings.Contains(uri, "..") {
-		return fmt.Errorf("URI cannot contain path traversal sequences")
-	}
 	if strings.Contains(uri, " ") {
 		return fmt.Errorf("URI cannot contain spaces")
-	}
-	// Validate characters
-	if strings.ContainsAny(uri, "<>|&;$") {
-		return fmt.Errorf("URI contains invalid characters")
 	}
 	// Validate scheme-specific format
 	if strings.HasPrefix(uri, "oci://") {
 		if !strings.Contains(uri[6:], "/") {
 			return fmt.Errorf("invalid OCI URI format")
-		}
-	} else if strings.Contains(uri, "://") {
-		scheme := strings.Split(uri, "://")[0]
-		if !isValidScheme(scheme) {
-			return fmt.Errorf("unsupported URI scheme: %s", scheme)
 		}
 	}
 	return nil

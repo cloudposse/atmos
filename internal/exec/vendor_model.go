@@ -161,7 +161,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			version := grayColor.Render(version)
 			return m, tea.Sequence(
-				tea.Printf("%s %s %s", mark, pkg.name, version),
+				tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
 				tea.Quit,
 			)
 		}
@@ -246,7 +246,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		}
 
 		// Create temp directory
-		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
+		tempDir, err := os.MkdirTemp("", "atmos-vendor")
 		if err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to create temp directory: %w", err),

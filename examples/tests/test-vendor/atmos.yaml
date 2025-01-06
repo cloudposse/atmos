@@ -1,0 +1,40 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+vendor:  
+  # Single file
+  base_path: "./vendor.yaml"
+  
+  # Directory with multiple files
+  #base_path: "./vendor"
+  
+  # Absolute path
+  #base_path: "vendor.d/vendor1.yaml"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Custom CLI commands
+
+# No arguments or flags are required
+commands:
+- name: "test"
+  description: "Run all tests"
+  steps:
+  - atmos vendor pull --everything
