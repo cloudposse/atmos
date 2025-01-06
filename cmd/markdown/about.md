@@ -1,6 +1,6 @@
 # About Atmos
 
-Cloud Posse Atmos is an open-source framework for managing Infrastructure as Code (IaC) at scale. 
+Atmos is an open-source framework for managing the configuration of Infrastructure as Code (IaC) at scale using Stacks.
 
 It simplifies the deployment of infrastructure by providing a consistent, YAML-driven configuration system using tools like Terraform and Helmfile. Atmos helps teams adopt best practices, enforce standards, and automate complex workflows across environments.
 
