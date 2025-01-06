@@ -40,7 +40,7 @@ func TestMergeBasicOverride(t *testing.T) {
 
 func TestMergeListReplace(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
+		Settings: &schema.AtmosSettings{
 			ListMergeStrategy: ListMergeStrategyReplace,
 		},
 	}
@@ -67,7 +67,7 @@ func TestMergeListReplace(t *testing.T) {
 
 func TestMergeListAppend(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
+		Settings: &schema.AtmosSettings{
 			ListMergeStrategy: ListMergeStrategyAppend,
 		},
 	}
@@ -94,7 +94,7 @@ func TestMergeListAppend(t *testing.T) {
 
 func TestMergeListMerge(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
+		Settings: &schema.AtmosSettings{
 			ListMergeStrategy: ListMergeStrategyMerge,
 		},
 	}
