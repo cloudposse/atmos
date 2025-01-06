@@ -12,6 +12,7 @@ type Model struct {
 	Viewport           viewport.Model
 	HighlightedContent string
 	SyntaxTheme        string
+	IsMarkdown         bool
 }
 
 // New creates a new instance of the model
@@ -25,6 +26,7 @@ func New(syntaxTheme string) Model {
 	return Model{
 		Viewport:    viewPort,
 		SyntaxTheme: syntaxTheme,
+		IsMarkdown:  false,
 	}
 }
 
@@ -35,8 +37,26 @@ func (m *Model) Init() tea.Cmd {
 
 // SetContent sets content
 func (m *Model) SetContent(content string, language string) {
-	highlighted, _ := u.HighlightCode(content, language, m.SyntaxTheme)
-	m.HighlightedContent = highlighted
+	var rendered string
+	var err error
+
+	if language == "markdown" || language == "md" {
+		m.IsMarkdown = true
+		rendered, err = u.RenderMarkdown(content, "")
+		if err != nil {
+			// Fallback to plain text if markdown rendering fails
+			rendered = content
+		}
+	} else {
+		m.IsMarkdown = false
+		rendered, err = u.HighlightCode(content, language, m.SyntaxTheme)
+		if err != nil {
+			// Fallback to plain text if syntax highlighting fails
+			rendered = content
+		}
+	}
+
+	m.HighlightedContent = rendered
 
 	m.Viewport.ViewUp()
 	m.Viewport.MouseWheelEnabled = true
@@ -44,7 +64,7 @@ func (m *Model) SetContent(content string, language string) {
 	m.Viewport.SetContent(lipgloss.NewStyle().
 		Width(m.Viewport.Width).
 		Height(m.Viewport.Height).
-		Render(highlighted))
+		Render(rendered))
 }
 
 // SetSyntaxTheme sets the syntax theme

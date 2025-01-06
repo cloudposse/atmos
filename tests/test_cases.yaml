@@ -168,3 +168,44 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
+
+  - name: atmos greet with args
+    enabled: true
+    description: "Validate atmos custom command greet runs with argument provided."
+    workdir: "../examples/demo-custom-command/"
+    command: "atmos"
+    args:
+      - "greet"
+      - "Andrey"
+    expect:
+      stdout:
+        - "Hello, Andrey\n"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos greet without args
+    enabled: true
+    description: "Validate atmos custom command greet runs without argument provided."
+    workdir: "../examples/demo-custom-command/"
+    command: "atmos"
+    args:
+      - "greet"
+    expect:
+      stdout:
+        - "Hello, John Doe\n"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos circuit-breaker
+    enabled: true
+    description: "Ensure atmos breaks the infinite loop when shell depth exceeds maximum (10)."
+    workdir: "../examples/tests/"
+    command: "atmos"
+    args:
+      - "loop"
+    expect:
+      stderr:
+        - "ATMOS_SHLVL.*exceeds maximum allowed depth.*(\r?\n)+exit status 1(\r?\n)+exit status 1.*"
+      exit_code: 1

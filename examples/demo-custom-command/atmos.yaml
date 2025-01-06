@@ -57,6 +57,18 @@ commands:
     steps:
       - curl -s https://api.github.com/repos/{{ .Arguments.repo }} | jq -r .stargazers_count
 
+# # Use positional arguments with default values
+- name: greet
+  description: "Displays a personalized greeting. Defaults to 'John Doe' if no name is provided."
+  arguments:
+    - name: name
+      description: >-
+          Enter your name as an argument
+      required: true
+      default: John Doe
+  steps:
+    - "echo Hello, {{ .Arguments.name }}"
+
 # Use flags
 - name: weather
   description: This command fetches the weather
