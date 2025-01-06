@@ -10,7 +10,7 @@ Need help? Join the [Atmos community!](https://cloudposse.com/slack)
 
 ## Office Hours
 
-We hold **office hours every Wednesday at 11:30 AM PST**. Join us for live Q&A, pairing sessions, or help with debugging issues.  
+We hold **office hours every Wednesday at 11:30 AM PST**. Join us for live Q&A sessions.
 
 ## Paid Support  
 
