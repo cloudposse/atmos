@@ -198,6 +198,17 @@ tests:
         - "^$"
       exit_code: 0
 
+  - name: atmos circuit-breaker
+    enabled: true
+    description: "Ensure atmos breaks the infinite loop when shell depth exceeds maximum (10)."
+    workdir: "../examples/tests/"
+    command: "atmos"
+    args:
+      - "loop"
+    expect:
+      stderr:
+        - "ATMOS_SHLVL.*exceeds maximum allowed depth.*(\r?\n)+exit status 1(\r?\n)+exit status 1.*"
+
   - name: atmos terraform deploy unlocked component
     enabled: true
     description: "Verify terraform deploy works on unlocked component in nonprod stack"
