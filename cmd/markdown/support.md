@@ -4,7 +4,7 @@
 
 Need help? Join the [Atmos community!](https://cloudposse.com/slack)  
 
-- **Slack Community**: Connect with active users in the `#atmos` channel and get help anytime.  
+- **Slack Community**: Connect with active users in the `#atmos` channel and get help anytime [on slack](https://cloudposse.com/slack).
 - **GitHub Discussions**: Post questions or join conversations with the community and Cloud Posse. 
 - **Issue Tracker**: Found a bug? Report it [here](https://github.com/cloudposse/atmos/issues).  
 
