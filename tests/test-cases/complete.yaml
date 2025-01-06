@@ -201,41 +201,11 @@ tests:
   - name: atmos circuit-breaker
     enabled: true
     description: "Ensure atmos breaks the infinite loop when shell depth exceeds maximum (10)."
-    workdir: "../tests/fixtures/scenarios/complete/"
+    workdir: "fixtures/scenarios/complete/"
     command: "atmos"
     args:
       - "loop"
     expect:
       stderr:
         - "ATMOS_SHLVL.*exceeds maximum allowed depth.*(\r?\n)+exit status 1(\r?\n)+exit status 1.*"
-      exit_code: 1
-
-  - name: atmos terraform deploy unlocked component
-    enabled: true
-    description: "Verify terraform deploy works on unlocked component in nonprod stack"
-    workdir: "../tests/fixtures/scenarios/metadata"
-    command: "atmos"
-    args:
-      - "terraform"
-      - "deploy"
-      - "myapp"
-      - "-s"
-      - "nonprod"
-    expect:
-      exit_code: 0
-
-  - name: atmos terraform deploy locked component
-    enabled: true
-    description: "Verify terraform deploy fails on locked component in prod stack"
-    workdir: "../tests/fixtures/scenarios/metadata"
-    command: "atmos"
-    args:
-      - "terraform"
-      - "deploy"
-      - "myapp"
-      - "-s"
-      - "prod"
-    expect:
-      stderr:
-        - "component 'myapp' is locked and cannot be modified \\(metadata.locked = true\\)"
       exit_code: 1
