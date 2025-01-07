@@ -153,7 +153,7 @@ tests:
   - name: atmos validate editorconfig error
     enabled: true
     description: "Ensure atmos CLI gives error during validation based on editorconfig"
-    workdir: "../examples/tests/"
+    workdir: "../tests/fixtures"
     command: "atmos"
     args:
       - "validate"
