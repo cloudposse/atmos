@@ -16,13 +16,6 @@ var terraformCmd = &cobra.Command{
 	Short:              "Execute Terraform commands",
 	Long:               `This command executes Terraform commands`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args, true)
-		if hasPositionalArgs(args) {
-			addUsageCommand(cmd, true)
-		}
-		terraformRun(cmd, cmd, args)
-	},
 }
 
 // Contains checks if a slice of strings contains an exact match for the target string.
@@ -60,6 +53,7 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
+	addUsageCommand(terraformCmd, true)
 	attachTerraformCommands(terraformCmd)
 	RootCmd.AddCommand(terraformCmd)
 }

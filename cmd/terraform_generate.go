@@ -18,6 +18,9 @@ This command supports the following subcommands:
 - 'varfiles' to generate varfiles for all Atmos components in all stacks.`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return terraformRun(cmd, cmd, args)
+	},
 }
 
 func init() {

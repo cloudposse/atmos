@@ -121,7 +121,6 @@ func initCobraConfig() {
 	b := boa.New(boa.WithStyles(styles))
 	oldUsageFunc := RootCmd.UsageFunc()
 	RootCmd.SetUsageFunc(func(c *cobra.Command) error {
-		fmt.Println("Usage:", c.Use)
 		if c.Use == "atmos" {
 			b.UsageFunc(c)
 			return nil
