@@ -350,9 +350,9 @@ func execTerraformShellCommand(
 // mergeEnvVars combines two sets of environment variables, with overrideEnv taking precedence.
 //
 // This is necessary because:
-// 1. We need to preserve existing system environment variables (PATH, HOME, etc.)
-// 2. Component-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
-// 3. (Most importantly) Simply appending the two sets wouldn't work as processes use the first occurrence of each variable
+//  1. We need to preserve existing system environment variables (PATH, HOME, etc.)
+//  2. Atmos-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
+//  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
 func mergeEnvVars(baseEnv, overrideEnv []string) []string {
 	envMap := make(map[string]string)
 
