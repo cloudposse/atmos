@@ -40,7 +40,7 @@ var listComponentsCmd = &cobra.Command{
 			return
 		}
 
-		output, err := l.FilterAndListComponents(stackFlag, abstractFlag, stacksMap, cliConfig.Components.List)
+		output, err := l.FilterAndListComponents(stackFlag, abstractFlag, stacksMap, atmosConfig.Components.List)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), color.New(color.FgYellow))
 			return
