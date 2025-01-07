@@ -539,11 +539,6 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	}
 }
 
-func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
-	originalHelpFunc(cmd, args)
-	CheckForAtmosUpdateAndPrintMessage(atmosConfig)
-}
-
 // Check Atmos is version command
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && os.Args[1] == "version"
