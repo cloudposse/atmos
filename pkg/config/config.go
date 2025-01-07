@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -54,20 +55,20 @@ var (
 			},
 		},
 		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
 			Terminal: schema.Terminal{
-				MaxWidth: 180,
+				MaxWidth: templates.GetTerminalWidth(),
 				Pager:    true,
 				Colors:   true,
 				Unicode:  true,
 				SyntaxHighlighting: schema.SyntaxHighlighting{
 					Enabled:   true,
-					Lexer:     "yaml",
-					Formatter: "terminal256",
-					Style:     "monokai",
+					Formatter: "terminal",
+					Style:     "dracula",
 					Pager:     true,
 					Options: schema.HighlightOptions{
 						LineNumbers: true,
-						Wrap:        true,
+						Wrap:        false,
 					},
 				},
 			},

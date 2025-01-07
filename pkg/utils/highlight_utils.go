@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/chroma"
 	"github.com/alecthomas/chroma/formatters"
 	"github.com/alecthomas/chroma/lexers"
 	"github.com/alecthomas/chroma/quick"
 	"github.com/alecthomas/chroma/styles"
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"golang.org/x/term"
 )
@@ -18,11 +20,11 @@ import (
 func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	return &schema.SyntaxHighlighting{
 		Enabled:   true,
-		Lexer:     "yaml",
 		Formatter: "terminal",
 		Style:     "dracula",
+		Pager:     true,
 		Options: schema.HighlightOptions{
-			LineNumbers: false,
+			LineNumbers: true,
 			Wrap:        false,
 		},
 	}
@@ -38,9 +40,6 @@ func GetHighlightSettings(config schema.AtmosConfiguration) *schema.SyntaxHighli
 	// Apply defaults for any unset fields
 	if !settings.Enabled {
 		settings.Enabled = defaults.Enabled
-	}
-	if settings.Lexer == "" {
-		settings.Lexer = defaults.Lexer
 	}
 	if settings.Formatter == "" {
 		settings.Formatter = defaults.Formatter
@@ -76,8 +75,20 @@ func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration) (str
 	if !settings.Enabled {
 		return code, nil
 	}
+
+	// Get terminal width
+	config.Settings.Terminal.MaxWidth = templates.GetTerminalWidth()
+
+	// Determine lexer based on content format
+	var lexerName string
+	if strings.HasPrefix(strings.TrimSpace(code), "{") {
+		lexerName = "json"
+	} else {
+		lexerName = "yaml"
+	}
+
 	// Get lexer
-	lexer := lexers.Get(settings.Lexer)
+	lexer := lexers.Get(lexerName)
 	if lexer == nil {
 		lexer = lexers.Fallback
 	}

@@ -325,10 +325,9 @@ settings:
     timestamps: false     # Show timestamps in logs
     colors: true          # Enable colored output
     unicode: true         # Use unicode characters
-    
+
     syntax_highlighting:
       enabled: true
-      lexer: yaml           # Default lexer for the content
       formatter: terminal   # Output formatter (e.g., terminal, html)
       style: dracula        # Highlighting style
       pager: true           # Enable pager
