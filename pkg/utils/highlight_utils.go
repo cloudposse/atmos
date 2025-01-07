@@ -69,7 +69,7 @@ func HighlightCode(code string, lexerName string, style string) (string, error) 
 }
 
 // HighlightCodeWithConfig highlights the given code using the provided configuration
-func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration) (string, error) {
+func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration, format ...string) (string, error) {
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
 		return code, nil
 	}
@@ -81,25 +81,31 @@ func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration) (str
 	// Get terminal width
 	config.Settings.Terminal.MaxWidth = templates.GetTerminalWidth()
 
-	// Determine lexer based on content format
+	// Determine lexer based on format flag or content format
 	var lexerName string
-	trimmed := strings.TrimSpace(code)
-
-	// Try to parse as JSON first
-	if json.Valid([]byte(trimmed)) {
-		lexerName = "json"
+	if len(format) > 0 && format[0] != "" {
+		// Use format flag if provided
+		lexerName = strings.ToLower(format[0])
 	} else {
-		// Check for common YAML indicators
-		// 1. Contains key-value pairs with colons
-		// 2. Does not start with a curly brace (which could indicate malformed JSON)
-		// 3. Contains indentation or list markers
-		if (strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, "{")) ||
-			strings.Contains(trimmed, "\n  ") ||
-			strings.Contains(trimmed, "\n- ") {
-			lexerName = "yaml"
+		// This is just a fallback
+		trimmed := strings.TrimSpace(code)
+
+		// Try to parse as JSON first
+		if json.Valid([]byte(trimmed)) {
+			lexerName = "json"
 		} else {
-			// Fallback to plaintext if format is unclear
-			lexerName = "plaintext"
+			// Check for common YAML indicators
+			// 1. Contains key-value pairs with colons
+			// 2. Does not start with a curly brace (which could indicate malformed JSON)
+			// 3. Contains indentation or list markers
+			if (strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, "{")) ||
+				strings.Contains(trimmed, "\n  ") ||
+				strings.Contains(trimmed, "\n- ") {
+				lexerName = "yaml"
+			} else {
+				// Fallback to plaintext if format is unclear
+				lexerName = "plaintext"
+			}
 		}
 	}
 
@@ -141,13 +147,19 @@ func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration) (str
 type HighlightWriter struct {
 	config schema.AtmosConfiguration
 	writer io.Writer
+	format string
 }
 
 // NewHighlightWriter creates a new HighlightWriter
-func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration) *HighlightWriter {
+func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration, format ...string) *HighlightWriter {
+	var f string
+	if len(format) > 0 {
+		f = format[0]
+	}
 	return &HighlightWriter{
 		config: config,
 		writer: w,
+		format: f,
 	}
 }
 
@@ -157,7 +169,7 @@ func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration) *Highligh
 // This maintains compatibility with the io.Writer interface contract while still
 // providing syntax highlighting functionality.
 func (h *HighlightWriter) Write(p []byte) (n int, err error) {
-	highlighted, err := HighlightCodeWithConfig(string(p), h.config)
+	highlighted, err := HighlightCodeWithConfig(string(p), h.config, h.format)
 	if err != nil {
 		return 0, err
 	}

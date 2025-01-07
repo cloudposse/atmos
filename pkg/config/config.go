@@ -58,14 +58,14 @@ var (
 			ListMergeStrategy: "replace",
 			Terminal: schema.Terminal{
 				MaxWidth: templates.GetTerminalWidth(),
-				Pager:    true,
+				UsePager: true,
 				Colors:   true,
 				Unicode:  true,
 				SyntaxHighlighting: schema.SyntaxHighlighting{
 					Enabled:   true,
 					Formatter: "terminal",
 					Style:     "dracula",
-					Pager:     true,
+					UsePager:  true,
 					Options: schema.HighlightOptions{
 						LineNumbers: true,
 						Wrap:        false,
