@@ -229,25 +229,8 @@ func execTerraformShellCommand(
 
 	// Define the Terraform commands that may use var-file configuration
 	tfCommands := []string{"plan", "apply", "refresh", "import", "destroy", "console"}
-
-	// Prepare additions to the environment for TF_CLI arguments
 	for _, cmd := range tfCommands {
-		envVar := fmt.Sprintf("TF_CLI_ARGS_%s", cmd)
-		existing := os.Getenv(envVar)
-
-		// Collect arguments, starting with any existing value
-		args := []string{}
-		if existing != "" {
-			u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", envVar))
-			args = append(args, existing)
-		}
-
-		// Always add the -var-file argument
-		args = append(args, fmt.Sprintf("-var-file=%s", varFile))
-
-		// Join arguments with a space and set the environment variable
-		newValue := strings.Join(args, " ")
-		componentEnvList = append(componentEnvList, fmt.Sprintf("%s=\"%s\"", envVar, newValue))
+		componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_%s=-var-file=%s", cmd, varFile))
 	}
 
 	// Set environment variables to indicate the details of the Atmos shell configuration
@@ -278,18 +261,15 @@ func execTerraformShellCommand(
 		}
 	}
 
-	// Merge env vars, ensuring componentEnvList takes precedence
-	mergedEnv := mergeEnvVars(os.Environ(), componentEnvList)
-
 	u.LogDebug(atmosConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
 	u.LogDebug(atmosConfig, fmt.Sprintf("Component: %s\n", component))
 	u.LogDebug(atmosConfig, fmt.Sprintf("Stack: %s\n", stack))
 	u.LogDebug(atmosConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
 	u.LogDebug(atmosConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
 	u.LogDebug(atmosConfig, "\nSetting the ENV vars in the shell:\n")
-	for _, v := range mergedEnv {
-		u.LogDebug(atmosConfig, v)
-	}
+
+	// Merge env vars, ensuring componentEnvList takes precedence
+	mergedEnv := mergeEnvVars(atmosConfig, componentEnvList)
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
 	pa := os.ProcAttr{
@@ -353,32 +333,49 @@ func execTerraformShellCommand(
 	return nil
 }
 
-// mergeEnvVars combines two sets of environment variables, with overrideEnv taking precedence.
+// mergeEnvVars adds a list of environment variables to the system environment variables
 //
 // This is necessary because:
 //  1. We need to preserve existing system environment variables (PATH, HOME, etc.)
 //  2. Atmos-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
 //  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
-func mergeEnvVars(baseEnv, overrideEnv []string) []string {
+func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []string) []string {
 	envMap := make(map[string]string)
 
-	// Parse base environment variables
-	for _, env := range baseEnv {
+	// Parse system environment variables
+	for _, env := range os.Environ() {
 		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
+			if strings.HasPrefix(parts[0], "TF_") {
+				u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", parts[0]))
+			}
 			envMap[parts[0]] = parts[1]
 		}
 	}
 
-	// Override with new environment variables
-	for _, env := range overrideEnv {
+	// Merge with new, Atmos defined environment variables
+	for _, env := range componentEnvList {
 		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
+			// Special handling for Terraform CLI arguments environment variables
+			if strings.HasPrefix(parts[0], "TF_CLI_ARGS_") {
+				// For TF_CLI_ARGS_* variables, we need to append new values to any existing values
+				if existing, exists := envMap[parts[0]]; exists {
+					// Put the new, Atmos defined value first so it takes precedence
+					envMap[parts[0]] = parts[1] + " " + existing
+				} else {
+					// No existing value, just set the new value
+					envMap[parts[0]] = parts[1]
+				}
+			} else {
+				// For all other environment variables, simply override any existing value
+				envMap[parts[0]] = parts[1]
+			}
 		}
 	}
 
 	// Convert back to slice
 	merged := make([]string, 0, len(envMap))
 	for k, v := range envMap {
+		u.LogDebug(atmosConfig, fmt.Sprintf("%s=%s", k, v))
 		merged = append(merged, k+"="+v)
 	}
 	return merged
