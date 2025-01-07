@@ -3,11 +3,11 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -30,7 +30,7 @@ var validateComponentCmd = &cobra.Command{
 		}
 
 		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", component, stack)
-		u.PrintMessageInColor(m, color.New(color.FgGreen))
+		u.PrintMessageInColor(m, theme.Colors.Success)
 	},
 }
 
