@@ -11,7 +11,7 @@ import (
 // helmfileGenerateVarfileCmd generates varfile for a helmfile component
 var helmfileGenerateVarfileCmd = &cobra.Command{
 	Use:                "varfile",
-	Short:              "Generate a varfile for an Atmos Helmfile component",
+	Short:              "Generate a values file for a Helmfile component",
 	Long:               "This command generates a varfile for a specified Atmos Helmfile component.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
