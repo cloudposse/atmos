@@ -11,7 +11,7 @@ import (
 // terraformGenerateBackendCmd generates backend config for a terraform component
 var terraformGenerateBackendCmd = &cobra.Command{
 	Use:                "backend",
-	Short:              "Generate backend configuration for a Terraform component",
+	Short:              "Generate backend (HCL) configuration for a Terraform component",
 	Long:               `Generates the backend configuration for a Terraform component using the specified stack`,
 	Example: `atmos terraform generate backend <component> -s <stack>`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
