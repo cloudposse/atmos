@@ -48,7 +48,7 @@ func formatCommand(name string, desc string, padding int, IsNotSupported bool) s
 
 var customHelpShortMessage = map[string]string{
 	"help": "Display help information for Atmos commands",
-	"tf":   "Alias for ‘terraform’ commands",
+	"tf":   "Alias for `terraform` commands",
 }
 
 // formatCommands formats a slice of cobra commands with proper styling
