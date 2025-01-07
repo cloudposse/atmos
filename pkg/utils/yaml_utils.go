@@ -31,7 +31,21 @@ func PrintAsYAML(data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
+
+	var atmosConfig schema.AtmosConfiguration
+	switch v := data.(type) {
+	case schema.AtmosConfiguration:
+		atmosConfig = v
+	case *schema.AtmosConfiguration:
+		atmosConfig = *v
+	}
+	highlighted, err := HighlightCodeWithConfig(y, atmosConfig)
+	if err != nil {
+		// Fallback to plain text if highlighting fails
+		PrintMessage(y)
+		return nil
+	}
+	PrintMessage(highlighted)
 	return nil
 }
 

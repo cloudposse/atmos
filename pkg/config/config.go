@@ -53,6 +53,25 @@ var (
 				UseEKS:                true,
 			},
 		},
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				MaxWidth: 180,
+				Pager:    true,
+				Colors:   true,
+				Unicode:  true,
+				SyntaxHighlighting: schema.SyntaxHighlighting{
+					Enabled:   true,
+					Lexer:     "yaml",
+					Formatter: "terminal256",
+					Style:     "monokai",
+					Pager:     true,
+					Options: schema.HighlightOptions{
+						LineNumbers: true,
+						Wrap:        true,
+					},
+				},
+			},
+		},
 		Workflows: schema.Workflows{
 			BasePath: "stacks/workflows",
 		},
