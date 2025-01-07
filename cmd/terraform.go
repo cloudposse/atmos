@@ -50,7 +50,7 @@ var terraformCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 	},
-	PostRunE: func(cmd *cobra.Command, args []string) {
+	PostRunE: func(cmd *cobra.Command, args []string) error {
 		info := RootCmd.Context().Value(contextKey("atmos_info")).(schema.ConfigAndStacksInfo)
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
@@ -85,11 +85,15 @@ var terraformCmd = &cobra.Command{
 						store := atmosConfig.Stores[hook.Name]
 						u.LogInfo(atmosConfig, fmt.Sprintf("  storing terraform output '%s' in store '%s' with key '%s' and value %v", outputKey, hook.Name, key, outputValue))
 
-						return store.Set(info.Stack, info.ComponentFromArg, key, outputValue)
+						err = store.Set(info.Stack, info.ComponentFromArg, key, outputValue)
+						if err != nil {
+							return err
+						}
 					}
 				}
 			}
 		}
+		return nil
 	},
 }
 
