@@ -316,8 +316,37 @@ settings:
   #            deep-merged with all items in the source list.
   list_merge_strategy: replace
 
+  # Terminal settings for displaying content
+  terminal:
+    max_width: 120      # Maximum width for terminal output
+    pager: true         # Use pager for long output
+    timestamps: false   # Show timestamps in logs
+    colors: true       # Enable colored output
+    unicode: true      # Use unicode characters
+
+  # Markdown element styling
+  markdown:
+    document:
+      color: "${colors.text}"
+    heading:
+      color: "${colors.primary}"
+      bold: true
+    code_block:
+      color: "${colors.secondary}"
+      margin: 1
+    link:
+      color: "${colors.primary}"
+      underline: true
+    strong:
+      color: "${colors.secondary}"
+      bold: true
+    emph:
+      color: "${colors.muted}"
+      italic: true
+
 version:
   check:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
+
