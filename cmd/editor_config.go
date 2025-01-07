@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -30,7 +31,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	Short: "Validate all files against the EditorConfig",
 	Long:  "Validate all files against the project's EditorConfig rules",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		initializeConfig()
+		initializeConfig(cmd)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if cliConfig.Help {
@@ -42,8 +43,8 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 }
 
 // initializeConfig breaks the initialization cycle by separating the config setup
-func initializeConfig() {
-	replaceAtmosConfigInConfig(atmosConfig)
+func initializeConfig(cmd *cobra.Command) {
+	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
 	if configFilePath == "" {
 		configFilePath = defaultConfigFilePath
@@ -71,48 +72,48 @@ func initializeConfig() {
 	currentConfig.Merge(cliConfig)
 }
 
-func replaceAtmosConfigInConfig(atmosConfig schema.AtmosConfiguration) {
-	if atmosConfig.Validate.EditorConfig.ConfigFilePath != "" {
+func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) {
+	if !cmd.Flags().Changed("config") && atmosConfig.Validate.EditorConfig.ConfigFilePath != "" {
 		configFilePath = atmosConfig.Validate.EditorConfig.ConfigFilePath
 	}
-	if atmosConfig.Validate.EditorConfig.Exclude != "" {
-		tmpExclude = atmosConfig.Validate.EditorConfig.Exclude
+	if !cmd.Flags().Changed("exclude") && len(atmosConfig.Validate.EditorConfig.Exclude) > 0 {
+		tmpExclude = strings.Join(atmosConfig.Validate.EditorConfig.Exclude, ",")
 	}
-	if atmosConfig.Validate.EditorConfig.Init {
+	if !cmd.Flags().Changed("init") && atmosConfig.Validate.EditorConfig.Init {
 		initEditorConfig = atmosConfig.Validate.EditorConfig.Init
 	}
-	if atmosConfig.Validate.EditorConfig.IgnoreDefaults {
+	if !cmd.Flags().Changed("ignore-defaults") && atmosConfig.Validate.EditorConfig.IgnoreDefaults {
 		cliConfig.IgnoreDefaults = atmosConfig.Validate.EditorConfig.IgnoreDefaults
 	}
-	if atmosConfig.Validate.EditorConfig.DryRun {
+	if !cmd.Flags().Changed("dry-run") && atmosConfig.Validate.EditorConfig.DryRun {
 		cliConfig.DryRun = atmosConfig.Validate.EditorConfig.DryRun
 	}
-	if atmosConfig.Validate.EditorConfig.Format != "" {
+	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
 		cliConfig.Format = atmosConfig.Validate.EditorConfig.Format
 	}
 	if atmosConfig.Logs.Level == "trace" {
 		cliConfig.Verbose = true
 	}
-	if atmosConfig.Validate.EditorConfig.NoColor {
-		cliConfig.NoColor = atmosConfig.Validate.EditorConfig.NoColor
+	if !cmd.Flags().Changed("no-color") && !atmosConfig.Validate.EditorConfig.Color {
+		cliConfig.NoColor = !atmosConfig.Validate.EditorConfig.Color
 	}
-	if atmosConfig.Validate.EditorConfig.Disable.TrimTrailingWhitespace {
-		cliConfig.Disable.TrimTrailingWhitespace = atmosConfig.Validate.EditorConfig.Disable.TrimTrailingWhitespace
+	if !cmd.Flags().Changed("disable-trim-trailing-whitespace") && atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace {
+		cliConfig.Disable.TrimTrailingWhitespace = atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace
 	}
-	if atmosConfig.Validate.EditorConfig.Disable.EndOfLine {
-		cliConfig.Disable.EndOfLine = atmosConfig.Validate.EditorConfig.Disable.EndOfLine
+	if !cmd.Flags().Changed("disable-end-of-line") && atmosConfig.Validate.EditorConfig.DisableEndOfLine {
+		cliConfig.Disable.EndOfLine = atmosConfig.Validate.EditorConfig.DisableEndOfLine
 	}
-	if atmosConfig.Validate.EditorConfig.Disable.InsertFinalNewline {
-		cliConfig.Disable.InsertFinalNewline = atmosConfig.Validate.EditorConfig.Disable.InsertFinalNewline
+	if !cmd.Flags().Changed("disable-insert-final-newline") && atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline {
+		cliConfig.Disable.InsertFinalNewline = atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline
 	}
-	if atmosConfig.Validate.EditorConfig.Disable.Indentation {
-		cliConfig.Disable.Indentation = atmosConfig.Validate.EditorConfig.Disable.Indentation
+	if !cmd.Flags().Changed("disable-indentation") && atmosConfig.Validate.EditorConfig.DisableIndentation {
+		cliConfig.Disable.Indentation = atmosConfig.Validate.EditorConfig.DisableIndentation
 	}
-	if atmosConfig.Validate.EditorConfig.Disable.IndentSize {
-		cliConfig.Disable.IndentSize = atmosConfig.Validate.EditorConfig.Disable.IndentSize
+	if !cmd.Flags().Changed("disable-indent-size") && atmosConfig.Validate.EditorConfig.DisableIndentSize {
+		cliConfig.Disable.IndentSize = atmosConfig.Validate.EditorConfig.DisableIndentSize
 	}
-	if atmosConfig.Validate.EditorConfig.Disable.MaxLineLength {
-		cliConfig.Disable.MaxLineLength = atmosConfig.Validate.EditorConfig.Disable.MaxLineLength
+	if !cmd.Flags().Changed("disable-max-line-length") && atmosConfig.Validate.EditorConfig.DisableMaxLineLength {
+		cliConfig.Disable.MaxLineLength = atmosConfig.Validate.EditorConfig.DisableMaxLineLength
 	}
 }
 

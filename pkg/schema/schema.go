@@ -44,25 +44,20 @@ type Validate struct {
 }
 
 type EditorConfig struct {
-	IgnoreDefaults bool           `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
-	DryRun         bool           `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
-	Format         string         `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
-	NoColor        bool           `yaml:"no_color,omitempty" json:"no_color,omitempty" mapstructure:"no_color"`
-	Disable        DisabledChecks `yaml:"disable,omitempty" json:"disable,omitempty" mapstructure:"disable"`
+	IgnoreDefaults bool     `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
+	DryRun         bool     `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
+	Format         string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	Color          bool     `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
+	ConfigFilePath string   `yaml:"config_file_path,omitempty" json:"config_file_path,omitempty" mapstructure:"config_file_path"`
+	Exclude        []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
+	Init           bool     `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
 
-	ConfigFilePath string `yaml:"config_file_path,omitempty" json:"config_file_path,omitempty" mapstructure:"config_file_path"`
-	Exclude        string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
-	Init           bool   `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
-}
-
-// DisabledChecks is a Struct which represents disabled checks
-type DisabledChecks struct {
-	EndOfLine              bool `yaml:"end_of_line,omitempty" json:"end_of_line,omitempty" mapstructure:"end_of_line"`
-	InsertFinalNewline     bool `yaml:"insert_final_newline,omitempty" json:"insert_final_newline,omitempty" mapstructure:"insert_final_newline"`
-	Indentation            bool `yaml:"indentation,omitempty" json:"indentation,omitempty" mapstructure:"indentation"`
-	IndentSize             bool `yaml:"indent_size,omitempty" json:"indent_size,omitempty" mapstructure:"indent_size"`
-	MaxLineLength          bool `yaml:"max_line_length,omitempty" json:"max_line_length,omitempty" mapstructure:"max_line_length"`
-	TrimTrailingWhitespace bool `yaml:"trim_trailing_whitespace,omitempty" json:"trim_trailing_whitespace,omitempty" mapstructure:"trim_trailing_whitespace"`
+	DisableEndOfLine              bool `yaml:"disable_end_of_line,omitempty" json:"disable_end_of_line,omitempty" mapstructure:"disable_end_of_line"`
+	DisableInsertFinalNewline     bool `yaml:"disable_insert_final_newline,omitempty" json:"disable_insert_final_newline,omitempty" mapstructure:"disable_insert_final_newline"`
+	DisableIndentation            bool `yaml:"disable_indentation,omitempty" json:"disable_indentation,omitempty" mapstructure:"disable_indentation"`
+	DisableIndentSize             bool `yaml:"disable_indent_size,omitempty" json:"disable_indent_size,omitempty" mapstructure:"disable_indent_size"`
+	DisableMaxLineLength          bool `yaml:"disable_max_line_length,omitempty" json:"disable_max_line_length,omitempty" mapstructure:"disable_max_line_length"`
+	DisableTrimTrailingWhitespace bool `yaml:"disable_trim_trailing_whitespace,omitempty" json:"disable_trim_trailing_whitespace,omitempty" mapstructure:"disable_trim_trailing_whitespace"`
 }
 
 type Terminal struct {
