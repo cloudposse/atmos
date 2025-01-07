@@ -352,8 +352,7 @@
         },
         "locked": {
           "type": "boolean",
-          "description": "Flag to lock the component and prevent modifications while allowing read operations",
-          "default": false
+          "description": "Flag to lock the component and prevent modifications while allowing read operations"
         }
       },
       "required": [],
