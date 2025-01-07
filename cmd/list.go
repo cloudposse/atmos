@@ -8,7 +8,7 @@ import (
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List available stacks and components",
-	Long: `Retrieve and display a list of all available stacks and components in your environment.`,
+	Long: `Displays a list of all available stacks and components defined in your project.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
