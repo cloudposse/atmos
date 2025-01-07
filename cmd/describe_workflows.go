@@ -12,7 +12,7 @@ import (
 var describeWorkflowsCmd = &cobra.Command{
 	Use:   "workflows",
 	Short: "Lists Atmos workflows and their associated files",
-	Long:  "This command provides details about the Atmos workflows, helping you review and understand the workflows configured in the system.",
+	Long:  "Lists all Atmos workflows, showing their associated files and workflow names for easy reference.",
 	Example: "describe workflows\n" +
 		"describe workflows --format json\n" +
 		"describe workflows -f yaml\n" +
