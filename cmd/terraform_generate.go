@@ -6,10 +6,20 @@ import (
 
 // terraformGenerateCmd generates configurations for terraform components
 var terraformGenerateCmd = &cobra.Command{
-	Use:                "generate",
-	Short:              "Generate configurations for Terraform components",
-	Long:               "This command generates various configuration files for Terraform components in Atmos.",
+	Use:   "generate",
+	Short: "Generate Terraform configuration files for Atmos components and stacks.",
+	Long: `The 'atmos terraform generate' command is used to generate Terraform configuration files 
+for specific components and stacks within your Atmos setup.
+
+This command supports the following subcommands:
+- 'backend' to generate a backend configuration file for an Atmos component in a stack.
+- 'backends' to generate backend configuration files for all Atmos components in all stacks.
+- 'varfile' to generate a variable file (varfile) for an Atmos component in a stack.
+- 'varfiles' to generate varfiles for all Atmos components in all stacks.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return terraformRun(cmd, cmd, args)
+	},
 }
 
 func init() {
