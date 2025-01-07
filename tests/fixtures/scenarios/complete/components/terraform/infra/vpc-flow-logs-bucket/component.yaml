@@ -5,7 +5,7 @@
 
 # > atmos vendor pull -c infra/vpc-flow-logs-bucket
 # Pulling sources for the component 'infra/vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=0.194.0'
-#  into 'examples/tests/components/terraform/infra/vpc-flow-logs-bucket'
+#  into 'tests/fixtures/scenarios/complete/components/terraform/infra/vpc-flow-logs-bucket'
 #
 #  Including the file 'README.md' since it matches the '**/*.md' pattern from 'included_paths'
 #  Excluding the file 'context.tf' since it matches the '**/context.tf' pattern from 'excluded_paths'
@@ -17,9 +17,9 @@
 #  Including the file 'versions.tf' since it matches the '**/*.tf' pattern from 'included_paths'
 #
 # Pulling the mixin 'https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf'
-#  for the component 'infra/vpc-flow-logs-bucket' into 'examples/tests/components/terraform/infra/vpc-flow-logs-bucket'
+#  for the component 'infra/vpc-flow-logs-bucket' into 'tests/fixtures/scenarios/complete/components/terraform/infra/vpc-flow-logs-bucket'
 # Pulling the mixin 'https://raw.githubusercontent.com/cloudposse/terraform-aws-components/0.194.0/modules/datadog-agent/introspection.mixin.tf'
-#  for the component 'infra/vpc-flow-logs-bucket' into 'examples/tests/components/terraform/infra/vpc-flow-logs-bucket'
+#  for the component 'infra/vpc-flow-logs-bucket' into 'tests/fixtures/scenarios/complete/components/terraform/infra/vpc-flow-logs-bucket'
 
 apiVersion: atmos/v1
 kind: ComponentVendorConfig
