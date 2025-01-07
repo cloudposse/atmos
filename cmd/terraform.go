@@ -19,6 +19,8 @@ import (
 
 type contextKey string
 
+const atmosInfoKey contextKey = "atmos_info"
+
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
@@ -44,7 +46,7 @@ var terraformCmd = &cobra.Command{
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
-		ctx := context.WithValue(context.Background(), contextKey("atmos_info"), info)
+		ctx := context.WithValue(context.Background(), contextKey(atmosInfoKey), info)
 		RootCmd.SetContext(ctx)
 
 		// Check Atmos configuration
