@@ -91,8 +91,12 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
 		cliConfig.Format = atmosConfig.Validate.EditorConfig.Format
 	}
-	if atmosConfig.Logs.Level == "trace" {
+	if !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == "trace" {
 		cliConfig.Verbose = true
+	} else if cmd.Flags().Changed("logs-level") {
+		if v, err := cmd.Flags().GetString("logs-level"); err == nil && v == "trace" {
+			cliConfig.Verbose = true
+		}
 	}
 	if !cmd.Flags().Changed("no-color") && !atmosConfig.Validate.EditorConfig.Color {
 		cliConfig.NoColor = !atmosConfig.Validate.EditorConfig.Color
