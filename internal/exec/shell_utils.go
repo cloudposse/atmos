@@ -230,19 +230,26 @@ func execTerraformShellCommand(
 	// Define the Terraform commands that may use var-file configuration
 	tfCommands := []string{"plan", "apply", "refresh", "import", "destroy", "console"}
 
-	// Check for existing var-file arguments in TF_CLI environment variables
-	for _, cmd := range tfCommands {
-		envVar := fmt.Sprintf("TF_CLI_ARGS_%s", cmd)
-		existing := os.Getenv(envVar)
-		if existing != "" {
-			u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", envVar))
-			// Create new value by combining existing and new var-file argument
-			newValue := fmt.Sprintf("\"%s -var-file=%s\"", existing, varFile)
-			componentEnvList = append(componentEnvList, fmt.Sprintf("%s=%s", envVar, newValue))
-		} else {
-			componentEnvList = append(componentEnvList, fmt.Sprintf("%s=-var-file=%s", envVar, varFile))
-		}
-	}
+	// Prepare additions to the environment for TF_CLI arguments
+        for _, cmd := range tfCommands {
+            envVar := fmt.Sprintf("TF_CLI_ARGS_%s", cmd)
+            existing := os.Getenv(envVar)
+        
+            // Collect arguments, starting with any existing value
+            args := []string{}
+            if existing != "" {
+                u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", envVar))
+                args = append(args, existing)
+            }
+        
+            // Always add the -var-file argument
+            args = append(args, fmt.Sprintf("-var-file=%s", varFile))
+        
+            // Join arguments with a space and set the environment variable
+            newValue := strings.Join(args, " ")
+            componentEnvList = append(componentEnvList, fmt.Sprintf("%s=\"%s\"", envVar, newValue))
+        }
+	
 
 	// Set environment variables to indicate the details of the Atmos shell configuration
 	componentEnvList = append(componentEnvList, fmt.Sprintf("ATMOS_STACK=%s", stack))
