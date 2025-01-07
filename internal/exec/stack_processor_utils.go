@@ -1752,11 +1752,12 @@ func resolveRelativePath(path string, currentFilePath string) string {
 	normalizedPath := filepath.ToSlash(path)
 	normalizedCurrentFilePath := filepath.ToSlash(currentFilePath)
 
-	// Atmos import paths are always relative paths, but they can be relative to either:
-	// 1. The base path (most common) - e.g. "mixins/region/us-east-2"
-	// 2. The current file's directory (less common) - e.g. "./_defaults"
+  // Atmos import paths are generally relative paths, however, there are two types of relative paths:
+	//   1. Paths relative to the base path (most common) - e.g. "mixins/region/us-east-2"
+	//   2. Paths relative to the current file's directory (less common) - e.g. "./_defaults" imports will be relative to `./`
+	//
 	// Here we check if the path starts with "." or ".." to identify if it's relative to the current file.
-	// If it is, we'll convert it to be relative to the base path instead, to maintain consistency.
+	// If it is, we'll convert it to be relative to the file doing the import, rather than the `base_path`.
 	parts := strings.Split(normalizedPath, "/")
 	firstElement := filepath.Clean(parts[0])
 	if firstElement == "." || firstElement == ".." {
