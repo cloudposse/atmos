@@ -72,7 +72,7 @@ func getMarkdownSection(title string) (details, suggestion string) {
 // workflowCmd executes a workflow
 var workflowCmd = &cobra.Command{
 	Use:   "workflow",
-	Short: "Run automated workflows for infrastructure and operations",
+	Short: "Run predefined tasks using workflows",
 	Long:  `This command executes a workflow: atmos workflow <name> --file <file>`,
 	Example: "atmos workflow\n" +
 		"atmos workflow <name> --file <file>\n" +
