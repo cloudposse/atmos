@@ -272,13 +272,16 @@ func execTerraformShellCommand(
 		}
 	}
 
+	// Merge env vars, ensuring componentEnvList takes precedence
+	mergedEnv := mergeEnvVars(os.Environ(), componentEnvList)
+
 	u.LogDebug(atmosConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
 	u.LogDebug(atmosConfig, fmt.Sprintf("Component: %s\n", component))
 	u.LogDebug(atmosConfig, fmt.Sprintf("Stack: %s\n", stack))
 	u.LogDebug(atmosConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
 	u.LogDebug(atmosConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
 	u.LogDebug(atmosConfig, "\nSetting the ENV vars in the shell:\n")
-	for _, v := range componentEnvList {
+	for _, v := range mergedEnv {
 		u.LogDebug(atmosConfig, v)
 	}
 
@@ -286,7 +289,7 @@ func execTerraformShellCommand(
 	pa := os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 		Dir:   componentPath,
-		Env:   append(componentEnvList, os.Environ()...), // Give priority to Atmos defined env vars
+		Env:   mergedEnv,
 	}
 
 	// Start a new shell
@@ -342,4 +345,35 @@ func execTerraformShellCommand(
 
 	u.LogDebug(atmosConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
 	return nil
+}
+
+// mergeEnvVars combines two sets of environment variables, with overrideEnv taking precedence.
+//
+// This is necessary because:
+// 1. We need to preserve existing system environment variables (PATH, HOME, etc.)
+// 2. Component-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
+// 3. (Most importantly) Simply appending the two sets wouldn't work as processes use the first occurrence of each variable
+func mergeEnvVars(baseEnv, overrideEnv []string) []string {
+	envMap := make(map[string]string)
+
+	// Parse base environment variables
+	for _, env := range baseEnv {
+		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
+
+	// Override with new environment variables
+	for _, env := range overrideEnv {
+		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
+
+	// Convert back to slice
+	merged := make([]string, 0, len(envMap))
+	for k, v := range envMap {
+		merged = append(merged, k+"="+v)
+	}
+	return merged
 }
