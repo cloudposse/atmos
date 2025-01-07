@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -176,7 +177,7 @@ func ProcessCommandLineArgs(
 	cmd.DisableFlagParsing = false
 
 	err := cmd.ParseFlags(args)
-	if err != nil {
+	if err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return configAndStacksInfo, err
 	}
 
@@ -222,20 +223,6 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Override = argsAndFlagsInfo.Override
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
-
-	// Check if `-h` or `--help` flags are specified
-	if argsAndFlagsInfo.NeedHelp {
-		// If we're dealing with `-h` or `--help`,
-		// then the SubCommand should be empty.
-		if argsAndFlagsInfo.SubCommand == "-h" || argsAndFlagsInfo.SubCommand == "--help" {
-			argsAndFlagsInfo.SubCommand = ""
-		}
-		err = processHelp(schema.AtmosConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
-		if err != nil {
-			return configAndStacksInfo, err
-		}
-		return configAndStacksInfo, nil
-	}
 
 	flags := cmd.Flags()
 
