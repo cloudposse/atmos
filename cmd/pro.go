@@ -8,7 +8,7 @@ import (
 var proCmd = &cobra.Command{
 	Use:                "pro",
 	Short:              "Access premium features integrated with app.cloudposse.com",
-	Long:               `This command executes 'atmos pro' CLI commands`,
+	Long:               `This command allows you to manage and configure premium features available through app.cloudposse.com.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
