@@ -1,24 +1,17 @@
 package cmd
 
 import (
-<<<<<<< HEAD
 	"context"
 	"fmt"
 	"strings"
-=======
-	"fmt"
->>>>>>> main
 
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-<<<<<<< HEAD
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
-=======
-	"github.com/cloudposse/atmos/internal/tui/templates"
->>>>>>> main
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	cc "github.com/ivanpirog/coloredcobra"
@@ -99,7 +92,6 @@ var terraformCmd = &cobra.Command{
 		}
 	},
 }
-
 
 // Contains checks if a slice of strings contains an exact match for the target string.
 func Contains(slice []string, target string) bool {
