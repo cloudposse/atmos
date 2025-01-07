@@ -12,7 +12,7 @@ import (
 var terraformGenerateVarfileCmd = &cobra.Command{
 	Use:                "varfile",
 	Short:              "Generate a varfile for a Terraform component",
-	Long:               "This command generates a varfile for a specified Atmos Terraform component.",
+	Long:               "This command generates a `varfile` for a specified Atmos Terraform component.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
