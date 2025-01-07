@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"encoding/json"
+
 	"github.com/alecthomas/chroma"
 	"github.com/alecthomas/chroma/formatters"
 	"github.com/alecthomas/chroma/lexers"
@@ -22,7 +24,7 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 		Enabled:   true,
 		Formatter: "terminal",
 		Style:     "dracula",
-		Pager:     true,
+		UsePager:  true,
 		Options: schema.HighlightOptions{
 			LineNumbers: true,
 			Wrap:        false,
@@ -81,10 +83,24 @@ func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration) (str
 
 	// Determine lexer based on content format
 	var lexerName string
-	if strings.HasPrefix(strings.TrimSpace(code), "{") {
+	trimmed := strings.TrimSpace(code)
+
+	// Try to parse as JSON first
+	if json.Valid([]byte(trimmed)) {
 		lexerName = "json"
 	} else {
-		lexerName = "yaml"
+		// Check for common YAML indicators
+		// 1. Contains key-value pairs with colons
+		// 2. Does not start with a curly brace (which could indicate malformed JSON)
+		// 3. Contains indentation or list markers
+		if (strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, "{")) ||
+			strings.Contains(trimmed, "\n  ") ||
+			strings.Contains(trimmed, "\n- ") {
+			lexerName = "yaml"
+		} else {
+			// Fallback to plaintext if format is unclear
+			lexerName = "plaintext"
+		}
 	}
 
 	// Get lexer
@@ -136,10 +152,25 @@ func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration) *Highligh
 }
 
 // Write implements io.Writer
+// The returned byte count n is the length of p regardless of whether the highlighting
+// process changes the actual number of bytes written to the underlying writer.
+// This maintains compatibility with the io.Writer interface contract while still
+// providing syntax highlighting functionality.
 func (h *HighlightWriter) Write(p []byte) (n int, err error) {
 	highlighted, err := HighlightCodeWithConfig(string(p), h.config)
 	if err != nil {
 		return 0, err
 	}
-	return h.writer.Write([]byte(highlighted))
+
+	// Write the highlighted content, ignoring the actual number of bytes written
+	// since we'll return the original input length
+	_, err = h.writer.Write([]byte(highlighted))
+	if err != nil {
+		// If there's an error, we can't be sure how many bytes were actually written
+		return 0, err
+	}
+
+	// Return the original length of p as required by io.Writer interface
+	// This ensures that the caller knows all bytes from p were processed
+	return len(p), nil
 }

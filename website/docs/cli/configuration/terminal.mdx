@@ -18,9 +18,24 @@ Atmos provides configurable terminal settings that allow you to customize the ou
 - Control output pagination and line wrapping
 - Set display preferences for different output formats
 </KeyPoints>
+## General Terminal Settings
+
+Configure general terminal behavior:
+
+```yaml
+settings:
+  terminal:
+    max_width: 120          # Maximum width for terminal output
+    use_pager: true         # Whether to use a pager (like 'less') for long output
+    timestamps: false       # Show timestamps in output
+    colors: true           # Enable colored output
+    unicode: true          # Use Unicode characters in output
+```
+
 ## Syntax Highlighting
-You can customize the syntax highlighting behavior for terminal output using the following settings in your `atmos.yaml`:
-<File title="atmos.yaml">
+
+You can customize the syntax highlighting behavior for terminal output using the following settings:
+
 ```yaml
 settings:
   terminal:
@@ -28,14 +43,15 @@ settings:
       enabled: true         # Enable/disable syntax highlighting
       lexer: yaml           # Lexer to use (yaml or json)
       formatter: terminal   # Output formatter
-      style: dracula        # Color scheme to use; see list of supported themes bellow
-      pager: false          # Whether to use a pager for output
+      style: dracula        # Color scheme to use
+      use_pager: false      # Whether to use a pager for highlighted output
       options:
         line_numbers: false # Show line numbers
         wrap: false         # Wrap long lines
 ```
-</File>
+
 ### Configuration Options
+
 <dl>
   <dt>`enabled`</dt>
   <dd>Enable or disable syntax highlighting (default: `true`)</dd>
@@ -66,8 +82,8 @@ settings:
     </ul>
   </dd>
   
-  <dt>`pager`</dt>
-  <dd>Whether to use a pager for long output (default: `false`)</dd>
+  <dt>`use_pager`</dt>
+  <dd>Whether to use a pager specifically for syntax-highlighted output (default: `false`)</dd>
   
   <dt>`options`</dt>
   <dd>
@@ -80,14 +96,18 @@ settings:
     </dl>
   </dd>
 </dl>
+
 ### Example Usage
+
 The syntax highlighting is automatically applied when using commands that output YAML or JSON, such as:
+
 ```bash
 # Display config in YAML format with syntax highlighting
 atmos describe config -f yaml
 # Display config in JSON format with syntax highlighting
 atmos describe config
 ```
+
 <Note>
 When the output is piped to another command, syntax highlighting is automatically disabled to ensure compatibility:
 ```bash
@@ -95,23 +115,32 @@ When the output is piped to another command, syntax highlighting is automaticall
 atmos describe config | grep base_path
 ```
 </Note>
+
 ## Default Settings
+
 If not specified in your `atmos.yaml`, Atmos uses these default settings:
-<File title="atmos.yaml">
+
 ```yaml
 settings:
   terminal:
+    max_width: 120
+    use_pager: false
+    timestamps: false
+    colors: true
+    unicode: true
     syntax_highlighting:
       enabled: true
       lexer: yaml
       formatter: terminal
       style: dracula
-      pager: false
+      use_pager: false
       options:
         line_numbers: false
         wrap: false
 ```
-</File>
+
 You can override any of these settings in your [Atmos CLI configuration](/cli/configuration) file. 
+
 ## Supported Themes
+
 Atmos supports a wide range of themes for syntax highlighting. You can find the full list of supported themes [here](https://xyproto.github.io/splash/docs/).

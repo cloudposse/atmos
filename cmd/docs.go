@@ -101,7 +101,7 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 			}
 
-			usePager := atmosConfig.Settings.Terminal.Pager
+			usePager := atmosConfig.Settings.Terminal.UsePager
 			if !usePager && atmosConfig.Settings.Docs.Pagination {
 				usePager = atmosConfig.Settings.Docs.Pagination
 				u.LogWarning(atmosConfig, "'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")

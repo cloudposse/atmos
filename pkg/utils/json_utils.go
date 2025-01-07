@@ -24,14 +24,7 @@ func PrintAsJSON(data any) error {
 		return err
 	}
 
-	// Get the Atmos configuration
-	var atmosConfig schema.AtmosConfiguration
-	switch v := data.(type) {
-	case schema.AtmosConfiguration:
-		atmosConfig = v
-	case *schema.AtmosConfiguration:
-		atmosConfig = *v
-	}
+	atmosConfig := ExtractAtmosConfig(data)
 	highlighted, err := HighlightCodeWithConfig(prettyJSON.String(), atmosConfig)
 	if err != nil {
 		// Fallback to plain text if highlighting fails

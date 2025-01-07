@@ -39,7 +39,7 @@ type AtmosConfiguration struct {
 
 type Terminal struct {
 	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
-	Pager              bool               `yaml:"pager" json:"pager" mapstructure:"pager"`
+	UsePager           bool               `yaml:"pager" json:"pager" mapstructure:"pager"`
 	Timestamps         bool               `yaml:"timestamps" json:"timestamps" mapstructure:"timestamps"`
 	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
@@ -51,7 +51,7 @@ type SyntaxHighlighting struct {
 	Lexer     string           `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
 	Formatter string           `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
 	Style     string           `yaml:"style" json:"style" mapstructure:"style"`
-	Pager     bool             `yaml:"pager" json:"pager" mapstructure:"pager"`
+	UsePager  bool             `yaml:"pager" json:"pager" mapstructure:"pager"`
 	Options   HighlightOptions `yaml:"options" json:"options" mapstructure:"options"`
 }
 
