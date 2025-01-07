@@ -51,7 +51,10 @@ var terraformCmd = &cobra.Command{
 		checkAtmosConfig()
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
-		info := RootCmd.Context().Value(contextKey("atmos_info")).(schema.ConfigAndStacksInfo)
+		info, ok := RootCmd.Context().Value(atmosInfoKey).(schema.ConfigAndStacksInfo)
+		if !ok {
+			return fmt.Errorf("failed to retrieve atmos info from context")
+		}
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
 			u.LogErrorAndExit(atmosConfig, err)
@@ -71,6 +74,10 @@ var terraformCmd = &cobra.Command{
 
 			for _, hook := range hooks {
 				if strings.ToLower(hook.Command) == "store" {
+					if len(hook.Outputs) == 0 {
+						u.LogInfo(atmosConfig, fmt.Sprintf("skipping hook %q: no outputs configured", hook.Name))
+						continue
+					}
 					u.LogInfo(atmosConfig, fmt.Sprintf("\nexecuting 'after-terraform-apply' hook '%s' with command '%s'", hook.Name, hook.Command))
 					for key, value := range hook.Outputs {
 						var outputValue any
@@ -83,6 +90,9 @@ var terraformCmd = &cobra.Command{
 						}
 
 						store := atmosConfig.Stores[hook.Name]
+						if store == nil {
+							return fmt.Errorf("store %q not found in configuration", hook.Name)
+						}
 						u.LogInfo(atmosConfig, fmt.Sprintf("  storing terraform output '%s' in store '%s' with key '%s' and value %v", outputKey, hook.Name, key, outputValue))
 
 						err = store.Set(info.Stack, info.ComponentFromArg, key, outputValue)
