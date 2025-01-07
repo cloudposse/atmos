@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -162,7 +163,7 @@ func ProcessComponentConfig(
 	return nil
 }
 
-// processCommandLineArgs processes command-line args
+// ProcessCommandLineArgs processes command-line args
 func ProcessCommandLineArgs(
 	componentType string,
 	cmd *cobra.Command,
@@ -174,7 +175,7 @@ func ProcessCommandLineArgs(
 	cmd.DisableFlagParsing = false
 
 	err := cmd.ParseFlags(args)
-	if err != nil {
+	if err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return configAndStacksInfo, err
 	}
 
@@ -218,20 +219,6 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
-
-	// Check if `-h` or `--help` flags are specified
-	if argsAndFlagsInfo.NeedHelp {
-		// If we're dealing with `-h` or `--help`,
-		// then the SubCommand should be empty.
-		if argsAndFlagsInfo.SubCommand == "-h" || argsAndFlagsInfo.SubCommand == "--help" {
-			argsAndFlagsInfo.SubCommand = ""
-		}
-		err = processHelp(schema.AtmosConfiguration{}, componentType, argsAndFlagsInfo.SubCommand)
-		if err != nil {
-			return configAndStacksInfo, err
-		}
-		return configAndStacksInfo, nil
-	}
 
 	flags := cmd.Flags()
 
@@ -319,6 +306,7 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentType,
 			configAndStacksInfo.ComponentFromArg,
 		)
+
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -430,6 +418,10 @@ func ProcessStacks(
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
+	}
+
+	if configAndStacksInfo.ComponentSection == nil {
+		configAndStacksInfo.ComponentSection = make(map[string]any)
 	}
 
 	// Add imports
@@ -652,7 +644,10 @@ func ProcessStacks(
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
-func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (schema.ArgsAndFlagsInfo, error) {
+func processArgsAndFlags(
+	componentType string,
+	inputArgsAndFlags []string,
+) (schema.ArgsAndFlagsInfo, error) {
 	var info schema.ArgsAndFlagsInfo
 	var additionalArgsAndFlags []string
 	var globalOptions []string
@@ -664,6 +659,7 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 		info.NeedHelp = true
 		return info, nil
 	}
+
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "version" {
 		info.SubCommand = inputArgsAndFlags[0]
 		return info, nil
@@ -1044,6 +1040,14 @@ func processArgsAndFlags(componentType string, inputArgsAndFlags []string) (sche
 			if additionalArgsAndFlags[0] == "state" &&
 				u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
 				info.SubCommand = fmt.Sprintf("state %s", additionalArgsAndFlags[1])
+				twoWordsCommand = true
+			}
+
+			// `terraform providers` commands
+			// https://developer.hashicorp.com/terraform/cli/commands/providers
+			if additionalArgsAndFlags[0] == "providers" &&
+				u.SliceContainsString([]string{"lock", "mirror", "schema"}, additionalArgsAndFlags[1]) {
+				info.SubCommand = fmt.Sprintf("providers %s", additionalArgsAndFlags[1])
 				twoWordsCommand = true
 			}
 		}
