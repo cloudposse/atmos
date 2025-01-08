@@ -24,7 +24,13 @@ var listComponentsCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		stackFlag, _ := cmd.Flags().GetString("stack")
+		flags := cmd.Flags()
+
+		stackFlag, err := flags.GetString("stack")
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'stack' flag: %v", err), color.New(color.FgRed))
+			return
+		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)

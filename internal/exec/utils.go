@@ -50,7 +50,6 @@ var (
 		cfg.RedirectStdErrFlag,
 		cfg.LogsLevelFlag,
 		cfg.LogsFileFlag,
-		cfg.OverrideFlag,
 		cfg.QueryFlag,
 	}
 )
@@ -221,7 +220,6 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
-	configAndStacksInfo.Override = argsAndFlagsInfo.Override
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 
 	flags := cmd.Flags()
@@ -965,19 +963,6 @@ func processArgsAndFlags(
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
-		}
-
-		if arg == cfg.OverrideFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf("invalid flag: %s", arg)
-			}
-			info.Override = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.OverrideFlag) {
-			var parts = strings.Split(arg, "=")
-			if len(parts) != 2 {
-				return info, fmt.Errorf("invalid flag: %s", arg)
-			}
-			info.Override = parts[1]
 		}
 
 		if arg == cfg.QueryFlag {
