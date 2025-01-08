@@ -1,107 +1,170 @@
 package store
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestNewMemoryStore(t *testing.T) {
-	store, err := NewInMemoryStore(nil)
-	if err != nil {
-		t.Errorf("NewMemoryStore() error = %v, want nil", err)
-	}
-	if store == nil {
-		t.Error("NewMemoryStore() returned nil store")
-	}
-}
-
-func TestMemoryStoreSet(t *testing.T) {
-	store := &InMemoryStore{
-		data: make(map[string]interface{}),
-	}
-
+func TestInMemoryStore_Set(t *testing.T) {
 	tests := []struct {
-		name  string
-		key   string
-		value interface{}
+		name      string
+		stack     string
+		component string
+		key       string
+		value     interface{}
+		wantErr   bool
 	}{
 		{
-			name:  "string value",
-			key:   "test-key",
-			value: "test-value",
+			name:      "successful set",
+			stack:     "dev-us-west-2",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
+			wantErr:   false,
 		},
 		{
-			name:  "integer value",
-			key:   "number",
-			value: 42,
+			name:      "complex value",
+			stack:     "dev-us-west-2",
+			component: "app/service",
+			key:       "config-map",
+			value:     map[string]string{"key": "value"},
+			wantErr:   false,
 		},
 		{
-			name:  "complex value",
-			key:   "object",
-			value: map[string]string{"nested": "value"},
+			name:      "empty stack",
+			stack:     "",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
+			wantErr:   true,
+		},
+		{
+			name:      "empty component",
+			stack:     "dev-us-west-2",
+			component: "",
+			key:       "config-key",
+			value:     "test-value",
+			wantErr:   true,
+		},
+		{
+			name:      "empty key",
+			stack:     "dev-us-west-2",
+			component: "app/service",
+			key:       "",
+			value:     "test-value",
+			wantErr:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := store.Set(tt.key, tt.value)
-			if err != nil {
-				t.Errorf("Set() error = %v, want nil", err)
-			}
+			store, err := NewInMemoryStore()
+			assert.NoError(t, err)
 
-			// Verify the value was stored correctly
-			got, exists := store.data[tt.key]
-			if !exists {
-				t.Errorf("Set() key %v not found in store", tt.key)
-			}
+			err = store.Set(tt.stack, tt.component, tt.key, tt.value)
 
-			// Use reflect.DeepEqual for comparing complex types
-			if !reflect.DeepEqual(got, tt.value) {
-				t.Errorf("Set() = %v, want %v", got, tt.value)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Verify the value was stored correctly
+				got, err := store.Get(tt.stack, tt.component, tt.key)
+				assert.NoError(t, err)
+				assert.Equal(t, tt.value, got)
 			}
 		})
 	}
 }
 
-func TestMemoryStoreGet(t *testing.T) {
-	store := &InMemoryStore{
-		data: make(map[string]interface{}),
-	}
+func TestInMemoryStore_Get(t *testing.T) {
+	store, err := NewInMemoryStore()
+	assert.NoError(t, err)
 
 	// Setup test data
-	testKey := "test-key"
+	testStack := "dev-us-west-2"
+	testComponent := "app/service"
+	testKey := "config-key"
 	testValue := "test-value"
-	store.data[testKey] = testValue
+
+	err = store.Set(testStack, testComponent, testKey, testValue)
+	assert.NoError(t, err)
 
 	tests := []struct {
 		name      string
+		stack     string
+		component string
 		key       string
 		want      interface{}
-		wantError bool
+		wantErr   bool
 	}{
 		{
 			name:      "existing key",
+			stack:     testStack,
+			component: testComponent,
 			key:       testKey,
 			want:      testValue,
-			wantError: false,
+			wantErr:   false,
 		},
 		{
 			name:      "non-existing key",
+			stack:     testStack,
+			component: testComponent,
 			key:       "non-existing",
 			want:      nil,
-			wantError: true,
+			wantErr:   true,
+		},
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: testComponent,
+			key:       testKey,
+			want:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "empty component",
+			stack:     testStack,
+			component: "",
+			key:       testKey,
+			want:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "empty key",
+			stack:     testStack,
+			component: testComponent,
+			key:       "",
+			want:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "wrong stack",
+			stack:     "wrong-stack",
+			component: testComponent,
+			key:       testKey,
+			want:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "wrong component",
+			stack:     testStack,
+			component: "wrong/component",
+			key:       testKey,
+			want:      nil,
+			wantErr:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := store.Get(tt.key)
-			if (err != nil) != tt.wantError {
-				t.Errorf("Get() error = %v, wantError %v", err, tt.wantError)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("Get() = %v, want %v", got, tt.want)
+			got, err := store.Get(tt.stack, tt.component, tt.key)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, got)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, got)
 			}
 		})
 	}

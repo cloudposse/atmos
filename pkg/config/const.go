@@ -44,6 +44,7 @@ const (
 	ImportSectionName                 = "import"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
+	HooksSectionName                  = "hooks"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
 	EnvSectionName                    = "env"
