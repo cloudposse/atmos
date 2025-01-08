@@ -134,7 +134,6 @@ func ExecuteAtmosCmd() error {
 		}
 
 		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", selectedComponent, selectedStack)
-		u.PrintMessageInColor(m, theme.Colors.Info)
 		u.PrintMessageInColor(m, theme.Colors.Success)
 		return nil
 	}
