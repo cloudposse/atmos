@@ -3,13 +3,14 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
 )
 
 // listComponentsCmd lists atmos components
@@ -23,7 +24,13 @@ var listComponentsCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		stackFlag, _ := cmd.Flags().GetString("stack")
+		flags := cmd.Flags()
+
+		stackFlag, err := flags.GetString("stack")
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'stack' flag: %v", err), color.New(color.FgRed))
+			return
+		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)

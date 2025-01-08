@@ -35,21 +35,27 @@ func (m *MockSSMClient) GetParameter(ctx context.Context, params *ssm.GetParamet
 
 func TestSSMStore_Set(t *testing.T) {
 	mockFnOverwrite := true
+	testPrefix := "/test-prefix"
+	testDelimiter := "-"
 
 	tests := []struct {
-		name    string
-		key     string
-		value   interface{}
-		mockFn  func(*MockSSMClient)
-		wantErr bool
+		name      string
+		stack     string
+		component string
+		key       string
+		value     interface{}
+		mockFn    func(*MockSSMClient)
+		wantErr   bool
 	}{
 		{
-			name:  "successful set",
-			key:   "/test/key",
-			value: "test-value",
+			name:      "successful set",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
 			mockFn: func(m *MockSSMClient) {
 				m.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
-					Name:      aws.String("/test/key"),
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					Value:     aws.String("test-value"),
 					Type:      types.ParameterTypeString,
 					Overwrite: &mockFnOverwrite,
@@ -58,9 +64,11 @@ func TestSSMStore_Set(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:  "aws error",
-			key:   "/test/key",
-			value: "test-value",
+			name:      "aws error",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
 			mockFn: func(m *MockSSMClient) {
 				m.On("PutParameter", mock.Anything, mock.Anything).
 					Return(nil, errors.New("aws error"))
@@ -68,11 +76,72 @@ func TestSSMStore_Set(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "invalid value type",
-			key:     "/test/key",
-			value:   123, // Not a string
-			mockFn:  func(m *MockSSMClient) {},
-			wantErr: true,
+			name:      "invalid value type",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			value:     123, // Not a string
+			mockFn:    func(m *MockSSMClient) {},
+			wantErr:   true,
+		},
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
+			mockFn:    func(m *MockSSMClient) {},
+			wantErr:   true,
+		},
+		{
+			name:      "empty component",
+			stack:     "dev-usw2",
+			component: "",
+			key:       "config-key",
+			value:     "test-value",
+			mockFn:    func(m *MockSSMClient) {},
+			wantErr:   true,
+		},
+		{
+			name:      "empty key",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "",
+			value:     "test-value",
+			mockFn:    func(m *MockSSMClient) {},
+			wantErr:   true,
+		},
+		{
+			name:      "nil stack delimiter",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
+			mockFn: func(m *MockSSMClient) {
+				m.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					Value:     aws.String("test-value"),
+					Type:      types.ParameterTypeString,
+					Overwrite: &mockFnOverwrite,
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+			wantErr: false,
+		},
+		{
+			name:      "complex stack name with multiple delimiters",
+			stack:     "dev-usw2-prod",
+			component: "app/service",
+			key:       "config-key",
+			value:     "test-value",
+			mockFn: func(m *MockSSMClient) {
+				m.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/prod/app/service/config-key"),
+					Value:     aws.String("test-value"),
+					Type:      types.ParameterTypeString,
+					Overwrite: &mockFnOverwrite,
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+			wantErr: false,
 		},
 	}
 
@@ -81,8 +150,12 @@ func TestSSMStore_Set(t *testing.T) {
 			mockClient := new(MockSSMClient)
 			tt.mockFn(mockClient)
 
-			store := &SSMStore{client: mockClient}
-			err := store.Set(tt.key, tt.value)
+			store := &SSMStore{
+				client:         mockClient,
+				prefix:         testPrefix,
+				stackDelimiter: aws.String(testDelimiter),
+			}
+			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -96,20 +169,26 @@ func TestSSMStore_Set(t *testing.T) {
 
 func TestSSMStore_Get(t *testing.T) {
 	mockFnWithDecryption := true
+	testPrefix := "/test-prefix"
+	testDelimiter := "-"
 
 	tests := []struct {
-		name    string
-		key     string
-		mockFn  func(*MockSSMClient)
-		want    interface{}
-		wantErr bool
+		name      string
+		stack     string
+		component string
+		key       string
+		mockFn    func(*MockSSMClient)
+		want      interface{}
+		wantErr   bool
 	}{
 		{
-			name: "successful get",
-			key:  "/test/key",
+			name:      "successful get",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
 			mockFn: func(m *MockSSMClient) {
 				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name:           aws.String("/test/key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
 					WithDecryption: &mockFnWithDecryption,
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
@@ -121,11 +200,52 @@ func TestSSMStore_Get(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "aws error",
-			key:  "/test/key",
+			name:      "aws error",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
 			mockFn: func(m *MockSSMClient) {
 				m.On("GetParameter", mock.Anything, mock.Anything).
 					Return(nil, errors.New("aws error"))
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockSSMClient) {},
+			want:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "empty component",
+			stack:     "dev-usw2",
+			component: "",
+			key:       "config-key",
+			mockFn:    func(m *MockSSMClient) {},
+			want:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "empty key",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "",
+			mockFn:    func(m *MockSSMClient) {},
+			want:      nil,
+			wantErr:   true,
+		},
+		{
+			name:      "parameter not found",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "non-existent-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, mock.Anything).
+					Return(nil, &types.ParameterNotFound{})
 			},
 			want:    nil,
 			wantErr: true,
@@ -137,8 +257,12 @@ func TestSSMStore_Get(t *testing.T) {
 			mockClient := new(MockSSMClient)
 			tt.mockFn(mockClient)
 
-			store := &SSMStore{client: mockClient}
-			got, err := store.Get(tt.key)
+			store := &SSMStore{
+				client:         mockClient,
+				prefix:         testPrefix,
+				stackDelimiter: aws.String(testDelimiter),
+			}
+			got, err := store.Get(tt.stack, tt.component, tt.key)
 
 			if tt.wantErr {
 				assert.Error(t, err)
