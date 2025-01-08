@@ -268,6 +268,10 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
+
+			// Register custom detectors
+			RegisterCustomDetectors()
+
 			client := &getter.Client{
 				Ctx:  ctx,
 				Dst:  tempDir,

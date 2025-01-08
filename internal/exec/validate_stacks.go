@@ -379,6 +379,7 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+	RegisterCustomDetectors()
 	client := &getter.Client{
 		Ctx:  ctx,
 		Dst:  atmosManifestJsonSchemaFilePath,

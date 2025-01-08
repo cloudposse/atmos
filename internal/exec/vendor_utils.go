@@ -11,6 +11,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -668,10 +669,62 @@ func validateURI(uri string) error {
 }
 func isValidScheme(scheme string) bool {
 	validSchemes := map[string]bool{
-		"http":  true,
-		"https": true,
-		"git":   true,
-		"ssh":   true,
+		"http":       true,
+		"https":      true,
+		"git":        true,
+		"ssh":        true,
+		"git::https": true,
 	}
 	return validSchemes[scheme]
+}
+
+// CustomGitHubDetector intercepts GitHub URLs and transforms them
+// into something like git::https://<token>@github.com/... so we can
+// do a git-based clone with a token.
+type CustomGitHubDetector struct{}
+
+// Detect implements the getter.Detector interface for go-getter v1.
+func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
+	if len(src) == 0 {
+		return "", false, nil
+	}
+	// If there's no scheme (no "://"), prepend "https://".
+	if !strings.Contains(src, "://") {
+		src = "https://" + src
+	}
+
+	u, err := url.Parse(src)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to parse GitHub URL %q: %w", src, err)
+	}
+
+	if u.Host != "github.com" {
+		return "", false, nil
+	}
+
+	parts := strings.SplitN(u.Path, "/", 4)
+	if len(parts) < 3 {
+		return "", false, fmt.Errorf("invalid GitHub URL %q", u)
+	}
+
+	token := os.Getenv("GITHUB_TOKEN")
+	if token != "" {
+		u.User = url.UserPassword("x-access-token", token)
+	}
+
+	// Convert the URL to a git URL
+	finalURL := "git::" + u.String()
+
+	return finalURL, true, nil
+}
+
+// RegisterCustomDetectors prepends the custom detector so it runs before
+// the built-in ones. Any code that calls go-getter should invoke this.
+func RegisterCustomDetectors() {
+	getter.Detectors = append(
+		[]getter.Detector{
+			&CustomGitHubDetector{},
+		},
+		getter.Detectors...,
+	)
 }
