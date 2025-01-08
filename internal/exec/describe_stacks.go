@@ -55,7 +55,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	includeEmptyStacks, err := cmd.Flags().GetBool("include-empty-stacks")
+	includeEmptyStacks, err := flags.GetBool("include-empty-stacks")
 	if err != nil {
 		return err
 	}
@@ -94,6 +94,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
 	finalStacksMap, err := ExecuteDescribeStacks(
 		atmosConfig,
 		filterByStack,
@@ -108,7 +113,18 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, finalStacksMap)
+	var res any
+
+	if query != "" {
+		res, err = u.EvaluateYqExpression(atmosConfig, finalStacksMap, query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = finalStacksMap
+	}
+
+	err = printOrWriteToFile(format, file, res)
 	if err != nil {
 		return err
 	}
