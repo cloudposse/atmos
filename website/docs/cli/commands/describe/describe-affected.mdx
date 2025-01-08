@@ -107,6 +107,7 @@ atmos describe affected --include-dependents=true
 atmos describe affected --include-settings=true
 atmos describe affected --stack=plat-ue2-prod
 atmos describe affected --upload=true
+atmos describe affected --query <yq-expression>
 ```
 
 # Example Output
@@ -210,6 +211,7 @@ Affected components and stacks:
 | `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                                                                         | no       |
 | `--include-settings`               | Include the `settings` section for each affected component.<br/>`atmos describe affected --include-settings=true`                                                                                                                                                                                                                                                                                            | no       |
 | `--upload`                         | Upload the affected components and stacks to a specified HTTP endpoint.<br/><br/>`atmos describe affected --upload=true`<br/><br/>Atmos will perform an HTTP POST request<br/>to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,<br/>where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,<br/>and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable. | no       |
+| `--query`                          | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe affected --query=<yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                                                                                                                                                     | no       |
 
 ## Output
 
