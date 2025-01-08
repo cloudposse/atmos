@@ -170,10 +170,13 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 				ExecName: cc.Bold,
 				Flags:    cc.Bold,
 			})
-
 		}
 
-		actualCmd.Help()
+		err := actualCmd.Help()
+		if err != nil {
+			return err
+		}
+
 		return nil
 	}
 	// Check Atmos configuration

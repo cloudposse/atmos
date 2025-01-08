@@ -15,7 +15,7 @@ import (
 var validateComponentCmd = &cobra.Command{
 	Use:   "component",
 	Short: "Validate an Atmos component in a stack using JSON Schema or OPA policies",
-	Long:  "This command validates an Atmos component within a stack using either JSON Schema or OPA policies.",
+	Long:  "This command validates an Atmos component within a stack using JSON Schema or OPA policies.",
 	Example: "atmos validate component <component> -s <stack>\n" +
 		"atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa>\n" +
 		"atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type opa --module-paths catalog",
