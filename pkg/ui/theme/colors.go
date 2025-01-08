@@ -5,22 +5,20 @@ import (
 	"github.com/fatih/color"
 )
 
-// ANSI Colors (for lipgloss)
 const (
 	// Base colors
-	ColorGray      = "8"   // Version number
-	ColorGreen     = "10"  // Success, new version
-	ColorCyan      = "14"  // Links, info
-	ColorPink      = "211" // Package names
-	ColorBlue      = "63"  // UI elements
-	ColorDarkGray  = "241" // Subtle text
-	ColorRed       = "9"   // Errors, x mark
-	ColorCheckmark = "42"  // Checkmark
-	ColorWhite     = "7"   // Default text
+	ColorGray      = "#808080" // Version number
+	ColorGreen     = "#00FF00" // Success, new version
+	ColorCyan      = "#00FFFF" // Links, info
+	ColorPink      = "#FF69B4" // Package names
+	ColorBlue      = "#5F5FFF" // UI elements
+	ColorDarkGray  = "#626262" // Subtle text
+	ColorRed       = "#FF0000" // Errors, x mark
+	ColorCheckmark = "#00D700" // Checkmark
+	ColorWhite     = "#FFFFFF" // Default text
 
-	// Hex colors
 	ColorSelectedItem = "#10ff10" // Selected items in lists
-	ColorBorder       = "62"      // UI borders
+	ColorBorder       = "#5F5FD7" // UI borders
 )
 
 // Styles provides pre-configured lipgloss styles for common UI elements
