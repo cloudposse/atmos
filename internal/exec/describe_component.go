@@ -7,6 +7,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeComponentCmd executes `describe component` command
@@ -42,6 +43,11 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	componentSection, err := ExecuteDescribeComponent(component, stack, processTemplates)
@@ -49,7 +55,23 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, componentSection)
+	var res any
+
+	if query != "" {
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		if err != nil {
+			return err
+		}
+
+		res, err = u.EvaluateYqExpression(atmosConfig, componentSection, query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = componentSection
+	}
+
+	err = printOrWriteToFile(format, file, res)
 	if err != nil {
 		return err
 	}
