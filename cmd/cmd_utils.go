@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -19,6 +18,7 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -451,8 +451,8 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	c1 := color.New(color.FgCyan)
-	c2 := color.New(color.FgGreen)
+	c1 := theme.Colors.Info
+	c2 := theme.Colors.Success
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")

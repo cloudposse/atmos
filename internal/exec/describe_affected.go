@@ -32,6 +32,7 @@ type DescribeAffectedCmdArgs struct {
 	Verbose                     bool
 	Upload                      bool
 	Stack                       string
+	Query                       string
 }
 
 func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
@@ -153,6 +154,11 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		}
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
 	result := DescribeAffectedCmdArgs{
 		CLIConfig:                   atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
@@ -170,6 +176,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		Verbose:                     verbose,
 		Upload:                      upload,
 		Stack:                       stack,
+		Query:                       query,
 	}
 
 	return result, nil
@@ -231,39 +238,57 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	a.Logger.Trace("\nAffected components and stacks: \n")
+	if a.Query == "" {
+		a.Logger.Trace("\nAffected components and stacks: \n")
 
-	err = printOrWriteToFile(a.Format, a.OutputFile, affected)
-	if err != nil {
-		return err
+		err = printOrWriteToFile(a.Format, a.OutputFile, affected)
+		if err != nil {
+			return err
+		}
+
+		if a.Upload {
+			// Parse the repo URL
+			gitURL, err := giturl.NewGitURL(repoUrl)
+			if err != nil {
+				return err
+			}
+
+			apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
+			if err != nil {
+				return err
+			}
+
+			req := pro.AffectedStacksUploadRequest{
+				HeadSHA:   headHead.Hash().String(),
+				BaseSHA:   baseHead.Hash().String(),
+				RepoURL:   repoUrl,
+				RepoName:  gitURL.GetRepoName(),
+				RepoOwner: gitURL.GetOwnerName(),
+				RepoHost:  gitURL.GetHostName(),
+				Stacks:    affected,
+			}
+
+			err = apiClient.UploadAffectedStacks(req)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		if err != nil {
+			return err
+		}
+
+		res, err := u.EvaluateYqExpression(atmosConfig, affected, a.Query)
+		if err != nil {
+			return err
+		}
+
+		err = printOrWriteToFile(a.Format, a.OutputFile, res)
+		if err != nil {
+			return err
+		}
 	}
 
-	if a.Upload {
-		// Parse the repo URL
-		gitURL, err := giturl.NewGitURL(repoUrl)
-		if err != nil {
-			return err
-		}
-
-		apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
-		if err != nil {
-			return err
-		}
-
-		req := pro.AffectedStacksUploadRequest{
-			HeadSHA:   headHead.Hash().String(),
-			BaseSHA:   baseHead.Hash().String(),
-			RepoURL:   repoUrl,
-			RepoName:  gitURL.GetRepoName(),
-			RepoOwner: gitURL.GetOwnerName(),
-			RepoHost:  gitURL.GetHostName(),
-			Stacks:    affected,
-		}
-
-		err = apiClient.UploadAffectedStacks(req)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }

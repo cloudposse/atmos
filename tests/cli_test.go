@@ -92,6 +92,29 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
+// loadTestSuites loads and merges all .yaml files from the test-cases directory
+func loadTestSuites(testCasesDir string) (*TestSuite, error) {
+	var mergedSuite TestSuite
+
+	entries, err := os.ReadDir(testCasesDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read test-cases directory: %v", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".yaml") {
+			filePath := filepath.Join(testCasesDir, entry.Name())
+			suite, err := loadTestSuite(filePath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load %s: %v", filePath, err)
+			}
+			mergedSuite.Tests = append(mergedSuite.Tests, suite.Tests...)
+		}
+	}
+
+	return &mergedSuite, nil
+}
+
 func TestCLICommands(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -108,9 +131,10 @@ func TestCLICommands(t *testing.T) {
 	}
 	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
 
-	testSuite, err := loadTestSuite("test_cases.yaml")
+	// Update the test suite loading
+	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
-		t.Fatalf("Failed to load test suite: %v", err)
+		t.Fatalf("Failed to load test suites: %v", err)
 	}
 
 	for _, tc := range testSuite.Tests {

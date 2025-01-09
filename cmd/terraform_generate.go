@@ -16,10 +16,9 @@ This command supports the following subcommands:
 - 'backends' to generate backend configuration files for all Atmos components in all stacks.
 - 'varfile' to generate a variable file (varfile) for an Atmos component in a stack.
 - 'varfiles' to generate varfiles for all Atmos components in all stacks.`,
-
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return terraformRun(cmd, cmd, args)
+	Run: func(cmd *cobra.Command, args []string) {
+		terraformRun(cmd, cmd, args)
 	},
 }
 

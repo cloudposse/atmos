@@ -11,8 +11,8 @@ import (
 // atlantisGenerateRepoConfigCmd generates repository configuration for Atlantis
 var atlantisGenerateRepoConfigCmd = &cobra.Command{
 	Use:                "repo-config",
-	Short:              "Execute 'atlantis generate repo-config`",
-	Long:               "This command generates repository configuration for Atlantis",
+	Short:              "Generate repository configuration for Atlantis",
+	Long:               "Generate the repository configuration file required for Atlantis to manage Terraform repositories.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args, false)

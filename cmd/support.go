@@ -35,7 +35,11 @@ var supportCmd = &cobra.Command{
 			return fmt.Errorf("failed to render support documentation: %w", err)
 		}
 
-		fmt.Fprint(os.Stdout, out)
+		_, err = fmt.Fprint(os.Stdout, out)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	},
 }
