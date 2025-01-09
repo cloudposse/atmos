@@ -19,8 +19,6 @@ func TestStackProcessor(t *testing.T) {
 		"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/prod/us-east-2.yaml",
 		"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/staging/us-east-2.yaml",
 		"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/test1/us-east-2.yaml",
-		"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/test2/us-east-2.yaml",
-		"../../tests/fixtures/scenarios/complete/stacks/orgs/cp/tenant1/test2/us-west-1.yaml",
 	}
 
 	processStackDeps := true
@@ -52,16 +50,15 @@ func TestStackProcessor(t *testing.T) {
 	)
 
 	assert.Nil(t, err)
-	assert.Equal(t, 6, len(listResult))
-	assert.Equal(t, 6, len(mapResult))
+	assert.Equal(t, 4, len(listResult))
+	assert.Equal(t, 4, len(mapResult))
 
 	mapResultKeys := u.StringKeysFromMap(mapResult)
 	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", mapResultKeys[0])
 	assert.Equal(t, "orgs/cp/tenant1/prod/us-east-2", mapResultKeys[1])
 	assert.Equal(t, "orgs/cp/tenant1/staging/us-east-2", mapResultKeys[2])
 	assert.Equal(t, "orgs/cp/tenant1/test1/us-east-2", mapResultKeys[3])
-	assert.Equal(t, "orgs/cp/tenant1/test2/us-east-2", mapResultKeys[4])
-	assert.Equal(t, "orgs/cp/tenant1/test2/us-west-1", mapResultKeys[5])
+
 	mapConfig1, err := u.UnmarshalYAML[schema.AtmosSectionMapType](listResult[0])
 	assert.Nil(t, err)
 
@@ -195,4 +192,56 @@ func TestStackProcessor(t *testing.T) {
 	yamlConfig, err := u.ConvertToYAML(mapConfig1)
 	assert.Nil(t, err)
 	t.Log(string(yamlConfig))
+}
+
+func TestStackProcessorRelativePaths(t *testing.T) {
+	stacksBasePath := "../../tests/fixtures/scenarios/relative-paths/stacks"
+	terraformComponentsBasePath := "../../tests/fixtures/components/terraform"
+
+	filePaths := []string{
+		"../../tests/fixtures/scenarios/relative-paths/stacks/orgs/acme/platform/dev.yaml",
+		"../../tests/fixtures/scenarios/relative-paths/stacks/orgs/acme/platform/prod.yaml",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+				Sprig: schema.TemplatesSettingsSprig{
+					Enabled: true,
+				},
+				Gomplate: schema.TemplatesSettingsGomplate{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	listResult, mapResult, _, err := ProcessYAMLConfigFiles(
+		atmosConfig,
+		stacksBasePath,
+		terraformComponentsBasePath,
+		"",
+		filePaths,
+		true,
+		true,
+		false,
+	)
+
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(listResult))
+	assert.Equal(t, 2, len(mapResult))
+
+	mapResultKeys := u.StringKeysFromMap(mapResult)
+	assert.Equal(t, "orgs/acme/platform/dev", mapResultKeys[0])
+	assert.Equal(t, "orgs/acme/platform/prod", mapResultKeys[1])
+
+	mapConfig1, err := u.UnmarshalYAML[schema.AtmosSectionMapType](listResult[0])
+	assert.Nil(t, err)
+
+	components := mapConfig1["components"].(map[string]any)
+	terraformComponents := components["terraform"].(map[string]any)
+
+	myappComponent := terraformComponents["myapp"].(map[string]any)
+	assert.NotNil(t, myappComponent)
 }
