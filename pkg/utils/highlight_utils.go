@@ -21,12 +21,12 @@ import (
 // DefaultHighlightSettings returns the default syntax highlighting settings
 func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	return &schema.SyntaxHighlighting{
-		Enabled:     true,
-		Formatter:   "terminal",
-		Theme:       "dracula",
-		UsePager:    true,
-		LineNumbers: true,
-		Wrap:        false,
+		Enabled:                true,
+		Formatter:              "terminal",
+		Theme:                  "dracula",
+		HighlightedOutputPager: true,
+		LineNumbers:            true,
+		Wrap:                   false,
 	}
 }
 
@@ -46,6 +46,9 @@ func GetHighlightSettings(config schema.AtmosConfiguration) *schema.SyntaxHighli
 	}
 	if settings.Theme == "" {
 		settings.Theme = defaults.Theme
+	}
+	if !settings.HighlightedOutputPager {
+		settings.HighlightedOutputPager = defaults.HighlightedOutputPager
 	}
 	if !settings.LineNumbers {
 		settings.LineNumbers = defaults.LineNumbers

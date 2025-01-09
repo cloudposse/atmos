@@ -101,13 +101,13 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 			}
 
-			usePager := atmosConfig.Settings.Terminal.UsePager
-			if !usePager && atmosConfig.Settings.Docs.Pagination {
-				usePager = atmosConfig.Settings.Docs.Pagination
+			pager := atmosConfig.Settings.Terminal.Pager
+			if !pager && atmosConfig.Settings.Docs.Pagination {
+				pager = atmosConfig.Settings.Docs.Pagination
 				u.LogWarning(atmosConfig, "'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
 			}
 
-			if err := u.DisplayDocs(componentDocs, usePager); err != nil {
+			if err := u.DisplayDocs(componentDocs, pager); err != nil {
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to display documentation: %w", err))
 			}
 
