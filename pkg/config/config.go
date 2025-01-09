@@ -88,6 +88,8 @@ var (
 				Frequency: "daily",
 			},
 		},
+		Core: schema.CoreConfig{
+			InjectGithubToken: true},
 	}
 )
 
@@ -114,6 +116,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// Default configuration values
 	v.SetDefault("components.helmfile.use_eks", true)
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
+	v.SetDefault("core.inject_github_token", true)
 
 	// Process config in system folder
 	configFilePath1 := ""

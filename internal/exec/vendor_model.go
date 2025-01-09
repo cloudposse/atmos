@@ -244,7 +244,6 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				name: p.name,
 			}
 		}
-
 		// Create temp directory
 		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
 		if err != nil {
@@ -268,9 +267,10 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
-
-			// Register custom detectors
-			RegisterCustomDetectors()
+			// Register custom detectors if InjectGithubToken is enabled
+			if atmosConfig.Core.InjectGithubToken {
+				RegisterCustomDetectors()
+			}
 
 			client := &getter.Client{
 				Ctx:  ctx,

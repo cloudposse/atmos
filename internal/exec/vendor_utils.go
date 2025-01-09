@@ -709,7 +709,11 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 	token := os.Getenv("GITHUB_TOKEN")
 	if token != "" {
-		u.User = url.UserPassword("x-access-token", token)
+		user := u.User.Username()
+		pass, _ := u.User.Password()
+		if user == "" && pass == "" {
+			u.User = url.UserPassword("x-access-token", token)
+		}
 	}
 
 	// Convert the URL to a git URL
