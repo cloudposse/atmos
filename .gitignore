@@ -35,3 +35,4 @@
 .direnv/
 
 .atmos/cache.yaml
+**/cache.*.txt
