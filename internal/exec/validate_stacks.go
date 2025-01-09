@@ -86,7 +86,6 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
 	var atmosManifestJsonSchemaFilePath string
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("Using the schema '%s'", atmosConfig.Schemas.Atmos.Manifest))
 	if atmosConfig.Schemas.Atmos.Manifest == "" {
 		atmosConfig.Schemas.Atmos.Manifest = atmosManifestDefault
 		u.LogTrace(atmosConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default schema '%s'", atmosManifestDefault))
