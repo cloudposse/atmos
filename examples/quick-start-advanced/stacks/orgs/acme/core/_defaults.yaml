@@ -1,3 +1,3 @@
 import:
-  - ../_defaults
+  - orgs/acme/_defaults
   - mixins/tenant/core
