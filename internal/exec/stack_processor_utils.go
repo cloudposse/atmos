@@ -1790,7 +1790,7 @@ func resolveRelativePath(path string, currentFilePath string) string {
 	normalizedPath := filepath.ToSlash(path)
 	normalizedCurrentFilePath := filepath.ToSlash(currentFilePath)
 
-  // Atmos import paths are generally relative paths, however, there are two types of relative paths:
+	// Atmos import paths are generally relative paths, however, there are two types of relative paths:
 	//   1. Paths relative to the base path (most common) - e.g. "mixins/region/us-east-2"
 	//   2. Paths relative to the current file's directory (less common) - e.g. "./_defaults" imports will be relative to `./`
 	//
