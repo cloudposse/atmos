@@ -17,8 +17,8 @@ import (
 // listComponentsCmd lists atmos components
 var listComponentsCmd = &cobra.Command{
 	Use:   "components",
-	Short: "Execute 'list components' command",
-	Long:  `This command lists all Atmos components or filters components by stacks.`,
+	Short: "List all Atmos components or filter by stack",
+	Long:  "List Atmos components, with options to filter results by specific stacks.",
 	Example: "atmos list components\n" +
 		"atmos list components -s <stack>",
 	Run: func(cmd *cobra.Command, args []string) {

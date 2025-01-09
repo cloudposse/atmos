@@ -25,8 +25,8 @@ const atmosInfoKey contextKey = "atmos_info"
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
 	Aliases:            []string{"tf"},
-	Short:              "Execute Terraform commands",
-	Long:               `This command executes Terraform commands`,
+	Short:              "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
+	Long:               `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(cmd, cmd, args)
@@ -170,10 +170,13 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 				ExecName: cc.Bold,
 				Flags:    cc.Bold,
 			})
-
 		}
 
-		actualCmd.Help()
+		err := actualCmd.Help()
+		if err != nil {
+			return err
+		}
+
 		return nil
 	}
 	// Check Atmos configuration
