@@ -17,6 +17,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
 
 // RootCmd represents the base command when called without any subcommands
@@ -126,11 +127,9 @@ func initCobraConfig() {
 	oldUsageFunc := RootCmd.UsageFunc()
 	RootCmd.SetUsageFunc(func(c *cobra.Command) error {
 		if c.Use == "atmos" {
-			b.UsageFunc(c)
-			return nil
+			return b.UsageFunc(c)
 		}
-		oldUsageFunc(c)
-		return nil
+		return oldUsageFunc(c)
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
