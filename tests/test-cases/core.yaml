@@ -1,0 +1,64 @@
+tests:
+  - name: "which atmos"
+    enabled: true
+    description: "Ensure atmos CLI is installed and we're using the one that was built."
+    workdir: "../"
+    command: "which"
+    args:
+      - "atmos"
+    expect:
+      stdout:
+        - '(build[/\\]atmos|atmos[/\\]atmos)'
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: "atmos"
+    enabled: true
+    description: "Verify atmos CLI reports missing stacks directory."
+    workdir: "../"
+    command: "atmos"
+    expect:
+      stdout:
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
+        - "but the directory does not exist."
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos docs
+    enabled: false
+    description: "Ensure atmos docs command executes without errors."
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "docs"
+    expect:
+      exit_code: 0
+      stderr:
+        - "^$"
+
+  - name: atmos non-existent
+    enabled: true
+    description: "Ensure atmos CLI returns an error for a non-existent command."
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "non-existent"
+    expect:
+      stderr:
+        - 'unknown command "non-existent" for "atmos"'
+      exit_code: 1
+
+  - name: atmos terraform non-existent
+    enabled: false
+    description: "Ensure atmos CLI returns an error for a non-existent command."
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "non-existent"
+    expect:
+      stderr:
+        - 'unknown command "non-existent" for "atmos"'
+      exit_code: 1
