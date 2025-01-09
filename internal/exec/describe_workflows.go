@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	u "github.com/cloudposse/atmos/pkg/utils"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/spf13/cobra"
@@ -47,18 +48,34 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		outputType = "list"
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
 	describeWorkflowsList, describeWorkflowsMap, describeWorkflowsAll, err := ExecuteDescribeWorkflows(atmosConfig)
 	if err != nil {
 		return err
 	}
 
+	var res any
+
 	if outputType == "list" {
-		err = printOrWriteToFile(format, "", describeWorkflowsList)
+		res = describeWorkflowsList
 	} else if outputType == "map" {
-		err = printOrWriteToFile(format, "", describeWorkflowsMap)
+		res = describeWorkflowsMap
 	} else {
-		err = printOrWriteToFile(format, "", describeWorkflowsAll)
+		res = describeWorkflowsAll
 	}
+
+	if query != "" {
+		res, err = u.EvaluateYqExpression(atmosConfig, res, query)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = printOrWriteToFile(format, "", res)
 	if err != nil {
 		return err
 	}

@@ -17,8 +17,8 @@ var checkFlag bool
 
 var versionCmd = &cobra.Command{
 	Use:     "version",
-	Short:   "Print the CLI version",
-	Long:    `This command prints the CLI version`,
+	Short:   "Display the version of Atmos you are running and check for updates",
+	Long:    `This command shows the version of the Atmos CLI you are currently running and checks if a newer version is available. Use this command to verify your installation and ensure you are up to date.`,
 	Example: "atmos version",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Print a styled Atmos logo to the terminal

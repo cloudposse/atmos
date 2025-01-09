@@ -227,13 +227,11 @@ func execTerraformShellCommand(
 		}
 	}()
 
-	// Set the Terraform environment variables to reference the var file
-	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_plan=-var-file=%s", varFile))
-	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_apply=-var-file=%s", varFile))
-	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_refresh=-var-file=%s", varFile))
-	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_import=-var-file=%s", varFile))
-	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_destroy=-var-file=%s", varFile))
-	componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_console=-var-file=%s", varFile))
+	// Define the Terraform commands that may use var-file configuration
+	tfCommands := []string{"plan", "apply", "refresh", "import", "destroy", "console"}
+	for _, cmd := range tfCommands {
+		componentEnvList = append(componentEnvList, fmt.Sprintf("TF_CLI_ARGS_%s=-var-file=%s", cmd, varFile))
+	}
 
 	// Set environment variables to indicate the details of the Atmos shell configuration
 	componentEnvList = append(componentEnvList, fmt.Sprintf("ATMOS_STACK=%s", stack))
@@ -269,15 +267,15 @@ func execTerraformShellCommand(
 	u.LogDebug(atmosConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
 	u.LogDebug(atmosConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
 	u.LogDebug(atmosConfig, "\nSetting the ENV vars in the shell:\n")
-	for _, v := range componentEnvList {
-		u.LogDebug(atmosConfig, v)
-	}
+
+	// Merge env vars, ensuring componentEnvList takes precedence
+	mergedEnv := mergeEnvVars(atmosConfig, componentEnvList)
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
 	pa := os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 		Dir:   componentPath,
-		Env:   append(os.Environ(), componentEnvList...),
+		Env:   mergedEnv,
 	}
 
 	// Start a new shell
@@ -333,4 +331,52 @@ func execTerraformShellCommand(
 
 	u.LogDebug(atmosConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
 	return nil
+}
+
+// mergeEnvVars adds a list of environment variables to the system environment variables
+//
+// This is necessary because:
+//  1. We need to preserve existing system environment variables (PATH, HOME, etc.)
+//  2. Atmos-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
+//  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
+func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []string) []string {
+	envMap := make(map[string]string)
+
+	// Parse system environment variables
+	for _, env := range os.Environ() {
+		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
+			if strings.HasPrefix(parts[0], "TF_") {
+				u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", parts[0]))
+			}
+			envMap[parts[0]] = parts[1]
+		}
+	}
+
+	// Merge with new, Atmos defined environment variables
+	for _, env := range componentEnvList {
+		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
+			// Special handling for Terraform CLI arguments environment variables
+			if strings.HasPrefix(parts[0], "TF_CLI_ARGS_") {
+				// For TF_CLI_ARGS_* variables, we need to append new values to any existing values
+				if existing, exists := envMap[parts[0]]; exists {
+					// Put the new, Atmos defined value first so it takes precedence
+					envMap[parts[0]] = parts[1] + " " + existing
+				} else {
+					// No existing value, just set the new value
+					envMap[parts[0]] = parts[1]
+				}
+			} else {
+				// For all other environment variables, simply override any existing value
+				envMap[parts[0]] = parts[1]
+			}
+		}
+	}
+
+	// Convert back to slice
+	merged := make([]string, 0, len(envMap))
+	for k, v := range envMap {
+		u.LogDebug(atmosConfig, fmt.Sprintf("%s=%s", k, v))
+		merged = append(merged, k+"="+v)
+	}
+	return merged
 }

@@ -2,8 +2,8 @@ package store
 
 // Store defines the common interface for all store implementations.
 type Store interface {
-	Set(key string, value interface{}) error
-	Get(key string) (interface{}, error) // Default values if it doesn't exist?
+	Set(stack string, component string, key string, value interface{}) error
+	Get(stack string, component string, key string) (interface{}, error)
 }
 
 // StoreFactory is a function type to initialize a new store.

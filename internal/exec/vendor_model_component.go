@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 )
@@ -37,7 +37,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 		progress.WithoutPercentage(),
 	)
 	s := spinner.New()
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	s.Style = theme.Styles.Link
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
 	}

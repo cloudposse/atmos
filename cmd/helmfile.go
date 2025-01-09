@@ -13,8 +13,8 @@ import (
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
 	Aliases:            []string{"hf"},
-	Short:              "Execute 'helmfile' commands",
-	Long:               `This command runs Helmfile commands`,
+	Short:              "Manage Helmfile-based Kubernetes deployments",
+	Long:               `This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 
