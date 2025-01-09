@@ -287,6 +287,7 @@ schemas:
     # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
     # manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+    # manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
 # `Go` templates in Atmos manifests
 # https://atmos.tools/core-concepts/stacks/templates
