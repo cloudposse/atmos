@@ -120,6 +120,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		"**/*.yaml.tmpl",
 		"**/*.yml.tmpl",
 	}
+
 	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
