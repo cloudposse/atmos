@@ -329,7 +329,7 @@ settings:
     syntax_highlighting:
       enabled: true
       formatter: terminal   # Output formatter (e.g., terminal, html)
-      style: dracula        # Highlighting style
+      theme: dracula        # Highlighting theme
       pager: true           # Enable pager
       options:
         line_numbers: true  # Display line numbers
