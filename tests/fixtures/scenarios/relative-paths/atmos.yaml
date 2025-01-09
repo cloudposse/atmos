@@ -19,7 +19,3 @@ stacks:
 logs:
   file: "/dev/stderr"
   level: Info
-
-schemas:
-  atmos:
-    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
