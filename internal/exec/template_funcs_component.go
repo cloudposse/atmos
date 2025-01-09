@@ -57,7 +57,7 @@ func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stac
 		terraformOutputs = remoteStateBackendStaticTypeOutputs
 	} else {
 		// Execute `terraform output`
-		terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections)
+		terraformOutputs, err = execTerraformOutput(&atmosConfig, component, stack, sections)
 		if err != nil {
 			return nil, err
 		}

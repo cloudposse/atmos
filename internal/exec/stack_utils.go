@@ -55,15 +55,14 @@ func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndSta
 }
 
 // ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether
-// the component is real or abstract and whether the component is disabled or not and whether the component is locked
+// the component is real or abstract and whether the component is disabled or not
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
-) (map[string]any, string, bool, bool, bool) {
+) (map[string]any, string, bool, bool) {
 	baseComponentName := ""
 	componentIsAbstract := false
 	componentIsEnabled := true
-	componentIsLocked := false
 	var componentMetadata map[string]any
 
 	// Find base component in the `component` attribute
@@ -83,11 +82,6 @@ func ProcessComponentMetadata(
 				componentIsEnabled = false
 			}
 		}
-		if lockedValue, exists := componentMetadata["locked"]; exists {
-			if locked, ok := lockedValue.(bool); ok && locked {
-				componentIsLocked = true
-			}
-		}
 		// Find base component in the `metadata.component` attribute
 		// `metadata.component` overrides `component`
 		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata[cfg.ComponentSectionName].(string); componentMetadataComponentExists {
@@ -100,7 +94,7 @@ func ProcessComponentMetadata(
 		baseComponentName = ""
 	}
 
-	return componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled, componentIsLocked
+	return componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled
 }
 
 // BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config

@@ -50,6 +50,7 @@ var (
 		cfg.RedirectStdErrFlag,
 		cfg.LogsLevelFlag,
 		cfg.LogsFileFlag,
+		cfg.QueryFlag,
 	}
 )
 
@@ -70,6 +71,7 @@ func ProcessComponentConfig(
 	var componentSettingsSection map[string]any
 	var componentOverridesSection map[string]any
 	var componentProvidersSection map[string]any
+	var componentHooksSection map[string]any
 	var componentImportsSection []string
 	var componentEnvSection map[string]any
 	var componentBackendSection map[string]any
@@ -81,59 +83,78 @@ func ProcessComponentConfig(
 	if len(stack) == 0 {
 		return errors.New("stack must be provided and must not be empty")
 	}
+
 	if len(component) == 0 {
 		return errors.New("component must be provided and must not be empty")
 	}
+
 	if len(componentType) == 0 {
 		return errors.New("component type must be provided and must not be empty")
 	}
+
 	if stackSection, ok = stacksMap[stack].(map[string]any); !ok {
 		return fmt.Errorf("could not find the stack '%s'", stack)
 	}
+
 	if componentsSection, ok = stackSection["components"].(map[string]any); !ok {
 		return fmt.Errorf("'components' section is missing in the stack manifest '%s'", stack)
 	}
+
 	if componentTypeSection, ok = componentsSection[componentType].(map[string]any); !ok {
 		return fmt.Errorf("'components.%s' section is missing in the stack manifest '%s'", componentType, stack)
 	}
+
 	if componentSection, ok = componentTypeSection[component].(map[string]any); !ok {
 		return fmt.Errorf("no config found for the component '%s' in the stack manifest '%s'", component, stack)
 	}
+
 	if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {
 		return fmt.Errorf("missing 'vars' section for the component '%s' in the stack manifest '%s'", component, stack)
 	}
+
 	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 		componentProvidersSection = map[string]any{}
 	}
+
+	if componentHooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
+		componentHooksSection = map[string]any{}
+	}
+
 	if componentBackendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
 		componentBackendSection = nil
 	}
+
 	if componentBackendType, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
 		componentBackendType = ""
 	}
+
 	if componentImportsSection, ok = stackSection["imports"].([]string); !ok {
 		componentImportsSection = nil
 	}
+
 	if command, ok = componentSection[cfg.CommandSectionName].(string); !ok {
 		command = ""
 	}
+
 	if componentEnvSection, ok = componentSection[cfg.EnvSectionName].(map[string]any); !ok {
 		componentEnvSection = map[string]any{}
 	}
+
 	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
 		componentSettingsSection = map[string]any{}
 	}
+
 	if componentOverridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
 		componentOverridesSection = map[string]any{}
 	}
+
 	if componentInheritanceChain, ok = componentSection["inheritance"].([]string); !ok {
 		componentInheritanceChain = []string{}
 	}
 
 	// Process component metadata and find a base component (if any) and whether the component is real or abstract
-	componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled, componentIsLocked := ProcessComponentMetadata(component, componentSection)
+	componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled := ProcessComponentMetadata(component, componentSection)
 	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
-	configAndStacksInfo.ComponentIsLocked = componentIsLocked
 
 	// Remove the ENV vars that are set to `null` in the `env` section.
 	// Setting an ENV var to `null` in stack config has the effect of unsetting it
@@ -151,6 +172,7 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
 	configAndStacksInfo.ComponentOverridesSection = componentOverridesSection
 	configAndStacksInfo.ComponentProvidersSection = componentProvidersSection
+	configAndStacksInfo.ComponentHooksSection = componentHooksSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -220,6 +242,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
+	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 
 	flags := cmd.Flags()
 
@@ -587,10 +610,9 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 	// Process component metadata
-	_, baseComponentName, _, componentIsEnabled, componentIsLocked := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
+	_, baseComponentName, _, componentIsEnabled := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
 	configAndStacksInfo.BaseComponentPath = baseComponentName
 	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
-	configAndStacksInfo.ComponentIsLocked = componentIsLocked
 
 	// Process component path and name
 	configAndStacksInfo.ComponentFolderPrefix = ""
@@ -963,6 +985,19 @@ func processArgsAndFlags(
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
+		}
+
+		if arg == cfg.QueryFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.Query = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.QueryFlag) {
+			var parts = strings.Split(arg, "=")
+			if len(parts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.Query = parts[1]
 		}
 
 		if arg == cfg.FromPlanFlag {

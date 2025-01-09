@@ -349,10 +349,6 @@
           "description": "Custom configuration per component, not inherited by derived components",
           "additionalProperties": true,
           "title": "custom"
-        },
-        "locked": {
-          "type": "boolean",
-          "description": "Flag to lock the component and prevent modifications while allowing read operations"
         }
       },
       "required": [],

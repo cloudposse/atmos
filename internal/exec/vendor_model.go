@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
@@ -67,11 +68,11 @@ type modelVendor struct {
 }
 
 var (
-	currentPkgNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("211"))
+	currentPkgNameStyle = theme.Styles.PackageName
 	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
-	checkMark           = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
-	xMark               = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
-	grayColor           = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	checkMark           = theme.Styles.Checkmark
+	xMark               = theme.Styles.XMark
+	grayColor           = theme.Styles.GrayText
 )
 
 func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) (modelVendor, error) {
@@ -81,7 +82,7 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig
 		progress.WithoutPercentage(),
 	)
 	s := spinner.New()
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	s.Style = theme.Styles.Link
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
 	}
