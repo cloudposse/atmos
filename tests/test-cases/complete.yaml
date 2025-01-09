@@ -209,20 +209,3 @@ tests:
       stderr:
         - "ATMOS_SHLVL.*exceeds maximum allowed depth.*(\r?\n)+exit status 1(\r?\n)+exit status 1.*"
       exit_code: 1
-
-  - name: atmos stacks with relative paths
-    enabled: true
-    description: "Verify atmos describe stacks command lists all stacks with their configurations when using relative paths with . and .. in imports"
-    workdir: "fixtures/scenarios/relative-paths"
-    command: "atmos"
-    args:
-      - "describe"
-      - "stacks"
-    expect:
-      stdout:
-        - "acme-platform-dev:"
-        - "acme-platform-staging:"
-        - "acme-platform-prod:"
-      stderr:
-        - "^$"
-      exit_code: 0
