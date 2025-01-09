@@ -555,6 +555,7 @@ func ProcessStackConfig(
 	terraformEnv := map[string]any{}
 	terraformCommand := ""
 	terraformProviders := map[string]any{}
+	terraformHooks := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
@@ -656,6 +657,13 @@ func ProcessStackConfig(
 		terraformProviders, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := globalTerraformSection[cfg.HooksSectionName]; ok {
+		terraformHooks, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.hooks' section in the file '%s'", stackName)
 		}
 	}
 
@@ -795,6 +803,14 @@ func ProcessStackConfig(
 					}
 				}
 
+				componentHooks := map[string]any{}
+				if i, ok := componentMap[cfg.HooksSectionName]; ok {
+					componentHooks, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
+					}
+				}
+
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[string]any{}
@@ -855,6 +871,7 @@ func ProcessStackConfig(
 				componentOverridesSettings := map[string]any{}
 				componentOverridesEnv := map[string]any{}
 				componentOverridesProviders := map[string]any{}
+				componentOverridesHooks := map[string]any{}
 				componentOverridesTerraformCommand := ""
 
 				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
@@ -891,6 +908,12 @@ func ProcessStackConfig(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.providers' in the manifest '%s'", component, stackName)
 						}
 					}
+
+					if i, ok = componentOverrides[cfg.HooksSectionName]; ok {
+						if componentOverridesHooks, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.hooks' in the manifest '%s'", component, stackName)
+						}
+					}
 				}
 
 				// Process base component(s)
@@ -899,6 +922,7 @@ func ProcessStackConfig(
 				baseComponentSettings := map[string]any{}
 				baseComponentEnv := map[string]any{}
 				baseComponentProviders := map[string]any{}
+				baseComponentHooks := map[string]any{}
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
 				baseComponentBackendSection := map[string]any{}
@@ -935,6 +959,7 @@ func ProcessStackConfig(
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
 					baseComponentProviders = baseComponentConfig.BaseComponentProviders
+					baseComponentHooks = baseComponentConfig.BaseComponentHooks
 					baseComponentName = baseComponentConfig.FinalBaseComponentName
 					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
@@ -1058,6 +1083,18 @@ func ProcessStackConfig(
 						baseComponentProviders,
 						componentProviders,
 						componentOverridesProviders,
+					})
+				if err != nil {
+					return nil, err
+				}
+
+				finalComponentHooks, err := m.Merge(
+					atmosConfig,
+					[]map[string]any{
+						terraformHooks,
+						baseComponentHooks,
+						componentHooks,
+						componentOverridesHooks,
 					})
 				if err != nil {
 					return nil, err
@@ -1251,6 +1288,7 @@ func ProcessStackConfig(
 				comp[cfg.MetadataSectionName] = componentMetadata
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
+				comp[cfg.HooksSectionName] = finalComponentHooks
 
 				if baseComponentName != "" {
 					comp[cfg.ComponentSectionName] = baseComponentName
@@ -1989,6 +2027,7 @@ func ProcessBaseComponentConfig(
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentProviders map[string]any
+	var baseComponentHooks map[string]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
@@ -2112,6 +2151,13 @@ func ProcessBaseComponentConfig(
 			}
 		}
 
+		if baseComponentHooksSection, baseComponentHooksSectionExist := baseComponentMap[cfg.HooksSectionName]; baseComponentHooksSectionExist {
+			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("invalid '%s.hooks' section in the stack '%s'", baseComponent, stack)
+			}
+		}
+
 		// Base component backend
 		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
 			baseComponentBackendType, ok = i.(string)
@@ -2181,6 +2227,13 @@ func ProcessBaseComponentConfig(
 			return err
 		}
 		baseComponentConfig.BaseComponentProviders = merged
+
+		// Base component `hooks`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentHooks = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
