@@ -44,7 +44,6 @@ func ProcessYAMLConfigFiles(
 	map[string]map[string]any,
 	error,
 ) {
-
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
@@ -170,7 +169,6 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
-
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
@@ -468,6 +466,7 @@ func ProcessYAMLConfigFile(
 			if err != nil {
 				return nil, nil, nil, nil, nil, err
 			}
+
 			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
@@ -1779,11 +1778,42 @@ func FindComponentDependenciesLegacy(
 	return unique, nil
 }
 
+// resolveRelativePath checks if a path is relative to the current directory and if so,
+// resolves it relative to the current file's directory. It ensures the resolved path
+// exists within the base path.
+func resolveRelativePath(path string, currentFilePath string) string {
+	if path == "" {
+		return path
+	}
+
+	// Convert all paths to use forward slashes for consistency in processing
+	normalizedPath := filepath.ToSlash(path)
+	normalizedCurrentFilePath := filepath.ToSlash(currentFilePath)
+
+	// Atmos import paths are generally relative paths, however, there are two types of relative paths:
+	//   1. Paths relative to the base path (most common) - e.g. "mixins/region/us-east-2"
+	//   2. Paths relative to the current file's directory (less common) - e.g. "./_defaults" imports will be relative to `./`
+	//
+	// Here we check if the path starts with "." or ".." to identify if it's relative to the current file.
+	// If it is, we'll convert it to be relative to the file doing the import, rather than the `base_path`.
+	parts := strings.Split(normalizedPath, "/")
+	firstElement := filepath.Clean(parts[0])
+	if firstElement == "." || firstElement == ".." {
+		// Join the current local path with the current stack file path
+		baseDir := filepath.Dir(normalizedCurrentFilePath)
+		relativePath := filepath.Join(baseDir, normalizedPath)
+		// Return in original format, OS-specific
+		return filepath.FromSlash(relativePath)
+	}
+	// For non-relative paths, return as-is in original format
+	return path
+}
+
 // ProcessImportSection processes the `import` section in stack manifests
-// The `import` section` can be of the following types:
-// 1. list of `StackImport` structs
-// 2. list of strings
-// 3. List of strings and `StackImport` structs in the same file
+// The `import` section can contain:
+// 1. Project-relative paths (e.g. "mixins/region/us-east-2")
+// 2. Paths relative to the current stack file (e.g. "./_defaults")
+// 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2")
 func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.StackImport, error) {
 	stackImports, ok := stackMap[cfg.ImportSectionName]
 
@@ -1809,6 +1839,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		var importObj schema.StackImport
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
+			importObj.Path = resolveRelativePath(importObj.Path, filePath)
 			result = append(result, importObj)
 			continue
 		}
@@ -1822,6 +1853,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 		}
 
+		s = resolveRelativePath(s, filePath)
 		result = append(result, schema.StackImport{Path: s})
 	}
 
