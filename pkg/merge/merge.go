@@ -7,6 +7,7 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -39,15 +40,13 @@ func MergeWithOptions(
 		// so `mergo` does not have access to the original pointers
 		yamlCurrent, err := u.ConvertToYAML(current)
 		if err != nil {
-			c := color.New(color.FgRed)
-			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
+			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
 		}
 
 		dataCurrent, err := u.UnmarshalYAML[any](yamlCurrent)
 		if err != nil {
-			c := color.New(color.FgRed)
-			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
+			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
 		}
 
@@ -66,8 +65,7 @@ func MergeWithOptions(
 		}
 
 		if err = mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			c := color.New(color.FgRed)
-			_, _ = c.Fprintln(color.Error, err.Error()+"\n")
+			_, _ = theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 			return nil, err
 		}
 	}

@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -25,7 +25,7 @@ var ValidateStacksCmd = &cobra.Command{
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
-		u.PrintMessageInColor("all stacks validated successfully\n", color.New(color.FgGreen))
+		u.PrintMessageInColor("all stacks validated successfully\n", theme.Colors.Success)
 	},
 }
 
