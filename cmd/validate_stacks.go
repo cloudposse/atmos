@@ -1,19 +1,19 @@
 package cmd
 
 import (
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ValidateStacksCmd validates stacks
 var ValidateStacksCmd = &cobra.Command{
 	Use:                "stacks",
-	Short:              "Execute 'validate stacks' command",
-	Long:               `This command validates stack manifest configurations: atmos validate stacks`,
+	Short:              "Validate stack manifest configurations",
+	Long:               "This command validates the configuration of stack manifests in Atmos to ensure proper setup and compliance.",
 	Example:            "validate stacks",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
@@ -25,7 +25,7 @@ var ValidateStacksCmd = &cobra.Command{
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
-		u.PrintMessageInColor("all stacks validated successfully\n", color.New(color.FgGreen))
+		u.PrintMessageInColor("all stacks validated successfully\n", theme.Colors.Success)
 	},
 }
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
@@ -19,18 +20,14 @@ type Templater struct {
 
 // commandStyle defines the styles for command formatting
 var (
-	commandNameStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("2")). // Green color for command name
-				Bold(true)
+	commandNameStyle = theme.Styles.CommandName
+	commandDescStyle = theme.Styles.Description
 
-	commandDescStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("7")) // White color for description
-
-	commandUnsupportedNameStyle = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("8")).
+	commandUnsupportedNameStyle = theme.Styles.CommandName.
+					Foreground(lipgloss.Color(theme.ColorGray)).
 					Bold(true)
-	commandUnsupportedDescStyle = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("8"))
+	commandUnsupportedDescStyle = theme.Styles.Description.
+					Foreground(lipgloss.Color(theme.ColorGray))
 )
 
 // formatCommand returns a styled string for a command and its description
@@ -44,6 +41,11 @@ func formatCommand(name string, desc string, padding int, IsNotSupported bool) s
 	styledName := commandNameStyle.Render(paddedName)
 	styledDesc := commandDescStyle.Render(desc)
 	return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
+}
+
+var customHelpShortMessage = map[string]string{
+	"help": "Display help information for Atmos commands",
+	"tf":   "Alias for `terraform` commands",
 }
 
 // formatCommands formats a slice of cobra commands with proper styling
@@ -80,6 +82,9 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 					maxLen = len(cmd.Name())
 				}
 			}
+		}
+		if v, ok := customHelpShortMessage[cmd.Name()]; ok {
+			cmd.Short = v
 		}
 	}
 

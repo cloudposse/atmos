@@ -7,12 +7,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -109,12 +109,12 @@ func ExecuteWorkflow(
 			workflowFileName := filepath.Base(workflowPath)
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
-			failedMsg := color.New(color.FgRed).Sprintf("\nStep '%s' failed!", step.Name)
+			failedMsg := theme.Colors.Error.Sprintf("\nStep '%s' failed!", step.Name)
 
 			u.LogDebug(atmosConfig, fmt.Sprintf("\nCommand failed: %s", command))
 			u.LogDebug(atmosConfig, fmt.Sprintf("Error: %v", err))
 
-			resumeMsg := color.New(color.FgGreen).Sprintf(
+			resumeMsg := theme.Colors.Success.Sprintf(
 				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",
 				workflow,
 				workflowFileName,
@@ -256,7 +256,7 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 	fmt.Println()
 	u.PrintMessageInColor(fmt.Sprintf(
 		"Executing command:\n"+os.Args[0]+" workflow %s --file %s --from-step \"%s\"\n", selectedWorkflow, selectedWorkflowFile, selectedWorkflowStep),
-		color.New(color.FgCyan),
+		theme.Colors.Info,
 	)
 	fmt.Println()
 

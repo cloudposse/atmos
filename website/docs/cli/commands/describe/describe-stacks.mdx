@@ -44,10 +44,11 @@ atmos describe stacks --components=test/test-component-override-3 --sections=var
 atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings --format=json --file=stacks.json
 atmos describe stacks --components=test/test-component-override-3 --sections=deps,vars -s=tenant2-ue2-staging
 atmos describe stacks --process-templates=false
+atmos describe stacks --query <yq-expression>
 ```
 
 :::tip
-Use `jq` to filter the output.
+Use the `--query` flag (shorthand `-q`) to filter the output.
 :::
 
 ## Flags
@@ -61,3 +62,4 @@ Use `jq` to filter the output.
 | `--component-types`   | Filter by specific component types: `terraform` or `helmfile`                                                                                                                                                                                                           |       | no       |
 | `--sections`          | Output only the specified component sections.<br/>Available component sections: `backend`, `backend_type`, `deps`, `env`,<br/>`inheritance`, `metadata`, `remote_state_backend`,<br/>`remote_state_backend_type`, `settings`, `vars`                                    |       | no       |
 | `--process-templates` | Enable/disable processing of `Go` templates in Atmos stacks manifests<br/>when executing the command.<br/>Use the flag to see the stack configurations<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default |       | no       |
+| `--query`             | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe stacks --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                  | `-q`  | no       |
