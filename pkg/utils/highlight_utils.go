@@ -21,14 +21,12 @@ import (
 // DefaultHighlightSettings returns the default syntax highlighting settings
 func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	return &schema.SyntaxHighlighting{
-		Enabled:   true,
-		Formatter: "terminal",
-		Theme:     "dracula",
-		UsePager:  true,
-		Options: schema.HighlightOptions{
-			LineNumbers: true,
-			Wrap:        false,
-		},
+		Enabled:     true,
+		Formatter:   "terminal",
+		Theme:       "dracula",
+		UsePager:    true,
+		LineNumbers: true,
+		Wrap:        false,
 	}
 }
 
@@ -49,8 +47,11 @@ func GetHighlightSettings(config schema.AtmosConfiguration) *schema.SyntaxHighli
 	if settings.Theme == "" {
 		settings.Theme = defaults.Theme
 	}
-	if settings.Options == (schema.HighlightOptions{}) {
-		settings.Options = defaults.Options
+	if !settings.LineNumbers {
+		settings.LineNumbers = defaults.LineNumbers
+	}
+	if !settings.Wrap {
+		settings.Wrap = defaults.Wrap
 	}
 	return settings
 }
@@ -121,7 +122,7 @@ func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration, form
 	}
 	// Get formatter
 	var formatter chroma.Formatter
-	if settings.Options.LineNumbers {
+	if settings.LineNumbers {
 		formatter = formatters.TTY256
 	} else {
 		formatter = formatters.Get(settings.Formatter)
