@@ -23,7 +23,7 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	return &schema.SyntaxHighlighting{
 		Enabled:   true,
 		Formatter: "terminal",
-		Style:     "dracula",
+		Theme:     "dracula",
 		UsePager:  true,
 		Options: schema.HighlightOptions{
 			LineNumbers: true,
@@ -46,8 +46,8 @@ func GetHighlightSettings(config schema.AtmosConfiguration) *schema.SyntaxHighli
 	if settings.Formatter == "" {
 		settings.Formatter = defaults.Formatter
 	}
-	if settings.Style == "" {
-		settings.Style = defaults.Style
+	if settings.Theme == "" {
+		settings.Theme = defaults.Theme
 	}
 	if settings.Options == (schema.HighlightOptions{}) {
 		settings.Options = defaults.Options
@@ -55,13 +55,13 @@ func GetHighlightSettings(config schema.AtmosConfiguration) *schema.SyntaxHighli
 	return settings
 }
 
-// HighlightCode highlights the given code using chroma with the specified lexer and style
-func HighlightCode(code string, lexerName string, style string) (string, error) {
+// HighlightCode highlights the given code using chroma with the specified lexer and theme
+func HighlightCode(code string, lexerName string, theme string) (string, error) {
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
 		return code, nil
 	}
 	var buf bytes.Buffer
-	err := quick.Highlight(&buf, code, lexerName, "terminal", style)
+	err := quick.Highlight(&buf, code, lexerName, "terminal", theme)
 	if err != nil {
 		return code, err
 	}
@@ -115,7 +115,7 @@ func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration, form
 		lexer = lexers.Fallback
 	}
 	// Get style
-	s := styles.Get(settings.Style)
+	s := styles.Get(settings.Theme)
 	if s == nil {
 		s = styles.Fallback
 	}

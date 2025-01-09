@@ -64,7 +64,7 @@ var (
 				SyntaxHighlighting: schema.SyntaxHighlighting{
 					Enabled:   true,
 					Formatter: "terminal",
-					Style:     "dracula",
+					Theme:     "dracula",
 					UsePager:  true,
 					Options: schema.HighlightOptions{
 						LineNumbers: true,

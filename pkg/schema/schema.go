@@ -50,7 +50,7 @@ type SyntaxHighlighting struct {
 	Enabled   bool             `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 	Lexer     string           `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
 	Formatter string           `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
-	Style     string           `yaml:"style" json:"style" mapstructure:"style"`
+	Theme     string           `yaml:"theme" json:"theme" mapstructure:"theme"`
 	UsePager  bool             `yaml:"pager" json:"pager" mapstructure:"pager"`
 	Options   HighlightOptions `yaml:"options" json:"options" mapstructure:"options"`
 }
