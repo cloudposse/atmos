@@ -410,7 +410,7 @@ In `stacks/orgs/acme/core/_defaults.yaml`, add the following config for the `cor
 <File title="stacks/orgs/acme/core/_defaults.yaml">
 ```yaml
 import:
-  - orgs/acme/_defaults
+  - ../_defaults
   - mixins/tenant/core
 ```
 </File>
@@ -420,7 +420,7 @@ In `stacks/orgs/acme/plat/_defaults.yaml`, add the following config for the `pla
 <File title="stacks/orgs/acme/plat/_defaults.yaml">
 ```yaml
 import:
-  - orgs/acme/_defaults
+  - ../_defaults
   - mixins/tenant/plat
 ```
 </File>
@@ -434,7 +434,7 @@ In `stacks/orgs/acme/plat/dev/_defaults.yaml`, add the following config for the 
 <File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
 ```yaml
 import:
-  - orgs/acme/plat/_defaults
+  - ../_defaults
   - mixins/stage/dev
 ```
 </File>
@@ -449,7 +449,7 @@ Similar to the `dev` account, add the following configs for the `prod` and `stag
 <File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
 ```yaml
 import:
-  - orgs/acme/plat/_defaults
+  - ../_defaults
   - mixins/stage/prod
 ```
 </File>
@@ -457,7 +457,7 @@ import:
 <File title="stacks/orgs/acme/plat/staging/_defaults.yaml">
 ```yaml
 import:
-  - orgs/acme/plat/_defaults
+  - ../_defaults
   - mixins/stage/staging
 ```
 </File>
@@ -474,7 +474,7 @@ In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, add the following config:
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 # File extensions are optional (if not specified, `.yaml` is used by default).
 import:
-  - orgs/acme/plat/dev/_defaults
+  - ./_defaults
   - mixins/region/us-east-2
   # Override the `vpc` component configuration for `dev` by importing the `catalog/vpc/dev` manifest
   - catalog/vpc/dev
@@ -488,7 +488,7 @@ Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2`
 <File title="stacks/orgs/acme/plat/dev/us-west-2.yaml">
 ```yaml
 import:
-  - orgs/acme/plat/dev/_defaults
+  - ./_defaults
   - mixins/region/us-west-2
   # Override the `vpc` component configuration for `dev` by importing the `catalog/vpc/dev` manifest
   - catalog/vpc/dev
@@ -500,7 +500,7 @@ In `stacks/orgs/acme/plat/staging/us-east-2.yaml`, add the following config:
 <File title="stacks/orgs/acme/plat/staging/us-east-2.yaml">
 ```yaml
 import:
-  - orgs/acme/plat/staging/_defaults
+  - ./_defaults
   - mixins/region/us-east-2
   # Override the `vpc` component configuration for `staging` by importing the `catalog/vpc/staging` manifest
   - catalog/vpc/staging
@@ -512,7 +512,7 @@ Similarly, create the top-level Atmos stack for the `staging` account in `us-wes
 <File title="stacks/orgs/acme/plat/staging/us-west-2.yaml">
 ```yaml
 import:
-  - orgs/acme/plat/staging/_defaults
+  - ./_defaults
   - mixins/region/us-west-2
   # Override the `vpc` component configuration for `staging` by importing the `catalog/vpc/staging` manifest
   - catalog/vpc/staging
@@ -527,7 +527,7 @@ In `stacks/orgs/acme/plat/prod/us-east-2.yaml`, add the following config:
 # `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 # File extensions are optional (if not specified, `.yaml` is used by default).
 import:
-  - orgs/acme/plat/prod/_defaults
+  - ./_defaults
   - mixins/region/us-east-2
   # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
   - catalog/vpc/prod
@@ -541,7 +541,7 @@ Similarly, create the top-level Atmos stack for the `prod` account in `us-west-2
 <File title="stacks/orgs/acme/plat/prod/us-west-2.yaml">
 ```yaml
 import:
-  - orgs/acme/plat/prod/_defaults
+  - ./_defaults
   - mixins/region/us-west-2
   # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
   - catalog/vpc/prod
