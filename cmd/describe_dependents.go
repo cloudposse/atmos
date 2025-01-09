@@ -12,8 +12,8 @@ import (
 var describeDependentsCmd = &cobra.Command{
 	Use:                "dependents",
 	Aliases:            []string{"dependants"},
-	Short:              "Execute 'describe dependents' command",
-	Long:               `This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component: atmos describe dependents [options]`,
+	Short:              "List Atmos components that depend on a given component",
+	Long:               "This command generates a list of Atmos components within stacks that depend on the specified Atmos component.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
