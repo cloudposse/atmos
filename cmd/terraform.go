@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -29,19 +28,7 @@ func Contains(slice []string, target string) bool {
 }
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
-	var argsAfterDoubleDash []string
-	var finalArgs = args
-
-	doubleDashIndex := lo.IndexOf(args, "--")
-	if doubleDashIndex > 0 {
-		finalArgs = lo.Slice(args, 0, doubleDashIndex)
-		argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
-	}
-
-	info, _ := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
-	// Check Atmos configuration
-	checkAtmosConfig()
-
+	info := getConfigAndStacksInfo("terraform", cmd, args)
 	err := e.ExecuteTerraform(info)
 	if err != nil {
 		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)

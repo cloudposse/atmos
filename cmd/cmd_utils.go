@@ -11,6 +11,7 @@ import (
 
 	"github.com/fatih/color"
 	cc "github.com/ivanpirog/coloredcobra"
+	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -642,4 +643,25 @@ func hasPositionalArgs(args []string) bool {
 		}
 	}
 	return false
+}
+
+// getConfigAndStacksInfo gets the
+func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
+	// Check Atmos configuration
+	checkAtmosConfig()
+
+	var argsAfterDoubleDash []string
+	var finalArgs = args
+
+	doubleDashIndex := lo.IndexOf(args, "--")
+	if doubleDashIndex > 0 {
+		finalArgs = lo.Slice(args, 0, doubleDashIndex)
+		argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
+	}
+
+	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
+	if err != nil {
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+	}
+	return info
 }

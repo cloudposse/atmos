@@ -135,6 +135,5 @@ var docsCmd = &cobra.Command{
 }
 
 func init() {
-	// TODO: Check what this command does
 	RootCmd.AddCommand(docsCmd)
 }
