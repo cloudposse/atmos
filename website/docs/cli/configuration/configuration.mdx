@@ -110,8 +110,6 @@ settings:
   terminal:
     max_width: 120  # Maximum width for terminal output
     pager: true     # Use pager for long output
-core:
-  inject_github_token: true
 ```
 </File>
 
@@ -163,6 +161,7 @@ The `settings` section configures Atmos global settings.
       terminal:
         max_width: 120  # Maximum width for terminal output
         pager: true     # Use pager for long output
+      inject_github_token: true # Adds the GITHUB_TOKEN as a Bearer token for GitHub API requests.
     ```
 </File>
 
@@ -196,6 +195,13 @@ The `settings` section configures Atmos global settings.
       <dt>`pager`</dt>
       <dd>When enabled, displays long content in a pager instead of directly in the terminal.</dd>
     </dl>
+  </dd>
+
+  <dt>`settings.inject_github_token`</dt>
+  <dd>
+    Adds the GITHUB_TOKEN as a Bearer token for GitHub API requests,
+
+    enabling authentication for private repositories and higher rate limits.
   </dd>
 
   <dt>`settings.docs` (Deprecated)</dt>

@@ -268,7 +268,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
 			// Register custom detectors if InjectGithubToken is enabled
-			if atmosConfig.Core.InjectGithubToken {
+			if atmosConfig.Settings.InjectGithubToken {
 				RegisterCustomDetectors()
 			}
 

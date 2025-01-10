@@ -384,7 +384,7 @@ func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error
 	defer cancel()
 
 	// Register custom detectors if InjectGithubToken is enabled
-	if atmosConfig.Core.InjectGithubToken {
+	if atmosConfig.Settings.InjectGithubToken {
 		RegisterCustomDetectors()
 	}
 

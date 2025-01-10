@@ -35,7 +35,6 @@ type AtmosConfiguration struct {
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
 	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
-	Core   CoreConfig          `yaml:"core,omitempty" json:"core,omitempty" mapstructure:"core,omitempty"`
 }
 
 type Terminal struct {
@@ -51,6 +50,7 @@ type AtmosSettings struct {
 	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
 	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
+	InjectGithubToken bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 }
 
 type Docs struct {
@@ -156,10 +156,6 @@ type VersionCheck struct {
 
 type Version struct {
 	Check VersionCheck `yaml:"check,omitempty" mapstructure:"check"`
-}
-
-type CoreConfig struct {
-	InjectGithubToken bool `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 }
 
 type ArgsAndFlagsInfo struct {

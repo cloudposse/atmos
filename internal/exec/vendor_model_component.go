@@ -127,7 +127,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		tempDir = filepath.Join(tempDir, sanitizeFileName(p.uri))
 
 		// Register custom detectors if InjectGithubToken is enabled
-		if atmosConfig.Core.InjectGithubToken {
+		if atmosConfig.Settings.InjectGithubToken {
 			RegisterCustomDetectors()
 		}
 		client := &getter.Client{
@@ -193,7 +193,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 	case pkgTypeRemote:
 
 		// Register custom detectors if InjectGithubToken is enabled
-		if atmosConfig.Core.InjectGithubToken {
+		if atmosConfig.Settings.InjectGithubToken {
 			RegisterCustomDetectors()
 		}
 		client := &getter.Client{
