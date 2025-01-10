@@ -13,8 +13,8 @@ import (
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
 	Aliases:            []string{"hf"},
-	Short:              "Execute 'helmfile' commands",
-	Long:               `This command runs Helmfile commands`,
+	Short:              "Manage Helmfile-based Kubernetes deployments",
+	Long:               `This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -32,9 +32,11 @@ var helmfileCmd = &cobra.Command{
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 		// Exit on help
-		if info.NeedHelp {
+		if info.NeedHelp || (info.SubCommand == "" && info.SubCommand2 == "") {
 			// Check for the latest Atmos release on GitHub and print update message
-			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+			if err := cmd.Help(); err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
 			return
 		}
 		// Check Atmos configuration

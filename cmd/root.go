@@ -8,7 +8,6 @@ import (
 	"github.com/elewis787/boa"
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
@@ -19,9 +18,6 @@ import (
 )
 
 var atmosConfig schema.AtmosConfiguration
-
-// originalHelpFunc holds Cobra's original help function to avoid recursion.
-var originalHelpFunc func(*cobra.Command, []string)
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -74,15 +70,6 @@ func Execute() error {
 		Flags:    cc.Bold,
 	})
 
-	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
-	err := RootCmd.ParseFlags(os.Args)
-	if err != nil && errors.Is(err, pflag.ErrHelp) {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
-	}
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
@@ -95,15 +82,7 @@ func Execute() error {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, initErr)
 		}
 	}
-
-	// Save the original help function to prevent infinite recursion when overriding it.
-	// This allows us to call the original help functionality within our custom help function.
-	originalHelpFunc = RootCmd.HelpFunc()
-
-	// Override the help function with a custom one that adds an upgrade message after displaying help.
-	// This custom help function will call the original help function and then display the bordered message.
-	RootCmd.SetHelpFunc(customHelpMessageToUpgradeToAtmosLatestRelease)
-
+	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
@@ -131,26 +110,43 @@ func init() {
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
 	// Set custom usage template
-	templates.SetCustomUsageFunc(RootCmd)
-	cobra.OnInitialize(initConfig)
+	err := templates.SetCustomUsageFunc(RootCmd)
+	if err != nil {
+		u.LogErrorAndExit(atmosConfig, err)
+	}
+
+	initCobraConfig()
 }
 
-func initConfig() {
+func initCobraConfig() {
+	RootCmd.SetOut(os.Stdout)
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
-
+	oldUsageFunc := RootCmd.UsageFunc()
 	RootCmd.SetUsageFunc(b.UsageFunc)
 
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+		if command.Use != "atmos" || command.Flags().Changed("help") {
+			err := tuiUtils.PrintStyledText("ATMOS")
+			if err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
+			if err := oldUsageFunc(command); err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
+		} else {
+			err := tuiUtils.PrintStyledText("ATMOS")
+			if err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
+			b.HelpFunc(command, strings)
+			if err := command.Usage(); err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
 		}
-
-		b.HelpFunc(command, strings)
-		command.Usage()
+		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }
 

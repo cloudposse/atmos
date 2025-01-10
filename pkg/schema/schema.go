@@ -190,6 +190,7 @@ type ArgsAndFlagsInfo struct {
 	LogsLevel                 string
 	LogsFile                  string
 	SettingsListMergeStrategy string
+	Query                     string
 }
 
 type ConfigAndStacksInfo struct {
@@ -254,6 +255,7 @@ type ConfigAndStacksInfo struct {
 	LogsLevel                     string
 	LogsFile                      string
 	SettingsListMergeStrategy     string
+	Query                         string
 }
 
 // Workflows

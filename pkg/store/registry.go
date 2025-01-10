@@ -21,7 +21,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			registry[key] = store
 
 		case "in-memory":
-			store, err := NewInMemoryStore(storeConfig.Options)
+			store, err := NewInMemoryStore()
 			if err != nil {
 				return nil, err
 			}

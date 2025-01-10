@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"reflect"
 	"strings"
 
@@ -51,6 +52,11 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	dependents, err := ExecuteDescribeDependents(atmosConfig, component, stack, false)
@@ -58,7 +64,18 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, dependents)
+	var res any
+
+	if query != "" {
+		res, err = u.EvaluateYqExpression(atmosConfig, dependents, query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = dependents
+	}
+
+	err = printOrWriteToFile(format, file, res)
 	if err != nil {
 		return err
 	}
