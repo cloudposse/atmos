@@ -8,8 +8,8 @@ require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/arsham/figurine v1.3.0
 	github.com/aws/aws-sdk-go-v2 v1.32.7
-	github.com/aws/aws-sdk-go-v2/config v1.28.7
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.56.2
+	github.com/aws/aws-sdk-go-v2/config v1.28.8
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.56.3
 	github.com/bmatcuk/doublestar/v4 v4.7.1
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.2.4
@@ -36,12 +36,13 @@ require (
 	github.com/kubescape/go-git-url v0.0.30
 	github.com/lrstanley/bubblezone v0.0.0-20241221063659-0f12a2876fb2
 	github.com/mattn/go-isatty v0.0.20
+	github.com/mikefarah/yq/v4 v4.44.6
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/muesli/termenv v0.15.3-0.20240618155329-98d742f6907a
 	github.com/open-policy-agent/opa v1.0.0
-	github.com/otiai10/copy v1.14.0
+	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.47.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
@@ -49,8 +50,10 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
-	github.com/zclconf/go-cty v1.15.1
-	golang.org/x/term v0.27.0
+	github.com/zclconf/go-cty v1.16.0
+	golang.org/x/term v0.28.0
+	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/sh/v3 v3.10.0
 )
@@ -67,9 +70,11 @@ require (
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/ProtonMail/go-crypto v1.1.3 // indirect
 	github.com/Shopify/ejson v1.3.3 // indirect
+	github.com/a8m/envsubst v1.4.2 // indirect
 	github.com/agext/levenshtein v1.2.2 // indirect
 	github.com/agnivade/levenshtein v1.2.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
+	github.com/alecthomas/participle/v2 v2.1.1 // indirect
 	github.com/apparentlymart/go-cidr v1.1.0 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
@@ -78,7 +83,7 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go v1.44.206 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.1 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.48 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.49 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.22 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.14 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.26 // indirect
@@ -92,7 +97,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.24.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.33.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.33.4 // indirect
 	github.com/aws/smithy-go v1.22.1 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
@@ -116,6 +121,7 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
 	github.com/cyphar/filepath-securejoin v0.3.6 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.11.0 // indirect
 	github.com/docker/cli v27.1.1+incompatible // indirect
 	github.com/docker/distribution v2.8.2+incompatible // indirect
@@ -123,6 +129,7 @@ require (
 	github.com/docker/libkv v0.2.2-0.20180912205406-458977154600 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad // indirect
+	github.com/elliotchance/orderedmap v1.7.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -134,6 +141,8 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/goccy/go-json v0.10.3 // indirect
+	github.com/goccy/go-yaml v1.13.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
@@ -175,6 +184,7 @@ require (
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
+	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/joho/godotenv v1.4.0 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
@@ -199,7 +209,8 @@ require (
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
+	github.com/otiai10/mint v1.6.3 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -233,6 +244,7 @@ require (
 	github.com/yashtewari/glob-intersection v0.2.0 // indirect
 	github.com/yuin/goldmark v1.7.4 // indirect
 	github.com/yuin/goldmark-emoji v1.0.3 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/zealic/xignore v0.3.3 // indirect
 	go.etcd.io/bbolt v1.3.10 // indirect
 	go.opencensus.io v0.24.0 // indirect
@@ -254,7 +266,7 @@ require (
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.24.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/tools v0.23.0 // indirect

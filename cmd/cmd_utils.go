@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -448,8 +448,8 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	c1 := color.New(color.FgCyan)
-	c2 := color.New(color.FgGreen)
+	c1 := theme.Colors.Info
+	c2 := theme.Colors.Success
 
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
@@ -537,11 +537,6 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
 
 	}
-}
-
-func customHelpMessageToUpgradeToAtmosLatestRelease(cmd *cobra.Command, args []string) {
-	originalHelpFunc(cmd, args)
-	CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 }
 
 // Check Atmos is version command

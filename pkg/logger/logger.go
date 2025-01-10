@@ -7,6 +7,7 @@ import (
 	"github.com/fatih/color"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 type LogLevel string
@@ -104,8 +105,7 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 
 func (l *Logger) Error(err error) {
 	if err != nil {
-		c := color.New(color.FgRed)
-		_, err2 := c.Fprintln(color.Error, err.Error()+"\n")
+		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
 			color.Red("Error logging the error:")
 			color.Red("%s\n", err2)
@@ -117,7 +117,7 @@ func (l *Logger) Error(err error) {
 
 func (l *Logger) Trace(message string) {
 	if l.LogLevel == LogLevelTrace {
-		l.log(color.New(color.FgCyan), message)
+		l.log(theme.Colors.Info, message)
 	}
 }
 
@@ -125,17 +125,16 @@ func (l *Logger) Debug(message string) {
 	if l.LogLevel == LogLevelTrace ||
 		l.LogLevel == LogLevelDebug {
 
-		l.log(color.New(color.FgCyan), message)
+		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Info(message string) {
-
 	if l.LogLevel == LogLevelTrace ||
 		l.LogLevel == LogLevelDebug ||
 		l.LogLevel == LogLevelInfo {
 
-		l.log(color.New(color.Reset), message)
+		l.log(theme.Colors.Default, message)
 	}
 }
 
@@ -145,6 +144,6 @@ func (l *Logger) Warning(message string) {
 		l.LogLevel == LogLevelInfo ||
 		l.LogLevel == LogLevelWarning {
 
-		l.log(color.New(color.FgYellow), message)
+		l.log(theme.Colors.Warning, message)
 	}
 }

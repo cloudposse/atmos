@@ -22,7 +22,7 @@ const atmosDocsURL = "https://atmos.tools"
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
 	Use:                "docs",
-	Short:              "Open the Atmos docs or display component documentation",
+	Short:              "Open Atmos documentation or display component-specific docs",
 	Long:               `This command opens the Atmos docs or displays the documentation for a specified Atmos component.`,
 	Example:            "atmos docs vpc",
 	Args:               cobra.MaximumNArgs(1),

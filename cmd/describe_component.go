@@ -11,8 +11,8 @@ import (
 // describeComponentCmd describes configuration for components
 var describeComponentCmd = &cobra.Command{
 	Use:                "component",
-	Short:              "Execute 'describe component' command",
-	Long:               `This command shows configuration for an Atmos component in an Atmos stack: atmos describe component <component> -s <stack>`,
+	Short:              "Show configuration details for an Atmos component in a stack",
+	Long:               `Display the configuration details for a specific Atmos component within a designated Atmos stack, including its dependencies, settings, and overrides.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
