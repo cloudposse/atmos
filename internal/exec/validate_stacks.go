@@ -99,7 +99,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			return err
 		}
 		atmosConfig.Schemas.Atmos.Manifest = f
-		u.LogTrace(atmosConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default embedded schema"))
+		u.LogTrace(atmosConfig, fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
 	} else if u.FileExists(atmosConfig.Schemas.Atmos.Manifest) {
 		atmosManifestJsonSchemaFilePath = atmosConfig.Schemas.Atmos.Manifest
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
@@ -115,7 +115,8 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			"2. ATMOS_SCHEMAS_ATMOS_MANIFEST env var\n"+
 			"3. --schemas-atmos-manifest flag\n\n"+
 			"Accepts: absolute path, path relative to base_path, or URL",
-			atmosConfig.Schemas.Atmos.Manifest)
+			atmosConfig.Schemas.Atmos.Manifest,
+		)
 	}
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
