@@ -5,13 +5,15 @@ sidebar_label: JSON Schema
 description: Use JSON Schema policies to validate Stacks and Component configurations.
 id: json-schema
 ---
+
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import EmbedFile from '@site/src/components/EmbedFile'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos supports [JSON Schema](https://json-schema.org/) validation, which can validate the schema of configurations such as stacks, workflows, and vendoring manifests. JSON Schema is an industry standard and provides a vocabulary to annotate and validate JSON documents for correctness.
+Atmos supports [JSON Schema](https://json-schema.org/) validation, which can validate the schema of configurations such as stacks, workflows, and vendoring manifests.
+JSON Schema is an industry standard and provides a vocabulary to annotate and validate JSON documents for correctness.
 </Intro>
 
 ## Example
@@ -43,19 +45,6 @@ schemas:
 In the component [manifest](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
 the `settings.validation` section:
 
-### Use Remote Schemas
-
-You can specify remote schemas by setting the `manifest` field to a remote URL in your `atmos.yaml` configuration file.
-
-<File title="atmos.yaml">
-```yaml
-# Validation schemas (for validating atmos stacks and components)
-schemas:
-  atmos:
-    # You can specify a remote schema URL as well
-    manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
-```
-</File>
 <EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml"/>
 
 Add the following JSON Schema in the

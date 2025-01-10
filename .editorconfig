@@ -1,5 +1,6 @@
 [*]
 insert_final_newline = true
+end_of_line = lf
 
 # Override for Makefile
 [{Makefile,makefile,GNUmakefile}]
