@@ -82,7 +82,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment: demo
+    env:
+      AWS_REGION: us-east-2
+      IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-prod-atmos-docs-gha
+      IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-${{ github.run_id }}
+      S3_BUCKET_NAME: cplive-plat-ue2-prod-atmos-docs-origin
+
     steps:
+      # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
+
+      - name: Test AWS
+        run: |
+          aws sts get-caller-identity
+
       - uses: actions/create-github-app-token@v1
         id: github-app
         with:
@@ -147,6 +165,15 @@ jobs:
         run: |
           demo/recordings/build.sh
           mv demo/recordings/gif/atmos.gif docs/demo.gif
+
+      - name: Copy Website to S3 Bucket PR Folder
+        run: |
+          cd demo/recordings
+          aws s3 ls s3://${{ env.S3_BUCKET_NAME }}
+          #aws s3 sync . s3://${{ env.S3_BUCKET_NAME }}/assets/mp4/
+          #aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/assets/mp4/ --recursive --human-readable --summarize
+          #aws s3 sync . s3://${{ env.S3_BUCKET_NAME }}/assets/gif/
+          #aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/assets/gif/ --recursive --human-readable --summarize
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
