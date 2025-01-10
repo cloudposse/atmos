@@ -731,7 +731,7 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 			tokenSource = "GITHUB_TOKEN"
 			u.LogDebug(d.AtmosConfig, fmt.Sprintf("InjectGithubToken=true and GITHUB_TOKEN is set, using it for %s\n", src))
 		} else {
-			u.LogDebug(d.AtmosConfig, fmt.Sprintf("No ATMOS_GITHUB_TOKEN found or GITHUB_TOKEN unavailable. Won't inject for %s\n", src))
+			u.LogTrace(d.AtmosConfig, fmt.Sprintf("No ATMOS_GITHUB_TOKEN found or GITHUB_TOKEN unavailable. Won't inject for %s\n", src))
 		}
 	}
 
