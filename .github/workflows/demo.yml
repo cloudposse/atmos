@@ -87,6 +87,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment: demo
+    env:
+      AWS_REGION: us-east-2
     steps:
       # Determine environment-specific settings
       - name: Set Environment Variables
