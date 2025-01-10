@@ -1,4 +1,4 @@
-* text eol=lf
+* text auto
 docs linguist-documentation=true
 website/src/components/Screengrabs/**.html linguist-generated=true binary
 
