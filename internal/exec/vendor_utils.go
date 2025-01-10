@@ -693,31 +693,37 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		src = "https://" + src
 	}
 
-	u, err := url.Parse(src)
+	us, err := url.Parse(src)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to parse GitHub URL %q: %w", src, err)
 	}
 
-	if u.Host != "github.com" {
+	if us.Host != "github.com" {
 		return "", false, nil
 	}
 
-	parts := strings.SplitN(u.Path, "/", 4)
+	parts := strings.SplitN(us.Path, "/", 4)
 	if len(parts) < 3 {
-		return "", false, fmt.Errorf("invalid GitHub URL %q", u)
+		return "", false, fmt.Errorf("invalid GitHub URL %q", us)
 	}
 
 	token := os.Getenv("GITHUB_TOKEN")
-	if token != "" {
-		user := u.User.Username()
-		pass, _ := u.User.Password()
+	if token == "" {
+		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("No GITHUB_TOKEN set, won't inject for %s\n", src))
+	} else {
+		user := us.User.Username()
+		pass, _ := us.User.Password()
+
 		if user == "" && pass == "" {
-			u.User = url.UserPassword("x-access-token", token)
+			u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Injecting GitHub token for %s\n", src))
+			us.User = url.UserPassword("x-access-token", token)
+		} else {
+			u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Username/password already present in %s, skipping token injection\n", src))
 		}
 	}
 
 	// Convert the URL to a git URL
-	finalURL := "git::" + u.String()
+	finalURL := "git::" + us.String()
 
 	return finalURL, true, nil
 }
