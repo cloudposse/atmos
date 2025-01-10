@@ -742,7 +742,7 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 			u.LogDebug(d.AtmosConfig, fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
 			parsedURL.User = url.UserPassword("x-access-token", usedToken)
 		} else {
-			u.LogDebug(d.AtmosConfig, fmt.Sprintf("Username/password already present in %s; skipping token injection\n", src))
+			u.LogDebug(d.AtmosConfig, fmt.Sprintf("Credentials found in %s; skipping token injection\n", src))
 		}
 	}
 
