@@ -6,10 +6,10 @@ tests:
     command: "atmos"
     args:
       - "greet"
-      - "Andrey"
+      - "Neo"
     expect:
       stdout:
-        - "Hello, Andrey\n"
+        - "Hello, Neo\n"
       stderr:
         - "^$"
       exit_code: 0

@@ -27,7 +27,7 @@ tests:
       exit_code: 0
 
   - name: atmos docs
-    enabled: false
+    enabled: true
     description: "Ensure atmos docs command executes without errors."
     workdir: "../"
     command: "atmos"
@@ -51,7 +51,7 @@ tests:
       exit_code: 1
 
   - name: atmos terraform non-existent
-    enabled: false
+    enabled: true
     description: "Ensure atmos CLI returns an error for a non-existent command."
     workdir: "../"
     command: "atmos"
