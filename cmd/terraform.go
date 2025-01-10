@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
@@ -14,7 +15,6 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	cc "github.com/ivanpirog/coloredcobra"
 )
 
 type contextKey string

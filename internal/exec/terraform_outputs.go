@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -19,7 +19,11 @@ var (
 	terraformOutputsCache = sync.Map{}
 )
 
-func execTerraformOutput(atmosConfig *schema.AtmosConfiguration, component string, stack string, sections map[string]any) (map[string]any, error) {
+func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
+	component string,
+	stack string,
+	sections map[string]any,
+) (map[string]any, error) {
 	outputProcessed := map[string]any{}
 	componentAbstract := false
 	componentEnabled := true
@@ -132,7 +136,13 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration, component strin
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
 
 		u.LogTrace(*atmosConfig, fmt.Sprintf("\nExecuting 'terraform init %s -s %s'", component, stack))
-		err = tf.Init(ctx, tfexec.Upgrade(false))
+		var initOptions []tfexec.InitOption
+		initOptions = append(initOptions, tfexec.Upgrade(false))
+		// If `components.terraform.init_run_reconfigure` is set to `true` in atmos.yaml, add the `-reconfigure` flag to `terraform init`
+		if atmosConfig.Components.Terraform.InitRunReconfigure {
+			initOptions = append(initOptions, tfexec.Reconfigure(true))
+		}
+		err = tf.Init(ctx, initOptions...)
 		if err != nil {
 			return nil, err
 		}
