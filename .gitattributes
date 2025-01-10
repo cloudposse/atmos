@@ -1,6 +1,6 @@
 * text eol=lf
 docs linguist-documentation=true
-website/src/components/screengrabs/**/*.html linguist-generated=true binary
+website/src/components/Screengrabs/**.html linguist-generated=true binary
 
 # Mark binary files to prevent normalization
 *.png binary
