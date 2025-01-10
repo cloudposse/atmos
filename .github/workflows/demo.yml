@@ -87,13 +87,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment: demo
-    env:
-      AWS_REGION: us-east-2
-      IAM_ROLE_ARN: arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha
-      IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-${{ github.run_id }}
-      S3_BUCKET_NAME: cplive-plat-ue2-dev-atmos-docs-origin
-
     steps:
+      # Determine environment-specific settings
+      - name: Set Environment Variables
+        id: set-env
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "IAM_ROLE_ARN=arn:aws:iam::557075604627:role/cplive-plat-ue2-prod-atmos-docs-gha" >> $GITHUB_ENV
+            echo "IAM_ROLE_SESSION_NAME=cloudposse-atmos-ci-deploy-release" >> $GITHUB_ENV
+            echo "S3_BUCKET_NAME=cplive-plat-ue2-prod-atmos-docs-origin" >> $GITHUB_ENV
+            echo "S3_PATH=assets" >> $GITHUB_ENV
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "IAM_ROLE_ARN=arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha" >> $GITHUB_ENV
+            echo "IAM_ROLE_SESSION_NAME=cloudposse-atmos-ci-deploy-${{ github.run_id }}" >> $GITHUB_ENV
+            echo "S3_BUCKET_NAME=cplive-plat-ue2-dev-atmos-docs-origin" >> $GITHUB_ENV
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+            echo "S3_PATH=pr-${{ github.event.pull_request.number }}/assets" >> $GITHUB_ENV
+          fi
+
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -171,14 +182,14 @@ jobs:
           demo/recordings/build.sh
           mv demo/recordings/gif/atmos.gif docs/demo.gif
 
-      - name: Copy Website to S3 Bucket PR Folder
+      - name: Upload Assets to S3 (atmos.tools)
         run: |
           cd demo/recordings
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }}
-          #aws s3 sync . s3://${{ env.S3_BUCKET_NAME }}/assets/mp4/
-          #aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/assets/mp4/ --recursive --human-readable --summarize
-          #aws s3 sync . s3://${{ env.S3_BUCKET_NAME }}/assets/gif/
-          #aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/assets/gif/ --recursive --human-readable --summarize
+          for ext in mp4 gif; do
+            echo aws s3 sync $ext/ s3://${{ env.S3_BUCKET_NAME }}/${{ env.S3_PATH }}/${ext}/
+            echo aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/${{ env.S3_PATH }}/${ext}/ --recursive --human-readable --summarize
+          done
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@v7
