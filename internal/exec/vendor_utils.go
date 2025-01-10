@@ -681,59 +681,83 @@ func isValidScheme(scheme string) bool {
 // CustomGitHubDetector intercepts GitHub URLs and transforms them
 // into something like git::https://<token>@github.com/... so we can
 // do a git-based clone with a token.
-type CustomGitHubDetector struct{}
+type CustomGitHubDetector struct {
+	AtmosConfig schema.AtmosConfiguration
+}
 
 // Detect implements the getter.Detector interface for go-getter v1.
 func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 	if len(src) == 0 {
 		return "", false, nil
 	}
-	// If there's no scheme (no "://"), prepend "https://".
+
 	if !strings.Contains(src, "://") {
+		u.LogDebug(d.AtmosConfig, fmt.Sprintf("No scheme in %q, prepending 'https://'", src))
 		src = "https://" + src
 	}
 
-	us, err := url.Parse(src)
+	parsedURL, err := url.Parse(src)
 	if err != nil {
+		u.LogDebug(d.AtmosConfig, fmt.Sprintf("Failed to parse GitHub URL %q: %v", src, err))
 		return "", false, fmt.Errorf("failed to parse GitHub URL %q: %w", src, err)
 	}
 
-	if us.Host != "github.com" {
+	if parsedURL.Host != "github.com" {
+		u.LogDebug(d.AtmosConfig, fmt.Sprintf("Host is %q, not 'github.com'; skipping token injection", parsedURL.Host))
 		return "", false, nil
 	}
 
-	parts := strings.SplitN(us.Path, "/", 4)
+	parts := strings.SplitN(parsedURL.Path, "/", 4)
 	if len(parts) < 3 {
-		return "", false, fmt.Errorf("invalid GitHub URL %q", us)
+		u.LogDebug(d.AtmosConfig, fmt.Sprintf("URL path %q doesn't look like /owner/repo", parsedURL.Path))
+		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL)
 	}
 
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("No GITHUB_TOKEN set, won't inject for %s\n", src))
-	} else {
-		user := us.User.Username()
-		pass, _ := us.User.Password()
+	tokenATMOS := os.Getenv("ATMOS_GITHUB_TOKEN")
+	tokenGitHub := os.Getenv("GITHUB_TOKEN")
 
-		if user == "" && pass == "" {
-			u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Injecting GitHub token for %s\n", src))
-			us.User = url.UserPassword("x-access-token", token)
+	var usedToken string
+	var tokenSource string
+
+	// 1. If ATMOS_GITHUB_TOKEN is set, always use that
+	if tokenATMOS != "" {
+		usedToken = tokenATMOS
+		tokenSource = "ATMOS_GITHUB_TOKEN"
+		u.LogDebug(d.AtmosConfig, fmt.Sprintf("ATMOS_GITHUB_TOKEN is set; using it for %s\n", src))
+	} else {
+		// 2. Otherwise, only inject GITHUB_TOKEN if cfg.Settings.InjectGithubToken == true
+		if d.AtmosConfig.Settings.InjectGithubToken && tokenGitHub != "" {
+			usedToken = tokenGitHub
+			tokenSource = "GITHUB_TOKEN"
+			u.LogDebug(d.AtmosConfig, fmt.Sprintf("InjectGithubToken=true and GITHUB_TOKEN is set, using it for %s\n", src))
 		} else {
-			u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Username/password already present in %s, skipping token injection\n", src))
+			u.LogDebug(d.AtmosConfig, fmt.Sprintf("No ATMOS_GITHUB_TOKEN found or GITHUB_TOKEN unavailable. Won't inject for %s\n", src))
 		}
 	}
 
-	// Convert the URL to a git URL
-	finalURL := "git::" + us.String()
+	if usedToken != "" {
+		user := parsedURL.User.Username()
+		pass, _ := parsedURL.User.Password()
+		if user == "" && pass == "" {
+			u.LogDebug(d.AtmosConfig, fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
+			parsedURL.User = url.UserPassword("x-access-token", usedToken)
+		} else {
+			u.LogDebug(d.AtmosConfig, fmt.Sprintf("Username/password already present in %s; skipping token injection\n", src))
+		}
+	}
+
+	finalURL := "git::" + parsedURL.String()
+	u.LogDebug(d.AtmosConfig, fmt.Sprintf("Rewriting %q to %q", src, finalURL))
 
 	return finalURL, true, nil
 }
 
 // RegisterCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors() {
+func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitHubDetector{},
+			&CustomGitHubDetector{AtmosConfig: atmosConfig},
 		},
 		getter.Detectors...,
 	)

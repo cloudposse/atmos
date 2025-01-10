@@ -126,10 +126,9 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, sanitizeFileName(p.uri))
 
-		// Register custom detectors if InjectGithubToken is enabled
-		if atmosConfig.Settings.InjectGithubToken {
-			RegisterCustomDetectors()
-		}
+		// Register custom detectors
+		RegisterCustomDetectors(atmosConfig)
+
 		client := &getter.Client{
 			Ctx: context.Background(),
 			// Define the destination where the files will be stored. This will create the directory if it doesn't exist
@@ -192,10 +191,9 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 	switch p.pkgType {
 	case pkgTypeRemote:
 
-		// Register custom detectors if InjectGithubToken is enabled
-		if atmosConfig.Settings.InjectGithubToken {
-			RegisterCustomDetectors()
-		}
+		// Register custom detectors
+		RegisterCustomDetectors(atmosConfig)
+
 		client := &getter.Client{
 			Ctx:  ctx,
 			Dst:  filepath.Join(tempDir, p.mixinFilename),

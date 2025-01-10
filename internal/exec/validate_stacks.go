@@ -383,10 +383,8 @@ func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	// Register custom detectors if InjectGithubToken is enabled
-	if atmosConfig.Settings.InjectGithubToken {
-		RegisterCustomDetectors()
-	}
+	// Register custom detectors
+	RegisterCustomDetectors(atmosConfig)
 
 	client := &getter.Client{
 		Ctx:  ctx,
