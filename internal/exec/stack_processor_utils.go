@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -45,7 +44,6 @@ func ProcessYAMLConfigFiles(
 	map[string]map[string]any,
 	error,
 ) {
-
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
@@ -60,7 +58,7 @@ func ProcessYAMLConfigFiles(
 
 			stackBasePath := stacksBasePath
 			if len(stackBasePath) < 1 {
-				stackBasePath = path.Dir(p)
+				stackBasePath = filepath.Dir(p)
 			}
 
 			stackFileName := strings.TrimSuffix(
@@ -171,7 +169,6 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
-
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
@@ -470,7 +467,7 @@ func ProcessYAMLConfigFile(
 				return nil, nil, nil, nil, nil, err
 			}
 
-			importRelativePathWithExt := strings.Replace(importFile, basePath+"/", "", 1)
+			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
 				ext2 = u.DefaultStackConfigFileExtension
@@ -558,6 +555,7 @@ func ProcessStackConfig(
 	terraformEnv := map[string]any{}
 	terraformCommand := ""
 	terraformProviders := map[string]any{}
+	terraformHooks := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
@@ -659,6 +657,13 @@ func ProcessStackConfig(
 		terraformProviders, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'terraform.providers' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := globalTerraformSection[cfg.HooksSectionName]; ok {
+		terraformHooks, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'terraform.hooks' section in the file '%s'", stackName)
 		}
 	}
 
@@ -798,6 +803,14 @@ func ProcessStackConfig(
 					}
 				}
 
+				componentHooks := map[string]any{}
+				if i, ok := componentMap[cfg.HooksSectionName]; ok {
+					componentHooks, ok = i.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("invalid 'components.terraform.%s.hooks' section in the file '%s'", component, stackName)
+					}
+				}
+
 				// Component metadata.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentMetadata := map[string]any{}
@@ -858,6 +871,7 @@ func ProcessStackConfig(
 				componentOverridesSettings := map[string]any{}
 				componentOverridesEnv := map[string]any{}
 				componentOverridesProviders := map[string]any{}
+				componentOverridesHooks := map[string]any{}
 				componentOverridesTerraformCommand := ""
 
 				if i, ok := componentMap[cfg.OverridesSectionName]; ok {
@@ -894,6 +908,12 @@ func ProcessStackConfig(
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.providers' in the manifest '%s'", component, stackName)
 						}
 					}
+
+					if i, ok = componentOverrides[cfg.HooksSectionName]; ok {
+						if componentOverridesHooks, ok = i.(map[string]any); !ok {
+							return nil, fmt.Errorf("invalid 'components.terraform.%s.overrides.hooks' in the manifest '%s'", component, stackName)
+						}
+					}
 				}
 
 				// Process base component(s)
@@ -902,6 +922,7 @@ func ProcessStackConfig(
 				baseComponentSettings := map[string]any{}
 				baseComponentEnv := map[string]any{}
 				baseComponentProviders := map[string]any{}
+				baseComponentHooks := map[string]any{}
 				baseComponentTerraformCommand := ""
 				baseComponentBackendType := ""
 				baseComponentBackendSection := map[string]any{}
@@ -938,6 +959,7 @@ func ProcessStackConfig(
 					baseComponentSettings = baseComponentConfig.BaseComponentSettings
 					baseComponentEnv = baseComponentConfig.BaseComponentEnv
 					baseComponentProviders = baseComponentConfig.BaseComponentProviders
+					baseComponentHooks = baseComponentConfig.BaseComponentHooks
 					baseComponentName = baseComponentConfig.FinalBaseComponentName
 					baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 					baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
@@ -1061,6 +1083,18 @@ func ProcessStackConfig(
 						baseComponentProviders,
 						componentProviders,
 						componentOverridesProviders,
+					})
+				if err != nil {
+					return nil, err
+				}
+
+				finalComponentHooks, err := m.Merge(
+					atmosConfig,
+					[]map[string]any{
+						terraformHooks,
+						baseComponentHooks,
+						componentHooks,
+						componentOverridesHooks,
 					})
 				if err != nil {
 					return nil, err
@@ -1254,6 +1288,7 @@ func ProcessStackConfig(
 				comp[cfg.MetadataSectionName] = componentMetadata
 				comp[cfg.OverridesSectionName] = componentOverrides
 				comp[cfg.ProvidersSectionName] = finalComponentProviders
+				comp[cfg.HooksSectionName] = finalComponentHooks
 
 				if baseComponentName != "" {
 					comp[cfg.ComponentSectionName] = baseComponentName
@@ -1743,11 +1778,42 @@ func FindComponentDependenciesLegacy(
 	return unique, nil
 }
 
+// resolveRelativePath checks if a path is relative to the current directory and if so,
+// resolves it relative to the current file's directory. It ensures the resolved path
+// exists within the base path.
+func resolveRelativePath(path string, currentFilePath string) string {
+	if path == "" {
+		return path
+	}
+
+	// Convert all paths to use forward slashes for consistency in processing
+	normalizedPath := filepath.ToSlash(path)
+	normalizedCurrentFilePath := filepath.ToSlash(currentFilePath)
+
+	// Atmos import paths are generally relative paths, however, there are two types of relative paths:
+	//   1. Paths relative to the base path (most common) - e.g. "mixins/region/us-east-2"
+	//   2. Paths relative to the current file's directory (less common) - e.g. "./_defaults" imports will be relative to `./`
+	//
+	// Here we check if the path starts with "." or ".." to identify if it's relative to the current file.
+	// If it is, we'll convert it to be relative to the file doing the import, rather than the `base_path`.
+	parts := strings.Split(normalizedPath, "/")
+	firstElement := filepath.Clean(parts[0])
+	if firstElement == "." || firstElement == ".." {
+		// Join the current local path with the current stack file path
+		baseDir := filepath.Dir(normalizedCurrentFilePath)
+		relativePath := filepath.Join(baseDir, normalizedPath)
+		// Return in original format, OS-specific
+		return filepath.FromSlash(relativePath)
+	}
+	// For non-relative paths, return as-is in original format
+	return path
+}
+
 // ProcessImportSection processes the `import` section in stack manifests
-// The `import` section` can be of the following types:
-// 1. list of `StackImport` structs
-// 2. list of strings
-// 3. List of strings and `StackImport` structs in the same file
+// The `import` section can contain:
+// 1. Project-relative paths (e.g. "mixins/region/us-east-2")
+// 2. Paths relative to the current stack file (e.g. "./_defaults")
+// 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2")
 func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.StackImport, error) {
 	stackImports, ok := stackMap[cfg.ImportSectionName]
 
@@ -1773,6 +1839,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		var importObj schema.StackImport
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
+			importObj.Path = resolveRelativePath(importObj.Path, filePath)
 			result = append(result, importObj)
 			continue
 		}
@@ -1786,6 +1853,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 		}
 
+		s = resolveRelativePath(s, filePath)
 		result = append(result, schema.StackImport{Path: s})
 	}
 
@@ -1826,7 +1894,7 @@ func CreateComponentStackMap(
 	componentStackMap["terraform"] = map[string][]string{}
 	componentStackMap["helmfile"] = map[string][]string{}
 
-	dir := path.Dir(filePath)
+	dir := filepath.Dir(filePath)
 
 	err := filepath.Walk(dir,
 		func(p string, info os.FileInfo, err error) error {
@@ -1959,6 +2027,7 @@ func ProcessBaseComponentConfig(
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentProviders map[string]any
+	var baseComponentHooks map[string]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
@@ -2082,6 +2151,13 @@ func ProcessBaseComponentConfig(
 			}
 		}
 
+		if baseComponentHooksSection, baseComponentHooksSectionExist := baseComponentMap[cfg.HooksSectionName]; baseComponentHooksSectionExist {
+			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("invalid '%s.hooks' section in the stack '%s'", baseComponent, stack)
+			}
+		}
+
 		// Base component backend
 		if i, ok2 := baseComponentMap["backend_type"]; ok2 {
 			baseComponentBackendType, ok = i.(string)
@@ -2151,6 +2227,13 @@ func ProcessBaseComponentConfig(
 			return err
 		}
 		baseComponentConfig.BaseComponentProviders = merged
+
+		// Base component `hooks`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentHooks = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand

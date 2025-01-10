@@ -142,8 +142,7 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 10
-        run: |
-          make testacc
+        run: make testacc
 
   docker:
     name: "Docker Lint"
@@ -299,25 +298,25 @@ jobs:
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
         demo-folder:
-          - demo-atlantis
-          # - demo-component-manifest
-          - demo-component-versions
-          - demo-context
-          # - demo-custom-command
-          # - demo-json-validation
-          # - demo-opa-validation
-          # - demo-opentofu
-          # - demo-project
-          # - demo-stacks
-          # - demo-terraform
-          # - demo-terraform-overrides
-          # - demo-workflows
-          # - demo-yaml-anchors
-          # - demo-mock-architecture
-          # - demo-stack-templating
-          # - demo-multi-cloud
-          - demo-vendoring
-          - tests
+          - examples/demo-atlantis
+          # - examples/demo-component-manifest
+          - examples/demo-component-versions
+          - examples/demo-context
+          # - examples/demo-custom-command
+          # - examples/demo-json-validation
+          # - examples/demo-opa-validation
+          # - examples/demo-opentofu
+          # - examples/demo-project
+          # - examples/demo-stacks
+          # - examples/demo-terraform
+          # - examples/demo-terraform-overrides
+          # - examples/demo-workflows
+          # - examples/demo-yaml-anchors
+          # - examples/demo-mock-architecture
+          # - examples/demo-stack-templating
+          # - examples/demo-multi-cloud
+          - examples/demo-vendoring
+          - tests/fixtures/scenarios/complete
 
     timeout-minutes: 20
     steps:
@@ -351,7 +350,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
-        working-directory: examples/${{ matrix.demo-folder }}
+        working-directory: ${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
           atmos test
@@ -367,7 +366,7 @@ jobs:
           atmos version
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
-        working-directory: examples/${{ matrix.demo-folder }}
+        working-directory: ${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'windows'
         shell: pwsh
         run: |

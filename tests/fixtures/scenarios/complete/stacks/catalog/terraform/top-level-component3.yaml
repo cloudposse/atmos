@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - catalog/terraform/services/top-level-service-?.*
+
+components:
+  terraform:
+    top-level-component3:
+      metadata:
+        component: "top-level-component1"
+      settings:
+        spacelift:
+          workspace_enabled: false
+        depends_on:
+          1:
+            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+          2:
+            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+      vars:
+        enabled: true

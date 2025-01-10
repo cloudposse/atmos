@@ -22,7 +22,7 @@ const atmosDocsURL = "https://atmos.tools"
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
 	Use:                "docs",
-	Short:              "Open the Atmos docs or display component documentation",
+	Short:              "Open Atmos documentation or display component-specific docs",
 	Long:               `This command opens the Atmos docs or displays the documentation for a specified Atmos component.`,
 	Example:            "atmos docs vpc",
 	Args:               cobra.MaximumNArgs(1),
@@ -41,7 +41,11 @@ var docsCmd = &cobra.Command{
 
 			// Detect terminal width if not specified in `atmos.yaml`
 			// The default screen width is 120 characters, but uses maxWidth if set and greater than zero
-			maxWidth := atmosConfig.Settings.Docs.MaxWidth
+			maxWidth := atmosConfig.Settings.Terminal.MaxWidth
+			if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
+				maxWidth = atmosConfig.Settings.Docs.MaxWidth
+				u.LogWarning(atmosConfig, "'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
+			}
 			defaultWidth := 120
 			screenWidth := defaultWidth
 
@@ -97,7 +101,13 @@ var docsCmd = &cobra.Command{
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 			}
 
-			if err := u.DisplayDocs(componentDocs, atmosConfig.Settings.Docs.Pagination); err != nil {
+			usePager := atmosConfig.Settings.Terminal.Pager
+			if !usePager && atmosConfig.Settings.Docs.Pagination {
+				usePager = atmosConfig.Settings.Docs.Pagination
+				u.LogWarning(atmosConfig, "'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
+			}
+
+			if err := u.DisplayDocs(componentDocs, usePager); err != nil {
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to display documentation: %w", err))
 			}
 

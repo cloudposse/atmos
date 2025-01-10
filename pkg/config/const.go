@@ -44,6 +44,7 @@ const (
 	ImportSectionName                 = "import"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
+	HooksSectionName                  = "hooks"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
 	EnvSectionName                    = "env"
@@ -64,6 +65,8 @@ const (
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
+
+	QueryFlag = "--query"
 
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
