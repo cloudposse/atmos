@@ -7,6 +7,10 @@ on:
     paths:
       - ".github/workflows/demo.yml"
 
+permissions:
+  contents: read
+  id-token: write
+
 env:
   TERM: "xterm-256color"
   COLORTERM: "truecolor"
