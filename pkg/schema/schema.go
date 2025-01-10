@@ -40,7 +40,6 @@ type AtmosConfiguration struct {
 type Terminal struct {
 	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
 	Pager              bool               `yaml:"pager" json:"pager" mapstructure:"pager"`
-	Timestamps         bool               `yaml:"timestamps" json:"timestamps" mapstructure:"timestamps"`
 	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
