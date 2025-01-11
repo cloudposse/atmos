@@ -94,6 +94,16 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
+	// Check if the component is locked (`metadata.locked` is set to true)
+	if info.ComponentIsLocked {
+		// Allow read-only commands, block modification commands
+		switch info.SubCommand {
+		case "sync", "apply", "deploy", "delete", "destroy":
+			return fmt.Errorf("component '%s' is locked and cannot be modified (metadata.locked = true)",
+				filepath.Join(info.ComponentFolderPrefix, info.Component))
+		}
+	}
+
 	// Print component variables
 	u.LogDebug(atmosConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 

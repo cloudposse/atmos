@@ -1,2 +1,14 @@
+* text eol=lf
 docs linguist-documentation=true
-website/src/components/screengrabs/**.html linguist-generated=true
+website/src/components/screengrabs/**/*.html linguist-generated=true binary
+
+# Mark binary files to prevent normalization
+*.png binary
+*.svg binary
+*.jpg binary
+*.gif binary
+*.pdf binary
+*.ai binary
+*.eps binary
+*.ansi binary
+*.mp4 binary
