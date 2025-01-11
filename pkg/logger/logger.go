@@ -45,20 +45,14 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		return LogLevelInfo, nil
 	}
 
-	switch LogLevel(logLevel) { // Convert logLevel to type LogLevel
-	case LogLevelTrace:
-		return LogLevelTrace, nil
-	case LogLevelDebug:
-		return LogLevelDebug, nil
-	case LogLevelInfo:
-		return LogLevelInfo, nil
-	case LogLevelWarning:
-		return LogLevelWarning, nil
-	case LogLevelOff:
-		return LogLevelOff, nil
-	default:
-		return LogLevelInfo, fmt.Errorf("Error: Invalid log level '%s'. Valid options are: [Trace, Debug, Info, Warning, Off]. Please use one of these values", logLevel)
+	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelOff}
+	for _, level := range validLevels {
+		if LogLevel(logLevel) == level {
+			return level, nil
+		}
 	}
+
+	return LogLevelInfo, fmt.Errorf("Error: Invalid log level '%s'. Valid options are: %v", logLevel, validLevels)
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {
