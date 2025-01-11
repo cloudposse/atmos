@@ -52,8 +52,19 @@ version-windows: build-windows
 deps:
 	go mod download
 
-# Run acceptance tests
-testacc: get
-	go test $(TEST) -v $(TESTARGS) -timeout 2m
+# Test verbosity levels: quiet, normal, verbose
+TEST_VERBOSITY ?= normal
+
+.PHONY: test
+test: ## Run unit tests
+	ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./...
+
+.PHONY: testacc
+testacc: ## Run acceptance tests
+	ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./tests -timeout 20m
+
+.PHONY: testrace
+testrace: ## Run tests with race detector
+	ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -race -v ./...
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc
