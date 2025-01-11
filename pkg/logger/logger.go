@@ -106,7 +106,7 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 }
 
 func (l *Logger) Error(err error) {
-	if err != nil {
+	if err != nil && l.LogLevel != LogLevelOff {
 		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
 			color.Red("Error logging the error:")
@@ -118,34 +118,25 @@ func (l *Logger) Error(err error) {
 }
 
 func (l *Logger) Trace(message string) {
-	if l.LogLevel != LogLevelOff && l.LogLevel == LogLevelTrace {
+	if l.LogLevel != LogLevelOff && l.LogLevel <= LogLevelTrace {
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
-	if l.LogLevel != LogLevelOff && (l.LogLevel == LogLevelTrace ||
-		l.LogLevel == LogLevelDebug) {
-
+	if l.LogLevel != LogLevelOff && l.LogLevel <= LogLevelDebug {
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Info(message string) {
-	if l.LogLevel != LogLevelOff && (l.LogLevel == LogLevelTrace ||
-		l.LogLevel == LogLevelDebug ||
-		l.LogLevel == LogLevelInfo) {
-
-		l.log(theme.Colors.Default, message)
+	if l.LogLevel != LogLevelOff && l.LogLevel <= LogLevelInfo {
+		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
-	if l.LogLevel != LogLevelOff && (l.LogLevel == LogLevelTrace ||
-		l.LogLevel == LogLevelDebug ||
-		l.LogLevel == LogLevelInfo ||
-		l.LogLevel == LogLevelWarning) {
-
+	if l.LogLevel != LogLevelOff && l.LogLevel <= LogLevelWarning {
 		l.log(theme.Colors.Warning, message)
 	}
 }
