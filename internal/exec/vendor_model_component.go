@@ -11,10 +11,11 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 type pkgComponentVendor struct {
@@ -106,6 +107,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 		}
 	}
 }
+
 func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
 
 	// Create temp folder
@@ -174,8 +176,8 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	}
 
 	return nil
-
 }
+
 func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {

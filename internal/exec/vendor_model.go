@@ -235,6 +235,7 @@ func max(a, b int) int {
 	}
 	return b
 }
+
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
