@@ -360,10 +360,10 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	if len(logsLevel) > 0 {
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
 		// Validate the log level before setting it
-		_, err := logger.ParseLogLevel(logsLevel)
-		if err != nil {
-			return err
+		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
+			return fmt.Errorf("invalid log level '%s': %v", logsLevel, err)
 		}
+		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = logsLevel
 	}
 
