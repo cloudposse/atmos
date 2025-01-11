@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -358,6 +359,11 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
 	if len(logsLevel) > 0 {
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
+		// Validate the log level before setting it
+		_, err := logger.ParseLogLevel(logsLevel)
+		if err != nil {
+			return err
+		}
 		atmosConfig.Logs.Level = logsLevel
 	}
 
