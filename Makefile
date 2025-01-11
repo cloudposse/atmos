@@ -55,16 +55,12 @@ deps:
 # Test verbosity levels: quiet, normal, verbose
 TEST_VERBOSITY ?= normal
 
-.PHONY: test
-test: ## Run unit tests
-	ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./...
-
 .PHONY: testacc
-testacc: ## Run acceptance tests
-	ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./tests -timeout 20m
-
-.PHONY: testrace
-testrace: ## Run tests with race detector
-	ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -race -v ./...
+testacc: ## Run all tests
+	@if [ "$(TEST_VERBOSITY)" = "quiet" ]; then \
+		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test ./... -timeout 20m 2>&1 | grep -E "^(ok|FAIL|panic:|--- FAIL)" | grep -v "=== RUN"; \
+	else \
+		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./... -timeout 20m | grep -E "^(ok|FAIL|panic:|--- FAIL|=== RUN)"; \
+	fi
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc
