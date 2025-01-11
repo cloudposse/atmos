@@ -105,7 +105,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
 		atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
 	} else if u.IsURL(atmosConfig.Schemas.Atmos.Manifest) {
-		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(atmosConfig.Schemas.Atmos.Manifest)
+		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -372,7 +372,10 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 }
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
-func downloadSchemaFromURL(manifestURL string) (string, error) {
+func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error) {
+
+	manifestURL := atmosConfig.Schemas.Atmos.Manifest
+
 	parsedURL, err := url.Parse(manifestURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL '%s': %w", manifestURL, err)
@@ -391,6 +394,10 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+
+	// Register custom detectors
+	RegisterCustomDetectors(atmosConfig)
+
 	client := &getter.Client{
 		Ctx:  ctx,
 		Dst:  atmosManifestJsonSchemaFilePath,
