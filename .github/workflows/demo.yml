@@ -44,6 +44,11 @@ jobs:
           sudo apt-get install -y aha util-linux make jq bat
           sudo ln -s /usr/bin/batcat /usr/bin/bat
 
+      - name: Set Git Preferences for windows
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -128,7 +133,6 @@ jobs:
           repositories: assets
 
       - uses: actions/checkout@v4
-
       - name: Checkout cloudposse-corp/assets
         uses: actions/checkout@v4
         with:
