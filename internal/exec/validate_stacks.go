@@ -377,14 +377,17 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid URL '%s': %w", manifestURL, err)
 	}
+
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return "", fmt.Errorf("unsupported URL scheme '%s' for schema manifest", parsedURL.Scheme)
 	}
+
 	tempDir := os.TempDir()
 	fileName, err := u.GetFileNameFromURL(manifestURL)
 	if err != nil || fileName == "" {
 		return "", fmt.Errorf("failed to get the file name from the URL '%s': %w", manifestURL, err)
 	}
+
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -397,6 +400,7 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	if err = client.Get(); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
+
 	return atmosManifestJsonSchemaFilePath, nil
 }
 

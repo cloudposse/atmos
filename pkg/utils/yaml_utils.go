@@ -112,3 +112,9 @@ func UnmarshalYAML[T any](input string) (T, error) {
 
 	return data, nil
 }
+
+// IsYAML checks if data is in YAML format
+func IsYAML(data string) bool {
+	var yml any
+	return yaml.Unmarshal([]byte(data), &yml) == nil
+}

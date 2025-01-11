@@ -1,12 +1,16 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hashicorp/hcl"
+	"gopkg.in/yaml.v3"
 )
 
 // IsDirectory checks if the path is a directory
@@ -242,4 +246,24 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 		return "", fmt.Errorf("unable to extract filename from URL: %s", rawURL)
 	}
 	return fileName, nil
+}
+
+// DetectFormatAndParseFile detects the format of the file and parses the file into a Go type
+func DetectFormatAndParseFile(filename string, v any) error {
+	d, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	data := string(d)
+
+	if IsJSON(data) {
+		return json.Unmarshal(d, v)
+	} else if IsYAML(data) {
+		return yaml.Unmarshal(d, v)
+	} else if IsHCL(data) {
+		return hcl.Unmarshal(d, v)
+	} else {
+		return fmt.Errorf("unsupported or unrecognized file format in the file '%s'. Supported formats are JSON, YAML and HCL", filename)
+	}
 }

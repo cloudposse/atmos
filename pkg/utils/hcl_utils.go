@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
@@ -139,4 +140,10 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	}
 
 	return nil
+}
+
+// IsHCL checks if data is in HCL format
+func IsHCL(data string) bool {
+	var hclData any
+	return hcl.Unmarshal([]byte(data), &hclData) == nil
 }
