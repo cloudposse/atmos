@@ -141,8 +141,12 @@ jobs:
           make deps
 
       - name: Acceptance tests
-        timeout-minutes: 10
-        run: make testacc
+        uses: n8maninger/go-test-action@v1
+        with:
+          test-flags: "-timeout 10m"
+          test-command: "make testacc"
+          report-name: "acceptance-tests"
+          max-output-size: "2M"
 
   docker:
     name: "Docker Lint"
