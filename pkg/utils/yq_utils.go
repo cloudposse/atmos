@@ -31,7 +31,7 @@ func (n logBackend) IsEnabledFor(level logging.Level, s string) bool {
 	return false
 }
 
-func EvaluateYqExpression(atmosConfig schema.AtmosConfiguration, data any, yq string) (any, error) {
+func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
 	// Use the `yqlib` default (chatty) logger only when Atmos Logs Level is set to `Trace`
 	// Otherwise, use the no-op logging backend
 	if atmosConfig.Logs.Level != LogLevelTrace {

@@ -220,7 +220,7 @@ func GetTerraformOutput(
 		cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 		if found && cachedOutputs != nil {
 			u.LogTrace(*atmosConfig, fmt.Sprintf("Found the result of the Atmos YAML function '!terraform.output %s %s %s' in the cache", component, stack, output))
-			return getTerraformOutput(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+			return getTerraformOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
 		}
 	}
 
@@ -249,28 +249,37 @@ func GetTerraformOutput(
 
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, terraformOutputs)
-		return getTerraformOutput(atmosConfig, component, stack, terraformOutputs, output)
+		return getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
 }
 
-func getTerraformOutput(
+func getTerraformOutputVariable(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	outputs map[string]any,
 	output string,
 ) any {
-	if u.MapKeyExists(outputs, output) {
-		return outputs[output]
+	res, err := u.EvaluateYqExpression(atmosConfig, outputs, "."+output)
+
+	if err != nil {
+		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating terrform output '%s' for the component '%s' in the stack '%s':\n%v",
+			output,
+			component,
+			stack,
+			err,
+		))
 	}
 
-	u.LogErrorAndExit(*atmosConfig, fmt.Errorf("invalid terrform output lookup: the component '%s' in the stack '%s' does not have the output '%s'",
-		component,
-		stack,
-		output,
-	))
+	if res == nil {
+		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating terrform output: the component '%s' in the stack '%s' does not have the output '%s'",
+			component,
+			stack,
+			output,
+		))
+	}
 
-	return nil
+	return res
 }
 
 func getStaticRemoteStateOutput(
@@ -280,16 +289,25 @@ func getStaticRemoteStateOutput(
 	remoteStateSection map[string]any,
 	output string,
 ) any {
-	if u.MapKeyExists(remoteStateSection, output) {
-		return remoteStateSection[output]
+	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, "."+output)
+
+	if err != nil {
+		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating the 'static' remote state backend output '%s' for the component '%s' in the stack '%s':\n%v",
+			output,
+			component,
+			stack,
+			err,
+		))
 	}
 
-	u.LogErrorAndExit(*atmosConfig, fmt.Errorf("invalid terrform output lookup: the component '%s' in the stack '%s' "+
-		"is configured with the 'static' remote state backend, but the remote state backend does not have the output '%s'",
-		component,
-		stack,
-		output,
-	))
+	if res == nil {
+		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating the 'static' remote state backend output: the component '%s' in the stack '%s' "+
+			"is configured with the 'static' remote state backend, but the remote state backend does not have the output '%s'",
+			component,
+			stack,
+			output,
+		))
+	}
 
-	return nil
+	return res
 }
