@@ -173,6 +173,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
+	// Check if the component is locked (`metadata.locked` is set to true)
+	if info.ComponentIsLocked {
+		// Allow read-only commands, block modification commands
+		switch info.SubCommand {
+		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
+			return fmt.Errorf("component '%s' is locked and cannot be modified (metadata.locked = true)",
+				filepath.Join(info.ComponentFolderPrefix, info.Component))
+		}
+	}
+
 	if info.SubCommand == "clean" {
 		err := handleCleanSubCommand(info, componentPath, atmosConfig)
 		if err != nil {

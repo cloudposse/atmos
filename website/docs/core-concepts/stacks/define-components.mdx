@@ -234,3 +234,25 @@ components:
         name: primary-vpc
 ```
 Using the `metadata.enabled` flag makes it easy to ensure that only the intended components are active in each environment.
+
+### Locking Components with `metadata.locked`
+
+The `metadata.locked` parameter prevents changes to a component while still allowing read operations. When a component is locked, operations that would modify infrastructure (like `terraform apply`) are blocked, while read-only operations (like `terraform plan`) remain available. By default, components are unlocked. Setting `metadata.locked` to `true` prevents any change operations.
+
+:::info Note
+Locking a component does not affect the Terraform state. It's intended as a way to communicate intention and prevent accidental changes to sensitive or critical infrastructure.
+:::
+
+**Example**:
+```yaml
+# Lock a production database component to prevent accidental changes
+components:
+  terraform:
+    rds:
+      metadata:
+        locked: true
+      vars:
+        name: production-database
+```
+
+Using the `metadata.locked` flag helps protect critical infrastructure from unintended modifications while still allowing teams to inspect and review the configuration.
