@@ -37,8 +37,14 @@ fi
 
 for tape in "${TAPEFILES[@]}"; do
   base="$(basename "$tape" .tape)"
-  echo "   Processing $tape -> $MP4_OUTDIR/$base.mp4"
-  (cd "$REPO_ROOT" && vhs "$tape" --output "$MP4_OUTDIR/$base.mp4")
+  output_file="$MP4_OUTDIR/$base.mp4"
+
+  if [[ ! -f "$output_file" || "$tape" -nt "$output_file" ]]; then
+    echo "   Processing $tape -> $output_file"
+    (cd "$REPO_ROOT" && vhs "$tape" --output "$output_file")
+  else
+    echo "   Skipping $tape; $output_file is up-to-date."
+  fi
 done
 
 # 2) Process scenes/*.txt
@@ -56,7 +62,7 @@ for scene_file in "${SCENE_FILES[@]}"; do
 
   # Concatenate scene
   echo "      Concatenating -> $MP4_OUTDIR/$scene_name.mp4"
-  ffmpeg -f concat -safe 0 -i "$scene_file" -c copy "$MP4_OUTDIR/$scene_name.mp4"
+  ffmpeg -f concat -safe 0 -i "$scene_file" -c copy "$MP4_OUTDIR/$scene_name.mp4" -y
 
   # Add audio fade
   echo "      Adding fade audio -> $MP4_OUTDIR/$scene_name-with-audio.mp4"
@@ -65,7 +71,7 @@ for scene_file in "${SCENE_FILES[@]}"; do
   ffmpeg -i "$MP4_OUTDIR/$scene_name.mp4" -i "$AUDIO_FILE" \
     -filter_complex "[1:a]afade=t=out:st=${FADE_START}:d=5[aout]" \
     -map 0:v -map "[aout]" \
-    -c:v copy -c:a aac "$MP4_OUTDIR/$scene_name-with-audio.mp4"
+    -c:v copy -c:a aac "$MP4_OUTDIR/$scene_name-with-audio.mp4" -y
 
   # Create GIF
   echo "      Creating GIF -> $GIF_OUTDIR/$scene_name.gif"

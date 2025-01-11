@@ -183,6 +183,7 @@ jobs:
         run: |
           demo/recordings/build.sh
           mv demo/recordings/gif/atmos.gif docs/demo.gif
+          git add -A
 
       - name: Upload Assets to S3 (atmos.tools)
         run: |
