@@ -14,6 +14,8 @@ const (
 	AtmosYamlFuncStore           = "!store"
 	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
+	AtmosYamlFuncEnv             = "!env"
+	AtmosYamlFuncInclude         = "!include"
 )
 
 var (
@@ -22,6 +24,8 @@ var (
 		AtmosYamlFuncStore,
 		AtmosYamlFuncTemplate,
 		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncEnv,
+		AtmosYamlFuncInclude,
 	}
 )
 
