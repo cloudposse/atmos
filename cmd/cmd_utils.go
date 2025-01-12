@@ -589,7 +589,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string, isNativeCommandsAvailab
 		handleHelpRequest(cmd, args, isNativeCommandsAvailable)
 		suggestions = cmd.SuggestionsFor(args[0])
 		subCommand = args[0]
-		unkonwnCommand = fmt.Sprintf(`Error: Unknkown command %q for %q`+"\n", subCommand, cmd.CommandPath())
+		unkonwnCommand = fmt.Sprintf(`Error: Unkown command %q for %q`+"\n", subCommand, cmd.CommandPath())
 	}
 	if len(suggestions) > 0 {
 		u.PrintMessage(fmt.Sprintf("%s\n\nDid you mean this?", unkonwnCommand))

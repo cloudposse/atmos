@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/elewis787/boa"
 	cc "github.com/ivanpirog/coloredcobra"
@@ -98,7 +100,31 @@ func Execute() error {
 		}
 	}
 
-	return RootCmd.Execute()
+	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
+	RootCmd.SilenceErrors = true
+	err = RootCmd.Execute()
+	if err != nil {
+		if strings.Contains(err.Error(), "unknown command") {
+			command := getInvalidCommandName(err.Error())
+			showUsageAndExit(RootCmd, []string{command}, false)
+		}
+	}
+	return err
+}
+
+func getInvalidCommandName(input string) string {
+	// Regular expression to match the command name inside quotes
+	re := regexp.MustCompile(`unknown command "([^"]+)"`)
+
+	// Find the match
+	match := re.FindStringSubmatch(input)
+
+	// Check if a match is found
+	if len(match) > 1 {
+		command := match[1] // The first capturing group contains the command
+		return command
+	}
+	return ""
 }
 
 func init() {
