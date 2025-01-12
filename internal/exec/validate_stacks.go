@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -10,9 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"time"
 
-	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -391,19 +388,8 @@ func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error
 	}
 
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
 
-	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
-
-	client := &getter.Client{
-		Ctx:  ctx,
-		Dst:  atmosManifestJsonSchemaFilePath,
-		Src:  manifestURL,
-		Mode: getter.ClientModeFile,
-	}
-	if err = client.Get(); err != nil {
+	if err = GoGetterDownloadFile(atmosConfig, manifestURL, atmosManifestJsonSchemaFilePath); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
 

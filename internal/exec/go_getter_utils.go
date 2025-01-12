@@ -3,10 +3,12 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-getter"
 
@@ -42,14 +44,15 @@ func ValidateURI(uri string) error {
 		}
 	} else if strings.Contains(uri, "://") {
 		scheme := strings.Split(uri, "://")[0]
-		if !isValidScheme(scheme) {
+		if !IsValidScheme(scheme) {
 			return fmt.Errorf("unsupported URI scheme: %s", scheme)
 		}
 	}
 	return nil
 }
 
-func isValidScheme(scheme string) bool {
+// IsValidScheme checks if the URL scheme is valid
+func IsValidScheme(scheme string) bool {
 	validSchemes := map[string]bool{
 		"http":       true,
 		"https":      true,
@@ -141,4 +144,25 @@ func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
 		},
 		getter.Detectors...,
 	)
+}
+
+func GoGetterDownloadFile(atmosConfig schema.AtmosConfiguration, src string, dest string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+
+	// Register custom detectors
+	RegisterCustomDetectors(atmosConfig)
+
+	client := &getter.Client{
+		Ctx:  ctx,
+		Src:  src,
+		Dst:  dest,
+		Mode: getter.ClientModeFile,
+	}
+
+	if err := client.Get(); err != nil {
+		return err
+	}
+
+	return nil
 }
