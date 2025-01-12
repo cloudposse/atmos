@@ -146,18 +146,26 @@ func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
 	)
 }
 
-func GoGetterDownloadFile(atmosConfig schema.AtmosConfiguration, src string, dest string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination
+func GoGetterGet(
+	atmosConfig schema.AtmosConfiguration,
+	src string,
+	dest string,
+	clientMode getter.ClientMode,
+	timeout time.Duration,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	// Register custom detectors
 	RegisterCustomDetectors(atmosConfig)
 
 	client := &getter.Client{
-		Ctx:  ctx,
-		Src:  src,
+		Ctx: ctx,
+		Src: src,
+		// Destination where the files will be stored. This will create the directory if it doesn't exist
 		Dst:  dest,
-		Mode: getter.ClientModeFile,
+		Mode: clientMode,
 	}
 
 	if err := client.Get(); err != nil {

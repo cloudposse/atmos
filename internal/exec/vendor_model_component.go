@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -118,30 +117,20 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	if err != nil {
 		return fmt.Errorf("Failed to create temp directory %s", err)
 	}
+
 	// Ensure directory permissions are restricted
 	if err := os.Chmod(tempDir, 0700); err != nil {
 		return fmt.Errorf("failed to set temp directory permissions: %w", err)
 	}
+
 	defer removeTempDir(atmosConfig, tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		// Register custom detectors
-		RegisterCustomDetectors(atmosConfig)
-
-		client := &getter.Client{
-			Ctx: context.Background(),
-			// Define the destination where the files will be stored. This will create the directory if it doesn't exist
-			Dst: tempDir,
-			// Source
-			Src:  p.uri,
-			Mode: getter.ClientModeAny,
-		}
-
-		if err = client.Get(); err != nil {
-			return fmt.Errorf("Failed to download package %s error %s", p.name, err)
+		if err = GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package %s error %s", p.name, err)
 		}
 
 	case pkgTypeOci:
@@ -188,30 +177,20 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 	}
 
 	defer removeTempDir(atmosConfig, tempDir)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
+
 	switch p.pkgType {
 	case pkgTypeRemote:
-
-		// Register custom detectors
-		RegisterCustomDetectors(atmosConfig)
-
-		client := &getter.Client{
-			Ctx:  ctx,
-			Dst:  filepath.Join(tempDir, p.mixinFilename),
-			Src:  p.uri,
-			Mode: getter.ClientModeFile,
+		if err = GoGetterGet(atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package %s error %s", p.name, err)
 		}
 
-		if err = client.Get(); err != nil {
-			return fmt.Errorf("Failed to download package %s error %s", p.name, err)
-		}
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
+			return fmt.Errorf("failed to process OCI image %s error %s", p.name, err)
 		}
+
 	case pkgTypeLocal:
 		if p.uri == "" {
 			return fmt.Errorf("local mixin URI cannot be empty")
@@ -221,8 +200,8 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 
 	default:
 		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
-
 	}
+
 	// Copy from the temp folder to the destination folder
 	copyOptions := cp.Options{
 		// Preserve the atime and the mtime of the entries

@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,11 +12,12 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hashicorp/go-getter"
+	cp "github.com/otiai10/copy"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/hashicorp/go-getter"
-	cp "github.com/otiai10/copy"
 )
 
 type pkgType int
@@ -113,6 +113,7 @@ func (m *modelVendor) Init() tea.Cmd {
 	}
 	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.atmosConfig), m.spinner.Tick)
 }
+
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -120,6 +121,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.width > 120 {
 			m.width = 120
 		}
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc", "q":
@@ -194,7 +196,6 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m modelVendor) View() string {
-
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
@@ -263,22 +264,11 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		}
 
 		defer removeTempDir(atmosConfig, tempDir)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
 
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
-			// Register custom detectors
-			RegisterCustomDetectors(atmosConfig)
-
-			client := &getter.Client{
-				Ctx:  ctx,
-				Dst:  tempDir,
-				Src:  p.uri,
-				Mode: getter.ClientModeAny,
-			}
-			if err := client.Get(); err != nil {
+			if err := GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to download package: %w", err),
 					name: p.name,
