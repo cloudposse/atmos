@@ -302,7 +302,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 			}
 			if p.sourceIsLocalFile {
-				tempDir = filepath.Join(tempDir, sanitizeFileName(p.uri))
+				tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{
