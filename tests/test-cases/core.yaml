@@ -47,7 +47,7 @@ tests:
       - "non-existent"
     expect:
       stderr:
-        - 'unknown command "non-existent" for "atmos"'
+        - 'Error: Unkown command \"non-existent\" for \"atmos\"'
       exit_code: 1
 
   - name: atmos terraform non-existent
