@@ -8,6 +8,7 @@ const (
 	LongDescription HelpTemplateSections = iota
 	Usage
 	Aliases
+	SubCommandAliases
 	Examples
 	AvailableCommands
 	Flags
@@ -34,32 +35,49 @@ func getSection(commandName string, section HelpTemplateSections) string {
 	case AdditionalHelpTopics:
 		return `{{if .HasHelpSubCommands}}
 
-Additional help topics:
+
+{{HeadingStyle "Additional help topics:"}}
+
 {{formatCommands .Commands "additionalHelpTopics"}}{{end}}`
 	case Aliases:
 		return `{{if gt (len .Aliases) 0}}
 
-Aliases:
+{{HeadingStyle "Aliases:"}}
+
   {{.NameAndAliases}}{{end}}`
+	case SubCommandAliases:
+		return `{{if (isAliasesPresent .Commands)}}
+
+{{HeadingStyle "SubCommand Aliases:"}}
+
+{{formatCommands .Commands "subcommandAliases"}}{{end}}`
 	case AvailableCommands:
 		return `{{if .HasAvailableSubCommands}}
 
-Available Commands:
+
+{{HeadingStyle "Available Commands:"}}
+
 {{formatCommands .Commands "availableCommands"}}{{end}}`
 	case Examples:
 		return `{{if .HasExample}}
 
-Examples:
+
+{{HeadingStyle "Examples:"}}
+
 {{.Example}}{{end}}`
 	case Flags:
 		return `{{if .HasAvailableLocalFlags}}
 
-Flags:
+
+{{HeadingStyle "Flags:"}}
+
 {{wrappedFlagUsages .LocalFlags | trimTrailingWhitespaces}}{{end}}`
 	case GlobalFlags:
 		return `{{if .HasAvailableInheritedFlags}}
 
-Global Flags:
+
+{{HeadingStyle "Global Flags:"}}
+
 {{wrappedFlagUsages .InheritedFlags | trimTrailingWhitespaces}}{{end}}`
 	case NativeCommands:
 		return fmt.Sprintf(`
@@ -69,7 +87,9 @@ Global Flags:
 {{formatCommands .Commands "native"}}
 `, commandName)
 	case Usage:
-		return `Usage:{{if .Runnable}}
+		return `
+{{HeadingStyle "Usage:"}}
+{{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [command]{{end}}`
 	case DoubleDashHelp:

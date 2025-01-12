@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/colored"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -564,13 +564,13 @@ func handleHelpRequest(cmd *cobra.Command, args []string, isNativeCommandsAvaila
 				templates.Footer,
 			})
 			cmd.SetUsageTemplate(template)
-			cc.Init(&cc.Config{
+			colored.Init(&colored.Config{
 				RootCmd:  cmd,
-				Headings: cc.HiCyan + cc.Bold + cc.Underline,
-				Commands: cc.HiGreen + cc.Bold,
-				Example:  cc.Italic,
-				ExecName: cc.Bold,
-				Flags:    cc.Bold,
+				Headings: colored.HiCyan + colored.Bold + colored.Underline,
+				Commands: colored.HiGreen + colored.Bold,
+				Example:  colored.Italic,
+				ExecName: colored.Bold,
+				Flags:    colored.Bold,
 			})
 		}
 		cmd.Help()

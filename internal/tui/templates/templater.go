@@ -48,12 +48,45 @@ var customHelpShortMessage = map[string]string{
 	"tf":   "Alias for `terraform` commands",
 }
 
+// filterCommands returns only commands or aliases based on returnOnlyAliases boolean
+func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.Command {
+	filtered := []*cobra.Command{}
+	for _, cmd := range commands {
+		isAlias := false
+		for _, parentCmd := range commands {
+			if cmd != parentCmd {
+				for _, alias := range parentCmd.Aliases {
+					if cmd.Name() == alias {
+						isAlias = true
+						break
+					}
+				}
+			}
+			if isAlias {
+				break
+			}
+		}
+		// Add to the filtered list based on the includeAliases flag
+		if returnOnlyAliases && isAlias {
+			filtered = append(filtered, cmd) // Include only aliases
+		} else if !returnOnlyAliases && !isAlias {
+			filtered = append(filtered, cmd) // Include only primary commands
+		}
+	}
+	return filtered
+}
+
+func isAliasesPresent(cmds []*cobra.Command) bool {
+	return len(filterCommands(cmds, true)) > 0
+}
+
 // formatCommands formats a slice of cobra commands with proper styling
 func formatCommands(cmds []*cobra.Command, listType string) string {
 	var maxLen int
 	availableCmds := make([]*cobra.Command, 0)
 
 	// First pass: collect available commands and find max length
+	cmds = filterCommands(cmds, listType == "subcommandAliases")
 	for _, cmd := range cmds {
 		switch listType {
 		case "additionalHelpTopics":
@@ -72,6 +105,19 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				}
 				continue
 			}
+		case "subcommandAliases":
+			if v, ok := customHelpShortMessage[cmd.Name()]; ok {
+				cmd.Short = v
+			}
+			if cmd.Annotations["nativeCommand"] == "true" {
+				continue
+			}
+			if cmd.IsAvailableCommand() || cmd.Name() == "help" {
+				availableCmds = append(availableCmds, cmd)
+				if len(cmd.Name()) > maxLen {
+					maxLen = len(cmd.Name())
+				}
+			}
 		default:
 			if cmd.Annotations["nativeCommand"] == "true" {
 				continue
@@ -82,9 +128,6 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 					maxLen = len(cmd.Name())
 				}
 			}
-		}
-		if v, ok := customHelpShortMessage[cmd.Name()]; ok {
-			cmd.Short = v
 		}
 	}
 
@@ -124,6 +167,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 			Aliases,
 			Examples,
 			AvailableCommands,
+			SubCommandAliases,
 			Flags,
 			GlobalFlags,
 			AdditionalHelpTopics,
@@ -133,6 +177,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	}
 
 	cmd.SetUsageTemplate(t.UsageTemplate)
+	cobra.AddTemplateFunc("isAliasesPresent", isAliasesPresent)
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
 	return nil
 }
