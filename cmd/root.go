@@ -43,8 +43,6 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 		}
-		handleHelpRequest(cmd, args)
-		checkAtmosConfig()
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -108,7 +106,6 @@ func Execute() error {
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
-			fmt.Println("_______REOO__________")
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
