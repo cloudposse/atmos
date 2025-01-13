@@ -57,8 +57,8 @@ tests:
       - "version"
       - "--check"
     expect:
-      diff: []
-      snapshot: true
+      diff:
+        - 'Update available! (\d+\.\d+\.\d+|test) » \d+.\d+.\d+'
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
@@ -111,7 +111,8 @@ tests:
       - "describe"
       - "config"
     expect:
-      diff: []
+      diff:
+        - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stderr:

@@ -14,8 +14,7 @@ import (
 	"testing"
 
 	"github.com/creack/pty"
-	"github.com/fatih/color"
-	"github.com/google/go-cmp/cmp"
+	"github.com/sergi/go-diff/diffmatchpatch"
 	"gopkg.in/yaml.v3"
 )
 
@@ -163,26 +162,6 @@ func executeCommand(t *testing.T, cmd *exec.Cmd) int {
 		t.Fatalf("Command execution failed: %v", err)
 	}
 	return 0
-}
-
-func colorizeDiff(diff string) string {
-	var result strings.Builder
-	for _, line := range strings.Split(diff, "\n") {
-		if strings.HasPrefix(line, "+") {
-			// Additions are green
-			result.WriteString(color.GreenString(line) + "\n")
-		} else if strings.HasPrefix(line, "-") {
-			// Deletions are red
-			result.WriteString(color.RedString(line) + "\n")
-		} else if strings.HasPrefix(line, "@") {
-			// Diff context is yellow
-			result.WriteString(color.YellowString(line) + "\n")
-		} else {
-			// Unchanged lines are plain
-			result.WriteString(line + "\n")
-		}
-	}
-	return result.String()
 }
 
 // loadTestSuites loads and merges all .yaml files from the test-cases directory
@@ -427,41 +406,40 @@ func readSnapshot(t *testing.T, fullPath string) string {
 	}
 	return string(data)
 }
+func DiffStrings(x, y string) string {
+	dmp := diffmatchpatch.New()
+	diffs := dmp.DiffMain(x, y, false)
+	dmp.DiffCleanupSemantic(diffs) // Clean up the diff for readability
+	return dmp.DiffPrettyText(diffs)
+}
 
 func verifySnapshot(t *testing.T, tc TestCase, actualOutput string, regenerate bool) bool {
-	// Skip snapshot validation if not enabled
 	if !tc.Snapshot {
 		return true
 	}
 
-	// Construct snapshot file path
 	testName := sanitizeTestName(t.Name())
 	snapshotFileName := fmt.Sprintf("%s.golden", testName)
 	fullPath := filepath.Join(snapshotBaseDir, snapshotFileName)
 
-	// Filter ignored diffs from the actual output
-	filteredActual := applyIgnorePatterns(actualOutput, tc.Expect.Diff)
-
-	// Check if the snapshot exists
-	if _, err := os.Stat(fullPath); errors.Is(err, os.ErrNotExist) {
-		if regenerate {
-			// Regenerate the snapshot if the flag is set
-			t.Logf("Regenerating missing snapshot at %q", fullPath)
-			updateSnapshot(fullPath, filteredActual)
-			return true
-		} else {
-			// Fail the test if the snapshot is missing and regenerate is not enabled
-			t.Errorf("Snapshot file %q not found. Run with -regenerate-snapshots to create it.", fullPath)
-			return false
-		}
+	if regenerate {
+		t.Logf("Regenerating snapshot at %q", fullPath)
+		updateSnapshot(fullPath, actualOutput)
+		return true
 	}
 
-	// Read and filter the existing snapshot
+	if _, err := os.Stat(fullPath); errors.Is(err, os.ErrNotExist) {
+		t.Fatalf(`Snapshot file not found: %q\nRun the following command to create it:\n$ go test -run=%q -regenerate-snapshots`, fullPath, t.Name())
+	}
+
+	filteredActual := applyIgnorePatterns(actualOutput, tc.Expect.Diff)
 	filteredExpected := applyIgnorePatterns(readSnapshot(t, fullPath), tc.Expect.Diff)
 
-	// Compare the actual output with the snapshot
-	if diff := cmp.Diff(filteredExpected, filteredActual); diff != "" {
-		t.Errorf("Snapshot mismatch for %q:\n%s", fullPath, colorizeDiff(diff))
+	// Compare the strings
+	if filteredExpected != filteredActual {
+		// Generate a unified diff for the entire string
+		diff := DiffStrings(filteredExpected, filteredActual)
+		t.Errorf("Snapshot mismatch for %q:\n%s", fullPath, diff)
 		return false
 	}
 
