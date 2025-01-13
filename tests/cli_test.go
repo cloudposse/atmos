@@ -317,7 +317,8 @@ func TestCLICommands(t *testing.T) {
 				t.Errorf("Description: %s", tc.Description)
 			}
 
-			if !verifySnapshot(t, tc, stdout.String(), *regenerateSnapshots) {
+			// Validate snapshots for stdout and stderr
+			if !verifySnapshot(t, tc, stdout.String(), stderr.String(), *regenerateSnapshots) {
 				t.Errorf("Description: %s", tc.Description)
 			}
 		})
@@ -413,34 +414,52 @@ func DiffStrings(x, y string) string {
 	return dmp.DiffPrettyText(diffs)
 }
 
-func verifySnapshot(t *testing.T, tc TestCase, actualOutput string, regenerate bool) bool {
+func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string, regenerate bool) bool {
 	if !tc.Snapshot {
 		return true
 	}
 
 	testName := sanitizeTestName(t.Name())
-	snapshotFileName := fmt.Sprintf("%s.golden", testName)
-	fullPath := filepath.Join(snapshotBaseDir, snapshotFileName)
+	stdoutFileName := fmt.Sprintf("%s.stdout.golden", testName)
+	stderrFileName := fmt.Sprintf("%s.stderr.golden", testName)
+	stdoutPath := filepath.Join(snapshotBaseDir, stdoutFileName)
+	stderrPath := filepath.Join(snapshotBaseDir, stderrFileName)
 
+	// Regenerate snapshots if the flag is set
 	if regenerate {
-		t.Logf("Regenerating snapshot at %q", fullPath)
-		updateSnapshot(fullPath, actualOutput)
+		t.Logf("Updating stdout snapshot at %q", stdoutPath)
+		updateSnapshot(stdoutPath, stdoutOutput)
+		t.Logf("Updating stderr snapshot at %q", stderrPath)
+		updateSnapshot(stderrPath, stderrOutput)
 		return true
 	}
 
-	if _, err := os.Stat(fullPath); errors.Is(err, os.ErrNotExist) {
-		t.Fatalf(`Snapshot file not found: %q\nRun the following command to create it:\n$ go test -run=%q -regenerate-snapshots`, fullPath, t.Name())
+	// Verify stdout
+	if _, err := os.Stat(stdoutPath); errors.Is(err, os.ErrNotExist) {
+		t.Fatalf(`Stdout snapshot file not found: %q
+Run the following command to create it:
+$ go test -run=%q -regenerate-snapshots`, stdoutPath, t.Name())
+	}
+	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
+	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
+
+	if filteredStdoutExpected != filteredStdoutActual {
+		diff := DiffStrings(filteredStdoutExpected, filteredStdoutActual)
+		t.Errorf("Stdout mismatch for %q:\n%s", stdoutPath, diff)
 	}
 
-	filteredActual := applyIgnorePatterns(actualOutput, tc.Expect.Diff)
-	filteredExpected := applyIgnorePatterns(readSnapshot(t, fullPath), tc.Expect.Diff)
+	// Verify stderr
+	if _, err := os.Stat(stderrPath); errors.Is(err, os.ErrNotExist) {
+		t.Fatalf(`Stderr snapshot file not found: %q
+Run the following command to create it:
+$ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
+	}
+	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
+	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
 
-	// Compare the strings
-	if filteredExpected != filteredActual {
-		// Generate a unified diff for the entire string
-		diff := DiffStrings(filteredExpected, filteredActual)
-		t.Errorf("Snapshot mismatch for %q:\n%s", fullPath, diff)
-		return false
+	if filteredStderrExpected != filteredStderrActual {
+		diff := DiffStrings(filteredStderrExpected, filteredStderrActual)
+		t.Errorf("Stderr mismatch for %q:\n%s", stderrPath, diff)
 	}
 
 	return true
