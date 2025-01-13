@@ -1,12 +1,14 @@
 tests:
   - name: atmos --help
     enabled: true
+    snapshot: true
     description: "Ensure atmos CLI help command lists available commands."
     workdir: "../examples/demo-stacks"
     command: "atmos"
     args:
       - "--help"
     expect:
+      diff: []
       stdout:
         - "Available Commands:"
         - "\\batlantis\\b"
@@ -31,12 +33,14 @@ tests:
 
   - name: atmos version
     enabled: true
+    snapshot: true
     description: "Check that atmos version command outputs version details."
     workdir: "../examples/demo-stacks"
     command: "atmos"
     args:
       - "version"
     expect:
+      diff: []
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
@@ -45,6 +49,7 @@ tests:
 
   - name: atmos version --check
     enabled: true
+    snapshot: true
     description: "Verify atmos version --check command functions correctly."
     workdir: "../examples/demo-stacks"
     command: "atmos"
@@ -52,6 +57,8 @@ tests:
       - "version"
       - "--check"
     expect:
+      diff: []
+      snapshot: true
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
@@ -60,6 +67,7 @@ tests:
 
   - name: atmos docs myapp
     enabled: true
+    snapshot: true
     description: "Validate atmos docs command outputs documentation for a specific component."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
@@ -67,6 +75,7 @@ tests:
       - "docs"
       - "myapp"
     expect:
+      diff: []
       stdout:
         - "Example Terraform Weather Component"
       stderr:
@@ -74,6 +83,7 @@ tests:
       exit_code: 0
 
   - name: atmos describe config -f yaml
+    snapshot: true
     enabled: true
     description: "Ensure atmos CLI outputs the Atmos configuration in YAML."
     workdir: "../examples/demo-stacks/"
@@ -84,6 +94,7 @@ tests:
       - "-f"
       - "yaml"
     expect:
+      diff: []
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       stderr:
@@ -92,6 +103,7 @@ tests:
 
   - name: atmos describe config
     enabled: true
+    snapshot: true
     description: "Ensure atmos CLI outputs the Atmos configuration in JSON."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
@@ -99,6 +111,7 @@ tests:
       - "describe"
       - "config"
     expect:
+      diff: []
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stderr:

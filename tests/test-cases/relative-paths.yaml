@@ -1,6 +1,7 @@
 tests:
   - name: atmos stacks with relative paths
     enabled: true
+    snapshot: true
     description: "Verify atmos describe stacks command lists all stacks with their configurations when using relative paths with . and .. in imports"
     workdir: "fixtures/scenarios/relative-paths"
     command: "atmos"
@@ -8,6 +9,7 @@ tests:
       - "describe"
       - "stacks"
     expect:
+      diff: []
       stdout:
         - "acme-platform-dev:"
         - "acme-platform-staging:"

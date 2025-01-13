@@ -24,18 +24,13 @@ var regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate a
 var startingDir string
 var snapshotBaseDir string
 
-type DiffResult struct {
-	HasDiff  bool
-	DiffText string
-}
-
 type Expectation struct {
 	Stdout       []string            `yaml:"stdout"`
 	Stderr       []string            `yaml:"stderr"`
 	ExitCode     int                 `yaml:"exit_code"`
 	FileExists   []string            `yaml:"file_exists"`
 	FileContains map[string][]string `yaml:"file_contains"`
-	IgnoreDiffs  []string            `yaml:"ignore_diffs"`
+	Diff         []string            `yaml:"diff"` // Acceptable differences in snapshot
 }
 
 type TestCase struct {
@@ -48,6 +43,7 @@ type TestCase struct {
 	Env         map[string]string `yaml:"env"`
 	Expect      Expectation       `yaml:"expect"`
 	Tty         bool              `yaml:"tty"`
+	Snapshot    bool              `yaml:"snapshot"`
 }
 
 type TestSuite struct {
@@ -64,6 +60,16 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 	err = yaml.Unmarshal(data, &suite)
 	if err != nil {
 		return nil, err
+	}
+
+	// Default `diff` and `snapshot` if not present
+	for i := range suite.Tests {
+		if suite.Tests[i].Expect.Diff == nil {
+			suite.Tests[i].Expect.Diff = []string{}
+		}
+		if !suite.Tests[i].Snapshot {
+			suite.Tests[i].Snapshot = false
+		}
 	}
 
 	return &suite, nil
@@ -108,7 +114,22 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
-// Apply regex ignore patterns to text
+// sanitizeTestName converts t.Name() into a valid filename.
+func sanitizeTestName(name string) string {
+	// Replace slashes with underscores
+	name = strings.ReplaceAll(name, "/", "_")
+
+	// Remove or replace other problematic characters
+	invalidChars := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`) // Matches invalid filename characters
+	name = invalidChars.ReplaceAllString(name, "_")
+
+	// Trim trailing periods and spaces (Windows-specific issue)
+	name = strings.TrimRight(name, " .")
+
+	return name
+}
+
+// Apply regex ignore patterns to text (by replacing them with empty strings)
 func applyIgnorePatterns(input string, patterns []string) string {
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
@@ -316,6 +337,10 @@ func TestCLICommands(t *testing.T) {
 			if !verifyFileContains(t, tc.Expect.FileContains) {
 				t.Errorf("Description: %s", tc.Description)
 			}
+
+			if !verifySnapshot(t, tc, stdout.String(), *regenerateSnapshots) {
+				t.Errorf("Description: %s", tc.Description)
+			}
 		})
 	}
 }
@@ -384,8 +409,7 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]string) bool {
 	return success
 }
 
-func updateSnapshot(path, output string) {
-	fullPath := filepath.Join(snapshotBaseDir, path)
+func updateSnapshot(fullPath, output string) {
 	err := os.MkdirAll(filepath.Dir(fullPath), 0755) // Ensure parent directories exist
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create snapshot directory: %v", err))
@@ -396,8 +420,7 @@ func updateSnapshot(path, output string) {
 	}
 }
 
-func readSnapshot(t *testing.T, path string) string {
-	fullPath := filepath.Join(snapshotBaseDir, path)
+func readSnapshot(t *testing.T, fullPath string) string {
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		t.Fatalf("Error reading snapshot file %q: %v", fullPath, err)
@@ -405,41 +428,42 @@ func readSnapshot(t *testing.T, path string) string {
 	return string(data)
 }
 
-func verifySnapshot(t *testing.T, goldenPath, actualOutput string, ignorePatterns []string, regenerate bool) DiffResult {
+func verifySnapshot(t *testing.T, tc TestCase, actualOutput string, regenerate bool) bool {
+	// Skip snapshot validation if not enabled
+	if !tc.Snapshot {
+		return true
+	}
+
+	// Construct snapshot file path
+	testName := sanitizeTestName(t.Name())
+	snapshotFileName := fmt.Sprintf("%s.golden", testName)
+	fullPath := filepath.Join(snapshotBaseDir, snapshotFileName)
+
 	// Filter ignored diffs from the actual output
-	filteredActual := applyIgnorePatterns(actualOutput, ignorePatterns)
+	filteredActual := applyIgnorePatterns(actualOutput, tc.Expect.Diff)
 
-	if regenerate {
-		t.Logf("Regenerating snapshot at %q", filepath.Join(snapshotBaseDir, goldenPath))
-		updateSnapshot(goldenPath, filteredActual)
-		return DiffResult{HasDiff: false}
-	}
-
-	var filteredExpected string
-	if _, err := os.Stat(filepath.Join(snapshotBaseDir, goldenPath)); errors.Is(err, os.ErrNotExist) {
-		t.Logf("Snapshot not found at %q. Creating new one.", filepath.Join(snapshotBaseDir, goldenPath))
-		updateSnapshot(goldenPath, filteredActual)
-		return DiffResult{HasDiff: false}
-	} else {
-		filteredExpected = applyIgnorePatterns(readSnapshot(t, goldenPath), ignorePatterns)
-	}
-
-	// Compare outputs and generate a colorized diff
-	if diff := cmp.Diff(filteredExpected, filteredActual); diff != "" {
-		return DiffResult{
-			HasDiff:  true,
-			DiffText: colorizeDiff(diff),
+	// Check if the snapshot exists
+	if _, err := os.Stat(fullPath); errors.Is(err, os.ErrNotExist) {
+		if regenerate {
+			// Regenerate the snapshot if the flag is set
+			t.Logf("Regenerating missing snapshot at %q", fullPath)
+			updateSnapshot(fullPath, filteredActual)
+			return true
+		} else {
+			// Fail the test if the snapshot is missing and regenerate is not enabled
+			t.Errorf("Snapshot file %q not found. Run with -regenerate-snapshots to create it.", fullPath)
+			return false
 		}
 	}
 
-	return DiffResult{HasDiff: false}
-}
+	// Read and filter the existing snapshot
+	filteredExpected := applyIgnorePatterns(readSnapshot(t, fullPath), tc.Expect.Diff)
 
-// filterIgnoredDiffs removes ignored patterns from the output
-func filterIgnoredDiffs(output string, ignores []string) string {
-	for _, pattern := range ignores {
-		re := regexp.MustCompile(pattern)
-		output = re.ReplaceAllString(output, "")
+	// Compare the actual output with the snapshot
+	if diff := cmp.Diff(filteredExpected, filteredActual); diff != "" {
+		t.Errorf("Snapshot mismatch for %q:\n%s", fullPath, colorizeDiff(diff))
+		return false
 	}
-	return output
+
+	return true
 }
