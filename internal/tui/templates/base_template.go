@@ -1,7 +1,5 @@
 package templates
 
-import "fmt"
-
 type HelpTemplateSections int
 
 const (
@@ -19,15 +17,15 @@ const (
 	Footer
 )
 
-func GenerateFromBaseTemplate(commandName string, parts []HelpTemplateSections) string {
+func GenerateFromBaseTemplate(parts []HelpTemplateSections) string {
 	template := ""
 	for _, value := range parts {
-		template += getSection(commandName, value)
+		template += getSection(value)
 	}
 	return template
 }
 
-func getSection(commandName string, section HelpTemplateSections) string {
+func getSection(section HelpTemplateSections) string {
 	switch section {
 	case LongDescription:
 		return `{{ .Long }}
@@ -80,12 +78,11 @@ func getSection(commandName string, section HelpTemplateSections) string {
 
 {{wrappedFlagUsages .InheritedFlags | trimTrailingWhitespaces}}{{end}}`
 	case NativeCommands:
-		return fmt.Sprintf(`
+		return `{{if (isNativeCommandsAvailable .Commands)}}
 
-{{HeadingStyle "Native %s Commands:"}}
+{{HeadingStyle "Native "}}{{HeadingStyle .Use}}{{HeadingStyle " Commands:"}}
 
-{{formatCommands .Commands "native"}}
-`, commandName)
+{{formatCommands .Commands "native"}}{{end}}`
 	case Usage:
 		return `
 {{HeadingStyle "Usage:"}}
@@ -93,17 +90,17 @@ func getSection(commandName string, section HelpTemplateSections) string {
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [command]{{end}}`
 	case DoubleDashHelp:
-		return fmt.Sprintf(`
+		return `
 
 The '--' (double-dash) can be used to signify the end of Atmos-specific options 
 and the beginning of additional native arguments and flags for the specific command being run.
 
 Example:
-  atmos %s <subcommand> <component> -s <stack> -- <native-flags>`, commandName)
+  atmos {{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} <component> -s <stack> -- <native-flags>`
 	case Footer:
 		return `{{if .HasAvailableSubCommands}}
 
-Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}`
+Use "{{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} --help" for more information about a command.{{end}}`
 	default:
 		return ""
 	}

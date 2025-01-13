@@ -76,6 +76,15 @@ func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.
 	return filtered
 }
 
+func isNativeCommandsAvailable(cmds []*cobra.Command) bool {
+	for _, cmd := range cmds {
+		if cmd.Annotations["nativeCommand"] == "true" {
+			return true
+		}
+	}
+	return false
+}
+
 func isAliasesPresent(cmds []*cobra.Command) bool {
 	return len(filterCommands(cmds, true)) > 0
 }
@@ -162,11 +171,12 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 		return fmt.Errorf("command cannot be nil")
 	}
 	t := &Templater{
-		UsageTemplate: GenerateFromBaseTemplate(cmd.Use, []HelpTemplateSections{
+		UsageTemplate: GenerateFromBaseTemplate([]HelpTemplateSections{
 			Usage,
 			Aliases,
 			Examples,
 			AvailableCommands,
+			NativeCommands,
 			SubCommandAliases,
 			Flags,
 			GlobalFlags,
@@ -178,6 +188,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 
 	cmd.SetUsageTemplate(t.UsageTemplate)
 	cobra.AddTemplateFunc("isAliasesPresent", isAliasesPresent)
+	cobra.AddTemplateFunc("isNativeCommandsAvailable", isNativeCommandsAvailable)
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
 	return nil
 }

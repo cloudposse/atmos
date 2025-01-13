@@ -15,7 +15,7 @@ var vendorDiffCmd = &cobra.Command{
 	Long:               "This command compares and displays the differences in vendor-specific configurations or dependencies.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args, false)
+		handleHelpRequest(cmd, args)
 		// TODO: There was no documentation here:https://atmos.tools/cli/commands/vendor we need to know what this command requires to check if we should add usage help
 
 		// Check Atmos configuration

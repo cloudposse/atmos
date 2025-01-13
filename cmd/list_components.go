@@ -22,9 +22,9 @@ var listComponentsCmd = &cobra.Command{
 	Example: "atmos list components\n" +
 		"atmos list components -s <stack>",
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args, false)
+		handleHelpRequest(cmd, args)
 		if hasPositionalArgs(args) {
-			showUsageAndExit(cmd, args, false)
+			showUsageAndExit(cmd, args)
 		}
 		// Check Atmos configuration
 		checkAtmosConfig()

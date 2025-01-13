@@ -17,9 +17,9 @@ var ValidateStacksCmd = &cobra.Command{
 	Example:            "validate stacks",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args, false)
+		handleHelpRequest(cmd, args)
 		if hasPositionalArgs(args) {
-			showUsageAndExit(cmd, args, false)
+			showUsageAndExit(cmd, args)
 		}
 		// Check Atmos configuration
 		checkAtmosConfig()

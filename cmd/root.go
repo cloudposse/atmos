@@ -106,7 +106,7 @@ func Execute() error {
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
-			showUsageAndExit(RootCmd, []string{command}, false)
+			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
 	return err

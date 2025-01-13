@@ -28,7 +28,7 @@ var docsCmd = &cobra.Command{
 	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args, false)
+		handleHelpRequest(cmd, args)
 		if len(args) == 1 {
 			info := schema.ConfigAndStacksInfo{
 				Component:             args[0],

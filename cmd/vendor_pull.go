@@ -15,9 +15,9 @@ var vendorPullCmd = &cobra.Command{
 	Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args, false)
+		handleHelpRequest(cmd, args)
 		if hasPositionalArgs(args) {
-			showUsageAndExit(cmd, args, false)
+			showUsageAndExit(cmd, args)
 		}
 		// WithStackValidation is a functional option that enables/disables stack configuration validation
 		// based on whether the --stack flag is provided

@@ -15,9 +15,9 @@ var describeAffectedCmd = &cobra.Command{
 	Long:               "Identify and list Atmos components and stacks impacted by changes between two Git commits.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args, false)
+		handleHelpRequest(cmd, args)
 		if hasPositionalArgs(args) {
-			showUsageAndExit(cmd, args, false)
+			showUsageAndExit(cmd, args)
 		}
 
 		// Check Atmos configuration

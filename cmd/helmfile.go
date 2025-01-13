@@ -24,7 +24,7 @@ func init() {
 }
 
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
-	handleHelpRequest(cmd, args, false)
+	handleHelpRequest(cmd, args)
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)

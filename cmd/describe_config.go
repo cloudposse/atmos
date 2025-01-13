@@ -15,9 +15,9 @@ var describeConfigCmd = &cobra.Command{
 	Long:               "This command displays the final, deep-merged CLI configuration after combining all relevant configuration files.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args, false)
+		handleHelpRequest(cmd, args)
 		if hasPositionalArgs(args) {
-			showUsageAndExit(cmd, args, false)
+			showUsageAndExit(cmd, args)
 		}
 
 		err := e.ExecuteDescribeConfigCmd(cmd, args)

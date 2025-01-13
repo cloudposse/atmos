@@ -12,9 +12,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/cmd/colored"
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -548,37 +546,14 @@ func isVersionCommand() bool {
 }
 
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h"
-func handleHelpRequest(cmd *cobra.Command, args []string, isNativeCommandsAvailable bool) {
+func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
-		if isNativeCommandsAvailable {
-			template := templates.GenerateFromBaseTemplate(cmd.Use, []templates.HelpTemplateSections{
-				templates.LongDescription,
-				templates.Usage,
-				templates.Aliases,
-				templates.Examples,
-				templates.AvailableCommands,
-				templates.Flags,
-				templates.GlobalFlags,
-				templates.NativeCommands,
-				templates.DoubleDashHelp,
-				templates.Footer,
-			})
-			cmd.SetUsageTemplate(template)
-			colored.Init(&colored.Config{
-				RootCmd:  cmd,
-				Headings: colored.HiCyan + colored.Bold + colored.Underline,
-				Commands: colored.HiGreen + colored.Bold,
-				Example:  colored.Italic,
-				ExecName: colored.Bold,
-				Flags:    colored.Bold,
-			})
-		}
 		cmd.Help()
 		os.Exit(0)
 	}
 }
 
-func showUsageAndExit(cmd *cobra.Command, args []string, isNativeCommandsAvailable bool) {
+func showUsageAndExit(cmd *cobra.Command, args []string) {
 
 	var suggestions []string
 	var subCommand string = ""
@@ -586,7 +561,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string, isNativeCommandsAvailab
 
 	if len(args) > 0 {
 		// Show help if the first argument is "help"
-		handleHelpRequest(cmd, args, isNativeCommandsAvailable)
+		handleHelpRequest(cmd, args)
 		suggestions = cmd.SuggestionsFor(args[0])
 		subCommand = args[0]
 		unkonwnCommand = fmt.Sprintf(`Error: Unkown command %q for %q`+"\n", subCommand, cmd.CommandPath())
@@ -618,7 +593,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string, isNativeCommandsAvailab
 
 func addUsageCommand(cmd *cobra.Command, isNativeCommandsAvailable bool) {
 	cmd.Run = func(cmd *cobra.Command, args []string) {
-		showUsageAndExit(cmd, args, isNativeCommandsAvailable)
+		showUsageAndExit(cmd, args)
 	}
 }
 
