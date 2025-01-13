@@ -144,7 +144,7 @@ jobs:
         timeout-minutes: 10
         uses: robherley/go-test-action@v0
         with:
-          test-command: "make testacc"
+          test-command: "make testacc TEST_VERBOSITY=quiet"
 
   docker:
     name: "Docker Lint"
