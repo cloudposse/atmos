@@ -87,8 +87,9 @@ type AtmosSettings struct {
 }
 
 type Docs struct {
-	MaxWidth   int  `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
-	Pagination bool `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	MaxWidth   int          `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	Pagination bool         `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	Generate   DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
 }
 
 type Templates struct {
@@ -189,6 +190,24 @@ type VersionCheck struct {
 
 type Version struct {
 	Check VersionCheck `yaml:"check,omitempty" mapstructure:"check"`
+}
+
+type TerraformDocsSettings struct {
+	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled,omitempty"`
+	Format        string `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format,omitempty"`
+	ShowProviders bool   `yaml:"show_providers,omitempty" json:"show_providers,omitempty" mapstructure:"show_providers,omitempty"`
+	ShowInputs    bool   `yaml:"show_inputs,omitempty" json:"show_inputs,omitempty" mapstructure:"show_inputs,omitempty"`
+	ShowOutputs   bool   `yaml:"show_outputs,omitempty" json:"show_outputs,omitempty" mapstructure:"show_outputs,omitempty"`
+	SortBy        string `yaml:"sort_by,omitempty" json:"sort_by,omitempty" mapstructure:"sort_by,omitempty"`
+	HideEmpty     bool   `yaml:"hide_empty,omitempty" json:"hide_empty,omitempty" mapstructure:"hide_empty,omitempty"`
+	IndentLevel   int    `yaml:"indent_level,omitempty" json:"indent_level,omitempty" mapstructure:"indent_level,omitempty"`
+}
+
+type DocsGenerate struct {
+	Input     []string              `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
+	Template  []string              `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+	Output    string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Terraform TerraformDocsSettings `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
 }
 
 type ArgsAndFlagsInfo struct {
