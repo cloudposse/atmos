@@ -52,7 +52,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		}
 	}
 
-	return LogLevelInfo, fmt.Errorf("Error: Invalid log level '%s'. Valid options are: %v", logLevel, validLevels)
+	return "", fmt.Errorf("Error: Invalid log level '%s'. Valid options are: %v", logLevel, validLevels)
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {

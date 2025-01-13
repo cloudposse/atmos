@@ -13,7 +13,6 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -29,6 +28,7 @@ var RootCmd = &cobra.Command{
 		// Determine if the command is a help command or if the help flag is set
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag := cmd.Flags().Changed("help")
+
 		isHelpRequested := isHelpCommand || helpFlag
 
 		if isHelpRequested {
@@ -40,26 +40,13 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceErrors = true
 		}
 	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Validate log level
-		logsLevel, err := cmd.Flags().GetString("logs-level")
-		if err != nil {
-			cmd.SilenceErrors = false
-			fmt.Fprintln(os.Stderr, err.Error())
-			return err
-		}
-		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
-			cmd.SilenceErrors = false
-			fmt.Fprintln(os.Stderr, err.Error())
-			return err
-		}
-
+	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
+		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
@@ -68,8 +55,6 @@ var RootCmd = &cobra.Command{
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
-
-		return nil
 	},
 }
 
@@ -85,17 +70,6 @@ func Execute() error {
 		Flags:    cc.Bold,
 	})
 
-	// Check if the logs-level flag is set and validate it
-	logsLevel, err := RootCmd.PersistentFlags().GetString("logs-level")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-	if _, err := logger.ParseLogLevel(logsLevel); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
@@ -108,7 +82,7 @@ func Execute() error {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, initErr)
 		}
 	}
-
+	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
@@ -133,7 +107,6 @@ func init() {
 		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
 
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
-
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
 	// Set custom usage template
