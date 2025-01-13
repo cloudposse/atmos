@@ -1,0 +1,98 @@
+tests:
+  - name: "Invalid Log Level in Config File"
+    enabled: true
+    description: "Test validation of invalid log level in atmos.yaml config file"
+    workdir: "fixtures/invalid-log-level"
+    command: "atmos"
+    args:
+      - terraform
+      - plan
+      - test
+      - -s
+      - test
+    expect:
+      exit_code: 1
+      stderr:
+        - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
+
+  - name: "Invalid Log Level in Environment Variable"
+    enabled: true
+    description: "Test validation of invalid log level in ATMOS_LOGS_LEVEL env var"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - terraform
+      - plan
+      - test
+      - -s
+      - test
+    env:
+      ATMOS_LOGS_LEVEL: XTrace
+    expect:
+      exit_code: 1
+      stderr:
+        - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
+
+  - name: "Invalid Log Level in Command Line Flag"
+    enabled: true
+    description: "Test validation of invalid log level in --logs-level flag"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - --logs-level
+      - XTrace
+      - terraform
+      - plan
+      - test
+      - -s
+      - test
+    expect:
+      exit_code: 1
+      stderr:
+        - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
+
+  - name: "Valid Log Level in Config File"
+    enabled: true
+    description: "Test validation of valid log level in atmos.yaml config file"
+    workdir: "fixtures/valid-log-level"
+    command: "atmos"
+    args:
+      - terraform
+      - plan
+      - test
+      - -s
+      - test
+    expect:
+      exit_code: 0
+
+  - name: "Valid Log Level in Environment Variable"
+    enabled: true
+    description: "Test validation of valid log level in ATMOS_LOGS_LEVEL env var"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - terraform
+      - plan
+      - test
+      - -s
+      - test
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+    expect:
+      exit_code: 0
+
+  - name: "Valid Log Level in Command Line Flag"
+    enabled: true
+    description: "Test validation of valid log level in --logs-level flag"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - --logs-level
+      - Info
+      - terraform
+      - plan
+      - test
+      - -s
+      - test
+    expect:
+      exit_code: 0 
