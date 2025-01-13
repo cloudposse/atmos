@@ -1,4 +1,36 @@
+# yaml-language-server: $schema=./schema.json
+
 tests:
+  - name: "test tty"
+    enabled: true
+    snapshot: true
+    tty: true
+    description: "Ensure tty is enabled."
+    workdir: "../"
+    command: "tty"
+    expect:
+      diff: []
+      stdout:
+        - "^(/dev)"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: "test non-tty"
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Ensure tty is disabled."
+    workdir: "../"
+    command: "tty"
+    expect:
+      diff: []
+      stdout:
+        - "^not a tty"
+      stderr:
+        - "^$"
+      exit_code: 1
+
   - name: "which atmos"
     enabled: true
     snapshot: true
@@ -10,7 +42,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - '(build[/\\]atmos|atmos[/\\]atmos)'
+        - '(build[/\\]atmos)'
       stderr:
         - "^$"
       exit_code: 0
