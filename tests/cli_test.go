@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,8 +13,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/creack/pty"
+	"github.com/fatih/color"
+	"github.com/google/go-cmp/cmp"
 	"gopkg.in/yaml.v3"
 )
+
+// Command-line flag for regenerating snapshots
+var regenerateSnapshots = flag.Bool("--regenerate-snapshots", false, "Regenerate all golden snapshots")
+
+type DiffResult struct {
+	HasDiff  bool
+	DiffText string
+}
 
 type Expectation struct {
 	Stdout       []string            `yaml:"stdout"`
@@ -21,6 +33,7 @@ type Expectation struct {
 	ExitCode     int                 `yaml:"exit_code"`
 	FileExists   []string            `yaml:"file_exists"`
 	FileContains map[string][]string `yaml:"file_contains"`
+	IgnoreDiffs  []string            `yaml:"ignore_diffs"`
 }
 
 type TestCase struct {
@@ -32,6 +45,7 @@ type TestCase struct {
 	Args        []string          `yaml:"args"`
 	Env         map[string]string `yaml:"env"`
 	Expect      Expectation       `yaml:"expect"`
+	Tty         bool              `yaml:"tty"`
 }
 
 type TestSuite struct {
@@ -92,6 +106,62 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
+// Apply regex ignore patterns to text
+func applyIgnorePatterns(input string, patterns []string) string {
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		input = re.ReplaceAllString(input, "")
+	}
+	return input
+}
+
+// Simulate TTY command execution
+func simulateTtyCommand(cmd *exec.Cmd) (string, error) {
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to start TTY: %v", err)
+	}
+	defer func() { _ = ptmx.Close() }() // Best effort cleanup
+
+	var buffer bytes.Buffer
+	_, err = buffer.ReadFrom(ptmx)
+	if err != nil {
+		return "", fmt.Errorf("failed to read TTY output: %v", err)
+	}
+	return buffer.String(), nil
+}
+
+// Execute the command and return the exit code
+func executeCommand(t *testing.T, cmd *exec.Cmd) int {
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode()
+		}
+		t.Fatalf("Command execution failed: %v", err)
+	}
+	return 0
+}
+
+func colorizeDiff(diff string) string {
+	var result strings.Builder
+	for _, line := range strings.Split(diff, "\n") {
+		if strings.HasPrefix(line, "+") {
+			// Additions are green
+			result.WriteString(color.GreenString(line) + "\n")
+		} else if strings.HasPrefix(line, "-") {
+			// Deletions are red
+			result.WriteString(color.RedString(line) + "\n")
+		} else if strings.HasPrefix(line, "@") {
+			// Diff context is yellow
+			result.WriteString(color.YellowString(line) + "\n")
+		} else {
+			// Unchanged lines are plain
+			result.WriteString(line + "\n")
+		}
+	}
+	return result.String()
+}
+
 // loadTestSuites loads and merges all .yaml files from the test-cases directory
 func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	var mergedSuite TestSuite
@@ -113,6 +183,12 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	}
 
 	return &mergedSuite, nil
+}
+
+// Entry point for tests to parse flags and handle setup/teardown
+func TestMain(m *testing.M) {
+	flag.Parse() // Parse command-line flags
+	os.Exit(m.Run())
 }
 
 func TestCLICommands(t *testing.T) {
@@ -180,6 +256,17 @@ func TestCLICommands(t *testing.T) {
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
 
+			if tc.Tty {
+				ptyOutput, err := simulateTtyCommand(cmd)
+				if err != nil {
+					t.Fatalf("Failed to run TTY command: %v", err)
+				}
+				stdout.WriteString(ptyOutput)
+			} else {
+				exitCode := executeCommand(t, cmd)
+				verifyExitCode(t, tc.Expect.ExitCode, exitCode)
+			}
+
 			// Run the command
 			err = cmd.Run()
 
@@ -215,6 +302,12 @@ func TestCLICommands(t *testing.T) {
 				t.Errorf("Description: %s", tc.Description)
 			}
 		})
+	}
+}
+
+func verifyExitCode(t *testing.T, expected, actual int) {
+	if expected != actual {
+		t.Errorf(color.RedString("Expected exit code: %d, got: %d"), expected, actual)
 	}
 }
 
@@ -271,4 +364,90 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]string) bool {
 		}
 	}
 	return success
+}
+
+func compareWithGoldenSnapshot(t *testing.T, goldenPath, actualOutput string, ignorePatterns []string) DiffResult {
+	// Load the golden snapshot
+	expectedOutput, err := ioutil.ReadFile(goldenPath)
+	if err != nil {
+		t.Logf("Golden snapshot not found at %q. Creating new one.", goldenPath)
+		if err := ioutil.WriteFile(goldenPath, []byte(actualOutput), 0644); err != nil {
+			t.Fatalf("Failed to write golden snapshot to %q: %v", goldenPath, err)
+		}
+		return DiffResult{HasDiff: false}
+	}
+
+	// Apply ignore patterns
+	filteredActual := applyIgnorePatterns(actualOutput, ignorePatterns)
+	filteredExpected := applyIgnorePatterns(string(expectedOutput), ignorePatterns)
+
+	// Compare with golden
+	if diff := cmp.Diff(filteredExpected, filteredActual); diff != "" {
+		return DiffResult{
+			HasDiff:  true,
+			DiffText: diff,
+		}
+	}
+	return DiffResult{HasDiff: false}
+}
+
+func verifySnapshot(t *testing.T, goldenPath, actualOutput string, ignorePatterns []string, regenerate bool) DiffResult {
+	// Filter ignored diffs from the actual output
+	filteredActual := filterIgnoredDiffs(actualOutput, ignorePatterns)
+
+	if regenerate {
+		t.Logf("Regenerating snapshot at %q", goldenPath)
+		updateSnapshot(goldenPath, filteredActual)
+		return DiffResult{HasDiff: false}
+	}
+
+	// Read the existing snapshot
+	var filteredExpected string
+	if _, err := os.Stat(goldenPath); errors.Is(err, os.ErrNotExist) {
+		t.Logf("Snapshot not found at %q. Creating new one.", goldenPath)
+		updateSnapshot(goldenPath, filteredActual)
+		return DiffResult{HasDiff: false}
+	} else {
+		filteredExpected = filterIgnoredDiffs(readSnapshot(t, goldenPath), ignorePatterns)
+	}
+
+	// Compare outputs and generate a colorized diff
+	if diff := cmp.Diff(filteredExpected, filteredActual); diff != "" {
+		return DiffResult{
+			HasDiff:  true,
+			DiffText: colorizeDiff(diff),
+		}
+	}
+
+	return DiffResult{HasDiff: false}
+}
+
+// updateSnapshot updates or creates the snapshot file
+func updateSnapshot(path, output string) {
+	err := os.MkdirAll(filepath.Dir(path), 0755) // Ensure parent directories exist
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create snapshot directory: %v", err))
+	}
+	err = os.WriteFile(path, []byte(output), 0644) // Write snapshot
+	if err != nil {
+		panic(fmt.Sprintf("Failed to write snapshot file: %v", err))
+	}
+}
+
+// readSnapshot reads the snapshot file
+func readSnapshot(t *testing.T, path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Error reading snapshot file %q: %v", path, err)
+	}
+	return string(data)
+}
+
+// filterIgnoredDiffs removes ignored patterns from the output
+func filterIgnoredDiffs(output string, ignores []string) string {
+	for _, pattern := range ignores {
+		re := regexp.MustCompile(pattern)
+		output = re.ReplaceAllString(output, "")
+	}
+	return output
 }
