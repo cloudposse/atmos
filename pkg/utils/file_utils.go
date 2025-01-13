@@ -248,7 +248,8 @@ func GetFileNameFromURL(rawURL string) (string, error) {
 	return fileName, nil
 }
 
-// DetectFormatAndParseFile detects the format of the file and parses the file into a Go type
+// DetectFormatAndParseFile detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
+// For all other formats, it just reads the file and returns the content as a string
 func DetectFormatAndParseFile(filename string, v any) error {
 	d, err := os.ReadFile(filename)
 	if err != nil {
@@ -264,6 +265,7 @@ func DetectFormatAndParseFile(filename string, v any) error {
 	} else if IsHCL(data) {
 		return hcl.Unmarshal(d, v)
 	} else {
-		return fmt.Errorf("unsupported or unrecognized file format in the file '%s'. Supported formats are JSON, YAML and HCL", filename)
+		v = string(d)
+		return nil
 	}
 }
