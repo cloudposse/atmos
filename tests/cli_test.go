@@ -20,7 +20,9 @@ import (
 )
 
 // Command-line flag for regenerating snapshots
-var regenerateSnapshots = flag.Bool("--regenerate-snapshots", false, "Regenerate all golden snapshots")
+var regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
+var startingDir string
+var snapshotBaseDir string
 
 type DiffResult struct {
 	HasDiff  bool
@@ -187,16 +189,26 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 
 // Entry point for tests to parse flags and handle setup/teardown
 func TestMain(m *testing.M) {
+	// Declare err in the function's scope
+	var err error
+
+	// Capture the starting working directory
+	startingDir, err = os.Getwd()
+	if err != nil {
+		fmt.Printf("Failed to get the current working directory: %v\n", err)
+		os.Exit(1) // Exit with a non-zero code to indicate failure
+	}
+
+	// Define the base directory for snapshots relative to startingDir
+	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
+
 	flag.Parse() // Parse command-line flags
 	os.Exit(m.Run())
 }
 
 func TestCLICommands(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
+	// Declare err in the function's scope
+	var err error
 
 	// Initialize PathManager and update PATH
 	pathManager := NewPathManager()
@@ -256,30 +268,33 @@ func TestCLICommands(t *testing.T) {
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
 
+			var exitCode int
 			if tc.Tty {
+				// Run the command in a pseudo-terminal
 				ptyOutput, err := simulateTtyCommand(cmd)
 				if err != nil {
-					t.Fatalf("Failed to run TTY command: %v", err)
+					if exitErr, ok := err.(*exec.ExitError); ok {
+						exitCode = exitErr.ExitCode()
+					} else {
+						t.Fatalf("Failed to run TTY command: %v", err)
+					}
 				}
 				stdout.WriteString(ptyOutput)
 			} else {
-				exitCode := executeCommand(t, cmd)
-				verifyExitCode(t, tc.Expect.ExitCode, exitCode)
-			}
-
-			// Run the command
-			err = cmd.Run()
-
-			// Validate exit code
-			exitCode := 0
-			if err != nil {
-				if exitErr, ok := err.(*exec.ExitError); ok {
-					exitCode = exitErr.ExitCode()
+				// Run the command directly and capture the exit code
+				err := cmd.Run()
+				if err != nil {
+					if exitErr, ok := err.(*exec.ExitError); ok {
+						exitCode = exitErr.ExitCode()
+					} else {
+						t.Fatalf("Failed to run command: %v", err)
+					}
 				}
 			}
-			if exitCode != tc.Expect.ExitCode {
+
+			// Validate exit code
+			if !verifyExitCode(t, tc.Expect.ExitCode, exitCode) {
 				t.Errorf("Description: %s", tc.Description)
-				t.Errorf("Reason: Expected exit code %d, got %d", tc.Expect.ExitCode, exitCode)
 			}
 
 			// Validate stdout
@@ -305,10 +320,13 @@ func TestCLICommands(t *testing.T) {
 	}
 }
 
-func verifyExitCode(t *testing.T, expected, actual int) {
+func verifyExitCode(t *testing.T, expected, actual int) bool {
+	success := true
 	if expected != actual {
-		t.Errorf(color.RedString("Expected exit code: %d, got: %d"), expected, actual)
+		t.Errorf("Reason: Expected exit code %d, got %d", expected, actual)
+		success = false
 	}
+	return success
 }
 
 func verifyOutput(t *testing.T, outputType, output string, patterns []string) bool {
@@ -366,49 +384,44 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]string) bool {
 	return success
 }
 
-func compareWithGoldenSnapshot(t *testing.T, goldenPath, actualOutput string, ignorePatterns []string) DiffResult {
-	// Load the golden snapshot
-	expectedOutput, err := ioutil.ReadFile(goldenPath)
+func updateSnapshot(path, output string) {
+	fullPath := filepath.Join(snapshotBaseDir, path)
+	err := os.MkdirAll(filepath.Dir(fullPath), 0755) // Ensure parent directories exist
 	if err != nil {
-		t.Logf("Golden snapshot not found at %q. Creating new one.", goldenPath)
-		if err := ioutil.WriteFile(goldenPath, []byte(actualOutput), 0644); err != nil {
-			t.Fatalf("Failed to write golden snapshot to %q: %v", goldenPath, err)
-		}
-		return DiffResult{HasDiff: false}
+		panic(fmt.Sprintf("Failed to create snapshot directory: %v", err))
 	}
-
-	// Apply ignore patterns
-	filteredActual := applyIgnorePatterns(actualOutput, ignorePatterns)
-	filteredExpected := applyIgnorePatterns(string(expectedOutput), ignorePatterns)
-
-	// Compare with golden
-	if diff := cmp.Diff(filteredExpected, filteredActual); diff != "" {
-		return DiffResult{
-			HasDiff:  true,
-			DiffText: diff,
-		}
+	err = os.WriteFile(fullPath, []byte(output), 0644) // Write snapshot
+	if err != nil {
+		panic(fmt.Sprintf("Failed to write snapshot file: %v", err))
 	}
-	return DiffResult{HasDiff: false}
+}
+
+func readSnapshot(t *testing.T, path string) string {
+	fullPath := filepath.Join(snapshotBaseDir, path)
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		t.Fatalf("Error reading snapshot file %q: %v", fullPath, err)
+	}
+	return string(data)
 }
 
 func verifySnapshot(t *testing.T, goldenPath, actualOutput string, ignorePatterns []string, regenerate bool) DiffResult {
 	// Filter ignored diffs from the actual output
-	filteredActual := filterIgnoredDiffs(actualOutput, ignorePatterns)
+	filteredActual := applyIgnorePatterns(actualOutput, ignorePatterns)
 
 	if regenerate {
-		t.Logf("Regenerating snapshot at %q", goldenPath)
+		t.Logf("Regenerating snapshot at %q", filepath.Join(snapshotBaseDir, goldenPath))
 		updateSnapshot(goldenPath, filteredActual)
 		return DiffResult{HasDiff: false}
 	}
 
-	// Read the existing snapshot
 	var filteredExpected string
-	if _, err := os.Stat(goldenPath); errors.Is(err, os.ErrNotExist) {
-		t.Logf("Snapshot not found at %q. Creating new one.", goldenPath)
+	if _, err := os.Stat(filepath.Join(snapshotBaseDir, goldenPath)); errors.Is(err, os.ErrNotExist) {
+		t.Logf("Snapshot not found at %q. Creating new one.", filepath.Join(snapshotBaseDir, goldenPath))
 		updateSnapshot(goldenPath, filteredActual)
 		return DiffResult{HasDiff: false}
 	} else {
-		filteredExpected = filterIgnoredDiffs(readSnapshot(t, goldenPath), ignorePatterns)
+		filteredExpected = applyIgnorePatterns(readSnapshot(t, goldenPath), ignorePatterns)
 	}
 
 	// Compare outputs and generate a colorized diff
@@ -420,27 +433,6 @@ func verifySnapshot(t *testing.T, goldenPath, actualOutput string, ignorePattern
 	}
 
 	return DiffResult{HasDiff: false}
-}
-
-// updateSnapshot updates or creates the snapshot file
-func updateSnapshot(path, output string) {
-	err := os.MkdirAll(filepath.Dir(path), 0755) // Ensure parent directories exist
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create snapshot directory: %v", err))
-	}
-	err = os.WriteFile(path, []byte(output), 0644) // Write snapshot
-	if err != nil {
-		panic(fmt.Sprintf("Failed to write snapshot file: %v", err))
-	}
-}
-
-// readSnapshot reads the snapshot file
-func readSnapshot(t *testing.T, path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("Error reading snapshot file %q: %v", path, err)
-	}
-	return string(data)
 }
 
 // filterIgnoredDiffs removes ignored patterns from the output
