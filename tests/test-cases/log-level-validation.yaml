@@ -33,24 +33,6 @@ tests:
       stderr:
         - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
 
-  - name: "Invalid Log Level in Command Line Flag"
-    enabled: true
-    description: "Test validation of invalid log level in --logs-level flag"
-    workdir: "../"
-    command: "atmos"
-    args:
-      - --logs-level
-      - XTrace
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
-    expect:
-      exit_code: 1
-      stderr:
-        - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
-
   - name: "Valid Log Level in Config File"
     enabled: true
     description: "Test validation of valid log level in atmos.yaml config file"

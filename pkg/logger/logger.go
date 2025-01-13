@@ -20,6 +20,15 @@ const (
 	LogLevelWarning LogLevel = "Warning"
 )
 
+// logLevelOrder defines the order of log levels from most verbose to least verbose
+var logLevelOrder = map[LogLevel]int{
+	LogLevelTrace:   0,
+	LogLevelDebug:   1,
+	LogLevelInfo:    2,
+	LogLevelWarning: 3,
+	LogLevelOff:     4,
+}
+
 type Logger struct {
 	LogLevel LogLevel
 	File     string
@@ -111,26 +120,34 @@ func (l *Logger) Error(err error) {
 	}
 }
 
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+func (l *Logger) isLevelEnabled(level LogLevel) bool {
+	if l.LogLevel == LogLevelOff {
+		return false
+	}
+	return logLevelOrder[level] >= logLevelOrder[l.LogLevel]
+}
+
 func (l *Logger) Trace(message string) {
-	if l.LogLevel != LogLevelOff && l.LogLevel <= LogLevelTrace {
+	if l.isLevelEnabled(LogLevelTrace) {
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
-	if l.LogLevel != LogLevelOff && l.LogLevel <= LogLevelDebug {
+	if l.isLevelEnabled(LogLevelDebug) {
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Info(message string) {
-	if l.LogLevel != LogLevelOff && l.LogLevel <= LogLevelInfo {
+	if l.isLevelEnabled(LogLevelInfo) {
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
-	if l.LogLevel != LogLevelOff && l.LogLevel <= LogLevelWarning {
+	if l.isLevelEnabled(LogLevelWarning) {
 		l.log(theme.Colors.Warning, message)
 	}
 }
