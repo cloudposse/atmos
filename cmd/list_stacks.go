@@ -21,11 +21,8 @@ var listStacksCmd = &cobra.Command{
 	Example: "atmos list stacks\n" +
 		"atmos list stacks -c <component>",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args)
-		if hasPositionalArgs(args) {
-			showUsageAndExit(cmd, args)
-		}
 		// Check Atmos configuration
 		checkAtmosConfig()
 

@@ -13,18 +13,17 @@ var helmfileCmd = &cobra.Command{
 	Short:              "Manage Helmfile-based Kubernetes deployments",
 	Long:               `This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	Args:               cobra.NoArgs,
 }
 
 func init() {
 	// https://github.com/spf13/cobra/issues/739
 	helmfileCmd.DisableFlagParsing = true
 	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile <helmfile_command> <component> -s <stack>")
-	addUsageCommand(helmfileCmd, false)
 	RootCmd.AddCommand(helmfileCmd)
 }
 
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
-	handleHelpRequest(cmd, args)
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)

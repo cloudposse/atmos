@@ -20,11 +20,8 @@ var versionCmd = &cobra.Command{
 	Short:   "Display the version of Atmos you are running and check for updates",
 	Long:    `This command shows the version of the Atmos CLI you are currently running and checks if a newer version is available. Use this command to verify your installation and ensure you are up to date.`,
 	Example: "atmos version",
+	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args)
-		if hasPositionalArgs(args) {
-			showUsageAndExit(cmd, args)
-		}
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")

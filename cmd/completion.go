@@ -13,12 +13,7 @@ var completionCmd = &cobra.Command{
 	Short:                 "Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell",
 	Long:                  "This command generates completion scripts for Bash, Zsh, Fish and PowerShell",
 	DisableFlagsInUseLine: true,
-	// Why I am not using cobra inbuilt validation for Args:
-	// Because we have our own custom validation for Args
-	// Why we have our own custom validation for Args:
-	// Because we want to show custom error message when user provides invalid shell name
-	// ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
-	// Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+	Args:                  cobra.NoArgs,
 }
 
 func runCompletion(cmd *cobra.Command, args []string) {
@@ -48,8 +43,8 @@ func init() {
 			Short: "Generate completion script for " + shellName,
 			Long:  "This command generates completion scripts for " + shellName,
 			Run:   runCompletion,
+			Args:  cobra.NoArgs,
 		})
 	}
-	addUsageCommand(completionCmd, false)
 	RootCmd.AddCommand(completionCmd)
 }

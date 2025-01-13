@@ -10,9 +10,9 @@ var awsCmd = &cobra.Command{
 	Short:              "Run AWS-specific commands for interacting with cloud resources",
 	Long:               `This command allows interaction with AWS resources through various CLI commands.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 }
 
 func init() {
-	addUsageCommand(awsCmd, false)
 	RootCmd.AddCommand(awsCmd)
 }

@@ -10,9 +10,9 @@ var listCmd = &cobra.Command{
 	Short:              "List available stacks and components",
 	Long:               `Display a list of all available stacks and components defined in your project.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 }
 
 func init() {
-	addUsageCommand(listCmd, false)
 	RootCmd.AddCommand(listCmd)
 }

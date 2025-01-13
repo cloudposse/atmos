@@ -16,6 +16,7 @@ This command supports the following subcommands:
 - 'backends' to generate backend configuration files for all Atmos components in all stacks.
 - 'varfile' to generate a variable file (varfile) for an Atmos component in a stack.
 - 'varfiles' to generate varfiles for all Atmos components in all stacks.`,
+	Args:               cobra.NoArgs,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		terraformRun(cmd, cmd, args)
@@ -23,6 +24,5 @@ This command supports the following subcommands:
 }
 
 func init() {
-	addUsageCommand(terraformGenerateCmd, false)
 	terraformCmd.AddCommand(terraformGenerateCmd)
 }

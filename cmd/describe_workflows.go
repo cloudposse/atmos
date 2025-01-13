@@ -21,12 +21,8 @@ var describeWorkflowsCmd = &cobra.Command{
 		"describe workflows -o map\n" +
 		"describe workflows -o all",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		handleHelpRequest(cmd, args)
-		if hasPositionalArgs(args) {
-			showUsageAndExit(cmd, args)
-		}
-
 		err := e.ExecuteDescribeWorkflowsCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)

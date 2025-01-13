@@ -442,7 +442,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			printMessageForMissingAtmosConfig(atmosConfig)
-			os.Exit(0)
+			os.Exit(1)
 		}
 	}
 }
@@ -560,8 +560,6 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	unkonwnCommand := fmt.Sprintf("Unknown command: %q", cmd.CommandPath())
 
 	if len(args) > 0 {
-		// Show help if the first argument is "help"
-		handleHelpRequest(cmd, args)
 		suggestions = cmd.SuggestionsFor(args[0])
 		subCommand = args[0]
 		unkonwnCommand = fmt.Sprintf(`Error: Unkown command %q for %q`+"\n", subCommand, cmd.CommandPath())
@@ -589,12 +587,6 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	}
 	u.PrintMessage(fmt.Sprintf(`Run '%s --help' for usage`, cmd.CommandPath()))
 	u.LogErrorAndExit(atmosConfig, errors.New(unkonwnCommand))
-}
-
-func addUsageCommand(cmd *cobra.Command, isNativeCommandsAvailable bool) {
-	cmd.Run = func(cmd *cobra.Command, args []string) {
-		showUsageAndExit(cmd, args)
-	}
 }
 
 // hasPositionalArgs checks if a slice of strings contains an exact match for the target string.

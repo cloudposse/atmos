@@ -21,7 +21,7 @@ var terraformCmd = &cobra.Command{
 	Short:              "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
 	Long:               `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	PostRunE: func(cmd *cobra.Command, args []string) error {
+	PostRun: func(cmd *cobra.Command, args []string) {
 		info := getConfigAndStacksInfo("terraform", cmd, args)
 
 		sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true)
@@ -55,19 +55,18 @@ var terraformCmd = &cobra.Command{
 
 						store := atmosConfig.Stores[hook.Name]
 						if store == nil {
-							return fmt.Errorf("store %q not found in configuration", hook.Name)
+							u.LogErrorAndExit(atmosConfig, fmt.Errorf("store %q not found in configuration", hook.Name))
 						}
 						u.LogInfo(atmosConfig, fmt.Sprintf("  storing terraform output '%s' in store '%s' with key '%s' and value %v", outputKey, hook.Name, key, outputValue))
 
 						err = store.Set(info.Stack, info.ComponentFromArg, key, outputValue)
 						if err != nil {
-							return err
+							u.LogErrorAndExit(atmosConfig, err)
 						}
 					}
 				}
 			}
 		}
-		return nil
 	},
 }
 
@@ -93,7 +92,6 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
-	addUsageCommand(terraformCmd, true)
 	attachTerraformCommands(terraformCmd)
 	RootCmd.AddCommand(terraformCmd)
 }

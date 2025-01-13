@@ -43,6 +43,8 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 		}
+		handleHelpRequest(cmd, args)
+		checkAtmosConfig()
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -106,6 +108,7 @@ func Execute() error {
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
+			fmt.Println("_______REOO__________")
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
@@ -155,9 +158,14 @@ func initCobraConfig() {
 		if c.Use == "atmos" {
 			return b.UsageFunc(c)
 		}
-		return oldUsageFunc(c)
+		showUsageAndExit(c, c.Flags().Args())
+		return nil
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+
+		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
+			showUsageAndExit(command, command.Flags().Args())
+		}
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
 		if command.Use != "atmos" || command.Flags().Changed("help") {
