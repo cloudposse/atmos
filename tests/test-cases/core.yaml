@@ -24,7 +24,7 @@ tests:
         - "but the directory does not exist."
       stderr:
         - "^$"
-      exit_code: 0
+      exit_code: 1
 
   - name: atmos docs
     enabled: true
