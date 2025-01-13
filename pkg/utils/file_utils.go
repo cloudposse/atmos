@@ -265,7 +265,7 @@ func DetectFormatAndParseFile(filename string, v any) error {
 	} else if IsHCL(data) {
 		return hcl.Unmarshal(d, v)
 	} else {
-		v = string(d)
+		v = data
 		return nil
 	}
 }
