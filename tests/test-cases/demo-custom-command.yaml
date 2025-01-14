@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=./schema.json
+# yaml-language-server: $schema=schema.json
 tests:
   - name: atmos greet with args
     enabled: true

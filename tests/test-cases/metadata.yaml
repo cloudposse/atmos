@@ -1,4 +1,5 @@
-# yaml-language-server: $schema=./schema.json
+# yaml-language-server: $schema=schema.json
+
 tests:
   - name: atmos validate stacks with metadata
     enabled: true
