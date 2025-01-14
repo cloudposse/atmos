@@ -82,6 +82,10 @@ func Contains(slice []string, target string) bool {
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 	info := getConfigAndStacksInfo("terraform", cmd, args)
+	if info.NeedHelp {
+		actualCmd.Usage()
+		return
+	}
 	err := e.ExecuteTerraform(info)
 	if err != nil {
 		u.LogErrorAndExit(atmosConfig, err)

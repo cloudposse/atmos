@@ -18,9 +18,6 @@ This command supports the following subcommands:
 - 'varfiles' to generate varfiles for all Atmos components in all stacks.`,
 	Args:               cobra.NoArgs,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Run: func(cmd *cobra.Command, args []string) {
-		terraformRun(cmd, cmd, args)
-	},
 }
 
 func init() {

@@ -158,10 +158,14 @@ func initCobraConfig() {
 		showUsageAndExit(c, c.Flags().Args())
 		return nil
 	})
-	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
 
 		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
-			showUsageAndExit(command, command.Flags().Args())
+			arguments := os.Args[len(strings.Split(command.CommandPath(), " ")):]
+			if len(command.Flags().Args()) > 0 {
+				arguments = command.Flags().Args()
+			}
+			showUsageAndExit(command, arguments)
 		}
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
@@ -178,7 +182,7 @@ func initCobraConfig() {
 			if err != nil {
 				u.LogErrorAndExit(atmosConfig, err)
 			}
-			b.HelpFunc(command, strings)
+			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
 				u.LogErrorAndExit(atmosConfig, err)
 			}
