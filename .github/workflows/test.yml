@@ -140,6 +140,17 @@ jobs:
         run: |
           make deps
 
+      - name: Validate YAML Schema for Test Cases
+        uses: InoUno/yaml-ls-check@v1.4.0
+        with:
+          root: "tests/test-cases"
+          schemaMapping: |
+            {
+              "tests/test-cases/schema.json": [
+                "**/*.yaml"
+              ]
+            }
+
       - name: Acceptance tests
         timeout-minutes: 10
         run: make testacc
@@ -446,7 +457,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Validate YAML Schema
+      - name: Validate YAML Schema for Stacks
         uses: InoUno/yaml-ls-check@v1.4.0
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
