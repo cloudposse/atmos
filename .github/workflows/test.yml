@@ -140,16 +140,18 @@ jobs:
         run: |
           make deps
 
-      - name: Validate YAML Schema for Test Cases
-        uses: InoUno/yaml-ls-check@v1.4.0
-        with:
-          root: "tests/test-cases"
-          schemaMapping: |
-            {
-              "schema.json": [
-                "**/*.yaml"
-              ]
-            }
+      # Enable this after merging test-cases
+      # Only seems to work with remote schema files
+      #- name: Validate YAML Schema for Test Cases
+      #  uses: InoUno/yaml-ls-check@v1.4.0
+      #  with:
+      #    root: "tests/test-cases"
+      #    schemaMapping: |
+      #      {
+      #        "schema.json": [
+      #          "**/*.yaml"
+      #        ]
+      #       }
 
       - name: Acceptance tests
         timeout-minutes: 10
