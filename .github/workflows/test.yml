@@ -155,6 +155,8 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 10
+        # Establish a TTY for the tests
+        shell: 'script -q -e -c "bash {0}"'
         run: make testacc
 
   docker:
