@@ -143,8 +143,6 @@ jobs:
       - name: Acceptance tests
         timeout-minutes: 10
         uses: robherley/go-test-action@v0
-        with:
-          test-command: "make testacc"
 
   docker:
     name: "Docker Lint"
