@@ -58,9 +58,9 @@ TEST_VERBOSITY ?= normal
 .PHONY: testacc
 testacc: ## Run all tests
 	@if [ "$(TEST_VERBOSITY)" = "quiet" ]; then \
-		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test ./... -timeout 20m 2>&1 | grep -E "^(ok|FAIL|panic:|--- FAIL)" | grep -v "=== RUN"; \
+		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test ./... -timeout 20m; \
 	else \
-		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./... -timeout 20m | grep -E "^(ok|FAIL|panic:|--- FAIL|=== RUN)"; \
+		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./... -timeout 20m; \
 	fi
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc

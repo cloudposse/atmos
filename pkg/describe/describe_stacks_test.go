@@ -1,6 +1,7 @@
 package describe
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// shouldLogVerbose returns true if test verbosity is set to verbose
+func shouldLogVerbose() bool {
+	return os.Getenv("ATMOS_TEST_VERBOSITY") == "verbose"
+}
+
 func TestDescribeStacks(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
@@ -18,10 +24,13 @@ func TestDescribeStacks(t *testing.T) {
 
 	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false)
 	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
-	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	if shouldLogVerbose() {
+		dependentsYaml, err := u.ConvertToYAML(stacks)
+		assert.Nil(t, err)
+		t.Log(dependentsYaml)
+	}
 }
 
 func TestDescribeStacksWithFilter1(t *testing.T) {
@@ -34,10 +43,13 @@ func TestDescribeStacksWithFilter1(t *testing.T) {
 
 	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, false)
 	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
-	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	if shouldLogVerbose() {
+		dependentsYaml, err := u.ConvertToYAML(stacks)
+		assert.Nil(t, err)
+		t.Log(dependentsYaml)
+	}
 }
 
 func TestDescribeStacksWithFilter2(t *testing.T) {
@@ -51,10 +63,13 @@ func TestDescribeStacksWithFilter2(t *testing.T) {
 
 	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, nil, nil, false, false)
 	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
-	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	if shouldLogVerbose() {
+		dependentsYaml, err := u.ConvertToYAML(stacks)
+		assert.Nil(t, err)
+		t.Log(dependentsYaml)
+	}
 }
 
 func TestDescribeStacksWithFilter3(t *testing.T) {
@@ -68,10 +83,13 @@ func TestDescribeStacksWithFilter3(t *testing.T) {
 
 	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, sections, false, false)
 	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
-	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	if shouldLogVerbose() {
+		dependentsYaml, err := u.ConvertToYAML(stacks)
+		assert.Nil(t, err)
+		t.Log(dependentsYaml)
+	}
 }
 
 func TestDescribeStacksWithFilter4(t *testing.T) {
@@ -85,10 +103,13 @@ func TestDescribeStacksWithFilter4(t *testing.T) {
 
 	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, componentTypes, sections, false, false)
 	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-	dependentsYaml, err := u.ConvertToYAML(stacks)
-	assert.Nil(t, err)
-	t.Log(dependentsYaml)
+	if shouldLogVerbose() {
+		dependentsYaml, err := u.ConvertToYAML(stacks)
+		assert.Nil(t, err)
+		t.Log(dependentsYaml)
+	}
 }
 
 func TestDescribeStacksWithFilter5(t *testing.T) {
@@ -117,9 +138,11 @@ func TestDescribeStacksWithFilter5(t *testing.T) {
 	assert.Equal(t, "ue2", tenant1Ue2DevStackComponentsTerraformComponentVarsEnvironment)
 	assert.Equal(t, "dev", tenant1Ue2DevStackComponentsTerraformComponentVarsStage)
 
-	stacksYaml, err := u.ConvertToYAML(stacks)
-	assert.Nil(t, err)
-	t.Log(stacksYaml)
+	if shouldLogVerbose() {
+		stacksYaml, err := u.ConvertToYAML(stacks)
+		assert.Nil(t, err)
+		t.Log(stacksYaml)
+	}
 }
 
 func TestDescribeStacksWithFilter6(t *testing.T) {
@@ -144,9 +167,11 @@ func TestDescribeStacksWithFilter6(t *testing.T) {
 	tenant1Ue2DevStackComponentsTerraformWorkspace := tenant1Ue2DevStackComponentsTerraformComponent["workspace"].(string)
 	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevStackComponentsTerraformWorkspace)
 
-	stacksYaml, err := u.ConvertToYAML(stacks)
-	assert.Nil(t, err)
-	t.Log(stacksYaml)
+	if shouldLogVerbose() {
+		stacksYaml, err := u.ConvertToYAML(stacks)
+		assert.Nil(t, err)
+		t.Log(stacksYaml)
+	}
 }
 
 func TestDescribeStacksWithFilter7(t *testing.T) {
@@ -171,9 +196,11 @@ func TestDescribeStacksWithFilter7(t *testing.T) {
 	tenant1Ue2DevStackComponentsTerraformWorkspace := tenant1Ue2DevStackComponentsTerraformComponent["workspace"].(string)
 	assert.Equal(t, "test-component-override-3-workspace", tenant1Ue2DevStackComponentsTerraformWorkspace)
 
-	stacksYaml, err := u.ConvertToYAML(stacks)
-	assert.Nil(t, err)
-	t.Log(stacksYaml)
+	if shouldLogVerbose() {
+		stacksYaml, err := u.ConvertToYAML(stacks)
+		assert.Nil(t, err)
+		t.Log(stacksYaml)
+	}
 }
 
 func TestDescribeStacksWithEmptyStacks(t *testing.T) {
