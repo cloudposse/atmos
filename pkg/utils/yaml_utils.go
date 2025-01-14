@@ -71,9 +71,9 @@ func ConvertToYAML(data any) (string, error) {
 	return string(y), nil
 }
 
-func processCustomTags(node *yaml.Node) error {
+func processCustomTags(node *yaml.Node, file string) error {
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
-		return processCustomTags(node.Content[0])
+		return processCustomTags(node.Content[0], file)
 	}
 
 	for i := 0; i < len(node.Content); i++ {
@@ -83,7 +83,7 @@ func processCustomTags(node *yaml.Node) error {
 			n.Value = n.Tag + " " + n.Value
 		}
 
-		if err := processCustomTags(n); err != nil {
+		if err := processCustomTags(n, file); err != nil {
 			return err
 		}
 	}
@@ -91,6 +91,10 @@ func processCustomTags(node *yaml.Node) error {
 }
 
 func UnmarshalYAML[T any](input string) (T, error) {
+	return UnmarshalYAMLFromFile[T](input, "")
+}
+
+func UnmarshalYAMLFromFile[T any](input string, file string) (T, error) {
 	var zeroValue T
 	var node yaml.Node
 	b := []byte(input)
@@ -100,7 +104,7 @@ func UnmarshalYAML[T any](input string) (T, error) {
 		return zeroValue, err
 	}
 
-	if err := processCustomTags(&node); err != nil {
+	if err := processCustomTags(&node, file); err != nil {
 		return zeroValue, err
 	}
 
