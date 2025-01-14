@@ -91,7 +91,11 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 }
 
 func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) string {
-	return n.Tag + " " + n.Value
+	res := n.Tag + " " + n.Value
+	if n.Tag == AtmosYamlFuncInclude && file != "" {
+		res = res + " " + file
+	}
+	return res
 }
 
 func UnmarshalYAML[T any](input string) (T, error) {
