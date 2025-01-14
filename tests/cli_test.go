@@ -10,6 +10,7 @@ import (
 	"path/filepath" // For resolving absolute paths
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/creack/pty"
@@ -174,12 +175,12 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	}
 	defer func() { _ = ptmx.Close() }()
 
-	//t.Logf("PTY Fd: %d, IsTerminal: %v", ptmx.Fd(), term.IsTerminal(int(ptmx.Fd())))
+	// t.Logf("PTY Fd: %d, IsTerminal: %v", ptmx.Fd(), term.IsTerminal(int(ptmx.Fd())))
 
 	if input != "" {
 		go func() {
 			_, _ = ptmx.Write([]byte(input))
-			_ = ptmx.Close()
+			_ = ptmx.Close() // Ensure we close the input after writing
 		}()
 	}
 
@@ -187,7 +188,7 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	done := make(chan error, 1)
 	go func() {
 		_, err := buffer.ReadFrom(ptmx)
-		done <- err
+		done <- ptyError(err) // Wrap the error handling
 	}()
 
 	err = cmd.Wait()
@@ -200,9 +201,20 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	}
 
 	output := buffer.String()
-	//t.Logf("Captured Output:\n%s", output)
+	// t.Logf("Captured Output:\n%s", output)
 
 	return output, nil
+}
+
+// Linux kernel return EIO when attempting to read from a master pseudo
+// terminal which no longer has an open slave. So ignore error here.
+// See https://github.com/creack/pty/issues/21
+// See https://github.com/owenthereal/upterm/pull/11
+func ptyError(err error) error {
+	if pathErr, ok := err.(*os.PathError); !ok || pathErr.Err != syscall.EIO {
+		return err
+	}
+	return nil
 }
 
 // Execute the command and return the exit code
