@@ -71,30 +71,34 @@ func ConvertToYAML(data any) (string, error) {
 	return string(y), nil
 }
 
-func processCustomTags(node *yaml.Node, file string) error {
+func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
-		return processCustomTags(node.Content[0], file)
+		return processCustomTags(atmosConfig, node.Content[0], file)
 	}
 
 	for i := 0; i < len(node.Content); i++ {
 		n := node.Content[i]
 
 		if SliceContainsString(AtmosYamlTags, n.Tag) {
-			n.Value = n.Tag + " " + n.Value
+			n.Value = getValueWithTag(atmosConfig, n, file)
 		}
 
-		if err := processCustomTags(n, file); err != nil {
+		if err := processCustomTags(atmosConfig, n, file); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func UnmarshalYAML[T any](input string) (T, error) {
-	return UnmarshalYAMLFromFile[T](input, "")
+func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) string {
+	return n.Tag + " " + n.Value
 }
 
-func UnmarshalYAMLFromFile[T any](input string, file string) (T, error) {
+func UnmarshalYAML[T any](input string) (T, error) {
+	return UnmarshalYAMLFromFile[T](&schema.AtmosConfiguration{}, input, "")
+}
+
+func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, error) {
 	var zeroValue T
 	var node yaml.Node
 	b := []byte(input)
@@ -104,7 +108,7 @@ func UnmarshalYAMLFromFile[T any](input string, file string) (T, error) {
 		return zeroValue, err
 	}
 
-	if err := processCustomTags(&node, file); err != nil {
+	if err := processCustomTags(atmosConfig, &node, file); err != nil {
 		return zeroValue, err
 	}
 
