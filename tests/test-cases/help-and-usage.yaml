@@ -64,13 +64,13 @@ tests:
       - "terraform"
     expect:
       stdout:
-        - "Unknown command: \"atmos terraform\""
+        - "Error: Unknown command: \"atmos terraform\""
         - "Valid subcommands are:"
         - "apply"
         - "clean"
         - "console"
       stderr:
-        - "Unknown command: \"atmos terraform\""
+        - "Error: Unknown command: \"atmos terraform\""
       exit_code: 1
   - name: atmos terraform help
     enabled: true
@@ -174,4 +174,225 @@ tests:
     expect:
       stderr:
         - "'stack' is required. Usage: atmos terraform <command> <component> -s <stack>"
+      exit_code: 1
+  - name: atmos helmfile
+    enabled: true
+    description: "Should show usage for helmfile"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "helmfile"
+    expect:
+      stderr:
+        - "Error: Unknown command: \"atmos helmfile\""
+      stdout:
+        - "Valid subcommands are:"
+        - "apply"
+        - "destroy"
+      exit_code: 1
+  - name: atmos helmfile non-existant
+    enabled: true
+    description: "Should show usage for helmfile and non-existant subcommand"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "non-existant"
+    expect:
+      stderr:
+        - "Error: Unknown command \"non-existant\" for \"atmos helmfile\""
+      stdout:
+        - "Valid subcommands are:"
+        - "apply"
+        - "destroy"
+      exit_code: 1
+  - name: atmos helmfile help
+    enabled: true
+    description: "Should show help for helmfile"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "help"
+    expect:
+      stdout:
+        - "Available Commands:"
+        - "apply"
+        - "destroy"
+      exit_code: 0
+  - name: atmos helmfile --help
+    enabled: true
+    description: "Should show help for helmfile when using help flag"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "help"
+    expect:
+      stdout:
+        - "Available Commands:"
+        - "apply"
+        - "destroy"
+      exit_code: 0
+  - name: atmos helmfile apply 
+    enabled: true
+    description: "Should show error in non atmos workspace"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "apply"
+      - "non-existent"
+    expect:
+      stdout:
+        - "CLI config file specifies the directory for Atmos stack"
+        - "Quick Start"
+      exit_code: 1
+  - name: atmos helmfile apply 
+    enabled: true
+    description: "Should show error in non atmos workspace"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "apply"
+      - "non-existent"
+    expect:
+      stdout:
+        - "CLI config file specifies the directory for Atmos stack"
+        - "Quick Start"
+      exit_code: 1
+  - name: atmos helmfile apply 
+    enabled: true
+    description: "Should show error in atmos workspace"
+    workdir: "../examples/demo-helmfile"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "apply"
+    expect:
+      stderr:
+        - "'stack' is required. Usage: atmos helmfile <command> <component> -s <stack>"
+      exit_code: 1
+  - name: atmos helmfile apply help
+    enabled: true
+    description: "Should show help for atmos helmfile apply"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "apply"
+      - "help"
+    expect:
+      stdout:
+        - "Flags:"
+        - "--logs-file"
+      exit_code: 0
+  - name: atmos helmfile apply --help
+    enabled: true
+    description: "Should show help for atmos helmfile apply --help"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "apply"
+      - "--help"
+    expect:
+      stdout:
+        - "Flags:"
+        - "--logs-file"
+      exit_code: 0
+  - name: atmos atlantis
+    enabled: true
+    description: "Should show usage atmos atlantis"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+    expect:
+      stderr:
+        - "Error: Unknown command: \"atmos atlantis\""
+      exit_code: 1
+  - name: atmos atlantis help
+    enabled: true
+    description: "Should show help 'atmos atlantis help'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "help"
+    expect:
+      stdout:
+        - "Available Commands:"
+        - "generate"
+      exit_code: 0
+  - name: atmos atlantis --help
+    enabled: true
+    description: "Should show help 'atmos atlantis --help'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "--help"
+    expect:
+      stdout:
+        - "Available Commands:"
+        - "generate"
+      exit_code: 0
+
+  - name: atmos atlantis generate
+    enabled: true
+    description: "Should show usage atmos atlantis"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "generate"
+    expect:
+      stderr:
+        - "Error: Unknown command: \"atmos atlantis generate\""
+      exit_code: 1
+  - name: atmos atlantis generate help
+    enabled: true
+    description: "Should show help 'atmos atlantis generate help'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "generate"
+      - "help"
+    expect:
+      stdout:
+        - "Available Commands:"
+        - "repo-config"
+      exit_code: 0
+  - name: atmos atlantis generate --help
+    enabled: true
+    description: "Should show help 'atmos atlantis --help'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "generate"
+      - "--help"
+    expect:
+      stdout:
+        - "Available Commands:"
+        - "repo-config"
+      exit_code: 0
+  - name: atmos atlantis generate repo-config
+    enabled: true
+    description: "Should show config missing in non atmos workspace 'atmos atlantis generate repo-config'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "generate"
+      - "repo-config"
+    expect:
+      stdout:
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
+        - "To configure and start using Atmos, refer to the following documents:"
+      stderr:
+        - "^$"
       exit_code: 1
