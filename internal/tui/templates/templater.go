@@ -45,32 +45,27 @@ func formatCommand(name string, desc string, padding int, IsNotSupported bool) s
 
 var customHelpShortMessage = map[string]string{
 	"help": "Display help information for Atmos commands",
-	"tf":   "Alias for `terraform` commands",
 }
 
 // filterCommands returns only commands or aliases based on returnOnlyAliases boolean
 func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.Command {
+	if !returnOnlyAliases {
+		return commands
+	}
 	filtered := []*cobra.Command{}
+	cmdMap := make(map[string]struct{})
 	for _, cmd := range commands {
-		isAlias := false
-		for _, parentCmd := range commands {
-			if cmd != parentCmd {
-				for _, alias := range parentCmd.Aliases {
-					if cmd.Name() == alias {
-						isAlias = true
-						break
-					}
-				}
+		cmdMap[cmd.Use] = struct{}{}
+	}
+	for _, cmd := range commands {
+		for _, alias := range cmd.Aliases {
+			if _, ok := cmdMap[alias]; ok {
+				continue
 			}
-			if isAlias {
-				break
-			}
-		}
-		// Add to the filtered list based on the includeAliases flag
-		if returnOnlyAliases && isAlias {
-			filtered = append(filtered, cmd) // Include only aliases
-		} else if !returnOnlyAliases && !isAlias {
-			filtered = append(filtered, cmd) // Include only primary commands
+			copyCmd := *cmd
+			copyCmd.Use = alias
+			copyCmd.Short = fmt.Sprintf("Alias of %q command", cmd.CommandPath())
+			filtered = append(filtered, &copyCmd)
 		}
 	}
 	return filtered

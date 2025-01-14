@@ -557,7 +557,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 
 	var suggestions []string
 	var subCommand string = ""
-	unkonwnCommand := fmt.Sprintf("Unknown command: %q", cmd.CommandPath())
+	unkonwnCommand := fmt.Sprintf("Error: Unknown command: %q", cmd.CommandPath())
 
 	if len(args) > 0 {
 		suggestions = cmd.SuggestionsFor(args[0])
