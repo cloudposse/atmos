@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"path/filepath" // For resolving absolute paths
 	"regexp"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type Expectation struct {
@@ -40,7 +39,7 @@ type TestSuite struct {
 }
 
 func loadTestSuite(filePath string) (*TestSuite, error) {
-	data, err := os.ReadFile(filePath)
+	data, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +71,7 @@ func (pm *PathManager) Prepend(dirs ...string) {
 	for _, dir := range dirs {
 		absPath, err := filepath.Abs(dir)
 		if err != nil {
-			u.TestLogf(nil, u.TestVerbosityVerbose, "Failed to resolve absolute path for %q: %v\n", dir, err)
+			fmt.Printf("Failed to resolve absolute path for %q: %v\n", dir, err)
 			continue
 		}
 		pm.Prepended = append(pm.Prepended, absPath)
@@ -116,74 +115,6 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
-func verifyOutput(t *testing.T, outputType, output string, patterns []string) bool {
-	success := true
-	for _, pattern := range patterns {
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			u.LogTestFailure(t, "", pattern, err, fmt.Sprintf("Invalid %s regex pattern", outputType))
-			t.Error("Test failed due to invalid regex pattern")
-			success = false
-			continue
-		}
-		if !re.MatchString(output) {
-			u.LogTestFailure(t, "", pattern, output,
-				fmt.Sprintf("%s output did not match expected pattern", outputType),
-				fmt.Sprintf("Full %s output:", outputType),
-				output)
-			t.Error("Test failed due to pattern mismatch")
-			success = false
-		}
-	}
-	return success
-}
-
-func verifyFileExists(t *testing.T, files []string) bool {
-	success := true
-	for _, file := range files {
-		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
-			u.LogTestFailure(t, "", file, "file does not exist",
-				"Expected file to exist but it does not")
-			t.Error("Test failed due to missing file")
-			success = false
-		}
-	}
-	return success
-}
-
-func verifyFileContains(t *testing.T, filePatterns map[string][]string) bool {
-	success := true
-	for file, patterns := range filePatterns {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			u.LogTestFailure(t, "", file, err,
-				fmt.Sprintf("Failed to read file contents"))
-			t.Error("Test failed due to file read error")
-			success = false
-			continue
-		}
-		for _, pattern := range patterns {
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				u.LogTestFailure(t, "", pattern, err,
-					fmt.Sprintf("Invalid regex pattern for file %s", file))
-				t.Error("Test failed due to invalid file content pattern")
-				success = false
-				continue
-			}
-			if !re.Match(content) {
-				u.LogTestFailure(t, "", pattern, string(content),
-					fmt.Sprintf("File %s content did not match pattern", file),
-					"File contents:",
-					string(content))
-				t.Error("Test failed due to file content mismatch")
-				success = false
-			}
-		}
-	}
-	return success
-}
-
 func TestCLICommands(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -191,18 +122,14 @@ func TestCLICommands(t *testing.T) {
 		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
 
-	// Initialize PATH manager and update PATH
+	// Initialize PathManager and update PATH
 	pathManager := NewPathManager()
 	pathManager.Prepend("../build", "..")
 	err = pathManager.Apply()
 	if err != nil {
 		t.Fatalf("Failed to apply updated PATH: %v", err)
 	}
-
-	// Log PATH only in verbose mode
-	if u.GetTestVerbosity() >= u.TestVerbosityVerbose {
-		u.TestLogf(t, u.TestVerbosityVerbose, "Updated PATH: %s", pathManager.GetPath())
-	}
+	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
 
 	// Update the test suite loading
 	testSuite, err := loadTestSuites("test-cases")
@@ -211,11 +138,9 @@ func TestCLICommands(t *testing.T) {
 	}
 
 	for _, tc := range testSuite.Tests {
+
 		if !tc.Enabled {
-			// Log skipped tests based on verbosity
-			if u.GetTestVerbosity() >= u.TestVerbosityNormal {
-				u.TestLogf(t, u.TestVerbosityNormal, "Skipping disabled test: %s", tc.Name)
-			}
+			t.Logf("Skipping disabled test: %s", tc.Name)
 			continue
 		}
 
@@ -265,36 +190,85 @@ func TestCLICommands(t *testing.T) {
 					exitCode = exitErr.ExitCode()
 				}
 			}
-
 			if exitCode != tc.Expect.ExitCode {
-				u.LogTestFailure(t, tc.Description, tc.Expect.ExitCode, exitCode,
-					"Command failed with unexpected exit code",
-					fmt.Sprintf("Command: %s %v", tc.Command, tc.Args),
-					fmt.Sprintf("Stdout:\n%s", stdout.String()),
-					fmt.Sprintf("Stderr:\n%s", stderr.String()))
-				return
+				t.Errorf("Description: %s", tc.Description)
+				t.Errorf("Reason: Expected exit code %d, got %d", tc.Expect.ExitCode, exitCode)
 			}
 
+			// Validate stdout
 			if !verifyOutput(t, "stdout", stdout.String(), tc.Expect.Stdout) {
-				return
+				t.Errorf("Description: %s", tc.Description)
 			}
 
+			// Validate stderr
 			if !verifyOutput(t, "stderr", stderr.String(), tc.Expect.Stderr) {
-				return
+				t.Errorf("Description: %s", tc.Description)
 			}
 
+			// Validate file existence
 			if !verifyFileExists(t, tc.Expect.FileExists) {
-				return
+				t.Errorf("Description: %s", tc.Description)
 			}
 
+			// Validate file contents
 			if !verifyFileContains(t, tc.Expect.FileContains) {
-				return
-			}
-
-			// Log success message only in verbose mode
-			if u.GetTestVerbosity() >= u.TestVerbosityVerbose {
-				u.TestLogf(t, u.TestVerbosityVerbose, "Test passed: %s", tc.Description)
+				t.Errorf("Description: %s", tc.Description)
 			}
 		})
 	}
+}
+
+func verifyOutput(t *testing.T, outputType, output string, patterns []string) bool {
+	success := true
+	for _, pattern := range patterns {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			t.Errorf("Invalid %s regex: %q, error: %v", outputType, pattern, err)
+			success = false
+			continue
+		}
+		if !re.MatchString(output) {
+			t.Errorf("Reason: %s did not match pattern %q.", outputType, pattern)
+			t.Errorf("Output: %q", output)
+			success = false
+		}
+	}
+	return success
+}
+
+func verifyFileExists(t *testing.T, files []string) bool {
+	success := true
+	for _, file := range files {
+		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Reason: Expected file does not exist: %q", file)
+			success = false
+		}
+	}
+	return success
+}
+
+func verifyFileContains(t *testing.T, filePatterns map[string][]string) bool {
+	success := true
+	for file, patterns := range filePatterns {
+		content, err := ioutil.ReadFile(file)
+		if err != nil {
+			t.Errorf("Reason: Failed to read file %q: %v", file, err)
+			success = false
+			continue
+		}
+		for _, pattern := range patterns {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				t.Errorf("Invalid regex for file %q: %q, error: %v", file, pattern, err)
+				success = false
+				continue
+			}
+			if !re.Match(content) {
+				t.Errorf("Reason: File %q did not match pattern %q.", file, pattern)
+				t.Errorf("Content: %q", string(content))
+				success = false
+			}
+		}
+	}
+	return success
 }
