@@ -146,7 +146,7 @@ jobs:
           root: "tests/test-cases"
           schemaMapping: |
             {
-              "tests/test-cases/schema.json": [
+              "schema.json": [
                 "**/*.yaml"
               ]
             }
