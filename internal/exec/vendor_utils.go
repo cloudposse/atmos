@@ -181,7 +181,7 @@ func ReadAndProcessVendorConfigFile(
 	// Check if it's a directory
 	fileInfo, err := os.Stat(foundVendorConfigFile)
 	if err != nil {
-		return vendorConfig, false, "", err
+		return vendorConfig, false, "", fmt.Errorf("Vendoring is not configured. To set up vendoring please see https://atmos.tools/core-concepts/vendor/")
 	}
 
 	var configFiles []string
