@@ -143,6 +143,12 @@ jobs:
       - name: Acceptance tests
         timeout-minutes: 10
         run: make testacc
+      
+      - name: Run Go tests with go-test-action
+        uses: robherley/go-test-action@v0
+        with:
+          moduleDirectory: '.'
+          testArguments: '-v -timeout 20m ./...'
 
   docker:
     name: "Docker Lint"
