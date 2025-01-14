@@ -1,6 +1,10 @@
-* text eol=lf
+# Always check-out / check-in files with LF line endings.
+* text=auto eol=lf
+
 docs linguist-documentation=true
-website/src/components/screengrabs/**/*.html linguist-generated=true binary
+
+# Screengrabs are binary HTML files that are automatically generated
+website/src/components/Screengrabs/**/*.html linguist-generated=true binary
 
 # Mark binary files to prevent normalization
 *.png binary
