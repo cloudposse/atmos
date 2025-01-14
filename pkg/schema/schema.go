@@ -157,7 +157,8 @@ type Stacks struct {
 }
 
 type Workflows struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	List     ListConfig `yaml:"list" json:"list" mapstructure:"list"`
 }
 
 type Logs struct {
@@ -690,4 +691,14 @@ type MarkdownStyle struct {
 
 type ChromaStyle struct {
 	Color string `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
+}
+
+type ListConfig struct {
+	Format  string             `yaml:"format" json:"format" mapstructure:"format"`
+	Columns []ListColumnConfig `yaml:"columns" json:"columns" mapstructure:"columns"`
+}
+
+type ListColumnConfig struct {
+	Name  string `yaml:"name" json:"name" mapstructure:"name"`
+	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
