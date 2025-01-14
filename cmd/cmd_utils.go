@@ -557,15 +557,15 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 
 	var suggestions []string
 	var subCommand string = ""
-	unkonwnCommand := fmt.Sprintf("Error: Unknown command: %q", cmd.CommandPath())
+	unknownCommand := fmt.Sprintf("Error: Unknown command: %q", cmd.CommandPath())
 
 	if len(args) > 0 {
 		suggestions = cmd.SuggestionsFor(args[0])
 		subCommand = args[0]
-		unkonwnCommand = fmt.Sprintf(`Error: Unknown command %q for %q`+"\n", subCommand, cmd.CommandPath())
+		unknownCommand = fmt.Sprintf(`Error: Unknown command %q for %q`+"\n", subCommand, cmd.CommandPath())
 	}
 	if len(suggestions) > 0 {
-		u.PrintMessage(fmt.Sprintf("%s\n\nDid you mean this?", unkonwnCommand))
+		u.PrintMessage(fmt.Sprintf("%s\n\nDid you mean this?", unknownCommand))
 		for _, suggestion := range suggestions {
 			u.PrintMessage(fmt.Sprintf("  %s\n", suggestion))
 		}
@@ -575,7 +575,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 		for _, subCmd := range cmd.Commands() {
 			validSubcommands = append(validSubcommands, subCmd.Name())
 		}
-		u.PrintMessage(unkonwnCommand)
+		u.PrintMessage(unknownCommand)
 		if len(validSubcommands) > 0 {
 			u.PrintMessage("Valid subcommands are:")
 			for _, sub := range validSubcommands {
@@ -586,7 +586,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 		}
 	}
 	u.PrintMessage(fmt.Sprintf(`Run '%s --help' for usage`, cmd.CommandPath()))
-	u.LogErrorAndExit(atmosConfig, errors.New(unkonwnCommand))
+	u.LogErrorAndExit(atmosConfig, errors.New(unknownCommand))
 }
 
 // hasPositionalArgs checks if a slice of strings contains an exact match for the target string.
