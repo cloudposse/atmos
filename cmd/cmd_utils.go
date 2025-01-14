@@ -589,29 +589,6 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	u.LogErrorAndExit(atmosConfig, errors.New(unknownCommand))
 }
 
-// hasPositionalArgs checks if a slice of strings contains an exact match for the target string.
-func hasPositionalArgs(args []string) bool {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		if strings.HasPrefix(arg, "-") {
-			// Handle "--flag=value" syntax
-			if strings.Contains(arg, "=") {
-				continue
-			}
-
-			// Skip the next argument if it looks like a value for a flag
-			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-				i++ // Skip the value
-			}
-		} else {
-			// If it's not a flag and not a value for a flag, it's positional
-			return true
-		}
-	}
-	return false
-}
-
 // getConfigAndStacksInfo gets the
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
