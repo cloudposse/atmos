@@ -142,7 +142,7 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 10
-        run: make testacc
+        run: make testacc TEST_VERBOSITY=quiet
 
   docker:
     name: "Docker Lint"

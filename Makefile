@@ -59,6 +59,8 @@ TEST_VERBOSITY ?= normal
 testacc: ## Run all tests
 	@if [ "$(TEST_VERBOSITY)" = "quiet" ]; then \
 		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test ./... -timeout 20m; \
+	elif [ "$(TEST_VERBOSITY)" = "verbose" ]; then \
+		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v -count=1 ./... -timeout 20m; \
 	else \
 		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./... -timeout 20m; \
 	fi
