@@ -395,3 +395,39 @@ tests:
       stderr:
         - "^$"
       exit_code: 1
+  - name: atmos atlantis generate repo-config help
+    enabled: true
+    description: "Should show help for 'atmos atlantis generate repo-config help'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "generate"
+      - "repo-config"
+      - "help"
+    expect:
+      stdout:
+        - "Flags:"
+        - "--affected-only"
+        - "--config-template"
+      stderr:
+        - "^$"
+      exit_code: 0
+  - name: atmos atlantis generate repo-config --help
+    enabled: true
+    description: "Should show help for 'atmos atlantis generate repo-config --help'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "generate"
+      - "repo-config"
+      - "--help"
+    expect:
+      stdout:
+        - "Flags:"
+        - "--affected-only"
+        - "--config-template"
+      stderr:
+        - "^$"
+      exit_code: 0
