@@ -66,12 +66,7 @@ var RootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
 	colored.Init(&colored.Config{
-		RootCmd:  RootCmd,
-		Headings: colored.HiCyan + colored.Bold + colored.Underline,
-		Commands: colored.HiGreen + colored.Bold,
-		Example:  colored.Italic,
-		ExecName: colored.Bold,
-		Flags:    colored.Bold,
+		RootCmd: RootCmd,
 	})
 
 	// InitCliConfig finds and merges CLI configurations in the following order:

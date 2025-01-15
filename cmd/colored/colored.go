@@ -29,6 +29,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -41,51 +42,12 @@ import (
 //
 //	c := &cc.Config{
 //	   RootCmd:       rootCmd,
-//	   Headings:      cc.HiWhite + cc.Bold + cc.Underline,
-//	   Commands:      cc.Yellow + cc.Bold,
-//	   CmdShortDescr: cc.Cyan,
-//	   ExecName:      cc.Bold,
-//	   Flags:         cc.Bold,
-//	   Aliases:       cc.Bold,
-//	   Example:       cc.Italic,
 //	}
 type Config struct {
 	RootCmd         *cobra.Command
-	Headings        uint8
-	Commands        uint8
-	CmdShortDescr   uint8
-	ExecName        uint8
-	Flags           uint8
-	FlagsDataType   uint8
-	FlagsDescr      uint8
-	Aliases         uint8
-	Example         uint8
 	NoExtraNewlines bool
 	NoBottomNewline bool
 }
-
-// Constants for colors and B, I, U
-const (
-	None      = 0
-	Black     = 1
-	Red       = 2
-	Green     = 3
-	Yellow    = 4
-	Blue      = 5
-	Magenta   = 6
-	Cyan      = 7
-	White     = 8
-	HiRed     = 9
-	HiGreen   = 10
-	HiYellow  = 11
-	HiBlue    = 12
-	HiMagenta = 13
-	HiCyan    = 14
-	HiWhite   = 15
-	Bold      = 16
-	Italic    = 32
-	Underline = 64
-)
 
 // Init patches Cobra's usage template with configuration provided.
 func Init(cfg *Config) {
@@ -100,7 +62,7 @@ func Init(cfg *Config) {
 	//
 	// Add extra line breaks for headings
 	//
-	if cfg.NoExtraNewlines == false {
+	if !cfg.NoExtraNewlines {
 		tpl = strings.NewReplacer(
 			"Use \"", "\nUse \"",
 		).Replace(tpl)
@@ -109,8 +71,8 @@ func Init(cfg *Config) {
 	//
 	// Styling headers
 	//
-	if cfg.Headings != None {
-		ch := getColor(cfg.Headings)
+	if theme.Styles.Help.Headings != nil {
+		ch := theme.Styles.Help.Headings
 		// Add template function to style the headers
 		cobra.AddTemplateFunc("HeadingStyle", ch.SprintFunc())
 	}
@@ -118,8 +80,8 @@ func Init(cfg *Config) {
 	//
 	// Styling commands
 	//
-	if cfg.Commands != None {
-		cc := getColor(cfg.Commands)
+	if theme.Styles.Help.Commands != nil {
+		cc := theme.Styles.Help.Commands
 
 		// Add template function to style commands
 		cobra.AddTemplateFunc("CommandStyle", cc.SprintFunc())
@@ -138,8 +100,8 @@ func Init(cfg *Config) {
 	//
 	// Styling a short desription of commands
 	//
-	if cfg.CmdShortDescr != None {
-		csd := getColor(cfg.CmdShortDescr)
+	if theme.Styles.Help.CmdShortDescr != nil {
+		csd := theme.Styles.Help.CmdShortDescr
 
 		cobra.AddTemplateFunc("CmdShortStyle", csd.SprintFunc())
 
@@ -150,8 +112,8 @@ func Init(cfg *Config) {
 	//
 	// Styling executable file name
 	//
-	if cfg.ExecName != None {
-		cen := getColor(cfg.ExecName)
+	if theme.Styles.Help.ExecName != nil {
+		cen := theme.Styles.Help.ExecName
 
 		// Add template functions
 		cobra.AddTemplateFunc("ExecStyle", cen.SprintFunc())
@@ -173,14 +135,14 @@ func Init(cfg *Config) {
 	// Styling flags
 	//
 	var cf, cfd, cfdt *color.Color
-	if cfg.Flags != None {
-		cf = getColor(cfg.Flags)
+	if theme.Styles.Help.Flags != nil {
+		cf = theme.Styles.Help.Flags
 	}
-	if cfg.FlagsDescr != None {
-		cfd = getColor(cfg.FlagsDescr)
+	if theme.Styles.Help.FlagsDescr != nil {
+		cfd = theme.Styles.Help.FlagsDescr
 	}
-	if cfg.FlagsDataType != None {
-		cfdt = getColor(cfg.FlagsDataType)
+	if theme.Styles.Help.FlagsDataType != nil {
+		cfdt = theme.Styles.Help.FlagsDataType
 	}
 	if cf != nil || cfd != nil || cfdt != nil {
 
@@ -242,8 +204,8 @@ func Init(cfg *Config) {
 	//
 	// Styling aliases
 	//
-	if cfg.Aliases != None {
-		ca := getColor(cfg.Aliases)
+	if theme.Styles.Help.Aliases != nil {
+		ca := theme.Styles.Help.Aliases
 		cobra.AddTemplateFunc("AliasStyle", ca.SprintFunc())
 
 		re := regexp.MustCompile(`(?i){{\s*.NameAndAliases\s*}}`)
@@ -253,8 +215,8 @@ func Init(cfg *Config) {
 	//
 	// Styling the example text
 	//
-	if cfg.Example != None {
-		ce := getColor(cfg.Example)
+	if theme.Styles.Help.Example != nil {
+		ce := theme.Styles.Help.Example
 		cobra.AddTemplateFunc("ExampleStyle", ce.SprintFunc())
 
 		re := regexp.MustCompile(`(?i){{\s*.Example\s*}}`)
@@ -269,55 +231,4 @@ func Init(cfg *Config) {
 	cfg.RootCmd.SetUsageTemplate(tpl)
 	// Debug line, uncomment when needed
 	// fmt.Println(tpl)
-}
-
-// getColor decodes color param and returns color.Color object
-func getColor(param uint8) (c *color.Color) {
-
-	switch param & 15 {
-	case None:
-		c = color.New(color.FgWhite)
-	case Black:
-		c = color.New(color.FgBlack)
-	case Red:
-		c = color.New(color.FgRed)
-	case Green:
-		c = color.New(color.FgGreen)
-	case Yellow:
-		c = color.New(color.FgYellow)
-	case Blue:
-		c = color.New(color.FgBlue)
-	case Magenta:
-		c = color.New(color.FgMagenta)
-	case Cyan:
-		c = color.New(color.FgCyan)
-	case White:
-		c = color.New(color.FgWhite)
-	case HiRed:
-		c = color.New(color.FgHiRed)
-	case HiGreen:
-		c = color.New(color.FgHiGreen)
-	case HiYellow:
-		c = color.New(color.FgHiYellow)
-	case HiBlue:
-		c = color.New(color.FgHiBlue)
-	case HiMagenta:
-		c = color.New(color.FgHiMagenta)
-	case HiCyan:
-		c = color.New(color.FgHiCyan)
-	case HiWhite:
-		c = color.New(color.FgHiWhite)
-	}
-
-	if param&Bold == Bold {
-		c.Add(color.Bold)
-	}
-	if param&Italic == Italic {
-		c.Add(color.Italic)
-	}
-	if param&Underline == Underline {
-		c.Add(color.Underline)
-	}
-
-	return
 }
