@@ -29,6 +29,11 @@ func PrintMessageInColor(message string, messageColor *color.Color) {
 	_, _ = messageColor.Fprint(os.Stdout, message)
 }
 
+func PrintErrorInColor(message string) {
+	messageColor := theme.Colors.Error
+	_, _ = messageColor.Fprint(os.Stderr, message)
+}
+
 // LogErrorAndExit logs errors to std.Error and exits with an error code
 func LogErrorAndExit(atmosConfig schema.AtmosConfiguration, err error) {
 	if err != nil {

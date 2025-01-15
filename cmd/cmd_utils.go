@@ -557,15 +557,16 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 
 	var suggestions []string
 	var subCommand string = ""
-	unknownCommand := fmt.Sprintf("Error: Unknown command: %q", cmd.CommandPath())
+	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
 
 	if len(args) > 0 {
 		suggestions = cmd.SuggestionsFor(args[0])
 		subCommand = args[0]
-		unknownCommand = fmt.Sprintf(`Error: Unknown command %q for %q`+"\n", subCommand, cmd.CommandPath())
+		unknownCommand = fmt.Sprintf("Error: Unknown command %q for %q\n\n", subCommand, cmd.CommandPath())
 	}
+	u.PrintErrorInColor(unknownCommand)
 	if len(suggestions) > 0 {
-		u.PrintMessage(fmt.Sprintf("%s\n\nDid you mean this?", unknownCommand))
+		u.PrintMessage("Did you mean this?")
 		for _, suggestion := range suggestions {
 			u.PrintMessage(fmt.Sprintf("  %s\n", suggestion))
 		}
@@ -575,7 +576,6 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 		for _, subCmd := range cmd.Commands() {
 			validSubcommands = append(validSubcommands, subCmd.Name())
 		}
-		u.PrintMessage(unknownCommand)
 		if len(validSubcommands) > 0 {
 			u.PrintMessage("Valid subcommands are:")
 			for _, sub := range validSubcommands {
@@ -585,8 +585,8 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 			u.PrintMessage("No valid subcommands found")
 		}
 	}
-	u.PrintMessage(fmt.Sprintf(`Run '%s --help' for usage`, cmd.CommandPath()))
-	u.LogErrorAndExit(atmosConfig, errors.New(unknownCommand))
+	u.PrintMessage(fmt.Sprintf("\nRun '%s --help' for usage", cmd.CommandPath()))
+	os.Exit(1)
 }
 
 // getConfigAndStacksInfo gets the
