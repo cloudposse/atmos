@@ -88,7 +88,7 @@ func getSection(section HelpTemplateSections) string {
 {{HeadingStyle "Usage:"}}
 {{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
-  {{.CommandPath}} [command]{{end}}`
+  {{.CommandPath}} [sub-command] [flags]{{end}}`
 	case DoubleDashHelp:
 		return `
 
