@@ -16,12 +16,12 @@ tests:
   - name: atmos validate editorconfig error
     enabled: true
     description: "Ensure atmos CLI gives error during validation based on editorconfig"
-    workdir: "../tests/fixtures"
+    workdir: "../tests/fixtures/scenarios/editorconfig"
     command: "atmos"
     args:
       - "validate"
       - "editorconfig"
     expect:
       stderr:
-        - "18 errors found"
+        - "16 errors found"
       exit_code: 1
