@@ -104,11 +104,9 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 		// Detect relative paths and convert to absolute paths
 		if strings.HasPrefix(val, ".") || strings.HasPrefix(val, "..") {
 			resolved := ResolveRelativePath(val, file)
-
 			if !FileExists(resolved) {
-				return "", fmt.Errorf("the function '!include %s' references a file which does not exist", val)
+				return "", fmt.Errorf("the function '!include %s' points to a file that does not exist", val)
 			}
-
 			val = resolved
 		}
 	}

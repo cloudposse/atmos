@@ -22,10 +22,7 @@ func processTagInclude(
 		u.LogErrorAndExit(atmosConfig, err)
 	}
 
-	res, err := ExecuteShellAndReturnOutput(atmosConfig, str, input, ".", nil, false)
-	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
-	}
+	res := str
 
 	var decoded any
 	if err = json.Unmarshal([]byte(res), &decoded); err != nil {
