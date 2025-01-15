@@ -162,7 +162,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			version := grayColor.Render(version)
 			return m, tea.Sequence(
-				tea.Printf("%s %s %s", mark, pkg.name, version),
+				tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
 				tea.Quit,
 			)
 		}
