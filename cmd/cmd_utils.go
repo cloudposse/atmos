@@ -556,13 +556,11 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 func showUsageAndExit(cmd *cobra.Command, args []string) {
 
 	var suggestions []string
-	var subCommand string = ""
 	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
 
 	if len(args) > 0 {
 		suggestions = cmd.SuggestionsFor(args[0])
-		subCommand = args[0]
-		unknownCommand = fmt.Sprintf("Error: Unknown command %q for %q\n\n", subCommand, cmd.CommandPath())
+		unknownCommand = fmt.Sprintf("Error: Unknown command %q for %q\n\n", args[0], cmd.CommandPath())
 	}
 	u.PrintErrorInColor(unknownCommand)
 	if len(suggestions) > 0 {
