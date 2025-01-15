@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -80,7 +82,11 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		n := node.Content[i]
 
 		if SliceContainsString(AtmosYamlTags, n.Tag) {
-			n.Value = getValueWithTag(atmosConfig, n, file)
+			val, err := getValueWithTag(atmosConfig, n, file)
+			if err != nil {
+				return err
+			}
+			n.Value = val
 		}
 
 		if err := processCustomTags(atmosConfig, n, file); err != nil {
@@ -90,14 +96,24 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	return nil
 }
 
-func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) string {
-	if n.Tag == AtmosYamlFuncInclude {
-		// Detect the protocols
-		// Detect relative paths and convert to absolute paths
+func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) (string, error) {
+	val := n.Value
+	tag := n.Tag
 
+	if tag == AtmosYamlFuncInclude {
+		// Detect relative paths and convert to absolute paths
+		if strings.HasPrefix(val, ".") || strings.HasPrefix(val, "..") {
+			resolved := ResolveRelativePath(val, file)
+
+			if !FileExists(resolved) {
+				return "", fmt.Errorf("the function '!include %s' references a file which does not exist", val)
+			}
+
+			val = resolved
+		}
 	}
 
-	return n.Tag + " " + n.Value
+	return tag + " " + val, nil
 }
 
 func UnmarshalYAML[T any](input string) (T, error) {

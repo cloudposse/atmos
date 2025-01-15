@@ -15,7 +15,7 @@
 # are independent settings (supporting both absolute and relative paths).
 # If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
 # are considered paths relative to 'base_path'.
-base_path: ""
+base_path: "./examples/quick-start-advanced"
 
 vendor:
   # Path to vendor configuration file or directory containing vendor files
