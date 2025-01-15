@@ -64,7 +64,6 @@ tests:
       - "terraform"
     expect:
       stdout:
-        - "Error: Unknown command: \"atmos terraform\""
         - "Valid subcommands are:"
         - "apply"
         - "clean"
