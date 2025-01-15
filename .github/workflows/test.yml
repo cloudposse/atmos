@@ -86,14 +86,6 @@ jobs:
     timeout-minutes: 15
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      # Configures Git to ensure LF line endings on Windows to pass the `atmos validate editorconfig` check.
-      # The check expects LF endings, but on Windows, files might default to CRLF due to core.autocrlf.
-      # Since the validation runs in CI, we enforce consistent settings across all OS environments.
-      - name: Set Git Preferences for windows
-        if: matrix.flavor.target == 'windows'
-        run: |
-          git config --global core.autocrlf false
-          git config --global core.eol lf
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
