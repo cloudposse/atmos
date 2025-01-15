@@ -16,5 +16,3 @@ website/src/components/Screengrabs/**/*.html linguist-generated=true binary
 *.eps binary
 *.ansi binary
 *.mp4 binary
-# Ensure all files use LF line endings
-* text eol=lf
