@@ -9,5 +9,5 @@ tests:
       - "pull"
     expect:
       stderr:
-        - "Vendoring is not configured. To set up vendoring please see https://atmos.tools/core-concepts/vendor/"
+        - "Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/"
       exit_code: 1
