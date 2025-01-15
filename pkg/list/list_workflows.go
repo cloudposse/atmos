@@ -115,5 +115,5 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig) (stri
 		Headers(header...).
 		Rows(rows...)
 
-	return t.String(), nil
+	return t.String() + "\n", nil
 }
