@@ -23,5 +23,5 @@ tests:
       - "editorconfig"
     expect:
       stderr:
-        - "16 errors found"
+        - "2 errors found"
       exit_code: 1
