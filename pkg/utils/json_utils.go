@@ -24,7 +24,14 @@ func PrintAsJSON(data any) error {
 		return err
 	}
 
-	PrintMessage(prettyJSON.String())
+	atmosConfig := ExtractAtmosConfig(data)
+	highlighted, err := HighlightCodeWithConfig(prettyJSON.String(), atmosConfig)
+	if err != nil {
+		// Fallback to plain text if highlighting fails
+		PrintMessage(prettyJSON.String())
+		return nil
+	}
+	PrintMessage(highlighted)
 	return nil
 }
 

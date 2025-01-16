@@ -320,11 +320,17 @@ settings:
 
   # Terminal settings for displaying content
   terminal:
-    max_width: 120      # Maximum width for terminal output
-    pager: true         # Use pager for long output
-    timestamps: false   # Show timestamps in logs
-    colors: true       # Enable colored output
-    unicode: true      # Use unicode characters
+    max_width: 120          # Maximum width for terminal output
+    pager: true             # Pager setting for all terminal output
+    colors: true            # Enable colored output
+    unicode: true           # Use unicode characters
+
+    syntax_highlighting:
+      enabled: true
+      formatter: terminal   # Output formatter (e.g., terminal, html)
+      theme: dracula        # Highlighting theme
+      line_numbers: true    # Display line numbers
+      wrap: false           # Wrap long lines
 
   # Markdown element styling
   markdown:
