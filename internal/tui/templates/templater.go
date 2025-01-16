@@ -137,8 +137,8 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	return nil
 }
 
-// getTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
-func getTerminalWidth() int {
+// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
+func GetTerminalWidth() int {
 	defaultWidth := 80
 	screenWidth := defaultWidth
 
@@ -156,7 +156,7 @@ func getTerminalWidth() int {
 // WrappedFlagUsages formats the flag usage string to fit within the terminal width
 func WrappedFlagUsages(f *pflag.FlagSet) string {
 	var builder strings.Builder
-	width := getTerminalWidth()
+	width := GetTerminalWidth()
 	printer, err := NewHelpFlagPrinter(&builder, uint(width), f)
 	if err != nil {
 		// If we can't create the printer, return empty string
