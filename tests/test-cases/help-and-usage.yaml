@@ -431,3 +431,17 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
+  - name: atmos atlantis generate repo-config non-existant
+    enabled: true
+    description: "Should show usage for 'atmos atlantis generate repo-config non-existant'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "generate"
+      - "repo-config"
+      - "non-existant"
+    expect:
+      stderr:
+        - "Error: Unknown command \"non-existant\" for \"atmos atlantis generate repo-config\""
+      exit_code: 1
