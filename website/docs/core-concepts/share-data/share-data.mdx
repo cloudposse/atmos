@@ -14,10 +14,15 @@ import File from '@site/src/components/File'
 import Note from '@site/src/components/Note'
 
 <Intro>
-Breaking apart your infrastructure into loosely coupled components is a great way to manage complexity and reuse code. However, sometimes, you need to share data between components. In Atmos, you can easily share settings, configurations, and outputs between components and even tap into external data sources.
+Breaking up your infrastructure components into loosely coupled components is a great way to manage complexity and
+reuse code. However, these smaller components often lead to a situation where you need to share data between components.
+In Atmos, there are several ways you can easily share settings, configurations, and outputs among components and even
+tap into external data sources and stores.
 </Intro>
 
-There are two ways to approach this: using native Terraform support for remote state to read outputs from other components or using template functions in stack configurations. In this chapter, you’ll learn how to share state between components within the same stack or even across different stacks.
+There are multiple ways to approach this: using native Terraform support for remote state to read outputs from other
+components or using template functions in stack configurations. In this chapter, you’ll learn how to share state between
+components within the same stack or even across different stacks.
 
 <KeyPoints>
 - Why you might need to share data between components
@@ -26,6 +31,38 @@ There are two ways to approach this: using native Terraform support for remote s
 </KeyPoints>
 
 
+## Using YAML Functions
+
+###  Function: `!store`
+
+The `!store` YAML function can read data from a remote store such as SSM Parameter Store or Artifactory.
+
+For example, we can read the `vpc_id` output of the `vpc` component in the current stack from the SSM Parameter Store
+configured in `atmos.yaml` as 'ssm/prod` simply by doing:
+
+```yaml
+components:
+  terraform:
+    cluster:
+      vars:
+        vpc_id: !store ssm/prod vpc vpc_id
+```
+
+To access the configuration of a component in a different stack, you can specify the stack name as the third argument.
+For example, here we're reading the `vpc_id` output of the `vpc` component in the `staging` stack:
+
+```yaml
+components:
+  terraform:
+    cluster:
+      vars:
+        vpc_id: !store ssm/prod vpc staging vpc_id
+```
+
+<ActionCard>
+For more advanced examples, check out the `!store` yaml function documentation.
+<PrimaryCTA to="/core-concepts/stacks/yaml-functions/store">Learn More</PrimaryCTA>
+</ActionCard>
 
 ## Using Template Functions
 
@@ -173,5 +210,5 @@ resource "aws_network_acl" "default" {
 
 <ActionCard>
   Use the Terraform-native `remote-state` module to share data between components.
-  <PrimaryCTA to="/core-concepts/components/terraform/remote-state">Learn How</PrimaryCTA>
+  <PrimaryCTA to="/core-concepts/share-data/remote-state">Learn How</PrimaryCTA>
 </ActionCard>
