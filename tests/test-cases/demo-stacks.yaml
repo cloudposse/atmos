@@ -52,6 +52,8 @@ tests:
     snapshot: false
     description: "Verify atmos version --check command functions correctly."
     workdir: "../examples/demo-stacks"
+    env:
+      ATMOS_LOGS_LEVEL: "warn"
     command: "atmos"
     args:
       - "version"
@@ -59,8 +61,8 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
-        - "Atmos Releases: https://github.com/cloudposse/atmos/releases │"
-        - "Install Atmos: https://atmos.tools/install"
+        - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
+        - 'Install Atmos: https://atmos\.tools/install'
       stderr:
         - "^$"
       exit_code: 0
