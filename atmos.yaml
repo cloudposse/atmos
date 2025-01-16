@@ -389,6 +389,30 @@ settings:
       color: "${colors.muted}"
       italic: true
 
+
+  docs:
+    max-width: 100
+    pagination: false
+    generate:
+      # To Do: Add logic to mirror the one in build-harness on finding the README.yaml (repo owner->org->check avail repos etc)
+      input:
+        - "./README.yaml"
+      # To Do: template can be a remote URL/github, using this local for testing
+      template:
+        - "./build-harness/templates/README.md.gotmpl"
+      # The final README
+      output: "README.md"
+      terraform:
+        enabled: true
+        format: "markdown"
+        show_providers: false
+        show_inputs: true
+        show_outputs: true
+        sort_by: "name"
+        hide_empty: false
+        indent_level: 2  
+
+
 version:
   check:
     enabled: true
