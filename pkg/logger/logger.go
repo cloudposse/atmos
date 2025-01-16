@@ -20,6 +20,15 @@ const (
 	LogLevelWarning LogLevel = "Warning"
 )
 
+// logLevelOrder defines the order of log levels from most verbose to least verbose
+var logLevelOrder = map[LogLevel]int{
+	LogLevelTrace:   0,
+	LogLevelDebug:   1,
+	LogLevelInfo:    2,
+	LogLevelWarning: 3,
+	LogLevelOff:     4,
+}
+
 type Logger struct {
 	LogLevel LogLevel
 	File     string
@@ -45,18 +54,14 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		return LogLevelInfo, nil
 	}
 
-	switch LogLevel(logLevel) { // Convert logLevel to type LogLevel
-	case LogLevelTrace:
-		return LogLevelTrace, nil
-	case LogLevelDebug:
-		return LogLevelDebug, nil
-	case LogLevelInfo:
-		return LogLevelInfo, nil
-	case LogLevelWarning:
-		return LogLevelWarning, nil
-	default:
-		return LogLevelInfo, fmt.Errorf("invalid log level '%s'. Supported log levels are Trace, Debug, Info, Warning, Off", logLevel)
+	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelOff}
+	for _, level := range validLevels {
+		if LogLevel(logLevel) == level {
+			return level, nil
+		}
 	}
+
+	return "", fmt.Errorf("Error: Invalid log level '%s'. Valid options are: %v", logLevel, validLevels)
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {
@@ -104,7 +109,7 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 }
 
 func (l *Logger) Error(err error) {
-	if err != nil {
+	if err != nil && l.LogLevel != LogLevelOff {
 		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
 			color.Red("Error logging the error:")
@@ -115,35 +120,34 @@ func (l *Logger) Error(err error) {
 	}
 }
 
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+func (l *Logger) isLevelEnabled(level LogLevel) bool {
+	if l.LogLevel == LogLevelOff {
+		return false
+	}
+	return logLevelOrder[level] >= logLevelOrder[l.LogLevel]
+}
+
 func (l *Logger) Trace(message string) {
-	if l.LogLevel == LogLevelTrace {
+	if l.isLevelEnabled(LogLevelTrace) {
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
-	if l.LogLevel == LogLevelTrace ||
-		l.LogLevel == LogLevelDebug {
-
+	if l.isLevelEnabled(LogLevelDebug) {
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Info(message string) {
-	if l.LogLevel == LogLevelTrace ||
-		l.LogLevel == LogLevelDebug ||
-		l.LogLevel == LogLevelInfo {
-
-		l.log(theme.Colors.Default, message)
+	if l.isLevelEnabled(LogLevelInfo) {
+		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
-	if l.LogLevel == LogLevelTrace ||
-		l.LogLevel == LogLevelDebug ||
-		l.LogLevel == LogLevelInfo ||
-		l.LogLevel == LogLevelWarning {
-
+	if l.isLevelEnabled(LogLevelWarning) {
 		l.log(theme.Colors.Warning, message)
 	}
 }
