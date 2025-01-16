@@ -47,7 +47,7 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, false)
 	if err != nil {
 		return err
 	}
@@ -88,10 +88,9 @@ func generateAllReadmes(atmosConfig schema.AtmosConfiguration, baseDir string, d
 	return err
 }
 
-// generateSingleReadme merges the data from 'docsGenerate.Input' + local README.yaml,
-// calls terraform-docs if needed, and renders final README
+// generateSingleReadme merges the data from 'docsGenerate.Input' + local README.yaml then calls terraform-docs if needed, and renders final README
 func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerate) error {
-	// 1) Merge data from all YAML inputs
+	// Merge data from all YAML inputs
 	mergedData := map[string]interface{}{}
 
 	for _, src := range docsGenerate.Input {
@@ -113,7 +112,6 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		}
 	}
 
-	// 2) If terraform-docs is enabled, run it
 	if docsGenerate.Terraform.Enabled {
 		terraformDocs, err := runTerraformDocs(dir, docsGenerate.Terraform)
 		if err != nil {
@@ -122,27 +120,26 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		mergedData["terraform_docs"] = terraformDocs
 	}
 
-	// 3) Find or download the first valid template
+	// Find or download the first valid template
 	chosenTemplate, err := pickFirstAvailableTemplate(docsGenerate.Template, dir)
 	if err != nil {
 		u.LogDebug(atmosConfig, fmt.Sprintf("No valid template found, defaulting to minimal README. Error was: %v", err))
 		chosenTemplate = "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
 	}
 
-	// 4) Render final Markdown
-	rendered, err := ProcessTmplWithDatasources(
+	// Render final Markdown with Gomplate 3.x
+	rendered, err := ProcessTmplWithDatasourcesGomplate(
 		atmosConfig,
 		schema.Settings{},
 		"docs-generate",
 		chosenTemplate,
 		mergedData,
-		false,
+		true,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to render template with datasources: %w", err)
 	}
 
-	// 5) Write the output
 	outputFile := docsGenerate.Output
 	if outputFile == "" {
 		outputFile = "README.md"
@@ -208,7 +205,6 @@ func runTerraformDocs(dir string, settings schema.TerraformDocsSettings) (string
 	config := tfdocsPrint.DefaultConfig()
 	config.ModuleRoot = dir
 
-	//Some settings
 	config.Sections.Providers = settings.ShowProviders
 	config.Sections.Inputs = settings.ShowInputs
 	config.Sections.Outputs = settings.ShowOutputs
@@ -280,6 +276,7 @@ func inMemoryYaml(m map[string]interface{}) string {
 	return "string://" + string(b)
 }
 
+// TBC: Check if it can be replaced with mergo as it is done in other places
 func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
 	out := make(map[string]interface{}, len(dst))
 	for k, v := range dst {
