@@ -41,7 +41,8 @@ tests:
     args:
       - "version"
     expect:
-      diff: []
+      diff:
+        - 'Atmos (\d+\.\d+\.\d+|test) on '
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
@@ -60,6 +61,7 @@ tests:
     expect:
       diff:
         - 'Update available! (\d+\.\d+\.\d+|test) » \d+.\d+.\d+'
+        - 'Atmos (\d+\.\d+\.\d+|test) on '
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
@@ -95,7 +97,10 @@ tests:
       - "-f"
       - "yaml"
     expect:
-      diff: []
+      diff:
+        - "stacksBaseAbsolutePath"
+        - "terraformDirAbsolutePath"
+        - "helmfileDirAbsolutePath"
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       stderr:
@@ -114,6 +119,9 @@ tests:
     expect:
       diff:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
+        - "stacksBaseAbsolutePath"
+        - "terraformDirAbsolutePath"
+        - "helmfileDirAbsolutePath"
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stderr:

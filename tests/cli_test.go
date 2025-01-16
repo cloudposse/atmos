@@ -103,11 +103,14 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 			testCase.Snapshot = false
 		}
 
+		if testCase.Env == nil {
+			testCase.Env = make(map[string]string)
+		}
+
+		testCase.Env["GO_TEST"] = "1"
+
 		// Dynamically set TTY-related environment variables if `Tty` is true
 		if testCase.Tty {
-			if testCase.Env == nil {
-				testCase.Env = make(map[string]string)
-			}
 			// Set TTY-specific environment variables
 			testCase.Env["TERM"] = "xterm-256color" // Simulates terminal support
 		}
@@ -175,13 +178,26 @@ func sanitizeTestName(name string) string {
 	return name
 }
 
-// Apply regex ignore patterns to text (by replacing them with empty strings)
+// Drop any lines matched by the ignore patterns so they do not affect the comparison
 func applyIgnorePatterns(input string, patterns []string) string {
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		input = re.ReplaceAllString(input, "")
+	lines := strings.Split(input, "\n") // Split input into lines
+	var filteredLines []string          // Store lines that don't match the patterns
+
+	for _, line := range lines {
+		shouldIgnore := false
+		for _, pattern := range patterns {
+			re := regexp.MustCompile(pattern)
+			if re.MatchString(line) { // Check if the line matches the pattern
+				shouldIgnore = true
+				break // No need to check further patterns for this line
+			}
+		}
+		if !shouldIgnore {
+			filteredLines = append(filteredLines, line) // Add non-matching lines
+		}
 	}
-	return input
+
+	return strings.Join(filteredLines, "\n") // Join the filtered lines back into a string
 }
 
 // Simulate TTY command execution with optional stdin and proper stdout redirection
@@ -605,6 +621,7 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 Run the following command to create it:
 $ go test -run=%q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
+
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
 	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
 

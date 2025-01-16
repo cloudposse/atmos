@@ -116,6 +116,12 @@ var docsCmd = &cobra.Command{
 
 		// Opens atmos.tools docs if no component argument is provided
 		var err error
+
+		if os.Getenv("GO_TEST") == "1" {
+			u.LogDebug(atmosConfig, "Skipping browser launch in test environment")
+			return // Skip launching the browser
+		}
+
 		switch runtime.GOOS {
 		case "linux":
 			err = exec.Command("xdg-open", atmosDocsURL).Start()

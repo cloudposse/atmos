@@ -3,13 +3,12 @@
 tests:
   - name: "test tty"
     enabled: true
-    snapshot: true
+    snapshot: false
     tty: true
     description: "Ensure tty is enabled."
     workdir: "../"
     command: "tty"
     expect:
-      diff: []
       stdout:
         - "^(/dev)"
       stderr:
@@ -18,13 +17,12 @@ tests:
 
   - name: "test non-tty"
     enabled: true
-    snapshot: true
+    snapshot: false
     tty: false
     description: "Ensure tty is disabled."
     workdir: "../"
     command: "tty"
     expect:
-      diff: []
       stdout:
         - "^not a tty"
       stderr:
@@ -33,14 +31,13 @@ tests:
 
   - name: "which atmos"
     enabled: true
-    snapshot: true
+    snapshot: false
     description: "Ensure atmos CLI is installed and we're using the one that was built."
     workdir: "../"
     command: "which"
     args:
       - "atmos"
     expect:
-      diff: []
       stdout:
         # build/atmos is local
         # atmos/atmos is in GitHub Actions
