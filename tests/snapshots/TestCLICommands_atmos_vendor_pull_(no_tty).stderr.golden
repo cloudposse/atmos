@@ -1,19 +1,7 @@
 Vendoring from 'vendor.yaml'
 No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
-Failed to vendor github/stargazers: error : failed to download package: error downloading 'https://github.com/cloudposse/atmos.git?ref=main': /usr/bin/git exited with 128: Cloning into '/var/folders/xd/jg70jgfs1dj7gdn5dl3hlnkr0000gn/T/getter2130591943/temp'...
-error: RPC failed; HTTP 500 curl 22 The requested URL returned error: 500
-fatal: expected flush after ref listing
-
-
-x github/stargazers (main)
+✓ github/stargazers (main)
 ✓ weather (main)
-Failed to vendor ipinfo: error : failed to download package: error downloading 'https://github.com/cloudposse/atmos.git?ref=main': /usr/bin/git exited with 128: Cloning into '/var/folders/xd/jg70jgfs1dj7gdn5dl3hlnkr0000gn/T/getter3743721216/temp'...
-remote: Internal Server Error
-fatal: unable to access 'https://github.com/cloudposse/atmos.git/': The requested URL returned error: 500
-
-
-x ipinfo (main)
-Vendored 1 components. Failed to vendor 2 components.
-
+✓ ipinfo (main)
 Vendored 3 components.
 

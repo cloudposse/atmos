@@ -13,8 +13,14 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
+	"github.com/hexops/gotextdiff/span"
+	"github.com/muesli/termenv"
 	"github.com/sergi/go-diff/diffmatchpatch"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -22,6 +28,12 @@ import (
 var regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
 var startingDir string
 var snapshotBaseDir string
+
+// Define styles using lipgloss
+var (
+	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
+	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("160")) // Red
+)
 
 type Expectation struct {
 	Stdout       []MatchPattern            `yaml:"stdout"`        // Expected stdout output
@@ -143,6 +155,11 @@ func (pm *PathManager) Apply() error {
 	return os.Setenv("PATH", pm.GetPath())
 }
 
+// Determine if running in a CI environment
+func isCIEnvironment() bool {
+	return os.Getenv("CI") != ""
+}
+
 // sanitizeTestName converts t.Name() into a valid filename.
 func sanitizeTestName(name string) string {
 	// Replace slashes with underscores
@@ -255,6 +272,9 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
+
+	// Ensure that Lipgloss uses terminal colors for tests
+	lipgloss.SetColorProfile(termenv.TrueColor)
 
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
@@ -498,11 +518,65 @@ func readSnapshot(t *testing.T, fullPath string) string {
 	return string(data)
 }
 
+// Generate a unified diff using gotextdiff
+func generateUnifiedDiff(actual, expected string) string {
+	edits := myers.ComputeEdits(span.URIFromPath("actual"), expected, actual)
+	unified := gotextdiff.ToUnified("expected", "actual", expected, edits)
+
+	// Use a buffer to construct the colorized diff
+	var buf bytes.Buffer
+	for _, line := range strings.Split(fmt.Sprintf("%v", unified), "\n") {
+		switch {
+		case strings.HasPrefix(line, "+"):
+			// Apply green style for additions
+			fmt.Fprintln(&buf, addedStyle.Render(line))
+		case strings.HasPrefix(line, "-"):
+			// Apply red style for deletions
+			fmt.Fprintln(&buf, removedStyle.Render(line))
+		default:
+			// Keep other lines as-is
+			fmt.Fprintln(&buf, line)
+		}
+	}
+	return buf.String()
+}
+
+// Generate a diff using diffmatchpatch
 func DiffStrings(x, y string) string {
 	dmp := diffmatchpatch.New()
 	diffs := dmp.DiffMain(x, y, false)
 	dmp.DiffCleanupSemantic(diffs) // Clean up the diff for readability
 	return dmp.DiffPrettyText(diffs)
+}
+
+// Colorize diff output based on the threshold
+func colorizeDiffWithThreshold(actual, expected string, threshold int) string {
+	dmp := diffmatchpatch.New()
+	diffs := dmp.DiffMain(expected, actual, false)
+	dmp.DiffCleanupSemantic(diffs)
+
+	var sb strings.Builder
+	for _, diff := range diffs {
+		text := diff.Text
+		switch diff.Type {
+		case diffmatchpatch.DiffInsert, diffmatchpatch.DiffDelete:
+			if len(text) < threshold {
+				// For short diffs, highlight entire line
+				sb.WriteString(fmt.Sprintf("\033[1m\033[33m%s\033[0m", text))
+			} else {
+				// For long diffs, highlight at word/character level
+				color := "\033[32m" // Insert: green
+				if diff.Type == diffmatchpatch.DiffDelete {
+					color = "\033[31m" // Delete: red
+				}
+				sb.WriteString(fmt.Sprintf("%s%s\033[0m", color, text))
+			}
+		case diffmatchpatch.DiffEqual:
+			sb.WriteString(text)
+		}
+	}
+
+	return sb.String()
 }
 
 func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string, regenerate bool) bool {
@@ -535,7 +609,15 @@ $ go test -run=%q -regenerate-snapshots`, stdoutPath, t.Name())
 	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
 
 	if filteredStdoutExpected != filteredStdoutActual {
-		diff := DiffStrings(filteredStdoutExpected, filteredStdoutActual)
+		var diff string
+		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
+			// Generate a colorized diff for better readability
+			diff = generateUnifiedDiff(filteredStdoutActual, filteredStdoutExpected)
+
+		} else {
+			diff = colorizeDiffWithThreshold(filteredStdoutActual, filteredStdoutExpected, 10)
+		}
+
 		t.Errorf("Stdout mismatch for %q:\n%s", stdoutPath, diff)
 	}
 
@@ -549,8 +631,14 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
 
 	if filteredStderrExpected != filteredStderrActual {
-		diff := DiffStrings(filteredStderrExpected, filteredStderrActual)
-		t.Errorf("Stderr mismatch for %q:\n%s", stderrPath, diff)
+		var diff string
+		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
+			diff = generateUnifiedDiff(filteredStderrActual, filteredStderrExpected)
+		} else {
+			// Generate a colorized diff for better readability
+			diff = colorizeDiffWithThreshold(filteredStderrActual, filteredStderrExpected, 10)
+		}
+		t.Errorf("Stderr mismatch for %q:\n%s", stdoutPath, diff)
 	}
 
 	return true

@@ -42,7 +42,9 @@ tests:
     expect:
       diff: []
       stdout:
-        - '(build[/\\]atmos)'
+        # build/atmos is local
+        # atmos/atmos is in GitHub Actions
+        - '(build[/\\]atmos|atmos/atmos)'
       stderr:
         - "^$"
       exit_code: 0
