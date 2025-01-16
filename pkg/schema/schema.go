@@ -38,11 +38,21 @@ type AtmosConfiguration struct {
 }
 
 type Terminal struct {
-	MaxWidth   int  `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
-	Pager      bool `yaml:"pager" json:"pager" mapstructure:"pager"`
-	Timestamps bool `yaml:"timestamps" json:"timestamps" mapstructure:"timestamps"`
-	Colors     bool `yaml:"colors" json:"colors" mapstructure:"colors"`
-	Unicode    bool `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
+	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
+	Pager              bool               `yaml:"pager" json:"pager" mapstructure:"pager"`
+	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
+	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
+	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
+}
+
+type SyntaxHighlighting struct {
+	Enabled                bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Lexer                  string `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
+	Formatter              string `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
+	Theme                  string `yaml:"theme" json:"theme" mapstructure:"theme"`
+	HighlightedOutputPager bool   `yaml:"pager" json:"pager" mapstructure:"pager"`
+	LineNumbers            bool   `yaml:"line_numbers" json:"line_numbers" mapstructure:"line_numbers"`
+	Wrap                   bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
 }
 
 type AtmosSettings struct {
