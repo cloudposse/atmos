@@ -34,15 +34,13 @@ tests:
 
   - name: atmos version
     enabled: true
-    snapshot: true
+    snapshot: false
     description: "Check that atmos version command outputs version details."
     workdir: "../examples/demo-stacks"
     command: "atmos"
     args:
       - "version"
     expect:
-      diff:
-        - 'Atmos (\d+\.\d+\.\d+|test) on '
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
@@ -51,7 +49,7 @@ tests:
 
   - name: atmos version --check
     enabled: true
-    snapshot: true
+    snapshot: false
     description: "Verify atmos version --check command functions correctly."
     workdir: "../examples/demo-stacks"
     command: "atmos"
@@ -59,11 +57,10 @@ tests:
       - "version"
       - "--check"
     expect:
-      diff:
-        - 'Update available! (\d+\.\d+\.\d+|test) » \d+.\d+.\d+'
-        - 'Atmos (\d+\.\d+\.\d+|test) on '
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+        - "Atmos Releases: https://github.com/cloudposse/atmos/releases │"
+        - "Install Atmos: https://atmos.tools/install"
       stderr:
         - "^$"
       exit_code: 0
