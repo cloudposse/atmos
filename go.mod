@@ -5,6 +5,7 @@ go 1.23
 require (
 	dario.cat/mergo v1.0.1
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/adrg/xdg v0.5.3
 	github.com/alecthomas/chroma v0.10.0
 	github.com/arsham/figurine v1.3.0
 	github.com/aws/aws-sdk-go-v2 v1.32.7

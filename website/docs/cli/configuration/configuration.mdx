@@ -215,44 +215,7 @@ Relative paths, such as `components.terraform.base_path`, `components.helmfile.b
 Each setting (`components.terraform.base_path`, `components.helmfile.base_path`, `stacks.base_path`, and `workflows.base_path`) operates independently and can accept either an absolute or a relative path.
 <File title="atmos config">
 
-```mermaid
-flowchart TD
-    A[CLI Configuration atmos.yaml] --> B[Load Stage 1]
-    B -->|--config flag| C[Atmos Config]
-    B -->|No --config flag| D[Read system directory with lowest priority]
-    C --> E{Multiple --config flags?}
-    E -->|Yes| F[Deep merge configurations in the order provided]
-    E -->|No| G[Use single configuration]
-    B --> H[Load Stage 2: Discover Additional Configurations]
-    H --> I[ATMOS_CLI_CONFIG_PATH environment variable points to folder or file]
-    H --> J[Git Repository Root]
-    I --> K[Atmos searches folder for atmos.yaml and related files]
-    J --> L[Atmos searches repository root for atmos.yaml and related files]
-    K --> M{Is it a folder or file?}
-    M -->|Folder| N[Load YAML files in lexicographical order]
-    M -->|File| O[Load specified file]
-    L --> P[Load atmos.yaml or other YAML files in priority order]
-    H --> Q[Stage 3: Apply User Preferences]
-    Q --> R[$XDG_CONFIG_HOME/atmos/atmos.yaml allows user preferences and overrides]
-    Q --> S[Imports]
-    S --> T[Remote URL]
-    S --> U[Specific Path]
-    S --> V[Wildcard globs such as YAML files]
 
-    style A fill:#E63946,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-    style B fill:#457B9D,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-    style H fill:#457B9D,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-    style Q fill:#457B9D,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-    style S fill:#A8DADC,stroke:#1D3557,stroke-width:2px,color:#000000
-    style E fill:#F4A261,stroke:#1D3557,stroke-width:2px,color:#000000
-    style M fill:#F4A261,stroke:#1D3557,stroke-width:2px,color:#000000
-    style F fill:#2A9D8F,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-    style G fill:#2A9D8F,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-    style T fill:#8D99AE,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-    style U fill:#8D99AE,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-    style V fill:#8D99AE,stroke:#1D3557,stroke-width:2px,color:#FFFFFF
-```
-</File>
 
 ## Default CLI Configuration
 

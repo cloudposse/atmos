@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/spf13/viper"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack
@@ -765,4 +766,62 @@ func SearchConfigFile(configPath string, atmosConfig schema.AtmosConfiguration) 
 	}
 
 	return "", fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", configPath, dir, base)
+}
+
+// ProcessConfigFile attempts to load a configuration file.
+// Returns whether the file was found and loaded, the absolute path, and any error encountered.
+func ProcessConfigFile(config interface{}, configPath string, v *viper.Viper) (bool, string, error) {
+	absPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return false, "", fmt.Errorf("unable to get absolute path for %s: %w", configPath, err)
+	}
+
+	// Check if the file exists
+	info, err := os.Stat(absPath)
+	if os.IsNotExist(err) {
+		return false, "", nil
+	} else if err != nil {
+		return false, "", fmt.Errorf("error accessing config file (%s): %w", absPath, err)
+	}
+
+	if info.IsDir() {
+		// If it's a directory, attempt to load all .yaml files within it
+		err := filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && (filepath.Ext(path) == ".yaml" || filepath.Ext(path) == ".yml") {
+				v.SetConfigFile(path)
+				if readErr := v.MergeInConfig(); readErr != nil {
+					return fmt.Errorf("error reading config file (%s): %w", path, readErr)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return false, absPath, err
+		}
+		return true, absPath, nil
+	}
+
+	// Load the single configuration file
+	v.SetConfigFile(absPath)
+	if err := v.MergeInConfig(); err != nil {
+		return false, absPath, fmt.Errorf("error reading config file (%s): %w", absPath, err)
+	}
+
+	return true, absPath, nil
+}
+
+// GetHomeDir returns the user's home directory.
+// It returns an error if the home directory cannot be determined.
+func GetHomeDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("unable to determine home directory: %w", err)
+	}
+	if homeDir == "" {
+		return "", fmt.Errorf("home directory not found")
+	}
+	return homeDir, nil
 }
