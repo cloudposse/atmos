@@ -111,7 +111,7 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 			return tag + " " + resolved, nil
 		}
 
-		// Check if the `include` function points to an Atmos stack manifest
+		// Check if the `include` function points to an Atmos stack manifest relative to the `base_path` defined in `atmos.yaml`
 		atmosManifestPath := filepath.Join(atmosConfig.BasePath, val)
 		if FileExists(atmosManifestPath) {
 			atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
