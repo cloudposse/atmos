@@ -155,6 +155,8 @@ jobs:
 
       - name: Acceptance tests
         timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc
 
   docker:
