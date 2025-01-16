@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -51,6 +52,23 @@ var (
 				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
 				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 				UseEKS:                true,
+			},
+		},
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+			Terminal: schema.Terminal{
+				MaxWidth: templates.GetTerminalWidth(),
+				Pager:    true,
+				Colors:   true,
+				Unicode:  true,
+				SyntaxHighlighting: schema.SyntaxHighlighting{
+					Enabled:                true,
+					Formatter:              "terminal",
+					Theme:                  "dracula",
+					HighlightedOutputPager: true,
+					LineNumbers:            true,
+					Wrap:                   false,
+				},
 			},
 		},
 		Workflows: schema.Workflows{
