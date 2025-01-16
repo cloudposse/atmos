@@ -162,7 +162,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			version := grayColor.Render(version)
 			return m, tea.Sequence(
-				tea.Printf("%s %s %s", mark, pkg.name, version),
+				tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
 				tea.Quit,
 			)
 		}
@@ -245,7 +245,6 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				name: p.name,
 			}
 		}
-
 		// Create temp directory
 		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
 		if err != nil {
@@ -269,6 +268,9 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
+			// Register custom detectors
+			RegisterCustomDetectors(atmosConfig)
+
 			client := &getter.Client{
 				Ctx:  ctx,
 				Dst:  tempDir,
