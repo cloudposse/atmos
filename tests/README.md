@@ -2,7 +2,9 @@
 
 We have automated tests in packages, as well as standalone tests in this directory.
 
-```
+Smoke tests are implemented to verify the basic functionality and expected behavior of the compiled `atmos` binary, simulating real-world usage scenarios.
+
+```shell
 ├── cli_test.go                                      # Responsible for smoke testing
 ├── fixtures/
 │   ├── components/
@@ -23,7 +25,7 @@ We have automated tests in packages, as well as standalone tests in this directo
     ├── demo-vendoring.yaml
     ├── metadata.yaml
     ├── relative-paths.yaml
-    └── schema.json
+    └── schema.json                                 # JSON schema for validation
 
 ```
 
@@ -53,6 +55,13 @@ To regenerate snapshots pass the `-regenerate-snaphosts` flag.
 > ```
 
 ### Example Configuration
+
+We support an explicit type `!not` on the `expect.stdout` and `expect.stderr` sections (not on `expect.diff`)
+
+Snapshots are enabled by setting the `snapshots` flag, and using the `expect.diff` to ignore line-level differences. If no differences are expected, use an empty list. Note, things like paths will change between local development and CI, so some differences are often expected.
+
+We recommend testing incorrect usage with `expect.exit_code` of non-zero. For example, passing unsupported arguments.
+
 
 ```yaml
 # yaml-language-server: $schema=schema.json

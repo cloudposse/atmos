@@ -67,9 +67,17 @@
     "terminal": {
       "max_width": 0,
       "pager": false,
-      "timestamps": false,
       "colors": false,
-      "unicode": false
+      "unicode": false,
+      "syntax_highlighting": {
+        "enabled": false,
+        "lexer": "",
+        "formatter": "",
+        "theme": "",
+        "pager": false,
+        "line_numbers": false,
+        "wrap": false
+      }
     },
     "docs": {
       "max_width": 0,

@@ -101,6 +101,8 @@ tests:
         - "stacksBaseAbsolutePath"
         - "terraformDirAbsolutePath"
         - "helmfileDirAbsolutePath"
+        - 'examples/demo-stacks/stacks/\*\*/_defaults.yaml'
+        - 'examples/demo-stacks/stacks/deploy/\*\*/\*'
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       stderr:
@@ -122,6 +124,8 @@ tests:
         - "stacksBaseAbsolutePath"
         - "terraformDirAbsolutePath"
         - "helmfileDirAbsolutePath"
+        - 'examples/demo-stacks/stacks/\*\*/_defaults.yaml'
+        - 'examples/demo-stacks/stacks/deploy/\*\*/\*'
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stderr:
