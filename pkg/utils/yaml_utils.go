@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -101,16 +102,27 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 	tag := n.Tag
 
 	if tag == AtmosYamlFuncInclude {
-		// Detect relative paths and convert to absolute paths
-		if strings.HasPrefix(val, ".") || strings.HasPrefix(val, "..") {
+		// Detect relative paths (relative to the manifest file) and convert to absolute paths
+		if strings.HasPrefix(val, "./") || strings.HasPrefix(val, "../") {
 			resolved := ResolveRelativePath(val, file)
 			if !FileExists(resolved) {
 				return "", fmt.Errorf("the function '!include %s' points to a file that does not exist", val)
 			}
-			val = resolved
+			return tag + " " + resolved, nil
+		}
+
+		// Check if the `include` function points to an Atmos stack manifest
+		atmosManifestPath := filepath.Join(atmosConfig.BasePath, val)
+		if FileExists(atmosManifestPath) {
+			atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
+			if err != nil {
+				return "", fmt.Errorf("error converting the file path to an ansolute path in the function '!include %s': %v", val, err)
+			}
+			return tag + " " + atmosManifestAbsolutePath, nil
 		}
 	}
 
+	// Return it to be processed by `go-getter`
 	return tag + " " + val, nil
 }
 
