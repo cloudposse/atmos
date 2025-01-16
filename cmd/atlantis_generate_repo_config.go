@@ -14,9 +14,11 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 	Short:              "Generate repository configuration for Atlantis",
 	Long:               "Generate the repository configuration file required for Atlantis to manage Terraform repositories.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args)
+		if len(args) > 0 {
+			showUsageAndExit(cmd, args)
+		}
 		// Check Atmos configuration
 		checkAtmosConfig()
 		err := e.ExecuteAtlantisGenerateRepoConfigCmd(cmd, args)

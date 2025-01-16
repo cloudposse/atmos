@@ -114,7 +114,7 @@ tests:
       stdout:
         - "\\bUsage\\b"
         - "Flags:"
-        - "and the beginning of additional native arguments and flags for the specific command bei"
+        - "and the beginning of additional native arguments and flags for the specific command being run"
       stderr:
         - "^$"
       exit_code: 0
@@ -131,7 +131,7 @@ tests:
       stdout:
         - "\\bUsage\\b"
         - "Flags:"
-        - "and the beginning of additional native arguments and flags for the specific command bei"
+        - "and the beginning of additional native arguments and flags for the specific command being run"
       stderr:
         - "^$"
       exit_code: 0
@@ -233,21 +233,7 @@ tests:
         - "apply"
         - "destroy"
       exit_code: 0
-  - name: atmos helmfile apply 
-    enabled: true
-    description: "Should show error in non atmos workspace"
-    workdir: "../"
-    command: "atmos"
-    args:
-      - "helmfile"
-      - "apply"
-      - "non-existent"
-    expect:
-      stdout:
-        - "CLI config file specifies the directory for Atmos stack"
-        - "Quick Start"
-      exit_code: 1
-  - name: atmos helmfile apply 
+  - name: atmos helmfile apply non-existant
     enabled: true
     description: "Should show error in non atmos workspace"
     workdir: "../"
@@ -431,3 +417,17 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
+  - name: atmos atlantis generate repo-config non-existant
+    enabled: true
+    description: "Should show usage for 'atmos atlantis generate repo-config non-existant'"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "atlantis"
+      - "generate"
+      - "repo-config"
+      - "non-existant"
+    expect:
+      stderr:
+        - "Error: Unknown command \"non-existant\" for \"atmos atlantis generate repo-config\""
+      exit_code: 1
