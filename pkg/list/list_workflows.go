@@ -2,14 +2,14 @@ package list
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/samber/lo"
-	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -84,7 +84,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig) (stri
 	}
 
 	// Check if TTY is attached
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
+	if !exec.CheckTTYSupport() {
 		// Degrade to simple tabular format
 		var output strings.Builder
 		output.WriteString(strings.Join(header, "\t") + "\n")
@@ -97,20 +97,16 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig) (stri
 	// Create a styled table
 	t := table.New().
 		Border(lipgloss.ThickBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("241"))).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
 		StyleFunc(func(row, col int) lipgloss.Style {
+			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 			if row == 0 {
-				return lipgloss.NewStyle().
-					Bold(true).
-					Foreground(lipgloss.Color("99")).
-					Align(lipgloss.Center)
+				return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
 			}
 			if row%2 == 0 {
-				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color("245"))
+				return style.Inherit(theme.Styles.GrayText)
 			}
-			return lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241"))
+			return style.Inherit(theme.Styles.Description)
 		}).
 		Headers(header...).
 		Rows(rows...)
