@@ -48,7 +48,7 @@ func LogErrorAndExit(atmosConfig schema.AtmosConfiguration, err error) {
 // LogError logs errors to std.Error
 func LogError(atmosConfig schema.AtmosConfiguration, err error) {
 	if err != nil {
-		_, printErr := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
+		_, printErr := theme.Colors.Error.Fprintln(color.Error, err.Error())
 		if printErr != nil {
 			theme.Colors.Error.Println("Error logging the error:")
 			theme.Colors.Error.Printf("%s\n", printErr)
