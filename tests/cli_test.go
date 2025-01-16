@@ -107,7 +107,15 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 			testCase.Env = make(map[string]string)
 		}
 
+		// Convey to atmos that it's running in a test environment
 		testCase.Env["GO_TEST"] = "1"
+
+		// Dynamically set GITHUB_TOKEN if not already set, to avoid rate limits
+		if token, exists := os.LookupEnv("GITHUB_TOKEN"); exists {
+			if _, alreadySet := testCase.Env["GITHUB_TOKEN"]; !alreadySet {
+				testCase.Env["GITHUB_TOKEN"] = token
+			}
+		}
 
 		// Dynamically set TTY-related environment variables if `Tty` is true
 		if testCase.Tty {
