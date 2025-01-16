@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -261,7 +262,12 @@ func getTerraformOutputVariable(
 	outputs map[string]any,
 	output string,
 ) any {
-	res, err := u.EvaluateYqExpression(*atmosConfig, outputs, "."+output)
+	val := output
+	if !strings.HasPrefix(output, ".") {
+		val = "." + val
+	}
+
+	res, err := u.EvaluateYqExpression(*atmosConfig, outputs, val)
 
 	if err != nil {
 		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating terrform output '%s' for the component '%s' in the stack '%s':\n%v",
@@ -269,14 +275,6 @@ func getTerraformOutputVariable(
 			component,
 			stack,
 			err,
-		))
-	}
-
-	if res == nil {
-		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating terrform output: the component '%s' in the stack '%s' does not have the output '%s'",
-			component,
-			stack,
-			output,
 		))
 	}
 
@@ -290,7 +288,12 @@ func getStaticRemoteStateOutput(
 	remoteStateSection map[string]any,
 	output string,
 ) any {
-	res, err := u.EvaluateYqExpression(*atmosConfig, remoteStateSection, "."+output)
+	val := output
+	if !strings.HasPrefix(output, ".") {
+		val = "." + val
+	}
+
+	res, err := u.EvaluateYqExpression(*atmosConfig, remoteStateSection, val)
 
 	if err != nil {
 		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating the 'static' remote state backend output '%s' for the component '%s' in the stack '%s':\n%v",
@@ -298,15 +301,6 @@ func getStaticRemoteStateOutput(
 			component,
 			stack,
 			err,
-		))
-	}
-
-	if res == nil {
-		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating the 'static' remote state backend output: the component '%s' in the stack '%s' "+
-			"is configured with the 'static' remote state backend, but the remote state backend does not have the output '%s'",
-			component,
-			stack,
-			output,
 		))
 	}
 
