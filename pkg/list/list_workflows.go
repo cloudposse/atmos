@@ -1,6 +1,7 @@
 package list
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -29,10 +30,12 @@ func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, err
 	return rows, nil
 }
 
-// Filters and lists workflows based on the given file
-func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig) (string, error) {
+// FilterAndListWorkflows filters and lists workflows based on the given file
+func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, format string, delimiter string) (string, error) {
+	// Parse columns configuration
 	header := []string{"File", "Workflow", "Description"}
 
+	// Get all workflows from manifests
 	var rows [][]string
 
 	// If a specific file is provided, validate and load it
@@ -83,43 +86,77 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig) (stri
 
 	// Remove duplicates and sort
 	rows = lo.UniqBy(rows, func(row []string) string {
-		return strings.Join(row, "\t")
+		return strings.Join(row, delimiter)
 	})
 	sort.Slice(rows, func(i, j int) bool {
-		return strings.Join(rows[i], "\t") < strings.Join(rows[j], "\t")
+		return strings.Join(rows[i], delimiter) < strings.Join(rows[j], delimiter)
 	})
 
 	if len(rows) == 0 {
 		return "No workflows found", nil
 	}
 
-	// See if TTY is attached
-	if !exec.CheckTTYSupport() {
-		// Degrade it to tabular output
-		var output strings.Builder
-		output.WriteString(strings.Join(header, "\t") + "\n")
+	// Handle different output formats
+	switch format {
+	case "json":
+		// Convert to JSON format
+		type workflow struct {
+			File        string `json:"file"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		var workflows []workflow
 		for _, row := range rows {
-			output.WriteString(strings.Join(row, "\t") + "\n")
+			workflows = append(workflows, workflow{
+				File:        row[0],
+				Name:        row[1],
+				Description: row[2],
+			})
+		}
+		jsonBytes, err := json.MarshalIndent(workflows, "", "  ")
+		if err != nil {
+			return "", fmt.Errorf("error formatting JSON output: %w", err)
+		}
+		return string(jsonBytes), nil
+
+	case "csv":
+		// Use the provided delimiter for CSV output
+		var output strings.Builder
+		output.WriteString(strings.Join(header, delimiter) + "\n")
+		for _, row := range rows {
+			output.WriteString(strings.Join(row, delimiter) + "\n")
+		}
+		return output.String(), nil
+
+	default:
+		// If format is empty or "table", use table format
+		if format == "" && exec.CheckTTYSupport() {
+			// Create a styled table for TTY
+			t := table.New().
+				Border(lipgloss.ThickBorder()).
+				BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
+				StyleFunc(func(row, col int) lipgloss.Style {
+					style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+					if row == 0 {
+						return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
+					}
+					if row%2 == 0 {
+						return style.Inherit(theme.Styles.GrayText)
+					}
+					return style.Inherit(theme.Styles.Description)
+				}).
+				Headers(header...).
+				Rows(rows...)
+
+			return t.String() + "\n", nil
+		}
+
+		// Default to simple tabular format for non-TTY or when format is explicitly "table"
+		var output strings.Builder
+		output.WriteString(strings.Join(header, delimiter) + "\n")
+		for _, row := range rows {
+			output.WriteString(strings.Join(row, delimiter) + "\n")
 		}
 		return output.String(), nil
 	}
-
-	// Create a styled table
-	t := table.New().
-		Border(lipgloss.ThickBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-			if row == 0 {
-				return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
-			}
-			if row%2 == 0 {
-				return style.Inherit(theme.Styles.GrayText)
-			}
-			return style.Inherit(theme.Styles.Description)
-		}).
-		Headers(header...).
-		Rows(rows...)
-
-	return t.String() + "\n", nil
 }
