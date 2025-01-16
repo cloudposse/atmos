@@ -222,25 +222,3 @@ Copyright © 2017-2024 [Cloud Posse, LLC](https://cpco.io/copyright)
 <a href="https://cloudposse.com/readme/footer/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=readme_footer_link"><img alt="README footer" src="https://cloudposse.com/readme/footer/img"/></a>
 
 <img alt="Beacon" width="0" src="https://ga-beacon.cloudposse.com/UA-76589703-4/cloudposse/atmos?pixel&cs=github&cm=readme&an=atmos"/>
-
-## Testing
-
-### Test Verbosity Control
-
-The test suite supports three verbosity levels to control output:
-
-- `quiet`: Minimal output, only shows failures
-- `normal`: Standard test output (default)
-- `verbose`: Detailed test output with additional debugging information
-
-You can control the verbosity level using the `TEST_VERBOSITY` environment variable:
-
-```bash
-# Run tests with minimal output
-make test TEST_VERBOSITY=quiet
-
-# Run acceptance tests with verbose output
-make testacc TEST_VERBOSITY=verbose
-```
-
-This is particularly useful when running tests in CI environments or when debugging specific test failures.

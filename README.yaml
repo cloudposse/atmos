@@ -135,3 +135,27 @@ introduction: |-
   Find all documentation at: [atmos.tools](https://atmos.tools)
 
 contributors: []
+
+testing:
+  content: |-
+    ## Testing
+
+    ### Test Verbosity Control
+
+    The test suite supports three verbosity levels to control output:
+
+    - `quiet`: Minimal output, only shows failures
+    - `normal`: Standard test output (default)
+    - `verbose`: Detailed test output with additional debugging information
+
+    You can control the verbosity level using the `ATMOS_TEST_VERBOSITY` environment variable:
+
+    ```bash
+    # Run tests with minimal output
+    make test ATMOS_TEST_VERBOSITY=quiet
+
+    # Run acceptance tests with verbose output
+    make testacc ATMOS_TEST_VERBOSITY=verbose
+    ```
+
+    This is particularly useful when running tests in CI environments or when debugging specific test failures.
