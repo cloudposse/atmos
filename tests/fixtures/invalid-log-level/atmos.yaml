@@ -1,0 +1,8 @@
+logs:
+  level: XTrace
+  file: /dev/stdout
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*" 
