@@ -553,6 +553,12 @@ func findAffected(
 										continue
 									}
 								}
+								// Skip disabled components
+								if enabled, ok := metadataSection["enabled"].(bool); ok {
+									if !enabled {
+										continue
+									}
+								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
@@ -790,6 +796,12 @@ func findAffected(
 								// Skip abstract components
 								if metadataType, ok := metadataSection["type"].(string); ok {
 									if metadataType == "abstract" {
+										continue
+									}
+								}
+								// Skip disabled components
+								if enabled, ok := metadataSection["enabled"].(bool); ok {
+									if !enabled {
 										continue
 									}
 								}

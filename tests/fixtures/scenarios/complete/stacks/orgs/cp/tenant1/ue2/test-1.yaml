@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  tenant: "tenant1"
+  environment: "ue2"
+  stage: "test"
+
+components:
+  terraform:
+    disabled-component:
+      metadata:
+        type: real
+        enabled: false
+        component: "test/test-component"
+      vars:
+        enabled: false
+        name: "disabled-component"
