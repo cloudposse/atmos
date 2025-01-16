@@ -53,16 +53,16 @@ deps:
 	go mod download
 
 # Test verbosity levels: quiet, normal, verbose
-TEST_VERBOSITY ?= normal
+ATMOS_TEST_VERBOSITY ?= normal
 
 .PHONY: testacc
 testacc: ## Run all tests
-	@if [ "$(TEST_VERBOSITY)" = "quiet" ]; then \
-		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test ./... -timeout 20m; \
-	elif [ "$(TEST_VERBOSITY)" = "verbose" ]; then \
-		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v -count=1 ./... -timeout 20m; \
+	@if [ "$(ATMOS_TEST_VERBOSITY)" = "quiet" ]; then \
+		go test ./... -timeout 20m; \
+	elif [ "$(ATMOS_TEST_VERBOSITY)" = "verbose" ]; then \
+		go test -v -count=1 ./... -timeout 20m; \
 	else \
-		ATMOS_TEST_VERBOSITY=$(TEST_VERBOSITY) go test -v ./... -timeout 20m; \
+		go test -v ./... -timeout 20m; \
 	fi
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc
