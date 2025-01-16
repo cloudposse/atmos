@@ -6,8 +6,8 @@ docs linguist-documentation=true
 # Screengrabs are binary HTML files that are automatically generated
 website/src/components/Screengrabs/**/*.html linguist-generated=true binary
 
-# Golden snapshots should be treated a raw binary output
-tests/snapshots/**/*.golden linguist-generated=true binary
+# Golden snapshots should be treated a raw output to prevent line-ending conversions
+tests/snapshots/**/*.golden linguist-generated=true -text
 
 # Mark binary files to prevent normalization
 *.png binary
