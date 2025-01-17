@@ -52,8 +52,17 @@ version-windows: build-windows
 deps:
 	go mod download
 
-# Run acceptance tests
-testacc: get
-	go test $(TEST) -v $(TESTARGS) -timeout 2m
+# Test verbosity levels: quiet, normal, verbose
+ATMOS_TEST_VERBOSITY ?= normal
+
+.PHONY: testacc
+testacc: ## Run all tests
+	@if [ "$(ATMOS_TEST_VERBOSITY)" = "quiet" ]; then \
+		go test ./... -timeout 20m; \
+	elif [ "$(ATMOS_TEST_VERBOSITY)" = "verbose" ]; then \
+		go test -v -count=1 ./... -timeout 20m; \
+	else \
+		go test -v ./... -timeout 20m; \
+	fi
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc
