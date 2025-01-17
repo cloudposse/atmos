@@ -48,4 +48,9 @@ components:
         subnet_type_tag_key: "acme/subnet/type"
         ipv4_primary_cidr_block: 10.9.0.0/18
         test1: !include ./dev.yaml
-        test2: !include stacks/catalog/vpc/ue2.yaml
+        test2: !include ./dev.yaml .components.terraform.vpc.vars
+        test3: !include ./dev.yaml .components.terraform.vpc.vars.ipv4_primary_cidr_block
+        test4: !include stacks/catalog/vpc/ue2.yaml
+        test5: !include stacks/catalog/vpc/ue2.yaml .import
+        test6: !include stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones
+        test7: !include stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones[1]
