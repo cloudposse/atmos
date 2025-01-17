@@ -469,7 +469,7 @@ func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
 		// Check if the current OS matches the pattern
 		match := re.MatchString(currentOS)
 		if pattern.Negate && match {
-			t.Logf("Reason: OS %q unexpectedly matched negated pattern %q.", currentOS, pattern.Pattern)
+			t.Logf("Reason: OS %q matched negated pattern %q.", currentOS, pattern.Pattern)
 			success = false
 		} else if !pattern.Negate && !match {
 			t.Logf("Reason: OS %q did not match pattern %q.", currentOS, pattern.Pattern)
