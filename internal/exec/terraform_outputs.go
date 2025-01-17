@@ -231,7 +231,7 @@ func GetTerraformOutput(
 	// Initialize spinner
 	s := spinner.New()
 	s.Style = theme.Styles.Link
-	message := fmt.Sprintf("Fetching Terraform output %s %s %s", component, stack, output)
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
 	p := tea.NewProgram(modelSpinner{
 		spinner: s,

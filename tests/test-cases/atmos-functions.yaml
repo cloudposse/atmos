@@ -11,7 +11,7 @@ tests:
        - "terraform-output"
     expect:
       stdout:
-        - "Fetching Terraform output component-1 nonprod location"
-        - "Fetching Terraform output component-2 nonprod lang"
-        - "Fetching Terraform output component-3 nonprod units"
+        - "Fetching units output from component-3 in nonprod"
+        - "Fetching lang output from component-2 in nonprod"
+        - "Fetching location output from component-1 in nonprod"
       exit_code: 0
