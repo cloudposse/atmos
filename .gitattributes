@@ -20,5 +20,7 @@ tests/snapshots/**/*.golden linguist-generated=true -text
 *.ansi binary
 *.mp4 binary
 
+# Reduce merge conflicts that can occur when go.mod and go.sum files are updated
+# Run `go mod tidy` to update the go.sum file
 go.sum linguist-generated=true merge=union
 go.mod linguist-generated=true merge=union

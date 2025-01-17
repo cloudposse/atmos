@@ -42,7 +42,7 @@ The tests will automatically set some environment variables:
 
 ### Flags
 
-To regenerate snapshots pass the `-regenerate-snaphosts` flag.
+To regenerate ALL snapshots pass the `-regenerate-snaphosts` flag.
 
 > ![WARNING]
 >
@@ -53,6 +53,20 @@ To regenerate snapshots pass the `-regenerate-snaphosts` flag.
 > ```shell
 > git diff tests/snapshots
 > ```
+
+To regenerate the snapshots for a specific test, just run:
+
+(replace `TestCLICommands/check_atmos_--help_in_empty-dir` with your test name)
+
+```shell
+go test ./tests -v -run 'TestCLICommands/check_atmos_--help_in_empty-dir' -timeout 2m -regenerate-snapshots
+```
+
+After generating new golden snapshots, don't forget to add them.
+
+```shell
+git add tests/snapshots/*
+```
 
 ### Example Configuration
 
