@@ -87,8 +87,9 @@ jobs:
 
       - uses: j0hnsmith/go-mod-check@v1
         with:
-          working-directory: go.mod # required
-          skip-replace-check: true # optional, only if you're happy to have `replace ` lines in your go.mod file
+          working-directory: ${{ github.workspace }}
+          # optional, only if you're happy to have `replace ` lines in your go.mod file
+          skip-replace-check: true
 
   # run acceptance tests
   test:

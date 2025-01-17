@@ -76,20 +76,30 @@ Snapshots are enabled by setting the `snapshots` flag, and using the `expect.dif
 
 We recommend testing incorrect usage with `expect.exit_code` of non-zero. For example, passing unsupported arguments.
 
-
 ```yaml
 # yaml-language-server: $schema=schema.json
 
 tests:
   - name: atmos circuit-breaker
-    enabled: true                             # Whether or not to enable this check
-    snapshot: true                            # Enable golden snapshot. Use together with `expect.diff`
     description: >                            # Friendly description of what this test is verifying
       Ensure atmos breaks the infinite loop when shell depth exceeds maximum (10).
-    workdir: "fixtures/scenarios/complete/"
+
+    enabled: true                             # Whether or not to enable this check
+
+    skip:                                     # Conditions when to skip
+      os: !not windows                        # Do not run on Windows (e.g. PTY not supported)
+                                              # Use "darwin" for macOS
+                                              # Use "linux" for Linux ;)
+
+    snapshot: true                            # Enable golden snapshot. Use together with `expect.diff`
+
+    workdir: "fixtures/scenarios/complete/"   # Location to execute command
+    env:
+      SOME_ENV: true                          # Set an environment variable called "SOME_ENV"
     command: "atmos"                          # Command to run
     args:                                     # Arguments or flags passed to command
       - "help"
+
     expect:                                   # Assertions
       diff: []                                # List of expected differences
       stdout:                                 # Expected output to stdout or TTY. All TTY output is directed to stdout

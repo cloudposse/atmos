@@ -461,7 +461,7 @@ func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
 		// Compile the regex pattern
 		re, err := regexp.Compile(pattern.Pattern)
 		if err != nil {
-			t.Errorf("Invalid OS regex pattern: %q, error: %v", pattern.Pattern, err)
+			t.Logf("Invalid OS regex pattern: %q, error: %v", pattern.Pattern, err)
 			success = false
 			continue
 		}
@@ -469,10 +469,10 @@ func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
 		// Check if the current OS matches the pattern
 		match := re.MatchString(currentOS)
 		if pattern.Negate && match {
-			t.Errorf("Reason: OS %q unexpectedly matched negated pattern %q.", currentOS, pattern.Pattern)
+			t.Logf("Reason: OS %q unexpectedly matched negated pattern %q.", currentOS, pattern.Pattern)
 			success = false
 		} else if !pattern.Negate && !match {
-			t.Errorf("Reason: OS %q did not match pattern %q.", currentOS, pattern.Pattern)
+			t.Logf("Reason: OS %q did not match pattern %q.", currentOS, pattern.Pattern)
 			success = false
 		}
 	}
