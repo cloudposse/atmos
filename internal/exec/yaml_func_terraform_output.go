@@ -25,7 +25,8 @@ func processTagTerraformOutput(
 	var stack string
 	var output string
 
-	// Split the string into slices based on any whitespace
+	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
+	// while also ignoring leading and trailing whitespace
 	parts := strings.Fields(str)
 	partsLen := len(parts)
 
