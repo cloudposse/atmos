@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,6 +137,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
 
 		u.LogTrace(*atmosConfig, fmt.Sprintf("\nExecuting 'terraform init %s -s %s'", component, stack))
+
 		var initOptions []tfexec.InitOption
 		initOptions = append(initOptions, tfexec.Upgrade(false))
 		// If `components.terraform.init_run_reconfigure` is set to `true` in atmos.yaml, add the `-reconfigure` flag to `terraform init`
@@ -195,11 +197,11 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 			return k, d
 		})
 	} else {
-		componentType := "disabled"
+		componentStatus := "disabled"
 		if componentAbstract {
-			componentType = "abstract"
+			componentStatus = "abstract"
 		}
-		u.LogTrace(*atmosConfig, fmt.Sprintf("\nNot executing 'terraform output %s -s %s' because the component is %s", component, stack, componentType))
+		u.LogTrace(*atmosConfig, fmt.Sprintf("\nNot executing 'terraform output %s -s %s' because the component is %s", component, stack, componentStatus))
 	}
 
 	return outputProcessed, nil
@@ -260,7 +262,12 @@ func getTerraformOutputVariable(
 	outputs map[string]any,
 	output string,
 ) any {
-	res, err := u.EvaluateYqExpression(atmosConfig, outputs, "."+output)
+	val := output
+	if !strings.HasPrefix(output, ".") {
+		val = "." + val
+	}
+
+	res, err := u.EvaluateYqExpression(*atmosConfig, outputs, val)
 
 	if err != nil {
 		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating terrform output '%s' for the component '%s' in the stack '%s':\n%v",
@@ -268,14 +275,6 @@ func getTerraformOutputVariable(
 			component,
 			stack,
 			err,
-		))
-	}
-
-	if res == nil {
-		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating terrform output: the component '%s' in the stack '%s' does not have the output '%s'",
-			component,
-			stack,
-			output,
 		))
 	}
 
@@ -289,7 +288,12 @@ func getStaticRemoteStateOutput(
 	remoteStateSection map[string]any,
 	output string,
 ) any {
-	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, "."+output)
+	val := output
+	if !strings.HasPrefix(output, ".") {
+		val = "." + val
+	}
+
+	res, err := u.EvaluateYqExpression(*atmosConfig, remoteStateSection, val)
 
 	if err != nil {
 		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating the 'static' remote state backend output '%s' for the component '%s' in the stack '%s':\n%v",
@@ -297,15 +301,6 @@ func getStaticRemoteStateOutput(
 			component,
 			stack,
 			err,
-		))
-	}
-
-	if res == nil {
-		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating the 'static' remote state backend output: the component '%s' in the stack '%s' "+
-			"is configured with the 'static' remote state backend, but the remote state backend does not have the output '%s'",
-			component,
-			stack,
-			output,
 		))
 	}
 

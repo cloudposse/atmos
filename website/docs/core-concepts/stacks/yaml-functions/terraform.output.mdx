@@ -9,7 +9,7 @@ import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/components/terraform/remote-state))
+The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
 of components directly in Atmos stack manifests.
 </Intro>
 
@@ -45,6 +45,30 @@ Atmos processes the templates first, and then executes the `!terraform.output` f
 the function dynamically.
 :::
 
+## Using YQ Expressions to retrieve items from complex output types
+
+To retrieve items from complex output types such as maps and lists, or do any kind of filtering or querying,
+you can utilize [YQ](https://mikefarah.gitbook.io/yq) expressions.
+
+For example:
+
+- Retrieve the first item from a list
+
+```yaml
+subnet_id1: !terraform.output vpc .private_subnet_ids[0]
+```
+
+- Read a key from a map
+
+```yaml
+username: !terraform.output config .config_map.username
+```
+
+For more details, review the following docs:
+
+- [YQ Guide](https://mikefarah.gitbook.io/yq)
+- [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
+
 ## Examples
 
 <File title="stack.yaml">
@@ -60,8 +84,12 @@ components:
           security_group_id3: !terraform.output security-group/lambda3 {{ .atmos_stack }} id
           # Output of type list
           subnet_ids: !terraform.output vpc private_subnet_ids
+          # Use a YQ expression to get an item from the list
+          subnet_id1: !terraform.output vpc .private_subnet_ids[0]
           # Output of type map
           config_map: !terraform.output config {{ .stack }} config_map
+          # Use a YQ expression to get a value from the map
+          username: !terraform.output config .config_map.username
 ```
 </File>
 
@@ -251,13 +279,13 @@ vars:
 
 ## Considerations
 
- - Using `!terraform.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.  
+ - Using `!terraform.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
 
-- When using `!terraform.output` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.  
-   If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.  
+- When using `!terraform.output` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.
+   If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 
-- Overusing the function within a stack to reference multiple components can significantly impact performance.  
+- Overusing the function within a stack to reference multiple components can significantly impact performance.
 
-- Be mindful of disaster recovery (DR) implications when using it across regions.  
+- Be mindful of disaster recovery (DR) implications when using it across regions.
 
 - Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.
