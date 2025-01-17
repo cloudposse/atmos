@@ -34,7 +34,7 @@ func processTagInclude(
 	} else if partsLen == 1 {
 		f = strings.TrimSpace(parts[0])
 	} else {
-		err = fmt.Errorf("invalid number of arguments in the Atmos YAML function: '!include %s'. The function saccepts 1 or 2 arguments", f)
+		err = fmt.Errorf("invalid number of arguments in the Atmos YAML function: !include %s. The function accepts 1 or 2 arguments", input)
 		u.LogErrorAndExit(atmosConfig, err)
 	}
 

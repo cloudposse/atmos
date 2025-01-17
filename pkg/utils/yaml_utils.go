@@ -123,14 +123,14 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 		} else if partsLen == 1 {
 			f = strings.TrimSpace(parts[0])
 		} else {
-			err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: '%s %s'", tag, val)
+			err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s %s. The function accepts 1 or 2 arguments", tag, val)
 			return "", err
 		}
 
 		// If absolute path is provided, check if the file exists
 		if filepath.IsAbs(f) {
 			if !FileExists(f) {
-				return "", fmt.Errorf("the function '!include %s' points to a file that does not exist", f)
+				return "", fmt.Errorf("the function '%s %s' points to a file that does not exist", tag, val)
 			}
 			return strings.TrimSpace(tag + " " + f + " " + q), nil
 		}
@@ -139,7 +139,7 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 		if strings.HasPrefix(f, "./") || strings.HasPrefix(f, "../") {
 			resolved := ResolveRelativePath(f, file)
 			if !FileExists(resolved) {
-				return "", fmt.Errorf("the function '!include %s' points to a file that does not exist", f)
+				return "", fmt.Errorf("the function '%s %s' points to a file that does not exist", tag, val)
 			}
 			return strings.TrimSpace(tag + " " + resolved + " " + q), nil
 		}
@@ -149,7 +149,7 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 		if FileExists(atmosManifestPath) {
 			atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
 			if err != nil {
-				return "", fmt.Errorf("error converting the file path to an ansolute path in the function '!include %s': %v", f, err)
+				return "", fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
 			}
 			return strings.TrimSpace(tag + " " + atmosManifestAbsolutePath + " " + q), nil
 		}
