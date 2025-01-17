@@ -11,6 +11,9 @@ tests:
     args:
       - "vendor"
       - "pull"
+    skip:
+      # PTY not supported on windows
+      os: !not windows
     expect:
       stdout:
         - "Pulling"

@@ -8,6 +8,9 @@ tests:
     description: "Ensure tty is enabled."
     workdir: "../"
     command: "tty"
+    skip:
+      # PTY not supported on windows
+      os: !not windows
     expect:
       stdout:
         - "^(/dev)"

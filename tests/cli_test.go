@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath" // For resolving absolute paths
 	"regexp"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -54,6 +55,9 @@ type TestCase struct {
 	Expect      Expectation       `yaml:"expect"`
 	Tty         bool              `yaml:"tty"`
 	Snapshot    bool              `yaml:"snapshot"`
+	Skip        struct {
+		OS MatchPattern `yaml:"os"`
+	} `yaml:"skip"`
 }
 
 type TestSuite struct {
@@ -436,11 +440,44 @@ func TestCLICommands(t *testing.T) {
 			continue
 		}
 
+		// Check OS condition for skipping
+		if !verifyOS(t, []MatchPattern{tc.Skip.OS}) {
+			t.Logf("Skipping test due to OS condition: %s", tc.Name)
+			continue
+		}
+
 		// Run with `t.Run` for non-TTY tests
 		t.Run(tc.Name, func(t *testing.T) {
 			runCLICommandTest(t, tc)
 		})
 	}
+}
+
+func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
+	currentOS := runtime.GOOS // Get the current operating system
+	success := true
+
+	for _, pattern := range osPatterns {
+		// Compile the regex pattern
+		re, err := regexp.Compile(pattern.Pattern)
+		if err != nil {
+			t.Errorf("Invalid OS regex pattern: %q, error: %v", pattern.Pattern, err)
+			success = false
+			continue
+		}
+
+		// Check if the current OS matches the pattern
+		match := re.MatchString(currentOS)
+		if pattern.Negate && match {
+			t.Errorf("Reason: OS %q unexpectedly matched negated pattern %q.", currentOS, pattern.Pattern)
+			success = false
+		} else if !pattern.Negate && !match {
+			t.Errorf("Reason: OS %q did not match pattern %q.", currentOS, pattern.Pattern)
+			success = false
+		}
+	}
+
+	return success
 }
 
 func verifyExitCode(t *testing.T, expected, actual int) bool {
