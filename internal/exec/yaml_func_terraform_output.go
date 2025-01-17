@@ -3,15 +3,10 @@ package exec
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-)
-
-var (
-	terraformOutputFuncSyncMap = sync.Map{}
 )
 
 func processTagTerraformOutput(
