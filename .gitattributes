@@ -19,3 +19,6 @@ tests/snapshots/**/*.golden linguist-generated=true -text
 *.eps binary
 *.ansi binary
 *.mp4 binary
+
+go.sum linguist-generated=true merge=union
+go.mod linguist-generated=true merge=union
