@@ -11,8 +11,11 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -214,7 +217,6 @@ func GetTerraformOutput(
 	output string,
 	skipCache bool,
 ) any {
-
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it
@@ -226,8 +228,29 @@ func GetTerraformOutput(
 		}
 	}
 
+	// Initialize spinner
+	s := spinner.New()
+	s.Style = theme.Styles.Link
+	message := fmt.Sprintf("Fetching Terraform output %s %s %s", component, stack, output)
+
+	p := tea.NewProgram(modelSpinner{
+		spinner: s,
+		message: message,
+	})
+
+	spinnerDone := make(chan struct{})
+	go func() {
+		if _, err := p.Run(); err != nil {
+			u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
+		}
+		close(spinnerDone)
+	}()
+
 	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
+		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
@@ -235,24 +258,38 @@ func GetTerraformOutput(
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
+		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
+	var result any
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		return getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result = getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
+			p.Quit()
+			<-spinnerDone
+			fmt.Printf("\r✗ %s\n", message)
 			u.LogErrorAndExit(*atmosConfig, err)
 		}
 
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, terraformOutputs)
-		return getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
+		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
+
+	// Stop spinner and show success
+	p.Quit()
+	<-spinnerDone
+	fmt.Printf("\r✓ %s\n", message)
+
+	return result
 }
 
 func getTerraformOutputVariable(
