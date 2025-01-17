@@ -88,7 +88,6 @@ func generateAllReadmes(atmosConfig schema.AtmosConfiguration, baseDir string, d
 	return err
 }
 
-// generateSingleReadme merges the data from 'docsGenerate.Input' + local README.yaml then calls terraform-docs if needed, and renders final README
 func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerate) error {
 	// Merge data from all YAML inputs
 	mergedData := map[string]interface{}{}
@@ -120,14 +119,12 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		mergedData["terraform_docs"] = terraformDocs
 	}
 
-	// Find or download the first valid template
 	chosenTemplate, err := pickFirstAvailableTemplate(docsGenerate.Template, dir)
 	if err != nil {
-		u.LogDebug(atmosConfig, fmt.Sprintf("No valid template found, defaulting to minimal README. Error was: %v", err))
+		// fallback
 		chosenTemplate = "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
 	}
 
-	// Render final Markdown with Gomplate 3.x
 	rendered, err := ProcessTmplWithDatasourcesGomplate(
 		atmosConfig,
 		schema.Settings{},
@@ -146,8 +143,7 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 	}
 	outputPath := filepath.Join(dir, outputFile)
 
-	err = os.WriteFile(outputPath, []byte(rendered), 0644)
-	if err != nil {
+	if err = os.WriteFile(outputPath, []byte(rendered), 0644); err != nil {
 		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
 	}
 
