@@ -218,6 +218,7 @@ func GetTerraformOutput(
 	skipCache bool,
 ) any {
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	if !skipCache {
@@ -231,7 +232,6 @@ func GetTerraformOutput(
 	// Initialize spinner
 	s := spinner.New()
 	s.Style = theme.Styles.Link
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
 	p := tea.NewProgram(modelSpinner{
 		spinner: s,
@@ -241,7 +241,12 @@ func GetTerraformOutput(
 	spinnerDone := make(chan struct{})
 	go func() {
 		if _, err := p.Run(); err != nil {
-			u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
+			// If TTY is not available, just print the message
+			if strings.Contains(err.Error(), "could not open a new TTY") {
+				fmt.Println(message)
+			} else {
+				u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
+			}
 		}
 		close(spinnerDone)
 	}()
