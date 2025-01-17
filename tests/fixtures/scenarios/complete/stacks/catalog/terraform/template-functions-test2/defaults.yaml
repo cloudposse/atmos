@@ -18,6 +18,8 @@ components:
         test_2: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
         test_3: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
         test_4: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map }}'
+        test_4b: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map.b }}'
+        test_4c: !template '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map.c }}'
         test_5: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
         test_10: !terraform.output template-functions-test {{ .stack }} test_label_id
         test_11: !terraform.output template-functions-test {{ .stack }} test_label_id
@@ -42,6 +44,10 @@ components:
         test_53: !terraform.output template-functions-test3 val3
         test_54: !terraform.output template-functions-test3 val4
         test_55: !terraform.output template-functions-test3 val5
-        test_56: !terraform.output template-functions-test3 val6
-        # test_57: !terraform.output does_not_exist val6
-        # test_57: !terraform.output template-functions-test3 invalid-val
+        test_56: !terraform.output template-functions-test3 val5[0]
+        test_56b: !terraform.output template-functions-test3 .val5[0]
+        test_57: !terraform.output template-functions-test3 val6
+        test_58: !terraform.output template-functions-test3 val6.i1
+        test_58b: !terraform.output template-functions-test3 .val6.i1
+        # test_59: !terraform.output does_not_exist val6
+        # test_60: !terraform.output template-functions-test3 invalid-val

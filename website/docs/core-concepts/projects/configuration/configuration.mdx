@@ -244,7 +244,7 @@ Initial Atmos configuration can be controlled by these environment variables:
 
 ## Special Considerations for Terraform Components
 
-If you are relying on Atmos discovering the `atmos.yaml` based on your current working directory (e.g. at the root of repository), it will work for the `atmos` CLI; however, it will **not work** for [Component Remote State](/core-concepts/components/terraform/remote-state) because it uses the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider.
+If you are relying on Atmos discovering the `atmos.yaml` based on your current working directory (e.g. at the root of repository), it will work for the `atmos` CLI; however, it will **not work** for [Component Remote State](/core-concepts/share-data/remote-state) because it uses the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider.
 
 This is because Terraform executes provider from the component's folder (e.g. `components/terraform/vpc`), so it will no longer find the file in the root of the repository, since the working directory has changed.
 
