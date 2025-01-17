@@ -3,8 +3,9 @@ package exec
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
+	"net/url"
 	"os"
 	"text/template"
 	"text/template/parse"
@@ -15,7 +16,6 @@ import (
 	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -224,243 +224,114 @@ func IsGolangTemplate(str string) (bool, error) {
 	return isGoTemplate, nil
 }
 
-// ProcessTmplWithDatasourcesGomplate processes a template using Gomplate 3.x with configured datasources.
+// ProcessTmplWithDatasourcesGomplate parses and executes Go templates with datasources using Gomplate
 func ProcessTmplWithDatasourcesGomplate(
 	atmosConfig schema.AtmosConfiguration,
 	settingsSection schema.Settings,
 	tmplName string,
 	tmplValue string,
-	tmplData any,
+	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
-	if !atmosConfig.Templates.Settings.Enabled {
-		return tmplValue, nil
+
+	/* Since there's no API method for this in Gomplate 3.11.8, have to set up env var
+	 	The .Option("missingkey=default") approach isn't used to avoid having our own render logic.
+		Instead we rely on standard gomplate.NewRenderer()
+	*/
+	if ignoreMissingTemplateValues {
+		os.Setenv("GOMPLATE_MISSINGKEY", "default")
+		defer os.Unsetenv("GOMPLATE_MISSINGKEY")
 	}
 
-	// Merge template settings from atmos + stack
-	var cliConfigTemplateSettingsMap map[string]any
-	var stackManifestTemplateSettingsMap map[string]any
-	var templateSettings schema.TemplatesSettings
+	// Write merged data to a temporary JSON file
+	// Required to make no changes to the original templates used with build-harness
 
-	if err := mapstructure.Decode(atmosConfig.Templates.Settings, &cliConfigTemplateSettingsMap); err != nil {
-		return "", err
-	}
-	if err := mapstructure.Decode(settingsSection.Templates.Settings, &stackManifestTemplateSettingsMap); err != nil {
-		return "", err
-	}
-	templateSettingsMerged, err := merge.Merge(
-		atmosConfig,
-		[]map[string]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap},
-	)
+	rawJSON, err := json.Marshal(mergedData)
 	if err != nil {
-		return "", err
-	}
-	if err := mapstructure.Decode(templateSettingsMerged, &templateSettings); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal merged data to JSON: %w", err)
 	}
 
-	// Possibly multiple passes
-	evaluations, _ := lo.Coalesce(atmosConfig.Templates.Settings.Evaluations, 1)
-	result := tmplValue
-
-	// Set environment variables from templateSettings.Env
-	for k, v := range templateSettings.Env {
-		if setErr := os.Setenv(k, v); setErr != nil {
-			return "", setErr
-		}
-	}
-	// Ensure README_YAML & README_INCLUDES exist or are "" if ignoring
-	if envErr := maybeEnsureEnvVar("README_YAML", ignoreMissingTemplateValues); envErr != nil {
-		return "", envErr
-	}
-	if envErr := maybeEnsureEnvVar("README_INCLUDES", ignoreMissingTemplateValues); envErr != nil {
-		return "", envErr
-	}
-	// Pre-process README_YAML & README_INCLUDES to unify any multi-doc or single-element arrays
-	if prepErr := multiDocUnwrap("README_YAML", ignoreMissingTemplateValues); prepErr != nil {
-		return "", prepErr
-	}
-	if prepErr := multiDocUnwrap("README_INCLUDES", ignoreMissingTemplateValues); prepErr != nil {
-		return "", prepErr
-	}
-
-	// Multi-pass loop
-	for i := 0; i < evaluations; i++ {
-		cfg := &gomplate.Config{
-			Input:  result,
-			Out:    new(bytes.Buffer),
-			LDelim: "{{",
-			RDelim: "}}",
-		}
-
-		// Custom delimiters
-		if len(atmosConfig.Templates.Settings.Delimiters) == 2 &&
-			atmosConfig.Templates.Settings.Delimiters[0] != "" &&
-			atmosConfig.Templates.Settings.Delimiters[1] != "" {
-			cfg.LDelim = atmosConfig.Templates.Settings.Delimiters[0]
-			cfg.RDelim = atmosConfig.Templates.Settings.Delimiters[1]
-		}
-
-		// If gomplate is enabled, define datasources from templateSettings
-		if atmosConfig.Templates.Settings.Gomplate.Enabled {
-			for dsName, dsInfo := range templateSettings.Gomplate.Datasources {
-				cfg.DataSources = append(cfg.DataSources, dsName+"="+dsInfo.Url)
-			}
-		}
-
-		if err := gomplate.RunTemplates(cfg); err != nil {
-			return "", fmt.Errorf("gomplate pass %d for '%s': %w", i+1, tmplName, err)
-		}
-
-		// Grab the rendered output
-		buf := cfg.Out.(*bytes.Buffer)
-		result = buf.String()
-
-		// Parse it as YAML
-		anyData, parseErr := u.UnmarshalYAML[any](result)
-		if parseErr != nil {
-			return "", fmt.Errorf("yaml parse error pass %d: %w", i+1, parseErr)
-		}
-
-		// If it’s an array with length 1, unwrap it
-		if arr, ok := anyData.([]interface{}); ok && len(arr) == 1 {
-			anyData = arr[0]
-		}
-		dataMap, ok := anyData.(map[string]any)
-		if !ok {
-			return "", fmt.Errorf("yaml parse pass %d: expected object but got %T", i+1, anyData)
-		}
-
-		// Update templateSettings from the newly rendered YAML
-		if resultMapSettings, ok := dataMap["settings"].(map[string]any); ok {
-			if resultMapSettingsTemplates, ok := resultMapSettings["templates"].(map[string]any); ok {
-				if resultMapSettingsTemplatesSettings, ok := resultMapSettingsTemplates["settings"].(map[string]any); ok {
-					if decErr := mapstructure.Decode(resultMapSettingsTemplatesSettings, &templateSettings); decErr != nil {
-						return "", decErr
-					}
-				}
-			}
-		}
-	}
-	return result, nil
-}
-
-// maybeEnsureEnvVar sets env var 'name' to "" if missing
-func maybeEnsureEnvVar(name string, ignore bool) error {
-	if _, found := os.LookupEnv(name); !found {
-		if ignore {
-			_ = os.Setenv(name, "")
-		} else {
-			return fmt.Errorf("environment variable %s is missing; set it or enable ignoreMissingTemplateValues", name)
-		}
-	}
-	return nil
-}
-
-// multiDocUnwrap ensures the file ref'd by envVarName is loaded as multi-document YAML
-func multiDocUnwrap(envVarName string, ignore bool) error {
-	path, found := os.LookupEnv(envVarName)
-	if !found || path == "" {
-		return nil
-	}
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		if ignore {
-			return nil
-		}
-		return fmt.Errorf("file %q for %s not found; set it or enable ignoreMissingTemplateValues", path, envVarName)
-	}
+	tmpfile, err := os.CreateTemp("", "gomplate-data-*.json")
 	if err != nil {
-		return err
+		return "", fmt.Errorf("failed to create temp data file for gomplate: %w", err)
 	}
-	if info.IsDir() {
-		return nil
+	tmpName := tmpfile.Name()
+	defer os.Remove(tmpName)
+
+	if _, err = tmpfile.Write(rawJSON); err != nil {
+		_ = tmpfile.Close()
+		return "", fmt.Errorf("failed to write JSON to temp file: %w", err)
+	}
+	if err = tmpfile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temp data file: %w", err)
 	}
 
-	// read the raw file
-	raw, err := os.ReadFile(path)
+	// This is the file URL, it is referenced in .Env.README_YAML
+	fileURL, err := url.Parse("file://" + tmpName)
 	if err != nil {
-		if ignore {
-			return nil
-		}
-		return fmt.Errorf("error reading %q for %s: %w", path, envVarName, err)
+		return "", fmt.Errorf("failed to parse temp file path: %w", err)
 	}
 
-	// parse as multi-doc
-	docs, docErr := parseMultiDocYAML(raw)
-	if docErr != nil {
-		if ignore {
-			return nil
-		}
-		return fmt.Errorf("invalid multi-doc YAML in %q for %s: %w", path, envVarName, docErr)
-	}
-	if len(docs) == 0 {
-		// no docs => do nothing
-		return nil
-	}
-	// If exactly 1 doc, keep that doc
-	var single interface{}
-	if len(docs) == 1 {
-		single = docs[0]
-	} else {
-		single = docs[0]
+	//  Build the  top-level data object that includes Env
+	topLevel := make(map[string]interface{})
+
+	// Add .Env.README_YAML to point to fileURL
+	topLevel["Env"] = map[string]interface{}{
+		"README_YAML": fileURL.String(),
 	}
 
-	if arr, ok := single.([]interface{}); ok && len(arr) == 1 {
-		single = arr[0]
+	// Could be refactored later to avoid the second temp file, but this is more straighforward
+
+	outerJSON, err := json.Marshal(topLevel)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal top-level data: %w", err)
 	}
 
-	_, isMap := single.(map[string]any)
-	if isMap {
-		newYAML, serErr := u.ConvertToYAML(single)
-		if serErr != nil {
-			if ignore {
-				return nil
-			}
-			return fmt.Errorf("unable to serialize unwrapped data for %s: %w", envVarName, serErr)
-		}
-
-		tmp, tmpErr := os.CreateTemp("", envVarName+"-*.yaml")
-		if tmpErr != nil {
-			if ignore {
-				return nil
-			}
-			return fmt.Errorf("failed to create temp for %s: %w", envVarName, tmpErr)
-		}
-		defer tmp.Close()
-
-		if _, writeErr := tmp.Write([]byte(newYAML)); writeErr != nil {
-			if ignore {
-				return nil
-			}
-			return fmt.Errorf("failed to write unwrapped data for %s: %w", envVarName, writeErr)
-		}
-
-		if setErr := os.Setenv(envVarName, tmp.Name()); setErr != nil {
-			if ignore {
-				return nil
-			}
-			return fmt.Errorf("failed to reset %s to new file: %w", envVarName, setErr)
-		}
+	tmpfile2, err := os.CreateTemp("", "gomplate-top-level-*.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp data file for top-level: %w", err)
 	}
-	return nil
-}
+	tmpName2 := tmpfile2.Name()
+	defer os.Remove(tmpName2)
 
-// parseMultiDocYAML tries to parse `raw` as multi-document YAML, returns a slice of docs.
-func parseMultiDocYAML(raw []byte) ([]interface{}, error) {
-	var docs []interface{}
-
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	for {
-		var doc interface{}
-		err := decoder.Decode(&doc)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		docs = append(docs, doc)
+	if _, err = tmpfile2.Write(outerJSON); err != nil {
+		_ = tmpfile2.Close()
+		return "", fmt.Errorf("failed to write top-level JSON to temp file: %w", err)
 	}
-	return docs, nil
+	if err = tmpfile2.Close(); err != nil {
+		return "", fmt.Errorf("failed to close top-level temp data file: %w", err)
+	}
+
+	topLevelFileURL, err := url.Parse("file://" + tmpName2)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse top-level temp file path: %w", err)
+	}
+
+	// Build the gomplate Options to point the entire "dot" context at the second file
+	opts := gomplate.Options{
+		Context: map[string]gomplate.Datasource{
+			".": {
+				URL: topLevelFileURL,
+			},
+		},
+		LDelim: "{{",
+		RDelim: "}}",
+		Funcs:  template.FuncMap{},
+	}
+
+	renderer := gomplate.NewRenderer(opts)
+
+	var buf bytes.Buffer
+	tpl := gomplate.Template{
+		Name:   tmplName,
+		Text:   tmplValue,
+		Writer: &buf,
+	}
+
+	err = renderer.RenderTemplates(context.Background(), []gomplate.Template{tpl})
+	if err != nil {
+		return "", fmt.Errorf("failed to render template: %w", err)
+	}
+
+	return buf.String(), nil
 }
