@@ -9,7 +9,7 @@ import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/components/terraform/remote-state))
+The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
 of components directly in Atmos stack manifests.
 </Intro>
 
@@ -279,13 +279,13 @@ vars:
 
 ## Considerations
 
- - Using `!terraform.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.  
+ - Using `!terraform.output` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
 
-- When using `!terraform.output` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.  
-   If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.  
+- When using `!terraform.output` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.
+   If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 
-- Overusing the function within a stack to reference multiple components can significantly impact performance.  
+- Overusing the function within a stack to reference multiple components can significantly impact performance.
 
-- Be mindful of disaster recovery (DR) implications when using it across regions.  
+- Be mindful of disaster recovery (DR) implications when using it across regions.
 
 - Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.
