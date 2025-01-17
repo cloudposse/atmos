@@ -367,6 +367,8 @@ jobs:
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos test
 
@@ -384,6 +386,8 @@ jobs:
         working-directory: ${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'windows'
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos test
 
