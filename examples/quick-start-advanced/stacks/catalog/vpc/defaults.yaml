@@ -56,4 +56,5 @@ components:
         test7: !include 'stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones[2]'
         test8: !include a.txt
         test9: !include '"b c.txt" ".[1]"'
-        test10: !env USER
+        test10: !include a.hcl
+        test15: !env USER

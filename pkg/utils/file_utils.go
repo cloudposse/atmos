@@ -282,22 +282,35 @@ func ResolveRelativePath(path string, basePath string) string {
 
 // DetectFormatAndParseFile detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
 // For all other formats, it just reads the file and returns the content as a string
-func DetectFormatAndParseFile(filename string, v any) error {
+func DetectFormatAndParseFile(filename string) (any, error) {
+	var v any
+	var err error
+
 	d, err := os.ReadFile(filename)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	data := string(d)
 
-	if IsJSON(data) {
-		return json.Unmarshal(d, v)
+	if IsHCL(data) {
+		err = hcl.Unmarshal(d, &v)
+		if err != nil {
+			return nil, err
+		}
+	} else if IsJSON(data) {
+		err = json.Unmarshal(d, &v)
+		if err != nil {
+			return nil, err
+		}
 	} else if IsYAML(data) {
-		return yaml.Unmarshal(d, v)
-	} else if IsHCL(data) {
-		return hcl.Unmarshal(d, v)
+		err = yaml.Unmarshal(d, &v)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		v = data
-		return nil
 	}
+
+	return v, nil
 }

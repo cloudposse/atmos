@@ -45,7 +45,7 @@ func processTagInclude(
 	}
 
 	var res any
-	err = u.DetectFormatAndParseFile(f, &res)
+	res, err = u.DetectFormatAndParseFile(f)
 	if err != nil {
 		e := fmt.Errorf("error evaluating the YAML function: %s\n%v", input, err)
 		u.LogErrorAndExit(atmosConfig, e)

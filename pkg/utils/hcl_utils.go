@@ -144,6 +144,10 @@ func WriteTerraformBackendConfigToFileAsHcl(
 
 // IsHCL checks if data is in HCL format
 func IsHCL(data string) bool {
+	if strings.TrimSpace(data) == "" {
+		return false
+	}
+
 	var hclData any
 	return hcl.Unmarshal([]byte(data), &hclData) == nil
 }

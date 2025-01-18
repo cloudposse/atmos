@@ -199,6 +199,19 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 
 // IsYAML checks if data is in YAML format
 func IsYAML(data string) bool {
+	if strings.TrimSpace(data) == "" {
+		return false
+	}
+
 	var yml any
-	return yaml.Unmarshal([]byte(data), &yml) == nil
+	err := yaml.Unmarshal([]byte(data), &yml)
+	if err != nil {
+		return false
+	}
+
+	// Additional check: Ensure that the parsed result is not nil and has some meaningful content
+	_, isMap := yml.(map[string]any)
+	_, isSlice := yml.([]any)
+
+	return isMap || isSlice
 }
