@@ -3,6 +3,7 @@ package logger
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/fatih/color"
 
@@ -41,27 +42,50 @@ func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
 	}, nil
 }
 
-func NewLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
-	logLevel, err := ParseLogLevel(cfg.Logs.Level)
-	if err != nil {
-		return nil, err
-	}
-	return NewLogger(logLevel, cfg.Logs.File)
-}
-
-func ParseLogLevel(logLevel string) (LogLevel, error) {
-	if logLevel == "" {
-		return LogLevelInfo, nil
+func NewLoggerFromCliConfig(config schema.AtmosConfiguration) (*Logger, error) {
+	// Check for environment variable override
+	if envLevel := os.Getenv("ATMOS_LOGS_LEVEL"); envLevel != "" {
+		if _, err := ParseLogLevel(envLevel); err != nil {
+			return nil, fmt.Errorf("Error: Invalid log level '%s'. Valid options are: [Trace Debug Info Warning Off]", envLevel)
+		}
+		config.Logs.Level = envLevel
 	}
 
-	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelOff}
-	for _, level := range validLevels {
-		if LogLevel(logLevel) == level {
-			return level, nil
+	// If no level is set in config or env, default to Info
+	if config.Logs.Level == "" {
+		config.Logs.Level = string(LogLevelInfo)
+	} else {
+		// Validate the config log level
+		if _, err := ParseLogLevel(config.Logs.Level); err != nil {
+			return nil, fmt.Errorf("Error: Invalid log level '%s'. Valid options are: [Trace Debug Info Warning Off]", config.Logs.Level)
 		}
 	}
 
-	return "", fmt.Errorf("Error: Invalid log level '%s'. Valid options are: %v", logLevel, validLevels)
+	return NewLogger(LogLevel(config.Logs.Level), config.Logs.File)
+}
+
+func ParseLogLevel(level string) (LogLevel, error) {
+	if level == "" {
+		return "", fmt.Errorf("Error: Invalid log level ''. Valid options are: [Trace Debug Info Warning Off]")
+	}
+
+	// Convert to title case for consistent comparison
+	normalizedLevel := strings.Title(strings.ToLower(level))
+
+	switch normalizedLevel {
+	case string(LogLevelTrace):
+		return LogLevelTrace, nil
+	case string(LogLevelDebug):
+		return LogLevelDebug, nil
+	case string(LogLevelInfo):
+		return LogLevelInfo, nil
+	case string(LogLevelWarning):
+		return LogLevelWarning, nil
+	case string(LogLevelOff):
+		return LogLevelOff, nil
+	default:
+		return "", fmt.Errorf("Error: Invalid log level '%s'. Valid options are: [Trace Debug Info Warning Off]", level)
+	}
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {
@@ -130,24 +154,24 @@ func (l *Logger) isLevelEnabled(level LogLevel) bool {
 
 func (l *Logger) Trace(message string) {
 	if l.isLevelEnabled(LogLevelTrace) {
-		l.log(theme.Colors.Info, message)
+		l.log(theme.Colors.Info, fmt.Sprintf("[TRACE] %s", message))
 	}
 }
 
 func (l *Logger) Debug(message string) {
 	if l.isLevelEnabled(LogLevelDebug) {
-		l.log(theme.Colors.Info, message)
+		l.log(theme.Colors.Info, fmt.Sprintf("[DEBUG] %s", message))
 	}
 }
 
 func (l *Logger) Info(message string) {
 	if l.isLevelEnabled(LogLevelInfo) {
-		l.log(theme.Colors.Info, message)
+		l.log(theme.Colors.Info, fmt.Sprintf("[INFO] %s", message))
 	}
 }
 
 func (l *Logger) Warning(message string) {
 	if l.isLevelEnabled(LogLevelWarning) {
-		l.log(theme.Colors.Warning, message)
+		l.log(theme.Colors.Warning, fmt.Sprintf("[WARNING] %s", message))
 	}
 }

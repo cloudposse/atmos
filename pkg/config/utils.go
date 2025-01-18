@@ -185,10 +185,14 @@ func FindAllStackConfigsInPaths(
 	return absolutePaths, relativePaths, nil
 }
 
+// Process ENV vars
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
+	fmt.Printf("[DEBUG] Starting processEnvVars\n")
+
+	// Process base path from ENV var
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
+		fmt.Printf("[DEBUG] Found ENV var ATMOS_BASE_PATH=%s\n", basePath)
 		atmosConfig.BasePath = basePath
 	}
 
@@ -358,12 +362,13 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
 	if len(logsLevel) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
+		fmt.Printf("[DEBUG] Found ENV var ATMOS_LOGS_LEVEL=%s\n", logsLevel)
 		// Validate the log level before setting it
 		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
-			return err
+			fmt.Printf("[DEBUG] Invalid log level in ATMOS_LOGS_LEVEL: %v\n", err)
+			return fmt.Errorf("invalid value in environment variable ATMOS_LOGS_LEVEL='%s'. %v", logsLevel, err)
 		}
-		// Only set the log level if validation passes
+		fmt.Printf("[DEBUG] Setting log level from environment: %s\n", logsLevel)
 		atmosConfig.Logs.Level = logsLevel
 	}
 
@@ -402,9 +407,16 @@ func checkConfig(atmosConfig schema.AtmosConfiguration) error {
 		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	}
 
-	if len(atmosConfig.Logs.Level) > 0 {
+	// Always validate log level if it's set, regardless of source
+	if atmosConfig.Logs.Level != "" {
 		if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-			return err
+			// Check if the value came from an environment variable
+			envValue := os.Getenv("ATMOS_LOGS_LEVEL")
+			if envValue == atmosConfig.Logs.Level {
+				return fmt.Errorf("invalid value in environment variable ATMOS_LOGS_LEVEL='%s'. %v", atmosConfig.Logs.Level, err)
+			}
+			// Value must have come from config file or command line
+			return fmt.Errorf("invalid log level '%s' in configuration. %v", atmosConfig.Logs.Level, err)
 		}
 	}
 
