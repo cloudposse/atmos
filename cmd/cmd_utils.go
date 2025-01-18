@@ -489,30 +489,29 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
 
-// CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
-// It loads the cache, decides if it's time to check for updates, compares the current version to the latest available release,
-// and if newer, prints the update message. It also updates the cache's timestamp after printing.
+// CheckForAtmosUpdateAndPrintMessage checks if version checking is enabled, and if it is, checks if there is a newer version of Atmos available
 func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
-	// If version checking is disabled in the configuration, do nothing
+	// Check if version checking is enabled
 	if !atmosConfig.Version.Check.Enabled {
+		u.LogDebug(atmosConfig, "Version checking is disabled")
 		return
 	}
 
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Could not load cache: %s", err))
+		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to load cache: %s", err))
 		return
 	}
 
-	// Determine if it's time to check for updates based on frequency and last_checked
+	// Check if we need to check for updates
 	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency) {
-		// Not due for another check yet, so return without printing anything
+		u.LogDebug(atmosConfig, "Skipping version check - last check was recent")
 		return
 	}
 
 	// Get the latest Atmos release from GitHub
-	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
+	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos", atmosConfig)
 	if err != nil {
 		u.LogWarning(atmosConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
 		return
@@ -530,13 +529,14 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// If the versions differ, print the update message
 	if latestVersion != currentVersion {
 		u.PrintMessageToUpgradeToAtmosLatestRelease(latestVersion)
+	} else {
+		u.LogDebug(atmosConfig, "Atmos is up to date")
 	}
 
 	// Update the cache to mark the current timestamp
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
 		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
-
 	}
 }
 
