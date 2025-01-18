@@ -2,9 +2,11 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/google/go-github/v59/github"
 	"golang.org/x/oauth2"
 )
@@ -27,7 +29,7 @@ func newGitHubClient(ctx context.Context) *github.Client {
 }
 
 // GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository
-func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
+func GetLatestGitHubRepoRelease(owner string, repo string, config schema.AtmosConfiguration) (string, error) {
 	opt := &github.ListOptions{Page: 1, PerPage: 1}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
@@ -35,16 +37,20 @@ func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
 
 	client := newGitHubClient(ctx)
 
+	LogDebug(config, fmt.Sprintf("Fetching latest release for %s/%s from GitHub API", owner, repo))
 	releases, _, err := client.Repositories.ListReleases(ctx, owner, repo, opt)
 	if err != nil {
+		LogDebug(config, fmt.Sprintf("Error fetching GitHub releases: %v", err))
 		return "", err
 	}
 
 	if len(releases) > 0 {
 		latestRelease := releases[0]
 		latestReleaseTag := *latestRelease.TagName
+		LogDebug(config, fmt.Sprintf("Latest release tag: %s", latestReleaseTag))
 		return latestReleaseTag, nil
 	}
 
+	LogDebug(config, "No releases found")
 	return "", nil
 }
