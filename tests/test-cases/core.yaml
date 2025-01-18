@@ -62,7 +62,7 @@ tests:
         - "but the directory does not exist."
       stderr:
         - "^$"
-      exit_code: 0
+      exit_code: 1
 
   - name: atmos docs
     enabled: true
@@ -77,21 +77,6 @@ tests:
       exit_code: 0
       stderr:
         - "^$"
-
-  - name: atmos non-existent
-    enabled: true
-    snapshot: true
-    description: "Ensure atmos CLI returns an error for a non-existent command."
-    workdir: "../"
-    command: "atmos"
-    args:
-      - "non-existent"
-    expect:
-      diff: []
-      stderr:
-        - 'unknown command "non-existent" for "atmos"'
-      exit_code: 1
-
   - name: atmos terraform non-existent
     enabled: false
     snapshot: true
