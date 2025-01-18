@@ -9,20 +9,66 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func processTagInclude(
+func processTagIncludeLocalFile(
 	atmosConfig schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 ) any {
-	u.LogTrace(atmosConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
-
-	str, err := getStringAfterTag(input, config.AtmosYamlFuncInclude)
+	str, err := getStringAfterTag(input, config.AtmosYamlFuncIncludeLocalFile)
 	if err != nil {
 		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	// Split the value into slices based on any whitespace (one or more spaces, tabs, or newlines),
 	// while also ignoring leading and trailing whitespace
+	var f string
+	q := ""
+
+	parts, err := u.SplitStringByDelimiter(str, ' ')
+	if err != nil {
+		e := fmt.Errorf("error evaluating the YAML function: %s\n%v", input, err)
+		u.LogErrorAndExit(atmosConfig, e)
+	}
+
+	partsLen := len(parts)
+
+	if partsLen == 2 {
+		f = strings.TrimSpace(parts[0])
+		q = strings.TrimSpace(parts[1])
+	} else if partsLen == 1 {
+		f = strings.TrimSpace(parts[0])
+	} else {
+		err = fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s. The function accepts 1 or 2 arguments", input)
+		u.LogErrorAndExit(atmosConfig, err)
+	}
+
+	var res any
+	res, err = u.DetectFormatAndParseFile(f)
+	if err != nil {
+		e := fmt.Errorf("error evaluating the YAML function: %s\n%v", input, err)
+		u.LogErrorAndExit(atmosConfig, e)
+	}
+
+	if q != "" {
+		res, err = u.EvaluateYqExpression(&atmosConfig, res, q)
+		if err != nil {
+			u.LogErrorAndExit(atmosConfig, err)
+		}
+	}
+
+	return res
+}
+
+func processTagIncludeGoGetter(
+	atmosConfig schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+) any {
+	str, err := getStringAfterTag(input, config.AtmosYamlFuncIncludeGoGetter)
+	if err != nil {
+		u.LogErrorAndExit(atmosConfig, err)
+	}
+
 	var f string
 	q := ""
 

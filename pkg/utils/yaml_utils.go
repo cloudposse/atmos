@@ -13,12 +13,14 @@ import (
 
 const (
 	// Atmos YAML functions
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncStore           = "!store"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncEnv             = "!env"
-	AtmosYamlFuncInclude         = "!include"
+	AtmosYamlFuncExec             = "!exec"
+	AtmosYamlFuncStore            = "!store"
+	AtmosYamlFuncTemplate         = "!template"
+	AtmosYamlFuncTerraformOutput  = "!terraform.output"
+	AtmosYamlFuncEnv              = "!env"
+	AtmosYamlFuncInclude          = "!include"
+	AtmosYamlFuncIncludeLocalFile = "!include-local-file"
+	AtmosYamlFuncIncludeGoGetter  = "!include-go-getter"
 )
 
 var (
@@ -106,10 +108,11 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 }
 
 func getNodeValue(tag string, f string, q string) string {
+	t := tag + "-local-file \"" + f + "\""
 	if q == "" {
-		return strings.TrimSpace(tag + " \"" + f + "\"")
+		return strings.TrimSpace(t)
 	}
-	return strings.TrimSpace(tag + " \"" + f + "\" \" " + q + "\"")
+	return strings.TrimSpace(t + " \"" + q + "\"")
 }
 
 func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) (string, error) {
@@ -164,7 +167,7 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 			return getNodeValue(tag, atmosManifestAbsolutePath, q), nil
 		}
 
-		return getNodeValue(tag, f, q), nil
+		return getNodeValue(tag+"-go-getter ", f, q), nil
 	}
 
 	return strings.TrimSpace(tag + " " + val), nil
