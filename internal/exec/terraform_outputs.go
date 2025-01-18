@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,22 +11,14 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
 	terraformOutputsCache = sync.Map{}
 )
-
-func isTerminal() bool {
-	fileInfo, _ := os.Stdout.Stat()
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
-}
 
 func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 	component string,
@@ -225,8 +216,7 @@ func GetTerraformOutput(
 ) any {
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
-	var spinnerDone chan struct{}
-	var p *tea.Program
+	fmt.Println(message)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	if !skipCache {
@@ -237,50 +227,15 @@ func GetTerraformOutput(
 		}
 	}
 
-	// Check if we're running in a terminal
-	if !isTerminal() {
-		fmt.Println(message)
-	} else {
-		// Initialize spinner only in terminal environment
-		s := spinner.New()
-		s.Style = theme.Styles.Link
-
-		p = tea.NewProgram(modelSpinner{
-			spinner: s,
-			message: message,
-		})
-
-		spinnerDone = make(chan struct{})
-		go func() {
-			if _, err := p.Run(); err != nil {
-				if !strings.Contains(err.Error(), "could not open a new TTY") {
-					u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
-				}
-			}
-			close(spinnerDone)
-		}()
-	}
-
-	cleanupSpinner := func() {
-		if p != nil {
-			p.Quit()
-			<-spinnerDone
-		}
-	}
-	defer cleanupSpinner()
-
 	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
-		cleanupSpinner()
 		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
-	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
-	// `output` from the static remote state instead of executing `terraform output`
+	// Check if the component in the stack is configured with the 'static' remote state backend
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
-		cleanupSpinner()
 		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
@@ -294,7 +249,6 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
-			cleanupSpinner()
 			fmt.Printf("\r✗ %s\n", message)
 			u.LogErrorAndExit(*atmosConfig, err)
 		}
@@ -304,10 +258,7 @@ func GetTerraformOutput(
 		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
 
-	// Stop spinner and show success
-	cleanupSpinner()
 	fmt.Printf("\r✓ %s\n", message)
-
 	return result
 }
 

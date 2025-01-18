@@ -33,8 +33,15 @@ func renderError(msg ErrorMessage) error {
 		return fmt.Errorf("failed to initialize atmos config: %w", err)
 	}
 
-	termWriter := termwriter.NewResponsiveWriter(os.Stdout)
-	screenWidth := termWriter.(*termwriter.TerminalWriter).GetWidth()
+	var screenWidth uint = 80 // default width for non-terminal environments
+
+	// Only try to use terminal writer if we're in a terminal
+	if isTerminal() {
+		termWriter := termwriter.NewResponsiveWriter(os.Stdout)
+		if tw, ok := termWriter.(*termwriter.TerminalWriter); ok {
+			screenWidth = tw.GetWidth()
+		}
+	}
 
 	if atmosConfig.Settings.Docs.MaxWidth > 0 {
 		screenWidth = uint(min(atmosConfig.Settings.Docs.MaxWidth, int(screenWidth)))
@@ -54,6 +61,12 @@ func renderError(msg ErrorMessage) error {
 
 	fmt.Print(rendered)
 	return nil
+}
+
+// isTerminal checks if stdout is a terminal
+func isTerminal() bool {
+	fileInfo, _ := os.Stdout.Stat()
+	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 // getMarkdownSection returns a section from the markdown file
