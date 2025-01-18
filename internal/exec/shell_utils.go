@@ -42,6 +42,13 @@ func getNextShellLevel() (int, error) {
 		return 0, fmt.Errorf("ATMOS_SHLVL (%d) exceeds maximum allowed depth (%d). Infinite recursion?",
 			shellVal, MaxShellDepth)
 	}
+
+	// Set the incremented shell level in the environment
+	err := os.Setenv("ATMOS_SHLVL", strconv.Itoa(shellVal))
+	if err != nil {
+		return 0, err
+	}
+
 	return shellVal, nil
 }
 
@@ -168,7 +175,11 @@ func shellRunner(command string, name string, dir string, env []string, out io.W
 		return err
 	}
 
-	environ := append(os.Environ(), env...)
+	// Create a new environment list with the provided env vars taking precedence over the current environment
+	environ := make([]string, 0, len(os.Environ())+len(env))
+	environ = append(environ, env...)
+	environ = append(environ, os.Environ()...)
+
 	listEnviron := expand.ListEnviron(environ...)
 	runner, err := interp.New(
 		interp.Dir(dir),

@@ -134,6 +134,24 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	v.SetDefault("settings.inject_github_token", true)
 
+	// Process environment variables first
+	fmt.Printf("[DEBUG] Processing environment variables\n")
+	err = processEnvVars(&atmosConfig)
+	if err != nil {
+		fmt.Printf("[DEBUG] Error processing environment variables: %v\n", err)
+		return atmosConfig, err
+	}
+	fmt.Printf("[DEBUG] Environment variables processed, LogsLevel=%s\n", atmosConfig.Logs.Level)
+
+	// Set log level and file from command line arguments
+	if configAndStacksInfo.LogsLevel != "" {
+		fmt.Printf("[DEBUG] Setting log level from command line: %s\n", configAndStacksInfo.LogsLevel)
+		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
+	}
+	if configAndStacksInfo.LogsFile != "" {
+		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
+	}
+
 	// Process config in system folder
 	configFilePath1 := ""
 
@@ -250,12 +268,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&atmosConfig)
-	if err != nil {
-		return atmosConfig, err
-	}
-
-	// Process ENV vars
-	err = processEnvVars(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err
 	}
