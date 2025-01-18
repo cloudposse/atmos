@@ -3,28 +3,29 @@
 vars:
   stage: nonprod
 
-import:
-  - catalog/component-1
-
 components:
   terraform:
     # We want to test passing and reading multiple terraform outputs to component with atmos functions
+    component-1:
+      metadata:
+        component: mock
+      vars:
+        foo: foo-component-1
     component-2:
       metadata:
-        component: myapp
-        inherits:
-          - component-1
+        component: mock
+      vars:
+        bar: bar-component-2
     component-3:
       metadata:
-        component: myapp
-        inherits:
-          - component-1
+        component: mock
+      vars:
+        baz: baz-component-3
     component-4:
       metadata:
-        component: myapp
+        component: mock
       vars:
-        location: !terraform.output component-1 location
-        lang: !terraform.output component-2 lang
-        format: ''
-        options: '0'
-        units: !terraform.output component-3 units
+        foo: !terraform.output component-1 foo
+        bar: !terraform.output component-2 bar
+        baz: !terraform.output component-3 baz
+

@@ -10,8 +10,11 @@ tests:
        - "-f"
        - "terraform-output"
     expect:
-      stdout:
-        - "Fetching units output from component-3 in nonprod"
-        - "Fetching lang output from component-2 in nonprod"
-        - "Fetching location output from component-1 in nonprod"
       exit_code: 0
+      stdout:
+        - "Fetching baz output from component-3 in nonprod"
+        - "Fetching foo output from component-1 in nonprod"
+        - "Fetching bar output from component-2 in nonprod"
+      stderr:
+        - "^$"
+
