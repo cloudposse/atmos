@@ -40,4 +40,7 @@ excludeStackAbsolutePaths:
 terraformDirAbsolutePath: /Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/components/terraform
 helmfileDirAbsolutePath: /Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks
 default: false
+validate:
+    editorconfig:
+        color: true
 
