@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime/debug"
 
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/fatih/color"
@@ -18,6 +19,13 @@ const (
 	LogLevelInfo    = "Info"
 	LogLevelWarning = "Warning"
 )
+
+var globalLogger *logger.Logger
+
+// SetLogger sets the global logger instance
+func SetLogger(l *logger.Logger) {
+	globalLogger = l
+}
 
 // PrintMessage prints the message to the console
 func PrintMessage(message string) {
@@ -52,6 +60,11 @@ func LogErrorAndExit(atmosConfig schema.AtmosConfiguration, err error) {
 // LogError logs errors to std.Error
 func LogError(atmosConfig schema.AtmosConfiguration, err error) {
 	if err != nil {
+		if globalLogger != nil {
+			globalLogger.Error(err)
+			return
+		}
+
 		_, printErr := theme.Colors.Error.Fprintln(color.Error, err.Error())
 		if printErr != nil {
 			theme.Colors.Error.Println("Error logging the error:")
@@ -69,6 +82,11 @@ func LogError(atmosConfig schema.AtmosConfiguration, err error) {
 
 // LogTrace logs the provided trace message
 func LogTrace(atmosConfig schema.AtmosConfiguration, message string) {
+	if globalLogger != nil {
+		globalLogger.Trace(message)
+		return
+	}
+
 	if atmosConfig.Logs.Level == LogLevelTrace {
 		log(atmosConfig, theme.Colors.Info, message)
 	}
@@ -76,6 +94,11 @@ func LogTrace(atmosConfig schema.AtmosConfiguration, message string) {
 
 // LogDebug logs the provided debug message
 func LogDebug(atmosConfig schema.AtmosConfiguration, message string) {
+	if globalLogger != nil {
+		globalLogger.Debug(message)
+		return
+	}
+
 	if atmosConfig.Logs.Level == LogLevelTrace ||
 		atmosConfig.Logs.Level == LogLevelDebug {
 
@@ -85,6 +108,11 @@ func LogDebug(atmosConfig schema.AtmosConfiguration, message string) {
 
 // LogInfo logs the provided info message
 func LogInfo(atmosConfig schema.AtmosConfiguration, message string) {
+	if globalLogger != nil {
+		globalLogger.Info(message)
+		return
+	}
+
 	// Info level is default, it's used if not set in `atmos.yaml` in the `logs.level` section
 	if atmosConfig.Logs.Level == "" ||
 		atmosConfig.Logs.Level == LogLevelTrace ||
@@ -97,6 +125,11 @@ func LogInfo(atmosConfig schema.AtmosConfiguration, message string) {
 
 // LogWarning logs the provided warning message
 func LogWarning(atmosConfig schema.AtmosConfiguration, message string) {
+	if globalLogger != nil {
+		globalLogger.Warning(message)
+		return
+	}
+
 	if atmosConfig.Logs.Level == LogLevelTrace ||
 		atmosConfig.Logs.Level == LogLevelDebug ||
 		atmosConfig.Logs.Level == LogLevelInfo ||
