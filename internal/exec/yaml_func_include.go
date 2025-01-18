@@ -25,7 +25,13 @@ func processTagInclude(
 	// while also ignoring leading and trailing whitespace
 	var f string
 	q := ""
-	parts := strings.Fields(str)
+
+	parts, err := u.SplitStringByDelimiter(str, ' ')
+	if err != nil {
+		e := fmt.Errorf("error evaluating the YAML function: %s\n%v", input, err)
+		u.LogErrorAndExit(atmosConfig, e)
+	}
+
 	partsLen := len(parts)
 
 	if partsLen == 2 {
