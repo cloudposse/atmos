@@ -108,10 +108,11 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) (string, error) {
 	tag := n.Tag
 	val := n.Value
-	var f string
-	q := ""
 
 	if tag == AtmosYamlFuncInclude {
+		var f string
+		q := ""
+
 		// Split the value into slices based on any whitespace (one or more spaces, tabs, or newlines),
 		// while also ignoring leading and trailing whitespace
 		parts := strings.Fields(val)
@@ -153,9 +154,11 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 			}
 			return strings.TrimSpace(tag + " " + atmosManifestAbsolutePath + " " + q), nil
 		}
+
+		return strings.TrimSpace(tag + " " + f + " " + q), nil
 	}
 
-	return strings.TrimSpace(tag + " " + f + " " + q), nil
+	return strings.TrimSpace(tag + " " + val), nil
 }
 
 func UnmarshalYAML[T any](input string) (T, error) {
