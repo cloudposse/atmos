@@ -2,7 +2,7 @@
 title: Validating Stack Configurations
 sidebar_position: 5
 sidebar_label: Validate Configurations
-description: Use JSON Schema and OPA policies to validate Components.
+description: Use JSON Schema, OPA policies, and EditorConfig Checker to validate Components.
 id: validating
 ---
 import Terminal from '@site/src/components/Terminal'
@@ -12,12 +12,12 @@ import Intro from '@site/src/components/Intro'
 <Intro>
 Validation is essential for ensuring clean and correct configurations, especially in environments where multiple teams contribute
 to the development and deployment processes.
-Atmos enhances this validation process in two significant ways with [JSON Schema](https://json-schema.org/) and [OPA](https://www.openpolicyagent.org/) policies.
+Atmos enhances this validation process in three significant ways with [JSON Schema](https://json-schema.org/), [OPA](https://www.openpolicyagent.org/) policies, and the [EditorConfig Checker](https://github.com/editorconfig-checker/editorconfig-checker).
 </Intro>
 
 ## Types of Validation
 
-Atmos supports two types of native validation.
+Atmos supports three types of native validation.
 
 ### JSON Schema
 
@@ -29,9 +29,13 @@ JSON Schema is an industry standard and provides a vocabulary to annotate and va
 The [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA, pronounced “oh-pa”) is another open-source industry standard that provides
 a general-purpose policy engine to unify policy enforcement across your stacks.
 The OPA language (Rego) is a high-level declarative language for specifying policy as code.
-Atmos has native support for the OPA decision-making engine to enforce policies across all the components in your stacks (e.g. for microservice configurations).
+Atmos has native support for the OPA decision-making engine to enforce policies across all the components in your stacks (e.g., for microservice configurations).
 
 This is powerful stuff: because you can define many policies, it's possible to validate components differently for different environments or teams.
+
+### EditorConfig Checker
+
+The [EditorConfig Checker](https://github.com/editorconfig-checker/editorconfig-checker) is a tool that ensures adherence to the rules defined in your `.editorconfig` file. This ensures consistency in coding styles across teams, which is particularly important in collaborative environments. Atmos supports running the EditorConfig Checker to validate the configurations in your project.
 
 ## Validate Your Configurations
 

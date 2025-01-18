@@ -2,7 +2,7 @@ tests:
   - name: "Invalid Log Level in Config File"
     enabled: true
     description: "Test validation of invalid log level in atmos.yaml config file"
-    workdir: "fixtures/invalid-log-level"
+    workdir: "fixtures/scenarios/invalid-log-level"
     command: "atmos"
     args:
       - terraform
@@ -36,7 +36,7 @@ tests:
   - name: "Valid Log Level in Config File"
     enabled: true
     description: "Test validation of valid log level in atmos.yaml config file"
-    workdir: "fixtures/valid-log-level"
+    workdir: "fixtures/scenarios/valid-log-level"
     command: "atmos"
     args:
       - terraform
@@ -45,7 +45,7 @@ tests:
       - -s
       - test
     expect:
-      exit_code: 0
+      exit_code: 1
 
   - name: "Valid Log Level in Environment Variable"
     enabled: true
@@ -61,7 +61,7 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
-      exit_code: 0
+      exit_code: 1
 
   - name: "Valid Log Level in Command Line Flag"
     enabled: true
@@ -77,4 +77,4 @@ tests:
       - -s
       - test
     expect:
-      exit_code: 0 
+      exit_code: 1

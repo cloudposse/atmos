@@ -21,6 +21,7 @@ var listComponentsCmd = &cobra.Command{
 	Long:  "List Atmos components, with options to filter results by specific stacks.",
 	Example: "atmos list components\n" +
 		"atmos list components -s <stack>",
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
