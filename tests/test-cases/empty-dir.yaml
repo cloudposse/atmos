@@ -1,0 +1,48 @@
+tests:
+  - name: check atmos version in empty-dir
+    enabled: true
+    snapshot: false
+    description: "Check that atmos version command outputs version details."
+    workdir: "fixtures/scenarios/empty-dir"
+    command: "atmos"
+    args:
+      - "version"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: check atmos in empty-dir
+    enabled: true
+    snapshot: true
+    description: "Check that atmos command outputs helpful information to get started"
+    workdir: "fixtures/scenarios/empty-dir"
+    command: "atmos"
+    args: []
+    expect:
+      diff: []
+      stdout:
+        - "atmos.yaml CLI config file was not found."
+        - "https://atmos.tools/cli/configuration"
+      stderr:
+        - "^$"
+      exit_code: 1
+
+  - name: check atmos --help in empty-dir
+    enabled: true
+    snapshot: true
+    description: "Check that atmos command outputs help even with no configuration"
+    workdir: "fixtures/scenarios/empty-dir"
+    command: "atmos"
+    args: [--help]
+    expect:
+      diff: []
+      stdout:
+        - "Available Commands:"
+        - "Flags:"
+        - 'Use "atmos \[subcommand\] --help" for more information about a command\.'
+      stderr:
+        - "^$"
+      exit_code: 0

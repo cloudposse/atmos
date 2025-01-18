@@ -1,0 +1,46 @@
+base_path: ./
+components:
+    terraform:
+        base_path: components/terraform
+        apply_auto_approve: false
+        append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+        deploy_run_init: true
+        init_run_reconfigure: true
+        auto_generate_backend_file: false
+        command: ""
+        shell:
+            prompt: ""
+    helmfile:
+        base_path: ""
+        use_eks: true
+        kubeconfig_path: ""
+        helm_aws_profile_pattern: ""
+        cluster_name_pattern: ""
+        command: ""
+stacks:
+    base_path: stacks
+    included_paths:
+        - deploy/**/*
+    excluded_paths:
+        - '**/_defaults.yaml'
+    name_pattern: '{stage}'
+    name_template: ""
+logs:
+    file: /dev/stderr
+    level: Info
+settings:
+    list_merge_strategy: ""
+    inject_github_token: true
+initialized: true
+stacksBaseAbsolutePath: /Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/stacks
+includeStackAbsolutePaths:
+    - /Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/stacks/deploy/**/*
+excludeStackAbsolutePaths:
+    - /Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/stacks/**/_defaults.yaml
+terraformDirAbsolutePath: /Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/components/terraform
+helmfileDirAbsolutePath: /Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks
+default: false
+validate:
+    editorconfig:
+        color: true
+

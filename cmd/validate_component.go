@@ -21,6 +21,7 @@ var validateComponentCmd = &cobra.Command{
 		"atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type opa --module-paths catalog",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
 

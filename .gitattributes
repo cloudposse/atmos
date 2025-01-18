@@ -6,6 +6,9 @@ docs linguist-documentation=true
 # Screengrabs are binary HTML files that are automatically generated
 website/src/components/Screengrabs/**/*.html linguist-generated=true binary
 
+# Golden snapshots should be treated a raw output to prevent line-ending conversions
+tests/snapshots/**/*.golden linguist-generated=true -text
+
 # Mark binary files to prevent normalization
 *.png binary
 *.svg binary
@@ -16,3 +19,8 @@ website/src/components/Screengrabs/**/*.html linguist-generated=true binary
 *.eps binary
 *.ansi binary
 *.mp4 binary
+
+# Reduce merge conflicts that can occur when go.mod and go.sum files are updated
+# Run `go mod tidy` to update the go.sum file
+go.sum linguist-generated=true merge=union
+go.mod linguist-generated=true merge=union
