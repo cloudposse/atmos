@@ -105,6 +105,13 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	return nil
 }
 
+func getNodeValue(tag string, f string, q string) string {
+	if q == "" {
+		return strings.TrimSpace(tag + " \"" + f + "\"")
+	}
+	return strings.TrimSpace(tag + " \"" + f + "\" \" " + q + "\"")
+}
+
 func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) (string, error) {
 	tag := n.Tag
 	val := n.Value
@@ -135,7 +142,7 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 			if !FileExists(f) {
 				return "", fmt.Errorf("the function '%s %s' points to a file that does not exist", tag, val)
 			}
-			return strings.TrimSpace(tag + " \"" + f + "\" " + q), nil
+			return getNodeValue(tag, f, q), nil
 		}
 
 		// Detect relative paths (relative to the manifest file) and convert to absolute paths
@@ -144,7 +151,7 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 			if !FileExists(resolved) {
 				return "", fmt.Errorf("the function '%s %s' points to a file that does not exist", tag, val)
 			}
-			return strings.TrimSpace(tag + " \"" + resolved + " \" " + q), nil
+			return getNodeValue(tag, resolved, q), nil
 		}
 
 		// Check if the `!include` function points to an Atmos stack manifest relative to the `base_path` defined in `atmos.yaml`
@@ -154,10 +161,10 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 			if err != nil {
 				return "", fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
 			}
-			return strings.TrimSpace(tag + " \"" + atmosManifestAbsolutePath + " \" " + q), nil
+			return getNodeValue(tag, atmosManifestAbsolutePath, q), nil
 		}
 
-		return strings.TrimSpace(tag + " \"" + f + " \" " + q), nil
+		return getNodeValue(tag, f, q), nil
 	}
 
 	return strings.TrimSpace(tag + " " + val), nil
