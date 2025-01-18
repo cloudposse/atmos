@@ -92,6 +92,9 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 	// First pass: collect available commands and find max length
 	cmds = filterCommands(cmds, listType == "subcommandAliases")
 	for _, cmd := range cmds {
+		if v, ok := customHelpShortMessage[cmd.Name()]; ok {
+			cmd.Short = v
+		}
 		switch listType {
 		case "additionalHelpTopics":
 			if cmd.IsAdditionalHelpTopicCommand() {
@@ -110,9 +113,6 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				continue
 			}
 		case "subcommandAliases":
-			if v, ok := customHelpShortMessage[cmd.Name()]; ok {
-				cmd.Short = v
-			}
 			if cmd.Annotations["nativeCommand"] == "true" {
 				continue
 			}

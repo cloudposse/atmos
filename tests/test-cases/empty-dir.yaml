@@ -28,7 +28,7 @@ tests:
         - "https://atmos.tools/cli/configuration"
       stderr:
         - "^$"
-      exit_code: 0
+      exit_code: 1
 
   - name: check atmos --help in empty-dir
     enabled: true
@@ -42,7 +42,7 @@ tests:
       stdout:
         - "Available Commands:"
         - "Flags:"
-        - 'Use "atmos \[command\] --help" for more information about a command\.'
+        - 'Use "atmos \[subcommand\] --help" for more information about a command\.'
       stderr:
         - "^$"
       exit_code: 0
