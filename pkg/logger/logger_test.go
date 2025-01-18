@@ -65,32 +65,76 @@ func TestNewLoggerFromCliConfig(t *testing.T) {
 
 func TestParseLogLevel(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		expected    LogLevel
-		expectError bool
+		name          string
+		level         string
+		expectedLevel LogLevel
+		expectError   bool
 	}{
-		{"Empty string returns Info", "", LogLevelInfo, false},
-		{"Valid Trace level", "Trace", LogLevelTrace, false},
-		{"Valid Debug level", "Debug", LogLevelDebug, false},
-		{"Valid Info level", "Info", LogLevelInfo, false},
-		{"Valid Warning level", "Warning", LogLevelWarning, false},
-		{"Valid Off level", "Off", LogLevelOff, false},
-		{"Invalid lowercase level", "trace", "", true},
-		{"Invalid mixed case level", "TrAcE", "", true},
-		{"Invalid level", "InvalidLevel", "", true},
-		{"Invalid empty spaces", "  ", "", true},
-		{"Invalid special characters", "Debug!", "", true},
+		{
+			name:          "valid trace level",
+			level:         "Trace",
+			expectedLevel: LogLevelTrace,
+			expectError:   false,
+		},
+		{
+			name:          "valid debug level",
+			level:         "Debug",
+			expectedLevel: LogLevelDebug,
+			expectError:   false,
+		},
+		{
+			name:          "valid info level",
+			level:         "Info",
+			expectedLevel: LogLevelInfo,
+			expectError:   false,
+		},
+		{
+			name:          "valid warning level",
+			level:         "Warning",
+			expectedLevel: LogLevelWarning,
+			expectError:   false,
+		},
+		{
+			name:          "valid off level",
+			level:         "Off",
+			expectedLevel: LogLevelOff,
+			expectError:   false,
+		},
+		{
+			name:        "invalid lowercase level",
+			level:       "debug",
+			expectError: true,
+		},
+		{
+			name:        "invalid mixed case level",
+			level:       "DeBuG",
+			expectError: true,
+		},
+		{
+			name:        "empty level",
+			level:       "",
+			expectError: true,
+		},
+		{
+			name:        "invalid level",
+			level:       "invalid",
+			expectError: true,
+		},
+		{
+			name:        "special characters",
+			level:       "Debug!",
+			expectError: true,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			level, err := ParseLogLevel(test.input)
+			level, err := ParseLogLevel(test.level)
 			if test.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, test.expected, level)
+				assert.Equal(t, test.expectedLevel, level)
 			}
 		})
 	}
@@ -216,78 +260,167 @@ func TestLogger_isLevelEnabled(t *testing.T) {
 
 func TestLogger_LogMethods(t *testing.T) {
 	tests := []struct {
-		name         string
-		loggerLevel  LogLevel
-		message      string
-		expectOutput bool
-		logFunc      func(*Logger, string)
+		name            string
+		loggerLevel     string
+		messageLevel    string
+		message         string
+		shouldBePrinted bool
 	}{
-		{"Trace logs when level is Trace", LogLevelTrace, "trace message", true, (*Logger).Trace},
-		{"Trace doesn't log when level is Debug", LogLevelDebug, "trace message", false, (*Logger).Trace},
-		{"Debug logs when level is Trace", LogLevelTrace, "debug message", true, (*Logger).Debug},
-		{"Debug logs when level is Debug", LogLevelDebug, "debug message", true, (*Logger).Debug},
-		{"Debug doesn't log when level is Info", LogLevelInfo, "debug message", false, (*Logger).Debug},
-		{"Info logs when level is Trace", LogLevelTrace, "info message", true, (*Logger).Info},
-		{"Info logs when level is Debug", LogLevelDebug, "info message", true, (*Logger).Info},
-		{"Info logs when level is Info", LogLevelInfo, "info message", true, (*Logger).Info},
-		{"Info doesn't log when level is Warning", LogLevelWarning, "info message", false, (*Logger).Info},
-		{"Warning logs when level is Trace", LogLevelTrace, "warning message", true, (*Logger).Warning},
-		{"Warning logs when level is Warning", LogLevelWarning, "warning message", true, (*Logger).Warning},
-		{"Nothing logs when level is Off", LogLevelOff, "any message", false, (*Logger).Info},
+		{
+			name:            "trace logs when trace enabled",
+			loggerLevel:     "Trace",
+			messageLevel:    "TRACE",
+			message:         "trace message",
+			shouldBePrinted: true,
+		},
+		{
+			name:            "debug logs when trace enabled",
+			loggerLevel:     "Trace",
+			messageLevel:    "DEBUG",
+			message:         "debug message",
+			shouldBePrinted: true,
+		},
+		{
+			name:            "info logs when trace enabled",
+			loggerLevel:     "Trace",
+			messageLevel:    "INFO",
+			message:         "info message",
+			shouldBePrinted: true,
+		},
+		{
+			name:            "warning logs when trace enabled",
+			loggerLevel:     "Trace",
+			messageLevel:    "WARNING",
+			message:         "warning message",
+			shouldBePrinted: true,
+		},
+		{
+			name:            "trace not logged when debug enabled",
+			loggerLevel:     "Debug",
+			messageLevel:    "TRACE",
+			message:         "trace message",
+			shouldBePrinted: false,
+		},
+		{
+			name:            "debug logged when debug enabled",
+			loggerLevel:     "Debug",
+			messageLevel:    "DEBUG",
+			message:         "debug message",
+			shouldBePrinted: true,
+		},
+		{
+			name:            "info logged when info enabled",
+			loggerLevel:     "Info",
+			messageLevel:    "INFO",
+			message:         "info message",
+			shouldBePrinted: true,
+		},
+		{
+			name:            "debug not logged when info enabled",
+			loggerLevel:     "Info",
+			messageLevel:    "DEBUG",
+			message:         "debug message",
+			shouldBePrinted: false,
+		},
+		{
+			name:            "warning logged when warning enabled",
+			loggerLevel:     "Warning",
+			messageLevel:    "WARNING",
+			message:         "warning message",
+			shouldBePrinted: true,
+		},
+		{
+			name:            "info not logged when warning enabled",
+			loggerLevel:     "Warning",
+			messageLevel:    "INFO",
+			message:         "info message",
+			shouldBePrinted: false,
+		},
+		{
+			name:            "nothing logged when off",
+			loggerLevel:     "Off",
+			messageLevel:    "WARNING",
+			message:         "warning message",
+			shouldBePrinted: false,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Pipe to capture output
-			r, w, _ := os.Pipe()
-			oldStdout := os.Stdout
+			// Create a pipe to capture output
+			r, w, err := os.Pipe()
+			assert.NoError(t, err)
+
+			// Save original stdout and replace it with our pipe
+			originalStdout := os.Stdout
 			os.Stdout = w
 
-			// Channel to capture output
-			outC := make(chan string)
-			go func() {
-				var buf bytes.Buffer
-				io.Copy(&buf, r)
-				outC <- buf.String()
-			}()
+			// Create logger with test level
+			config := schema.AtmosConfiguration{
+				Logs: schema.Logs{
+					Level: test.loggerLevel,
+					File:  "/dev/stdout",
+				},
+			}
+			logger, err := NewLoggerFromCliConfig(config)
+			assert.NoError(t, err)
 
-			logger, _ := NewLogger(test.loggerLevel, "/dev/stdout")
-			test.logFunc(logger, test.message)
+			// Log message based on level
+			switch test.messageLevel {
+			case "TRACE":
+				logger.Trace(test.message)
+			case "DEBUG":
+				logger.Debug(test.message)
+			case "INFO":
+				logger.Info(test.message)
+			case "WARNING":
+				logger.Warning(test.message)
+			}
 
-			// Close the writer and restore stdout
+			// Close the write end of the pipe to flush it
 			w.Close()
-			os.Stdout = oldStdout
 
 			// Read the output
-			output := <-outC
+			output := make([]byte, 1024)
+			n, _ := r.Read(output)
+			outputStr := string(output[:n])
 
-			if test.expectOutput {
-				assert.Contains(t, output, test.message)
+			// Restore original stdout
+			os.Stdout = originalStdout
+
+			if test.shouldBePrinted {
+				assert.Contains(t, outputStr, test.message)
+				assert.Contains(t, outputStr, "["+test.messageLevel+"]")
 			} else {
-				assert.Empty(t, output)
+				assert.Empty(t, outputStr)
 			}
 		})
 	}
 }
 
-func TestLoggerFromCliConfig(t *testing.T) {
+func TestNewLoggerFromCliConfig_Comprehensive(t *testing.T) {
 	tests := []struct {
 		name        string
 		config      schema.AtmosConfiguration
+		envVars     map[string]string
 		expectError bool
+		checkLevel  bool
+		wantLevel   LogLevel
 	}{
 		{
-			name: "Valid config with Info level",
+			name: "valid config with debug level",
 			config: schema.AtmosConfiguration{
 				Logs: schema.Logs{
-					Level: "Info",
+					Level: "Debug",
 					File:  "/dev/stdout",
 				},
 			},
 			expectError: false,
+			checkLevel:  true,
+			wantLevel:   LogLevelDebug,
 		},
 		{
-			name: "Valid config with Trace level",
+			name: "valid config with trace level",
 			config: schema.AtmosConfiguration{
 				Logs: schema.Logs{
 					Level: "Trace",
@@ -295,9 +428,11 @@ func TestLoggerFromCliConfig(t *testing.T) {
 				},
 			},
 			expectError: false,
+			checkLevel:  true,
+			wantLevel:   LogLevelTrace,
 		},
 		{
-			name: "Invalid log level",
+			name: "invalid log level in config",
 			config: schema.AtmosConfiguration{
 				Logs: schema.Logs{
 					Level: "Invalid",
@@ -307,7 +442,35 @@ func TestLoggerFromCliConfig(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "Empty log level defaults to Info",
+			name: "environment variable overrides config",
+			config: schema.AtmosConfiguration{
+				Logs: schema.Logs{
+					Level: "Info",
+					File:  "/dev/stdout",
+				},
+			},
+			envVars: map[string]string{
+				"ATMOS_LOGS_LEVEL": "Debug",
+			},
+			expectError: false,
+			checkLevel:  true,
+			wantLevel:   LogLevelDebug,
+		},
+		{
+			name: "invalid environment variable",
+			config: schema.AtmosConfiguration{
+				Logs: schema.Logs{
+					Level: "Info",
+					File:  "/dev/stdout",
+				},
+			},
+			envVars: map[string]string{
+				"ATMOS_LOGS_LEVEL": "Invalid",
+			},
+			expectError: true,
+		},
+		{
+			name: "empty log level defaults to Info",
 			config: schema.AtmosConfiguration{
 				Logs: schema.Logs{
 					Level: "",
@@ -315,11 +478,19 @@ func TestLoggerFromCliConfig(t *testing.T) {
 				},
 			},
 			expectError: false,
+			checkLevel:  true,
+			wantLevel:   LogLevelInfo,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// Set environment variables
+			for key, value := range test.envVars {
+				os.Setenv(key, value)
+				defer os.Unsetenv(key)
+			}
+
 			logger, err := NewLoggerFromCliConfig(test.config)
 			if test.expectError {
 				assert.Error(t, err)
@@ -327,10 +498,8 @@ func TestLoggerFromCliConfig(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, logger)
-				if test.config.Logs.Level == "" {
-					assert.Equal(t, LogLevelInfo, logger.LogLevel)
-				} else {
-					assert.Equal(t, LogLevel(test.config.Logs.Level), logger.LogLevel)
+				if test.checkLevel {
+					assert.Equal(t, test.wantLevel, logger.LogLevel)
 				}
 				assert.Equal(t, test.config.Logs.File, logger.File)
 			}
