@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"net/url"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -96,4 +100,47 @@ func SanitizeFileName(uri string) string {
 	}, base)
 
 	return base
+}
+
+// toFileURL converts a local filesystem path into a "file://" URL in a way
+// that won't confuse Gomplate on Windows or Linux.
+//
+// On Windows, e.g. localPath = "D:\Temp\foo.json" => "file://D:/Temp/foo.json"
+// On Linux,  e.g. localPath = "/tmp/foo.json"    => "file:///tmp/foo.json"
+func toFileURL(localPath string) (string, error) {
+	pathSlashed := filepath.ToSlash(localPath)
+
+	if runtime.GOOS == "windows" {
+		// If pathSlashed is "/D:/Temp/foo.json", remove the leading slash => "D:/Temp/foo.json"
+		// Then prepend "file://"
+		if strings.HasPrefix(pathSlashed, "/") {
+			pathSlashed = strings.TrimPrefix(pathSlashed, "/") // e.g. "D:/Temp/foo.json"
+		}
+		return "file://" + pathSlashed, nil // e.g. "file://D:/Temp/foo.json"
+	}
+
+	// Non-Windows: a path like "/tmp/foo.json" => "file:///tmp/foo.json"
+	// If it doesn't start with '/', make it absolute
+	if !strings.HasPrefix(pathSlashed, "/") {
+		pathSlashed = "/" + pathSlashed
+	}
+	return "file://" + pathSlashed, nil
+}
+
+func fixWindowsFileURL(rawURL string) (*url.URL, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL %q: %w", rawURL, err)
+	}
+	if runtime.GOOS == "windows" && u.Scheme == "file" {
+		if len(u.Host) > 0 {
+			u.Path = u.Host + u.Path
+			u.Host = ""
+		}
+		if strings.HasPrefix(u.Path, "/") && len(u.Path) > 2 && u.Path[2] == ':' {
+			u.Path = strings.TrimPrefix(u.Path, "/") // => "D:/Temp/foo.json"
+		}
+	}
+
+	return u, nil
 }

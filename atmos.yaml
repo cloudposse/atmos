@@ -399,7 +399,7 @@ settings:
         - "./README.yaml"
       # To Do: template can be a remote URL/github, using this local for testing
       template:
-        - "./build-harness/templates/README.md.gotmpl"
+        - "./README.md.gotmpl"
       # The final README
       output: "README.md"
       terraform:
