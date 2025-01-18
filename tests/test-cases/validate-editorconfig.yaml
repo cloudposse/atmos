@@ -1,6 +1,7 @@
 tests:
   - name: atmos validate editorconfig
     enabled: true
+    snapshot: true
     description: "Ensure atmos CLI validates success case"
     workdir: "../examples/quick-start-simple/"
     command: "atmos"
@@ -8,6 +9,7 @@ tests:
       - "validate"
       - "editorconfig"
     expect:
+      diff: []
       stdout:
         - "No errors found"
       stderr:
@@ -15,6 +17,7 @@ tests:
       exit_code: 0
   - name: atmos validate editorconfig error
     enabled: true
+    snapshot: true
     description: "Ensure atmos CLI gives error during validation based on editorconfig"
     workdir: "../tests/fixtures/scenarios/editorconfig"
     command: "atmos"
@@ -22,6 +25,7 @@ tests:
       - "validate"
       - "editorconfig"
     expect:
+      diff: []
       stderr:
         - "2 errors found"
       exit_code: 1
