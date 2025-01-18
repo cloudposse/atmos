@@ -42,8 +42,7 @@ func LogErrorAndExit(atmosConfig schema.AtmosConfiguration, err error) {
 		// Find the executed command's exit code from the error
 		var exitError *exec.ExitError
 		if errors.As(err, &exitError) {
-			exitCode := exitError.ExitCode()
-			os.Exit(exitCode)
+			os.Exit(exitError.ExitCode())
 		}
 
 		os.Exit(1)
@@ -53,7 +52,7 @@ func LogErrorAndExit(atmosConfig schema.AtmosConfiguration, err error) {
 // LogError logs errors to std.Error
 func LogError(atmosConfig schema.AtmosConfiguration, err error) {
 	if err != nil {
-		_, printErr := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
+		_, printErr := theme.Colors.Error.Fprintln(color.Error, err.Error())
 		if printErr != nil {
 			theme.Colors.Error.Println("Error logging the error:")
 			theme.Colors.Error.Printf("%s\n", printErr)

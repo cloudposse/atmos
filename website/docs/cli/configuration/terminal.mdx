@@ -1,0 +1,103 @@
+---
+title: Terminal Settings
+sidebar_position: 4
+description: Configure terminal output settings including syntax highlighting
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import Note from '@site/src/components/Note';
+import File from '@site/src/components/File';
+
+<Intro>
+Atmos provides configurable terminal settings that allow you to customize the output appearance, including syntax highlighting for YAML and JSON outputs. These settings can be configured in your `atmos.yaml` configuration file.
+</Intro>
+
+<KeyPoints>
+- Configure syntax highlighting for terminal output
+- Customize color schemes and formatting options
+- Control output pagination and line wrapping
+- Set display preferences for different output formats
+</KeyPoints>
+## General Terminal Settings
+
+Configure general terminal behavior. These are also the default settings if not specified in your `atmos.yaml`:
+
+```yaml
+settings:
+  terminal:
+    max_width: 120        # Maximum width for terminal output
+    pager: true          # Pager setting for all terminal output
+    colors: true          # Enable colored output
+    unicode: true         # Use Unicode characters in output
+```
+
+## Syntax Highlighting
+
+You can customize the syntax highlighting behavior for terminal output using the following settings:
+
+```yaml
+settings:
+  terminal:
+    syntax_highlighting:
+      enabled: true                 # Enable/disable syntax highlighting
+      formatter: terminal           # Output formatter
+      theme: dracula                # Color scheme to use
+      line_numbers: false           # Show line numbers
+      wrap: false                   # Wrap long lines
+```
+
+### Configuration Options
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Enable or disable syntax highlighting (default: `true`)</dd>
+  
+  <dt>`formatter`</dt>
+  <dd>Output formatter (default: `terminal`)</dd>
+  
+  <dt>`theme`</dt>
+  <dd>
+    Color scheme for syntax highlighting. Available options include:
+    <ul>
+      <li>`vim`</li>
+      <li>`monokai`</li>
+      <li>`github`</li>
+      <li>`dracula`</li>
+      <li>...and many other standard themes</li>
+    </ul>
+    You can find the full list of supported themes [here](https://xyproto.github.io/splash/docs/).
+  </dd>
+  
+  <dt>`pager`</dt>
+  <dd>Whether to use a pager specifically for syntax-highlighted output. This setting is independent of the pager setting (default: `false`)</dd>
+  
+  <dt>`line_numbers`</dt>
+  <dd>Show line numbers in output (default: `false`)</dd>
+  
+  <dt>`wrap`</dt>
+  <dd>Wrap long lines (default: `false`)</dd>
+</dl>
+
+### Example Usage
+
+The syntax highlighting is automatically applied when using commands that output YAML or JSON, such as:
+
+```bash
+# Display config in YAML format with syntax highlighting
+atmos describe config -f yaml
+# Display config in JSON format with syntax highlighting
+atmos describe config
+```
+
+<Note>
+When the output is piped to another command, syntax highlighting is automatically disabled to ensure compatibility:
+```bash
+# Syntax highlighting is disabled when piping
+atmos describe config | grep base_path
+```
+</Note>
+
+## Supported Themes
+
+Atmos supports a wide range of themes for syntax highlighting. You can find the full list of supported themes [here](https://xyproto.github.io/splash/docs/).

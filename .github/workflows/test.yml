@@ -72,6 +72,25 @@ jobs:
           path: |
             ./build/
 
+  tidy:
+    name: Tidy Go Modules
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go
+
+      - uses: j0hnsmith/go-mod-check@v1
+        with:
+          working-directory: ${{ github.workspace }}
+          # optional, only if you're happy to have `replace ` lines in your go.mod file
+          skip-replace-check: true
+
   # run acceptance tests
   test:
     name: Acceptance Tests
@@ -140,8 +159,23 @@ jobs:
         run: |
           make deps
 
+      # Enable this after merging test-cases
+      # Only seems to work with remote schema files
+      #- name: Validate YAML Schema for Test Cases
+      #  uses: InoUno/yaml-ls-check@v1.4.0
+      #  with:
+      #    root: "tests/test-cases"
+      #    schemaMapping: |
+      #      {
+      #        "schema.json": [
+      #          "**/*.yaml"
+      #        ]
+      #       }
+
       - name: Acceptance tests
         timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc
 
   docker:
@@ -352,6 +386,8 @@ jobs:
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos test
 
@@ -369,6 +405,8 @@ jobs:
         working-directory: ${{ matrix.demo-folder }}
         if: matrix.flavor.target == 'windows'
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos test
 
@@ -446,7 +484,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Validate YAML Schema
+      - name: Validate YAML Schema for Stacks
         uses: InoUno/yaml-ls-check@v1.4.0
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"

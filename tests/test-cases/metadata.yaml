@@ -1,6 +1,9 @@
+# yaml-language-server: $schema=schema.json
+
 tests:
   - name: atmos validate stacks with metadata
     enabled: true
+    snapshot: true
     description: "Verify atmos validate stacks command works"
     workdir: "fixtures/scenarios/metadata"
     command: "atmos"
@@ -8,12 +11,14 @@ tests:
       - "validate"
       - "stacks"
     expect:
+      diff: []
       stdout:
         - "all stacks validated successfully"
       exit_code: 0
 
   - name: atmos terraform deploy unlocked component
     enabled: true
+    snapshot: false
     description: "Verify terraform deploy works on unlocked component"
     workdir: "fixtures/scenarios/metadata"
     command: "atmos"
@@ -28,6 +33,7 @@ tests:
 
   - name: atmos terraform deploy locked component
     enabled: true
+    snapshot: true
     description: "Verify terraform deploy fails on locked component"
     workdir: "fixtures/scenarios/metadata"
     command: "atmos"
@@ -44,6 +50,7 @@ tests:
 
   - name: atmos terraform plan locked component
     enabled: true
+    snapshot: false
     description: "Verify terraform plan works on locked component"
     workdir: "fixtures/scenarios/metadata"
     command: "atmos"

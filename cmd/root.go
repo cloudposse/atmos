@@ -43,6 +43,29 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 		}
+
+		logsLevel, _ := cmd.Flags().GetString("logs-level")
+		logsFile, _ := cmd.Flags().GetString("logs-file")
+
+		errorConfig := schema.AtmosConfiguration{
+			Logs: schema.Logs{
+				Level: logsLevel,
+				File:  logsFile,
+			},
+		}
+
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			LogsLevel: logsLevel,
+			LogsFile:  logsFile,
+		}
+
+		// Only validate the config, don't store it yet since commands may need to add more info
+		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		if err != nil {
+			if !errors.Is(err, cfg.NotFound) {
+				u.LogErrorAndExit(errorConfig, err)
+			}
+		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration

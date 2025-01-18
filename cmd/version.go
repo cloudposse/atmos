@@ -29,7 +29,9 @@ var versionCmd = &cobra.Command{
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 		}
 
-		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", version.Version, runtime.GOOS, runtime.GOARCH))
+		atmosIcon := "\U0001F47D"
+
+		u.PrintMessage(fmt.Sprintf("%s Atmos %s on %s/%s", atmosIcon, version.Version, runtime.GOOS, runtime.GOARCH))
 		fmt.Println()
 
 		if checkFlag {
@@ -46,7 +48,10 @@ var versionCmd = &cobra.Command{
 				}
 				latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
 				currentRelease := strings.TrimPrefix(version.Version, "v")
-				if latestRelease != currentRelease {
+
+				if latestRelease == currentRelease {
+					u.PrintMessage(fmt.Sprintf("You are running the latest version of Atmos (%s)", latestRelease))
+				} else {
 					u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
 				}
 			}
