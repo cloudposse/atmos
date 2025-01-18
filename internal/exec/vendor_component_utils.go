@@ -13,12 +13,12 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/mattn/go-isatty"
 	cp "github.com/otiai10/copy"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"golang.org/x/term"
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
@@ -367,5 +367,7 @@ func ExecuteComponentVendorInternal(
 
 // CheckTTYSupport checks if stdout supports TTY for displaying the progress UI.
 func CheckTTYSupport() bool {
-	return isatty.IsTerminal(os.Stdout.Fd())
+	fd := int(os.Stdout.Fd())
+	isTerminal := term.IsTerminal(fd)
+	return isTerminal
 }
