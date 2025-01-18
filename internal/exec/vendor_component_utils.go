@@ -14,11 +14,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
 	cp "github.com/otiai10/copy"
+	"golang.org/x/term"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"golang.org/x/term"
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
