@@ -135,5 +135,10 @@
       "Timeout": 0,
       "Frequency": ""
     }
+  },
+  "validate": {
+    "editorconfig": {
+      "color": true
+    }
   }
 }
