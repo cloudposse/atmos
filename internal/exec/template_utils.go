@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"text/template"
 	"text/template/parse"
@@ -234,23 +233,16 @@ func ProcessTmplWithDatasourcesGomplate(
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
 
-	/* Since there's no API method for this in Gomplate 3.11.8, have to set up env var
-	 	The .Option("missingkey=default") approach isn't used to avoid having our own render logic.
-		Instead we rely on standard gomplate.NewRenderer()
-	*/
 	if ignoreMissingTemplateValues {
 		os.Setenv("GOMPLATE_MISSINGKEY", "default")
 		defer os.Unsetenv("GOMPLATE_MISSINGKEY")
 	}
 
-	// Write merged data to a temporary JSON file
-	// Required to make no changes to the original templates used with build-harness
-
+	// 1) Write the 'inner' data
 	rawJSON, err := json.Marshal(mergedData)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal merged data to JSON: %w", err)
 	}
-
 	tmpfile, err := os.CreateTemp("", "gomplate-data-*.json")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp data file for gomplate: %w", err)
@@ -258,33 +250,33 @@ func ProcessTmplWithDatasourcesGomplate(
 	tmpName := tmpfile.Name()
 	defer os.Remove(tmpName)
 
-	if _, err = tmpfile.Write(rawJSON); err != nil {
-		_ = tmpfile.Close()
+	if _, err := tmpfile.Write(rawJSON); err != nil {
+		tmpfile.Close()
 		return "", fmt.Errorf("failed to write JSON to temp file: %w", err)
 	}
-	if err = tmpfile.Close(); err != nil {
+	if err := tmpfile.Close(); err != nil {
 		return "", fmt.Errorf("failed to close temp data file: %w", err)
 	}
 
-	// This is the file URL, it is referenced in .Env.README_YAML
-	fileURL, err := url.Parse("file://" + tmpName)
+	fileURL, err := toFileURL(tmpName)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse temp file path: %w", err)
+		return "", fmt.Errorf("failed to convert temp file path to file URL: %w", err)
 	}
 
-	//  Build the  top-level data object that includes Env
-	topLevel := make(map[string]interface{})
-
-	// Add .Env.README_YAML to point to fileURL
-	topLevel["Env"] = map[string]interface{}{
-		"README_YAML": fileURL.String(),
+	finalFileUrl, err := fixWindowsFileURL(fileURL)
+	if err != nil {
+		return "", err
 	}
 
-	// Could be refactored later to avoid the second temp file, but this is more straighforward
-
+	// 2) Write the 'outer' top-level
+	topLevel := map[string]interface{}{
+		"Env": map[string]interface{}{
+			"README_YAML": fileURL,
+		},
+	}
 	outerJSON, err := json.Marshal(topLevel)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal top-level data: %w", err)
+		return "", err
 	}
 
 	tmpfile2, err := os.CreateTemp("", "gomplate-top-level-*.json")
@@ -295,23 +287,32 @@ func ProcessTmplWithDatasourcesGomplate(
 	defer os.Remove(tmpName2)
 
 	if _, err = tmpfile2.Write(outerJSON); err != nil {
-		_ = tmpfile2.Close()
-		return "", fmt.Errorf("failed to write top-level JSON to temp file: %w", err)
+		tmpfile2.Close()
+		return "", fmt.Errorf("failed to write top-level JSON: %w", err)
 	}
 	if err = tmpfile2.Close(); err != nil {
-		return "", fmt.Errorf("failed to close top-level temp data file: %w", err)
+		return "", fmt.Errorf("failed to close top-level JSON: %w", err)
 	}
 
-	topLevelFileURL, err := url.Parse("file://" + tmpName2)
+	topLevelFileURL, err := toFileURL(tmpName2)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse top-level temp file path: %w", err)
+		return "", fmt.Errorf("failed to convert top-level temp file path to file URL: %w", err)
 	}
 
-	// Build the gomplate Options to point the entire "dot" context at the second file
+	// This step is crucial on Windows:
+	finalTopLevelFileURL, err := fixWindowsFileURL(topLevelFileURL)
+	if err != nil {
+		return "", err
+	}
+
+	// 3) Construct Gomplate Options
 	opts := gomplate.Options{
 		Context: map[string]gomplate.Datasource{
 			".": {
-				URL: topLevelFileURL,
+				URL: finalTopLevelFileURL,
+			},
+			"config": {
+				URL: finalFileUrl,
 			},
 		},
 		LDelim: "{{",
@@ -319,6 +320,7 @@ func ProcessTmplWithDatasourcesGomplate(
 		Funcs:  template.FuncMap{},
 	}
 
+	// 4) Render
 	renderer := gomplate.NewRenderer(opts)
 
 	var buf bytes.Buffer
@@ -328,8 +330,7 @@ func ProcessTmplWithDatasourcesGomplate(
 		Writer: &buf,
 	}
 
-	err = renderer.RenderTemplates(context.Background(), []gomplate.Template{tpl})
-	if err != nil {
+	if err := renderer.RenderTemplates(context.Background(), []gomplate.Template{tpl}); err != nil {
 		return "", fmt.Errorf("failed to render template: %w", err)
 	}
 
