@@ -38,6 +38,9 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args)
+		if len(args) > 0 {
+			showUsageAndExit(cmd, args)
+		}
 		runMainLogic()
 	},
 }

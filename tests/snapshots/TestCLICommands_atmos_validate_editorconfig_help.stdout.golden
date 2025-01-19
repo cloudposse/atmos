@@ -1,0 +1,78 @@
+
+
+Usage:
+
+  atmos validate editorconfig [flags]
+
+
+Flags:
+
+        --config string                       Path to the configuration file
+
+        --disable-end-of-line                 Disable end-of-line check (default
+                                              "false")
+
+        --disable-indent-size                 Disable indent size check (default
+                                              "false")
+
+        --disable-indentation                 Disable indentation check (default
+                                              "false")
+
+        --disable-insert-final-newline        Disable final newline check
+                                              (default "false")
+
+        --disable-max-line-length             Disable max line length check
+                                              (default "false")
+
+        --disable-trim-trailing-whitespace    Disable trailing whitespace check
+                                              (default "false")
+
+        --dry-run                             Show which files would be checked
+                                              (default "false")
+
+        --exclude string                      Regex to exclude files from
+                                              checking
+
+        --format string                       Specify the output format:
+                                              default, gcc (default "default")
+
+    -h, --help                                help for editorconfig (default
+                                              "false")
+
+        --ignore-defaults                     Ignore default excludes (default
+                                              "false")
+
+        --init                                creates an initial configuration
+                                              (default "false")
+
+        --no-color                            Don't print colors (default
+                                              "false")
+
+        --version                             Print the version number (default
+                                              "false")
+
+
+Global Flags:
+
+        --logs-file string          The file to write Atmos logs to. Logs can be
+                                    written to any file or any standard file
+                                    descriptor, including '/dev/stdout',
+                                    '/dev/stderr' and '/dev/null' (default
+                                    "/dev/stdout")
+
+        --logs-level string         Logs level. Supported log levels are Trace,
+                                    Debug, Info, Warning, Off. If the log level
+                                    is set to Off, Atmos will not log any
+                                    messages (default "Info")
+
+        --redirect-stderr string    File descriptor to redirect 'stderr' to.
+                                    Errors can be redirected to any file or any
+                                    standard file descriptor (including
+                                    '/dev/null'): atmos <command>
+                                    --redirect-stderr /dev/stdout
+
+The '--' (double-dash) can be used to signify the end of Atmos-specific options 
+and the beginning of additional native arguments and flags for the specific command being run.
+
+Example:
+  atmos atmos validate editorconfig  <component> -s <stack> -- <native-flags>
