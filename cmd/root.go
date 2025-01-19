@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -47,21 +48,16 @@ var RootCmd = &cobra.Command{
 		logsLevel, _ := cmd.Flags().GetString("logs-level")
 		logsFile, _ := cmd.Flags().GetString("logs-file")
 
-		errorConfig := schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: logsLevel,
-				File:  logsFile,
-			},
-		}
-
 		configAndStacksInfo := schema.ConfigAndStacksInfo{
 			LogsLevel: logsLevel,
 			LogsFile:  logsFile,
 		}
 
-		// Only validate the config, don't store it yet since commands may need to add more info
-		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		// Initialize the configuration with command line arguments and environment variables
+		var err error
+		atmosConfig, err = cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
+<<<<<<< HEAD
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
@@ -69,8 +65,23 @@ var RootCmd = &cobra.Command{
 				}
 			} else {
 				u.LogErrorAndExit(errorConfig, err)
+=======
+			if errors.Is(err, cfg.NotFound) && isVersionCommand() {
+				u.LogTrace(atmosConfig, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", err))
+			} else {
+				u.LogErrorAndExit(atmosConfig, err)
+>>>>>>> e1a616cc (Add logger initialization and improve version command logging)
 			}
 		}
+
+		// Initialize the logger
+		logger, err := logger.NewLoggerFromCliConfig(atmosConfig)
+		if err != nil {
+			u.LogErrorAndExit(atmosConfig, err)
+		}
+
+		// Set the logger in the utils package
+		u.SetLogger(logger)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -151,21 +162,24 @@ func getInvalidCommandName(input string) string {
 }
 
 func init() {
+	cobra.OnInitialize(initConfig)
+
 	// Add template function for wrapped flag usages
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
-	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. "+
-		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
-
+	// Add global flags
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
+	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect 'stderr' to. Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
 
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
 		u.LogErrorAndExit(atmosConfig, err)
 	}
+}
 
+func initConfig() {
 	initCobraConfig()
 }
 

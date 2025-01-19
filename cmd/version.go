@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -26,7 +25,7 @@ var versionCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(atmosConfig, err)
 		}
 
 		atmosIcon := "\U0001F47D"
@@ -35,30 +34,30 @@ var versionCmd = &cobra.Command{
 		fmt.Println()
 
 		if checkFlag {
+			u.LogDebug(atmosConfig, "Checking for latest Atmos release on GitHub")
 			// Check for the latest Atmos release on GitHub
-			latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
-			if err == nil && latestReleaseTag != "" {
-				if err != nil {
-					u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to check for updates: %v", err))
-					return
-				}
-				if latestReleaseTag == "" {
-					u.LogWarning(schema.AtmosConfiguration{}, "No release information available")
-					return
-				}
-				latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
-				currentRelease := strings.TrimPrefix(version.Version, "v")
-
-				if latestRelease == currentRelease {
-					u.PrintMessage(fmt.Sprintf("You are running the latest version of Atmos (%s)", latestRelease))
-				} else {
-					u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
-				}
+			latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos", atmosConfig)
+			if err != nil {
+				u.LogWarning(atmosConfig, fmt.Sprintf("Failed to check for updates: %v", err))
+				return
+			}
+			if latestReleaseTag == "" {
+				u.LogWarning(atmosConfig, "No release information available")
+				return
+			}
+			latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
+			currentRelease := strings.TrimPrefix(version.Version, "v")
+			u.LogDebug(atmosConfig, fmt.Sprintf("Current version: %s, Latest version: %s", currentRelease, latestRelease))
+			if latestRelease != currentRelease {
+				u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
+			} else {
+				u.LogDebug(atmosConfig, "Atmos is up to date")
 			}
 			return
 		}
 
 		// Check for the cache and print update message
+		u.LogDebug(atmosConfig, "Checking for updates using cache")
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	},
 }
