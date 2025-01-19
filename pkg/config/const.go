@@ -78,12 +78,8 @@ const (
 	AtmosProDefaultEndpoint    = "api"
 
 	// Atmos YAML functions
-	AtmosYamlFuncExec             = "!exec"
-	AtmosYamlFuncTemplate         = "!template"
-	AtmosYamlFuncTerraformOutput  = "!terraform.output"
-	AtmosYamlFuncStore            = "!store"
-	AtmosYamlFuncEnv              = "!env"
-	AtmosYamlFuncInclude          = "!include"
-	AtmosYamlFuncIncludeLocalFile = "!include-local-file"
-	AtmosYamlFuncIncludeGoGetter  = "!include-go-getter"
+	AtmosYamlFuncExec            = "!exec"
+	AtmosYamlFuncTemplate        = "!template"
+	AtmosYamlFuncTerraformOutput = "!terraform.output"
+	AtmosYamlFuncEnv             = "!env"
 )

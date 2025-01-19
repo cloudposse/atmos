@@ -15,10 +15,82 @@ import File from '@site/src/components/File'
 
 ## Usage
 
+The `!include` function can be called with either one or two parameters:
+
 ```yaml
-vars:
-  a: !include a.yaml
+  # Download the file and assign its content to the variable
+  var1: !include <file-path>
+
+  # Download the file, filter the content using the YQ expression,
+  # and assign the result to the variable
+  var2: !include <file-path> <yq-expression>
 ```
+
+## Arguments
+
+<dl>
+    <dt>`file-path`</dt>
+    <dd>
+        Path to a local or remote file
+     </dd>
+
+    <dt>`yq-expression`</dt>
+    <dd>(Optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the file</dd>
+</dl>
+
+## Supported File Protocols
+
+The `!include` function supports the following local file paths:
+  - absolute paths (e.g. `/Users/me/Documents/values.yaml`)
+  - paths relative to the current Atmos manifest where the `!include` function is executed (e.g. `./values.yaml`, `../config/values.yaml`)
+  - paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file (e.g. `stacks/catalog/vpc/defaults.yaml`)
+
+To download remote files from different sources, the `!include` function uses [`go-getter`](https://github.com/hashicorp/go-getter)
+(used by [Terraform](https://www.terraform.io/) for downloading modules) and supports the following protocols:
+
+- `tar` - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
+- `zip` - Zip files
+- `http` - HTTP URLs
+- `https` - HTTPS URLs
+- `git` - Git repositories, which can be accessed via HTTPS or SSH
+- `hg` - Mercurial repositories, accessed via HTTP/S or SSH
+- `s3` - Amazon S3 bucket URLs
+- `gcs` - Google Cloud Storage URLs
+- `oci` - Open Container Initiative (OCI) images
+- `scp` - Secure Copy Protocol for SSH-based transfers
+- `sftp` - SSH File Transfer Protocol
+
+:::tip
+You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!include` YAML function parameters.
+Atmos processes the templates first, and then executes the `!include` function, allowing you to provide the parameters to
+the function dynamically.
+:::
+
+## Description
+
+## Using YQ Expressions to retrieve individual values from files
+
+To retrieve individual values from complex types such as maps and lists, or do any kind of filtering or querying,
+you can utilize [YQ](https://mikefarah.gitbook.io/yq) expressions.
+
+For example:
+
+- Retrieve the first item from a list
+
+```yaml
+subnet_id1: !include <file-path> .private_subnet_ids[0]
+```
+
+- Read a key from a map
+
+```yaml
+username: !include <file-path> .config_map.username
+```
+
+For more details, review the following docs:
+
+- [YQ Guide](https://mikefarah.gitbook.io/yq)
+- [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
 
 ## Examples:
 
@@ -42,9 +114,3 @@ components:
         var11: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
         allowed_ips: !include https://api.github.com/meta .api
 ```
-
-:::tip
-You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!include` YAML function.
-Atmos processes the templates first, and then executes the `!include` function, allowing you to provide the parameters to
-the function dynamically.
-:::

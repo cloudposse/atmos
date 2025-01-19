@@ -13,12 +13,14 @@ import (
 
 const (
 	// Atmos YAML functions
-	AtmosYamlFuncExec             = "!exec"
-	AtmosYamlFuncStore            = "!store"
-	AtmosYamlFuncTemplate         = "!template"
-	AtmosYamlFuncTerraformOutput  = "!terraform.output"
-	AtmosYamlFuncEnv              = "!env"
-	AtmosYamlFuncInclude          = "!include"
+	AtmosYamlFuncExec            = "!exec"
+	AtmosYamlFuncStore           = "!store"
+	AtmosYamlFuncTemplate        = "!template"
+	AtmosYamlFuncTerraformOutput = "!terraform.output"
+	AtmosYamlFuncEnv             = "!env"
+	AtmosYamlFuncInclude         = "!include"
+
+	// For internal use by Atmos when processing the `!include` function
 	AtmosYamlFuncIncludeLocalFile = "!include-local-file"
 	AtmosYamlFuncIncludeGoGetter  = "!include-go-getter"
 )
@@ -174,10 +176,12 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 	return strings.TrimSpace(tag + " " + val), nil
 }
 
+// UnmarshalYAML unmarshals YAML into a Go type
 func UnmarshalYAML[T any](input string) (T, error) {
 	return UnmarshalYAMLFromFile[T](&schema.AtmosConfiguration{}, input, "")
 }
 
+// UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type
 func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, error) {
 	var zeroValue T
 	var node yaml.Node
@@ -213,7 +217,7 @@ func IsYAML(data string) bool {
 		return false
 	}
 
-	// Additional check: Ensure that the parsed result is not nil and has some meaningful content
+	// Ensure that the parsed result is not nil and has some meaningful content
 	_, isMap := yml.(map[string]any)
 	_, isSlice := yml.([]any)
 
