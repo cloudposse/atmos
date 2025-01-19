@@ -43,6 +43,9 @@ YAML supports three types of data: core, defined, and user-defined.
    [access component outputs (remote state) directly within Atmos stack manifests](/core-concepts/share-data/remote-state).
    Note that this requires initializing each component (`terraform init`), which downloads all Terraform providers and may significantly impact performance.
 
+ - The [__`!env`__](/core-concepts/stacks/yaml-functions/env) YAML function is used to retrieve environment variables
+   and assign them to the sections in Atmos stack manifests
+
 :::tip
 You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration.
 Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.

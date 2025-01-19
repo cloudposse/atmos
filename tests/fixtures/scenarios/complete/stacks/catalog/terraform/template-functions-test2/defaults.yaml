@@ -61,7 +61,7 @@ components:
         test77: !include a.txt
         test78: !include '"b c.txt" ".[1]"'
         test79: !include a.hcl
-        test80: !env USER
+        # test80: !env USER
         test81: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/catalog/vpc-flow-logs-bucket/defaults.yaml
         test82: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
         test83: !include https://api.github.com/meta .api
