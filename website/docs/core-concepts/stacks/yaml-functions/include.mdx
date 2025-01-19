@@ -30,17 +30,16 @@ components:
         config:
           user_id: 1
       vars:
-        test70: !include ./dev.yaml
-        test71: !include ./dev.yaml .components.terraform.vpc.vars
-        test72: !include ./dev.yaml .components.terraform.vpc.vars.ipv4_primary_cidr_block
-        test73: !include stacks/catalog/vpc/ue2.yaml
-        test74: !include stacks/catalog/vpc/ue2.yaml .import
-        test75: !include stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones
-        test77: !include a.txt
-        test78: !include '"b c.txt" ".[1]"'
-        test79: !include a.hcl
-        test81: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/catalog/vpc-flow-logs-bucket/defaults.yaml
-        test82: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        var1: !include ./dev.yaml
+        var2: !include ./dev.yaml .components.terraform.vpc.vars
+        var3: !include ./dev.yaml .components.terraform.vpc.vars.ipv4_primary_cidr_block
+        var4: !include stacks/catalog/vpc/ue2.yaml
+        var6: !include stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones
+        var7: !include a.txt
+        var8: !include '"b c.txt" ".[1]"'
+        var9: !include a.hcl
+        var10: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/catalog/vpc-flow-logs-bucket/defaults.yaml
+        var11: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
         allowed_ips: !include https://api.github.com/meta .api
 ```
 
