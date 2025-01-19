@@ -37,10 +37,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 		initializeConfig(cmd)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		if cliConfig.Help {
-			cmd.Help()
-			os.Exit(0)
-		}
+		handleHelpRequest(cmd, args)
 		runMainLogic()
 	},
 }
