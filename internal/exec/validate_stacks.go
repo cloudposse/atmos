@@ -2,7 +2,9 @@ package exec
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,7 +21,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const atmosManifestDefault = "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+//go:embed schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+var atmosManifestDefault embed.FS
+
+const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
@@ -85,20 +90,22 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	// Check if the Atmos manifest JSON Schema is configured and the file exists
 	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
 	var atmosManifestJsonSchemaFilePath string
-
-	if atmosConfig.Schemas.Atmos.Manifest == "" {
-		atmosConfig.Schemas.Atmos.Manifest = atmosManifestDefault
-		u.LogTrace(atmosConfig, fmt.Sprintf("The Atmos JSON Schema file is not configured. Using the default schema '%s'", atmosManifestDefault))
-	}
-
 	atmosManifestJsonSchemaFileAbsPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.Atmos.Manifest)
 
-	if u.FileExists(atmosConfig.Schemas.Atmos.Manifest) {
+	if atmosConfig.Schemas.Atmos.Manifest == "" {
+		// If the validation schema location is not specified, use the embedded one
+		f, err := getEmbeddedSchemaPath()
+		if err != nil {
+			return err
+		}
+		atmosConfig.Schemas.Atmos.Manifest = f
+		u.LogTrace(atmosConfig, fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
+	} else if u.FileExists(atmosConfig.Schemas.Atmos.Manifest) {
 		atmosManifestJsonSchemaFilePath = atmosConfig.Schemas.Atmos.Manifest
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
 		atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
 	} else if u.IsURL(atmosConfig.Schemas.Atmos.Manifest) {
-		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(atmosConfig.Schemas.Atmos.Manifest)
+		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -107,8 +114,9 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			"1. 'schemas.atmos.manifest' in atmos.yaml\n"+
 			"2. ATMOS_SCHEMAS_ATMOS_MANIFEST env var\n"+
 			"3. --schemas-atmos-manifest flag\n\n"+
-			"Accepts: absolute path, paths relative to base_path, or URL",
-			atmosConfig.Schemas.Atmos.Manifest)
+			"Accepts: absolute path, path relative to base_path, or URL",
+			atmosConfig.Schemas.Atmos.Manifest,
+		)
 	}
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
@@ -120,6 +128,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		"**/*.yaml.tmpl",
 		"**/*.yml.tmpl",
 	}
+
 	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(atmosConfig.StacksBaseAbsolutePath, includedPaths)
 	if err != nil {
 		return err
@@ -363,7 +372,10 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 }
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
-func downloadSchemaFromURL(manifestURL string) (string, error) {
+func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error) {
+
+	manifestURL := atmosConfig.Schemas.Atmos.Manifest
+
 	parsedURL, err := url.Parse(manifestURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL '%s': %w", manifestURL, err)
@@ -379,6 +391,10 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+
+	// Register custom detectors
+	RegisterCustomDetectors(atmosConfig)
+
 	client := &getter.Client{
 		Ctx:  ctx,
 		Dst:  atmosManifestJsonSchemaFilePath,
@@ -388,5 +404,27 @@ func downloadSchemaFromURL(manifestURL string) (string, error) {
 	if err = client.Get(); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
+	return atmosManifestJsonSchemaFilePath, nil
+}
+
+func getEmbeddedSchemaPath() (string, error) {
+	embedded, err := fs.ReadFile(atmosManifestDefault, atmosManifestDefaultFileName)
+	if err != nil {
+		return "", err
+	}
+
+	tempDir := os.TempDir()
+	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, atmosManifestDefaultFileName)
+
+	err = u.EnsureDir(atmosManifestJsonSchemaFilePath)
+	if err != nil {
+		return "", err
+	}
+
+	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0644)
+	if err != nil {
+		return "", err
+	}
+
 	return atmosManifestJsonSchemaFilePath, nil
 }

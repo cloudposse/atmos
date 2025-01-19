@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: atmos circuit-breaker
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos breaks the infinite loop when shell depth exceeds maximum (10)."
+    workdir: "fixtures/scenarios/complete/"
+    command: "atmos"
+    args:
+      - "loop"
+    expect:
+      diff: []
+      stderr:
+        - "ATMOS_SHLVL.*exceeds maximum allowed depth.*(\r?\n)+exit status 1(\r?\n)+exit status 1.*"
+      exit_code: 1

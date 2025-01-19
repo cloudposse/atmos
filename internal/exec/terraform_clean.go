@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -256,7 +257,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 func DeletePathTerraform(fullPath string, objectName string) error {
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
-		xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
+		xMark := theme.Styles.XMark
 		fmt.Printf("%s Cannot delete %s: path does not exist", xMark, objectName)
 		fmt.Println()
 		return err
@@ -267,12 +268,12 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	// Proceed with deletion
 	err = os.RemoveAll(fullPath)
 	if err != nil {
-		xMark := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
+		xMark := theme.Styles.XMark
 		fmt.Printf("%s Error deleting %s", xMark, objectName)
 		fmt.Println()
 		return err
 	}
-	checkMark := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
+	checkMark := theme.Styles.Checkmark
 	fmt.Printf("%s Deleted %s", checkMark, objectName)
 	fmt.Println()
 	return nil

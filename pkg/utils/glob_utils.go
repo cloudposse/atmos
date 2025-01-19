@@ -22,6 +22,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	if found && existingMatches != nil {
 		return strings.Split(existingMatches.(string), ","), nil
 	}
+
 	pattern = filepath.ToSlash(pattern)
 	base, cleanPattern := doublestar.SplitPattern(pattern)
 	f := os.DirFS(base)

@@ -11,10 +11,12 @@ import (
 // describeComponentCmd describes configuration for components
 var describeConfigCmd = &cobra.Command{
 	Use:                "config",
-	Short:              "Execute 'describe config' command",
-	Long:               `This command shows the final (deep-merged) CLI configuration: atmos describe config`,
+	Short:              "Display the final merged CLI configuration",
+	Long:               "This command displays the final, deep-merged CLI configuration after combining all relevant configuration files.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+
 		err := e.ExecuteDescribeConfigCmd(cmd, args)
 		if err != nil {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)

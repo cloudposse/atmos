@@ -321,6 +321,7 @@ The `settings` section configures Atmos global settings.
       terminal:
         max_width: 120  # Maximum width for terminal output
         pager: true     # Use pager for long output
+      inject_github_token: true # Adds the GITHUB_TOKEN as a Bearer token for GitHub API requests.
     ```
 </File>
 
@@ -354,6 +355,11 @@ The `settings` section configures Atmos global settings.
       <dt>`pager`</dt>
       <dd>When enabled, displays long content in a pager instead of directly in the terminal.</dd>
     </dl>
+  </dd>
+
+  <dt>`settings.inject_github_token`</dt>
+  <dd>
+    Adds the `GITHUB_TOKEN` as a Bearer token for GitHub API requests, enabling authentication for private repositories and increased rate limits. If `ATMOS_GITHUB_TOKEN` is set, it takes precedence, overriding this behavior.
   </dd>
 
   <dt>`settings.docs` (Deprecated)</dt>
@@ -831,6 +837,7 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_LOGS_LEVEL                                      | logs.level                                      | Logs level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging) |
 | ATMOS_SETTINGS_LIST_MERGE_STRATEGY                    | settings.list_merge_strategy                    | Specifies how lists are merged in Atmos stack manifests. The following strategies are supported: `replace`, `append`, `merge`                                                                                                |
 | ATMOS_VERSION_CHECK_ENABLED                           | version.check.enabled                           | Enable/disable Atmos version checks for updates to the newest release                                                                                                                                                        |
+| ATMOS_GITHUB_TOKEN                                    | N/A                                             | Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits                                                                                                                |
 
 ### Context
 

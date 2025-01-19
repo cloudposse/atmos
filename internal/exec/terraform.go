@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -34,47 +33,10 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 	return ExecuteTerraform(info)
 }
 
-// ExecuteTerraform executes terraform commands
-func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	if info.NeedHelp {
-		return nil
-	}
-
-	// If the user just types `atmos terraform`, print Atmos logo and show terraform help
-	if info.SubCommand == "" {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			return err
-		}
-
-		err = processHelp(atmosConfig, "terraform", "")
-		if err != nil {
-			return err
-		}
-
-		fmt.Println()
-		return nil
-	}
-	if info.SubCommand == "version" {
-		return ExecuteShellCommand(atmosConfig,
-			"terraform",
-			[]string{info.SubCommand},
-			"",
-			nil,
-			false,
-			info.RedirectStdErr)
-	}
-
+func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
 	shouldProcessStacks := true
 	shouldCheckStack := true
-	// Skip stack processing when cleaning with --everything or --force flags to allow
-	// cleaning without requiring stack configuration
+
 	if info.SubCommand == "clean" &&
 		(u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) ||
 			u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)) {
@@ -86,11 +48,81 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	}
 
+	return shouldProcessStacks, shouldCheckStack
+}
+
+func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	// Auto-generate backend file
+	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
+		backendFileName := filepath.Join(workingDir, "backend.tf.json")
+
+		u.LogDebug(*atmosConfig, "\nWriting the backend config to file:")
+		u.LogDebug(*atmosConfig, backendFileName)
+
+		if !info.DryRun {
+			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
+			if err != nil {
+				return err
+			}
+
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	if len(info.ComponentProvidersSection) > 0 {
+		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
+
+		u.LogDebug(*atmosConfig, "\nWriting the provider overrides to file:")
+		u.LogDebug(*atmosConfig, providerOverrideFileName)
+
+		if !info.DryRun {
+			var providerOverrides = generateComponentProviderOverrides(info.ComponentProvidersSection)
+			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
+			return err
+		}
+	}
+	return nil
+}
+
+// ExecuteTerraform executes terraform commands
+func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+
+	if info.NeedHelp {
+		return nil
+	}
+
+	if info.SubCommand == "version" {
+		return ExecuteShellCommand(atmosConfig,
+			"terraform",
+			[]string{info.SubCommand},
+			"",
+			nil,
+			false,
+			info.RedirectStdErr)
+	}
+
+	// Skip stack processing when cleaning with --everything or --force flags to allow cleaning without requiring stack
+	// configuration
+	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
+
 	if shouldProcessStacks {
 		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, true)
 		if err != nil {
 			return err
 		}
+
 		if len(info.Stack) < 1 && shouldCheckStack {
 			return errors.New("stack must be specified when not using --everything or --force flags")
 		}
@@ -105,6 +137,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
+
 	// Check if the component (or base component) exists as Terraform component
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
@@ -120,6 +153,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
 		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
+	}
+
+	// Check if the component is locked (`metadata.locked` is set to true)
+	if info.ComponentIsLocked {
+		// Allow read-only commands, block modification commands
+		switch info.SubCommand {
+		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
+			return fmt.Errorf("component '%s' is locked and cannot be modified (metadata.locked = true)",
+				filepath.Join(info.ComponentFolderPrefix, info.Component))
+		}
 	}
 
 	if info.SubCommand == "clean" {
@@ -188,6 +231,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
+
 	if !valid {
 		return fmt.Errorf("\nComponent '%s' did not pass the validation policies.\n", info.ComponentFromArg)
 	}
@@ -195,39 +239,21 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Component working directory
 	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
 
-	// Auto-generate backend file
-	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
-		backendFileName := filepath.Join(workingDir, "backend.tf.json")
-
-		u.LogDebug(atmosConfig, "\nWriting the backend config to file:")
-		u.LogDebug(atmosConfig, backendFileName)
-
-		if !info.DryRun {
-			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
-			if err != nil {
-				return err
-			}
-
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
-			if err != nil {
-				return err
-			}
-		}
+	err = generateBackendConfig(&atmosConfig, &info, workingDir)
+	if err != nil {
+		return err
 	}
 
-	// Generate `providers_override.tf.json` file if the `providers` section is configured
-	if len(info.ComponentProvidersSection) > 0 {
-		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
+	err = generateProviderOverrides(&atmosConfig, &info, workingDir)
+	if err != nil {
+		return err
+	}
 
-		u.LogDebug(atmosConfig, "\nWriting the provider overrides to file:")
-		u.LogDebug(atmosConfig, providerOverrideFileName)
-
-		if !info.DryRun {
-			var providerOverrides = generateComponentProviderOverrides(info.ComponentProvidersSection)
-			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
-			if err != nil {
-				return err
-			}
+	// Check for any Terraform environment variables that might conflict with Atmos
+	for _, envVar := range os.Environ() {
+		if strings.HasPrefix(envVar, "TF_") {
+			varName := strings.SplitN(envVar, "=", 2)[0]
+			u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
 		}
 	}
 

@@ -31,7 +31,15 @@ func PrintAsYAML(data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
+
+	atmosConfig := ExtractAtmosConfig(data)
+	highlighted, err := HighlightCodeWithConfig(y, atmosConfig)
+	if err != nil {
+		// Fallback to plain text if highlighting fails
+		PrintMessage(y)
+		return nil
+	}
+	PrintMessage(highlighted)
 	return nil
 }
 

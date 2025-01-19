@@ -72,8 +72,8 @@ func getMarkdownSection(title string) (details, suggestion string) {
 // workflowCmd executes a workflow
 var workflowCmd = &cobra.Command{
 	Use:   "workflow",
-	Short: "Execute a workflow",
-	Long:  `This command executes a workflow: atmos workflow <name> --file <file>`,
+	Short: "Run predefined tasks using workflows",
+	Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
 	Example: "atmos workflow\n" +
 		"atmos workflow <name> --file <file>\n" +
 		"atmos workflow <name> --file <file> --stack <stack>\n" +
@@ -83,17 +83,11 @@ var workflowCmd = &cobra.Command{
 		"For more details refer to https://atmos.tools/cli/commands/workflow/",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args)
 		// If no arguments are provided, start the workflow UI
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-			}
-			return
-		}
-
-		if args[0] == "help" {
-			if err := cmd.Help(); err != nil {
 				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 			}
 			return

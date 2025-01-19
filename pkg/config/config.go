@@ -17,7 +17,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -55,6 +57,23 @@ var (
 				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
 				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 				UseEKS:                true,
+			},
+		},
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+			Terminal: schema.Terminal{
+				MaxWidth: templates.GetTerminalWidth(),
+				Pager:    true,
+				Colors:   true,
+				Unicode:  true,
+				SyntaxHighlighting: schema.SyntaxHighlighting{
+					Enabled:                true,
+					Formatter:              "terminal",
+					Theme:                  "dracula",
+					HighlightedOutputPager: true,
+					LineNumbers:            true,
+					Wrap:                   false,
+				},
 			},
 		},
 		Workflows: schema.Workflows{
@@ -120,6 +139,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// Default configuration values
 	v.SetDefault("components.helmfile.use_eks", true)
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
+	v.SetDefault("settings.inject_github_token", true)
 
 	// 1. If ATMOS_CLI_CONFIG_PATH is defined, check only there
 	if atmosCliConfigPathEnv := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmosCliConfigPathEnv != "" {
@@ -221,9 +241,10 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		// Use default config if no config was found in any location
 		logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
 		if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace {
-			u.LogTrace(atmosConfig, "atmos.yaml' CLI config was not found.\n"+
-				"Refer to https://atmos.tools/cli/configuration\n"+
-				"Using the default CLI config:\n\n")
+			u.PrintMessageInColor("'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n"+
+				"Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'.\n"+
+				"Using the default CLI config:\n\n", theme.Colors.Info)
+
 			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, defaultCliConfig)
 			if err != nil {
 				return atmosConfig, err
@@ -242,8 +263,10 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			return atmosConfig, err
 		}
 	}
-
-	// Unmarshal, process environment variables, imports, and command-line arguments as needed.
+	// We want the editorconfig color by default to be true
+	atmosConfig.Validate.EditorConfig.Color = true
+	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
+	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err

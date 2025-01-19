@@ -60,11 +60,11 @@ components:
       settings:
         depends_on:
           1:
-            file: "examples/tests/components/terraform/mixins/introspection.mixin.tf"
+            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
 ```
 
 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
-`examples/tests/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder).
+`tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder).
 
 Dependencies on external folders are defined using the `folder` attribute. For example:
 
@@ -77,13 +77,13 @@ components:
       settings:
         depends_on:
           1:
-            file: "examples/tests/components/terraform/mixins/introspection.mixin.tf"
+            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
           2:
-            folder: "examples/tests/components/helmfile/infra/infra-server"
+            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
 ```
 
 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
-`examples/tests/components/helmfile/infra/infra-server`.
+`tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`.
 
 If `component` is specified, the rest of the attributes are the context variables and are used to define Atmos stacks other than the current stack.
 For example, you can specify:
@@ -100,7 +100,7 @@ In the following example, we define that the `top-level-component1` component de
 - The `test/test-component` component in Atmos stacks identified by the `dev` stage
 - The `my-component` component from the `tenant1-ue2-staging` Atmos stack
 
-```yaml title="examples/tests/stacks/catalog/terraform/top-level-component1.yaml"
+```yaml title="tests/fixtures/scenarios/complete/stacks/catalog/terraform/top-level-component1.yaml"
 components:
   terraform:
     top-level-component1:
@@ -131,7 +131,7 @@ In the following example, we specify that the `top-level-component2` component d
 - The `test/test-component` component in the same Atmos stack
 - The `test/test2/test-component-2` component in the same Atmos stack
 
-```yaml title="examples/tests/stacks/catalog/terraform/top-level-component2.yaml"
+```yaml title="tests/fixtures/scenarios/complete/stacks/catalog/terraform/top-level-component2.yaml"
 components:
   terraform:
     top-level-component2:
@@ -161,7 +161,7 @@ to show all the components that depend on the `test/test-component` component in
   {
     "component": "top-level-component1",
     "component_type": "terraform",
-    "component_path": "examples/tests/components/terraform/top-level-component1",
+    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",
@@ -185,7 +185,7 @@ the `tenant1-ue2-test-1` stack:
   {
     "component": "top-level-component1",
     "component_type": "terraform",
-    "component_path": "examples/tests/components/terraform/top-level-component1",
+    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",
@@ -198,7 +198,7 @@ the `tenant1-ue2-test-1` stack:
   {
     "component": "top-level-component2",
     "component_type": "terraform",
-    "component_path": "examples/tests/components/terraform/top-level-component1",
+    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",
@@ -241,6 +241,7 @@ atmos describe dependents test/test-component -s tenant1-ue2-dev --format yaml
 atmos describe dependents test/test-component -s tenant1-ue2-test-1 -f yaml
 atmos describe dependents test/test-component -s tenant1-ue2-test-1 --file dependents.json
 atmos describe dependents test/test-component -s tenant1-ue2-test-1 --format yaml --file dependents.yaml
+atmos describe dependents test/test-component -s tenant1-ue2-test-1 --query <yq-expression>
 ```
 
 ## Arguments
@@ -251,11 +252,12 @@ atmos describe dependents test/test-component -s tenant1-ue2-test-1 --format yam
 
 ## Flags
 
-| Flag       | Description                                         | Alias | Required |
-| :--------- | :-------------------------------------------------- | :---- | :------- |
-| `--stack`  | Atmos stack                                         | `-s`  | yes      |
-| `--format` | Output format: `json` or `yaml` (`json` is default) | `-f`  | no       |
-| `--file`   | If specified, write the result to the file          |       | no       |
+| Flag       | Description                                                                                                                                                                                                       | Alias | Required |
+|:-----------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--stack`  | Atmos stack                                                                                                                                                                                                       | `-s`  | yes      |
+| `--format` | Output format: `json` or `yaml` (`json` is default)                                                                                                                                                               | `-f`  | no       |
+| `--file`   | If specified, write the result to the file                                                                                                                                                                        |       | no       |
+| `--query`  | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe dependents <component> -s <stack> --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq | `-q`  | no       |
 
 ## Output
 
@@ -321,7 +323,7 @@ Atmos components and are not meant to be provisioned.
   {
     "component": "top-level-component2",
     "component_type": "terraform",
-    "component_path": "examples/tests/components/terraform/top-level-component1",
+    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",
@@ -333,7 +335,7 @@ Atmos components and are not meant to be provisioned.
   {
     "component": "top-level-component1",
     "component_type": "terraform",
-    "component_path": "examples/tests/components/terraform/top-level-component1",
+    "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
     "namespace": "cp",
     "tenant": "tenant1",
     "environment": "ue2",

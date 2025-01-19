@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -359,6 +360,11 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
 	if len(logsLevel) > 0 {
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
+		// Validate the log level before setting it
+		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
+			return err
+		}
+		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = logsLevel
 	}
 
@@ -395,6 +401,12 @@ func checkConfig(atmosConfig schema.AtmosConfiguration) error {
 
 	if len(atmosConfig.Stacks.IncludedPaths) < 1 {
 		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
+	}
+
+	if len(atmosConfig.Logs.Level) > 0 {
+		if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -474,6 +486,10 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
 	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
+		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
+			return err
+		}
+		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
 	}

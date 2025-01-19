@@ -1,50 +1,19 @@
 package cmd
 
 import (
-	"github.com/samber/lo"
-	"github.com/spf13/cobra"
-
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/spf13/cobra"
 )
 
 // helmfileCmd represents the base command for all helmfile sub-commands
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
 	Aliases:            []string{"hf"},
-	Short:              "Execute 'helmfile' commands",
-	Long:               `This command runs Helmfile commands`,
+	Short:              "Manage Helmfile-based Kubernetes deployments",
+	Long:               `This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Run: func(cmd *cobra.Command, args []string) {
-
-		var argsAfterDoubleDash []string
-		var finalArgs = args
-
-		doubleDashIndex := lo.IndexOf(args, "--")
-		if doubleDashIndex > 0 {
-			finalArgs = lo.Slice(args, 0, doubleDashIndex)
-			argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
-		}
-
-		info, err := e.ProcessCommandLineArgs("helmfile", cmd, finalArgs, argsAfterDoubleDash)
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
-		// Exit on help
-		if info.NeedHelp {
-			// Check for the latest Atmos release on GitHub and print update message
-			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
-			return
-		}
-		// Check Atmos configuration
-		checkAtmosConfig()
-
-		err = e.ExecuteHelmfile(info)
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
-	},
+	Args:               cobra.NoArgs,
 }
 
 func init() {
@@ -52,4 +21,15 @@ func init() {
 	helmfileCmd.DisableFlagParsing = true
 	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile <helmfile_command> <component> -s <stack>")
 	RootCmd.AddCommand(helmfileCmd)
+}
+
+func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
+	handleHelpRequest(cmd, args)
+	diffArgs := []string{commandName}
+	diffArgs = append(diffArgs, args...)
+	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	err := e.ExecuteHelmfile(info)
+	if err != nil {
+		u.LogErrorAndExit(atmosConfig, err)
+	}
 }
