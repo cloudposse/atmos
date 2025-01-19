@@ -79,7 +79,7 @@ func LogDebug(atmosConfig schema.AtmosConfiguration, message string) {
 	if atmosConfig.Logs.Level == LogLevelTrace ||
 		atmosConfig.Logs.Level == LogLevelDebug {
 
-		log(atmosConfig, theme.Colors.Info, message)
+		log(atmosConfig, theme.Colors.Info, fmt.Sprintf("[DEBUG] %s", message))
 	}
 }
 
