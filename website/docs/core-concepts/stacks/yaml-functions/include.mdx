@@ -1,0 +1,51 @@
+---
+title: "!include"
+sidebar_position: 6
+sidebar_label: "!include"
+description: Download local or remote files from different sources, and assign the file contents or individual values to Atmos stack manifests
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+    The `!include` Atmos YAML function allows downloading local or remote files from different sources,
+    and assigning the file contents or individual values to the sections in Atmos stack manifests.
+</Intro>
+
+## Usage
+
+```yaml
+vars:
+  a: !include a.yaml
+```
+
+## Examples:
+
+```yaml
+components:
+  terraform:
+    my-component:
+      settings:
+        config:
+          user_id: 1
+      vars:
+        test70: !include ./dev.yaml
+        test71: !include ./dev.yaml .components.terraform.vpc.vars
+        test72: !include ./dev.yaml .components.terraform.vpc.vars.ipv4_primary_cidr_block
+        test73: !include stacks/catalog/vpc/ue2.yaml
+        test74: !include stacks/catalog/vpc/ue2.yaml .import
+        test75: !include stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones
+        test77: !include a.txt
+        test78: !include '"b c.txt" ".[1]"'
+        test79: !include a.hcl
+        test81: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/catalog/vpc-flow-logs-bucket/defaults.yaml
+        test82: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        allowed_ips: !include https://api.github.com/meta .api
+```
+
+:::tip
+You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!include` YAML function.
+Atmos processes the templates first, and then executes the `!include` function, allowing you to provide the parameters to
+the function dynamically.
+:::
