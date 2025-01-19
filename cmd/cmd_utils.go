@@ -504,7 +504,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 		return
 	}
 
-	// Check if we need to check for updates
+	// Determine if it's time to check for updates based on frequency and last_checked
 	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency) {
 		u.LogDebug(atmosConfig, "Skipping version check - last check was recent")
 		return
