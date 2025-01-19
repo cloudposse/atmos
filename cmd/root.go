@@ -57,20 +57,10 @@ var RootCmd = &cobra.Command{
 		var err error
 		atmosConfig, err = cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
-<<<<<<< HEAD
-			if errors.Is(err, cfg.NotFound) {
-				// For help commands or when help flag is set, we don't want to show the error
-				if !isHelpRequested {
-					u.LogWarning(errorConfig, err.Error())
-				}
-			} else {
-				u.LogErrorAndExit(errorConfig, err)
-=======
 			if errors.Is(err, cfg.NotFound) && isVersionCommand() {
 				u.LogTrace(atmosConfig, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", err))
 			} else {
 				u.LogErrorAndExit(atmosConfig, err)
->>>>>>> e1a616cc (Add logger initialization and improve version command logging)
 			}
 		}
 
