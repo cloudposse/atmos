@@ -56,7 +56,7 @@ The '--' (double-dash) can be used to signify the end of Atmos-specific options
 and the beginning of additional native arguments and flags for the specific command being run.
 
 Example:
-  atmos atmos [subcommand] <component> -s <stack> -- <native-flags>
+  atmos [subcommand] <component> -s <stack> -- <native-flags>
 
 
 Use "atmos [subcommand] --help" for more information about a command.

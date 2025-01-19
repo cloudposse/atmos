@@ -96,7 +96,7 @@ The '--' (double-dash) can be used to signify the end of Atmos-specific options
 and the beginning of additional native arguments and flags for the specific command being run.
 
 Example:
-  atmos {{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} <component> -s <stack> -- <native-flags>`
+  {{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} <component> -s <stack> -- <native-flags>`
 	case Footer:
 		return `{{if .HasAvailableSubCommands}}
 
