@@ -60,3 +60,4 @@ components:
         test15: !env USER
         test20: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/catalog/vpc-flow-logs-bucket/defaults.yaml
         test21: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        test22: !include https://api.github.com/meta .api

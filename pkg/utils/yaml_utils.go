@@ -149,12 +149,13 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 		}
 
 		// Detect relative paths (relative to the manifest file) and convert to absolute paths
-		if strings.HasPrefix(f, "./") || strings.HasPrefix(f, "../") {
-			resolved := ResolveRelativePath(f, file)
-			if !FileExists(resolved) {
-				return "", fmt.Errorf("the function '%s %s' points to a file that does not exist", tag, val)
+		resolved := ResolveRelativePath(f, file)
+		if FileExists(resolved) {
+			resolvedAbsolutePath, err := filepath.Abs(resolved)
+			if err != nil {
+				return "", fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
 			}
-			return getNodeValue(tag, resolved, q), nil
+			return getNodeValue(tag, resolvedAbsolutePath, q), nil
 		}
 
 		// Check if the `!include` function points to an Atmos stack manifest relative to the `base_path` defined in `atmos.yaml`
