@@ -62,7 +62,12 @@ var RootCmd = &cobra.Command{
 		// Only validate the config, don't store it yet since commands may need to add more info
 		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
-			if !errors.Is(err, cfg.NotFound) {
+			if errors.Is(err, cfg.NotFound) {
+				// For help commands or when help flag is set, we don't want to show the error
+				if !isHelpRequested {
+					u.LogWarning(errorConfig, err.Error())
+				}
+			} else {
 				u.LogErrorAndExit(errorConfig, err)
 			}
 		}
