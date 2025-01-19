@@ -29,9 +29,6 @@ func processNodes(
 		case string:
 			return processCustomTags(atmosConfig, v, currentStack)
 
-		case int:
-			return processCustomTags(atmosConfig, string(rune(v)), currentStack)
-
 		case map[string]any:
 			newNestedMap := make(map[string]any)
 			for k, val := range v {

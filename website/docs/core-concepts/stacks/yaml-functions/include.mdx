@@ -6,7 +6,6 @@ description: Download local or remote files from different sources, and assign t
 ---
 
 import Intro from '@site/src/components/Intro'
-import File from '@site/src/components/File'
 
 <Intro>
     The `!include` Atmos YAML function allows downloading local or remote files from different sources,
@@ -32,11 +31,45 @@ The `!include` function can be called with either one or two parameters:
     <dt>`file-path`</dt>
     <dd>
         Path to a local or remote file
-     </dd>
+    </dd>
 
     <dt>`yq-expression`</dt>
     <dd>(Optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the file</dd>
 </dl>
+
+## Examples
+
+```yaml
+components:
+  terraform:
+    my-component:
+      settings:
+        config:
+          user_id: !include ./user_config.json .user_id
+      vars:
+        values: !include ./values.yaml
+        ipv4_primary_cidr_block: !include ./vpc_config.yaml .vars.ipv4_primary_cidr_block
+        vpc_defaults: !include stacks/catalog/vpc/defaults.yaml
+        hcl_values: !include ./values.hcl
+        tfvars_values: !include ../components/terraform/vpc/vpc.tfvars
+        description: !include ./description.md
+        text: !include a.txt
+        text2: !include '"b c.txt" .[1]'
+        tests: !include '"~/My Documents/dev/tests.yaml" .config.tests'
+        region_values: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        allowed_ips: !include https://api.github.com/meta .api
+```
+
+## Description
+
+The YAML standard provides [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), that allow you
+to reuse and reference pieces of your YAML file, making it more efficient and reducing duplication.
+
+Atmos supports YAML anchors and aliases, but the biggest limitation is that they are only available within the file in
+which they are defined. You cannot reuse anchors across different files.
+
+The `!include` Atmos YAML function overcomes this limitation by allowing you to include the content or individual values
+from different local and remote sources.
 
 ## Supported File Protocols
 
@@ -66,8 +99,6 @@ Atmos processes the templates first, and then executes the `!include` function, 
 the function dynamically.
 :::
 
-## Description
-
 ## Using YQ Expressions to retrieve individual values from files
 
 To retrieve individual values from complex types such as maps and lists, or do any kind of filtering or querying,
@@ -92,25 +123,23 @@ For more details, review the following docs:
 - [YQ Guide](https://mikefarah.gitbook.io/yq)
 - [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
 
-## Examples:
+## Handling file paths and YQ expressions with spaces
+
+If you have spaces in the file names or the YQ expressions, enclose the file path and YQ expression in double quotes and
+the whole expression in single quotes.
+
+For example, on Windows:
 
 ```yaml
-components:
-  terraform:
-    my-component:
-      settings:
-        config:
-          user_id: 1
-      vars:
-        var1: !include ./dev.yaml
-        var2: !include ./dev.yaml .components.terraform.vpc.vars
-        var3: !include ./dev.yaml .components.terraform.vpc.vars.ipv4_primary_cidr_block
-        var4: !include stacks/catalog/vpc/ue2.yaml
-        var6: !include stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones
-        var7: !include a.txt
-        var8: !include '"b c.txt" ".[1]"'
-        var9: !include a.hcl
-        var10: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/catalog/vpc-flow-logs-bucket/defaults.yaml
-        var11: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
-        allowed_ips: !include https://api.github.com/meta .api
+  vars:
+    values: !include '"~/My Documents/dev/values.yaml"'
+    config: !include '"~/My Documents/dev/config.json" "<yq-expression-with-spaces>"'
+```
+
+On macOS and Linux:
+
+```yaml
+  vars:
+    values: !include './values.yaml "<yq-expression-with-spaces>"'
+    description: !include '"component description.md"'
 ```
