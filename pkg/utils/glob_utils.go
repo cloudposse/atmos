@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -39,6 +40,8 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	for _, match := range matches {
 		fullMatches = append(fullMatches, filepath.Join(base, match))
 	}
+	// Sort matches lexicographically
+	sort.Strings(fullMatches)
 
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
 

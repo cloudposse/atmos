@@ -2,12 +2,17 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"time"
 
+	"github.com/hashicorp/go-getter"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
@@ -114,16 +119,18 @@ var (
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 	// atmosConfig is loaded from the following locations (from lower to higher priority):
-	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
-	// home dir (~/.atmos)
-	// current directory
-	// ENV vars
-	// Command-line arguments
-
+	// 1. If ATMOS_CLI_CONFIG_PATH is defined, check only there
+	// 2. If ATMOS_CLI_CONFIG_PATH is not defined, proceed with other paths
+	//    - Check system directory (optional)
+	//    - Check user-specific configuration:
+	//      - If XDG_CONFIG_HOME is defined, use it; otherwise fallback to ~/.config/atmos
+	//      - Check current directory
+	//    - If Terraform provider specified a path
+	// 3. If no config is found in any of the above locations, use the default config
+	// Check if no imports are defined
 	var atmosConfig schema.AtmosConfiguration
 	var err error
 	configFound := false
-	var found bool
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -134,93 +141,104 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	v.SetDefault("settings.inject_github_token", true)
 
-	// Process config in system folder
-	configFilePath1 := ""
-
-	// https://pureinfotech.com/list-environment-variables-windows-10/
-	// https://docs.microsoft.com/en-us/windows/deployment/usmt/usmt-recognized-environment-variables
-	// https://softwareengineering.stackexchange.com/questions/299869/where-is-the-appropriate-place-to-put-application-configuration-files-for-each-p
-	// https://stackoverflow.com/questions/37946282/why-does-appdata-in-windows-7-seemingly-points-to-wrong-folder
-	if runtime.GOOS == "windows" {
-		appDataDir := os.Getenv(WindowsAppDataEnvVar)
-		if len(appDataDir) > 0 {
-			configFilePath1 = appDataDir
+	// 1. If ATMOS_CLI_CONFIG_PATH is defined, check only there
+	if atmosCliConfigPathEnv := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmosCliConfigPathEnv != "" {
+		u.LogTrace(atmosConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", atmosCliConfigPathEnv))
+		configFile := filepath.Join(atmosCliConfigPathEnv, CliConfigFileName)
+		found, configPath, err := processConfigFile(atmosConfig, configFile, v)
+		if err != nil {
+			return atmosConfig, err
 		}
+		if !found {
+			// If we want to error out if config not found in ATMOS_CLI_CONFIG_PATH
+			return atmosConfig, fmt.Errorf("config not found in ATMOS_CLI_CONFIG_PATH: %s", configFile)
+		} else {
+			configFound = true
+			atmosConfig.CliConfigPath = configPath
+		}
+
+		// Since ATMOS_CLI_CONFIG_PATH is to be the first and only check, we skip other paths if found
+		// If not found, we still skip other paths as per the requirement.
 	} else {
-		configFilePath1 = SystemDirConfigFilePath
-	}
-
-	if len(configFilePath1) > 0 {
-		configFile1 := filepath.Join(configFilePath1, CliConfigFileName)
-		found, err = processConfigFile(atmosConfig, configFile1, v)
-		if err != nil {
-			return atmosConfig, err
+		// 2. If ATMOS_CLI_CONFIG_PATH is not defined, proceed with other paths
+		//    - Check system directory (optional)
+		configFilePathSystem := ""
+		if runtime.GOOS == "windows" {
+			appDataDir := os.Getenv(WindowsAppDataEnvVar)
+			if len(appDataDir) > 0 {
+				configFilePathSystem = appDataDir
+			}
+		} else {
+			configFilePathSystem = SystemDirConfigFilePath
 		}
-		if found {
-			configFound = true
-		}
-	}
 
-	// Process config in user's HOME dir
-	configFilePath2, err := homedir.Dir()
-	if err != nil {
-		return atmosConfig, err
-	}
-	configFile2 := filepath.Join(configFilePath2, ".atmos", CliConfigFileName)
-	found, err = processConfigFile(atmosConfig, configFile2, v)
-	if err != nil {
-		return atmosConfig, err
-	}
-	if found {
-		configFound = true
-	}
-
-	// Process config in the current dir
-	configFilePath3, err := os.Getwd()
-	if err != nil {
-		return atmosConfig, err
-	}
-	configFile3 := filepath.Join(configFilePath3, CliConfigFileName)
-	found, err = processConfigFile(atmosConfig, configFile3, v)
-	if err != nil {
-		return atmosConfig, err
-	}
-	if found {
-		configFound = true
-	}
-
-	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
-	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
-	if len(configFilePath4) > 0 {
-		u.LogTrace(atmosConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
-		configFile4 := filepath.Join(configFilePath4, CliConfigFileName)
-		found, err = processConfigFile(atmosConfig, configFile4, v)
-		if err != nil {
-			return atmosConfig, err
-		}
-		if found {
-			configFound = true
-		}
-	}
-
-	// Process config from the path specified in the Terraform provider (which calls into the atmos code)
-	if configAndStacksInfo.AtmosCliConfigPath != "" {
-		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
-		if len(configFilePath5) > 0 {
-			configFile5 := filepath.Join(configFilePath5, CliConfigFileName)
-			found, err = processConfigFile(atmosConfig, configFile5, v)
+		if len(configFilePathSystem) > 0 {
+			configFile := filepath.Join(configFilePathSystem, CliConfigFileName)
+			found, configPath, err := processConfigFile(atmosConfig, configFile, v)
 			if err != nil {
 				return atmosConfig, err
 			}
 			if found {
 				configFound = true
+				atmosConfig.CliConfigPath = configPath
+			}
+		}
+
+		// 3. Check user-specific configuration:
+		//    If XDG_CONFIG_HOME is defined, use it; otherwise fallback to ~/.config/atmos
+		xdgConfigHome := os.Getenv("XDG_CONFIG_HOME")
+		var userConfigDir string
+		if xdgConfigHome != "" {
+			userConfigDir = filepath.Join(xdgConfigHome, "atmos")
+		} else {
+			homeDir, err := homedir.Dir()
+			if err != nil {
+				return atmosConfig, err
+			}
+			userConfigDir = filepath.Join(homeDir, ".config", "atmos")
+		}
+
+		userConfigFile := filepath.Join(userConfigDir, CliConfigFileName)
+		found, configPath, err := processConfigFile(atmosConfig, userConfigFile, v)
+		if err != nil {
+			return atmosConfig, err
+		}
+		if found {
+			configFound = true
+			atmosConfig.CliConfigPath = configPath
+		}
+
+		// 4. Check current directory
+		configFilePathCwd, err := os.Getwd()
+		if err != nil {
+			return atmosConfig, err
+		}
+		configFileCwd := filepath.Join(configFilePathCwd, CliConfigFileName)
+		found, configPath, err = processConfigFile(atmosConfig, configFileCwd, v)
+		if err != nil {
+			return atmosConfig, err
+		}
+		if found {
+			configFound = true
+			atmosConfig.CliConfigPath = configPath
+		}
+
+		// 5. If Terraform provider specified a path
+		if configAndStacksInfo.AtmosCliConfigPath != "" {
+			configFileTfProvider := filepath.Join(configAndStacksInfo.AtmosCliConfigPath, CliConfigFileName)
+			found, configPath, err := processConfigFile(atmosConfig, configFileTfProvider, v)
+			if err != nil {
+				return atmosConfig, err
+			}
+			if found {
+				configFound = true
+				atmosConfig.CliConfigPath = configPath
 			}
 		}
 	}
 
 	if !configFound {
-		// If `atmos.yaml` not found, use the default config
-		// Set `ATMOS_LOGS_LEVEL` ENV var to "Debug" to see the message about Atmos using the default CLI config
+		// Use default config if no config was found in any location
 		logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
 		if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace {
 			u.PrintMessageInColor("'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n"+
@@ -254,10 +272,52 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
-	// Process ENV vars
 	err = processEnvVars(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err
+	}
+
+	// Check if no imports are defined
+	if len(atmosConfig.Import) == 0 {
+		basePath, err := filepath.Abs(atmosConfig.BasePath)
+		if err != nil {
+			return atmosConfig, err
+		}
+		// Check for an `atmos.d` directory and load the configs if found
+		atmosDPath := filepath.Join(basePath, "atmos.d")
+		// Ensure the joined path doesn't escape the intended directory
+		if !strings.HasPrefix(atmosDPath, basePath) {
+			u.LogWarning(atmosConfig, "invalid atmos.d path: attempted directory traversal")
+		}
+		_, err = os.Stat(atmosDPath)
+		if err == nil {
+			atmosConfig.Import = []string{"atmos.d/**/*.yaml", "atmos.d/**/*.yml"}
+		} else if !os.IsNotExist(err) {
+			return atmosConfig, err // Handle unexpected errors
+		}
+		// Check for `.atmos.d` directory if `.atmos.d` directory is not found
+		atmosDPath = filepath.Join(atmosDPath, ".atmos.d")
+		_, err = os.Stat(atmosDPath)
+		if err == nil {
+			cliImport := []string{".atmos.d/**/*.yaml", ".atmos.d/**/*.yml"}
+			atmosConfig.Import = append(atmosConfig.Import, cliImport...)
+		} else if !os.IsNotExist(err) {
+			return atmosConfig, err // Handle unexpected errors
+		}
+
+	}
+	// Process imports if any
+	if len(atmosConfig.Import) > 0 {
+		err = processImports(atmosConfig, v)
+		if err != nil {
+			return atmosConfig, err
+		}
+
+		// Re-unmarshal the merged configuration into atmosConfig
+		err = v.Unmarshal(&atmosConfig)
+		if err != nil {
+			return atmosConfig, err
+		}
 	}
 
 	// Process command-line args
@@ -377,15 +437,15 @@ func processConfigFile(
 	atmosConfig schema.AtmosConfiguration,
 	path string,
 	v *viper.Viper,
-) (bool, error) {
+) (bool, string, error) {
 	// Check if the config file exists
 	configPath, fileExists := u.SearchConfigFile(path)
 	if !fileExists {
-		return false, nil
+		return false, "", nil
 	}
 	reader, err := os.Open(configPath)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	defer func(reader *os.File) {
@@ -397,8 +457,103 @@ func processConfigFile(
 
 	err = v.MergeConfig(reader)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
-	return true, nil
+	return true, configPath, nil
+}
+func processImports(atmosConfig schema.AtmosConfiguration, v *viper.Viper) error {
+	for _, importPath := range atmosConfig.Import {
+		if importPath == "" {
+			continue
+		}
+
+		var resolvedPaths []string
+		var err error
+
+		if strings.HasPrefix(importPath, "http://") || strings.HasPrefix(importPath, "https://") {
+			// Handle remote URLs
+			// Validate the URL before downloading
+			parsedURL, err := url.Parse(importPath)
+			if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+				u.LogWarning(atmosConfig, fmt.Sprintf("unsupported URL '%s': %v", importPath, err))
+				continue
+			}
+
+			tempDir, tempFile, err := downloadRemoteConfig(importPath)
+			if err != nil {
+				u.LogWarning(atmosConfig, fmt.Sprintf("failed to download remote config '%s': %v", importPath, err))
+				continue
+			}
+			resolvedPaths = []string{tempFile}
+			defer os.RemoveAll(tempDir)
+
+		} else {
+
+			ext := filepath.Ext(importPath)
+
+			basePath, err := filepath.Abs(atmosConfig.BasePath)
+			if err != nil {
+				return err
+			}
+			if ext != "" {
+				imp := filepath.Join(basePath, importPath)
+				resolvedPaths, err = u.GetGlobMatches(imp)
+				if err != nil {
+					u.LogWarning(atmosConfig, fmt.Sprintf("failed to resolve import path '%s': %v", imp, err))
+					continue
+				}
+			} else {
+				impYaml := filepath.Join(basePath, importPath+".yaml")
+				impYml := filepath.Join(basePath, importPath+".yml")
+				// ensure the joined path doesn't escape the intended directory
+				if !strings.HasPrefix(impYaml, basePath) || !strings.HasPrefix(impYml, basePath) {
+					return fmt.Errorf("invalid import path: attempted directory traversal")
+				}
+				resolvedPathYaml, errYaml := u.GetGlobMatches(impYaml)
+				resolvedPathsYml, errYml := u.GetGlobMatches(impYml)
+				if errYaml != nil && errYml != nil {
+					u.LogWarning(atmosConfig, fmt.Sprintf("failed to resolve import path '%s': %v", importPath, err))
+					continue
+				}
+				resolvedPaths = append(resolvedPaths, resolvedPathYaml...)
+				resolvedPaths = append(resolvedPaths, resolvedPathsYml...)
+
+			}
+		}
+		// print the resolved paths
+		u.LogTrace(atmosConfig, fmt.Sprintf("Resolved import paths: %v", resolvedPaths))
+		for _, path := range resolvedPaths {
+			// Process each configuration file
+			_, _, err = processConfigFile(atmosConfig, path, v)
+			if err != nil {
+				// Log the error but continue processing other files
+				u.LogWarning(atmosConfig, fmt.Sprintf("failed to merge configuration from '%s': %v", path, err))
+				continue
+			}
+		}
+	}
+	return nil
+}
+
+func downloadRemoteConfig(url string) (string, string, error) {
+	tempDir, err := os.MkdirTemp("", "atmos-import-*")
+	if err != nil {
+		return "", "", err
+	}
+	tempFile := filepath.Join(tempDir, "atmos.yaml")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client := &getter.Client{
+		Ctx:  ctx,
+		Src:  url,
+		Dst:  tempFile,
+		Mode: getter.ClientModeFile,
+	}
+	err = client.Get()
+	if err != nil {
+		os.RemoveAll(tempDir)
+		return "", "", fmt.Errorf("failed to download remote config: %w", err)
+	}
+	return tempDir, tempFile, nil
 }

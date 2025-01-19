@@ -192,7 +192,7 @@ func SearchConfigFile(path string) (string, bool) {
 	}
 
 	// Check the possible config file extensions
-	configExtensions := []string{YamlFileExtension, YmlFileExtension, YamlTemplateExtension, YmlTemplateExtension}
+	configExtensions := []string{YamlTemplateExtension, YmlTemplateExtension, YamlFileExtension, YmlFileExtension}
 	for _, ext := range configExtensions {
 		filePath := path + ext
 		if FileExists(filePath) {

@@ -336,6 +336,7 @@ jobs:
           # - examples/demo-component-manifest
           - examples/demo-component-versions
           - examples/demo-context
+          - examples/demo-configuration
           # - examples/demo-custom-command
           # - examples/demo-json-validation
           # - examples/demo-opa-validation

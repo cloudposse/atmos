@@ -1,0 +1,9 @@
+# Description: This is an example of a custom import configuration file.
+# The import configuration file is used to load configurations from multiple files and directories.
+# The configurations are merged together to create a single configuration object.
+# The configurations are loaded in the order they are defined in the import section.
+base_path: "./"
+import:
+  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"  # Load from a remote URL
+  - "configs.d/**/*"                                                                 # Recursively load configurations from a directory
+  - "./logs.yaml"                                                                    # Load a specific file

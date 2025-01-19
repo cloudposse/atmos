@@ -1,0 +1,23 @@
+components:
+  terraform:
+    # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
+    # If not defined, `terraform` is used
+    # Examples:
+    # command: terraform
+    # command: /usr/local/bin/terraform
+    # command: /usr/local/bin/terraform-1.8
+    # command: tofu
+    # command: /usr/local/bin/tofu-1.7.1
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_COMMAND' ENV var, or '--terraform-command' command-line argument
+    command: terraform
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "components/terraform"
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
+    apply_auto_approve: false
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
+    deploy_run_init: true
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
+    init_run_reconfigure: true
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
+    auto_generate_backend_file: true
