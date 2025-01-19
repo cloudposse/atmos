@@ -156,10 +156,10 @@ func runMainLogic() {
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
-	er.PrintErrors(errors, config)
 	u.LogDebug(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
+		er.PrintErrors(errors, config)
 		os.Exit(1)
 	}
 	u.PrintMessage("No errors found")
