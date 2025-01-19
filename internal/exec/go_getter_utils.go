@@ -180,13 +180,6 @@ func GoGetterGet(
 // DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
 func DownloadDetectFormatAndParseFile(atmosConfig schema.AtmosConfiguration, file string) (any, error) {
 	tempDir := os.TempDir()
-	defer func(path string) {
-		err := os.RemoveAll(path)
-		if err != nil {
-			u.LogDebug(atmosConfig, fmt.Sprintf("failed to remove temp dir: %s\n", err))
-		}
-	}(tempDir)
-
 	f := filepath.Join(tempDir, uuid.New().String())
 
 	if err := GoGetterGet(atmosConfig, file, f, getter.ClientModeFile, time.Second*30); err != nil {

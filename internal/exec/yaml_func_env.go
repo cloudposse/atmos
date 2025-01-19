@@ -24,13 +24,18 @@ func processTagEnv(
 	}
 
 	res := os.Getenv(str)
-	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+	if res == "" {
+		return nil
+	}
+
+	if !u.IsJSON(res) {
+		return res
 	}
 
 	var decoded any
-	if err = json.Unmarshal([]byte(res), &decoded); err != nil {
-		return res
+	err = json.Unmarshal([]byte(res), &decoded)
+	if err != nil {
+		u.LogErrorAndExit(atmosConfig, err)
 	}
 
 	return decoded
