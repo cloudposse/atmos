@@ -116,8 +116,8 @@ func getNodeValue(tag string, f string, q string) string {
 }
 
 func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) (string, error) {
-	tag := n.Tag
-	val := n.Value
+	tag := strings.TrimSpace(n.Tag)
+	val := strings.TrimSpace(n.Value)
 
 	if tag == AtmosYamlFuncInclude {
 		var f string
@@ -167,7 +167,7 @@ func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file 
 			return getNodeValue(tag, atmosManifestAbsolutePath, q), nil
 		}
 
-		return getNodeValue(tag+"-go-getter ", f, q), nil
+		return strings.TrimSpace(tag + "-go-getter " + f + " " + q), nil
 	}
 
 	return strings.TrimSpace(tag + " " + val), nil
