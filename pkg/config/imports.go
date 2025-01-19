@@ -29,7 +29,7 @@ func (cl *ConfigLoader) downloadRemoteConfig(url string, tempDir string) (string
 	}
 	err := client.Get()
 	if err != nil {
-		os.RemoveAll(tempDir)
+		os.RemoveAll(tempFile)
 		return "", fmt.Errorf("failed to download remote config: %w", err)
 	}
 	return tempFile, nil

@@ -525,7 +525,7 @@ func (cl *ConfigLoader) processConfigImports() error {
 			return err
 		}
 		defer os.RemoveAll(tempDir)
-		resolvedPaths, err := cl.processImports(cl.atmosConfig.Import, tempDir, 0, MaximumImportLvL)
+		resolvedPaths, err := cl.processImports(cl.atmosConfig.Import, tempDir, 1, MaximumImportLvL)
 		if err != nil {
 			return err
 		}
