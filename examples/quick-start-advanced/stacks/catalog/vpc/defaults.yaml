@@ -47,17 +47,3 @@ components:
         nat_eip_aws_shield_protection_enabled: false
         subnet_type_tag_key: "acme/subnet/type"
         ipv4_primary_cidr_block: 10.9.0.0/18
-        test1: !include ./dev.yaml
-        test2: !include ./dev.yaml .components.terraform.vpc.vars
-        test3: !include ./dev.yaml .components.terraform.vpc.vars.ipv4_primary_cidr_block
-        test4: !include stacks/catalog/vpc/ue2.yaml
-        test5: !include stacks/catalog/vpc/ue2.yaml .import
-        test6: !include stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones
-        test7: !include 'stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones[2]'
-        test8: !include a.txt
-        test9: !include '"b c.txt" ".[1]"'
-        test10: !include a.hcl
-        test15: !env USER
-        test20: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/catalog/vpc-flow-logs-bucket/defaults.yaml
-        test21: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
-        test22: !include https://api.github.com/meta .api
