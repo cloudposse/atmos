@@ -2,20 +2,16 @@ package config
 
 import (
 	"bytes"
-	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/adrg/xdg"
-	"github.com/hashicorp/go-getter"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -23,6 +19,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+const MaximumImportLvL = 10
+
+type Imports struct {
+	Path  string
+	Level int
+}
 type ConfigLoader struct {
 	viper            *viper.Viper
 	atmosConfig      schema.AtmosConfiguration
@@ -74,8 +76,16 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 			if err := cl.loadExplicitConfigs(); err != nil {
 				return cl.atmosConfig, err
 			}
+			err = cl.deepMergeConfig()
+			if err != nil {
+				return cl.atmosConfig, err
+			}
 			if err := cl.processConfigImports(); err != nil {
 				cl.logging(err.Error())
+			}
+			err = cl.deepMergeConfig()
+			if err != nil {
+				return cl.atmosConfig, err
 			}
 			return cl.atmosConfig, err
 
@@ -509,13 +519,30 @@ func (cl *ConfigLoader) finalizeConfig() error {
 // processConfigImports processes any imported configuration files.
 func (cl *ConfigLoader) processConfigImports() error {
 	if len(cl.atmosConfig.Import) > 0 {
-		if err := processImports(cl.atmosConfig, cl.viper); err != nil {
+		importPaths := cl.atmosConfig.Import
+		tempDir, err := os.MkdirTemp("", "atmos-import-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tempDir)
+		resolvedPaths, err := cl.processImports(cl.atmosConfig.Import, tempDir, 0, MaximumImportLvL)
+		if err != nil {
 			return err
 		}
 
-		if err := cl.viper.Unmarshal(&cl.atmosConfig); err != nil {
-			return err
+		for _, configPath := range resolvedPaths {
+			found, configPath, err := cl.loadConfigFile(cl.atmosConfig, configPath, cl.viper)
+			if err != nil {
+				u.LogWarning(cl.atmosConfig, fmt.Sprintf("failed to merge configuration from '%s': %v", configPath, err))
+				continue
+			}
+			if found {
+				u.LogTrace(cl.atmosConfig, fmt.Sprintf("merge import paths: %v", resolvedPaths))
+			}
+			cl.deepMergeConfig()
+
 		}
+		cl.atmosConfig.Import = importPaths
 	}
 	return nil
 }
@@ -860,88 +887,8 @@ func (cl *ConfigLoader) MergePathsViber(configPaths []string) error {
 		}
 		if found {
 			cl.configFound = true
-			cl.atmosConfig.CliConfigPath = configPath
 			cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPath)
 		}
 	}
 	return nil
-}
-func (cl *ConfigLoader) processImports() (resolvedPaths []string, err error) {
-	tempDir := ""
-
-	for _, importPath := range cl.atmosConfig.Import {
-		if importPath == "" {
-			continue
-		}
-
-		if strings.HasPrefix(importPath, "http://") || strings.HasPrefix(importPath, "https://") {
-			// Handle remote URLs
-			// Validate the URL before downloading
-			parsedURL, err := url.Parse(importPath)
-			if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-				u.LogWarning(cl.atmosConfig, fmt.Sprintf("unsupported URL '%s': %v", importPath, err))
-				continue
-			}
-			if tempDir == "" {
-				tempDir, err = os.MkdirTemp("", "atmos-import-*")
-				if err != nil {
-					return nil, err
-				}
-				defer os.RemoveAll(tempDir)
-
-			}
-			tempFile, err := cl.downloadRemoteConfig(importPath, tempDir)
-			if err != nil {
-				u.LogWarning(cl.atmosConfig, fmt.Sprintf("failed to download remote config '%s': %v", importPath, err))
-				continue
-			}
-			resolvedPaths = append(resolvedPaths, tempFile)
-
-		} else {
-			basePath, err := filepath.Abs(cl.atmosConfig.BasePath)
-			if err != nil {
-				return nil, err
-			}
-			imp := filepath.Join(basePath, importPath)
-			paths, err := cl.SearchAtmosConfigFileDir(imp)
-			if err != nil {
-				u.LogWarning(cl.atmosConfig, fmt.Sprintf("failed to resolve import path '%s': %v", importPath, err))
-				continue
-			}
-			resolvedPaths = append(resolvedPaths, paths...)
-
-		}
-
-	}
-	for _, configPath := range resolvedPaths {
-		found, configPath, err := cl.loadConfigFile(cl.atmosConfig, configPath, cl.viper)
-		if err != nil {
-			u.LogWarning(cl.atmosConfig, fmt.Sprintf("failed to merge configuration from '%s': %v", configPath, err))
-			continue
-		}
-		if found {
-			u.LogTrace(cl.atmosConfig, fmt.Sprintf("merge import paths: %v", resolvedPaths))
-
-		}
-
-	}
-	return
-}
-func (cl *ConfigLoader) downloadRemoteConfig(url string, tempDir string) (string, error) {
-
-	tempFile := filepath.Join(tempDir, "atmos.yaml")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	client := &getter.Client{
-		Ctx:  ctx,
-		Src:  url,
-		Dst:  tempFile,
-		Mode: getter.ClientModeFile,
-	}
-	err := client.Get()
-	if err != nil {
-		os.RemoveAll(tempDir)
-		return "", fmt.Errorf("failed to download remote config: %w", err)
-	}
-	return tempFile, nil
 }
