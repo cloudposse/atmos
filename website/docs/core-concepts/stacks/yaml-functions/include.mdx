@@ -6,6 +6,7 @@ description: Download local or remote files from different sources, and assign t
 ---
 
 import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
 
 <Intro>
     The `!include` Atmos YAML function allows downloading local or remote files from different sources,
@@ -18,11 +19,11 @@ The `!include` function can be called with either one or two parameters:
 
 ```yaml
   # Download the file and assign its content to the variable
-  var1: !include <file-path>
+  !include <file-path>
 
   # Download the file, filter the content using the YQ expression,
   # and assign the result to the variable
-  var2: !include <file-path> <yq-expression>
+  !include <file-path> <yq-expression>
 ```
 
 ## Arguments
@@ -39,26 +40,40 @@ The `!include` function can be called with either one or two parameters:
 
 ## Examples
 
+<File title="stack.yaml">
 ```yaml
 components:
   terraform:
     my-component:
+      vars:
+        # Include a local file with the path relative to the current Atmos manifest
+        values: !include ./values.yaml
+        # Include a local file with the path relative to the current Atmos manifest and query the `vars.ipv4_primary_cidr_block` value from the file using YQ
+        ipv4_primary_cidr_block: !include ./vpc_config.yaml .vars.ipv4_primary_cidr_block
+        # Include a local file relative to the `base_path` setting in `atmos.yaml`
+        vpc_defaults: !include stacks/catalog/vpc/defaults.yaml
+        # Include a local file in HCL format
+        hcl_values: !include ./values.hcl
+        # Include a local file in HCL format with Terraform variables
+        tfvars_values: !include ../components/terraform/vpc/vpc.tfvars
+        # Include a local Markdown file
+        description: !include ./description.md
+        # Include a local text file
+        text: !include a.txt
+        # Include a local text file with spaces in the file name
+        text2: !include '"my config.txt"'
+        # Include a local text file on Windows with spaces in the file name, and get the `config.tests` value from the file
+        tests: !include '"~/My Documents/dev/tests.yaml" .config.tests'
+        # Download and include a remote YAML file using HTTPS protocol, and query the `vars` section from the file
+        region_values: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        # Download and include a remote JSON file and query the `api` section from the file
+        allowed_ips: !include https://api.github.com/meta .api
       settings:
         config:
+          # Include a local JSON file and query the `user_id` variable from the file
           user_id: !include ./user_config.json .user_id
-      vars:
-        values: !include ./values.yaml
-        ipv4_primary_cidr_block: !include ./vpc_config.yaml .vars.ipv4_primary_cidr_block
-        vpc_defaults: !include stacks/catalog/vpc/defaults.yaml
-        hcl_values: !include ./values.hcl
-        tfvars_values: !include ../components/terraform/vpc/vpc.tfvars
-        description: !include ./description.md
-        text: !include a.txt
-        text2: !include '"b c.txt" .[1]'
-        tests: !include '"~/My Documents/dev/tests.yaml" .config.tests'
-        region_values: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
-        allowed_ips: !include https://api.github.com/meta .api
 ```
+</File>
 
 ## Description
 
@@ -69,7 +84,19 @@ Atmos supports YAML anchors and aliases, but the biggest limitation is that they
 which they are defined. You cannot reuse anchors across different files.
 
 The `!include` Atmos YAML function overcomes this limitation by allowing you to include the content or individual values
-from different local and remote sources.
+from different local and remote sources. The `!include` function also provides the following features:
+
+- Supports local files with absolute and relative paths
+
+- Supports the remote protocols provided by the [`go-getter`](https://github.com/hashicorp/go-getter) library
+
+- Allows you to use [YQ](https://mikefarah.gitbook.io/yq) expressions to query and filter the content of the files to retrieve individual values
+
+- Automatically detects the format of the files regardless of the file extensions. It supports files in JSON, YAML
+  and [HCL](https://github.com/hashicorp/hcl) (`tfvars`) formats, and automatically converts them into correct
+  YAML structures (simple and complex types like maps and lists are supported).
+  All other files are returned unchanged, allowing you, for example, to include text and
+  [Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests
 
 ## Supported File Protocols
 
