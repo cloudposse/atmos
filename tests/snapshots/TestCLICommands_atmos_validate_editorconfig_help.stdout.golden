@@ -75,4 +75,4 @@ The '--' (double-dash) can be used to signify the end of Atmos-specific options
 and the beginning of additional native arguments and flags for the specific command being run.
 
 Example:
-  atmos atmos validate editorconfig  <component> -s <stack> -- <native-flags>
+  atmos validate editorconfig  <component> -s <stack> -- <native-flags>
