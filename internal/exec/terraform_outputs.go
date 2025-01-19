@@ -214,8 +214,9 @@ func GetTerraformOutput(
 	output string,
 	skipCache bool,
 ) any {
-
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+	fmt.Println(message)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	if !skipCache {
@@ -228,31 +229,37 @@ func GetTerraformOutput(
 
 	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
+		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
-	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
-	// `output` from the static remote state instead of executing `terraform output`
+	// Check if the component in the stack is configured with the 'static' remote state backend
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
+		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
+	var result any
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		return getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result = getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
+			fmt.Printf("\r✗ %s\n", message)
 			u.LogErrorAndExit(*atmosConfig, err)
 		}
 
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, terraformOutputs)
-		return getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
+		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
+
+	fmt.Printf("\r✓ %s\n", message)
+	return result
 }
 
 func getTerraformOutputVariable(

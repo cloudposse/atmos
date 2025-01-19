@@ -1,0 +1,20 @@
+tests:
+  - name: terraform output function
+    enabled: true
+    description: "Ensure the !terraform.output function works."
+    workdir: "fixtures/scenarios/atmos-functions/"
+    command: "atmos"
+    args:
+       - "workflow"
+       - "deploy"
+       - "-f"
+       - "terraform-output"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Fetching baz output from component-3 in nonprod"
+        - "Fetching foo output from component-1 in nonprod"
+        - "Fetching bar output from component-2 in nonprod"
+      stderr:
+        - "^$"
+

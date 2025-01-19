@@ -36,3 +36,4 @@
 
 .atmos/cache.yaml
 **/cache.*.txt
+examples/demo-vendoring/components/terraform/**/**
