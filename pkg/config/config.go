@@ -135,17 +135,13 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v.SetDefault("settings.inject_github_token", true)
 
 	// Process environment variables first
-	fmt.Printf("[DEBUG] Processing environment variables\n")
 	err = processEnvVars(&atmosConfig)
 	if err != nil {
-		fmt.Printf("[DEBUG] Error processing environment variables: %v\n", err)
 		return atmosConfig, err
 	}
-	fmt.Printf("[DEBUG] Environment variables processed, LogsLevel=%s\n", atmosConfig.Logs.Level)
 
 	// Set log level and file from command line arguments
 	if configAndStacksInfo.LogsLevel != "" {
-		fmt.Printf("[DEBUG] Setting log level from command line: %s\n", configAndStacksInfo.LogsLevel)
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
 	}
 	if configAndStacksInfo.LogsFile != "" {

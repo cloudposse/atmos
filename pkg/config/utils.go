@@ -187,12 +187,10 @@ func FindAllStackConfigsInPaths(
 
 // Process ENV vars
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
-	fmt.Printf("[DEBUG] Starting processEnvVars\n")
-
 	// Process base path from ENV var
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
-		fmt.Printf("[DEBUG] Found ENV var ATMOS_BASE_PATH=%s\n", basePath)
+		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
 		atmosConfig.BasePath = basePath
 	}
 
@@ -362,13 +360,10 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
 	if len(logsLevel) > 0 {
-		fmt.Printf("[DEBUG] Found ENV var ATMOS_LOGS_LEVEL=%s\n", logsLevel)
 		// Validate the log level before setting it
 		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
-			fmt.Printf("[DEBUG] Invalid log level in ATMOS_LOGS_LEVEL: %v\n", err)
 			return fmt.Errorf("invalid value in environment variable ATMOS_LOGS_LEVEL='%s'. %v", logsLevel, err)
 		}
-		fmt.Printf("[DEBUG] Setting log level from environment: %s\n", logsLevel)
 		atmosConfig.Logs.Level = logsLevel
 	}
 
