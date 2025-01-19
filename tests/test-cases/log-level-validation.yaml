@@ -39,13 +39,9 @@ tests:
     workdir: "fixtures/scenarios/valid-log-level"
     command: "atmos"
     args:
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     expect:
-      exit_code: 1
+      exit_code: 0
 
   - name: "Valid Log Level in Environment Variable"
     enabled: true
@@ -53,15 +49,11 @@ tests:
     workdir: "../"
     command: "atmos"
     args:
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
-      exit_code: 1
+      exit_code: 0
 
   - name: "Valid Log Level in Command Line Flag"
     enabled: true
@@ -71,10 +63,6 @@ tests:
     args:
       - --logs-level
       - Info
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     expect:
-      exit_code: 1
+      exit_code: 0
