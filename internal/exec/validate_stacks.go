@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -373,37 +372,29 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
 func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error) {
-
 	manifestURL := atmosConfig.Schemas.Atmos.Manifest
 
 	parsedURL, err := url.Parse(manifestURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL '%s': %w", manifestURL, err)
 	}
+
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return "", fmt.Errorf("unsupported URL scheme '%s' for schema manifest", parsedURL.Scheme)
 	}
+
 	tempDir := os.TempDir()
 	fileName, err := u.GetFileNameFromURL(manifestURL)
 	if err != nil || fileName == "" {
 		return "", fmt.Errorf("failed to get the file name from the URL '%s': %w", manifestURL, err)
 	}
+
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
 
-	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
-
-	client := &getter.Client{
-		Ctx:  ctx,
-		Dst:  atmosManifestJsonSchemaFilePath,
-		Src:  manifestURL,
-		Mode: getter.ClientModeFile,
-	}
-	if err = client.Get(); err != nil {
+	if err = GoGetterGet(atmosConfig, manifestURL, atmosManifestJsonSchemaFilePath, getter.ClientModeFile, time.Second*30); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
+
 	return atmosManifestJsonSchemaFilePath, nil
 }
 

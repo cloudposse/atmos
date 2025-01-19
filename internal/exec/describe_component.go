@@ -63,7 +63,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		res, err = u.EvaluateYqExpression(atmosConfig, componentSection, query)
+		res, err = u.EvaluateYqExpression(&atmosConfig, componentSection, query)
 		if err != nil {
 			return err
 		}

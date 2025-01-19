@@ -69,7 +69,7 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if query != "" {
-		res, err = u.EvaluateYqExpression(atmosConfig, res, query)
+		res, err = u.EvaluateYqExpression(&atmosConfig, res, query)
 		if err != nil {
 			return err
 		}

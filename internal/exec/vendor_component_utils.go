@@ -12,12 +12,13 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	tea "github.com/charmbracelet/bubbletea"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hairyhenderson/gomplate/v3"
 	cp "github.com/otiai10/copy"
 	"golang.org/x/term"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
@@ -102,6 +103,7 @@ func ExecuteStackVendorInternal(
 ) error {
 	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not supported yet")
 }
+
 func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, componentPath string, vendorComponentSpec schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
 	// Copy from the temp folder to the destination folder and skip the excluded files
 	copyOptions := cp.Options{
@@ -181,7 +183,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 	componentPath2 := componentPath
 	if sourceIsLocalFile {
 		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, sanitizeFileName(uri))
+			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
 		}
 	}
 
@@ -190,6 +192,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 	}
 	return nil
 }
+
 func ExecuteComponentVendorInternal(
 	atmosConfig schema.AtmosConfiguration,
 	vendorComponentSpec schema.VendorComponentSpec,
@@ -222,6 +225,7 @@ func ExecuteComponentVendorInternal(
 	} else {
 		uri = vendorComponentSpec.Source.Uri
 	}
+
 	useOciScheme := false
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
@@ -245,6 +249,7 @@ func ExecuteComponentVendorInternal(
 			}
 		}
 	}
+
 	var pType pkgType
 	if useOciScheme {
 		pType = pkgTypeOci
@@ -264,8 +269,10 @@ func ExecuteComponentVendorInternal(
 		vendorComponentSpec: vendorComponentSpec,
 		IsComponent:         true,
 	}
+
 	var packages []pkgComponentVendor
 	packages = append(packages, componentPkg)
+
 	// Process mixins
 	if len(vendorComponentSpec.Mixins) > 0 {
 		for _, mixin := range vendorComponentSpec.Mixins {
@@ -338,6 +345,7 @@ func ExecuteComponentVendorInternal(
 			packages = append(packages, pkg)
 		}
 	}
+
 	// Run TUI to process packages
 	if len(packages) > 0 {
 		model, err := newModelComponentVendorInternal(packages, dryRun, atmosConfig)
