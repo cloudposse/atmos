@@ -495,19 +495,21 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// If version checking is disabled in the configuration, do nothing
 	if !atmosConfig.Version.Check.Enabled {
+		u.LogDebug(atmosConfig, "Version checking is disabled")
 		return
 	}
 
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Could not load cache: %s", err))
+		u.LogWarning(atmosConfig, fmt.Sprintf("Unable not load cache: %s", err))
 		return
 	}
 
 	// Determine if it's time to check for updates based on frequency and last_checked
 	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency) {
 		// Not due for another check yet, so return without printing anything
+		u.LogDebug(atmosConfig, "Skipping version check - last check was recent")
 		return
 	}
 
@@ -530,6 +532,8 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// If the versions differ, print the update message
 	if latestVersion != currentVersion {
 		u.PrintMessageToUpgradeToAtmosLatestRelease(latestVersion)
+	} else {
+		u.LogDebug(atmosConfig, "Atmos is up to date")
 	}
 
 	// Update the cache to mark the current timestamp

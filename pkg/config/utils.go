@@ -361,7 +361,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
 		// Validate the log level before setting it
 		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
-			return err
+			return fmt.Errorf("Invalid log level '%s' in environment variable ATMOS_LOGS_LEVEL. Valid options are: [Trace Debug Info Warning Off]", logsLevel)
 		}
 		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = logsLevel
@@ -486,7 +486,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
-			return err
+			return fmt.Errorf("Invalid log level '%s' in --logs-level flag. Valid options are: [Trace Debug Info Warning Off]", configAndStacksInfo.LogsLevel)
 		}
 		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
