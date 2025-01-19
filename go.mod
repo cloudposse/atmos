@@ -9,7 +9,7 @@ require (
 	github.com/arsham/figurine v1.3.0
 	github.com/aws/aws-sdk-go-v2 v1.33.0
 	github.com/aws/aws-sdk-go-v2/config v1.29.0
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.56.6
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.56.7
 	github.com/bmatcuk/doublestar/v4 v4.8.0
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.2.4
