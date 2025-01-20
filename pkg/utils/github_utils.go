@@ -31,11 +31,12 @@ func newGitHubClient(ctx context.Context) *github.Client {
 func GetLatestGitHubRepoRelease(atmosConfig schema.AtmosConfiguration, owner string, repo string) (string, error) {
 	LogDebug(atmosConfig, fmt.Sprintf("Fetching latest release for %s/%s from Github API", owner, repo))
 
-	// Create a new GitHub client
-	client := github.NewClient(nil)
+	// Create a new GitHub client with authentication if available
+	ctx := context.Background()
+	client := newGitHubClient(ctx)
 
 	// Get the latest release
-	release, _, err := client.Repositories.GetLatestRelease(context.Background(), owner, repo)
+	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
 		return "", err
 	}
