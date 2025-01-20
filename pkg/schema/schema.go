@@ -1,6 +1,8 @@
 package schema
 
-import "github.com/cloudposse/atmos/pkg/store"
+import (
+	"github.com/cloudposse/atmos/pkg/store"
+)
 
 type AtmosSectionMapType = map[string]any
 
@@ -30,11 +32,32 @@ type AtmosConfiguration struct {
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
 	Default                       bool               `yaml:"default" json:"default" mapstructure:"default"`
 	Version                       Version            `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
-
+	Validate                      Validate           `yaml:"validate,omitempty" json:"validate,omitempty" mapstructure:"validate"`
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
 	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+}
+
+type Validate struct {
+	EditorConfig EditorConfig `yaml:"editorconfig,omitempty" json:"editorconfig,omitempty" mapstructure:"editorconfig"`
+}
+
+type EditorConfig struct {
+	IgnoreDefaults bool     `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
+	DryRun         bool     `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
+	Format         string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	Color          bool     `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
+	ConfigFilePath string   `yaml:"config_file_path,omitempty" json:"config_file_path,omitempty" mapstructure:"config_file_path"`
+	Exclude        []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
+	Init           bool     `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
+
+	DisableEndOfLine              bool `yaml:"disable_end_of_line,omitempty" json:"disable_end_of_line,omitempty" mapstructure:"disable_end_of_line"`
+	DisableInsertFinalNewline     bool `yaml:"disable_insert_final_newline,omitempty" json:"disable_insert_final_newline,omitempty" mapstructure:"disable_insert_final_newline"`
+	DisableIndentation            bool `yaml:"disable_indentation,omitempty" json:"disable_indentation,omitempty" mapstructure:"disable_indentation"`
+	DisableIndentSize             bool `yaml:"disable_indent_size,omitempty" json:"disable_indent_size,omitempty" mapstructure:"disable_indent_size"`
+	DisableMaxLineLength          bool `yaml:"disable_max_line_length,omitempty" json:"disable_max_line_length,omitempty" mapstructure:"disable_max_line_length"`
+	DisableTrimTrailingWhitespace bool `yaml:"disable_trim_trailing_whitespace,omitempty" json:"disable_trim_trailing_whitespace,omitempty" mapstructure:"disable_trim_trailing_whitespace"`
 }
 
 type Terminal struct {

@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: atmos vendor pull
+    enabled: true
+    snapshot: false
+    tty: true
+    description: "Vendoring works with pull command"
+    workdir: "../examples/demo-vendoring/"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+    skip:
+      # PTY not supported on windows
+      os: !not windows
+    expect:
+      stdout:
+        - "Pulling"
+        - "github/stargazers"
+        - "weather"
+        - "Vendored 3 components"
+        - "Vendoring from 'vendor.yaml'"
+        - !not 'No TTY detected\. Falling back to basic output\.'
+      exit_code: 0
+
+  - name: atmos vendor pull (no tty)
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Vendoring works with pull command"
+    workdir: "../examples/demo-vendoring/"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+    expect:
+      diff: []
+      stderr:
+        - 'No TTY detected\. Falling back to basic output\.'
+      exit_code: 0
