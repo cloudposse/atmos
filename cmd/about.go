@@ -14,13 +14,10 @@ var aboutMarkdown string
 
 // aboutCmd represents the about command
 var aboutCmd = &cobra.Command{
-	Use:                "about",
-	Short:              "Learn about Atmos",
-	Long:               `Display information about Atmos, its features, and benefits.`,
-	Args:               cobra.NoArgs,
-	DisableSuggestions: true,
-	SilenceUsage:       true,
-	SilenceErrors:      true,
+	Use:   "about",
+	Short: "Learn about Atmos",
+	Long:  `Display information about Atmos, its features, and benefits.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		renderer, err := glamour.NewTermRenderer(
 			glamour.WithAutoStyle(),

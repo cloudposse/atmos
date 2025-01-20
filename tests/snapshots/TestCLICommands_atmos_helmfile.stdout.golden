@@ -1,0 +1,8 @@
+Valid subcommands are:
+  apply
+  destroy
+  diff
+  generate
+  sync
+
+Run 'atmos helmfile --help' for usage

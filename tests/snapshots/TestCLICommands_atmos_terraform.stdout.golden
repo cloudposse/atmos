@@ -1,0 +1,34 @@
+Valid subcommands are:
+  apply
+  clean
+  console
+  deploy
+  destroy
+  fmt
+  force-unlock
+  generate
+  get
+  graph
+  import
+  init
+  login
+  logout
+  metadata
+  modules
+  output
+  plan
+  providers
+  refresh
+  shell
+  show
+  state
+  taint
+  test
+  untaint
+  validate
+  varfile
+  version
+  workspace
+  write
+
+Run 'atmos terraform --help' for usage

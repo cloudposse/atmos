@@ -1,6 +1,8 @@
 tests:
   - name: atmos non-existent
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure atmos CLI returns an error for a non-existent command."
     workdir: "../"
     command: "atmos"
@@ -12,6 +14,8 @@ tests:
       exit_code: 1
   - name: atmos --help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure atmos CLI help command lists available commands."
     workdir: "./"
     command: "atmos"
@@ -57,6 +61,8 @@ tests:
       exit_code: 1
   - name: atmos terraform
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure atmos terraform cli shows usage command"
     workdir: "./"
     command: "atmos"
@@ -73,6 +79,8 @@ tests:
       exit_code: 1
   - name: atmos terraform help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure 'atmos terraform help' shows help output"
     workdir: "./"
     command: "atmos"
@@ -103,6 +111,8 @@ tests:
       exit_code: 0
   - name: atmos terraform apply --help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure atmos terraform apply --help shows help output"
     workdir: "./"
     command: "atmos"
@@ -120,6 +130,8 @@ tests:
       exit_code: 0
   - name: atmos terraform apply help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure atmos terraform help shows help output"
     workdir: "./"
     command: "atmos"
@@ -137,6 +149,8 @@ tests:
       exit_code: 0
   - name: atmos terraform non-existent
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure atmos terraform CLI returns an error for a non-existent command."
     workdir: "../"
     command: "atmos"
@@ -149,6 +163,8 @@ tests:
       exit_code: 1
   - name: atmos terraform plan non-existent in non workspace
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure atmos terraform CLI returns an error for a non-existent command in non existing workspace."
     workdir: "../"
     command: "atmos"
@@ -163,6 +179,8 @@ tests:
       exit_code: 1
   - name: atmos terraform plan non-existent in workspace
     enabled: true
+    snapshot: true
+    diff: []
     description: "Ensure atmos terraform CLI returns an error for a non-existent command in existing workspace."
     workdir: "../examples/quick-start-simple"
     command: "atmos"
@@ -176,6 +194,8 @@ tests:
       exit_code: 1
   - name: atmos helmfile
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show usage for helmfile"
     workdir: "../"
     command: "atmos"
@@ -191,6 +211,8 @@ tests:
       exit_code: 1
   - name: atmos helmfile non-existant
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show usage for helmfile and non-existant subcommand"
     workdir: "../"
     command: "atmos"
@@ -207,6 +229,8 @@ tests:
       exit_code: 1
   - name: atmos helmfile help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help for helmfile"
     workdir: "../"
     command: "atmos"
@@ -221,6 +245,8 @@ tests:
       exit_code: 0
   - name: atmos helmfile --help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help for helmfile when using help flag"
     workdir: "../"
     command: "atmos"
@@ -235,6 +261,8 @@ tests:
       exit_code: 0
   - name: atmos helmfile apply non-existant
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show error in non atmos workspace"
     workdir: "../"
     command: "atmos"
@@ -249,6 +277,8 @@ tests:
       exit_code: 1
   - name: atmos helmfile apply 
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show error in atmos workspace"
     workdir: "../examples/demo-helmfile"
     command: "atmos"
@@ -261,6 +291,8 @@ tests:
       exit_code: 1
   - name: atmos helmfile apply help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help for atmos helmfile apply"
     workdir: "../"
     command: "atmos"
@@ -275,6 +307,8 @@ tests:
       exit_code: 0
   - name: atmos helmfile apply --help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help for atmos helmfile apply --help"
     workdir: "../"
     command: "atmos"
@@ -289,6 +323,8 @@ tests:
       exit_code: 0
   - name: atmos atlantis
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show usage atmos atlantis"
     workdir: "../"
     command: "atmos"
@@ -300,6 +336,8 @@ tests:
       exit_code: 1
   - name: atmos atlantis help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help 'atmos atlantis help'"
     workdir: "../"
     command: "atmos"
@@ -313,6 +351,8 @@ tests:
       exit_code: 0
   - name: atmos atlantis --help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help 'atmos atlantis --help'"
     workdir: "../"
     command: "atmos"
@@ -327,6 +367,8 @@ tests:
 
   - name: atmos atlantis generate
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show usage atmos atlantis"
     workdir: "../"
     command: "atmos"
@@ -339,6 +381,8 @@ tests:
       exit_code: 1
   - name: atmos atlantis generate help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help 'atmos atlantis generate help'"
     workdir: "../"
     command: "atmos"
@@ -353,6 +397,8 @@ tests:
       exit_code: 0
   - name: atmos atlantis generate --help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help 'atmos atlantis --help'"
     workdir: "../"
     command: "atmos"
@@ -367,6 +413,8 @@ tests:
       exit_code: 0
   - name: atmos atlantis generate repo-config
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show config missing in non atmos workspace 'atmos atlantis generate repo-config'"
     workdir: "../"
     command: "atmos"
@@ -383,6 +431,8 @@ tests:
       exit_code: 1
   - name: atmos atlantis generate repo-config help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help for 'atmos atlantis generate repo-config help'"
     workdir: "../"
     command: "atmos"
@@ -401,6 +451,8 @@ tests:
       exit_code: 0
   - name: atmos atlantis generate repo-config --help
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show help for 'atmos atlantis generate repo-config --help'"
     workdir: "../"
     command: "atmos"
@@ -419,6 +471,8 @@ tests:
       exit_code: 0
   - name: atmos atlantis generate repo-config non-existant
     enabled: true
+    snapshot: true
+    diff: []
     description: "Should show usage for 'atmos atlantis generate repo-config non-existant'"
     workdir: "../"
     command: "atmos"
@@ -470,4 +524,27 @@ tests:
       - "non-existant"
     expect:
       exit_code: 1
-
+  - name: atmos about non-existent
+    enabled: true
+    snapshot: true
+    diff: []
+    description: "'atmos about non-existent' should show expected message"
+    workdir: "../"
+    command: atmos
+    args:
+      - "about"
+      - "non-existent"
+    expect:
+      exit_code: 1
+  - name: atmos about --help
+    enabled: true
+    snapshot: true
+    diff: []
+    description: "'atmos about --help' should show help"
+    workdir: "../"
+    command: atmos
+    args:
+      - "about"
+      - "--help"
+    expect:
+      exit_code: 0

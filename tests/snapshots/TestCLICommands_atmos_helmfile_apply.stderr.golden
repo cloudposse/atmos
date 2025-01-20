@@ -1,0 +1,1 @@
+'stack' is required. Usage: atmos helmfile <command> <component> -s <stack>

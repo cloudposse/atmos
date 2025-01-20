@@ -1,0 +1,21 @@
+Valid subcommands are:
+  about
+  atlantis
+  aws
+  completion
+  describe
+  docs
+  helmfile
+  help
+  list
+  pro
+  show
+  support
+  terraform
+  tf
+  validate
+  vendor
+  version
+  workflow
+
+Run 'atmos --help' for usage
