@@ -34,7 +34,7 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 	var res any
 
 	if query != "" {
-		res, err = u.EvaluateYqExpression(atmosConfig, atmosConfig, query)
+		res, err = u.EvaluateYqExpression(&atmosConfig, atmosConfig, query)
 		if err != nil {
 			return err
 		}
