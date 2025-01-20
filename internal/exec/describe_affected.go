@@ -279,7 +279,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		res, err := u.EvaluateYqExpression(atmosConfig, affected, a.Query)
+		res, err := u.EvaluateYqExpression(&atmosConfig, affected, a.Query)
 		if err != nil {
 			return err
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -51,6 +52,23 @@ var (
 				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
 				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
 				UseEKS:                true,
+			},
+		},
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+			Terminal: schema.Terminal{
+				MaxWidth: templates.GetTerminalWidth(),
+				Pager:    true,
+				Colors:   true,
+				Unicode:  true,
+				SyntaxHighlighting: schema.SyntaxHighlighting{
+					Enabled:                true,
+					Formatter:              "terminal",
+					Theme:                  "dracula",
+					HighlightedOutputPager: true,
+					LineNumbers:            true,
+					Wrap:                   false,
+				},
 			},
 		},
 		Workflows: schema.Workflows{
@@ -227,7 +245,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			return atmosConfig, err
 		}
 	}
-
+	// We want the editorconfig color by default to be true
+	atmosConfig.Validate.EditorConfig.Color = true
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&atmosConfig)

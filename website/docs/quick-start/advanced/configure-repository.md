@@ -78,7 +78,7 @@ The following example provides the simplest filesystem layout that Atmos can wor
 ## `atmos.yaml` CLI Config File Location
 
 While placing `atmos.yaml` at the root of the repository will work for the `atmos` CLI, it will not work
-for [Component Remote State](/core-concepts/components/terraform/remote-state) because it uses
+for [Component Remote State](/core-concepts/share-data/remote-state) because it uses
 the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider. Terraform executes the provider from the
 component's folder (e.g. `components/terraform/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
 
@@ -103,7 +103,7 @@ This means that `atmos.yaml` file must be at a location in the file system where
 Initial Atmos configuration can be controlled by these ENV vars:
 
 - `ATMOS_CLI_CONFIG_PATH` - where to find `atmos.yaml`. Path to a folder where the `atmos.yaml` CLI config file is located (just the folder without
-   the file name)
+  the file name)
 
 - `ATMOS_BASE_PATH` - base path to `components` and `stacks` folders
 

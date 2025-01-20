@@ -91,6 +91,43 @@ logs:
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
 
+validate:
+  # The configuration settings for the editorconfig-checker.
+
+  editorconfig:
+    # A list of file paths or patterns to exclude from checks.
+    exclude: []
+
+    # If set to true, the default ignore patterns (like .git/*) will not be applied.
+    ignore_defaults: false
+
+    # Runs the checker without making any changes or producing output, useful for testing configuration.
+    dry_run: false
+
+    # Specifies the output format. Options: "default", "json".
+    format: "default"
+
+    # Enables/Disables colored output in the terminal if .
+    color: true
+
+    # Disables checking for trailing whitespace at the end of lines.
+    disable_trim_trailing_whitespace: false
+
+    # Disables checking for consistent line endings (e.g., LF vs. CRLF).
+    disable_end_of_line: false
+
+    # Disables checking for the presence of a newline at the end of files.
+    disable_insert_final_newline: false
+
+    # Disables checking for consistent indentation style (e.g., tabs or spaces).
+    disable_indentation: false
+
+    # Disables checking for consistent indentation size (e.g., 2 spaces or 4 spaces).
+    disable_indent_size: false
+
+    # Disables checking for lines exceeding a maximum length.
+    disable_max_line_length: false
+
 # Custom CLI commands
 commands:
   - name: tf
@@ -320,11 +357,17 @@ settings:
 
   # Terminal settings for displaying content
   terminal:
-    max_width: 120      # Maximum width for terminal output
-    pager: true         # Use pager for long output
-    timestamps: false   # Show timestamps in logs
-    colors: true       # Enable colored output
-    unicode: true      # Use unicode characters
+    max_width: 120          # Maximum width for terminal output
+    pager: true             # Pager setting for all terminal output
+    colors: true            # Enable colored output
+    unicode: true           # Use unicode characters
+
+    syntax_highlighting:
+      enabled: true
+      formatter: terminal   # Output formatter (e.g., terminal, html)
+      theme: dracula        # Highlighting theme
+      line_numbers: true    # Display line numbers
+      wrap: false           # Wrap long lines
 
   # Markdown element styling
   markdown:

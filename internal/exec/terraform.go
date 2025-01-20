@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -101,23 +100,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.NeedHelp {
-		return nil
-	}
-
-	// If the user just types `atmos terraform`, print Atmos logo and show terraform help
-	if info.SubCommand == "" {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			return err
-		}
-
-		err = processHelp(atmosConfig, "terraform", "")
-		if err != nil {
-			return err
-		}
-
-		fmt.Println()
 		return nil
 	}
 
@@ -270,7 +252,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Check for any Terraform environment variables that might conflict with Atmos
 	for _, envVar := range os.Environ() {
 		if strings.HasPrefix(envVar, "TF_") {
-      varName := strings.SplitN(envVar, "=", 2)[0]
+			varName := strings.SplitN(envVar, "=", 2)[0]
 			u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
 		}
 	}
