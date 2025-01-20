@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,6 +14,51 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestValidateFormat(t *testing.T) {
+	tests := []struct {
+		name    string
+		format  string
+		wantErr bool
+	}{
+		{
+			name:    "empty format",
+			format:  "",
+			wantErr: false,
+		},
+		{
+			name:    "valid table format",
+			format:  "table",
+			wantErr: false,
+		},
+		{
+			name:    "valid json format",
+			format:  "json",
+			wantErr: false,
+		},
+		{
+			name:    "valid csv format",
+			format:  "csv",
+			wantErr: false,
+		},
+		{
+			name:    "invalid format",
+			format:  "invalid",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateFormat(tt.format)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
 
 func TestListWorkflows(t *testing.T) {
 	// Create a temporary directory for test files
@@ -30,6 +76,12 @@ func TestListWorkflows(t *testing.T) {
 	require.NoError(t, err)
 	err = os.WriteFile(emptyWorkflowFile, emptyWorkflowBytes, 0644)
 	require.NoError(t, err)
+
+	// Expected line ending based on OS
+	expectedLineEnding := "\n"
+	if runtime.GOOS == "windows" {
+		expectedLineEnding = "\r\n"
+	}
 
 	tests := []struct {
 		name        string
@@ -108,11 +160,41 @@ func TestListWorkflows(t *testing.T) {
 			delimiter: ",",
 			wantErr:   false,
 			validate: func(t *testing.T, output string) {
-				lines := strings.Split(strings.TrimSpace(output), "\n")
+				lines := strings.Split(strings.TrimSpace(output), expectedLineEnding)
 				assert.Len(t, lines, 2) // Header + 1 workflow
 				assert.Equal(t, "File,Workflow,Description", lines[0])
 				assert.Equal(t, "example,test-1,Test workflow", lines[1])
 			},
+		},
+		{
+			name:     "invalid format",
+			fileFlag: "",
+			config:   schema.ListConfig{},
+			format:   "invalid",
+			wantErr:  true,
+		},
+		{
+			name:     "config format overridden by parameter",
+			fileFlag: "",
+			config: schema.ListConfig{
+				Format: "json",
+			},
+			format:  "csv",
+			wantErr: false,
+			validate: func(t *testing.T, output string) {
+				lines := strings.Split(strings.TrimSpace(output), expectedLineEnding)
+				assert.Len(t, lines, 2)
+				assert.True(t, strings.Contains(lines[0], "File"))
+			},
+		},
+		{
+			name:     "invalid config format",
+			fileFlag: "",
+			config: schema.ListConfig{
+				Format: "invalid",
+			},
+			format:  "",
+			wantErr: true,
 		},
 	}
 
@@ -145,6 +227,11 @@ func TestListWorkflows(t *testing.T) {
 			if tt.name == "happy path - default config" {
 				assert.True(t, strings.Index(output, "File") < strings.Index(output, "Workflow"))
 				assert.True(t, strings.Index(output, "Workflow") < strings.Index(output, "Description"))
+			}
+
+			// Verify line endings for non-JSON formats
+			if tt.format != "json" && output != "No workflows found" {
+				assert.True(t, strings.Contains(output, expectedLineEnding), "Output should contain OS-specific line endings")
 			}
 		})
 	}
@@ -182,6 +269,12 @@ func TestListWorkflowsWithFile(t *testing.T) {
 		},
 	}
 
+	// Expected line ending based on OS
+	expectedLineEnding := "\n"
+	if runtime.GOOS == "windows" {
+		expectedLineEnding = "\r\n"
+	}
+
 	tests := []struct {
 		name      string
 		format    string
@@ -199,6 +292,7 @@ func TestListWorkflowsWithFile(t *testing.T) {
 				assert.Contains(t, output, "example")
 				assert.Contains(t, output, "test-1")
 				assert.Contains(t, output, "Test workflow")
+				assert.Contains(t, output, expectedLineEnding)
 			},
 		},
 		{
@@ -220,7 +314,7 @@ func TestListWorkflowsWithFile(t *testing.T) {
 			format:    "csv",
 			delimiter: ",",
 			validate: func(t *testing.T, output string) {
-				lines := strings.Split(strings.TrimSpace(output), "\n")
+				lines := strings.Split(strings.TrimSpace(output), expectedLineEnding)
 				assert.Len(t, lines, 2) // Header + 1 workflow
 				assert.Equal(t, "File,Workflow,Description", lines[0])
 				assert.Equal(t, "example,test-1,Test workflow", lines[1])
