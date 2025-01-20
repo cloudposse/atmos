@@ -52,7 +52,7 @@ components:
         ipv4_primary_cidr_block: !include ./vpc_config.yaml .vars.ipv4_primary_cidr_block
         # Include a local file relative to the `base_path` setting in `atmos.yaml`
         vpc_defaults: !include stacks/catalog/vpc/defaults.yaml
-        # Include a local file in HCL format
+        # Include a local file in HCL format with Terraform variables
         hcl_values: !include ./values.hcl
         # Include a local file in HCL format with Terraform variables
         tfvars_values: !include ../components/terraform/vpc/vpc.tfvars
@@ -152,8 +152,8 @@ For more details, review the following docs:
 
 ## Handling file paths and YQ expressions with spaces
 
-If you have spaces in the file names or the YQ expressions, enclose the file path and YQ expression in double quotes and
-the whole expression in single quotes.
+If you have spaces in the file names or the YQ expressions, enclose the file path and YQ expression in double quotes
+and use single quotes around the whole expression.
 
 For example, on Windows:
 

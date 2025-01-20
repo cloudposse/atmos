@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -28,15 +27,5 @@ func processTagEnv(
 		return nil
 	}
 
-	if !u.IsJSON(res) {
-		return res
-	}
-
-	var decoded any
-	err = json.Unmarshal([]byte(res), &decoded)
-	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
-	}
-
-	return decoded
+	return res
 }
