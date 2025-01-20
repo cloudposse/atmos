@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath" // For resolving absolute paths
@@ -84,7 +86,13 @@ func (m *MatchPattern) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func loadTestSuite(filePath string) (*TestSuite, error) {
-	data, err := os.ReadFile(filePath)
+	// Open the file
+	f, err := os.Open(filePath)
+	if err != nil {
+		log.Fatalf("Failed to open file: %v", err)
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
@@ -449,6 +457,76 @@ func TestCLICommands(t *testing.T) {
 		// Run with `t.Run` for non-TTY tests
 		t.Run(tc.Name, func(t *testing.T) {
 			runCLICommandTest(t, tc)
+			defer func() {
+				// Change back to the original working directory after the test
+				if err := os.Chdir(startingDir); err != nil {
+					t.Fatalf("Failed to change back to the starting directory: %v", err)
+				}
+			}()
+
+			// Change to the specified working directory
+			if tc.Workdir != "" {
+				err := os.Chdir(tc.Workdir)
+				if err != nil {
+					t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
+				}
+			}
+
+			// Check if the binary exists
+			binaryPath, err := exec.LookPath(tc.Command)
+			if err != nil {
+				t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, pathManager.GetPath())
+			}
+
+			// Prepare the command
+			cmd := exec.Command(binaryPath, tc.Args...)
+
+			// Set environment variables
+			envVars := os.Environ()
+			for key, value := range tc.Env {
+				envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
+			}
+			cmd.Env = envVars
+
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+
+			// Run the command
+			err = cmd.Run()
+
+			// Validate exit code
+			exitCode := 0
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					exitCode = exitErr.ExitCode()
+				}
+			}
+			if exitCode != tc.Expect.ExitCode {
+				t.Errorf("Description: %s", tc.Description)
+				t.Errorf("Reason: Expected exit code %d, got %d", tc.Expect.ExitCode, exitCode)
+				t.Errorf("error: %v", cmd.Stderr)
+			}
+
+			// Validate stdout
+			if !verifyOutput(t, "stdout", stdout.String(), tc.Expect.Stdout) {
+				t.Errorf("Description: %s", tc.Description)
+			}
+
+			// Validate stderr
+			if !verifyOutput(t, "stderr", stderr.String(), tc.Expect.Stderr) {
+				t.Errorf("Description: %s", tc.Description)
+			}
+
+			// Validate file existence
+			if !verifyFileExists(t, tc.Expect.FileExists) {
+				t.Errorf("Description: %s", tc.Description)
+			}
+
+			// Validate file contents
+			if !verifyFileContains(t, tc.Expect.FileContains) {
+				t.Errorf("Description: %s", tc.Description)
+			}
 		})
 	}
 }
@@ -512,12 +590,17 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 	}
 	return success
 }
-
 func verifyFileExists(t *testing.T, files []string) bool {
 	success := true
 	for _, file := range files {
-		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
-			t.Errorf("Reason: Expected file does not exist: %q", file)
+		fileAbs, err := filepath.Abs(file)
+		if err != nil {
+			log.Println(err)
+			return false
+		}
+
+		if _, err := os.Stat(fileAbs); errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Reason: Expected file does not exist: %q", fileAbs)
 			success = false
 		}
 	}
@@ -527,7 +610,13 @@ func verifyFileExists(t *testing.T, files []string) bool {
 func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bool {
 	success := true
 	for file, patterns := range filePatterns {
-		content, err := os.ReadFile(file)
+		// Open the file
+		f, err := os.Open(file)
+		if err != nil {
+			log.Fatalf("Failed to open file: %v", err)
+		}
+		defer f.Close()
+		content, err := io.ReadAll(f)
 		if err != nil {
 			t.Errorf("Reason: Failed to read file %q: %v", file, err)
 			success = false
