@@ -21,6 +21,7 @@ var describeWorkflowsCmd = &cobra.Command{
 		"describe workflows -o map\n" +
 		"describe workflows -o all",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeWorkflowsCmd(cmd, args)
 		if err != nil {
