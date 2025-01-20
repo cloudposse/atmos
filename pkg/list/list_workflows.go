@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -49,6 +50,9 @@ func LineEnding() string {
 // Extracts workflows from a workflow manifest
 func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, error) {
 	var rows [][]string
+	if manifest.Workflows == nil {
+		return rows, nil
+	}
 	for workflowName, workflow := range manifest.Workflows {
 		rows = append(rows, []string{
 			manifest.Name,
@@ -80,6 +84,11 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 
 	// If a specific file is provided, validate and load it
 	if fileFlag != "" {
+		// Validate file path
+		cleanPath := filepath.Clean(fileFlag)
+		if !strings.HasSuffix(cleanPath, ".yaml") && !strings.HasSuffix(cleanPath, ".yml") {
+			return "", fmt.Errorf("invalid workflow file extension: %s", fileFlag)
+		}
 		if _, err := os.Stat(fileFlag); os.IsNotExist(err) {
 			return "", fmt.Errorf("workflow file not found: %s", fileFlag)
 		}
