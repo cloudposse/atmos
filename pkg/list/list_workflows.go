@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -16,6 +17,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
 )
+
+// LineEnding returns the appropriate line ending for the current OS
+func LineEnding() string {
+	if runtime.GOOS == "windows" {
+		return "\r\n"
+	}
+	return "\n"
+}
 
 // Extracts workflows from a workflow manifest
 func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, error) {
@@ -122,9 +131,9 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 	case "csv":
 		// Use the provided delimiter for CSV output
 		var output strings.Builder
-		output.WriteString(strings.Join(header, delimiter) + "\n")
+		output.WriteString(strings.Join(header, delimiter) + LineEnding())
 		for _, row := range rows {
-			output.WriteString(strings.Join(row, delimiter) + "\n")
+			output.WriteString(strings.Join(row, delimiter) + LineEnding())
 		}
 		return output.String(), nil
 
@@ -148,14 +157,14 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 				Headers(header...).
 				Rows(rows...)
 
-			return t.String() + "\n", nil
+			return t.String() + LineEnding(), nil
 		}
 
 		// Default to simple tabular format for non-TTY or when format is explicitly "table"
 		var output strings.Builder
-		output.WriteString(strings.Join(header, delimiter) + "\n")
+		output.WriteString(strings.Join(header, delimiter) + LineEnding())
 		for _, row := range rows {
-			output.WriteString(strings.Join(row, delimiter) + "\n")
+			output.WriteString(strings.Join(row, delimiter) + LineEnding())
 		}
 		return output.String(), nil
 	}
