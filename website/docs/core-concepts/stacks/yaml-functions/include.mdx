@@ -86,24 +86,24 @@ which they are defined. You cannot reuse anchors across different files.
 The `!include` Atmos YAML function overcomes this limitation by allowing you to include the content or individual values
 from different local and remote sources. The `!include` function also provides the following features:
 
-- Supports local files with absolute and relative paths
+- Supports local files with absolute and relative paths.
 
-- Supports the remote protocols provided by the [`go-getter`](https://github.com/hashicorp/go-getter) library
+- Supports the remote protocols provided by the [`go-getter`](https://github.com/hashicorp/go-getter) library.
 
-- Allows you to use [YQ](https://mikefarah.gitbook.io/yq) expressions to query and filter the content of the files to retrieve individual values
+- Allows you to use [YQ](https://mikefarah.gitbook.io/yq) expressions to query and filter the content of the files to retrieve individual values.
 
 - Automatically detects the format of the files regardless of the file extensions. It supports files in JSON, YAML
   and [HCL](https://github.com/hashicorp/hcl) (`tfvars`) formats, and automatically converts them into correct
   YAML structures (simple and complex types like maps and lists are supported).
   All other files are returned unchanged, allowing you, for example, to include text and
-  [Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests
+  [Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests.
 
 ## Supported File Protocols
 
 The `!include` function supports the following local file paths:
-  - absolute paths (e.g. `/Users/me/Documents/values.yaml`)
-  - paths relative to the current Atmos manifest where the `!include` function is executed (e.g. `./values.yaml`, `../config/values.yaml`)
-  - paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file (e.g. `stacks/catalog/vpc/defaults.yaml`)
+  - absolute paths (e.g., `/Users/me/Documents/values.yaml`)
+  - paths relative to the current Atmos manifest where the `!include` function is executed (e.g., `./values.yaml`, `../config/values.yaml`)
+  - paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file (e.g., `stacks/catalog/vpc/defaults.yaml`)
 
 To download remote files from different sources, the `!include` function uses [`go-getter`](https://github.com/hashicorp/go-getter)
 (used by [Terraform](https://www.terraform.io/) for downloading modules) and supports the following protocols:
