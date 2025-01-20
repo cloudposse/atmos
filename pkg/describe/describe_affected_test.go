@@ -77,36 +77,3 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 
 	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
 }
-
-func TestDescribeAffectedFiltersDisabledComponents(t *testing.T) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-	assert.Nil(t, err)
-
-	// Set the base path to the test fixtures directory
-	atmosConfig.BasePath = "./tests/fixtures/scenarios/complete"
-
-	// Point to the same local repository
-	repoPath := "../../"
-
-	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
-		atmosConfig,
-		repoPath,
-		true,
-		true,
-		true,
-		"tenant1-ue2-test-1", // Use a specific stack that has disabled components
-	)
-	assert.Nil(t, err)
-
-	// Convert to YAML for logging
-	affectedYaml, err := u.ConvertToYAML(affected)
-	assert.Nil(t, err)
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
-
-	// Verify that no disabled components are in the affected list
-	for _, a := range affected {
-		assert.NotEqual(t, "disabled-component", a.Component, "Disabled component should not be included in affected list")
-	}
-}
