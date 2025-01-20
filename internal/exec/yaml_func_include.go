@@ -26,7 +26,7 @@ func processTagInclude(
 
 	parts, err := u.SplitStringByDelimiter(str, ' ')
 	if err != nil {
-		e := fmt.Errorf("error evaluating the YAML function: !include %s\n%v", str, err)
+		e := fmt.Errorf("error executing the YAML function: !include %s\n%v", str, err)
 		u.LogErrorAndExit(atmosConfig, e)
 	}
 
