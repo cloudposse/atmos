@@ -694,7 +694,9 @@ type ChromaStyle struct {
 }
 
 type ListConfig struct {
-	Format  string             `yaml:"format" json:"format" mapstructure:"format"`
+	// Format specifies the output format (table, json, csv)
+	// If empty, defaults to table format
+	Format  string             `yaml:"format" json:"format" mapstructure:"format" validate:"omitempty,oneof=table json csv"`
 	Columns []ListColumnConfig `yaml:"columns" json:"columns" mapstructure:"columns"`
 }
 

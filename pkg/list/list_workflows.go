@@ -18,6 +18,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	FormatTable = "table"
+	FormatJSON  = "json"
+	FormatCSV   = "csv"
+)
+
+// ValidateFormat checks if the given format is supported
+func ValidateFormat(format string) error {
+	if format == "" {
+		return nil
+	}
+	validFormats := []string{FormatTable, FormatJSON, FormatCSV}
+	for _, f := range validFormats {
+		if format == f {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid format '%s'. Supported formats are: %s", format, strings.Join(validFormats, ", "))
+}
+
 // LineEnding returns the appropriate line ending for the current OS
 func LineEnding() string {
 	if runtime.GOOS == "windows" {
@@ -41,6 +61,17 @@ func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, err
 
 // FilterAndListWorkflows filters and lists workflows based on the given file
 func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, format string, delimiter string) (string, error) {
+	if err := ValidateFormat(format); err != nil {
+		return "", err
+	}
+
+	if format == "" && listConfig.Format != "" {
+		if err := ValidateFormat(listConfig.Format); err != nil {
+			return "", err
+		}
+		format = listConfig.Format
+	}
+
 	// Parse columns configuration
 	header := []string{"File", "Workflow", "Description"}
 
