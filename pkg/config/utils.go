@@ -486,7 +486,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
-			return fmt.Errorf("Error: Invalid log level '%s' in --logs-level flag. Valid options are: [Trace Debug Info Warning Off]", configAndStacksInfo.LogsLevel)
+			return fmt.Errorf("Invalid log level '%s' specified with the --logs-level flag. Valid options are: [Trace Debug Info Warning Off]", configAndStacksInfo.LogsLevel)
 		}
 		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
