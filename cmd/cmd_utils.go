@@ -502,7 +502,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Unable not load cache: %s", err))
+		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to load cache: %s", err))
 		return
 	}
 
