@@ -189,4 +189,8 @@ tests:
         - "./components/terraform/weather/main/providers.tf"
         - "./components/terraform/weather/main/variables.tf"
         - "./components/terraform/weather/main/versions.tf"
+        - "./components/terraform/vpc-src/main.tf"
+        - "./components/terraform/vpc-src/outputs.tf"
+        - "./components/terraform/vpc-src/variables.tf"
+        - "./components/terraform/vpc-src/versions.tf"
       exit_code: 0
