@@ -205,7 +205,7 @@ type TerraformDocsSettings struct {
 
 type DocsGenerate struct {
 	Input     []string              `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
-	Template  []string              `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+	Template  string                `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 	Output    string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
 	Terraform TerraformDocsSettings `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
 }

@@ -14,12 +14,6 @@ var docsGenerateCmd = &cobra.Command{
 	Long: `Generate documentation by merging multiple README.yaml data sources 
 and then using templates to produce README.md files. Also supports terraform-docs injection.
 
-Usage:
-  atmos docs generate [path]
-
-Aliases:
-  generate docs
-
 Examples:
   - Generate a README.md in the current path:
       atmos docs generate

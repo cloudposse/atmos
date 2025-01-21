@@ -1,16 +1,13 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
-
 	"gopkg.in/yaml.v3"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -20,6 +17,8 @@ import (
 	tfdocsMarkdown "github.com/terraform-docs/terraform-docs/format"
 	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
 	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
+
+	"github.com/hashicorp/go-getter"
 )
 
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate' logic
@@ -54,7 +53,6 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 
 	docsGenerate := atmosConfig.Settings.Docs.Generate
 
-	// Validate basic config
 	if len(docsGenerate.Input) == 0 {
 		u.LogDebug(atmosConfig, "No 'docs.generate.input' sources defined in atmos.yaml.")
 	}
@@ -76,6 +74,7 @@ func generateAllReadmes(atmosConfig schema.AtmosConfiguration, baseDir string, d
 		if werr != nil {
 			return werr
 		}
+		// If you eventually reintroduce local reading, you'd look for "README.yaml" or similar here.
 		if strings.EqualFold(info.Name(), "README.yaml") {
 			dir := filepath.Dir(path)
 			err := generateSingleReadme(atmosConfig, dir, docsGenerate)
@@ -89,11 +88,10 @@ func generateAllReadmes(atmosConfig schema.AtmosConfiguration, baseDir string, d
 }
 
 func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerate) error {
-	// Merge data from all YAML inputs
+	// 1) Merge data from all YAML inputs
 	mergedData := map[string]interface{}{}
-
 	for _, src := range docsGenerate.Input {
-		dataMap, err := fetchAndParseYAML(src, dir)
+		dataMap, err := fetchAndParseYAML(atmosConfig, src, dir)
 		if err != nil {
 			u.LogTrace(atmosConfig, fmt.Sprintf("Skipping input '%s' due to error: %v", src, err))
 			continue
@@ -101,16 +99,7 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		mergedData = deepMerge(mergedData, dataMap)
 	}
 
-	localReadmeYaml := filepath.Join(dir, "README.yaml")
-	if fileExists(localReadmeYaml) {
-		localData, err := parseYAML(localReadmeYaml)
-		if err == nil {
-			mergedData = deepMerge(mergedData, localData)
-		} else {
-			u.LogDebug(atmosConfig, fmt.Sprintf("Error reading local README.yaml: %v", err))
-		}
-	}
-
+	// 2) Generate terraform docs if configured
 	if docsGenerate.Terraform.Enabled {
 		terraformDocs, err := runTerraformDocs(dir, docsGenerate.Terraform)
 		if err != nil {
@@ -119,12 +108,29 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		mergedData["terraform_docs"] = terraformDocs
 	}
 
-	chosenTemplate, err := pickFirstAvailableTemplate(docsGenerate.Template, dir)
-	if err != nil {
-		// fallback
+	// 3) Fetch the template (via go-getter) or fallback
+	var chosenTemplate string
+	if docsGenerate.Template != "" {
+		templateFile, tempDir, err := downloadSource(atmosConfig, docsGenerate.Template, dir)
+		if err != nil {
+			u.LogDebug(atmosConfig, fmt.Sprintf("Error fetching template '%s': %v. Using fallback instead.", docsGenerate.Template, err))
+		} else {
+			defer removeTempDir(atmosConfig, tempDir)
+			body, err := os.ReadFile(templateFile)
+			if err == nil {
+				chosenTemplate = string(body)
+			} else {
+				u.LogDebug(atmosConfig, fmt.Sprintf("Error reading template file: %v. Using fallback.", err))
+			}
+		}
+	}
+
+	// 4) If no user-supplied template or if an error occurred, fallback
+	if chosenTemplate == "" {
 		chosenTemplate = "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
 	}
 
+	// 5) Render final README with existing gomplate call
 	rendered, err := ProcessTmplWithDatasourcesGomplate(
 		atmosConfig,
 		schema.Settings{},
@@ -137,6 +143,7 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		return fmt.Errorf("failed to render template with datasources: %w", err)
 	}
 
+	// 6) Write final README.md (or custom output name)
 	outputFile := docsGenerate.Output
 	if outputFile == "" {
 		outputFile = "README.md"
@@ -151,32 +158,14 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 	return nil
 }
 
-// fetchAndParseYAML loads a remote or local path into a map[string]interface{}
-func fetchAndParseYAML(pathOrURL string, baseDir string) (map[string]interface{}, error) {
-	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
-		resp, err := http.Get(pathOrURL)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			return nil, fmt.Errorf("HTTP error %d fetching %s", resp.StatusCode, pathOrURL)
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return parseYAMLBytes(body)
+// fetchAndParseYAML fetches a YAML file from a local path or URL, parses it, and returns the data
+func fetchAndParseYAML(atmosConfig schema.AtmosConfiguration, pathOrURL string, baseDir string) (map[string]interface{}, error) {
+	localPath, temDir, err := downloadSource(atmosConfig, pathOrURL, baseDir)
+	defer removeTempDir(atmosConfig, temDir)
+	if err != nil {
+		return nil, err
 	}
-
-	candidate := pathOrURL
-	if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(baseDir, candidate)
-	}
-	if !fileExists(candidate) {
-		return nil, fmt.Errorf("file does not exist: %s", candidate)
-	}
-	return parseYAML(candidate)
+	return parseYAML(localPath)
 }
 
 func parseYAML(filePath string) (map[string]interface{}, error) {
@@ -195,9 +184,7 @@ func parseYAMLBytes(b []byte) (map[string]interface{}, error) {
 	return data, nil
 }
 
-// runTerraformDocs calls terraform-docs as a library at v0.19.0
 func runTerraformDocs(dir string, settings schema.TerraformDocsSettings) (string, error) {
-
 	config := tfdocsPrint.DefaultConfig()
 	config.ModuleRoot = dir
 
@@ -220,59 +207,76 @@ func runTerraformDocs(dir string, settings schema.TerraformDocsSettings) (string
 		return "", err
 	}
 
-	doc := formatter.Content()
-
-	return doc, nil
+	return formatter.Content(), nil
 }
 
-// pickFirstAvailableTemplate tries each template in order, returning the first that can be found/read.
-func pickFirstAvailableTemplate(templates []string, baseDir string) (string, error) {
-	for _, t := range templates {
-		content, err := fetchTemplate(t, baseDir)
-		if err == nil && content != "" {
-			return content, nil
-		}
+// downloadSource calls the go-getter,
+// then returns the single file path if exactly one file is found, or an error otherwise.
+func downloadSource(
+	atmosConfig schema.AtmosConfiguration,
+	pathOrURL string,
+	baseDir string,
+) (localPath string, temDir string, err error) {
+
+	// If path is relative & not obviously remote, make it absolute
+	if !filepath.IsAbs(pathOrURL) && !isLikelyRemote(pathOrURL) {
+		pathOrURL = filepath.Join(baseDir, pathOrURL)
 	}
-	return "", errors.New("no valid template found in the list")
+
+	tempDir, err := os.MkdirTemp("", "atmos-docs-*")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
+	err = GoGetterGet(atmosConfig, pathOrURL, tempDir, getter.ClientModeAny, 10*time.Minute)
+	if err != nil {
+		return "", tempDir, fmt.Errorf("failed to download %s: %w", pathOrURL, err)
+	}
+	downloadedPath, err := findSingleFileInDir(tempDir)
+	if err != nil {
+		return "", tempDir, fmt.Errorf("go-getter: %w", err)
+	}
+
+	return downloadedPath, tempDir, nil
 }
 
-func fetchTemplate(pathOrURL string, baseDir string) (string, error) {
-	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
-		resp, err := http.Get(pathOrURL)
-		if err != nil {
-			return "", err
+// findSingleFileInDir enforces that exactly one file is present
+func findSingleFileInDir(dir string) (string, error) {
+	var files []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, werr error) error {
+		if werr != nil {
+			return werr
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			return "", fmt.Errorf("HTTP error %d for %s", resp.StatusCode, pathOrURL)
+		if !info.IsDir() {
+			files = append(files, path)
 		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", err
-		}
-		return string(body), nil
-	}
-
-	candidate := pathOrURL
-	if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(baseDir, candidate)
-	}
-	if !fileExists(candidate) {
-		return "", fmt.Errorf("file not found: %s", candidate)
-	}
-	b, err := os.ReadFile(candidate)
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
-	return string(b), nil
+
+	if len(files) == 0 {
+		return "", fmt.Errorf("no files found in %s", dir)
+	}
+	if len(files) > 1 {
+		return "", fmt.Errorf("multiple files found in %s (found %d)", dir, len(files))
+	}
+	return files[0], nil
 }
 
-func inMemoryYaml(m map[string]interface{}) string {
-	b, _ := yaml.Marshal(m)
-	return "string://" + string(b)
+// isLikelyRemote does a quick check if a path looks remote
+func isLikelyRemote(s string) bool {
+	prefixes := []string{"http://", "https://", "git::", "github.com/", "git@"}
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
-// TBC: Check if it can be replaced with mergo as it is done in other places
+// to be replaced with native Atmos merging
 func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
 	out := make(map[string]interface{}, len(dst))
 	for k, v := range dst {
