@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -37,14 +37,6 @@ func ValidateFormat(format string) error {
 		}
 	}
 	return fmt.Errorf("invalid format '%s'. Supported formats are: %s", format, strings.Join(validFormats, ", "))
-}
-
-// LineEnding returns the appropriate line ending for the current OS
-func LineEnding() string {
-	if runtime.GOOS == "windows" {
-		return "\r\n"
-	}
-	return "\n"
 }
 
 // Extracts workflows from a workflow manifest
@@ -86,7 +78,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 	if fileFlag != "" {
 		// Validate file path
 		cleanPath := filepath.Clean(fileFlag)
-		if !strings.HasSuffix(cleanPath, ".yaml") && !strings.HasSuffix(cleanPath, ".yml") {
+		if !utils.IsYaml(cleanPath) {
 			return "", fmt.Errorf("invalid workflow file extension: %s", fileFlag)
 		}
 		if _, err := os.Stat(fileFlag); os.IsNotExist(err) {
@@ -171,9 +163,9 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 	case "csv":
 		// Use the provided delimiter for CSV output
 		var output strings.Builder
-		output.WriteString(strings.Join(header, delimiter) + LineEnding())
+		output.WriteString(strings.Join(header, delimiter) + utils.GetLineEnding())
 		for _, row := range rows {
-			output.WriteString(strings.Join(row, delimiter) + LineEnding())
+			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
 		}
 		return output.String(), nil
 
@@ -197,14 +189,14 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 				Headers(header...).
 				Rows(rows...)
 
-			return t.String() + LineEnding(), nil
+			return t.String() + utils.GetLineEnding(), nil
 		}
 
 		// Default to simple tabular format for non-TTY or when format is explicitly "table"
 		var output strings.Builder
-		output.WriteString(strings.Join(header, delimiter) + LineEnding())
+		output.WriteString(strings.Join(header, delimiter) + utils.GetLineEnding())
 		for _, row := range rows {
-			output.WriteString(strings.Join(row, delimiter) + LineEnding())
+			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
 		}
 		return output.String(), nil
 	}
