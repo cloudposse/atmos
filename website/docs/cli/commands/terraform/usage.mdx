@@ -63,7 +63,7 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
   The `--force` flag bypasses the safety confirmation prompt and forces the deletion. Use with caution.
 
   :::warning
-  The `clean` performs destructive operations that can lead to permanent state loss. Always ensure you have remote state configured in your components before proceeding.
+  The `clean` command performs destructive operations that can lead to permanent state loss, if not using remote backends. Always ensure you have remote state configured in your components before proceeding.
   :::
 
 - `atmos terraform workspace` command first runs `terraform init -reconfigure`, then `terraform workspace select`, and if the workspace was not

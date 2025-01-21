@@ -23,7 +23,7 @@ Execute the `terraform clean` command like this:
 atmos terraform clean <component> -s <stack> [--skip-lock-file] [--everything] [--force]
 
 :::warning
-The `clean` default behavior and will delete all Terraform-related files including state files, with a confirmation prompt before proceeding. The `--force` flag will bypass confirmation prompts.
+The `clean` command, by default, deletes all Terraform-related files, including local state files, but will prompt for confirmation before proceeding. Using the `--force` flag skips the confirmation prompt and executes the deletion immediately.
 Use these flags with extreme caution as they can lead to irreversible data loss.
 :::
 ```
