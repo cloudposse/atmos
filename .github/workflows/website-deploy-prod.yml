@@ -2,10 +2,12 @@ name: "Website Deploy Prod"
 
 on:
   workflow_dispatch:
-
   push:
     branches:
       - main
+  release:
+    types:
+      - released
 
 env:
   AWS_REGION: us-east-2
