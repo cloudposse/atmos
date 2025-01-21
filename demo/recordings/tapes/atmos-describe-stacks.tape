@@ -16,3 +16,7 @@ Down 25 Sleep 500ms
 
 Type "q" Sleep 500ms
 Sleep 1s
+
+Hide
+Ctrl+C
+Show
