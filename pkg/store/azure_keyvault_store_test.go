@@ -235,3 +235,137 @@ func TestKeyVaultStore_InputValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestKeyVaultStore_Set(t *testing.T) {
+	mockClient := new(MockKeyVaultClient)
+	delimiter := "-"
+	store := &KeyVaultStore{
+		client:         mockClient,
+		prefix:         "prefix",
+		stackDelimiter: &delimiter,
+	}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		value     interface{}
+		mockFn    func()
+		wantErr   bool
+	}{
+		{
+			name:      "valid set",
+			stack:     "dev",
+			component: "app",
+			key:       "config",
+			value:     "test-value",
+			mockFn: func() {
+				params := azsecrets.SetSecretParameters{Value: stringPtr("test-value")}
+				mockClient.On("SetSecret", mock.Anything, "prefix-dev-app-config", params).
+					Return(azsecrets.SetSecretResponse{}, nil)
+			},
+			wantErr: false,
+		},
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: "app",
+			key:       "config",
+			value:     "test",
+			mockFn:    func() {},
+			wantErr:   true,
+		},
+		{
+			name:      "non-string value",
+			stack:     "dev",
+			component: "app",
+			key:       "config",
+			value:     123,
+			mockFn:    func() {},
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient.ExpectedCalls = nil
+			mockClient.Calls = nil
+			tt.mockFn()
+
+			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestKeyVaultStore_Get(t *testing.T) {
+	mockClient := new(MockKeyVaultClient)
+	delimiter := "-"
+	store := &KeyVaultStore{
+		client:         mockClient,
+		prefix:         "prefix",
+		stackDelimiter: &delimiter,
+	}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		mockFn    func()
+		want      interface{}
+		wantErr   bool
+	}{
+		{
+			name:      "valid get",
+			stack:     "dev",
+			component: "app",
+			key:       "config",
+			mockFn: func() {
+				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config").
+					Return("test-value", nil)
+			},
+			want:    "test-value",
+			wantErr: false,
+		},
+		{
+			name:      "not found",
+			stack:     "dev",
+			component: "app",
+			key:       "missing",
+			mockFn: func() {
+				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-missing").
+					Return(nil, fmt.Errorf("secret not found"))
+			},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient.ExpectedCalls = nil
+			mockClient.Calls = nil
+			tt.mockFn()
+
+			got, err := store.Get(tt.stack, tt.component, tt.key)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func stringPtr(s string) *string {
+	return &s
+}

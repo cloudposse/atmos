@@ -16,9 +16,15 @@ import (
 
 var invalidCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 
+// KeyVaultClient interface allows us to mock the Azure Key Vault client
+type KeyVaultClient interface {
+	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
+	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
+}
+
 // KeyVaultStore is an implementation of the Store interface for Azure Key Vault.
 type KeyVaultStore struct {
-	client         *azsecrets.Client
+	client         KeyVaultClient
 	vaultURL       string
 	prefix         string
 	stackDelimiter *string
