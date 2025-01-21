@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -75,6 +73,10 @@ func NewKeyVaultStore(options KeyVaultStoreOptions) (Store, error) {
 }
 
 func (s *KeyVaultStore) getKey(stack string, component string, key string) (string, error) {
+	if stack == "" || component == "" || key == "" {
+		return "", fmt.Errorf("stack, component, and key cannot be empty")
+	}
+
 	stackParts := strings.Split(stack, *s.stackDelimiter)
 	componentParts := strings.Split(component, "/")
 
@@ -83,14 +85,7 @@ func (s *KeyVaultStore) getKey(stack string, component string, key string) (stri
 	parts = append(parts, key)
 
 	// Azure Key Vault secret names can only contain alphanumeric characters and dashes
-	// Replace all invalid characters with dashes and convert to lowercase
 	secretName := strings.ToLower(strings.Join(parts, "-"))
-
-	// Replace invalid characters with dashes
-	secretName = invalidCharsRegex.ReplaceAllString(secretName, "-")
-
-	// Replace multiple consecutive dashes with a single dash
-	secretName = strings.ReplaceAll(secretName, "--", "-")
 	secretName = strings.Trim(secretName, "-")
 
 	if len(secretName) > 127 {
@@ -101,28 +96,15 @@ func (s *KeyVaultStore) getKey(stack string, component string, key string) (stri
 }
 
 func (s *KeyVaultStore) Set(stack string, component string, key string, value interface{}) error {
-	if stack == "" {
-		return fmt.Errorf("stack cannot be empty")
-	}
-	if component == "" {
-		return fmt.Errorf("component cannot be empty")
-	}
-	if key == "" {
-		return fmt.Errorf("key cannot be empty")
-	}
-
-	// Convert value to string
-	strValue, ok := value.(string)
-	if !ok {
-		return fmt.Errorf("value must be a string")
-	}
-
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Setting secret '%s' in Azure Key Vault %s", secretName, s.vaultURL)
+	strValue, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("value must be a string")
+	}
 
 	params := azsecrets.SetSecretParameters{
 		Value: &strValue,
@@ -131,63 +113,34 @@ func (s *KeyVaultStore) Set(stack string, component string, key string, value in
 	_, err = s.client.SetSecret(context.Background(), secretName, params, nil)
 	if err != nil {
 		var respErr *azcore.ResponseError
-		switch {
-		case errors.As(err, &respErr) && respErr.StatusCode == 403:
+		if errors.As(err, &respErr) && respErr.StatusCode == 403 {
 			return fmt.Errorf("failed to set secret '%s': access denied. Please check your Azure credentials and permissions: %w", secretName, err)
-		case errors.As(err, &respErr) && respErr.StatusCode == 401:
-			return fmt.Errorf("failed to set secret '%s': unauthorized. Please check your Azure credentials: %w", secretName, err)
-		case errors.As(err, &respErr) && respErr.StatusCode == 429:
-			return fmt.Errorf("failed to set secret '%s': rate limit exceeded: %w", secretName, err)
-		default:
-			return fmt.Errorf("failed to set secret '%s': %w", secretName, err)
 		}
+		return fmt.Errorf("failed to set secret '%s': %w", secretName, err)
 	}
 
 	return nil
 }
 
 func (s *KeyVaultStore) Get(stack string, component string, key string) (interface{}, error) {
-	if stack == "" {
-		return nil, fmt.Errorf("stack cannot be empty")
-	}
-	if component == "" {
-		return nil, fmt.Errorf("component cannot be empty")
-	}
-	if key == "" {
-		return nil, fmt.Errorf("key cannot be empty")
-	}
-
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
 		return nil, err
 	}
 
-	maxRetries := 3
-	var lastErr error
-
-	for i := 0; i < maxRetries; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		resp, err := s.client.GetSecret(ctx, secretName, "", nil)
-		cancel()
-
-		if err == nil {
-			return *resp.Value, nil
-		}
-
+	resp, err := s.client.GetSecret(context.Background(), secretName, "", nil)
+	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) {
-			// Don't retry on permanent errors
-			if respErr.StatusCode == 403 || respErr.StatusCode == 404 {
-				return nil, fmt.Errorf("failed to get secret '%s': %w", secretName, err)
+			switch respErr.StatusCode {
+			case 404:
+				return nil, fmt.Errorf("secret '%s' not found: %w", secretName, err)
+			case 403:
+				return nil, fmt.Errorf("failed to get secret '%s': access denied. Please check your Azure credentials and permissions: %w", secretName, err)
 			}
-			// Add exponential backoff for retries
-			time.Sleep(time.Duration(i+1) * time.Second)
-			lastErr = err
-			continue
 		}
-
 		return nil, fmt.Errorf("failed to get secret '%s': %w", secretName, err)
 	}
 
-	return nil, fmt.Errorf("failed to get secret '%s' after %d retries: %w", secretName, maxRetries, lastErr)
+	return resp.Value, nil
 }

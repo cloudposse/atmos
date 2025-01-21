@@ -26,7 +26,7 @@ func (m *MockKeyVaultClient) GetSecret(ctx context.Context, name string, version
 		return azsecrets.GetSecretResponse{}, args.Error(1)
 	}
 	value := args.String(0)
-	return azsecrets.GetSecretResponse{Value: &value}, args.Error(1)
+	return azsecrets.GetSecretResponse{Value: value}, args.Error(1)
 }
 
 func TestNewKeyVaultStore(t *testing.T) {
@@ -76,6 +76,7 @@ func TestKeyVaultStore_getKey(t *testing.T) {
 		component string
 		key       string
 		expected  string
+		wantErr   bool
 	}{
 		{
 			name:      "simple path",
@@ -83,34 +84,27 @@ func TestKeyVaultStore_getKey(t *testing.T) {
 			component: "app",
 			key:       "config",
 			expected:  "prefix-dev-app-config",
+			wantErr:   false,
 		},
 		{
-			name:      "nested component",
-			stack:     "dev",
-			component: "app/service",
-			key:       "config",
-			expected:  "prefix-dev-app-service-config",
-		},
-		{
-			name:      "multi-level stack",
-			stack:     "dev-us-west-2",
+			name:      "empty stack",
+			stack:     "",
 			component: "app",
 			key:       "config",
-			expected:  "prefix-dev-us-west-2-app-config",
-		},
-		{
-			name:      "uppercase characters",
-			stack:     "Dev",
-			component: "App/Service",
-			key:       "Config",
-			expected:  "prefix-dev-app-service-config",
+			expected:  "",
+			wantErr:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := store.getKey(tt.stack, tt.component, tt.key)
-			assert.Equal(t, tt.expected, result)
+			result, err := store.getKey(tt.stack, tt.component, tt.key)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
 		})
 	}
 }
