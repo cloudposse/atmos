@@ -39,12 +39,29 @@ for tape in "${TAPEFILES[@]}"; do
   base="$(basename "$tape" .tape)"
   output_file="$MP4_OUTDIR/$base.mp4"
 
-  if [[ ! -f "$output_file" || "$tape" -nt "$output_file" ]]; then
-    echo "   Processing $tape -> $output_file"
-    (cd "$REPO_ROOT" && timeout 600 vhs "$tape" --output "$output_file")
-  else
-    echo "   Skipping $tape; $output_file is up-to-date."
-  fi
+   # Run the vhs command in the background
+    (cd "$REPO_ROOT" && timeout 600 vhs "$tape" --output "$output_file") &
+
+    # Get the PID of the background process
+    VHS_PID=$!
+
+    echo "   VHS is running with PID $VHS_PID. Monitoring..."
+
+    # Monitor the process
+    while kill -0 "$VHS_PID" 2>/dev/null; do
+        echo "   VHS is still running..."
+				ps -uxaww
+        sleep 5
+    done
+
+    # Check exit status of the process
+    wait "$VHS_PID"
+    EXIT_CODE=$?
+    if [ "$EXIT_CODE" -eq 0 ]; then
+        echo "   Processing completed successfully for $tape."
+    else
+        echo "   VHS encountered an error (exit code: $EXIT_CODE) for $tape."
+    fi
 done
 
 # 2) Process scenes/*.txt
