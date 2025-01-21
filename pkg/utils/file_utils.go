@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/hashicorp/hcl"
@@ -282,7 +283,7 @@ func ResolveRelativePath(path string, basePath string) string {
 
 // GetLineEnding returns the appropriate line ending for the current platform
 func GetLineEnding() string {
-	if strings.Contains(strings.ToLower(os.Getenv("OS")), "windows") {
+	if runtime.GOOS == "windows" {
 		return "\r\n"
 	}
 	return "\n"
