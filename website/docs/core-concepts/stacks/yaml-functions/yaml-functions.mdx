@@ -43,6 +43,16 @@ YAML supports three types of data: core, defined, and user-defined.
    [access component outputs (remote state) directly within Atmos stack manifests](/core-concepts/share-data/remote-state).
    Note that this requires initializing each component (`terraform init`), which downloads all Terraform providers and may significantly impact performance.
 
+ - The [__`!store`__](/core-concepts/stacks/yaml-functions/store) YAML function allows reading the values from a
+   remote [store](/core-concepts/projects/configuration/stores) (e.g. SSM Parameter Store, Artifactory, etc.)
+   into Atmos stack manifests
+
+ - The [__`!env`__](/core-concepts/stacks/yaml-functions/env) YAML function is used to retrieve environment variables
+   and assign them to the sections in Atmos stack manifests
+
+ - The [__`!include`__](/core-concepts/stacks/yaml-functions/include) YAML function allows downloading local or remote files from different sources,
+   and assigning the file contents or individual values to the sections in Atmos stack manifests
+
 :::tip
 You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration.
 Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
@@ -106,6 +116,15 @@ components:
 
         # Get the `test_map` output of type map from the `component1` component in the current stack
         test_10: !terraform.output component1 {{ .stack }} test_map
+
+        # Retrieve the value of an environment variable
+        api_key: !env API_KEY
+
+        # Include a local file
+        config: !include ./dev-config.yaml
+
+        # Download a remote file, query data from the file using a YQ expression, and assign the result to the variable
+        allowed_ips: !include https://api.github.com/meta .api
 ```
 </File>
 

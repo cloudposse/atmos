@@ -116,7 +116,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	var res any
 
 	if query != "" {
-		res, err = u.EvaluateYqExpression(atmosConfig, finalStacksMap, query)
+		res, err = u.EvaluateYqExpression(&atmosConfig, finalStacksMap, query)
 		if err != nil {
 			return err
 		}

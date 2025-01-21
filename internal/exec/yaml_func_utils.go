@@ -70,8 +70,14 @@ func processCustomTags(
 		return processTagStore(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput):
 		return processTagTerraformOutput(atmosConfig, input, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncEnv):
+		return processTagEnv(atmosConfig, input, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncIncludeGoGetter):
+		return processTagInclude(atmosConfig, input, u.AtmosYamlFuncIncludeGoGetter, currentStack)
+	case strings.HasPrefix(input, u.AtmosYamlFuncIncludeLocalFile):
+		return processTagInclude(atmosConfig, input, u.AtmosYamlFuncIncludeLocalFile, currentStack)
 	default:
-		// If any other YAML explicit type (not currently supported by Atmos) is used, return it w/o processing
+		// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing
 		return input
 	}
 }
