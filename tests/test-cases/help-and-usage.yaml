@@ -548,3 +548,33 @@ tests:
       - "--help"
     expect:
       exit_code: 0
+  - name: atmos version --check --non-existent
+    enabled: true
+    snapshot: true
+    diff: []
+    description: "'atmos version --check --non-existent' should show invalid flag usage"
+    workdir: "../"
+    command: atmos
+    args:
+      - "version"
+      - "--check"
+      - "--non-existent"
+    expect:
+      exit_code: 1
+  - name: atmos terraform plan station -s dev -- -no-color
+    enabled: true
+    snapshot: true
+    diff: []
+    description: "'atmos terraform plan station -s dev -- -no-color' should pass native flags to terraform without errors for flags"
+    workdir: "../examples/quick-start-simple"
+    command: atmos
+    args:
+      - "terraform"
+      - "plan"
+      - "station"
+      - "-s"
+      - "dev"
+      - "--"
+      - "-no-color"
+    expect:
+      exit_code: 0

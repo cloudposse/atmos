@@ -554,7 +554,6 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 }
 
 func showUsageAndExit(cmd *cobra.Command, args []string) {
-
 	var suggestions []string
 	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
 
@@ -587,6 +586,14 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	os.Exit(1)
 }
 
+func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
+	unknownCommand := fmt.Sprintf("Error: %v for command %q\n\n", err.Error(), cmd.CommandPath())
+	u.PrintErrorInColor(unknownCommand)
+	u.PrintMessage(fmt.Sprintf("Run '%s --help' for usage", cmd.CommandPath()))
+	os.Exit(1)
+	return nil
+}
+
 // getConfigAndStacksInfo gets the
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
@@ -606,4 +613,11 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 	return info
+}
+
+func getDoubleDashExample(commandPath string) string {
+	return fmt.Sprintf(`%s <component> -s <stack> -- <native-flags>
+
+The '--' (double-dash) can be used to signify the end of Atmos-specific options 
+and the beginning of additional native arguments and flags for the specific command being run.`, commandPath)
 }
