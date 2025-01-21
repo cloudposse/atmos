@@ -57,7 +57,6 @@ func TestCLITerraformClean(t *testing.T) {
 		return
 	}
 	cmd = exec.Command(binaryPath, "terraform", "apply", "station", "-s", "prod")
-	envVars = append(envVars, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
 	cmd.Env = envVars
 
 	err = cmd.Run()
@@ -86,10 +85,13 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// run atmos terraform clean
 	cmd = exec.Command(binaryPath, "terraform", "clean", "--force")
+	var stdoutClean, stderrClean bytes.Buffer
+	cmd.Stdout = &stdoutClean
+	cmd.Stderr = &stderrClean
 	err = cmd.Run()
+	t.Logf("Clean command output:\n%s", stdoutClean.String())
 	if err != nil {
-		t.Log(stdout.String())
-		t.Fatalf("Failed to run atmos terraform clean: %v", stderr.String())
+		t.Fatalf("Failed to run atmos terraform clean: %v", stderrClean.String())
 	}
 	// check if the state files and directories for the component and stack are deleted
 	for _, file := range stateFiles {
@@ -98,15 +100,13 @@ func TestCLITerraformClean(t *testing.T) {
 			t.Fatalf("Failed to resolve absolute path for %q: %v", file, err)
 		}
 		_, err = os.Stat(fileAbs)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			t.Errorf("Reason: error %q", fileAbs)
-			return
-
+		if err == nil {
+			t.Errorf("Expected Terraform state file to be deleted: %q", fileAbs)
+			continue
 		}
-		return
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Unexpected error checking file %q: %v", fileAbs, err)
+		}
 	}
 
 }
