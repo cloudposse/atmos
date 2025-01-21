@@ -50,7 +50,7 @@ for tape in "${TAPEFILES[@]}"; do
     # Monitor the process
     while kill -0 "$VHS_PID" 2>/dev/null; do
         echo "   VHS is still running..."
-				ps -uxaww
+				#ps -uxaww
         sleep 5
     done
 
