@@ -396,7 +396,7 @@ settings:
       input:
         - "./README.yaml"
       # To Do: template can be a remote URL/github, using this local for testing
-      template:  "github.com/Listener430/wsclean.git//notification?ref=master"
+      template:  "https://raw.githubusercontent.com/Listener430/wsclean/refs/heads/master/notification/README.md.gotmpl"
       # The final README
       output: "README.md"
       terraform:
