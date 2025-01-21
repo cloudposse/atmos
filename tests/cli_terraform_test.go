@@ -43,6 +43,11 @@ func TestCLITerraformClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
 	}
+	// Run terraform apply for prod environment
+	runTerraformApply(t, binaryPath, "prod")
+	verifyStateFilesExist(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
+	runCLITerraformCleanComponent(t, binaryPath, "prod")
+	verifyStateFilesDeleted(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
 
 	// Run terraform apply for dev environment
 	runTerraformApply(t, binaryPath, "dev")
@@ -63,6 +68,7 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Verify if state files have been deleted after clean
 	verifyStateFilesDeleted(t, stateFiles)
+
 }
 
 // runTerraformApply runs the terraform apply command for a given environment.
@@ -121,5 +127,17 @@ func verifyStateFilesDeleted(t *testing.T, stateFiles []string) {
 		} else if !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Unexpected error checking file %q: %v", fileAbs, err)
 		}
+	}
+}
+
+func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string) {
+	cmd := exec.Command(binaryPath, "terraform", "clean", "station", "-s", environment, "--force")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	t.Logf("Clean command output:\n%s", stdout.String())
+	if err != nil {
+		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
 }
