@@ -61,6 +61,7 @@ func IsValidScheme(scheme string) bool {
 		"git":        true,
 		"ssh":        true,
 		"git::https": true,
+		"file":       true,
 	}
 	return validSchemes[scheme]
 }

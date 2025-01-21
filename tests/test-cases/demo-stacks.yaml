@@ -159,7 +159,7 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
-  - name: atmos vendor pull
+  - name: atmos_vendor_pull
     enabled: true
     description: "Ensure atmos vendor pull command executes without errors and files are present."
     workdir: "../examples/tests/test-vendor/"
