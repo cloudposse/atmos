@@ -360,6 +360,32 @@ __atmos_handle_word()
     __atmos_handle_word
 }
 
+_atmos_about()
+{
+    last_command=&quot;atmos_about&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _atmos_atlantis_generate_repo-config()
 {
     last_command=&quot;atmos_atlantis_generate_repo-config&quot;
@@ -396,6 +422,7 @@ _atmos_atlantis_generate_repo-config()
     flags+=(&quot;--stacks=&quot;)
     two_word_flags+=(&quot;--stacks&quot;)
     flags+=(&quot;--verbose&quot;)
+    flags+=(&quot;--clone-target-ref&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
@@ -423,6 +450,7 @@ _atmos_atlantis_generate()
     flags_with_completion=()
     flags_completion=()
 
+    flags+=(&quot;--clone-target-ref&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
@@ -559,9 +587,9 @@ _atmos_aws()
     noun_aliases=()
 }
 
-_atmos_completion()
+_atmos_completion_bash()
 {
-    last_command=&quot;atmos_completion&quot;
+    last_command=&quot;atmos_completion_bash&quot;
 
     command_aliases=()
 
@@ -586,10 +614,114 @@ _atmos_completion()
 
     must_have_one_flag=()
     must_have_one_noun=()
-    must_have_one_noun+=(&quot;bash&quot;)
-    must_have_one_noun+=(&quot;fish&quot;)
-    must_have_one_noun+=(&quot;powershell&quot;)
-    must_have_one_noun+=(&quot;zsh&quot;)
+    noun_aliases=()
+}
+
+_atmos_completion_fish()
+{
+    last_command=&quot;atmos_completion_fish&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_completion_powershell()
+{
+    last_command=&quot;atmos_completion_powershell&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_completion_zsh()
+{
+    last_command=&quot;atmos_completion_zsh&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_completion()
+{
+    last_command=&quot;atmos_completion&quot;
+
+    command_aliases=()
+
+    commands=()
+    commands+=(&quot;bash&quot;)
+    commands+=(&quot;fish&quot;)
+    commands+=(&quot;powershell&quot;)
+    commands+=(&quot;zsh&quot;)
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
     noun_aliases=()
 }
 
@@ -607,10 +739,13 @@ _atmos_describe_affected()
     flags_with_completion=()
     flags_completion=()
 
+    flags+=(&quot;--clone-target-ref&quot;)
     flags+=(&quot;--file=&quot;)
     two_word_flags+=(&quot;--file&quot;)
     flags+=(&quot;--format=&quot;)
     two_word_flags+=(&quot;--format&quot;)
+    flags+=(&quot;--include-dependents&quot;)
+    flags+=(&quot;--include-settings&quot;)
     flags+=(&quot;--include-spacelift-admin-stacks&quot;)
     flags+=(&quot;--ref=&quot;)
     two_word_flags+=(&quot;--ref&quot;)
@@ -622,11 +757,18 @@ _atmos_describe_affected()
     two_word_flags+=(&quot;--ssh-key&quot;)
     flags+=(&quot;--ssh-key-password=&quot;)
     two_word_flags+=(&quot;--ssh-key-password&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+    flags+=(&quot;--upload&quot;)
     flags+=(&quot;--verbose&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--query=&quot;)
+    two_word_flags+=(&quot;--query&quot;)
+    two_word_flags+=(&quot;-q&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
 
@@ -654,6 +796,7 @@ _atmos_describe_component()
     flags+=(&quot;--format=&quot;)
     two_word_flags+=(&quot;--format&quot;)
     two_word_flags+=(&quot;-f&quot;)
+    flags+=(&quot;--process-templates&quot;)
     flags+=(&quot;--stack=&quot;)
     two_word_flags+=(&quot;--stack&quot;)
     two_word_flags+=(&quot;-s&quot;)
@@ -661,6 +804,9 @@ _atmos_describe_component()
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--query=&quot;)
+    two_word_flags+=(&quot;--query&quot;)
+    two_word_flags+=(&quot;-q&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
 
@@ -692,6 +838,9 @@ _atmos_describe_config()
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--query=&quot;)
+    two_word_flags+=(&quot;--query&quot;)
+    two_word_flags+=(&quot;-q&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
 
@@ -726,6 +875,9 @@ _atmos_describe_dependents()
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--query=&quot;)
+    two_word_flags+=(&quot;--query&quot;)
+    two_word_flags+=(&quot;-q&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
 
@@ -758,6 +910,8 @@ _atmos_describe_stacks()
     two_word_flags+=(&quot;--file&quot;)
     flags+=(&quot;--format=&quot;)
     two_word_flags+=(&quot;--format&quot;)
+    flags+=(&quot;--include-empty-stacks&quot;)
+    flags+=(&quot;--process-templates&quot;)
     flags+=(&quot;--sections=&quot;)
     two_word_flags+=(&quot;--sections&quot;)
     flags+=(&quot;--stack=&quot;)
@@ -767,6 +921,9 @@ _atmos_describe_stacks()
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--query=&quot;)
+    two_word_flags+=(&quot;--query&quot;)
+    two_word_flags+=(&quot;-q&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
 
@@ -799,6 +956,9 @@ _atmos_describe_workflows()
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--query=&quot;)
+    two_word_flags+=(&quot;--query&quot;)
+    two_word_flags+=(&quot;-q&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
 
@@ -831,6 +991,9 @@ _atmos_describe()
     flags_with_completion=()
     flags_completion=()
 
+    flags+=(&quot;--query=&quot;)
+    two_word_flags+=(&quot;--query&quot;)
+    two_word_flags+=(&quot;-q&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
@@ -863,6 +1026,93 @@ _atmos_docs()
     two_word_flags+=(&quot;--logs-level&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_helmfile_apply()
+{
+    last_command=&quot;atmos_helmfile_apply&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_helmfile_destroy()
+{
+    last_command=&quot;atmos_helmfile_destroy&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_helmfile_diff()
+{
+    last_command=&quot;atmos_helmfile_diff&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
 
     must_have_one_flag=()
     must_have_one_noun=()
@@ -933,6 +1183,35 @@ _atmos_helmfile_generate()
     noun_aliases=()
 }
 
+_atmos_helmfile_sync()
+{
+    last_command=&quot;atmos_helmfile_sync&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _atmos_helmfile()
 {
     last_command=&quot;atmos_helmfile&quot;
@@ -940,7 +1219,11 @@ _atmos_helmfile()
     command_aliases=()
 
     commands=()
+    commands+=(&quot;apply&quot;)
+    commands+=(&quot;destroy&quot;)
+    commands+=(&quot;diff&quot;)
     commands+=(&quot;generate&quot;)
+    commands+=(&quot;sync&quot;)
 
     flags=()
     two_word_flags=()
@@ -975,7 +1258,7 @@ _atmos_help()
     flags=()
     two_word_flags=()
     local_nonpersistent_flags=()
-    flags_with_completion=()
+    flags_with_completion=()
     flags_completion=()
 
     flags+=(&quot;--logs-file=&quot;)
@@ -991,9 +1274,9 @@ _atmos_help()
     noun_aliases=()
 }
 
-_atmos_terraform_generate_backend()
+_atmos_list_components()
 {
-    last_command=&quot;atmos_terraform_generate_backend&quot;
+    last_command=&quot;atmos_list_components&quot;
 
     command_aliases=()
 
@@ -1014,6 +1297,460 @@ _atmos_terraform_generate_backend()
     two_word_flags+=(&quot;--logs-level&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_list_stacks()
+{
+    last_command=&quot;atmos_list_stacks&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--component=&quot;)
+    two_word_flags+=(&quot;--component&quot;)
+    two_word_flags+=(&quot;-c&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_list()
+{
+    last_command=&quot;atmos_list&quot;
+
+    command_aliases=()
+
+    commands=()
+    commands+=(&quot;components&quot;)
+    commands+=(&quot;stacks&quot;)
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_pro_lock()
+{
+    last_command=&quot;atmos_pro_lock&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--component=&quot;)
+    two_word_flags+=(&quot;--component&quot;)
+    two_word_flags+=(&quot;-c&quot;)
+    flags+=(&quot;--message=&quot;)
+    two_word_flags+=(&quot;--message&quot;)
+    two_word_flags+=(&quot;-m&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+    flags+=(&quot;--ttl=&quot;)
+    two_word_flags+=(&quot;--ttl&quot;)
+    two_word_flags+=(&quot;-t&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_pro_unlock()
+{
+    last_command=&quot;atmos_pro_unlock&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--component=&quot;)
+    two_word_flags+=(&quot;--component&quot;)
+    two_word_flags+=(&quot;-c&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_pro()
+{
+    last_command=&quot;atmos_pro&quot;
+
+    command_aliases=()
+
+    commands=()
+    commands+=(&quot;lock&quot;)
+    commands+=(&quot;unlock&quot;)
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_support()
+{
+    last_command=&quot;atmos_support&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_apply()
+{
+    last_command=&quot;atmos_terraform_apply&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--from-plan&quot;)
+    flags+=(&quot;--planfile=&quot;)
+    two_word_flags+=(&quot;--planfile&quot;)
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_clean()
+{
+    last_command=&quot;atmos_terraform_clean&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--everything&quot;)
+    flags+=(&quot;--force&quot;)
+    flags+=(&quot;--skip-lock-file&quot;)
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_console()
+{
+    last_command=&quot;atmos_terraform_console&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_deploy()
+{
+    last_command=&quot;atmos_terraform_deploy&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--deploy-run-init&quot;)
+    flags+=(&quot;--from-plan&quot;)
+    flags+=(&quot;--planfile=&quot;)
+    two_word_flags+=(&quot;--planfile&quot;)
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_destroy()
+{
+    last_command=&quot;atmos_terraform_destroy&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_fmt()
+{
+    last_command=&quot;atmos_terraform_fmt&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_force-unlock()
+{
+    last_command=&quot;atmos_terraform_force-unlock&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_generate_backend()
+{
+    last_command=&quot;atmos_terraform_generate_backend&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
 
     must_have_one_flag=()
     must_have_one_flag+=(&quot;--stack=&quot;)
@@ -1044,12 +1781,15 @@ _atmos_terraform_generate_backends()
     two_word_flags+=(&quot;--format&quot;)
     flags+=(&quot;--stacks=&quot;)
     two_word_flags+=(&quot;--stacks&quot;)
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
     flags+=(&quot;--stack=&quot;)
     two_word_flags+=(&quot;--stack&quot;)
     two_word_flags+=(&quot;-s&quot;)
@@ -1079,12 +1819,15 @@ _atmos_terraform_generate_varfile()
     flags+=(&quot;--stack=&quot;)
     two_word_flags+=(&quot;--stack&quot;)
     two_word_flags+=(&quot;-s&quot;)
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
 
     must_have_one_flag=()
     must_have_one_flag+=(&quot;--stack=&quot;)
@@ -1115,12 +1858,15 @@ _atmos_terraform_generate_varfiles()
     two_word_flags+=(&quot;--format&quot;)
     flags+=(&quot;--stacks=&quot;)
     two_word_flags+=(&quot;--stacks&quot;)
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
     flags+=(&quot;--stack=&quot;)
     two_word_flags+=(&quot;--stack&quot;)
     two_word_flags+=(&quot;-s&quot;)
@@ -1149,12 +1895,774 @@ _atmos_terraform_generate()
     flags_with_completion=()
     flags_completion=()
 
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
     two_word_flags+=(&quot;--logs-level&quot;)
     flags+=(&quot;--redirect-stderr=&quot;)
     two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_get()
+{
+    last_command=&quot;atmos_terraform_get&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_graph()
+{
+    last_command=&quot;atmos_terraform_graph&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_import()
+{
+    last_command=&quot;atmos_terraform_import&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_init()
+{
+    last_command=&quot;atmos_terraform_init&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_login()
+{
+    last_command=&quot;atmos_terraform_login&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_logout()
+{
+    last_command=&quot;atmos_terraform_logout&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_metadata()
+{
+    last_command=&quot;atmos_terraform_metadata&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_modules()
+{
+    last_command=&quot;atmos_terraform_modules&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_output()
+{
+    last_command=&quot;atmos_terraform_output&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_plan()
+{
+    last_command=&quot;atmos_terraform_plan&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_providers()
+{
+    last_command=&quot;atmos_terraform_providers&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_refresh()
+{
+    last_command=&quot;atmos_terraform_refresh&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_shell()
+{
+    last_command=&quot;atmos_terraform_shell&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_show()
+{
+    last_command=&quot;atmos_terraform_show&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_state()
+{
+    last_command=&quot;atmos_terraform_state&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_taint()
+{
+    last_command=&quot;atmos_terraform_taint&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_test()
+{
+    last_command=&quot;atmos_terraform_test&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_untaint()
+{
+    last_command=&quot;atmos_terraform_untaint&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_validate()
+{
+    last_command=&quot;atmos_terraform_validate&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_varfile()
+{
+    last_command=&quot;atmos_terraform_varfile&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_version()
+{
+    last_command=&quot;atmos_terraform_version&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_workspace()
+{
+    last_command=&quot;atmos_terraform_workspace&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
+    flags+=(&quot;--stack=&quot;)
+    two_word_flags+=(&quot;--stack&quot;)
+    two_word_flags+=(&quot;-s&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_atmos_terraform_write()
+{
+    last_command=&quot;atmos_terraform_write&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+    flags+=(&quot;--skip-init&quot;)
     flags+=(&quot;--stack=&quot;)
     two_word_flags+=(&quot;--stack&quot;)
     two_word_flags+=(&quot;-s&quot;)
@@ -1171,7 +2679,37 @@ _atmos_terraform()
     command_aliases=()
 
     commands=()
+    commands+=(&quot;apply&quot;)
+    commands+=(&quot;clean&quot;)
+    commands+=(&quot;console&quot;)
+    commands+=(&quot;deploy&quot;)
+    commands+=(&quot;destroy&quot;)
+    commands+=(&quot;fmt&quot;)
+    commands+=(&quot;force-unlock&quot;)
     commands+=(&quot;generate&quot;)
+    commands+=(&quot;get&quot;)
+    commands+=(&quot;graph&quot;)
+    commands+=(&quot;import&quot;)
+    commands+=(&quot;init&quot;)
+    commands+=(&quot;login&quot;)
+    commands+=(&quot;logout&quot;)
+    commands+=(&quot;metadata&quot;)
+    commands+=(&quot;modules&quot;)
+    commands+=(&quot;output&quot;)
+    commands+=(&quot;plan&quot;)
+    commands+=(&quot;providers&quot;)
+    commands+=(&quot;refresh&quot;)
+    commands+=(&quot;shell&quot;)
+    commands+=(&quot;show&quot;)
+    commands+=(&quot;state&quot;)
+    commands+=(&quot;taint&quot;)
+    commands+=(&quot;test&quot;)
+    commands+=(&quot;untaint&quot;)
+    commands+=(&quot;validate&quot;)
+    commands+=(&quot;varfile&quot;)
+    commands+=(&quot;version&quot;)
+    commands+=(&quot;workspace&quot;)
+    commands+=(&quot;write&quot;)
 
     flags=()
     two_word_flags=()
@@ -1180,6 +2718,9 @@ _atmos_terraform()
     flags_completion=()
 
     flag_parsing_disabled=1
+    flags+=(&quot;--append-user-agent=&quot;)
+    two_word_flags+=(&quot;--append-user-agent&quot;)
+    flags+=(&quot;--skip-init&quot;)
     flags+=(&quot;--stack=&quot;)
     two_word_flags+=(&quot;--stack&quot;)
     two_word_flags+=(&quot;-s&quot;)
@@ -1234,6 +2775,49 @@ _atmos_validate_component()
     noun_aliases=()
 }
 
+_atmos_validate_editorconfig()
+{
+    last_command=&quot;atmos_validate_editorconfig&quot;
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=(&quot;--config=&quot;)
+    two_word_flags+=(&quot;--config&quot;)
+    flags+=(&quot;--disable-end-of-line&quot;)
+    flags+=(&quot;--disable-indent-size&quot;)
+    flags+=(&quot;--disable-indentation&quot;)
+    flags+=(&quot;--disable-insert-final-newline&quot;)
+    flags+=(&quot;--disable-max-line-length&quot;)
+    flags+=(&quot;--disable-trim-trailing-whitespace&quot;)
+    flags+=(&quot;--dry-run&quot;)
+    flags+=(&quot;--exclude=&quot;)
+    two_word_flags+=(&quot;--exclude&quot;)
+    flags+=(&quot;--format=&quot;)
+    two_word_flags+=(&quot;--format&quot;)
+    flags+=(&quot;--ignore-defaults&quot;)
+    flags+=(&quot;--init&quot;)
+    flags+=(&quot;--no-color&quot;)
+    flags+=(&quot;--version&quot;)
+    flags+=(&quot;--logs-file=&quot;)
+    two_word_flags+=(&quot;--logs-file&quot;)
+    flags+=(&quot;--logs-level=&quot;)
+    two_word_flags+=(&quot;--logs-level&quot;)
+    flags+=(&quot;--redirect-stderr=&quot;)
+    two_word_flags+=(&quot;--redirect-stderr&quot;)
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _atmos_validate_stacks()
 {
     last_command=&quot;atmos_validate_stacks&quot;
@@ -1270,6 +2854,7 @@ _atmos_validate()
 
     commands=()
     commands+=(&quot;component&quot;)
+    commands+=(&quot;editorconfig&quot;)
     commands+=(&quot;stacks&quot;)
 
     flags=()
@@ -1308,6 +2893,7 @@ _atmos_vendor_pull()
     two_word_flags+=(&quot;--component&quot;)
     two_word_flags+=(&quot;-c&quot;)
     flags+=(&quot;--dry-run&quot;)
+    flags+=(&quot;--everything&quot;)
     flags+=(&quot;--stack=&quot;)
     two_word_flags+=(&quot;--stack&quot;)
     two_word_flags+=(&quot;-s&quot;)
@@ -1369,6 +2955,10 @@ _atmos_version()
     flags_with_completion=()
     flags_completion=()
 
+    flags+=(&quot;--check&quot;)
+    flags+=(&quot;-c&quot;)
+    local_nonpersistent_flags+=(&quot;--check&quot;)
+    local_nonpersistent_flags+=(&quot;-c&quot;)
     flags+=(&quot;--logs-file=&quot;)
     two_word_flags+=(&quot;--logs-file&quot;)
     flags+=(&quot;--logs-level=&quot;)
@@ -1423,6 +3013,7 @@ _atmos_root_command()
     command_aliases=()
 
     commands=()
+    commands+=(&quot;about&quot;)
     commands+=(&quot;atlantis&quot;)
     commands+=(&quot;aws&quot;)
     commands+=(&quot;completion&quot;)
@@ -1434,6 +3025,9 @@ _atmos_root_command()
         aliashash[&quot;hf&quot;]=&quot;helmfile&quot;
     fi
     commands+=(&quot;help&quot;)
+    commands+=(&quot;list&quot;)
+    commands+=(&quot;pro&quot;)
+    commands+=(&quot;support&quot;)
     commands+=(&quot;terraform&quot;)
     if [[ -z &quot;${BASH_VERSION:-}&quot; || &quot;${BASH_VERSINFO[0]:-}&quot; -gt 3 ]]; then
         command_aliases+=(&quot;tf&quot;)
@@ -1499,3 +3093,4 @@ else
 fi
 
 # ex: ts=4 sw=4 et filetype=sh
+
