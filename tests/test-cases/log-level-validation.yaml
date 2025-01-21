@@ -1,6 +1,7 @@
 tests:
   - name: "Invalid Log Level in Config File"
     enabled: true
+    snapshot: true
     description: "Test validation of invalid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/invalid-log-level"
     command: "atmos"
@@ -11,12 +12,14 @@ tests:
       - -s
       - test
     expect:
+      diff: []
       exit_code: 1
       stderr:
         - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
 
   - name: "Invalid Log Level in Environment Variable"
     enabled: true
+    snapshot: true
     description: "Test validation of invalid log level in ATMOS_LOGS_LEVEL env var"
     workdir: "../"
     command: "atmos"
@@ -29,22 +32,26 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: XTrace
     expect:
+      diff: []
       exit_code: 1
       stderr:
         - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
 
   - name: "Valid Log Level in Config File"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/valid-log-level"
     command: "atmos"
     args:
       - version
     expect:
+      diff: []
       exit_code: 0
 
   - name: "Valid Log Level in Environment Variable"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in ATMOS_LOGS_LEVEL env var"
     workdir: "../"
     command: "atmos"
@@ -53,10 +60,12 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
+      diff: []
       exit_code: 0
 
   - name: "Valid Log Level in Command Line Flag"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in --logs-level flag"
     workdir: "../"
     command: "atmos"
@@ -65,4 +74,5 @@ tests:
       - Info
       - version
     expect:
+      diff: []
       exit_code: 0
