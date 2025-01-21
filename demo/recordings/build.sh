@@ -40,8 +40,16 @@ for tape in "${TAPEFILES[@]}"; do
   output_file="$MP4_OUTDIR/$base.mp4"
 
   if [[ ! -f "$output_file" || "$tape" -nt "$output_file" ]]; then
+		echo "Before processing...."
+		ps uxaww
+		free
+		df -h
     echo "   Processing $tape -> $output_file"
     (cd "$REPO_ROOT" && vhs "$tape" --output "$output_file")
+		echo "After processing...."
+		ps uxaww
+		free
+		df -h
   else
     echo "   Skipping $tape; $output_file is up-to-date."
   fi
