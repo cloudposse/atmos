@@ -367,6 +367,9 @@ func ExecuteAtmosVendorInternal(
 		if !useLocalFileSystem {
 			err = ValidateURI(uri)
 			if err != nil {
+				if strings.Contains(uri, "..") {
+					return fmt.Errorf("Invalid URI '%s': %w. Please ensure the source is a valid local path or a properly formatted URI.", uri, err)
+				}
 				return err
 			}
 		}
