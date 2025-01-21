@@ -520,10 +520,10 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 			useLocalFileSystem = true
 			sourceIsLocalFile = u.FileExists(*uri)
 		}
-		u, err := url.Parse(*uri)
-		if err == nil && u.Scheme != "" {
-			if u.Scheme == "file" {
-				trimmedPath := strings.TrimPrefix(filepath.ToSlash(u.Path), "/")
+		parsedURL, err := url.Parse(*uri)
+		if err == nil && parsedURL.Scheme != "" {
+			if parsedURL.Scheme == "file" {
+				trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
 				*uri = filepath.Clean(trimmedPath)
 				useLocalFileSystem = true
 			}
@@ -620,20 +620,4 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
-}
-
-func validateURI(uri string) error {
-	if uri == "" {
-		return fmt.Errorf("URI cannot be empty")
-	}
-	if strings.Contains(uri, " ") {
-		return fmt.Errorf("URI cannot contain spaces")
-	}
-	// Validate scheme-specific format
-	if strings.HasPrefix(uri, "oci://") {
-		if !strings.Contains(uri[6:], "/") {
-			return fmt.Errorf("invalid OCI URI format")
-		}
-	}
-	return nil
 }
