@@ -46,8 +46,10 @@ tests:
     args:
       - version
     expect:
-      stdout:
+      diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
       stderr:
         - "^$"
       exit_code: 0
@@ -63,8 +65,10 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
-      stdout:
+      diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
       stderr:
         - "^$"
       exit_code: 0
@@ -80,8 +84,10 @@ tests:
       - Info
       - version
     expect:
-      stdout:
+      diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
       stderr:
         - "^$"
       exit_code: 0
