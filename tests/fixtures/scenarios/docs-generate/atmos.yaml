@@ -1,0 +1,18 @@
+docs:
+    max-width: 100
+    pagination: false
+    generate:
+      input:
+        - "./README.yaml"
+      template:
+        - "./README.md.gotmpl"
+      output: "README.md"
+      terraform:
+        enabled: true
+        format: "markdown"
+        show_providers: false
+        show_inputs: true
+        show_outputs: true
+        sort_by: "name"
+        hide_empty: false
+        indent_level: 2  

@@ -81,7 +81,10 @@
     },
     "docs": {
       "max_width": 0,
-      "pagination": false
+      "pagination": false,
+      "generate": {
+        "terraform": {}
+      }
     },
     "markdown": {
       "document": {},
