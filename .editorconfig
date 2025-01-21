@@ -2,6 +2,27 @@
 insert_final_newline = true
 end_of_line = lf
 
+# Binary files (override to ensure no text-related rules are applied)
+[*.{png,jpg,gif,svg,pdf,ai,eps,mp4}]
+insert_final_newline = false
+end_of_line = unset
+indent_style = unset
+indent_size = unset
+
+# Override for machine generated binary HTML files in Screengrabs directory
+[website/src/components/Screengrabs/**/*.html]
+insert_final_newline = false
+end_of_line = unset
+indent_style = unset
+indent_size = unset
+
+# Override for machine generated binary files in tests/snapshots directory for golden snapshots
+[test/snapshots/**/*.golden]
+insert_final_newline = false
+end_of_line = unset
+indent_style = unset
+indent_size = unset
+
 # Override for Makefile
 [{Makefile,makefile,GNUmakefile}]
 indent_style = tab

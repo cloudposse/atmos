@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -441,7 +442,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			printMessageForMissingAtmosConfig(atmosConfig)
-			os.Exit(0)
+			os.Exit(1)
 		}
 	}
 }
@@ -542,4 +543,67 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 // Check Atmos is version command
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && os.Args[1] == "version"
+}
+
+// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h"
+func handleHelpRequest(cmd *cobra.Command, args []string) {
+	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
+		cmd.Help()
+		os.Exit(0)
+	}
+}
+
+func showUsageAndExit(cmd *cobra.Command, args []string) {
+
+	var suggestions []string
+	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
+
+	if len(args) > 0 {
+		suggestions = cmd.SuggestionsFor(args[0])
+		unknownCommand = fmt.Sprintf("Error: Unknown command %q for %q\n\n", args[0], cmd.CommandPath())
+	}
+	u.PrintErrorInColor(unknownCommand)
+	if len(suggestions) > 0 {
+		u.PrintMessage("Did you mean this?")
+		for _, suggestion := range suggestions {
+			u.PrintMessage(fmt.Sprintf("  %s\n", suggestion))
+		}
+	} else {
+		// Retrieve valid subcommands dynamically
+		validSubcommands := []string{}
+		for _, subCmd := range cmd.Commands() {
+			validSubcommands = append(validSubcommands, subCmd.Name())
+		}
+		if len(validSubcommands) > 0 {
+			u.PrintMessage("Valid subcommands are:")
+			for _, sub := range validSubcommands {
+				u.PrintMessage(fmt.Sprintf("  %s", sub))
+			}
+		} else {
+			u.PrintMessage("No valid subcommands found")
+		}
+	}
+	u.PrintMessage(fmt.Sprintf("\nRun '%s --help' for usage", cmd.CommandPath()))
+	os.Exit(1)
+}
+
+// getConfigAndStacksInfo gets the
+func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
+	// Check Atmos configuration
+	checkAtmosConfig()
+
+	var argsAfterDoubleDash []string
+	var finalArgs = args
+
+	doubleDashIndex := lo.IndexOf(args, "--")
+	if doubleDashIndex > 0 {
+		finalArgs = lo.Slice(args, 0, doubleDashIndex)
+		argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
+	}
+
+	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
+	if err != nil {
+		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+	}
+	return info
 }
