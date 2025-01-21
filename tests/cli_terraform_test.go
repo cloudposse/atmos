@@ -31,73 +31,85 @@ func TestCLITerraformClean(t *testing.T) {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
 		}
 	}()
+
+	// Define the work directory and change to it
 	workDir := "../examples/quick-start-simple"
-	err = os.Chdir(workDir)
-	if err != nil {
+	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
+
+	// Find the binary path for "atmos"
 	binaryPath, err := exec.LookPath("atmos")
 	if err != nil {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
 	}
-	cmdDev := exec.Command(binaryPath, "terraform", "apply", "station", "-s", "dev")
-	var stdout, stderr bytes.Buffer
-	cmdDev.Stdout = &stdout
-	cmdDev.Stderr = &stderr
-	// ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE
-	envVarsDev := os.Environ()
-	envVarsDev = append(envVarsDev, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
-	cmdDev.Env = envVarsDev
 
-	// run terraform apply station -s dev and terraform apply station -s prod
-	err = cmdDev.Run()
-	if err != nil {
-		t.Log(stdout.String())
-		t.Fatalf("Failed to run terraform apply station -s dev: %v", stderr.String())
-		return
-	}
-	cmdProd := exec.Command(binaryPath, "terraform", "apply", "station", "-s", "prod")
-	envVarsProd := os.Environ()
-	envVarsProd = append(envVarsProd, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
-	cmdProd.Env = envVarsProd
-	var stdoutProd, stderrProd bytes.Buffer
-	cmdDev.Stdout = &stdoutProd
-	cmdDev.Stderr = &stderrProd
-	err = cmdProd.Run()
-	if err != nil {
-		t.Log(stdoutProd.String())
-		t.Fatalf("Failed to run terraform apply station -s prod: %v", stderrProd.String())
-		return
-	}
-	// get command error sta
-	// check if the state files and directories for the component and stack are exist
+	// Run terraform apply for dev environment
+	runTerraformApply(t, binaryPath, "dev")
+
+	// Run terraform apply for prod environment
+	runTerraformApply(t, binaryPath, "prod")
+
+	// Verify if state files exist before cleaning
 	stateFiles := []string{
 		"./components/terraform/weather/.terraform",
 		"./components/terraform/weather/terraform.tfstate.d",
 		"./components/terraform/weather/.terraform.lock.hcl",
 	}
+	verifyStateFilesExist(t, stateFiles)
+
+	// Run terraform clean
+	runTerraformClean(t, binaryPath)
+
+	// Verify if state files have been deleted after clean
+	verifyStateFilesDeleted(t, stateFiles)
+}
+
+// runTerraformApply runs the terraform apply command for a given environment.
+func runTerraformApply(t *testing.T, binaryPath, environment string) {
+	cmd := exec.Command(binaryPath, "terraform", "apply", "station", "-s", environment)
+	envVars := os.Environ()
+	envVars = append(envVars, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
+	cmd.Env = envVars
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	t.Log(stdout.String())
+	if err != nil {
+		t.Fatalf("Failed to run terraform apply station -s %s: %v", environment, stderr.String())
+	}
+}
+
+// verifyStateFilesExist checks if the state files exist before cleaning.
+func verifyStateFilesExist(t *testing.T, stateFiles []string) {
 	for _, file := range stateFiles {
 		fileAbs, err := filepath.Abs(file)
 		if err != nil {
 			t.Fatalf("Failed to resolve absolute path for %q: %v", file, err)
 		}
 		if _, err := os.Stat(fileAbs); errors.Is(err, os.ErrNotExist) {
-			t.Errorf("Reason: Expected file exist: %q", fileAbs)
-			return
+			t.Errorf("Expected file to exist before cleaning: %q", fileAbs)
 		}
 	}
+}
 
-	// run atmos terraform clean
-	cmdClean := exec.Command(binaryPath, "terraform", "clean", "--force")
-	var stdoutClean, stderrClean bytes.Buffer
-	cmdClean.Stdout = &stdoutClean
-	cmdClean.Stderr = &stderrClean
-	err = cmdClean.Run()
-	t.Logf("Clean command output:\n%s", stdoutClean.String())
+// runTerraformClean runs the terraform clean command.
+func runTerraformClean(t *testing.T, binaryPath string) {
+	cmd := exec.Command(binaryPath, "terraform", "clean", "--force")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	t.Logf("Clean command output:\n%s", stdout.String())
 	if err != nil {
-		t.Fatalf("Failed to run atmos terraform clean: %v", stderrClean.String())
+		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
-	// check if the state files and directories for the component and stack are deleted
+}
+
+// verifyStateFilesDeleted checks if the state files have been deleted after cleaning.
+func verifyStateFilesDeleted(t *testing.T, stateFiles []string) {
 	for _, file := range stateFiles {
 		fileAbs, err := filepath.Abs(file)
 		if err != nil {
@@ -106,11 +118,8 @@ func TestCLITerraformClean(t *testing.T) {
 		_, err = os.Stat(fileAbs)
 		if err == nil {
 			t.Errorf("Expected Terraform state file to be deleted: %q", fileAbs)
-			continue
-		}
-		if !errors.Is(err, os.ErrNotExist) {
+		} else if !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Unexpected error checking file %q: %v", fileAbs, err)
 		}
 	}
-
 }
