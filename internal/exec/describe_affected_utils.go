@@ -553,6 +553,10 @@ func findAffected(
 										continue
 									}
 								}
+								// Use helper function to skip disabled components
+								if !isComponentEnabled(metadataSection, componentName, atmosConfig) {
+									continue
+								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "terraform", componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
@@ -792,6 +796,10 @@ func findAffected(
 									if metadataType == "abstract" {
 										continue
 									}
+								}
+								// Use helper function to skip disabled components
+								if !isComponentEnabled(metadataSection, componentName, atmosConfig) {
+									continue
 								}
 								// Check `metadata` section
 								if !isEqual(remoteStacks, stackName, "helmfile", componentName, metadataSection, "metadata") {
@@ -1511,4 +1519,15 @@ func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, 
 		}
 	}
 	return false
+}
+
+// isComponentEnabled checks if a component is enabled based on its metadata
+func isComponentEnabled(metadataSection map[string]any, componentName string, atmosConfig schema.AtmosConfiguration) bool {
+	if enabled, ok := metadataSection["enabled"].(bool); ok {
+		if !enabled {
+			u.LogTrace(atmosConfig, fmt.Sprintf("Skipping disabled component %s", componentName))
+			return false
+		}
+	}
+	return true
 }
