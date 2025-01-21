@@ -46,7 +46,10 @@ tests:
     args:
       - version
     expect:
-      diff: []
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: "Valid Log Level in Environment Variable"
@@ -60,7 +63,10 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
-      diff: []
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: "Valid Log Level in Command Line Flag"
@@ -74,5 +80,8 @@ tests:
       - Info
       - version
     expect:
-      diff: []
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - "^$"
       exit_code: 0
