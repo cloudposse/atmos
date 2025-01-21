@@ -114,7 +114,7 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 	if docsGenerate.Terraform.Enabled {
 		terraformDocs, err := runTerraformDocs(dir, docsGenerate.Terraform)
 		if err != nil {
-			return fmt.Errorf("failed to run terraform-docs: %w", err)
+			return fmt.Errorf("failed to generate terraform docs: %w", err)
 		}
 		mergedData["terraform_docs"] = terraformDocs
 	}
