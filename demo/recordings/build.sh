@@ -41,7 +41,7 @@ for tape in "${TAPEFILES[@]}"; do
 
   if [[ ! -f "$output_file" || "$tape" -nt "$output_file" ]]; then
     echo "   Processing $tape -> $output_file"
-    (cd "$REPO_ROOT" && timeout 60 vhs "$tape" --output "$output_file")
+    (cd "$REPO_ROOT" && timeout 600 vhs "$tape" --output "$output_file")
   else
     echo "   Skipping $tape; $output_file is up-to-date."
   fi
