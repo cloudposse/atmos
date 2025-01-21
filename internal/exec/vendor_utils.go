@@ -362,12 +362,14 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return err
 		}
-		err = ValidateURI(uri)
-		if err != nil {
-			return err
-		}
 
 		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(&uri, vendorConfigFilePath)
+		if !useLocalFileSystem {
+			err = ValidateURI(uri)
+			if err != nil {
+				return err
+			}
+		}
 
 		// Determine package type
 		var pType pkgType
