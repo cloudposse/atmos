@@ -39,6 +39,18 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			}
 			registry[key] = store
 
+		case "azure-key-vault":
+			var opts KeyVaultStoreOptions
+			if err := parseOptions(storeConfig.Options, &opts); err != nil {
+				return nil, fmt.Errorf("failed to parse Key Vault store options: %w", err)
+			}
+
+			store, err := NewKeyVaultStore(opts)
+			if err != nil {
+				return nil, err
+			}
+			registry[key] = store
+
 		default:
 			return nil, fmt.Errorf("store type %s not found", storeConfig.Type)
 		}
