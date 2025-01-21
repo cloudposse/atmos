@@ -104,12 +104,14 @@ jobs:
             echo "IAM_ROLE_SESSION_NAME=cloudposse-atmos-ci-deploy-release" >> $GITHUB_ENV
             echo "S3_BUCKET_NAME=cplive-plat-ue2-prod-atmos-docs-origin" >> $GITHUB_ENV
             echo "S3_PATH=assets" >> $GITHUB_ENV
+            echo "BASE_URL=https://atmos.tools/assets" >> $GITHUB_ENV
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "IAM_ROLE_ARN=arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha" >> $GITHUB_ENV
             echo "IAM_ROLE_SESSION_NAME=cloudposse-atmos-ci-deploy-${{ github.run_id }}" >> $GITHUB_ENV
             echo "S3_BUCKET_NAME=cplive-plat-ue2-dev-atmos-docs-origin" >> $GITHUB_ENV
             echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
             echo "S3_PATH=pr-${{ github.event.pull_request.number }}/assets" >> $GITHUB_ENV
+            echo "BASE_URL=https://pr-${{ github.event.pull_request.number }}.atmos-docs.ue2.dev.plat.cloudposse.org/assets" >> $GITHUB_ENV
           fi
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
@@ -194,8 +196,8 @@ jobs:
           cd demo/recordings
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }}
           for ext in mp4 gif; do
-            echo aws s3 sync $ext/ s3://${{ env.S3_BUCKET_NAME }}/${{ env.S3_PATH }}/${ext}/
-            echo aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/${{ env.S3_PATH }}/${ext}/ --recursive --human-readable --summarize
+            aws s3 sync $ext/ s3://${{ env.S3_BUCKET_NAME }}/${{ env.S3_PATH }}/${ext}/
+            aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/${{ env.S3_PATH }}/${ext}/ --recursive --human-readable --summarize
           done
 
       - name: Create or update PR
@@ -220,7 +222,7 @@ jobs:
           echo "![Demo GIF](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
 
           echo "## Demo Video" >> $GITHUB_STEP_SUMMARY
-          echo "https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/demo/recordings/mp4/atmos-with-audio.mp4?raw=true" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.BASE_URL }}/mp4/atmos-with-audio.mp4" >> $GITHUB_STEP_SUMMARY
 
       - name: No changes
         if: steps.auto-commit.outputs.pull-request-operation == 'none' || steps.auto-commit.outputs.pull-request-operation == 'closed'
