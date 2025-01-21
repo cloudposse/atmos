@@ -40,29 +40,33 @@ func TestCLITerraformClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
 	}
-	cmd := exec.Command(binaryPath, "terraform", "apply", "station", "-s", "dev")
+	cmdDev := exec.Command(binaryPath, "terraform", "apply", "station", "-s", "dev")
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmdDev.Stdout = &stdout
+	cmdDev.Stderr = &stderr
 	// ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE
-	envVars := os.Environ()
-	envVars = append(envVars, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
-	cmd.Env = envVars
+	envVarsDev := os.Environ()
+	envVarsDev = append(envVarsDev, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
+	cmdDev.Env = envVarsDev
 
 	// run terraform apply station -s dev and terraform apply station -s prod
-	err = cmd.Run()
+	err = cmdDev.Run()
 	if err != nil {
 		t.Log(stdout.String())
 		t.Fatalf("Failed to run terraform apply station -s dev: %v", stderr.String())
 		return
 	}
-	cmd = exec.Command(binaryPath, "terraform", "apply", "station", "-s", "prod")
-	cmd.Env = envVars
-
-	err = cmd.Run()
+	cmdProd := exec.Command(binaryPath, "terraform", "apply", "station", "-s", "prod")
+	envVarsProd := os.Environ()
+	envVarsProd = append(envVarsProd, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
+	cmdProd.Env = envVarsProd
+	var stdoutProd, stderrProd bytes.Buffer
+	cmdDev.Stdout = &stdoutProd
+	cmdDev.Stderr = &stderrProd
+	err = cmdProd.Run()
 	if err != nil {
-		t.Log(stdout.String())
-		t.Fatalf("Failed to run terraform apply station -s prod: %v", stderr.String())
+		t.Log(stdoutProd.String())
+		t.Fatalf("Failed to run terraform apply station -s prod: %v", stderrProd.String())
 		return
 	}
 	// get command error sta
@@ -84,11 +88,11 @@ func TestCLITerraformClean(t *testing.T) {
 	}
 
 	// run atmos terraform clean
-	cmd = exec.Command(binaryPath, "terraform", "clean", "--force")
+	cmdClean := exec.Command(binaryPath, "terraform", "clean", "--force")
 	var stdoutClean, stderrClean bytes.Buffer
-	cmd.Stdout = &stdoutClean
-	cmd.Stderr = &stderrClean
-	err = cmd.Run()
+	cmdClean.Stdout = &stdoutClean
+	cmdClean.Stderr = &stderrClean
+	err = cmdClean.Run()
 	t.Logf("Clean command output:\n%s", stdoutClean.String())
 	if err != nil {
 		t.Fatalf("Failed to run atmos terraform clean: %v", stderrClean.String())
