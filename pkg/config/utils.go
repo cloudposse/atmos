@@ -188,61 +188,61 @@ func FindAllStackConfigsInPaths(
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
 		atmosConfig.BasePath = basePath
 	}
 
 	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
 	if len(vendorBasePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_VENDOR_BASE_PATH=%s", vendorBasePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_VENDOR_BASE_PATH=%s", vendorBasePath))
 		atmosConfig.Vendor.BasePath = vendorBasePath
 	}
 
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_STACKS_BASE_PATH=%s", stacksBasePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_STACKS_BASE_PATH=%s", stacksBasePath))
 		atmosConfig.Stacks.BasePath = stacksBasePath
 	}
 
 	stacksIncludedPaths := os.Getenv("ATMOS_STACKS_INCLUDED_PATHS")
 	if len(stacksIncludedPaths) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_STACKS_INCLUDED_PATHS=%s", stacksIncludedPaths))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_STACKS_INCLUDED_PATHS=%s", stacksIncludedPaths))
 		atmosConfig.Stacks.IncludedPaths = strings.Split(stacksIncludedPaths, ",")
 	}
 
 	stacksExcludedPaths := os.Getenv("ATMOS_STACKS_EXCLUDED_PATHS")
 	if len(stacksExcludedPaths) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_STACKS_EXCLUDED_PATHS=%s", stacksExcludedPaths))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_STACKS_EXCLUDED_PATHS=%s", stacksExcludedPaths))
 		atmosConfig.Stacks.ExcludedPaths = strings.Split(stacksExcludedPaths, ",")
 	}
 
 	stacksNamePattern := os.Getenv("ATMOS_STACKS_NAME_PATTERN")
 	if len(stacksNamePattern) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_PATTERN=%s", stacksNamePattern))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_PATTERN=%s", stacksNamePattern))
 		atmosConfig.Stacks.NamePattern = stacksNamePattern
 	}
 
 	stacksNameTemplate := os.Getenv("ATMOS_STACKS_NAME_TEMPLATE")
 	if len(stacksNameTemplate) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_TEMPLATE=%s", stacksNameTemplate))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_TEMPLATE=%s", stacksNameTemplate))
 		atmosConfig.Stacks.NameTemplate = stacksNameTemplate
 	}
 
 	componentsTerraformCommand := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND")
 	if len(componentsTerraformCommand) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_COMMAND=%s", componentsTerraformCommand))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_COMMAND=%s", componentsTerraformCommand))
 		atmosConfig.Components.Terraform.Command = componentsTerraformCommand
 	}
 
 	componentsTerraformBasePath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
 	if len(componentsTerraformBasePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=%s", componentsTerraformBasePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=%s", componentsTerraformBasePath))
 		atmosConfig.Components.Terraform.BasePath = componentsTerraformBasePath
 	}
 
 	componentsTerraformApplyAutoApprove := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE")
 	if len(componentsTerraformApplyAutoApprove) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=%s", componentsTerraformApplyAutoApprove))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=%s", componentsTerraformApplyAutoApprove))
 		applyAutoApproveBool, err := strconv.ParseBool(componentsTerraformApplyAutoApprove)
 		if err != nil {
 			return err
@@ -252,7 +252,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsTerraformDeployRunInit := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT")
 	if len(componentsTerraformDeployRunInit) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=%s", componentsTerraformDeployRunInit))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=%s", componentsTerraformDeployRunInit))
 		deployRunInitBool, err := strconv.ParseBool(componentsTerraformDeployRunInit)
 		if err != nil {
 			return err
@@ -262,7 +262,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsInitRunReconfigure := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE")
 	if len(componentsInitRunReconfigure) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure))
 		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
 		if err != nil {
 			return err
@@ -272,7 +272,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile))
 		componentsTerraformAutoGenerateBackendFileBool, err := strconv.ParseBool(componentsTerraformAutoGenerateBackendFile)
 		if err != nil {
 			return err
@@ -282,19 +282,19 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsHelmfileCommand := os.Getenv("ATMOS_COMPONENTS_HELMFILE_COMMAND")
 	if len(componentsHelmfileCommand) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_COMMAND=%s", componentsHelmfileCommand))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_COMMAND=%s", componentsHelmfileCommand))
 		atmosConfig.Components.Helmfile.Command = componentsHelmfileCommand
 	}
 
 	componentsHelmfileBasePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
 	if len(componentsHelmfileBasePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_BASE_PATH=%s", componentsHelmfileBasePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_BASE_PATH=%s", componentsHelmfileBasePath))
 		atmosConfig.Components.Helmfile.BasePath = componentsHelmfileBasePath
 	}
 
 	componentsHelmfileUseEKS := os.Getenv("ATMOS_COMPONENTS_HELMFILE_USE_EKS")
 	if len(componentsHelmfileUseEKS) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_USE_EKS=%s", componentsHelmfileUseEKS))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_USE_EKS=%s", componentsHelmfileUseEKS))
 		useEKSBool, err := strconv.ParseBool(componentsHelmfileUseEKS)
 		if err != nil {
 			return err
@@ -304,61 +304,61 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsHelmfileKubeconfigPath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH")
 	if len(componentsHelmfileKubeconfigPath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH=%s", componentsHelmfileKubeconfigPath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH=%s", componentsHelmfileKubeconfigPath))
 		atmosConfig.Components.Helmfile.KubeconfigPath = componentsHelmfileKubeconfigPath
 	}
 
 	componentsHelmfileHelmAwsProfilePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN")
 	if len(componentsHelmfileHelmAwsProfilePattern) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN=%s", componentsHelmfileHelmAwsProfilePattern))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN=%s", componentsHelmfileHelmAwsProfilePattern))
 		atmosConfig.Components.Helmfile.HelmAwsProfilePattern = componentsHelmfileHelmAwsProfilePattern
 	}
 
 	componentsHelmfileClusterNamePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN")
 	if len(componentsHelmfileClusterNamePattern) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN=%s", componentsHelmfileClusterNamePattern))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN=%s", componentsHelmfileClusterNamePattern))
 		atmosConfig.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
 	}
 
 	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
 	if len(workflowsBasePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_WORKFLOWS_BASE_PATH=%s", workflowsBasePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_WORKFLOWS_BASE_PATH=%s", workflowsBasePath))
 		atmosConfig.Workflows.BasePath = workflowsBasePath
 	}
 
 	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
 	if len(jsonschemaBasePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH=%s", jsonschemaBasePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH=%s", jsonschemaBasePath))
 		atmosConfig.Schemas.JsonSchema.BasePath = jsonschemaBasePath
 	}
 
 	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
 	if len(opaBasePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_OPA_BASE_PATH=%s", opaBasePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_OPA_BASE_PATH=%s", opaBasePath))
 		atmosConfig.Schemas.Opa.BasePath = opaBasePath
 	}
 
 	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
 	if len(cueBasePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_CUE_BASE_PATH=%s", cueBasePath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_CUE_BASE_PATH=%s", cueBasePath))
 		atmosConfig.Schemas.Cue.BasePath = cueBasePath
 	}
 
 	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 	if len(atmosManifestJsonSchemaPath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_ATMOS_MANIFEST=%s", atmosManifestJsonSchemaPath))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_ATMOS_MANIFEST=%s", atmosManifestJsonSchemaPath))
 		atmosConfig.Schemas.Atmos.Manifest = atmosManifestJsonSchemaPath
 	}
 
 	logsFile := os.Getenv("ATMOS_LOGS_FILE")
 	if len(logsFile) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_FILE=%s", logsFile))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_LOGS_FILE=%s", logsFile))
 		atmosConfig.Logs.File = logsFile
 	}
 
 	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
 	if len(logsLevel) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
 		// Validate the log level before setting it
 		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
 			return err
@@ -369,22 +369,22 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
 	if len(tfAppendUserAgent) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT=%s", tfAppendUserAgent))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT=%s", tfAppendUserAgent))
 		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 
 	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
 	if len(listMergeStrategy) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_SETTINGS_LIST_MERGE_STRATEGY=%s", listMergeStrategy))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SETTINGS_LIST_MERGE_STRATEGY=%s", listMergeStrategy))
 		atmosConfig.Settings.ListMergeStrategy = listMergeStrategy
 	}
 
 	versionEnabled := os.Getenv("ATMOS_VERSION_CHECK_ENABLED")
 	if len(versionEnabled) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_VERSION_CHECK_ENABLED=%s", versionEnabled))
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_VERSION_CHECK_ENABLED=%s", versionEnabled))
 		enabled, err := strconv.ParseBool(versionEnabled)
 		if err != nil {
-			u.LogWarning(*atmosConfig, fmt.Sprintf("Invalid boolean value '%s' for ATMOS_VERSION_CHECK_ENABLED; using default.", versionEnabled))
+			u.LogWarning(fmt.Sprintf("Invalid boolean value '%s' for ATMOS_VERSION_CHECK_ENABLED; using default.", versionEnabled))
 		} else {
 			atmosConfig.Version.Check.Enabled = enabled
 		}
@@ -414,31 +414,31 @@ func checkConfig(atmosConfig schema.AtmosConfiguration) error {
 func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
 	}
 	if len(configAndStacksInfo.TerraformCommand) > 0 {
 		atmosConfig.Components.Terraform.Command = configAndStacksInfo.TerraformCommand
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as terraform executable", configAndStacksInfo.TerraformCommand))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as terraform executable", configAndStacksInfo.TerraformCommand))
 	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		atmosConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
 	}
 	if len(configAndStacksInfo.HelmfileCommand) > 0 {
 		atmosConfig.Components.Helmfile.Command = configAndStacksInfo.HelmfileCommand
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as helmfile executable", configAndStacksInfo.HelmfileCommand))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as helmfile executable", configAndStacksInfo.HelmfileCommand))
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		atmosConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
 	}
 	if len(configAndStacksInfo.ConfigDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.ConfigDir
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
 	}
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
 	}
 	if len(configAndStacksInfo.DeployRunInit) > 0 {
 		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
@@ -446,7 +446,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 			return err
 		}
 		atmosConfig.Components.Terraform.DeployRunInit = deployRunInitBool
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
 	}
 	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
 		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
@@ -454,11 +454,11 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 			return err
 		}
 		atmosConfig.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
 	}
 	if len(configAndStacksInfo.WorkflowsDir) > 0 {
 		atmosConfig.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
 	}
 	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
 		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
@@ -466,23 +466,23 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 			return err
 		}
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
 	}
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
 		atmosConfig.Schemas.JsonSchema.BasePath = configAndStacksInfo.JsonSchemaDir
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
 		atmosConfig.Schemas.Opa.BasePath = configAndStacksInfo.OpaDir
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
 		atmosConfig.Schemas.Cue.BasePath = configAndStacksInfo.CueDir
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
 		atmosConfig.Schemas.Atmos.Manifest = configAndStacksInfo.AtmosManifestJsonSchema
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
 	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
@@ -490,15 +490,15 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		}
 		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
 	}
 	if len(configAndStacksInfo.LogsFile) > 0 {
 		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
 	}
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy))
+		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy))
 	}
 
 	return nil

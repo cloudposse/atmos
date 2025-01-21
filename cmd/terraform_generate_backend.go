@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,7 +20,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateBackendCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -32,7 +31,7 @@ func init() {
 
 	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+		u.LogErrorAndExit(err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateBackendCmd)

@@ -12,14 +12,14 @@ import (
 func removeTempDir(atmosConfig schema.AtmosConfiguration, path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
-		u.LogWarning(atmosConfig, err.Error())
+		u.LogWarning(err.Error())
 	}
 }
 
 func closeFile(fileName string, file io.ReadCloser) {
 	err := file.Close()
 	if err != nil {
-		u.LogError(schema.AtmosConfiguration{}, fmt.Errorf("error closing the file '%s': %v", fileName, err))
+		u.LogError(fmt.Errorf("error closing the file '%s': %v", fileName, err))
 	}
 }
 

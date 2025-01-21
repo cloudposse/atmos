@@ -73,7 +73,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 	defer removeTempDir(atmosConfig, tempDir)
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", localRepoInfo.RepoUrl, tempDir))
+	u.LogTrace(fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", localRepoInfo.RepoUrl, tempDir))
 
 	cloneOptions := git.CloneOptions{
 		URL:          localRepoInfo.RepoUrl,
@@ -84,9 +84,9 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// If `ref` flag is not provided, it will clone the HEAD of the default branch
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nCloning Git ref '%s' ...\n", ref))
+		u.LogTrace(fmt.Sprintf("\nCloning Git ref '%s' ...\n", ref))
 	} else {
-		u.LogTrace(atmosConfig, "\nCloned the HEAD of the default branch ...\n")
+		u.LogTrace("\nCloned the HEAD of the default branch ...\n")
 	}
 
 	if verbose {
@@ -126,14 +126,14 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	}
 
 	if ref != "" {
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", ref))
+		u.LogTrace(fmt.Sprintf("\nCloned Git ref '%s'\n", ref))
 	} else {
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nCloned Git ref '%s'\n", remoteRepoHead.Name()))
+		u.LogTrace(fmt.Sprintf("\nCloned Git ref '%s'\n", remoteRepoHead.Name()))
 	}
 
 	// Check if a commit SHA was provided and checkout the repo at that commit SHA
 	if sha != "" {
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+		u.LogTrace(fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -152,7 +152,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
+		u.LogTrace(fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
@@ -208,7 +208,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	defer removeTempDir(atmosConfig, tempDir)
 
 	// Copy the local repo into the temp directory
-	u.LogTrace(atmosConfig, fmt.Sprintf("\nCopying the local repo into the temp directory '%s' ...", tempDir))
+	u.LogTrace(fmt.Sprintf("\nCopying the local repo into the temp directory '%s' ...", tempDir))
 
 	copyOptions := cp.Options{
 		PreserveTimes: false,
@@ -236,7 +236,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
+	u.LogTrace(fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
 
 	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -253,7 +253,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	}
 
 	if sha != "" {
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+		u.LogTrace(fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -272,14 +272,14 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(atmosConfig, fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
+		u.LogTrace(fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
 	} else {
 		// If `ref` is not provided, use the HEAD of the remote origin
 		if ref == "" {
 			ref = "refs/remotes/origin/HEAD"
 		}
 
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
+		u.LogTrace(fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -304,7 +304,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(atmosConfig, fmt.Sprintf("Checked out Git ref '%s'\n", ref))
+		u.LogTrace(fmt.Sprintf("Checked out Git ref '%s'\n", ref))
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
@@ -404,8 +404,8 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
-	u.LogTrace(atmosConfig, fmt.Sprintf("BASE: %s", remoteRepoHead))
+	u.LogTrace(fmt.Sprintf("Current HEAD: %s", localRepoHead))
+	u.LogTrace(fmt.Sprintf("BASE: %s", remoteRepoHead))
 
 	currentStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, true, false)
 	if err != nil {
@@ -448,39 +448,39 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("\nGetting current working repo commit object..."))
+	u.LogTrace(fmt.Sprintf("\nGetting current working repo commit object..."))
 
 	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("Got current working repo commit object"))
-	u.LogTrace(atmosConfig, fmt.Sprintf("Getting current working repo commit tree..."))
+	u.LogTrace(fmt.Sprintf("Got current working repo commit object"))
+	u.LogTrace(fmt.Sprintf("Getting current working repo commit tree..."))
 
 	localTree, err := localCommit.Tree()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("Got current working repo commit tree"))
-	u.LogTrace(atmosConfig, fmt.Sprintf("Getting remote repo commit object..."))
+	u.LogTrace(fmt.Sprintf("Got current working repo commit tree"))
+	u.LogTrace(fmt.Sprintf("Getting remote repo commit object..."))
 
 	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("Got remote repo commit object"))
-	u.LogTrace(atmosConfig, fmt.Sprintf("Getting remote repo commit tree..."))
+	u.LogTrace(fmt.Sprintf("Got remote repo commit object"))
+	u.LogTrace(fmt.Sprintf("Getting remote repo commit tree..."))
 
 	remoteTree, err := remoteCommit.Tree()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("Got remote repo commit tree"))
-	u.LogTrace(atmosConfig, fmt.Sprintf("Finding difference between the current working branch and remote target branch ..."))
+	u.LogTrace(fmt.Sprintf("Got remote repo commit tree"))
+	u.LogTrace(fmt.Sprintf("Finding difference between the current working branch and remote target branch ..."))
 
 	// Find a slice of Patch objects with all the changes between the current working and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -491,16 +491,16 @@ func executeDescribeAffected(
 	var changedFiles []string
 
 	if len(patch.Stats()) > 0 {
-		u.LogTrace(atmosConfig, fmt.Sprintf("Found difference between the current working branch and remote target branch"))
-		u.LogTrace(atmosConfig, "\nChanged files:\n")
+		u.LogTrace(fmt.Sprintf("Found difference between the current working branch and remote target branch"))
+		u.LogTrace("\nChanged files:\n")
 
 		for _, fileStat := range patch.Stats() {
-			u.LogTrace(atmosConfig, fileStat.Name)
+			u.LogTrace(fileStat.Name)
 			changedFiles = append(changedFiles, fileStat.Name)
 		}
-		u.LogTrace(atmosConfig, "")
+		u.LogTrace("")
 	} else {
-		u.LogTrace(atmosConfig, fmt.Sprintf("The current working branch and remote target branch are the same"))
+		u.LogTrace(fmt.Sprintf("The current working branch and remote target branch are the same"))
 	}
 
 	affected, err := findAffected(

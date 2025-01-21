@@ -48,7 +48,7 @@ func WriteToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(atmosConfig, err.Error())
+			LogWarning(err.Error())
 		}
 	}(f)
 
@@ -129,7 +129,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(atmosConfig, err.Error())
+			LogWarning(err.Error())
 		}
 	}(f)
 

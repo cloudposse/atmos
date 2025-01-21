@@ -172,7 +172,7 @@ func ReadAndProcessVendorConfigFile(
 
 			if !fileExists {
 				vendorConfigFileExists = false
-				u.LogWarning(atmosConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+				u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
 				return vendorConfig, vendorConfigFileExists, "", nil
 			}
 		}
@@ -415,7 +415,7 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 
 		model, err := newModelAtmosVendorInternal(packages, dryRun, atmosConfig)
@@ -483,7 +483,7 @@ func logInitialMessage(atmosConfig schema.AtmosConfiguration, vendorConfigFileNa
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
-	u.LogInfo(atmosConfig, logMessage)
+	u.LogInfo(logMessage)
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
@@ -603,7 +603,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 				return true, err
 			} else if excludeMatch {
 				// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+				u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 					trimmedSrc,
 					excludePath,
 				))
@@ -620,7 +620,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 					return true, err
 				} else if includeMatch {
 					// If the file matches ANY of the 'included_paths' patterns, include the file
-					u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+					u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 						trimmedSrc,
 						includePath,
 					))
@@ -632,13 +632,13 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 			if anyMatches {
 				return false, nil
 			} else {
-				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+				u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 				return true, nil
 			}
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+		u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
 }
@@ -706,18 +706,18 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("Failed to parse URL %q: %v\n", src, err))
+		u.LogDebug(fmt.Sprintf("Failed to parse URL %q: %v\n", src, err))
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
 	}
 
 	if strings.ToLower(parsedURL.Host) != "github.com" {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("Host is %q, not 'github.com', skipping token injection\n", parsedURL.Host))
+		u.LogDebug(fmt.Sprintf("Host is %q, not 'github.com', skipping token injection\n", parsedURL.Host))
 		return "", false, nil
 	}
 
 	parts := strings.SplitN(parsedURL.Path, "/", 4)
 	if len(parts) < 3 {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("URL path %q doesn't look like /owner/repo\n", parsedURL.Path))
+		u.LogDebug(fmt.Sprintf("URL path %q doesn't look like /owner/repo\n", parsedURL.Path))
 		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL.Path)
 	}
 
@@ -731,15 +731,15 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 	if atmosGitHubToken != "" {
 		usedToken = atmosGitHubToken
 		tokenSource = "ATMOS_GITHUB_TOKEN"
-		u.LogDebug(d.AtmosConfig, "ATMOS_GITHUB_TOKEN is set\n")
+		u.LogDebug("ATMOS_GITHUB_TOKEN is set\n")
 	} else {
 		// 2. Otherwise, only inject GITHUB_TOKEN if cfg.Settings.InjectGithubToken == true
 		if d.AtmosConfig.Settings.InjectGithubToken && gitHubToken != "" {
 			usedToken = gitHubToken
 			tokenSource = "GITHUB_TOKEN"
-			u.LogTrace(d.AtmosConfig, "InjectGithubToken=true and GITHUB_TOKEN is set, using it\n")
+			u.LogDebug("InjectGithubToken=true and GITHUB_TOKEN is set, using it\n")
 		} else {
-			u.LogTrace(d.AtmosConfig, "No ATMOS_GITHUB_TOKEN or GITHUB_TOKEN found\n")
+			u.LogDebug("No ATMOS_GITHUB_TOKEN or GITHUB_TOKEN found\n")
 		}
 	}
 
@@ -747,10 +747,10 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		user := parsedURL.User.Username()
 		pass, _ := parsedURL.User.Password()
 		if user == "" && pass == "" {
-			u.LogDebug(d.AtmosConfig, fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
+			u.LogDebug(fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
 			parsedURL.User = url.UserPassword("x-access-token", usedToken)
 		} else {
-			u.LogDebug(d.AtmosConfig, "Credentials found, skipping token injection\n")
+			u.LogDebug("Credentials found, skipping token injection\n")
 		}
 	}
 

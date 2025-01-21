@@ -5,7 +5,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -29,13 +28,13 @@ var helmfileCmd = &cobra.Command{
 
 		info, err := e.ProcessCommandLineArgs("helmfile", cmd, finalArgs, argsAfterDoubleDash)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 		// Exit on help
 		if info.NeedHelp || (info.SubCommand == "" && info.SubCommand2 == "") {
 			// Check for the latest Atmos release on GitHub and print update message
 			if err := cmd.Help(); err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 			return
 		}
@@ -44,7 +43,7 @@ var helmfileCmd = &cobra.Command{
 
 		err = e.ExecuteHelmfile(info)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }

@@ -36,7 +36,7 @@ var docsCmd = &cobra.Command{
 
 			atmosConfig, err := cfg.InitCliConfig(info, true)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 
 			// Detect terminal width if not specified in `atmos.yaml`
@@ -44,7 +44,7 @@ var docsCmd = &cobra.Command{
 			maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 			if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
 				maxWidth = atmosConfig.Settings.Docs.MaxWidth
-				u.LogWarning(atmosConfig, "'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
+				u.LogWarning("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
 			}
 			defaultWidth := 120
 			screenWidth := defaultWidth
@@ -66,24 +66,24 @@ var docsCmd = &cobra.Command{
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 			if !componentPathExists {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
+				u.LogErrorAndExit(fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
 				if os.IsNotExist(err) {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("No README found for component: %s", info.Component))
+					u.LogErrorAndExit(fmt.Errorf("No README found for component: %s", info.Component))
 				} else {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("Component %s not found", info.Component))
+					u.LogErrorAndExit(fmt.Errorf("Component %s not found", info.Component))
 				}
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 
 			r, err := glamour.NewTermRenderer(
@@ -93,22 +93,22 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to initialize markdown renderer: %w", err))
+				u.LogErrorAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err))
 			}
 
 			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 
 			pager := atmosConfig.Settings.Terminal.Pager
 			if !pager && atmosConfig.Settings.Docs.Pagination {
 				pager = atmosConfig.Settings.Docs.Pagination
-				u.LogWarning(atmosConfig, "'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
+				u.LogWarning("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to display documentation: %w", err))
+				u.LogErrorAndExit(fmt.Errorf("failed to display documentation: %w", err))
 			}
 
 			return
@@ -128,7 +128,7 @@ var docsCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }

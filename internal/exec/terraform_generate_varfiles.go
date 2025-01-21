@@ -266,7 +266,7 @@ func ExecuteTerraformGenerateVarfiles(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(atmosConfig, err)
+					u.LogErrorAndExit(err)
 				}
 
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
@@ -323,11 +323,11 @@ func ExecuteTerraformGenerateVarfiles(
 						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 					}
 
-					u.LogDebug(atmosConfig, fmt.Sprintf("varfile: %s", fileName))
-					u.LogDebug(atmosConfig, fmt.Sprintf("terraform component: %s", terraformComponent))
-					u.LogDebug(atmosConfig, fmt.Sprintf("atmos component: %s", componentName))
-					u.LogDebug(atmosConfig, fmt.Sprintf("atmos stack: %s", stackName))
-					u.LogDebug(atmosConfig, fmt.Sprintf("stack config file: %s", stackFileName))
+					u.LogDebug(fmt.Sprintf("varfile: %s", fileName))
+					u.LogDebug(fmt.Sprintf("terraform component: %s", terraformComponent))
+					u.LogDebug(fmt.Sprintf("atmos component: %s", componentName))
+					u.LogDebug(fmt.Sprintf("atmos stack: %s", stackName))
+					u.LogDebug(fmt.Sprintf("stack config file: %s", stackFileName))
 				}
 			}
 		}

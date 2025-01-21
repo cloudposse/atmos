@@ -49,7 +49,7 @@ func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	if err != nil {
 		return err
 	}
-	LogInfo(atmosConfig, y)
+	LogInfo(y)
 	return nil
 }
 

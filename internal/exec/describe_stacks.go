@@ -382,7 +382,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(atmosConfig, err)
+									u.LogErrorAndExit(err)
 								}
 
 								componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
@@ -573,7 +573,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
-									u.LogErrorAndExit(atmosConfig, err)
+									u.LogErrorAndExit(err)
 								}
 
 								componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)

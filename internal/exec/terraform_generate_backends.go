@@ -257,7 +257,7 @@ func ExecuteTerraformGenerateBackends(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
-					u.LogErrorAndExit(atmosConfig, err)
+					u.LogErrorAndExit(err)
 				}
 
 				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
@@ -327,7 +327,7 @@ func ExecuteTerraformGenerateBackends(
 					}
 
 					// Write the backend config to the file
-					u.LogDebug(atmosConfig, fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
+					u.LogDebug(fmt.Sprintf("Writing backend config for the component '%s' to file '%s'", terraformComponent, backendFilePath))
 
 					if format == "json" {
 						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "")

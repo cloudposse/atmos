@@ -12,7 +12,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	err := e.ExecuteAwsEksUpdateKubeconfig(kubeconfigContext)
 
 	if err != nil {
-		u.LogError(schema.AtmosConfiguration{}, err)
+		u.LogError(err)
 		return err
 	}
 

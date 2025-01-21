@@ -40,7 +40,7 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
-	logFunc(atmosConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
+	logFunc(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(atmosConfig, workflowDefinition)
@@ -64,7 +64,7 @@ func ExecuteWorkflow(
 		var command = strings.TrimSpace(step.Command)
 		var commandType = strings.TrimSpace(step.Type)
 
-		logFunc(atmosConfig, fmt.Sprintf("Executing workflow step: %s", command))
+		logFunc(fmt.Sprintf("Executing workflow step: %s", command))
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -97,7 +97,7 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				logFunc(atmosConfig, fmt.Sprintf("Stack: %s", finalStack))
+				logFunc(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
@@ -111,8 +111,8 @@ func ExecuteWorkflow(
 
 			failedMsg := theme.Colors.Error.Sprintf("\nStep '%s' failed!", step.Name)
 
-			u.LogDebug(atmosConfig, fmt.Sprintf("\nCommand failed: %s", command))
-			u.LogDebug(atmosConfig, fmt.Sprintf("Error: %v", err))
+			u.LogDebug(fmt.Sprintf("\nCommand failed: %s", command))
+			u.LogDebug(fmt.Sprintf("Error: %v", err))
 
 			resumeMsg := theme.Colors.Success.Sprintf(
 				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",

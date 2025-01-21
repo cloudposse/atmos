@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -25,7 +24,7 @@ var versionCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 
 		u.PrintMessage(fmt.Sprintf("\U0001F47D Atmos %s on %s/%s", version.Version, runtime.GOOS, runtime.GOARCH))
@@ -36,11 +35,11 @@ var versionCmd = &cobra.Command{
 			latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 			if err == nil && latestReleaseTag != "" {
 				if err != nil {
-					u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to check for updates: %v", err))
+					u.LogWarning(fmt.Sprintf("Failed to check for updates: %v", err))
 					return
 				}
 				if latestReleaseTag == "" {
-					u.LogWarning(schema.AtmosConfiguration{}, "No release information available")
+					u.LogWarning("No release information available")
 					return
 				}
 				latestRelease := strings.TrimPrefix(latestReleaseTag, "v")

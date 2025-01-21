@@ -87,14 +87,14 @@ var workflowCmd = &cobra.Command{
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 			return
 		}
 
 		if args[0] == "help" {
 			if err := cmd.Help(); err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 			return
 		}
@@ -107,7 +107,7 @@ var workflowCmd = &cobra.Command{
 			// Get atmos configuration
 			atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to initialize atmos config: %w", err))
+				u.LogErrorAndExit(fmt.Errorf("failed to initialize atmos config: %w", err))
 			}
 
 			// Create a terminal writer to get the optimal width
@@ -122,7 +122,7 @@ var workflowCmd = &cobra.Command{
 				markdown.WithWidth(screenWidth),
 			)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to create markdown renderer: %w", err))
+				u.LogErrorAndExit(fmt.Errorf("failed to create markdown renderer: %w", err))
 			}
 
 			// Generate the error message dynamically using H1 styling
@@ -130,7 +130,7 @@ var workflowCmd = &cobra.Command{
 			content := errorMsg + workflowMarkdown
 			rendered, err := renderer.Render(content)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to render markdown: %w", err))
+				u.LogErrorAndExit(fmt.Errorf("failed to render markdown: %w", err))
 			}
 
 			// Remove duplicate URLs and format output
@@ -168,7 +168,7 @@ var workflowCmd = &cobra.Command{
 					Suggestion: suggestion,
 				})
 				if err != nil {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+					u.LogErrorAndExit(err)
 				}
 			} else if strings.Contains(err.Error(), "does not have the") {
 				details, suggestion := getMarkdownSection("Invalid Workflow")
@@ -178,11 +178,11 @@ var workflowCmd = &cobra.Command{
 					Suggestion: suggestion,
 				})
 				if err != nil {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+					u.LogErrorAndExit(err)
 				}
 			} else {
 				// For other errors, use the standard error handler
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 			return
 		}

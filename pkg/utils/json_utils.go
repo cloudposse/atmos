@@ -41,7 +41,7 @@ func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	if err != nil {
 		return err
 	}
-	LogInfo(atmosConfig, j)
+	LogInfo(j)
 	return nil
 }
 

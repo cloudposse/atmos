@@ -3,8 +3,6 @@ package cmd
 import (
 	"os"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-
 	"github.com/spf13/cobra"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -32,7 +30,7 @@ var completionCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }

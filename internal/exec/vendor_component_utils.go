@@ -124,7 +124,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 					return true, err
 				} else if excludeMatch {
 					// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-					u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+					u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 						trimmedSrc,
 						excludePath,
 					))
@@ -142,7 +142,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 						return true, err
 					} else if includeMatch {
 						// If the file matches ANY of the 'included_paths' patterns, include the file
-						u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+						u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 							trimmedSrc,
 							includePath,
 						))
@@ -154,13 +154,13 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 				if anyMatches {
 					return false, nil
 				} else {
-					u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+					u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 					return true, nil
 				}
 			}
 
 			// If 'included_paths' is not provided, include all files that were not excluded
-			u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+			u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 			return false, nil
 		},
 
@@ -348,7 +348,7 @@ func ExecuteComponentVendorInternal(
 		// Disable TUI if no TTY support is available
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(atmosConfig, "TTY is not supported. Running in non-interactive mode")
+			u.LogWarning("TTY is not supported. Running in non-interactive mode")
 		}
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)

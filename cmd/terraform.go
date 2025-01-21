@@ -41,7 +41,7 @@ var terraformCmd = &cobra.Command{
 
 		info, err := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 
 		ctx := context.WithValue(context.Background(), contextKey(atmosInfoKey), info)
@@ -135,7 +135,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	err := e.ExecuteTerraform(info)
 	if err != nil {
-		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+		u.LogErrorAndExit(err)
 	}
 	return nil
 }
