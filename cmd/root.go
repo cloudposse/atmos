@@ -4,12 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/elewis787/boa"
-	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/cmd/colored"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -18,16 +19,15 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
-
-// originalHelpFunc holds Cobra's original help function to avoid recursion.
-var originalHelpFunc func(*cobra.Command, []string)
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "atmos",
-	Short: "Universal Tool for DevOps and Cloud Automation",
-	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Use:                "atmos",
+	Short:              "Universal Tool for DevOps and Cloud Automation",
+	Long:               `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Determine if the command is a help command or if the help flag is set
 		isHelpCommand := cmd.Name() == "help"
@@ -42,6 +42,29 @@ var RootCmd = &cobra.Command{
 		} else {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
+		}
+
+		logsLevel, _ := cmd.Flags().GetString("logs-level")
+		logsFile, _ := cmd.Flags().GetString("logs-file")
+
+		errorConfig := schema.AtmosConfiguration{
+			Logs: schema.Logs{
+				Level: logsLevel,
+				File:  logsFile,
+			},
+		}
+
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			LogsLevel: logsLevel,
+			LogsFile:  logsFile,
+		}
+
+		// Only validate the config, don't store it yet since commands may need to add more info
+		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		if err != nil {
+			if !errors.Is(err, cfg.NotFound) {
+				u.LogErrorAndExit(errorConfig, err)
+			}
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
@@ -65,24 +88,10 @@ var RootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
-	cc.Init(&cc.Config{
-		RootCmd:  RootCmd,
-		Headings: cc.HiCyan + cc.Bold + cc.Underline,
-		Commands: cc.HiGreen + cc.Bold,
-		Example:  cc.Italic,
-		ExecName: cc.Bold,
-		Flags:    cc.Bold,
+	colored.Init(&colored.Config{
+		RootCmd: RootCmd,
 	})
 
-	// Check if the `help` flag is passed and print a styled Atmos logo to the terminal before printing the help
-	err := RootCmd.ParseFlags(os.Args)
-	if err != nil && errors.Is(err, pflag.ErrHelp) {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
-	}
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
@@ -95,15 +104,7 @@ func Execute() error {
 			u.LogErrorAndExit(schema.AtmosConfiguration{}, initErr)
 		}
 	}
-
-	// Save the original help function to prevent infinite recursion when overriding it.
-	// This allows us to call the original help functionality within our custom help function.
-	originalHelpFunc = RootCmd.HelpFunc()
-
-	// Override the help function with a custom one that adds an upgrade message after displaying help.
-	// This custom help function will call the original help function and then display the bordered message.
-	RootCmd.SetHelpFunc(customHelpMessageToUpgradeToAtmosLatestRelease)
-
+	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
@@ -117,7 +118,31 @@ func Execute() error {
 		}
 	}
 
-	return RootCmd.Execute()
+	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
+	RootCmd.SilenceErrors = true
+	err = RootCmd.Execute()
+	if err != nil {
+		if strings.Contains(err.Error(), "unknown command") {
+			command := getInvalidCommandName(err.Error())
+			showUsageAndExit(RootCmd, []string{command})
+		}
+	}
+	return err
+}
+
+func getInvalidCommandName(input string) string {
+	// Regular expression to match the command name inside quotes
+	re := regexp.MustCompile(`unknown command "([^"]+)"`)
+
+	// Find the match
+	match := re.FindStringSubmatch(input)
+
+	// Check if a match is found
+	if len(match) > 1 {
+		command := match[1] // The first capturing group contains the command
+		return command
+	}
+	return ""
 }
 
 func init() {
@@ -131,26 +156,56 @@ func init() {
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
 	// Set custom usage template
-	templates.SetCustomUsageFunc(RootCmd)
-	cobra.OnInitialize(initConfig)
+	err := templates.SetCustomUsageFunc(RootCmd)
+	if err != nil {
+		u.LogErrorAndExit(atmosConfig, err)
+	}
+
+	initCobraConfig()
 }
 
-func initConfig() {
+func initCobraConfig() {
+	RootCmd.SetOut(os.Stdout)
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
+	oldUsageFunc := RootCmd.UsageFunc()
+	RootCmd.SetUsageFunc(func(c *cobra.Command) error {
+		if c.Use == "atmos" {
+			return b.UsageFunc(c)
+		}
+		showUsageAndExit(c, c.Flags().Args())
+		return nil
+	})
+	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
 
-	RootCmd.SetUsageFunc(b.UsageFunc)
-
-	RootCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
+			arguments := os.Args[len(strings.Split(command.CommandPath(), " ")):]
+			if len(command.Flags().Args()) > 0 {
+				arguments = command.Flags().Args()
+			}
+			showUsageAndExit(command, arguments)
+		}
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		err := tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+		if command.Use != "atmos" || command.Flags().Changed("help") {
+			err := tuiUtils.PrintStyledText("ATMOS")
+			if err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
+			if err := oldUsageFunc(command); err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
+		} else {
+			err := tuiUtils.PrintStyledText("ATMOS")
+			if err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
+			b.HelpFunc(command, args)
+			if err := command.Usage(); err != nil {
+				u.LogErrorAndExit(atmosConfig, err)
+			}
 		}
-
-		b.HelpFunc(command, strings)
-		command.Usage()
+		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }
 

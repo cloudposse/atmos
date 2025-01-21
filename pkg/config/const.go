@@ -44,6 +44,7 @@ const (
 	ImportSectionName                 = "import"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
+	HooksSectionName                  = "hooks"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
 	EnvSectionName                    = "env"
@@ -65,6 +66,8 @@ const (
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
 
+	QueryFlag = "--query"
+
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro
@@ -75,7 +78,8 @@ const (
 	AtmosProDefaultEndpoint    = "api"
 
 	// Atmos YAML functions
-	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncExec            = "!exec"
+	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
+	AtmosYamlFuncEnv             = "!env"
 )

@@ -55,7 +55,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	includeEmptyStacks, err := cmd.Flags().GetBool("include-empty-stacks")
+	includeEmptyStacks, err := flags.GetBool("include-empty-stacks")
 	if err != nil {
 		return err
 	}
@@ -94,6 +94,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
 	finalStacksMap, err := ExecuteDescribeStacks(
 		atmosConfig,
 		filterByStack,
@@ -108,7 +113,18 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, finalStacksMap)
+	var res any
+
+	if query != "" {
+		res, err = u.EvaluateYqExpression(&atmosConfig, finalStacksMap, query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = finalStacksMap
+	}
+
+	err = printOrWriteToFile(format, file, res)
 	if err != nil {
 		return err
 	}
@@ -140,6 +156,7 @@ func ExecuteDescribeStacks(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var hooksSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
 	var backendTypeSection string
@@ -226,6 +243,10 @@ func ExecuteDescribeStacks(
 							providersSection = map[string]any{}
 						}
 
+						if hooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
+							hooksSection = map[string]any{}
+						}
+
 						if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
 							overridesSection = map[string]any{}
 						}
@@ -246,6 +267,7 @@ func ExecuteDescribeStacks(
 							ComponentSettingsSection:  settingsSection,
 							ComponentEnvSection:       envSection,
 							ComponentProvidersSection: providersSection,
+							ComponentHooksSection:     hooksSection,
 							ComponentOverridesSection: overridesSection,
 							ComponentBackendSection:   backendSection,
 							ComponentBackendType:      backendTypeSection,
@@ -255,6 +277,7 @@ func ExecuteDescribeStacks(
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
 								cfg.ProvidersSectionName:   providersSection,
+								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
@@ -419,6 +442,10 @@ func ExecuteDescribeStacks(
 							providersSection = map[string]any{}
 						}
 
+						if hooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
+							hooksSection = map[string]any{}
+						}
+
 						if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
 							overridesSection = map[string]any{}
 						}
@@ -439,6 +466,7 @@ func ExecuteDescribeStacks(
 							ComponentSettingsSection:  settingsSection,
 							ComponentEnvSection:       envSection,
 							ComponentProvidersSection: providersSection,
+							ComponentHooksSection:     hooksSection,
 							ComponentOverridesSection: overridesSection,
 							ComponentBackendSection:   backendSection,
 							ComponentBackendType:      backendTypeSection,
@@ -448,6 +476,7 @@ func ExecuteDescribeStacks(
 								cfg.SettingsSectionName:    settingsSection,
 								cfg.EnvSectionName:         envSection,
 								cfg.ProvidersSectionName:   providersSection,
+								cfg.HooksSectionName:       hooksSection,
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,

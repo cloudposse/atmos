@@ -1,57 +1,55 @@
 package cmd
 
 import (
-	"github.com/samber/lo"
-	"github.com/spf13/cobra"
-
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/hooks"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/spf13/cobra"
 )
+
+type contextKey string
+
+const atmosInfoKey contextKey = "atmos_info"
 
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
 	Aliases:            []string{"tf"},
-	Short:              "Execute Terraform commands",
-	Long:               `This command executes Terraform commands`,
+	Short:              "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
+	Long:               `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
-		//checkAtmosConfig()
-
-		var argsAfterDoubleDash []string
-		var finalArgs = args
-
-		doubleDashIndex := lo.IndexOf(args, "--")
-		if doubleDashIndex > 0 {
-			finalArgs = lo.Slice(args, 0, doubleDashIndex)
-			argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
-		}
-		info, err := e.ProcessCommandLineArgs("terraform", cmd, finalArgs, argsAfterDoubleDash)
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
-
-		// Exit on help
-		if info.NeedHelp {
-			// Check for the latest Atmos release on GitHub and print update message
-			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
-			return
-		}
-		// Check Atmos configuration
-		checkAtmosConfig()
-
-		err = e.ExecuteTerraform(info)
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
+	PostRunE: func(cmd *cobra.Command, args []string) error {
+		info := getConfigAndStacksInfo("terraform", cmd, args)
+		return hooks.RunE(cmd, args, &info)
 	},
+}
+
+// Contains checks if a slice of strings contains an exact match for the target string.
+func Contains(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
+	info := getConfigAndStacksInfo("terraform", cmd, args)
+	if info.NeedHelp {
+		actualCmd.Usage()
+		return
+	}
+	err := e.ExecuteTerraform(info)
+	if err != nil {
+		u.LogErrorAndExit(atmosConfig, err)
+	}
 }
 
 func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
+	attachTerraformCommands(terraformCmd)
 	RootCmd.AddCommand(terraformCmd)
 }

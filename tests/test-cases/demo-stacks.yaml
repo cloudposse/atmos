@@ -1,0 +1,132 @@
+# yaml-language-server: $schema=schema.json
+tests:
+  - name: atmos --help
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos CLI help command lists available commands."
+    workdir: "../examples/demo-stacks"
+    command: "atmos"
+    args:
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Available Commands:"
+        - "\\batlantis\\b"
+        - "\\baws\\b"
+        - "\\bcompletion\\b"
+        - "\\bdescribe\\b"
+        - "\\bdocs\\b"
+        - "\\bhelmfile\\b"
+        - "\\bhelp\\b"
+        - "\\blist\\b"
+        - "\\bpro\\b"
+        - "\\bterraform\\b"
+        - "\\bvalidate\\b"
+        - "\\bvendor\\b"
+        - "\\bversion\\b"
+        - "\\bworkflow\\b"
+        - "Flags:"
+        - "for more information about a command"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos version
+    enabled: true
+    snapshot: false
+    description: "Check that atmos version command outputs version details."
+    workdir: "../examples/demo-stacks"
+    command: "atmos"
+    args:
+      - "version"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos version --check
+    enabled: true
+    snapshot: false
+    description: "Verify atmos version --check command functions correctly."
+    workdir: "../examples/demo-stacks"
+    env:
+      ATMOS_LOGS_LEVEL: "Warning"
+    command: "atmos"
+    args:
+      - "version"
+      - "--check"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+        - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
+        - 'Install Atmos: https://atmos\.tools/install'
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos docs myapp
+    enabled: true
+    snapshot: true
+    description: "Validate atmos docs command outputs documentation for a specific component."
+    workdir: "../examples/demo-stacks/"
+    command: "atmos"
+    args:
+      - "docs"
+      - "myapp"
+    expect:
+      diff: []
+      stdout:
+        - "Example Terraform Weather Component"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos describe config -f yaml
+    snapshot: true
+    enabled: true
+    description: "Ensure atmos CLI outputs the Atmos configuration in YAML."
+    workdir: "../examples/demo-stacks/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
+    expect:
+      diff:
+        - "stacksBaseAbsolutePath"
+        - "terraformDirAbsolutePath"
+        - "helmfileDirAbsolutePath"
+        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+\*\*[/\\]+_defaults.yaml'
+        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]deploy[/\\]+\*\*[/\\]+\*'
+      stdout:
+        - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos describe config
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos CLI outputs the Atmos configuration in JSON."
+    workdir: "../examples/demo-stacks/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "config"
+    expect:
+      diff:
+        - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
+        - "stacksBaseAbsolutePath"
+        - "terraformDirAbsolutePath"
+        - "helmfileDirAbsolutePath"
+        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+\*\*[/\\]+_defaults.yaml'
+        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+deploy[/\\]+\*\*[/\\]+\*'
+      stdout:
+        - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
+      stderr:
+        - "^$"
+      exit_code: 0

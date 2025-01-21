@@ -18,7 +18,13 @@ func TestValidateStacksCommand(t *testing.T) {
 }
 
 func TestValidateStacksCommandWithAtmosManifestJsonSchema(t *testing.T) {
-	err := e.ExecuteValidateStacksCmd(cmd.ValidateStacksCmd, []string{"--schemas-atmos-manifest", "../quick-start-advanced/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"})
+	err := e.ExecuteValidateStacksCmd(cmd.ValidateStacksCmd, []string{"--schemas-atmos-manifest", "../../internal/exec/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"})
+	u.LogError(schema.AtmosConfiguration{}, err)
+	assert.NotNil(t, err)
+}
+
+func TestValidateStacksCommandWithRemoteAtmosManifestJsonSchema(t *testing.T) {
+	err := e.ExecuteValidateStacksCmd(cmd.ValidateStacksCmd, []string{"--schemas-atmos-manifest", "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"})
 	u.LogError(schema.AtmosConfiguration{}, err)
 	assert.NotNil(t, err)
 }

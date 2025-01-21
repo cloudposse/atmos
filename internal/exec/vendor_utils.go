@@ -2,10 +2,8 @@ package exec
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -180,7 +178,16 @@ func ReadAndProcessVendorConfigFile(
 	// Check if it's a directory
 	fileInfo, err := os.Stat(foundVendorConfigFile)
 	if err != nil {
-		return vendorConfig, false, "", err
+		if os.IsNotExist(err) {
+			// File does not exist
+			return vendorConfig, false, "", fmt.Errorf("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
+		}
+		if os.IsPermission(err) {
+			// Permission error
+			return vendorConfig, false, "", fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions.", foundVendorConfigFile)
+		}
+		// Other errors
+		return vendorConfig, false, "", fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
 	}
 
 	var configFiles []string
@@ -354,7 +361,7 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return err
 		}
-		err = validateURI(uri)
+		err = ValidateURI(uri)
 		if err != nil {
 			return err
 		}
@@ -516,37 +523,6 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
 }
 
-// sanitizeFileName replaces invalid characters and query strings with underscores for Windows.
-func sanitizeFileName(uri string) string {
-
-	// Parse the URI to handle paths and query strings properly
-	parsed, err := url.Parse(uri)
-	if err != nil {
-		// Fallback to basic filepath.Base if URI parsing fails
-		return filepath.Base(uri)
-	}
-
-	// Extract the path component of the URI
-	base := filepath.Base(parsed.Path)
-
-	// This logic applies only to Windows
-	if runtime.GOOS != "windows" {
-		return base
-	}
-
-	// Replace invalid characters for Windows
-	base = strings.Map(func(r rune) rune {
-		switch r {
-		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
-			return '_'
-		default:
-			return r
-		}
-	}, base)
-
-	return base
-}
-
 func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
 	copyOptions := cp.Options{
 		Skip:          generateSkipFunction(atmosConfig, tempDir, s),
@@ -558,7 +534,7 @@ func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath str
 	// Adjust the target path if it's a local file with no extension
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
 		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := sanitizeFileName(uri)
+		sanitizedBase := SanitizeFileName(uri)
 		targetPath = filepath.Join(targetPath, sanitizedBase)
 	}
 
@@ -631,47 +607,4 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
-}
-
-func validateURI(uri string) error {
-	if uri == "" {
-		return fmt.Errorf("URI cannot be empty")
-	}
-	// Maximum length check
-	if len(uri) > 2048 {
-		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
-	}
-	// Add more validation as needed
-	// Validate URI format
-	if strings.Contains(uri, "..") {
-		return fmt.Errorf("URI cannot contain path traversal sequences")
-	}
-	if strings.Contains(uri, " ") {
-		return fmt.Errorf("URI cannot contain spaces")
-	}
-	// Validate characters
-	if strings.ContainsAny(uri, "<>|&;$") {
-		return fmt.Errorf("URI contains invalid characters")
-	}
-	// Validate scheme-specific format
-	if strings.HasPrefix(uri, "oci://") {
-		if !strings.Contains(uri[6:], "/") {
-			return fmt.Errorf("invalid OCI URI format")
-		}
-	} else if strings.Contains(uri, "://") {
-		scheme := strings.Split(uri, "://")[0]
-		if !isValidScheme(scheme) {
-			return fmt.Errorf("unsupported URI scheme: %s", scheme)
-		}
-	}
-	return nil
-}
-func isValidScheme(scheme string) bool {
-	validSchemes := map[string]bool{
-		"http":  true,
-		"https": true,
-		"git":   true,
-		"ssh":   true,
-	}
-	return validSchemes[scheme]
 }

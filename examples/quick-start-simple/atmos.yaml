@@ -17,5 +17,5 @@ stacks:
   name_pattern: "{stage}"
 
 logs:
-  file: "/dev/stderr"
   level: Info
+  file: "/dev/stderr"

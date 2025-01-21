@@ -23,7 +23,7 @@ By understanding these challenges, teams can better prepare for a smooth transit
 ## Brownfield Development in Atmos
 
 Atmos is easier for new organizations or "greenfield" environments because you need to architect Terraform according to
-our [best practices](/best-practices/components) to get all the benefits of Atmos. For example, when using our [Terraform components](https://github.com/cloudposse/terraform-aws-components), we frequently use [Terraform Remote State](/core-concepts/components/terraform/remote-state) to retrieve the outputs from other components.
+our [best practices](/best-practices/components) to get all the benefits of Atmos. For example, when using our [Terraform components](https://github.com/cloudposse/terraform-aws-components), we frequently use [Terraform Remote State](/core-concepts/share-data/remote-state) to retrieve the outputs from other components.
 
 This works well when you use our components but less so when you operate in a "brownfield" environment, for example,
 with an existing VPC, S3 bucket, or IAM role.
@@ -56,7 +56,7 @@ The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` 
 configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html).
 
 Let's redesign the example with the `vpc` and `vpc-flow-logs-bucket` components described in
-[Terraform Component Remote State](/core-concepts/components/terraform/remote-state) and configure the `static` remote state for
+[Terraform Component Remote State](/core-concepts/share-data/remote-state) and configure the `static` remote state for
 the `vpc-flow-logs-bucket` component to use an existing S3 bucket.
 
 ## Examples

@@ -1,0 +1,82 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "tests": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "The name of the test."
+            },
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether the test is enabled or not."
+            },
+            "tty": {
+              "type": "boolean",
+              "description": "Whether to run the test with a TTY."
+            },
+            "description": {
+              "type": "string",
+              "description": "A short description of the test."
+            },
+            "workdir": {
+              "type": "string",
+              "description": "The working directory for the test."
+            },
+            "command": {
+              "type": "string",
+              "description": "The command to execute."
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The arguments to pass to the command.",
+              "default": []
+            },
+            "expect": {
+              "type": "object",
+              "properties": {
+                "stdout": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      { "type": "string" },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "not": { "type": "string" }
+                        },
+                        "required": ["not"]
+                      }
+                    ]
+                  },
+                  "description": "Expected patterns in stdout."
+                },
+                "stderr": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Expected patterns in stderr."
+                },
+                "exit_code": {
+                  "type": "integer",
+                  "description": "Expected exit code of the command."
+                }
+              },
+              "required": ["exit_code"],
+              "description": "Expectations for the test."
+            }
+          },
+          "required": ["name", "enabled", "workdir", "command", "expect"]
+        }
+      }
+    },
+    "required": ["tests"]
+  }

@@ -1,6 +1,7 @@
 package exec
 
 import (
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -15,6 +16,11 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -25,7 +31,18 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(format, "", atmosConfig)
+	var res any
+
+	if query != "" {
+		res, err = u.EvaluateYqExpression(&atmosConfig, atmosConfig, query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = atmosConfig
+	}
+
+	err = printOrWriteToFile(format, "", res)
 	if err != nil {
 		return err
 	}

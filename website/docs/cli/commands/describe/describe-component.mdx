@@ -43,6 +43,10 @@ atmos describe component echo-server -s tenant1-ue2-staging
 atmos describe component test/test-component-override -s tenant2-ue2-prod
 
 atmos describe component vpc -s tenant1-ue2-dev --process-templates=false
+
+atmos describe component vpc -s plat-ue2-prod --query .vars.tags
+
+atmos describe component vpc -s plat-ue2-prod -q .settings
 ```
 
 ## Arguments
@@ -59,6 +63,7 @@ atmos describe component vpc -s tenant1-ue2-dev --process-templates=false
 | `--format`            | Output format: `yaml` or `json` (`yaml` is default)                                                                                                                                                                                                                            | `-f`  | no       |
 | `--file`              | If specified, write the result to the file                                                                                                                                                                                                                                     |       | no       |
 | `--process-templates` | Enable/disable processing of `Go` templates<br/>in Atmos stacks manifests<br/>when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default |       | no       |
+| `--query`             | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <component> -s <stack> --query .vars.tags`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                    | `-q`  | no       |
 
 ## Output
 
@@ -185,7 +190,7 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
 ```yaml
 atlantis_project: tenant1-ue2-dev-test-test-component-override-3
 atmos_cli_config:
-  base_path: ./examples/tests
+  base_path: ./tests/fixtures/scenarios/complete
   components:
     terraform:
       base_path: components/terraform
@@ -215,10 +220,10 @@ backend_type: s3
 command: terraform
 component: test/test-component
 component_info:
-  component_path: examples/tests/components/terraform/test/test-component
+  component_path: tests/fixtures/scenarios/complete/components/terraform/test/test-component
   component_type: terraform
   terraform_config:
-    path: examples/tests/components/terraform/test/test-component
+    path: tests/fixtures/scenarios/complete/components/terraform/test/test-component
     variables:
       enabled:
         name: enabled
@@ -228,7 +233,7 @@ component_info:
         required: false
         sensitive: false
         pos:
-          filename: examples/tests/components/terraform/test/test-component/context.tf
+          filename: tests/fixtures/scenarios/complete/components/terraform/test/test-component/context.tf
           line: 97
       name:
         name: name
@@ -241,7 +246,7 @@ component_info:
         required: false
         sensitive: false
         pos:
-          filename: examples/tests/components/terraform/test/test-component/context.tf
+          filename: tests/fixtures/scenarios/complete/components/terraform/test/test-component/context.tf
           line: 127
       service_1_name:
         name: service_1_name
@@ -251,7 +256,7 @@ component_info:
         required: true
         sensitive: false
         pos:
-          filename: examples/tests/components/terraform/test/test-component/variables.tf
+          filename: tests/fixtures/scenarios/complete/components/terraform/test/test-component/variables.tf
           line: 6
     outputs:
       service_1_id:
@@ -259,14 +264,14 @@ component_info:
         description: Service 1 ID
         sensitive: false
         pos:
-          filename: examples/tests/components/terraform/test/test-component/outputs.tf
+          filename: tests/fixtures/scenarios/complete/components/terraform/test/test-component/outputs.tf
           line: 1
       service_2_id:
         name: service_2_id
         description: Service 2 ID
         sensitive: false
         pos:
-          filename: examples/tests/components/terraform/test/test-component/outputs.tf
+          filename: tests/fixtures/scenarios/complete/components/terraform/test/test-component/outputs.tf
           line: 6
     modulecalls:
       service_1_label:
@@ -274,7 +279,7 @@ component_info:
         source: cloudposse/label/null
         version: 0.25.0
         pos:
-          filename: examples/tests/components/terraform/test/test-component/main.tf
+          filename: tests/fixtures/scenarios/complete/components/terraform/test/test-component/main.tf
           line: 1
     diagnostics: []
 deps:

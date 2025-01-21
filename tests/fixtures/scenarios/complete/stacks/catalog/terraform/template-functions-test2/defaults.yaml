@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    template-functions-test2:
+      metadata:
+        # Point to the Terraform component
+        component: "test/template-functions-test2"
+        terraform_workspace: '{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-test'
+      settings:
+        spacelift:
+          workspace_enabled: false
+      vars:
+        enabled: true
+        name: "test2"
+        # Examples of using Atmos template functions to get the outputs of another Atmos component
+        test_1: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+        test_2: '{{ (atmos.Component "template-functions-test" .stack).outputs.test_label_id }}'
+        test_3: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_4: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map }}'
+        test_4b: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map.b }}'
+        test_4c: !template '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map.c }}'
+        test_5: '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_10: !terraform.output template-functions-test {{ .stack }} test_label_id
+        test_11: !terraform.output template-functions-test {{ .stack }} test_label_id
+        test_12: !terraform.output template-functions-test {{ .stack }} test_list
+        test_13: !terraform.output template-functions-test {{ .stack }} test_map
+        test_17: !template '{{ .stack }}'
+        test_18: !template '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_list }}'
+        test_19: !template '{{ toJson (atmos.Component "template-functions-test" .stack).outputs.test_map }}'
+        test_20: !exec echo 42
+        test_21: !exec echo 43
+        test_30: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_label_id
+        test_31: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_map
+        test_32: !exec atmos terraform output template-functions-test -s {{ .stack }} --skip-init -- -json test_list
+        # Call the `!terraform.output` function with two parameters
+        test_40: !terraform.output template-functions-test test_label_id
+        test_41: !terraform.output template-functions-test test_list
+        test_42: !terraform.output template-functions-test test_map
+        # Component `template-functions-test3` is configured with the remote state backend of type `static`
+        test_50: !terraform.output template-functions-test3 val1
+        test_51: !terraform.output template-functions-test3 {{ .stack }} val1
+        test_52: !terraform.output template-functions-test3 val2
+        test_53: !terraform.output template-functions-test3 val3
+        test_54: !terraform.output template-functions-test3 val4
+        test_55: !terraform.output template-functions-test3 val5
+        test_56: !terraform.output template-functions-test3 val5[0]
+        test_56b: !terraform.output template-functions-test3 .val5[0]
+        test_57: !terraform.output template-functions-test3 val6
+        test_58: !terraform.output template-functions-test3 val6.i1
+        test_58b: !terraform.output template-functions-test3 .val6.i1
+        # test_59: !terraform.output does_not_exist val6
+        # test_60: !terraform.output template-functions-test3 invalid-val
+        test70: !include ./dev.yaml
+        test71: !include ./dev.yaml .components.terraform.vpc.vars
+        test72: !include ./dev.yaml .components.terraform.vpc.vars.ipv4_primary_cidr_block
+        test73: !include stacks/catalog/vpc/ue2.yaml
+        test74: !include stacks/catalog/vpc/ue2.yaml .import
+        test75: !include stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones
+        test76: !include 'stacks/catalog/vpc/ue2.yaml .components.terraform.vpc.vars.availability_zones[2]'
+        test77: !include a.txt
+        test78: !include '"b c.txt" ".[1]"'
+        test79: !include a.hcl
+        # test80: !env USER
+        test81: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/catalog/vpc-flow-logs-bucket/defaults.yaml
+        test82: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        test83: !include https://api.github.com/meta .api

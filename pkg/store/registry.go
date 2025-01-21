@@ -8,6 +8,18 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 	registry := make(StoreRegistry)
 	for key, storeConfig := range *config {
 		switch storeConfig.Type {
+		case "artifactory":
+			var opts ArtifactoryStoreOptions
+			if err := parseOptions(storeConfig.Options, &opts); err != nil {
+				return nil, fmt.Errorf("failed to parse Artifactory store options: %w", err)
+			}
+
+			store, err := NewArtifactoryStore(opts)
+			if err != nil {
+				return nil, err
+			}
+			registry[key] = store
+
 		case "aws-ssm-parameter-store":
 			var opts SSMStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
@@ -21,7 +33,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			registry[key] = store
 
 		case "in-memory":
-			store, err := NewInMemoryStore(storeConfig.Options)
+			store, err := NewInMemoryStore()
 			if err != nil {
 				return nil, err
 			}

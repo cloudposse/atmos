@@ -11,10 +11,13 @@ import (
 // vendorDiffCmd executes 'vendor diff' CLI commands
 var vendorDiffCmd = &cobra.Command{
 	Use:                "diff",
-	Short:              "Execute 'vendor diff' commands",
-	Long:               `This command executes 'atmos vendor diff' CLI commands`,
+	Short:              "Show differences in vendor configurations or dependencies",
+	Long:               "This command compares and displays the differences in vendor-specific configurations or dependencies.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args)
+		// TODO: There was no documentation here:https://atmos.tools/cli/commands/vendor we need to know what this command requires to check if we should add usage help
+
 		// Check Atmos configuration
 		checkAtmosConfig()
 
