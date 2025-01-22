@@ -169,14 +169,13 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 		UsageTemplate: GenerateFromBaseTemplate([]HelpTemplateSections{
 			Usage,
 			Aliases,
-			Examples,
 			AvailableCommands,
 			NativeCommands,
 			SubCommandAliases,
 			Flags,
 			GlobalFlags,
 			AdditionalHelpTopics,
-			DoubleDashHelp,
+			Examples,
 			Footer,
 		}),
 	}

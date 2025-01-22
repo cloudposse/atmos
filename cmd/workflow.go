@@ -34,7 +34,12 @@ func renderError(msg ErrorMessage) error {
 	}
 
 	termWriter := termwriter.NewResponsiveWriter(os.Stdout)
-	screenWidth := termWriter.(*termwriter.TerminalWriter).GetWidth()
+	var wr *termwriter.TerminalWriter
+	var ok bool
+	if wr, ok = termWriter.(*termwriter.TerminalWriter); !ok {
+		return fmt.Errorf("unsupported output")
+	}
+	screenWidth := wr.GetWidth()
 
 	if atmosConfig.Settings.Docs.MaxWidth > 0 {
 		screenWidth = uint(min(atmosConfig.Settings.Docs.MaxWidth, int(screenWidth)))

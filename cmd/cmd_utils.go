@@ -553,11 +553,17 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 	}
 }
 
+// showUsageAndExit we display the markdown usage or fallback to our custom usage
+// Markdown usage is not compatible with all outputs. We should therefore have fallback option.
 func showUsageAndExit(cmd *cobra.Command, args []string) {
+	if len(args) == 0 {
+		showErrorExampleFromMarkdown(cmd.CommandPath(), "")
+	}
 	var suggestions []string
 	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
 
 	if len(args) > 0 {
+		showErrorExampleFromMarkdown(cmd.CommandPath(), args[0])
 		suggestions = cmd.SuggestionsFor(args[0])
 		unknownCommand = fmt.Sprintf("Error: Unknown command %q for %q\n\n", args[0], cmd.CommandPath())
 	}
@@ -613,11 +619,4 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 	return info
-}
-
-func getDoubleDashExample(commandPath string) string {
-	return fmt.Sprintf(`%s <component> -s <stack> -- <native-flags>
-
-The '--' (double-dash) can be used to signify the end of Atmos-specific options 
-and the beginning of additional native arguments and flags for the specific command being run.`, commandPath)
 }

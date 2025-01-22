@@ -218,3 +218,23 @@ func initCobraConfig() {
 // https://pkg.go.dev/github.com/c-bata/go-prompt
 // https://pkg.go.dev/github.com/spf13/cobra
 // https://scene-si.org/2017/04/20/managing-configuration-with-viper/
+
+func showErrorExampleFromMarkdown(commandPath string, arg string) {
+	contentName := strings.ReplaceAll(commandPath, " ", "_")
+	if exampleContent, ok := examples[contentName]; ok {
+		details := fmt.Sprintf("The command `%s` is not valid\n\n%s", commandPath, exampleContent.Content)
+
+		if len(arg) > 0 {
+			details = fmt.Sprintf("The command `%s` is not valid\n\n%s", commandPath+" "+arg, exampleContent.Content)
+		}
+
+		if err := renderError(ErrorMessage{
+			Title:      "Invalid Command",
+			Details:    details,
+			Suggestion: exampleContent.Suggestion,
+		}); err != nil {
+			return
+		}
+		os.Exit(1)
+	}
+}

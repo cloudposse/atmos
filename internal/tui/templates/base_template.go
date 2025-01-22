@@ -46,7 +46,7 @@ func getSection(section HelpTemplateSections) string {
 	case SubCommandAliases:
 		return `{{if (isAliasesPresent .Commands)}}
 
-{{HeadingStyle "SubCommand Aliases:"}}
+{{HeadingStyle "Subcommand Aliases:"}}
 
 {{formatCommands .Commands "subcommandAliases"}}{{end}}`
 	case AvailableCommands:
