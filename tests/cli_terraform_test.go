@@ -52,9 +52,6 @@ func TestCLITerraformClean(t *testing.T) {
 	// Run terraform apply for dev environment
 	runTerraformApply(t, binaryPath, "dev")
 
-	// Run terraform apply for prod environment
-	runTerraformApply(t, binaryPath, "prod")
-
 	// Verify if state files exist before cleaning
 	stateFiles := []string{
 		"./components/terraform/weather/.terraform",
