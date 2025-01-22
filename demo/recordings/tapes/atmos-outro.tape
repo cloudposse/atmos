@@ -1,5 +1,5 @@
 Source demo/defaults.tape
-Source demo/recordings/style.tape
+Source demo/recordings/styles/defaults.tape
 
 Type "# Check out the docs at https://atmos.tools/" Sleep 500ms Enter
 Sleep 2s

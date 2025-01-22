@@ -90,7 +90,8 @@ jobs:
   vhs:
     needs: [prepare]
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    # Longer timeouts typically indicate VHS has hung
+    timeout-minutes: 20
     environment: demo
     env:
       AWS_REGION: us-east-2

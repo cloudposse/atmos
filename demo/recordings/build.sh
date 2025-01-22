@@ -39,29 +39,34 @@ for tape in "${TAPEFILES[@]}"; do
   base="$(basename "$tape" .tape)"
   output_file="$MP4_OUTDIR/$base.mp4"
 
-   # Run the vhs command in the background
-    (cd "$REPO_ROOT" && timeout 600 vhs "$tape" --output "$output_file") &
+	# Skip processing if output file exists and is newer than the input file
+  if [[ -f "$output_file" && "$output_file" -nt "$tape" ]]; then
+    echo "Skipping $tape as $output_file is up-to-date."
+    continue
+  fi
 
-    # Get the PID of the background process
-    VHS_PID=$!
+  # Run the vhs command in the background
+  (cd "$REPO_ROOT" && timeout 600 vhs "$tape" --output "$output_file") &
 
-    echo "   VHS is running with PID $VHS_PID. Monitoring..."
+  # Get the PID of the background process
+  VHS_PID=$!
 
-    # Monitor the process
-    while kill -0 "$VHS_PID" 2>/dev/null; do
-        echo "   VHS is still running..."
-				#ps -uxaww
-        sleep 5
-    done
+  echo "📼 VHS is running with PID $VHS_PID. Monitoring..."
+
+  # Monitor the process
+  while kill -0 "$VHS_PID" 2>/dev/null; do
+    echo "⏳ VHS is still running..."
+    sleep 5
+  done
 
     # Check exit status of the process
-    wait "$VHS_PID"
-    EXIT_CODE=$?
-    if [ "$EXIT_CODE" -eq 0 ]; then
-        echo "   Processing completed successfully for $tape."
-    else
-        echo "   VHS encountered an error (exit code: $EXIT_CODE) for $tape."
-    fi
+  wait "$VHS_PID"
+  EXIT_CODE=$?
+  if [ "$EXIT_CODE" -eq 0 ]; then
+      echo "✅ Processing completed successfully for $tape."
+  else
+      echo "❌ VHS encountered an error (exit code: $EXIT_CODE) for $tape."
+  fi
 done
 
 # 2) Process scenes/*.txt

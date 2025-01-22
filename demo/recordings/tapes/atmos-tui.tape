@@ -1,5 +1,6 @@
 Source demo/defaults.tape
-Source demo/recordings/style.tape
+Source demo/recordings/styles/defaults.tape
+Source demo/recordings/styles/quick-start-advanced.tape
 
 Type "# In Atmos you can easily explore components, stacks, and run commands..." Sleep 500ms Enter
 Type "atmos" Sleep 500ms Enter

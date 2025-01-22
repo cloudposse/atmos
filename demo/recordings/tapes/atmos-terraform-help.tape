@@ -1,5 +1,5 @@
 Source demo/defaults.tape
-Source demo/recordings/style.tape
+Source demo/recordings/styles/defaults.tape
 
 Type "# Atmos has native workflows for Terraform" Sleep 500ms Enter
 Type "atmos terraform --help" Sleep 500ms Enter

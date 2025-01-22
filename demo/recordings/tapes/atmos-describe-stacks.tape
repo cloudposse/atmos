@@ -1,5 +1,6 @@
 Source demo/defaults.tape
-Source demo/recordings/style.tape
+Source demo/recordings/styles/defaults.tape
+Source demo/recordings/styles/quick-start-advanced.tape
 
 Type "# Let's review the production VPC configuration in the us-east-2 region..." Sleep 500ms Enter
 Type "atmos describe stacks --components=vpc --stack=plat-ue2-prod --sections=vars" Sleep 500ms Enter

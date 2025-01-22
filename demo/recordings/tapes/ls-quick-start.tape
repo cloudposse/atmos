@@ -1,10 +1,6 @@
 Source demo/defaults.tape
-Source demo/recordings/style.tape
-
-#Hide
-#Type "cd ../../" Sleep 500ms Enter
-#Type "clear" Enter Sleep 500ms
-#Show
+Source demo/recordings/styles/defaults.tape
+Source demo/recordings/styles/repo-root.tape
 
 Type "# Now let's explore the Quick Start example" Sleep 500ms Enter
 Type "cd examples/quick-start-advanced" Sleep 500ms Enter

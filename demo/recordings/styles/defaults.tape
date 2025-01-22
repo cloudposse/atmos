@@ -12,6 +12,5 @@ Set PlaybackSpeed 3
 
 Hide
 Type "alias ls='ls --color=force'" Enter Sleep 500ms
-Type "cd examples/quick-start-advanced" Sleep 500ms Enter
 Type "clear" Enter Sleep 500ms
 Show

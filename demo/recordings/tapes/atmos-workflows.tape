@@ -1,5 +1,6 @@
 Source demo/defaults.tape
-Source demo/recordings/style.tape
+Source demo/recordings/styles/defaults.tape
+Source demo/recordings/styles/quick-start-advanced.tape
 
 Type "# In Atmos you can easily explore workflows and execute workflow commands..." Sleep 500ms Enter
 Type "atmos workflow" Sleep 500ms Enter
