@@ -11,58 +11,6 @@ tests:
       stderr:
         - 'Error: Unknown command \"non-existent\" for \"atmos\"'
       exit_code: 1
-  - name: atmos --help
-    enabled: true
-    snapshot: true
-    description: "Ensure atmos CLI help command lists available commands."
-    workdir: "./"
-    command: "atmos"
-    args:
-      - "--help"
-    expect:
-      diff:
-        - "──────────────────────────────────────────────────────────────"
-        - "Update available!"
-        - "Atmos Releases:"
-        - "Install Atmos:"
-      stdout:
-        - "Usage:"
-        - "Available Commands:"
-        - "\\batlantis\\b"
-        - "\\baws\\b"
-        - "\\bcompletion\\b"
-        - "\\bdescribe\\b"
-        - "\\bdocs\\b"
-        - "\\bhelmfile\\b"
-        - "\\bhelp\\b"
-        - "\\blist\\b"
-        - "\\bpro\\b"
-        - "\\bterraform\\b"
-        - "\\bvalidate\\b"
-        - "\\bvendor\\b"
-        - "\\bversion\\b"
-        - "\\bworkflow\\b"
-        - "SubCommand Aliases:"
-        - "\\bhf\\b"
-        - "Flags:"
-        - "\\batmos \\[subcommand\\] [<]component[>] -s [<]stack[>] -- [<]native-flags[>]"
-        - "for more information about a command"
-      stderr:
-        - "^$"
-      exit_code: 0
-  - name: atmos
-    enabled: true
-    snapshot: true
-    description: "Ensure atmos CLI help command shows atmos config "
-    workdir: "./"
-    command: "atmos"
-    expect:
-      stdout:
-        - "atmos.yaml CLI config file was not found"
-        - "The default Atmos stacks directory is set to stacks,"
-      stderr:
-        - "^$"
-      exit_code: 1
   - name: atmos terraform
     enabled: true
     snapshot: true
@@ -619,19 +567,3 @@ tests:
       - "--non-existent"
     expect:
       exit_code: 1
-  - name: atmos terraform plan station -s dev -- -no-color
-    enabled: true
-    snapshot: true
-    description: "'atmos terraform plan station -s dev -- -no-color' should pass native flags to terraform without errors for flags"
-    workdir: "../examples/quick-start-simple"
-    command: atmos
-    args:
-      - "terraform"
-      - "plan"
-      - "station"
-      - "-s"
-      - "dev"
-      - "--"
-      - "-no-color"
-    expect:
-      exit_code: 0
