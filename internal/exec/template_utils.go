@@ -237,9 +237,9 @@ func ProcessTmplWithDatasourcesGomplate(
 		os.Setenv("GOMPLATE_MISSINGKEY", "default")
 		defer os.Unsetenv("GOMPLATE_MISSINGKEY")
 	}
-
 	// 1) Write the 'inner' data
 	rawJSON, err := json.Marshal(mergedData)
+
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal merged data to JSON: %w", err)
 	}

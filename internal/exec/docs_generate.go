@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
@@ -40,7 +41,6 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -89,16 +89,20 @@ func generateAllReadmes(atmosConfig schema.AtmosConfiguration, baseDir string, d
 
 func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerate) error {
 	// 1) Merge data from all YAML inputs
-	mergedData := map[string]interface{}{}
+	var allMaps []map[string]any
 	for _, src := range docsGenerate.Input {
 		dataMap, err := fetchAndParseYAML(atmosConfig, src, dir)
 		if err != nil {
 			u.LogTrace(atmosConfig, fmt.Sprintf("Skipping input '%s' due to error: %v", src, err))
 			continue
 		}
-		mergedData = deepMerge(mergedData, dataMap)
+		allMaps = append(allMaps, dataMap)
 	}
-
+	// Use the native Atmos merging:
+	mergedData, err := merge.Merge(atmosConfig, allMaps)
+	if err != nil {
+		return fmt.Errorf("failed to merge input YAMLs: %w", err)
+	}
 	// 2) Generate terraform docs if configured
 	if docsGenerate.Terraform.Enabled {
 		terraformDocs, err := runTerraformDocs(dir, docsGenerate.Terraform)
@@ -274,28 +278,6 @@ func isLikelyRemote(s string) bool {
 		}
 	}
 	return false
-}
-
-// to be replaced with native Atmos merging
-func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
-	out := make(map[string]interface{}, len(dst))
-	for k, v := range dst {
-		out[k] = v
-	}
-	for k, v := range src {
-		if existing, ok := out[k]; ok {
-			existingMap, eOk := existing.(map[string]interface{})
-			incomingMap, iOk := v.(map[string]interface{})
-			if eOk && iOk {
-				out[k] = deepMerge(existingMap, incomingMap)
-			} else {
-				out[k] = v
-			}
-		} else {
-			out[k] = v
-		}
-	}
-	return out
 }
 
 func fileExists(path string) bool {
