@@ -363,7 +363,10 @@ func ExecuteAtmosVendorInternal(
 			return err
 		}
 
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(&uri, vendorConfigFilePath)
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
+		if err != nil {
+			return err
+		}
 		if !useLocalFileSystem {
 			err = ValidateURI(uri)
 			if err != nil {
@@ -510,7 +513,7 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool) {
+func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
 	// Determine if the URI is an OCI scheme, a local file, or remote
 	useOciScheme := strings.HasPrefix(*uri, "oci://")
 	if useOciScheme {
@@ -520,16 +523,22 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
 	if !useOciScheme {
-		if absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri); err == nil {
+		absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri)
+		// if URI contain path traversal is path should be resolved
+		if err != nil && strings.Contains(*uri, "..") {
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
+		}
+		if err == nil {
 			uri = &absPath
 			useLocalFileSystem = true
 			sourceIsLocalFile = u.FileExists(*uri)
 		}
+
 		parsedURL, err := url.Parse(*uri)
 		if err != nil {
-			return useOciScheme, useLocalFileSystem, sourceIsLocalFile
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, err
 		}
-		if parsedURL.Scheme != "" {
+		if err == nil && parsedURL.Scheme != "" {
 			if parsedURL.Scheme == "file" {
 				trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
 				*uri = filepath.Clean(trimmedPath)
@@ -539,7 +548,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 
 	}
 
-	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
+	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
 func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {

@@ -42,9 +42,9 @@ spec:
       targets:
         - "components/terraform/infra/my-vpc1"
     - component: "vpc-src"
-      source: "../../demo-library/weather" # required for test URI contain path traversal
+      source: "../../../fixtures" # required for test URI contain path traversal
       targets:
-        - "components/terraform/vpc-src"
+        - "components/terraform/myapp"
       included_paths:
         - "**/*.tf"
         - "**/*.md"
