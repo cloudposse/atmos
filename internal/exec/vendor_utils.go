@@ -526,7 +526,10 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 			sourceIsLocalFile = u.FileExists(*uri)
 		}
 		parsedURL, err := url.Parse(*uri)
-		if err == nil && parsedURL.Scheme != "" {
+		if err != nil {
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile
+		}
+		if parsedURL.Scheme != "" {
 			if parsedURL.Scheme == "file" {
 				trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
 				*uri = filepath.Clean(trimmedPath)

@@ -162,7 +162,7 @@ tests:
   - name: atmos_vendor_pull
     enabled: true
     description: "Ensure atmos vendor pull command executes without errors and files are present."
-    workdir: "../examples/tests/test-vendor/"
+    workdir: "fixtures/scenarios/vendor"
     command: "atmos"
     args:
       - "vendor"
