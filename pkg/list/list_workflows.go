@@ -11,11 +11,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/samber/lo"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
 )
 
@@ -102,27 +102,55 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 		}
 		rows = append(rows, manifestRows...)
 	} else {
-		// Use example data for empty fileFlag
-		manifest := schema.WorkflowManifest{
-			Name: "example",
-			Workflows: schema.WorkflowConfig{
-				"test-1": schema.WorkflowDefinition{
-					Description: "Test workflow",
-					Steps: []schema.WorkflowStep{
-						{Command: "echo Command 1", Name: "step1", Type: "shell"},
-						{Command: "echo Command 2", Name: "step2", Type: "shell"},
-						{Command: "echo Command 3", Name: "step3", Type: "shell"},
-						{Command: "echo Command 4", Type: "shell"},
-					},
-				},
-			},
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+		if err != nil {
+			return "", fmt.Errorf("error initializing CLI config: %w", err)
 		}
 
-		manifestRows, err := getWorkflowsFromManifest(manifest)
-		if err != nil {
-			return "", fmt.Errorf("error processing manifest: %w", err)
+		// Get the workflows directory
+		var workflowsDir string
+		if utils.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
+			workflowsDir = atmosConfig.Workflows.BasePath
+		} else {
+			workflowsDir = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
 		}
-		rows = append(rows, manifestRows...)
+
+		isDirectory, err := utils.IsDirectory(workflowsDir)
+		if err != nil || !isDirectory {
+			return "", fmt.Errorf("the workflow directory '%s' does not exist. Review 'workflows.base_path' in 'atmos.yaml'", workflowsDir)
+		}
+
+		files, err := utils.GetAllYamlFilesInDir(workflowsDir)
+		if err != nil {
+			return "", fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %v",
+				atmosConfig.Workflows.BasePath, err)
+		}
+
+		for _, f := range files {
+			var workflowPath string
+			if utils.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
+				workflowPath = filepath.Join(atmosConfig.Workflows.BasePath, f)
+			} else {
+				workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, f)
+			}
+
+			fileContent, err := os.ReadFile(workflowPath)
+			if err != nil {
+				return "", err
+			}
+
+			var manifest schema.WorkflowManifest
+			if err := yaml.Unmarshal(fileContent, &manifest); err != nil {
+				return "", fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
+			}
+
+			manifestRows, err := getWorkflowsFromManifest(manifest)
+			if err != nil {
+				return "", fmt.Errorf("error processing manifest: %w", err)
+			}
+			rows = append(rows, manifestRows...)
+		}
 	}
 
 	// Remove duplicates and sort

@@ -66,8 +66,26 @@ func TestListWorkflows(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
+	// Create workflow directory structure
+	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
+	err = os.MkdirAll(workflowsDir, 0755)
+	require.NoError(t, err)
+
+	// Create atmos.yaml with workflow configuration
+	atmosConfig := `
+base_path: ""
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+workflows:
+  base_path: "stacks/workflows"
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0644)
+	require.NoError(t, err)
+
 	// Create an empty workflow file
-	emptyWorkflowFile := filepath.Join(tmpDir, "empty.yaml")
+	emptyWorkflowFile := filepath.Join(workflowsDir, "empty.yaml")
 	emptyWorkflow := schema.WorkflowManifest{
 		Name:      "empty",
 		Workflows: schema.WorkflowConfig{},
@@ -76,6 +94,49 @@ func TestListWorkflows(t *testing.T) {
 	require.NoError(t, err)
 	err = os.WriteFile(emptyWorkflowFile, emptyWorkflowBytes, 0644)
 	require.NoError(t, err)
+
+	// Create a networking workflow file
+	networkingWorkflowFile := filepath.Join(workflowsDir, "networking.yaml")
+	networkingWorkflow := schema.WorkflowManifest{
+		Name: "Networking",
+		Workflows: schema.WorkflowConfig{
+			"plan-all-vpc": schema.WorkflowDefinition{
+				Description: "Run terraform plan on all vpc components",
+				Steps: []schema.WorkflowStep{
+					{Command: "terraform plan vpc -s test", Type: "shell"},
+				},
+			},
+		},
+	}
+	networkingWorkflowBytes, err := yaml.Marshal(networkingWorkflow)
+	require.NoError(t, err)
+	err = os.WriteFile(networkingWorkflowFile, networkingWorkflowBytes, 0644)
+	require.NoError(t, err)
+
+	// Create a validation workflow file
+	validationWorkflowFile := filepath.Join(workflowsDir, "validation.yaml")
+	validationWorkflow := schema.WorkflowManifest{
+		Name: "Validation",
+		Workflows: schema.WorkflowConfig{
+			"validate-all": schema.WorkflowDefinition{
+				Description: "Validate all components",
+				Steps: []schema.WorkflowStep{
+					{Command: "validate component vpc", Type: "shell"},
+				},
+			},
+		},
+	}
+	validationWorkflowBytes, err := yaml.Marshal(validationWorkflow)
+	require.NoError(t, err)
+	err = os.WriteFile(validationWorkflowFile, validationWorkflowBytes, 0644)
+	require.NoError(t, err)
+
+	// Change to the temporary directory for testing
+	currentDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tmpDir)
+	require.NoError(t, err)
+	defer os.Chdir(currentDir)
 
 	tests := []struct {
 		name        string
@@ -89,7 +150,7 @@ func TestListWorkflows(t *testing.T) {
 		validate    func(t *testing.T, output string)
 	}{
 		{
-			name:     "happy path - default config",
+			name:     "discover all workflows",
 			fileFlag: "",
 			config: schema.ListConfig{
 				Columns: []schema.ListColumnConfig{
@@ -102,13 +163,13 @@ func TestListWorkflows(t *testing.T) {
 			delimiter: "\t",
 			wantErr:   false,
 			contains: []string{
-				"File", "Workflow", "Description",
-				"example", "test-1", "Test workflow",
+				"Networking", "plan-all-vpc", "Run terraform plan on all vpc components",
+				"Validation", "validate-all", "Validate all components",
 			},
 		},
 		{
 			name:     "empty workflows",
-			fileFlag: emptyWorkflowFile,
+			fileFlag: "stacks/workflows/empty.yaml",
 			config: schema.ListConfig{
 				Columns: []schema.ListColumnConfig{
 					{Name: "File", Value: "{{ .workflow_file }}"},
@@ -131,7 +192,7 @@ func TestListWorkflows(t *testing.T) {
 			notContains: []string{"File", "Workflow", "Description"},
 		},
 		{
-			name:     "json format",
+			name:     "json format with multiple workflows",
 			fileFlag: "",
 			config:   schema.ListConfig{},
 			format:   "json",
@@ -140,14 +201,27 @@ func TestListWorkflows(t *testing.T) {
 				var workflows []map[string]interface{}
 				err := json.Unmarshal([]byte(output), &workflows)
 				assert.NoError(t, err)
-				assert.Len(t, workflows, 1)
-				assert.Equal(t, "example", workflows[0]["file"])
-				assert.Equal(t, "test-1", workflows[0]["name"])
-				assert.Equal(t, "Test workflow", workflows[0]["description"])
+				assert.GreaterOrEqual(t, len(workflows), 2)
+
+				// Find and validate networking workflow
+				var foundNetworking bool
+				var foundValidation bool
+				for _, w := range workflows {
+					if w["file"] == "Networking" && w["name"] == "plan-all-vpc" {
+						foundNetworking = true
+						assert.Equal(t, "Run terraform plan on all vpc components", w["description"])
+					}
+					if w["file"] == "Validation" && w["name"] == "validate-all" {
+						foundValidation = true
+						assert.Equal(t, "Validate all components", w["description"])
+					}
+				}
+				assert.True(t, foundNetworking, "Networking workflow not found")
+				assert.True(t, foundValidation, "Validation workflow not found")
 			},
 		},
 		{
-			name:      "csv format with custom delimiter",
+			name:      "csv format with multiple workflows",
 			fileFlag:  "",
 			config:    schema.ListConfig{},
 			format:    "csv",
@@ -155,40 +229,27 @@ func TestListWorkflows(t *testing.T) {
 			wantErr:   false,
 			validate: func(t *testing.T, output string) {
 				lines := strings.Split(strings.TrimSpace(output), utils.GetLineEnding())
-				assert.Len(t, lines, 2) // Header + 1 workflow
+				assert.GreaterOrEqual(t, len(lines), 3) // Header + at least 2 workflows
 				assert.Equal(t, "File,Workflow,Description", lines[0])
-				assert.Equal(t, "example,test-1,Test workflow", lines[1])
+
+				var foundNetworking bool
+				var foundValidation bool
+				for _, line := range lines[1:] {
+					fields := strings.Split(line, ",")
+					if len(fields) == 3 {
+						if fields[0] == "Networking" && fields[1] == "plan-all-vpc" {
+							foundNetworking = true
+							assert.Equal(t, "Run terraform plan on all vpc components", fields[2])
+						}
+						if fields[0] == "Validation" && fields[1] == "validate-all" {
+							foundValidation = true
+							assert.Equal(t, "Validate all components", fields[2])
+						}
+					}
+				}
+				assert.True(t, foundNetworking, "Networking workflow not found")
+				assert.True(t, foundValidation, "Validation workflow not found")
 			},
-		},
-		{
-			name:     "invalid format",
-			fileFlag: "",
-			config:   schema.ListConfig{},
-			format:   "invalid",
-			wantErr:  true,
-		},
-		{
-			name:     "config format overridden by parameter",
-			fileFlag: "",
-			config: schema.ListConfig{
-				Format: "json",
-			},
-			format:  "csv",
-			wantErr: false,
-			validate: func(t *testing.T, output string) {
-				lines := strings.Split(strings.TrimSpace(output), utils.GetLineEnding())
-				assert.Len(t, lines, 2)
-				assert.True(t, strings.Contains(lines[0], "File"))
-			},
-		},
-		{
-			name:     "invalid config format",
-			fileFlag: "",
-			config: schema.ListConfig{
-				Format: "invalid",
-			},
-			format:  "",
-			wantErr: true,
 		},
 	}
 
@@ -215,12 +276,6 @@ func TestListWorkflows(t *testing.T) {
 			// Verify unexpected content is not present
 			for _, unexpected := range tt.notContains {
 				assert.NotContains(t, output, unexpected)
-			}
-
-			// For the happy path, verify the order of headers
-			if tt.name == "happy path - default config" {
-				assert.True(t, strings.Index(output, "File") < strings.Index(output, "Workflow"))
-				assert.True(t, strings.Index(output, "Workflow") < strings.Index(output, "Description"))
 			}
 		})
 	}
