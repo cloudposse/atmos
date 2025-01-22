@@ -207,7 +207,14 @@ func ProcessCommandLineArgs(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-
+	configAndStacksInfo.BasePathFromArg, err = cmd.Flags().GetString("base-path")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.AtmosConfigPathFromArg, err = cmd.Flags().GetStringSlice("config")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
 		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
@@ -778,7 +785,6 @@ func processArgsAndFlags(
 			}
 			info.ConfigDir = configDirFlagParts[1]
 		}
-
 		if arg == cfg.StackDirFlag {
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)

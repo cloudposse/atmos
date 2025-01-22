@@ -44,6 +44,7 @@ var embeddedConfigData []byte
 
 // LoadConfig initiates the configuration loading process based on the defined flowchart.
 func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+
 	logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
 	if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace {
 		cl.debug = true
@@ -71,25 +72,23 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 	}
 
 	// Check if --config is provided via cmd args os.args
-	if os.Args != nil {
-		if u.SliceContainsString(os.Args, "--config") {
-			if err := cl.loadExplicitConfigs(); err != nil {
-				return cl.atmosConfig, err
-			}
-			err = cl.deepMergeConfig()
-			if err != nil {
-				return cl.atmosConfig, err
-			}
-			if err := cl.processConfigImports(); err != nil {
-				cl.logging(err.Error())
-			}
-			err = cl.deepMergeConfig()
-			if err != nil {
-				return cl.atmosConfig, err
-			}
+	if configAndStacksInfo.AtmosConfigPathFromArg != nil {
+		if err := cl.loadExplicitConfigs(configAndStacksInfo.AtmosConfigPathFromArg); err != nil {
 			return cl.atmosConfig, err
-
 		}
+		err = cl.deepMergeConfig()
+		if err != nil {
+			return cl.atmosConfig, err
+		}
+		if err := cl.processConfigImports(); err != nil {
+			cl.logging(err.Error())
+		}
+		err = cl.deepMergeConfig()
+		if err != nil {
+			return cl.atmosConfig, err
+		}
+		return cl.atmosConfig, err
+
 	}
 
 	if !cl.configFound {
@@ -169,60 +168,53 @@ func (cl *ConfigLoader) deepMergeConfig() error {
 }
 
 // loadExplicitConfigs handles the loading of configurations provided via --config.
-func (cl *ConfigLoader) loadExplicitConfigs() error {
-	if os.Args != nil {
-		//get all --config values from command line arguments
-		args := os.Args
-		var configPaths []string
-		for i, arg := range args {
-			if arg == "--config" {
-				if i+1 < len(args) {
-					configPath, err := filepath.Abs(args[i+1])
-					if err != nil {
-						return fmt.Errorf("failed to convert config path to absolute path: %w", err)
-					}
-					configPath = filepath.ToSlash(configPath)
-					// check path exist
-					info, err := os.Stat(configPath)
-					if err != nil && err == os.ErrNotExist {
-						return fmt.Errorf("config file %s does not exist", configPath)
-					}
-					if err != nil {
-						return err
-					}
-					if info.IsDir() {
-						paths, err := cl.SearchAtmosConfigFileDir(configPath)
-						if err != nil {
-							cl.logging(fmt.Sprintf("Failed to find config file in directory '%s'.", configPath))
-							continue
-						}
-						configPaths = append(configPaths, paths...)
-
-					} else {
-						path, exist := cl.SearchConfigFilePath(configPath)
-						if !exist {
-							cl.logging(fmt.Sprintf("Failed to find config file in path '%s'.", configPath))
-							continue
-						}
-						configPaths = append(configPaths, path)
-					}
-
-				} else {
-					return fmt.Errorf("--config flag provided without a value.")
-				}
-
-			}
-		}
-		if configPaths == nil {
-			return fmt.Errorf("--config flag provided without a value.")
-		}
-		err := cl.MergePathsViber(configPaths)
+func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
+	if configPathsArgs == nil {
+		return fmt.Errorf("No config paths provided. Please provide a list of config paths using the --config flag.")
+	}
+	var configPaths []string
+	//get all --config values from command line arguments
+	for _, configPath := range configPathsArgs {
+		configPath, err := filepath.Abs(configPath)
 		if err != nil {
-			return fmt.Errorf("failed to merge explicit config files: %w", err)
+			return fmt.Errorf("failed to convert config path to absolute path: %w", err)
 		}
-		cl.atmosConfig.CliConfigPath = ConnectPaths(cl.AtmosConfigPaths)
+		configPath = filepath.ToSlash(configPath)
+		// check path exist
+		info, err := os.Stat(configPath)
+		if err != nil && err == os.ErrNotExist {
+			return fmt.Errorf("config file %s does not exist", configPath)
+		}
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			paths, err := cl.SearchAtmosConfigFileDir(configPath)
+			if err != nil {
+				cl.logging(fmt.Sprintf("Failed to find config file in directory '%s'.", configPath))
+				continue
+			}
+			configPaths = append(configPaths, paths...)
+
+		} else {
+			path, exist := cl.SearchConfigFilePath(configPath)
+			if !exist {
+				cl.logging(fmt.Sprintf("Failed to find config file in path '%s'.", configPath))
+				continue
+			}
+			configPaths = append(configPaths, path)
+		}
 
 	}
+	if configPaths == nil {
+		return fmt.Errorf("config paths can not be found. Please provide a list of config paths using the --config flag.")
+	}
+	err := cl.MergePathsViber(configPaths)
+	if err != nil {
+		return fmt.Errorf("failed to merge explicit config files: %w", err)
+	}
+	cl.atmosConfig.CliConfigPath = ConnectPaths(cl.AtmosConfigPaths)
+
 	return nil
 }
 

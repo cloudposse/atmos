@@ -292,6 +292,8 @@ type ConfigAndStacksInfo struct {
 	LogsFile                      string
 	SettingsListMergeStrategy     string
 	Query                         string
+	BasePathFromArg               string
+	AtmosConfigPathFromArg        []string
 }
 
 // Workflows

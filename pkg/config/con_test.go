@@ -110,17 +110,12 @@ func TestLoadExplicitConfigsWithValidConfigFile(t *testing.T) {
 	err := os.WriteFile(configPath, []byte("test: config"), 0644)
 	require.NoError(t, err)
 
-	// Save and restore os.Args
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-	os.Args = []string{"cmd", "--config", configPath}
-
 	cl := &ConfigLoader{
 		atmosConfig: schema.AtmosConfiguration{},
 		viper:       viper.New(),
 	}
 
-	err = cl.loadExplicitConfigs()
+	err = cl.loadExplicitConfigs([]string{configPath})
 	require.NoError(t, err)
 
 	assert.True(t, cl.configFound)
@@ -128,29 +123,8 @@ func TestLoadExplicitConfigsWithValidConfigFile(t *testing.T) {
 	assert.Contains(t, cl.AtmosConfigPaths, configPath)
 }
 
-// Handle missing --config flag value
-func TestLoadExplicitConfigsWithMissingConfigValue(t *testing.T) {
-	// Save and restore os.Args
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-	os.Args = []string{"cmd", "--config"}
-
-	cl := &ConfigLoader{
-		atmosConfig: schema.AtmosConfiguration{},
-		viper:       viper.New(),
-	}
-
-	err := cl.loadExplicitConfigs()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--config flag provided without a value")
-	assert.False(t, cl.configFound)
-	assert.Empty(t, cl.AtmosConfigPaths)
-}
-
 // Successfully load multiple config file from valid command line argument and directories
 func TestLoadExplicitConfigsWithMultipleConfigFiles(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
 	// Setup test config files
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
@@ -160,12 +134,12 @@ func TestLoadExplicitConfigsWithMultipleConfigFiles(t *testing.T) {
 	require.NoError(t, err)
 	err = os.WriteFile(configPath2, []byte("test: config2"), 0644)
 	require.NoError(t, err)
-	os.Args = []string{"cmd", "--config", configPath1, "--config", configPath2}
 	cl := &ConfigLoader{
 		atmosConfig: schema.AtmosConfiguration{},
 		viper:       viper.New(),
 	}
-	err = cl.loadExplicitConfigs()
+
+	err = cl.loadExplicitConfigs([]string{configPath1, configPath2})
 	require.NoError(t, err)
 	assert.True(t, cl.configFound)
 	paths := ConnectPaths([]string{configPath1, configPath2})
@@ -173,12 +147,11 @@ func TestLoadExplicitConfigsWithMultipleConfigFiles(t *testing.T) {
 	assert.Contains(t, cl.AtmosConfigPaths, configPath1)
 	assert.Contains(t, cl.AtmosConfigPaths, configPath2)
 	// test read from dir
-	os.Args = []string{"cmd", "--config", tmpDir}
 	cl = &ConfigLoader{
 		atmosConfig: schema.AtmosConfiguration{},
 		viper:       viper.New(),
 	}
-	err = cl.loadExplicitConfigs()
+	err = cl.loadExplicitConfigs([]string{tmpDir})
 	require.NoError(t, err)
 	assert.True(t, cl.configFound)
 	assert.Equal(t, configPath1, cl.atmosConfig.CliConfigPath)
