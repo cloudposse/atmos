@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -246,6 +247,14 @@ func ExecuteComponentVendorInternal(
 
 			if u.FileExists(uri) {
 				sourceIsLocalFile = true
+			}
+		}
+		u, err := url.Parse(uri)
+		if err == nil && u.Scheme != "" {
+			if u.Scheme == "file" {
+				trimmedPath := strings.TrimPrefix(filepath.ToSlash(u.Path), "/")
+				uri = filepath.Clean(trimmedPath)
+				useLocalFileSystem = true
 			}
 		}
 	}
