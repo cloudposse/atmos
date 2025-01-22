@@ -22,7 +22,9 @@ Examples:
       atmos docs generate components/terraform/vpc
 
   - Generate all README.md (recursively searches for README.yaml to rebuild docs):
+      ```
       atmos docs generate --all
+      ```
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return e.ExecuteDocsGenerateCmd(cmd, args)
