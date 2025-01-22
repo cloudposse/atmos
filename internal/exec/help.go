@@ -36,5 +36,6 @@ func processHelp(
 		u.PrintMessage(fmt.Sprintf("atmos %s <subcommand> <component> --stack <stack> [options]", componentType))
 		u.PrintMessage(fmt.Sprintf("\nFor more details, execute '%s --help'\n", componentType))
 	}
+
 	return nil
 }
