@@ -27,10 +27,11 @@ tests:
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
     args:
-       - "workflow"
+       - "terraform"
        - "deploy"
-       - "-f"
-       - "terraform-output"
+       - "component-4"
+       - "-s"
+       - "nonprod"
     expect:
       exit_code: 0
       stdout:

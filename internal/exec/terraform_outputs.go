@@ -229,40 +229,38 @@ func GetTerraformOutput(
 		}
 	}
 
-	var spinnerDone chan struct{}
-	var p *tea.Program
+	// Initialize spinner
+	s := spinner.New()
+	s.Style = theme.Styles.Link
 
-	// Only initialize spinner and tea program if we have TTY support
-	if CheckTTYSupport() {
-		s := spinner.New()
-		s.Style = theme.Styles.Link
-
-		p = tea.NewProgram(modelSpinner{
-			spinner: s,
-			message: message,
-		})
-
-		spinnerDone = make(chan struct{})
-		go func() {
-			if _, err := p.Run(); err != nil {
-				fmt.Println(message)
-				u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
-			}
-			close(spinnerDone)
-		}()
-	} else {
-		// Simple output for non-TTY environments
+	var opts []tea.ProgramOption
+	if !CheckTTYSupport() {
+		// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue
+		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		u.LogWarning(*atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		fmt.Println(message)
 	}
 
+	p := tea.NewProgram(modelSpinner{
+		spinner: s,
+		message: message,
+	}, opts...)
+
+	spinnerDone := make(chan struct{})
+	go func() {
+		if _, err := p.Run(); err != nil {
+			// If there's any error running the spinner, just print the message
+			fmt.Println(message)
+			u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
+		}
+		close(spinnerDone)
+	}()
+
 	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
-		if p != nil {
-			p.Quit()
-			<-spinnerDone
-			fmt.Printf("\r✗ %s\n", message)
-		}
+		p.Quit()
+		<-spinnerDone
+		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
@@ -270,11 +268,9 @@ func GetTerraformOutput(
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
-		if p != nil {
-			p.Quit()
-			<-spinnerDone
-			fmt.Printf("\r✗ %s\n", message)
-		}
+		p.Quit()
+		<-spinnerDone
+		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
@@ -287,11 +283,9 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
-			if p != nil {
-				p.Quit()
-				<-spinnerDone
-				fmt.Printf("\r✗ %s\n", message)
-			}
+			p.Quit()
+			<-spinnerDone
+			fmt.Printf("\r✗ %s\n", message)
 			u.LogErrorAndExit(*atmosConfig, err)
 		}
 
@@ -300,12 +294,10 @@ func GetTerraformOutput(
 		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
 
-	// Stop spinner and show success only if we're in TTY mode
-	if p != nil {
-		p.Quit()
-		<-spinnerDone
-		fmt.Printf("\r✓ %s\n", message)
-	}
+	// Stop spinner and show success
+	p.Quit()
+	<-spinnerDone
+	fmt.Printf("\r✓ %s\n", message)
 
 	return result
 }
