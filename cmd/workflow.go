@@ -111,10 +111,14 @@ var workflowCmd = &cobra.Command{
 
 			// Create a terminal writer to get the optimal width
 			termWriter := termwriter.NewResponsiveWriter(os.Stdout)
-			screenWidth := termWriter.(*termwriter.TerminalWriter).GetWidth()
-
+			var wr *termwriter.TerminalWriter
+			var ok bool
+			if wr, ok = termWriter.(*termwriter.TerminalWriter); !ok {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("unsupported output"))
+			}
+			screenWidth := wr.GetWidth()
 			if atmosConfig.Settings.Docs.MaxWidth > 0 {
-				screenWidth = uint(min(atmosConfig.Settings.Docs.MaxWidth, int(screenWidth)))
+				screenWidth = uint(min(atmosConfig.Settings.Docs.MaxWidth, int(wr.GetWidth())))
 			}
 
 			renderer, err := markdown.NewRenderer(
