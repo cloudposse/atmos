@@ -233,20 +233,25 @@ func GetTerraformOutput(
 	s := spinner.New()
 	s.Style = theme.Styles.Link
 
+	var opts []tea.ProgramOption
+	if !CheckTTYSupport() {
+		// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue
+		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		u.LogWarning(*atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+		fmt.Println(message)
+	}
+
 	p := tea.NewProgram(modelSpinner{
 		spinner: s,
 		message: message,
-	})
+	}, opts...)
 
 	spinnerDone := make(chan struct{})
 	go func() {
 		if _, err := p.Run(); err != nil {
-			// If TTY is not available, just print the message
-			if strings.Contains(err.Error(), "could not open a new TTY") {
-				fmt.Println(message)
-			} else {
-				u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
-			}
+			// If there's any error running the spinner, just print the message
+			fmt.Println(message)
+			u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
 		}
 		close(spinnerDone)
 	}()
