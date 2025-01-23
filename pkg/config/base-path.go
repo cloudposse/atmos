@@ -59,6 +59,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 		}
 		return absPath, nil
 	}
+	// TODO : Update ATMOS_BASE_PATH with absolute path is that mean set env  ATMOS_BASE_PATH=base_path
 	//Set base_path to absolute path of ./
 	return "./", nil
 }
