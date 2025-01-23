@@ -1,6 +1,28 @@
 tests:
   - name: terraform output function
     enabled: true
+    tty: true
+    description: "Ensure the !terraform.output function works."
+    workdir: "fixtures/scenarios/atmos-functions/"
+    command: "atmos"
+    args:
+       - "terraform"
+       - "deploy"
+       - "component-4"
+       - "-s"
+       - "nonprod"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Fetching baz output from component-3 in nonprod"
+        - "Fetching foo output from component-1 in nonprod"
+        - "Fetching bar output from component-2 in nonprod"
+      stderr:
+        - "^$"
+
+  - name: terraform output function (no tty)
+    enabled: true
+    tty: false
     description: "Ensure the !terraform.output function works."
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
@@ -17,4 +39,3 @@ tests:
         - "Fetching bar output from component-2 in nonprod"
       stderr:
         - "^$"
-
