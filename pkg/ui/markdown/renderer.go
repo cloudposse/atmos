@@ -91,7 +91,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 
 	if suggestion != "" {
 		if strings.HasPrefix(suggestion, "http") {
-			content += fmt.Sprintf("For more information, refer to the **docs**:\n%s\n", suggestion)
+			content += fmt.Sprintf("\nFor more information, refer to the [docs](%s)\n", suggestion)
 		} else {
 			content += suggestion
 		}

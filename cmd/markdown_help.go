@@ -16,6 +16,8 @@ type ExampleContent struct {
 	Suggestion string
 }
 
+var doubleDashHint string = "Double dashes can be used to signify the end of Atmos-specific options and the beginning of additional native arguments and flags for the specific command being run."
+
 var examples map[string]ExampleContent = map[string]ExampleContent{
 	"atmos_terraform": {
 		Content:    terraform,
