@@ -32,15 +32,18 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	var targetDir string
+	currDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
 	if len(args) > 0 {
-		targetDir = args[0]
+		targetDir = filepath.Join(currDir, args[0])
 	} else {
 		// default to current directory
-		targetDir, err = os.Getwd()
-		if err != nil {
-			return err
-		}
+		targetDir = currDir
 	}
+
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -278,9 +281,4 @@ func isLikelyRemote(s string) bool {
 		}
 	}
 	return false
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

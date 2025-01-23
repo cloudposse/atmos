@@ -1,34 +1,76 @@
 # yaml-language-server: $schema=schema.json
 tests:
-  - name: "Test docs generate in current directory"
-    enabled: false
-    snapshot: true
+  - name: "atmos docs generate in current directory"
+    enabled: true
+    snapshot: false
     description: "Ensure docs are generated in the current directory."
-    workdir: "../"
+    workdir: "fixtures/scenarios/docs-generate/"
     command: "atmos"
     args:
       - "docs"
       - "generate"
     expect:
       diff: []
-      # TBC: should it be silent in case of success / no success message?
-      stdout: []
+      stdout: 
+        - "^$"
       stderr:
-        - "^Generated docs at .*/README.md.*$"
+        - "^Generated docs at .*README.md.*"
       exit_code: 0
+      files:
+        - "README.md"
 
-  - name: "Test docs generate with subdirectories"
-    enabled: false
+  - name: "atmos docs generate with subdirectories"
+    enabled: true
     description: "Ensure docs are generated for subdirectories."
     workdir: "../"
     command: "atmos"
     args:
       - "docs"
       - "generate"
+      - "--all"
     expect:
       diff: []
       exit_code: 0
       stderr:
-        - "^$"
+        - "^Generated docs at .*README.md.*"
       stdout:
-        - "README.md generated successfully"
+        - "^$"
+      files:
+        - "README.md"
+
+  - name: "atmos docs generate with path as agrument"
+    enabled: true
+    description: "Ensure docs are generated for with path as arg."
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "docs"
+      - "generate"
+      - "tests/fixtures/scenarios/docs-generate"
+    expect:
+      diff: []
+      exit_code: 0
+      stderr:
+        - "^Generated docs at .*README.md.*"
+      stdout:
+        - "^$"
+      files:
+        - "README.md"
+
+  - name: "atmos docs generate for terraform docs"
+    enabled: true
+    description: "Ensure terraform docs are generated"
+    workdir: "fixtures/scenarios/docs-generate/terraform"
+    command: "atmos"
+    args:
+      - "docs"
+      - "generate"
+    expect:
+      diff: []
+      exit_code: 0
+      stderr:
+        - "^Generated docs at .*README.md.*"
+      stdout:
+        - "^$"
+      files:
+        - "README.md"

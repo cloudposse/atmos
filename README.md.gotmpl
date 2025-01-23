@@ -1,0 +1,409 @@
+{{- defineDatasource "config" .Env.README_YAML -}}
+{{- defineDatasource "includes" (env.Getenv "README_INCLUDES" | default "./") -}}
+{{- $deprecated := has (ds "config") "deprecated" }}
+{{- $is_terraform := (strings.Contains "terraform-" ((ds "config").github_repo))  -}}
+{{- $utm_link := printf "%%s?utm_source=%s&utm_medium=%s&utm_campaign=%s&utm_content=%s" "github" "readme" (ds "config").github_repo "%s" -}}
+{{- $banner := printf "https://github.com/%s/blob/main/.github/banner.png?raw=true" (ds "config").github_repo -}}
+{{- $homepage := printf $utm_link "https://cpco.io/homepage" "" -}}
+{{- $logo := "https://cloudposse.com/logo-300x69.svg" -}}
+{{- $terraform_modules := printf $utm_link "https://cpco.io/terraform-modules" "terraform_modules" -}}
+{{- $slack := printf $utm_link "https://cpco.io/slack" "slack" -}}
+{{- $commercial_support := printf $utm_link "https://cpco.io/commercial-support" "commercial_support" -}}
+{{- $office_hours := printf $utm_link "https://cloudposse.com/office-hours" "office_hours" -}}
+{{- $newsletter := printf $utm_link "https://cpco.io/newsletter" "newsletter" -}}
+{{- $cta := printf "<a href=\"%s\"><img alt=\"Request Quote\" src=\"https://img.shields.io/badge/request%%20quote-success.svg?style=for-the-badge\"/></a>" $commercial_support -}}
+{{- $context := dict "is_terraform" $is_terraform "utm_link" $utm_link "commercial_support" $commercial_support "cta" $cta -}}
+{{- $sections := slice "introduction" "quickstart" "examples" -}}
+{{- define "nonEmptySections" -}}
+{{- range . -}}{{ $sectionContent := index (ds "config") . -}}{{ if and $sectionContent (gt (len $sectionContent) 2048) -}}{{ . }} {{ end -}}{{ end -}}
+{{- end -}}
+{{- $firstNonEmptySection := (tmpl.Exec "nonEmptySections" $sections) | strings.TrimSpace | regexp.Replace " .*" "" -}}
+{{- define "tip_use_atmos" }}
+{{- if .is_terraform }}
+> [!TIP]
+> #### 👽 Use Atmos with Terraform
+> Cloud Posse uses [`atmos`](https://atmos.tools) to easily orchestrate multiple environments using Terraform. <br/>
+> Works with [Github Actions](https://atmos.tools/integrations/github-actions/), [Atlantis](https://atmos.tools/integrations/atlantis), or [Spacelift](https://atmos.tools/integrations/spacelift).
+>
+> <details>
+> <summary><strong>Watch demo of using Atmos with Terraform</strong></summary>
+> <img src="https://github.com/cloudposse/atmos/blob/main/docs/demo.gif?raw=true"/><br/>
+> <i>Example of running <a href="https://atmos.tools"><code>atmos</code></a> to manage infrastructure from our <a href="https://atmos.tools/quick-start/">Quick Start</a> tutorial.</i>
+> </detalis>
+{{- end }}
+{{- end }}
+{{- define "tip_use_reference_architecture" -}}
+{{- if .is_terraform }}
+> [!TIP]
+> #### Use Terraform Reference Architectures for AWS
+>
+> Use Cloud Posse's ready-to-go [terraform architecture blueprints](https://cloudposse.com/reference-architecture/) for AWS to get up and running quickly.
+>
+> ✅ We build it together with your team.<br/>
+> ✅ Your team owns everything.<br/>
+> ✅ 100% Open Source and backed by fanatical support.<br/>
+>
+> {{ .cta }}
+> <details><summary>📚 <strong>Learn More</strong></summary>
+>
+> <br/>
+>
+> Cloud Posse is the leading [**DevOps Accelerator**]({{ .commercial_support }}) for funded startups and enterprises.
+>
+> *Your team can operate like a pro today.*
+>
+> Ensure that your team succeeds by using Cloud Posse's proven process and turnkey blueprints. Plus, we stick around until you succeed.
+> #### Day-0:  Your Foundation for Success
+> - **Reference Architecture.** You'll get everything you need from the ground up built using 100% infrastructure as code.
+> - **Deployment Strategy.** Adopt a proven deployment strategy with GitHub Actions, enabling automated, repeatable, and reliable software releases.
+> - **Site Reliability Engineering.** Gain total visibility into your applications and services with Datadog, ensuring high availability and performance.
+> - **Security Baseline.** Establish a secure environment from the start, with built-in governance, accountability, and comprehensive audit logs, safeguarding your operations.
+> - **GitOps.** Empower your team to manage infrastructure changes confidently and efficiently through Pull Requests, leveraging the full power of GitHub Actions.
+>
+> {{ .cta }}
+>
+> #### Day-2: Your Operational Mastery
+> - **Training.** Equip your team with the knowledge and skills to confidently manage the infrastructure, ensuring long-term success and self-sufficiency.
+> - **Support.** Benefit from a seamless communication over Slack with our experts, ensuring you have the support you need, whenever you need it.
+> - **Troubleshooting.** Access expert assistance to quickly resolve any operational challenges, minimizing downtime and maintaining business continuity.
+> - **Code Reviews.** Enhance your team’s code quality with our expert feedback, fostering continuous improvement and collaboration.
+> - **Bug Fixes.** Rely on our team to troubleshoot and resolve any issues, ensuring your systems run smoothly.
+> - **Migration Assistance.** Accelerate your migration process with our dedicated support, minimizing disruption and speeding up time-to-value.
+> - **Customer Workshops.** Engage with our team in weekly workshops, gaining insights and strategies to continuously improve and innovate.
+>
+> {{ .cta }}
+> </details>
+{{- end -}}
+{{- end }}
+
+<!-- markdownlint-disable -->
+{{ if $deprecated -}}
+# (deprecated) {{(ds "config").name}}
+{{- else }}
+  {{- if (file.Exists ".github/banner.png") -}}
+    <a href="https://cpco.io/homepage"><img src="{{ $banner }}" alt="Project Banner"/></a><br/>
+    {{ if has (ds "config") "badges" }}<p align="right">{{- end -}}
+  {{- else -}}
+    # {{(ds "config").name}} <a href="{{ $homepage }}"><img align="right" src="{{ $logo }}" width="150" /></a>
+  {{- end }}
+{{ end }}
+{{- if $deprecated -}}<img src="https://img.shields.io/badge/lifecycle-deprecated-critical?style=for-the-badge" alt="Deprecated"/>{{- end -}}
+{{- if has (ds "config") "badges" -}}
+  {{- range $badge := (ds "config").badges -}}
+    {{- printf "<a href=\"%s\"><img src=\"%s\" alt=\"%s\"/></a>" $badge.url $badge.image $badge.name -}}
+  {{- end -}}
+  {{- if (file.Exists ".github/banner.png") -}}</p>{{- end -}}
+{{- end }}
+<!-- markdownlint-restore -->
+
+<!--
+
+
+
+
+  ** DO NOT EDIT THIS FILE
+  **
+  ** This file was automatically generated by the `cloudposse/build-harness`.
+  ** 1) Make all changes to `README.yaml`
+  ** 2) Run `make init` (you only need to do this once)
+  ** 3) Run`make readme` to rebuild this file.
+  **
+  ** (We maintain HUNDREDS of open source projects. This is how we maintain our sanity.)
+  **
+
+
+
+
+
+-->
+{{ if has (ds "config") "logo" }}
+
+<img src="{{ (ds "config").logo }}" alt="{{(ds "config").name}}" />
+{{- end -}}
+
+{{- if $deprecated }}
+## Deprecated
+
+{{ if has (ds "config").deprecated "notice" }}
+  {{- (ds "config").deprecated.notice }}
+{{- else }}
+> [!IMPORTANT]
+>  This module is no longer actively maintained
+{{- end }}
+{{- if $is_terraform }}
+
+We literally have <a href="{{ $terraform_modules }}">*hundreds of other terraform modules*</a> that are Open Source and well-maintained. Check them out!
+{{- end }}
+
+{{ if has (ds "config") "description" }}
+### Historical Description
+
+{{(ds "config").description }}
+{{- end }}
+{{- else }}
+{{- if has (ds "config") "description" }}
+{{ (ds "config").description }}
+{{- end }}
+{{- end }}
+{{ if has (ds "config") "screenshots" }}
+## Screenshots
+
+{{ range $screenshot := (ds "config").screenshots }}
+{{- if or ( $screenshot.url | regexp.Match "\\.mp4$") ($screenshot.url | regexp.Match "\\.mp4\\?.*") -}}
+<video src="{{ $screenshot.url }}" ></video>
+{{- else -}}
+<img src="{{ $screenshot.url }}" alt="{{ $screenshot.name }}" />
+{{- end -}}
+*{{ $screenshot.description }}*
+{{ end }}
+{{- end }}
+{{ template "tip_use_atmos" $context }}
+
+{{ if has (ds "config") "introduction" }}
+## Introduction
+
+{{ (ds "config").introduction }}
+{{ end }}
+{{ if eq "introduction" $firstNonEmptySection }}{{ template "tip_use_reference_architecture" $context }}{{- end }}
+
+{{ if has (ds "config") "usage" }}
+## Usage
+
+{{ (ds "config").usage -}}
+{{- if $is_terraform }}
+
+> [!IMPORTANT]
+> In Cloud Posse's examples, we avoid pinning modules to specific versions to prevent discrepancies between the documentation
+> and the latest released versions. However, for your own projects, we strongly advise pinning each module to the exact version
+> you're using. This practice ensures the stability of your infrastructure. Additionally, we recommend implementing a systematic
+> approach for updating versions to avoid unexpected changes.
+
+{{ end }}
+{{ end }}
+{{- if eq "usage" $firstNonEmptySection }}{{ template "tip_use_reference_architecture" $context }}{{- end }}
+
+{{ if not $deprecated -}}
+{{ if has (ds "config") "quickstart" -}}
+## Quick Start
+
+{{ (ds "config").quickstart -}}
+{{ end }}
+{{- if eq "quickstart" $firstNonEmptySection }}{{ template "tip_use_reference_architecture" $context }}{{- end }}
+
+{{- if has (ds "config") "examples" }}
+## Examples
+
+{{ (ds "config").examples }}
+{{ end }}
+{{- if eq "examples" $firstNonEmptySection }}{{ template "tip_use_reference_architecture" $context }}{{- end }}
+
+
+{{ if has (ds "config") "include" }}
+{{ range $file := (datasource "config").include -}}
+{{ (include "includes" $file) }}
+{{- end }}
+{{- end }}
+{{ if has (ds "config") "related" }}
+## Related Projects
+
+Check out these related projects.
+{{ range $related := (ds "config").related }}
+{{ printf "- [%s](%s) - %s" $related.name $related.url $related.description }}{{ end }}
+
+{{- end}}
+{{- end}}
+{{ if has (ds "config") "references" }}
+
+## References
+
+For additional context, refer to some of these links.
+{{ range $reference := (ds "config").references }}
+{{ printf "- [%s](%s) - %s" $reference.name $reference.url $reference.description }}{{ end }}
+
+{{ end}}
+{{ if not $deprecated -}}
+{{- if eq "" $firstNonEmptySection }}{{ template "tip_use_reference_architecture" $context }}{{- end }}
+
+## ✨ Contributing
+
+This project is under active development, and we encourage contributions from our community.
+
+{{ if has (datasource "config") "contributors" }}
+
+Many thanks to our outstanding contributors:
+
+<a href="https://github.com/{{ printf "%s" (ds "config").github_repo}}/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo={{ printf "%s" (ds "config").github_repo}}&max=24" />
+</a>
+{{- end }}
+
+For 🐛 bug reports & feature requests, please use the [issue tracker]({{ printf "https://github.com/%s/issues" (ds "config").github_repo}}).
+
+In general, PRs are welcome. We follow the typical "fork-and-pull" Git workflow.
+ 1. Review our [Code of Conduct]({{ printf "https://github.com/%s/?tab=coc-ov-file#code-of-conduct" (ds "config").github_repo}}) and [Contributor Guidelines](https://github.com/cloudposse/.github/blob/main/CONTRIBUTING.md).
+ 2. **Fork** the repo on GitHub
+ 3. **Clone** the project to your own machine
+ 4. **Commit** changes to your own branch
+ 5. **Push** your work back up to your fork
+ 6. Submit a **Pull Request** so that we can review your changes
+
+**NOTE:** Be sure to merge the latest changes from "upstream" before making a pull request!
+
+### 🌎 Slack Community
+
+Join our [Open Source Community]({{ $slack }}) on Slack. It's **FREE** for everyone! Our "SweetOps" community is where you get to talk with others who share a similar vision for how to rollout and manage infrastructure. This is the best place to talk shop, ask questions, solicit feedback, and work together as a community to build totally *sweet* infrastructure.
+
+### 📰 Newsletter
+
+Sign up for [our newsletter]({{ $newsletter }}) and join 3,000+ DevOps engineers, CTOs, and founders who get insider access to the latest DevOps trends, so you can always stay in the know.
+Dropped straight into your Inbox every week — and usually a 5-minute read.
+
+### 📆 Office Hours <a href="{{ $office_hours }}"><img src="https://img.cloudposse.com/fit-in/200x200/https://cloudposse.com/wp-content/uploads/2019/08/Powered-by-Zoom.png" align="right" /></a>
+
+[Join us every Wednesday via Zoom]({{ $office_hours }}) for your weekly dose of insider DevOps trends, AWS news and Terraform insights, all sourced from our SweetOps community, plus a _live Q&A_ that you can’t find anywhere else.
+It's **FREE** for everyone!
+
+{{- end }}
+
+{{- if eq (ds "config").license "APACHE2" }}
+## License
+
+<a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge" alt="License"></a>
+
+<details>
+<summary>Preamble to the Apache License, Version 2.0</summary>
+<br/>
+<br/>
+
+{{ if (file.Exists "LICENSE") -}}
+Complete license is available in the [`LICENSE`](LICENSE) file.
+{{- end }}
+
+```text
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+```
+</details>
+{{- end }}
+{{- if eq (ds "config").license "CC-BY-NC-SA-4.0" }}
+## License
+
+<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/"><img src="https://img.shields.io/badge/License-CC%20BY%20NC%20SA%204.0-blue.svg?style=for-the-badge" alt="Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License"></a>
+
+This material may only be distributed subject to the terms and conditions set forth in the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License or later with the restrictions noted below (the latest version of the license is presently available at <https://creativecommons.org/licenses/by-nc-sa/4.0/>).
+
+**Attribution** You must attribute the work in the manner specified by the author or licensor.
+
+**Noncommercial** The licensor permits others to copy, distribute and transmit the work. In return, licensees may not use the work for commercial purposes — unless they get the licensor's permission.
+
+**Share Alike** The licensor permits others to distribute derivative works only under the same license or one compatible with the one that governs the licensor's work.
+
+## Distribution
+
+Distribution of substantively modified versions of this document is prohibited without the explicit permission of the copyright holder.
+
+Distribution of the work or derivative of the work in any standard (paper) book form for commercial purposes is prohibited unless prior permission is obtained from the copyright holder.
+{{- end }}
+
+{{- if eq (ds "config").license "MIT" }}
+## License
+
+<a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License: MIT"></a>
+
+```text
+The MIT License (MIT)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Source: <https://opensource.org/licenses/MIT>
+```
+{{- end }}
+
+{{- if eq (ds "config").license "ISC" }}
+## License
+
+<a href="https://opensource.org/licenses/ISC"><img src="https://img.shields.io/badge/License-ISC-blue.svg?style=for-the-badge" alt="License: ISC"></a>
+
+```text
+ISC License (ISC)
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+Source: <https://opensource.org/licenses/ISC>
+```
+{{- end }}
+
+{{- if eq (ds "config").license "GPL3" }}
+## License
+
+<a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge" alt="License: GPL v3"></a>
+
+```text
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+```
+{{- end }}
+
+## Trademarks
+
+All other trademarks referenced herein are the property of their respective owners.
+
+{{ if has (ds "config") "copyrights" }}
+## Copyrights
+
+{{ range $copyright := (ds "config").copyrights -}}
+{{ printf "Copyright © %s-%d [%s](%s)\n" $copyright.year time.Now.Year $copyright.name $copyright.url }}
+{{- end }}
+{{ else }}
+---
+Copyright © 2017-{{ time.Now.Year }} [Cloud Posse, LLC](https://cpco.io/copyright)
+{{ end }}
+
+<a href="{{ printf $utm_link "https://cloudposse.com/readme/footer/link" "readme_footer_link" }}"><img alt="README footer" src="https://cloudposse.com/readme/footer/img"/></a>
+
+<img alt="Beacon" width="0" src="{{ printf "https://ga-beacon.cloudposse.com/UA-76589703-4/%s?pixel&cs=github&cm=readme&an=%s" (ds "config").github_repo (filepath.Base ((ds "config").github_repo)) }}"/>
