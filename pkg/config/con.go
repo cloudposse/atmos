@@ -12,11 +12,14 @@ import (
 	"strings"
 
 	"github.com/adrg/xdg"
+	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 )
 
 const MaximumImportLvL = 10
@@ -883,4 +886,23 @@ func (cl *ConfigLoader) MergePathsViber(configPaths []string) error {
 		}
 	}
 	return nil
+}
+
+// findGitTopLevel finds the top-level directory of a Git repository
+func findGitTopLevel(startDir string) (string, error) {
+	// Open the current directory as a billy filesystem
+	fs := osfs.New(startDir)
+	// Create a filesystem-based storage for Git (this allows us to traverse Git config)
+	storer := filesystem.NewStorage(fs, nil)
+	// Create a new repository from the storage
+	repo, err := git.Open(storer, fs)
+	if err != nil {
+		return "", fmt.Errorf("not a git repository: %w", err)
+	}
+	// Get the repository's top-level directory from the configuration
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+	return worktree.Filesystem.Root(), nil
 }
