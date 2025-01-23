@@ -5,13 +5,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -364,12 +362,20 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return err
 		}
-		err = validateURI(uri)
+
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
 		if err != nil {
 			return err
 		}
-
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(&uri, vendorConfigFilePath)
+		if !useLocalFileSystem {
+			err = ValidateURI(uri)
+			if err != nil {
+				if strings.Contains(uri, "..") {
+					return fmt.Errorf("Invalid URI '%s': %w. Please ensure the source is a valid local path or a properly formatted URI.", uri, err)
+				}
+				return err
+			}
+		}
 
 		// Determine package type
 		var pType pkgType
@@ -387,7 +393,7 @@ func ExecuteAtmosVendorInternal(
 			if err != nil {
 				return err
 			}
-			targetPath := filepath.Join(vendorConfigFilePath, target)
+			targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
 			pkgName := s.Component
 			if pkgName == "" {
 				pkgName = uri
@@ -507,7 +513,7 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool) {
+func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
 	// Determine if the URI is an OCI scheme, a local file, or remote
 	useOciScheme := strings.HasPrefix(*uri, "oci://")
 	if useOciScheme {
@@ -517,44 +523,32 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
 	if !useOciScheme {
-		if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, *uri); err == nil {
+		absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri)
+		// if URI contain path traversal is path should be resolved
+		if err != nil && strings.Contains(*uri, "..") {
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
+		}
+		if err == nil {
 			uri = &absPath
 			useLocalFileSystem = true
 			sourceIsLocalFile = u.FileExists(*uri)
 		}
-	}
-	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
-}
 
-// sanitizeFileName replaces invalid characters and query strings with underscores for Windows.
-func sanitizeFileName(uri string) string {
-
-	// Parse the URI to handle paths and query strings properly
-	parsed, err := url.Parse(uri)
-	if err != nil {
-		// Fallback to basic filepath.Base if URI parsing fails
-		return filepath.Base(uri)
-	}
-
-	// Extract the path component of the URI
-	base := filepath.Base(parsed.Path)
-
-	// This logic applies only to Windows
-	if runtime.GOOS != "windows" {
-		return base
-	}
-
-	// Replace invalid characters for Windows
-	base = strings.Map(func(r rune) rune {
-		switch r {
-		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
-			return '_'
-		default:
-			return r
+		parsedURL, err := url.Parse(*uri)
+		if err != nil {
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, err
 		}
-	}, base)
+		if err == nil && parsedURL.Scheme != "" {
+			if parsedURL.Scheme == "file" {
+				trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
+				*uri = filepath.Clean(trimmedPath)
+				useLocalFileSystem = true
+			}
+		}
 
-	return base
+	}
+
+	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
 func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
@@ -568,7 +562,7 @@ func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath str
 	// Adjust the target path if it's a local file with no extension
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
 		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := sanitizeFileName(uri)
+		sanitizedBase := SanitizeFileName(uri)
 		targetPath = filepath.Join(targetPath, sanitizedBase)
 	}
 
@@ -590,6 +584,8 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
+		tempDir = filepath.ToSlash(tempDir)
+		src = filepath.ToSlash(src)
 
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
@@ -641,131 +637,4 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
-}
-
-func validateURI(uri string) error {
-	if uri == "" {
-		return fmt.Errorf("URI cannot be empty")
-	}
-	// Maximum length check
-	if len(uri) > 2048 {
-		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
-	}
-	// Add more validation as needed
-	// Validate URI format
-	if strings.Contains(uri, "..") {
-		return fmt.Errorf("URI cannot contain path traversal sequences")
-	}
-	if strings.Contains(uri, " ") {
-		return fmt.Errorf("URI cannot contain spaces")
-	}
-	// Validate characters
-	if strings.ContainsAny(uri, "<>|&;$") {
-		return fmt.Errorf("URI contains invalid characters")
-	}
-	// Validate scheme-specific format
-	if strings.HasPrefix(uri, "oci://") {
-		if !strings.Contains(uri[6:], "/") {
-			return fmt.Errorf("invalid OCI URI format")
-		}
-	} else if strings.Contains(uri, "://") {
-		scheme := strings.Split(uri, "://")[0]
-		if !isValidScheme(scheme) {
-			return fmt.Errorf("unsupported URI scheme: %s", scheme)
-		}
-	}
-	return nil
-}
-func isValidScheme(scheme string) bool {
-	validSchemes := map[string]bool{
-		"http":       true,
-		"https":      true,
-		"git":        true,
-		"ssh":        true,
-		"git::https": true,
-	}
-	return validSchemes[scheme]
-}
-
-// CustomGitHubDetector intercepts GitHub URLs and transforms them
-// into something like git::https://<token>@github.com/... so we can
-// do a git-based clone with a token.
-type CustomGitHubDetector struct {
-	AtmosConfig schema.AtmosConfiguration
-}
-
-// Detect implements the getter.Detector interface for go-getter v1.
-func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
-	if len(src) == 0 {
-		return "", false, nil
-	}
-
-	if !strings.Contains(src, "://") {
-		src = "https://" + src
-	}
-
-	parsedURL, err := url.Parse(src)
-	if err != nil {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("Failed to parse URL %q: %v\n", src, err))
-		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
-	}
-
-	if strings.ToLower(parsedURL.Host) != "github.com" {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("Host is %q, not 'github.com', skipping token injection\n", parsedURL.Host))
-		return "", false, nil
-	}
-
-	parts := strings.SplitN(parsedURL.Path, "/", 4)
-	if len(parts) < 3 {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("URL path %q doesn't look like /owner/repo\n", parsedURL.Path))
-		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL.Path)
-	}
-
-	atmosGitHubToken := os.Getenv("ATMOS_GITHUB_TOKEN")
-	gitHubToken := os.Getenv("GITHUB_TOKEN")
-
-	var usedToken string
-	var tokenSource string
-
-	// 1. If ATMOS_GITHUB_TOKEN is set, always use that
-	if atmosGitHubToken != "" {
-		usedToken = atmosGitHubToken
-		tokenSource = "ATMOS_GITHUB_TOKEN"
-		u.LogDebug(d.AtmosConfig, "ATMOS_GITHUB_TOKEN is set\n")
-	} else {
-		// 2. Otherwise, only inject GITHUB_TOKEN if cfg.Settings.InjectGithubToken == true
-		if d.AtmosConfig.Settings.InjectGithubToken && gitHubToken != "" {
-			usedToken = gitHubToken
-			tokenSource = "GITHUB_TOKEN"
-			u.LogTrace(d.AtmosConfig, "InjectGithubToken=true and GITHUB_TOKEN is set, using it\n")
-		} else {
-			u.LogTrace(d.AtmosConfig, "No ATMOS_GITHUB_TOKEN or GITHUB_TOKEN found\n")
-		}
-	}
-
-	if usedToken != "" {
-		user := parsedURL.User.Username()
-		pass, _ := parsedURL.User.Password()
-		if user == "" && pass == "" {
-			u.LogDebug(d.AtmosConfig, fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
-			parsedURL.User = url.UserPassword("x-access-token", usedToken)
-		} else {
-			u.LogDebug(d.AtmosConfig, "Credentials found, skipping token injection\n")
-		}
-	}
-
-	finalURL := "git::" + parsedURL.String()
-
-	return finalURL, true, nil
-}
-
-// RegisterCustomDetectors prepends the custom detector so it runs before
-// the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
-	getter.Detectors = append(
-		[]getter.Detector{
-			&CustomGitHubDetector{AtmosConfig: atmosConfig},
-		},
-		getter.Detectors...,
-	)
 }

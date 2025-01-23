@@ -309,7 +309,7 @@ func getTerraformOutputVariable(
 		val = "." + val
 	}
 
-	res, err := u.EvaluateYqExpression(*atmosConfig, outputs, val)
+	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
 
 	if err != nil {
 		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating terrform output '%s' for the component '%s' in the stack '%s':\n%v",
@@ -335,7 +335,7 @@ func getStaticRemoteStateOutput(
 		val = "." + val
 	}
 
-	res, err := u.EvaluateYqExpression(*atmosConfig, remoteStateSection, val)
+	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
 
 	if err != nil {
 		u.LogErrorAndExit(*atmosConfig, fmt.Errorf("error evaluating the 'static' remote state backend output '%s' for the component '%s' in the stack '%s':\n%v",

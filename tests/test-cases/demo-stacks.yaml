@@ -1,12 +1,15 @@
+# yaml-language-server: $schema=schema.json
 tests:
   - name: atmos --help
     enabled: true
+    snapshot: true
     description: "Ensure atmos CLI help command lists available commands."
     workdir: "../examples/demo-stacks"
     command: "atmos"
     args:
       - "--help"
     expect:
+      diff: []
       stdout:
         - "Available Commands:"
         - "\\batlantis\\b"
@@ -31,6 +34,7 @@ tests:
 
   - name: atmos version
     enabled: true
+    snapshot: false
     description: "Check that atmos version command outputs version details."
     workdir: "../examples/demo-stacks"
     command: "atmos"
@@ -45,8 +49,11 @@ tests:
 
   - name: atmos version --check
     enabled: true
+    snapshot: false
     description: "Verify atmos version --check command functions correctly."
     workdir: "../examples/demo-stacks"
+    env:
+      ATMOS_LOGS_LEVEL: "Warning"
     command: "atmos"
     args:
       - "version"
@@ -54,12 +61,15 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+        - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
+        - 'Install Atmos: https://atmos\.tools/install'
       stderr:
         - "^$"
       exit_code: 0
 
   - name: atmos docs myapp
     enabled: true
+    snapshot: true
     description: "Validate atmos docs command outputs documentation for a specific component."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
@@ -67,6 +77,7 @@ tests:
       - "docs"
       - "myapp"
     expect:
+      diff: []
       stdout:
         - "Example Terraform Weather Component"
       stderr:
@@ -74,6 +85,7 @@ tests:
       exit_code: 0
 
   - name: atmos describe config -f yaml
+    snapshot: true
     enabled: true
     description: "Ensure atmos CLI outputs the Atmos configuration in YAML."
     workdir: "../examples/demo-stacks/"
@@ -84,6 +96,12 @@ tests:
       - "-f"
       - "yaml"
     expect:
+      diff:
+        - "stacksBaseAbsolutePath"
+        - "terraformDirAbsolutePath"
+        - "helmfileDirAbsolutePath"
+        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+\*\*[/\\]+_defaults.yaml'
+        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]deploy[/\\]+\*\*[/\\]+\*'
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       stderr:
@@ -92,6 +110,7 @@ tests:
 
   - name: atmos describe config
     enabled: true
+    snapshot: true
     description: "Ensure atmos CLI outputs the Atmos configuration in JSON."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
@@ -99,8 +118,79 @@ tests:
       - "describe"
       - "config"
     expect:
+      diff:
+        - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
+        - "stacksBaseAbsolutePath"
+        - "terraformDirAbsolutePath"
+        - "helmfileDirAbsolutePath"
+        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+\*\*[/\\]+_defaults.yaml'
+        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+deploy[/\\]+\*\*[/\\]+\*'
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stderr:
         - "^$"
+      exit_code: 0
+
+  - name: atmos greet with args
+    enabled: true
+    description: "Validate atmos custom command greet runs with argument provided."
+    workdir: "../examples/demo-custom-command/"
+    command: "atmos"
+    args:
+      - "greet"
+      - "Andrey"
+    expect:
+      stdout:
+        - "Hello, Andrey\n"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos greet without args
+    enabled: true
+    description: "Validate atmos custom command greet runs without argument provided."
+    workdir: "../examples/demo-custom-command/"
+    command: "atmos"
+    args:
+      - "greet"
+    expect:
+      stdout:
+        - "Hello, John Doe\n"
+      stderr:
+        - "^$"
+      exit_code: 0
+  - name: atmos_vendor_pull
+    enabled: true
+    description: "Ensure atmos vendor pull command executes without errors and files are present."
+    workdir: "fixtures/scenarios/vendor"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+    expect:
+      file_exists:
+        - "./components/terraform/github/stargazers/main/main.tf"
+        - "./components/terraform/github/stargazers/main/outputs.tf"
+        - "./components/terraform/github/stargazers/main/providers.tf"
+        - "./components/terraform/github/stargazers/main/variables.tf"
+        - "./components/terraform/github/stargazers/main/versions.tf"
+        - "./components/terraform/infra/my-vpc1/main.tf"
+        - "./components/terraform/infra/my-vpc1/outputs.tf"
+        - "./components/terraform/infra/my-vpc1/providers.tf"
+        - "./components/terraform/infra/my-vpc1/variables.tf"
+        - "./components/terraform/infra/my-vpc1/versions.tf"
+        - "./components/terraform/test-components/main/main.tf"
+        - "./components/terraform/test-components/main/outputs.tf"
+        - "./components/terraform/test-components/main/providers.tf"
+        - "./components/terraform/test-components/main/variables.tf"
+        - "./components/terraform/test-components/main/versions.tf"
+        - "./components/terraform/weather/main/main.tf"
+        - "./components/terraform/weather/main/outputs.tf"
+        - "./components/terraform/weather/main/providers.tf"
+        - "./components/terraform/weather/main/variables.tf"
+        - "./components/terraform/weather/main/versions.tf"
+        - "./components/terraform/vpc-src/main.tf"
+        - "./components/terraform/vpc-src/outputs.tf"
+        - "./components/terraform/vpc-src/variables.tf"
+        - "./components/terraform/vpc-src/versions.tf"
       exit_code: 0
