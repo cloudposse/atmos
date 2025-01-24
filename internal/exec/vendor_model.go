@@ -248,7 +248,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 		}
 		// Create temp directory
-		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
+		tempDir, err := os.MkdirTemp("", "atmos-vendor")
 		if err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to create temp directory: %w", err),

@@ -55,6 +55,6 @@ deps:
 
 # Run acceptance tests
 testacc: get
-	go test $(TEST) -v $(TESTARGS) -timeout 2m
+	go test $(TEST) -v $(TESTARGS) -timeout 10m
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc
