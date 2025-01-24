@@ -1213,27 +1213,44 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 
 // getCliVars returns a map of variables provided on the command-line
 func getCliVars(args []string) (map[string]string, error) {
-	for i, arg := range args {
-		if arg == "-var" {
-			args[i] = "--var"
+	var variables = make(map[string]string)
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-var" && i+1 < len(args) {
+			kv := args[i+1]
+			parts := strings.SplitN(kv, "=", 2)
+			if len(parts) == 2 {
+				varName := parts[0]
+				varValue := strings.Trim(parts[1], "{}") // Handle the map-like syntax
+				variables[varName] = varValue
+			}
+			i++
 		}
 	}
-
-	flagSet := pflag.NewFlagSet("cliVars", pflag.ContinueOnError)
-	vars := flagSet.StringSlice("var", nil, "")
-
-	err := flagSet.Parse(args)
-	if err != nil {
-		return nil, err
-	}
-
-	varMap := make(map[string]string)
-	for _, v := range *vars {
-		parts := strings.SplitN(v, "=", 2)
-		if len(parts) == 2 {
-			varMap[parts[0]] = parts[1]
-		}
-	}
-
-	return varMap, nil
+	return variables, nil
 }
+
+//func getCliVars(args []string) (map[string]string, error) {
+//	for i, arg := range args {
+//		if arg == "-var" {
+//			args[i] = "--var"
+//		}
+//	}
+//
+//	flagSet := pflag.NewFlagSet("cliVars", pflag.ContinueOnError)
+//	vars := flagSet.StringSlice("var", nil, "")
+//
+//	err := flagSet.Parse(args)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	varMap := make(map[string]string)
+//	for _, v := range *vars {
+//		parts := strings.SplitN(v, "=", 2)
+//		if len(parts) == 2 {
+//			varMap[parts[0]] = parts[1]
+//		}
+//	}
+//
+//	return varMap, nil
+//}
