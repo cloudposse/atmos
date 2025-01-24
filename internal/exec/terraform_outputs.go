@@ -11,8 +11,11 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -214,8 +217,8 @@ func GetTerraformOutput(
 	output string,
 	skipCache bool,
 ) any {
-
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	if !skipCache {
@@ -226,8 +229,38 @@ func GetTerraformOutput(
 		}
 	}
 
+	// Initialize spinner
+	s := spinner.New()
+	s.Style = theme.Styles.Link
+
+	var opts []tea.ProgramOption
+	if !CheckTTYSupport() {
+		// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue
+		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		u.LogTrace(*atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+		fmt.Println(message)
+	}
+
+	p := tea.NewProgram(modelSpinner{
+		spinner: s,
+		message: message,
+	}, opts...)
+
+	spinnerDone := make(chan struct{})
+	go func() {
+		if _, err := p.Run(); err != nil {
+			// If there's any error running the spinner, just print the message
+			fmt.Println(message)
+			u.LogError(*atmosConfig, fmt.Errorf("failed to run spinner: %w", err))
+		}
+		close(spinnerDone)
+	}()
+
 	sections, err := ExecuteDescribeComponent(component, stack, true)
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
+		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
@@ -235,24 +268,38 @@ func GetTerraformOutput(
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
+		fmt.Printf("\r✗ %s\n", message)
 		u.LogErrorAndExit(*atmosConfig, err)
 	}
 
+	var result any
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		return getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result = getStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 	} else {
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
+			p.Quit()
+			<-spinnerDone
+			fmt.Printf("\r✗ %s\n", message)
 			u.LogErrorAndExit(*atmosConfig, err)
 		}
 
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, terraformOutputs)
-		return getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
+		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
+
+	// Stop spinner and show success
+	p.Quit()
+	<-spinnerDone
+	fmt.Printf("\r✓ %s\n", message)
+
+	return result
 }
 
 func getTerraformOutputVariable(
