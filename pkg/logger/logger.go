@@ -61,7 +61,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		}
 	}
 
-	return "", fmt.Errorf("Error: Invalid log level '%s'. Valid options are: %v", logLevel, validLevels)
+	return "", fmt.Errorf("Error: Invalid log level '%s'. Valid options are: [Trace, Debug, Info, Warning, Off]", logLevel)
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {
@@ -110,7 +110,7 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 
 func (l *Logger) Error(err error) {
 	if err != nil && l.LogLevel != LogLevelOff {
-		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
+		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error())
 		if err2 != nil {
 			color.Red("Error logging the error:")
 			color.Red("%s\n", err2)
