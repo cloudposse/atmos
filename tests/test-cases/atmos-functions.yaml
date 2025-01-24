@@ -11,6 +11,9 @@ tests:
        - "component-4"
        - "-s"
        - "nonprod"
+    skip:
+      # PTY not supported on windows
+      os: !not windows
     expect:
       exit_code: 0
       stdout:
