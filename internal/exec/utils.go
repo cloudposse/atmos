@@ -666,6 +666,16 @@ func ProcessStacks(
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
+	// Add command-line arguments and vars to the component section
+	// It will allow using them when validating with OPA policies or JSON Schema
+	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = configAndStacksInfo.AdditionalArgsAndFlags
+
+	cliVars, err := getCliVars(configAndStacksInfo.AdditionalArgsAndFlags)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.ComponentSection[cfg.CliVarsSectionName] = cliVars
+
 	return configAndStacksInfo, nil
 }
 
@@ -1199,4 +1209,31 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 	sort.Strings(unique)
 	sort.Strings(uniqueAll)
 	return unique, uniqueAll, nil
+}
+
+// getCliVars returns a map of variables provided on the command-line
+func getCliVars(args []string) (map[string]string, error) {
+	for i, arg := range args {
+		if arg == "-var" {
+			args[i] = "--var"
+		}
+	}
+
+	flagSet := pflag.NewFlagSet("cliVars", pflag.ContinueOnError)
+	vars := flagSet.StringSlice("var", nil, "")
+
+	err := flagSet.Parse(args)
+	if err != nil {
+		return nil, err
+	}
+
+	varMap := make(map[string]string)
+	for _, v := range *vars {
+		parts := strings.SplitN(v, "=", 2)
+		if len(parts) == 2 {
+			varMap[parts[0]] = parts[1]
+		}
+	}
+
+	return varMap, nil
 }

@@ -181,7 +181,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
 		u.LogDebug(atmosConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
-
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
 			if err != nil {
@@ -214,6 +213,24 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 			if !info.DryRun {
 				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		/*
+		   Variables provided on the command line
+		   Terraform processes variables in the following order of precedence (from highest to lowest):
+		     - Explicit -var flags: these have the highest priority and will override any other variable values, including those in --var-file
+		     - Variables in --var-file: values in a variable file specified with --var-file override default values set in the Terraform configuration
+		     - Environment variables: variables set as environment variables using the TF_VAR_ prefix
+		     - Default values in the configuration file: these have the lowest priority
+		*/
+		if cliVars, ok := info.ComponentSection[cfg.CliVarsSectionName].(map[string]string); ok && len(cliVars) > 0 {
+			u.LogDebug(atmosConfig, "\nCLI variables (will override the variables defined in the stack manifests):")
+			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+				err = u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars)
 				if err != nil {
 					return err
 				}

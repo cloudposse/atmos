@@ -62,6 +62,8 @@ const (
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
+	CliVarsSectionName                = "cli_vars"
+	CliArgsSectionName                = "cli_args"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
