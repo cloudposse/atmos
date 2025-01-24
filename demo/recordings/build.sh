@@ -15,6 +15,29 @@ MP4_OUTDIR="$REPO_ROOT/demo/recordings/mp4"
 GIF_OUTDIR="$REPO_ROOT/demo/recordings/gif"
 AUDIO_FILE="$REPO_ROOT/demo/recordings/background.mp3"
 
+create_gif() {
+  local input_mp4="$1"
+  local output_gif="$2"
+
+  # Extract the output directory and filename without extension
+  local output_dir
+  output_dir=$(dirname "$output_gif")
+  local scene_name
+  scene_name=$(basename "$output_gif" .gif)
+
+  echo "      Creating GIF -> $output_gif"
+
+  # Generate the palette
+  ffmpeg -y -i "$input_mp4" \
+    -vf palettegen "$output_dir/$scene_name-palette.png"
+
+  # Create the GIF using the palette
+  ffmpeg -i "$input_mp4" \
+         -i "$output_dir/$scene_name-palette.png" \
+         -lavfi "fps=10 [video]; [video][1:v] paletteuse" \
+         -y "$output_gif"
+}
+
 # Handle "clean" argument
 if [[ "${1:-}" == "clean" ]]; then
   echo ">> Cleaning up generated files..."
@@ -37,16 +60,17 @@ fi
 
 for tape in "${TAPEFILES[@]}"; do
   base="$(basename "$tape" .tape)"
-  output_file="$MP4_OUTDIR/$base.mp4"
+  output_mp4="$MP4_OUTDIR/$base.mp4"
+	output_gif="$GIF_OUTDIR/$base.gif"
 
 	# Skip processing if output file exists and is newer than the input file
-  if [[ -f "$output_file" && "$output_file" -nt "$tape" ]]; then
-    echo "Skipping $tape as $output_file is up-to-date."
+  if [[ -f "$output_mp4" && "$output_mp4" -nt "$tape" ]]; then
+    echo "Skipping $tape as $output_mp4 is up-to-date."
     continue
   fi
 
   # Run the vhs command in the background
-  (cd "$REPO_ROOT" && timeout 600 vhs "$tape" --output "$output_file") &
+  (cd "$REPO_ROOT" && timeout 600 vhs "$tape" --output "$output_mp4") &
 
   # Get the PID of the background process
   VHS_PID=$!
@@ -63,11 +87,18 @@ for tape in "${TAPEFILES[@]}"; do
   wait "$VHS_PID"
   EXIT_CODE=$?
   if [ "$EXIT_CODE" -eq 0 ]; then
-      echo "✅ Processing completed successfully for $tape."
+      echo "✅ VHS completed successfully for $tape."
   else
       echo "❌ VHS encountered an error (exit code: $EXIT_CODE) for $tape."
+			exit $EXIT_CODE
   fi
+
+	# Create GIF
+	create_gif "$output_mp4" "$output_gif"
+
+	echo "📼 Done processing $tape."
 done
+
 
 # 2) Process scenes/*.txt
 echo ">> Step 2: Building each scene from $SCENES_DIR/*.txt"
@@ -96,14 +127,7 @@ for scene_file in "${SCENE_FILES[@]}"; do
     -c:v copy -c:a aac "$MP4_OUTDIR/$scene_name-with-audio.mp4" -y
 
   # Create GIF
-  echo "      Creating GIF -> $GIF_OUTDIR/$scene_name.gif"
-  ffmpeg -y -i "$MP4_OUTDIR/$scene_name-with-audio.mp4" \
-    -vf palettegen "$GIF_OUTDIR/$scene_name-palette.png"
-
-  ffmpeg -i "$MP4_OUTDIR/$scene_name-with-audio.mp4" \
-         -i "$GIF_OUTDIR/$scene_name-palette.png" \
-         -lavfi "fps=10 [video]; [video][1:v] paletteuse" \
-         -y "$GIF_OUTDIR/$scene_name.gif"
+	create_gif "$MP4_OUTDIR/$scene_name-with-audio.mp4" "$GIF_OUTDIR/$scene_name.gif"
 
   echo "      Done with scene: $scene_name"
 done

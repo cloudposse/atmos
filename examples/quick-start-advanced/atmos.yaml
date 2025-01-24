@@ -233,4 +233,4 @@ settings:
   list_merge_strategy: replace
   terminal:
     max-width: 80
-    pagination: true
+    pager: true
