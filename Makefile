@@ -56,15 +56,6 @@ deps:
 # Test verbosity levels: quiet, normal, verbose
 ATMOS_TEST_VERBOSITY ?= normal
 
-.PHONY: testacc
-testacc: ## Run all tests
-	@if [ "$(ATMOS_TEST_VERBOSITY)" = "quiet" ]; then \
-		go test ./... -timeout 20m; \
-	elif [ "$(ATMOS_TEST_VERBOSITY)" = "verbose" ]; then \
-		go test -v -count=1 ./... -timeout 20m; \
-	else \
-		go test -v ./... -timeout 20m; \
-	fi
 # Run acceptance tests
 testacc: get
 	go test $(TEST) -v $(TESTARGS) -timeout 10m

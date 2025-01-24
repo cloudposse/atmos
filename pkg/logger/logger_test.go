@@ -14,6 +14,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// captureOutput is a simple stdout capture utility specific to logger tests.
+// For more comprehensive output capture in other tests, use the testhelper package.
 func captureOutput(f func()) string {
 	r, w, _ := os.Pipe()
 	stdout := os.Stdout
