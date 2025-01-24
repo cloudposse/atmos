@@ -209,9 +209,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 					if row == 0 {
 						return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
 					}
-					if row%2 == 0 {
-						return style.Inherit(theme.Styles.GrayText)
-					}
+					// Use consistent style for all rows
 					return style.Inherit(theme.Styles.Description)
 				}).
 				Headers(header...).
