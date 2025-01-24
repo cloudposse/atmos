@@ -1127,7 +1127,6 @@ func processArgsAndFlags(
 
 // generateComponentBackendConfig generates backend config for components
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
-
 	// Generate backend config file for Terraform Cloud
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
 	if backendType == "cloud" {
