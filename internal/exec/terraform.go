@@ -221,6 +221,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 		/*
 		   Variables provided on the command line
+		   https://developer.hashicorp.com/terraform/language/values/variables#variables-on-the-command-line
 		   Terraform processes variables in the following order of precedence (from highest to lowest):
 		     - Explicit -var flags: these have the highest priority and will override any other variable values, including those in --var-file
 		     - Variables in --var-file: values in a variable file specified with --var-file override default values set in the Terraform configuration
