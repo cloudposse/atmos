@@ -168,10 +168,10 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 // fetchAndParseYAML fetches a YAML file from a local path or URL, parses it, and returns the data
 func fetchAndParseYAML(atmosConfig schema.AtmosConfiguration, pathOrURL string, baseDir string) (map[string]interface{}, error) {
 	localPath, tempDir, err := downloadSource(atmosConfig, pathOrURL, baseDir)
-	defer removeTempDir(atmosConfig, tempDir)
 	if err != nil {
 		return nil, err
 	}
+	defer removeTempDir(atmosConfig, tempDir)
 	return parseYAML(localPath)
 }
 
