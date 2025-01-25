@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/hashicorp/hcl"
@@ -278,6 +279,14 @@ func ResolveRelativePath(path string, basePath string) string {
 
 	// For non-relative paths, return as-is in original format
 	return path
+}
+
+// GetLineEnding returns the appropriate line ending for the current platform
+func GetLineEnding() string {
+	if runtime.GOOS == "windows" {
+		return "\r\n"
+	}
+	return "\n"
 }
 
 // DetectFormatAndParseFile detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
