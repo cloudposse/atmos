@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/mitchellh/go-wordwrap"
 	"golang.org/x/term"
 )
@@ -30,7 +31,7 @@ func NewResponsiveWriter(w io.Writer) io.Writer {
 		return w
 	}
 
-	if !term.IsTerminal(int(file.Fd())) {
+	if !exec.CheckTTYSupport() {
 		return w
 	}
 
