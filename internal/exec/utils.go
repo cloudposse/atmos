@@ -1212,15 +1212,27 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 }
 
 // getCliVars returns a map of variables provided on the command-line
-func getCliVars(args []string) (map[string]string, error) {
-	var variables = make(map[string]string)
+// atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'
+func getCliVars(args []string) (map[string]any, error) {
+	var variables = make(map[string]any)
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-var" && i+1 < len(args) {
 			kv := args[i+1]
 			parts := strings.SplitN(kv, "=", 2)
 			if len(parts) == 2 {
 				varName := parts[0]
-				varValue := strings.Trim(parts[1], "{}")
+				part2 := parts[1]
+				var varValue any
+				if u.IsJSON(part2) {
+					v, err := u.ConvertFromJSON(part2)
+					if err != nil {
+						return nil, err
+					}
+					varValue = v
+				} else {
+					varValue = strings.TrimSpace(part2)
+				}
+
 				variables[varName] = varValue
 			}
 			i++
@@ -1228,29 +1240,3 @@ func getCliVars(args []string) (map[string]string, error) {
 	}
 	return variables, nil
 }
-
-//func getCliVars(args []string) (map[string]string, error) {
-//	for i, arg := range args {
-//		if arg == "-var" {
-//			args[i] = "--var"
-//		}
-//	}
-//
-//	flagSet := pflag.NewFlagSet("cliVars", pflag.ContinueOnError)
-//	vars := flagSet.StringSlice("var", nil, "")
-//
-//	err := flagSet.Parse(args)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	varMap := make(map[string]string)
-//	for _, v := range *vars {
-//		parts := strings.SplitN(v, "=", 2)
-//		if len(parts) == 2 {
-//			varMap[parts[0]] = parts[1]
-//		}
-//	}
-//
-//	return varMap, nil
-//}
