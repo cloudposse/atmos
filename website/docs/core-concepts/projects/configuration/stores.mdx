@@ -17,6 +17,7 @@ Currently, the following stores are supported:
 
 - [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
 - [Artifactory](https://jfrog.com/artifactory/)
+- [Azure Key Vault](https://azure.microsoft.com/en-us/products/key-vault)
 </Intro>
 
 Atmos stores are configured in the `atmos.yaml` file and available to use in stacks via the
@@ -115,3 +116,120 @@ stores:
 The AWS SSM Parameter Store supports the standard AWS methods for authentication and the `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables.
 
+### Azure Key Vault
+
+Azure Key Vault store allows you to store and retrieve secrets using Azure Key Vault. This implementation uses Azure SDK's DefaultAzureCredential for authentication, which supports multiple authentication methods.
+
+```yaml
+stores:
+  prod/keyvault:
+    type: azure-key-vault
+    options:
+      vault_url: https://your-vault.vault.azure.net/
+      prefix: myapp
+      stack_delimiter: "-"
+```
+
+<dl>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to `azure-key-vault`</dd>
+
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For Azure Key Vault, the following options are supported:</dd>
+
+  <dt>`stores.[store_name].options.vault_url (required)`</dt>
+  <dd>The URL of your Azure Key Vault instance.</dd>
+
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix that will be added to all keys stored in Key Vault. Useful for organizing secrets by application or environment.</dd>
+
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
+  <dd>The delimiter to use when constructing the key name from stack components. Defaults to "-".</dd>
+</dl>
+
+#### Authentication
+
+The Azure Key Vault store uses DefaultAzureCredential for authentication, which supports multiple authentication methods in the following order:
+
+1. Environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)
+2. Managed Identity
+3. Azure CLI credentials
+4. Visual Studio Code credentials
+5. Azure PowerShell credentials
+
+For local development, using Azure CLI credentials is recommended:
+
+```bash
+az login
+```
+
+For production environments, using Managed Identity or service principal credentials (environment variables) is recommended.
+
+#### Usage Examples
+
+1. Basic usage storing a database password:
+```yaml
+components:
+  terraform:
+    database:
+      vars:
+        admin_password: !store keyvault/prod database admin_password
+```
+
+2. Using with component outputs:
+```yaml
+components:
+  terraform:
+    database:
+      after:
+        - command: atmos store set
+          name: keyvault/prod
+          outputs:
+            db_host: database_hostname
+            db_port: database_port
+```
+
+#### Key Name Construction
+
+The Azure Key Vault store constructs secret names using the following format:
+```
+{prefix}-{stack}-{component}-{key}
+```
+
+For example, with these parameters:
+- prefix: "myapp"
+- stack: "prod-us-west"
+- component: "database/postgres"
+- key: "password"
+
+The resulting Key Vault secret name would be:
+```
+myapp-prod-us-west-database-postgres-password
+```
+
+Note: Azure Key Vault secret names:
+- Can only contain alphanumeric characters and dashes
+- Are case-insensitive
+- Must be 1-127 characters long
+
+The store automatically:
+- Converts all characters to lowercase
+- Replaces invalid characters with dashes
+- Trims leading and trailing dashes
+
+#### Error Handling
+
+The store provides detailed error messages for common scenarios:
+
+- Missing or invalid credentials:
+```
+failed to set secret 'myapp-dev-component-key': access denied. Please check your Azure credentials and permissions
+```
+
+- Non-existent secret:
+```
+secret 'myapp-dev-component-key' not found
+```
