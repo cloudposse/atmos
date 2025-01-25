@@ -1220,7 +1220,7 @@ func getCliVars(args []string) (map[string]string, error) {
 			parts := strings.SplitN(kv, "=", 2)
 			if len(parts) == 2 {
 				varName := parts[0]
-				varValue := strings.Trim(parts[1], "{}") // Handle the map-like syntax
+				varValue := strings.Trim(parts[1], "{}")
 				variables[varName] = varValue
 			}
 			i++
