@@ -84,7 +84,13 @@ tests:
       - Info
       - version
     expect:
-      exit_code: 1
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
+      stderr:
+        - "^$"
+      exit_code: 0
 
   - name: "Invalid Log Level in Command Line Flag"
     enabled: true
@@ -94,16 +100,8 @@ tests:
     args:
       - --logs-level
       - XTrace
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     expect:
       exit_code: 1
       stderr:
-        - "Error: Invalid log level 'XTrace' specified with the --logs-level flag\\. Valid options are: \\[Trace, Debug, Info, Warning, Off\\]\n"
-      diff:
-        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
-      stdout:
-        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+        - "Error: Invalid log level 'XTrace' specified with the --logs-level flag\\. Valid options are: \\[Trace, Debug, Info, Warning, Off\\]\\n"
