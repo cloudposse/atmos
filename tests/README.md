@@ -85,7 +85,6 @@ tests:
       Ensure atmos breaks the infinite loop when shell depth exceeds maximum (10).
 
     enabled: true                             # Whether or not to enable this check
-
     skip:                                     # Conditions when to skip
       os: !not windows                        # Do not run on Windows (e.g. PTY not supported)
                                               # Use "darwin" for macOS
@@ -93,6 +92,7 @@ tests:
 
     snapshot: true                            # Enable golden snapshot. Use together with `expect.diff`
 
+    clean: true                               # Whether or not to remove untracked files from workdir
     workdir: "fixtures/scenarios/complete/"   # Location to execute command
     env:
       SOME_ENV: true                          # Set an environment variable called "SOME_ENV"
