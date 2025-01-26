@@ -39,5 +39,8 @@
 **/cache.*.txt
 
 # Ignore components vendored during tests
-tests/fixtures/scenarios/vendor/components/**
 examples/demo-vendoring/components/**
+
+# We want to track the files, so we can easily clean them up in tests
+# Otherwise, our test-cases can produce unpredictable results
+!tests/fixtures/**/*

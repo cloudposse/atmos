@@ -435,7 +435,6 @@ tests:
     enabled: true
     description: "Should show help for 'atmos validate editorconfig help'"
     snapshot: true
-    diff: []
     workdir: "../"
     command: atmos
     args:
@@ -443,12 +442,12 @@ tests:
       - "editorconfig"
       - "help"
     expect:
+      diff: []
       exit_code: 0
   - name: atmos validate editorconfig --help
     enabled: true
     description: "Should show help for 'atmos validate editorconfig --help'"
     snapshot: true
-    diff: []
     workdir: "../"
     command: atmos
     args:
@@ -456,12 +455,12 @@ tests:
       - "editorconfig"
       - "--help"
     expect:
+      diff: []
       exit_code: 0
   - name: atmos validate editorconfig non-existant
     enabled: true
     description: "Should show usage for 'atmos validate editorconfig non-existant'"
     snapshot: true
-    diff: []
     workdir: "../"
     command: atmos
     args:
@@ -469,20 +468,45 @@ tests:
       - "editorconfig"
       - "non-existant"
     expect:
+      diff: []
       exit_code: 1
 
-  - name: "check atmos --help in empty-dir"
+  - name: "check atmos --help has new version available"
     enabled: true
     snapshot: true
-    description: "Test 'atmos --help' command in empty directory"
+    tty: false
+    description: "Test 'atmos --help' emits new version available message"
     workdir: "fixtures/scenarios/empty-dir"
+    clean: true
     command: "atmos"
     args:
       - --help
     expect:
+      exit_code: 0
+      stdout:
+        # Update available! test » 1.155.0
+        - 'Update available! (\d+\.\d+\.\d+|test) » (\d+\.\d+\.\d+|test)'
+        - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
+        - 'Install Atmos: https://atmos\.tools/install'
+      stderr:
+        - "^$"
+      diff:
+        - "Update available!"
+
+  - name: "check atmos --help in empty-dir"
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Test 'atmos --help' command in empty directory"
+    workdir: "fixtures/scenarios/empty-dir"
+    clean: true
+    command: "atmos"
+    args:
+      - --help
+    expect:
+      exit_code: 0
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
-      exit_code: 0

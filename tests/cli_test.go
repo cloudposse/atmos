@@ -16,6 +16,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
+	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
@@ -45,16 +46,17 @@ type Expectation struct {
 	Diff         []string                  `yaml:"diff"`          // Acceptable differences in snapshot
 }
 type TestCase struct {
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	Enabled     bool              `yaml:"enabled"`
-	Workdir     string            `yaml:"workdir"`
-	Command     string            `yaml:"command"`
-	Args        []string          `yaml:"args"`
-	Env         map[string]string `yaml:"env"`
-	Expect      Expectation       `yaml:"expect"`
-	Tty         bool              `yaml:"tty"`
-	Snapshot    bool              `yaml:"snapshot"`
+	Name        string            `yaml:"name"`        // Name of the test
+	Description string            `yaml:"description"` // Description of the test
+	Enabled     bool              `yaml:"enabled"`     // Enable or disable the test
+	Workdir     string            `yaml:"workdir"`     // Working directory for the command
+	Command     string            `yaml:"command"`     // Command to run
+	Args        []string          `yaml:"args"`        // Command arguments
+	Env         map[string]string `yaml:"env"`         // Environment variables
+	Expect      Expectation       `yaml:"expect"`      // Expected output
+	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
+	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
+	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
 	Skip        struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
@@ -329,9 +331,21 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Change to the specified working directory
 	if tc.Workdir != "" {
-		err := os.Chdir(tc.Workdir)
+		absoluteWorkdir, err := filepath.Abs(tc.Workdir)
+		if err != nil {
+			t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
+		}
+		err = os.Chdir(absoluteWorkdir)
 		if err != nil {
 			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
+		}
+
+		// Clean the directory if enabled
+		if tc.Clean {
+			t.Logf("Cleaning directory: %q", tc.Workdir)
+			if err := cleanDirectory(t, absoluteWorkdir); err != nil {
+				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
+			}
 		}
 	}
 
@@ -704,6 +718,72 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 
 	return true
+}
+
+// Clean up untracked files in the working directory
+func cleanDirectory(t *testing.T, workdir string) error {
+
+	// Find the root of the Git repository
+	repoRoot, err := findGitRepoRoot(workdir)
+	if err != nil {
+		return fmt.Errorf("failed to locate git repository from %q: %w", workdir, err)
+	}
+
+	// Open the repository
+	repo, err := git.PlainOpen(repoRoot)
+	if err != nil {
+		return fmt.Errorf("failed to open git repository: %w", err)
+	}
+
+	// Get the worktree
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Get the repository status
+	status, err := worktree.Status()
+	if err != nil {
+		return fmt.Errorf("failed to get git status: %w", err)
+	}
+
+	// Clean only files in the provided working directory
+	for file, statusEntry := range status {
+		if statusEntry.Worktree == git.Untracked {
+			fullPath := filepath.Join(repoRoot, file)
+			if strings.HasPrefix(fullPath, workdir) {
+				t.Logf("Removing untracked file: %q\n", fullPath)
+				if err := os.RemoveAll(fullPath); err != nil {
+					return fmt.Errorf("failed to remove %q: %w", fullPath, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// findGitRepo finds the Git repository root
+func findGitRepoRoot(path string) (string, error) {
+	// Open the Git repository starting from the given path
+	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
+		return "", fmt.Errorf("failed to find git repository: %w", err)
+	}
+
+	// Get the repository's working tree
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Return the absolute path to the root of the working tree
+	root, err := filepath.Abs(worktree.Filesystem.Root())
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path of repository root: %w", err)
+	}
+
+	return root, nil
 }
 
 func TestUnmarshalMatchPattern(t *testing.T) {
