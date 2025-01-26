@@ -210,10 +210,7 @@ func initCobraConfig() {
 				u.LogErrorAndExit(atmosConfig, err)
 			}
 		}
-		// Only check for version updates if this is a version-related command
-		if command.Name() == "version" || (len(args) > 0 && args[0] == "version") {
-			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
-		}
+		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }
 
