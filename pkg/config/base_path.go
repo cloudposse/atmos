@@ -23,30 +23,17 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 	}
 
 	// Check base path from configuration
+	// Check base path from configuration
 	if cl.atmosConfig.BasePath != "" {
-
+		source := "atmos config"
 		if !filepath.IsAbs(cl.atmosConfig.BasePath) {
-			source := "atmos config relative"
 			// If relative, make it absolute based on the current working directory
 			absPath, err := filepath.Abs(cl.atmosConfig.BasePath)
 			if err != nil {
 				return "", fmt.Errorf("failed to resolve relative base path from %s: %w", source, err)
 			}
-			currentDir, err := os.Getwd()
-			if err != nil {
-				return "", err
-			}
-			relativePath, err := filepath.Rel(currentDir, absPath)
-			if err != nil {
-				return "", fmt.Errorf("Error base path from from atmos config can not resolving relative path:%w", err)
-			}
-			_, err = cl.resolveAndValidatePath(relativePath, source)
-			if err != nil {
-				return "", err
-			}
-			return relativePath, nil
+			cl.atmosConfig.BasePath = absPath
 		}
-		source := "atmos config"
 		return cl.resolveAndValidatePath(cl.atmosConfig.BasePath, source)
 	}
 

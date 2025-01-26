@@ -106,9 +106,11 @@ func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create directory %q: %v", subDirTemp, err)
 	}
+	expectedPath, _ = filepath.Abs(subDirTemp)
+
 	configLoader.atmosConfig.BasePath = "sub-dir"
 	result, err = configLoader.BasePathComputing(info)
 	assert.NoError(t, err)
-	assert.Equal(t, "sub-dir", result)
+	assert.Equal(t, expectedPath, result)
 
 }
