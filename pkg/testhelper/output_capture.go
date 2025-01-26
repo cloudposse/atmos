@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var (
@@ -24,6 +26,8 @@ type testOutputBuffer struct {
 	origStderr *os.File
 	outBuf     *bytes.Buffer
 	errBuf     *bytes.Buffer
+	outReader  *os.File
+	errReader  *os.File
 }
 
 // Run executes a test function with output buffering
@@ -44,6 +48,18 @@ func Run(t *testing.T, testFunc func(*testing.T)) {
 	buf := captureTestOutput(t)
 	defer buf.stopCapture()
 	testFunc(t)
+}
+
+// RunWithConfig executes a test function with output buffering and ConfigAndStacksInfo
+func RunWithConfig(t *testing.T, configAndStacksInfo schema.ConfigAndStacksInfo, testFunc func(*testing.T, schema.ConfigAndStacksInfo)) {
+	if DisableBuffering {
+		testFunc(t, configAndStacksInfo)
+		return
+	}
+
+	buf := captureTestOutput(t)
+	defer buf.stopCapture()
+	testFunc(t, configAndStacksInfo)
 }
 
 // captureTestOutput starts capturing output for a test
@@ -72,6 +88,8 @@ func captureTestOutput(t *testing.T) *testOutputBuffer {
 		origStderr: os.Stderr,
 		outBuf:     &bytes.Buffer{},
 		errBuf:     &bytes.Buffer{},
+		outReader:  outReader,
+		errReader:  errReader,
 	}
 
 	outputMutex.Lock()
@@ -79,8 +97,8 @@ func captureTestOutput(t *testing.T) *testOutputBuffer {
 	os.Stderr = buf.stderr
 	outputMutex.Unlock()
 
-	go io.Copy(buf.outBuf, outReader)
-	go io.Copy(buf.errBuf, errReader)
+	go io.Copy(buf.outBuf, buf.outReader)
+	go io.Copy(buf.errBuf, buf.errReader)
 
 	return buf
 }
@@ -94,9 +112,15 @@ func (b *testOutputBuffer) stopCapture() {
 	outputMutex.Lock()
 	defer outputMutex.Unlock()
 
+	// Close writers first
 	b.stdout.Close()
 	b.stderr.Close()
 
+	// Wait for readers to finish
+	b.outReader.Close()
+	b.errReader.Close()
+
+	// Restore original stdout/stderr
 	os.Stdout = b.origStdout
 	os.Stderr = b.origStderr
 

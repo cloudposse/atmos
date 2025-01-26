@@ -53,9 +53,6 @@ version-windows: build-windows
 deps:
 	go mod download
 
-# Test verbosity levels: quiet, normal, verbose
-ATMOS_TEST_VERBOSITY ?= normal
-
 # Run acceptance tests
 testacc: get
 	go test $(TEST) -v $(TESTARGS) -timeout 10m

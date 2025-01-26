@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestOutputCapture(t *testing.T) {
@@ -16,6 +18,7 @@ func TestOutputCapture(t *testing.T) {
 			name: "captures stdout only",
 			fn: func() {
 				fmt.Println("Hello, stdout!")
+				t.Error("Intentionally failing test to verify output buffering")
 			},
 		},
 		{
@@ -72,5 +75,48 @@ func TestOutputCapture_Concurrent(t *testing.T) {
 
 	for i := 0; i < numGoroutines; i++ {
 		<-done
+	}
+}
+
+func TestRunWithConfig(t *testing.T) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "test-component",
+		Stack:            "test-stack",
+		ComponentSection: map[string]any{
+			"vars":     map[string]any{"env": "test"},
+			"metadata": map[string]any{"name": "test"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		fn            func(*testing.T, schema.ConfigAndStacksInfo)
+		disableBuffer bool
+	}{
+		{
+			name: "captures output with config",
+			fn: func(t *testing.T, info schema.ConfigAndStacksInfo) {
+				fmt.Printf("Component: %s, Stack: %s\n", info.ComponentFromArg, info.Stack)
+			},
+		},
+		{
+			name: "with disabled buffering",
+			fn: func(t *testing.T, info schema.ConfigAndStacksInfo) {
+				fmt.Printf("Unbuffered - Component: %s, Stack: %s\n", info.ComponentFromArg, info.Stack)
+			},
+			disableBuffer: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origDisableBuffering := DisableBuffering
+			defer func() {
+				DisableBuffering = origDisableBuffering
+			}()
+
+			DisableBuffering = tt.disableBuffer
+			RunWithConfig(t, configAndStacksInfo, tt.fn)
+		})
 	}
 }
