@@ -604,7 +604,7 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	commandPath := cmd.CommandPath()
 	suggestions := []string{}
-	details := fmt.Sprintf("The command `%s` is not valid\n\n", commandPath)
+	details := fmt.Sprintf("The command `%s` is not valid usage\n\n", commandPath)
 	if len(arg) > 0 {
 		details = fmt.Sprintf("Unknown command `%s` for `%s`\n\n", arg, commandPath)
 	} else if len(cmd.Commands()) != 0 && arg == "" {
