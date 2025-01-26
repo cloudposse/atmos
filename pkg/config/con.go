@@ -84,7 +84,7 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 			return cl.atmosConfig, err
 		}
 		if err := cl.processConfigImports(); err != nil {
-			cl.logging(err.Error())
+			cl.debugLogging(err.Error())
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
@@ -94,11 +94,19 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 
 	}
 
-	if !cl.configFound {
-		// Load system, user-specific, and other configurations
-		if err := cl.loadSystemAndUserConfigs(configAndStacksInfo); err != nil {
-			return cl.atmosConfig, err
+	// Load system directory configurations
+	err = cl.loadSystemConfig()
+	if err != nil {
+		cl.debugLogging(fmt.Sprintf("Failed to load system directory configurations: %v", err))
+	} else {
+		if err := cl.processConfigImports(); err != nil {
+			cl.debugLogging(fmt.Sprintf("Failed to process imports after system directory configurations: %s", err.Error()))
 		}
+	}
+
+	// Load  user-specific, and other configurations
+	if err := cl.loadSystemAndUserConfigs(configAndStacksInfo); err != nil {
+		return cl.atmosConfig, err
 	}
 
 	// Stage 2: Discover Additional Configurations
@@ -194,7 +202,7 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 		if info.IsDir() {
 			paths, err := cl.SearchAtmosConfigFileDir(configPath)
 			if err != nil {
-				cl.logging(fmt.Sprintf("Failed to find config file in directory '%s'.", configPath))
+				cl.debugLogging(fmt.Sprintf("Failed to find config file in directory '%s'.", configPath))
 				continue
 			}
 			configPaths = append(configPaths, paths...)
@@ -202,7 +210,7 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 		} else {
 			path, exist := cl.SearchConfigFilePath(configPath)
 			if !exist {
-				cl.logging(fmt.Sprintf("Failed to find config file in path '%s'.", configPath))
+				cl.debugLogging(fmt.Sprintf("Failed to find config file in path '%s'.", configPath))
 				continue
 			}
 			configPaths = append(configPaths, path)
@@ -223,19 +231,6 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 
 // loadSystemAndUserConfigs loads system and user-specific configuration files.
 func (cl *ConfigLoader) loadSystemAndUserConfigs(configAndStacksInfo schema.ConfigAndStacksInfo) error {
-	// Load system directory configurations
-	configFilePathSystem := getSystemConfigPath()
-	if configFilePathSystem != "" {
-		configFile := filepath.Join(configFilePathSystem, CliConfigFileName)
-		found, configPath, err := processConfigFile(cl.atmosConfig, configFile, cl.viper)
-		if err != nil {
-			return err
-		}
-		if found {
-			cl.configFound = true
-			cl.atmosConfig.CliConfigPath = configPath
-		}
-	}
 
 	// Load user-specific configurations using xdg.ConfigHome
 	userConfigFile := filepath.Join(xdg.ConfigHome, CliConfigFileName)
@@ -287,10 +282,10 @@ func (cl *ConfigLoader) discoverAdditionalConfigs(configAndStacksInfo schema.Con
 
 // stageDiscoverAdditionalConfigs handles Stage 2: Discover Additional Configurations as per the flowchart.
 func (cl *ConfigLoader) stageDiscoverAdditionalConfigs(configAndStacksInfo schema.ConfigAndStacksInfo) error {
-	// 1. Check ATMOS_CLI_CONFIG_PATH
-	if cl.atmosConfig.CliConfigPath != "" {
+	// 1. Check ATMOS_CLI_CONFIG_PATH ENV
+	if atmosCliConfigPathEnv := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmosCliConfigPathEnv != "" {
 		u.LogTrace(cl.atmosConfig, fmt.Sprintf("Checking ATMOS_CLI_CONFIG_PATH: %s", cl.atmosConfig.CliConfigPath))
-		found, paths, err := cl.loadConfigsFromPath(cl.atmosConfig.CliConfigPath)
+		found, paths, err := cl.loadConfigsFromPath(atmosCliConfigPathEnv)
 		if err != nil {
 			return fmt.Errorf("error loading configs from ATMOS_CLI_CONFIG_PATH: %w", err)
 		}
@@ -526,7 +521,7 @@ func (cl *ConfigLoader) processConfigImports() error {
 		}
 
 		for _, configPath := range resolvedPaths {
-			found, configPath, err := cl.loadConfigFile(cl.atmosConfig, configPath, cl.viper)
+			found, err := cl.loadConfigFileViber(cl.atmosConfig, configPath, cl.viper)
 			if err != nil {
 				u.LogWarning(cl.atmosConfig, fmt.Sprintf("failed to merge configuration from '%s': %v", configPath, err))
 				continue
@@ -583,40 +578,59 @@ func (cl *ConfigLoader) finalChecks() error {
 	// Additional final checks can be implemented here
 	return nil
 }
+func (cl *ConfigLoader) loadSystemConfig() error {
+	configSysPath, found := cl.getSystemConfigPath()
+	if found {
+		cl.atmosConfig.CliConfigPath = ConnectPaths([]string{configSysPath})
+		cl.debugLogging(fmt.Sprintf("Found system config file at: %s", configSysPath))
+		ok, err := cl.loadConfigFileViber(cl.atmosConfig, configSysPath, cl.viper)
+		if err != nil {
+			return err
+		}
+		if ok {
+			u.LogTrace(cl.atmosConfig, fmt.Sprintf(" system config file merged: %s", configSysPath))
+			err := cl.deepMergeConfig()
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+		return nil
+
+	} else {
+		cl.debugLogging(fmt.Sprintf("No system config file found"))
+	}
+	return nil
+}
 
 // Helper functions
 // getSystemConfigPath returns the first found system configuration directory.
-// It checks the standard XDG directories and includes /usr/local/etc as an additional path.
-func getSystemConfigPath() string {
+func (cl *ConfigLoader) getSystemConfigPath() (string, bool) {
+	var systemFilePaths []string
 	if runtime.GOOS == "windows" {
 		programData := os.Getenv("PROGRAMDATA")
 		if programData != "" {
-			return filepath.Join(programData, "atmos")
+			systemFilePaths = append(systemFilePaths, filepath.Join(programData, CliConfigFileName))
 		}
+	} else {
+		systemFilePaths = append(systemFilePaths, filepath.Join(SystemDirConfigFilePath, CliConfigFileName), filepath.Join("/etc", CliConfigFileName))
 	}
-
-	// Define additional system config directories
-	additionalSystemDirs := []string{
-		"/usr/local/etc", // Common on Unix-like systems
-	}
-
-	// Combine xdg.ConfigDirs with additional system directories
-	systemDirs := append(additionalSystemDirs, xdg.ConfigDirs...)
-
-	// Iterate through the system directories and return the first existing one
-	for _, dir := range systemDirs {
-		if _, err := os.Stat(dir); err == nil {
-			return dir
+	var configFilesPath string
+	for _, filePath := range systemFilePaths {
+		resultPath, exist := cl.SearchConfigFilePath(filePath)
+		if !exist {
+			cl.debugLogging(fmt.Sprintf("Failed to find config file on system path '%s'", filePath))
+			continue
 		}
-	}
+		if exist {
+			cl.debugLogging(fmt.Sprintf("Found config file on system path '%s': %s", filePath, resultPath))
+			configFilesPath = resultPath
+			return configFilesPath, true
+		}
 
-	// Fallback to the first XDG config directory if none of the above exist
-	if len(xdg.ConfigDirs) > 0 {
-		return xdg.ConfigDirs[0]
 	}
+	return configFilesPath, false
 
-	// If no directories are found, return an empty string
-	return ""
 }
 func (cl *ConfigLoader) convertPaths() error {
 	// Convert stacks base path to absolute path
@@ -697,7 +711,7 @@ func (cl *ConfigLoader) processStacks(configAndStacksInfo schema.ConfigAndStacks
 
 	return nil
 }
-func (cl *ConfigLoader) logging(msg string) {
+func (cl *ConfigLoader) debugLogging(msg string) {
 	if cl.debug {
 		u.LogTrace(cl.atmosConfig, msg)
 	}
@@ -844,14 +858,14 @@ func (cl *ConfigLoader) sortFilesByDepth(files []string) []string {
 	return sortedFiles
 }
 
-func (cl *ConfigLoader) loadConfigFile(
+func (cl *ConfigLoader) loadConfigFileViber(
 	atmosConfig schema.AtmosConfiguration,
 	path string,
 	v *viper.Viper,
-) (bool, string, error) {
+) (bool, error) {
 	reader, err := os.Open(path)
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
 	defer func(reader *os.File) {
@@ -863,10 +877,10 @@ func (cl *ConfigLoader) loadConfigFile(
 
 	err = v.MergeConfig(reader)
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
 
-	return true, path, nil
+	return true, nil
 }
 
 // ConnectPaths joins multiple paths using the OS-specific path list separator.
@@ -875,7 +889,7 @@ func ConnectPaths(paths []string) string {
 }
 func (cl *ConfigLoader) MergePathsViber(configPaths []string) error {
 	for _, configPath := range configPaths {
-		found, configPath, err := cl.loadConfigFile(cl.atmosConfig, configPath, cl.viper)
+		found, err := cl.loadConfigFileViber(cl.atmosConfig, configPath, cl.viper)
 		if err != nil {
 			u.LogWarning(cl.atmosConfig, fmt.Sprintf("failed to merge configuration from '%s': %v", configPath, err))
 			continue

@@ -88,7 +88,7 @@ func (cl *ConfigLoader) processRemoteImport(importPath, tempDir string, currentD
 
 	v := viper.New()
 	v.SetConfigType("yaml")
-	found, _, err := cl.loadConfigFile(cl.atmosConfig, tempFile, v)
+	found, err := cl.loadConfigFileViber(cl.atmosConfig, tempFile, v)
 	if err != nil || !found {
 		return nil, fmt.Errorf("failed to load remote config '%s': %v", importPath, err)
 	}
@@ -131,7 +131,7 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 	for _, path := range paths {
 		v := viper.New()
 		v.SetConfigType("yaml")
-		found, _, err := cl.loadConfigFile(cl.atmosConfig, path, v)
+		found, err := cl.loadConfigFileViber(cl.atmosConfig, path, v)
 		if err != nil || !found {
 			u.LogWarning(cl.atmosConfig, fmt.Sprintf("failed to load local config '%s': %v", path, err))
 			continue
