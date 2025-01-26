@@ -25,6 +25,17 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 	// Check base path from configuration
 	// Check base path from configuration
 	if cl.atmosConfig.BasePath != "" {
+		if cl.atmosConfig.BasePath == "!repo-root" {
+			pwd, err := os.Getwd()
+			if err != nil {
+				return "", err
+			}
+			getGitRoot, err := GetGitRoot(pwd)
+			if err != nil {
+				return "", fmt.Errorf("failed to resolve base path from `!repo-root` Git root error: %w", err)
+			}
+			return getGitRoot, nil
+		}
 		source := "atmos config"
 		if !filepath.IsAbs(cl.atmosConfig.BasePath) {
 			// If relative, make it absolute based on the current working directory

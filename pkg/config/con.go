@@ -871,7 +871,7 @@ func (cl *ConfigLoader) loadConfigFileViber(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(atmosConfig, fmt.Sprintf("error closing file '"+path+"'. "+err.Error()))
+			u.LogWarning(atmosConfig, fmt.Sprintf("%s", "error closing file '"+path+"'. "+err.Error()))
 		}
 	}(reader)
 
