@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	"github.com/charmbracelet/glamour/ansi"
-	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -22,12 +21,7 @@ func applyStyleSafely(style *ansi.StylePrimitive, color string) {
 
 // GetDefaultStyle returns the markdown style configuration from atmos.yaml settings
 // or falls back to built-in defaults if not configured
-func GetDefaultStyle() ([]byte, error) {
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return getBuiltinDefaultStyle()
-	}
-
+func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	// Get the built-in default style
 	defaultBytes, err := getBuiltinDefaultStyle()
 	if err != nil {

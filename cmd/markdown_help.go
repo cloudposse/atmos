@@ -11,6 +11,12 @@ var terraformPlan string
 //go:embed markdown/atmos_terraform_apply_usage.md
 var terraformApply string
 
+//go:embed markdown/atmos_workflow_usage.md
+var workflow string
+
+//go:embed markdown/atmos_about_usage.md
+var atmosAbout string
+
 type ExampleContent struct {
 	Content    string
 	Suggestion string
@@ -32,5 +38,12 @@ var examples map[string]ExampleContent = map[string]ExampleContent{
 		Content: terraformApply,
 		// TODO: We should update this once we have a page for terraform plan
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
+	},
+	"atmos_workflow": {
+		Content:    workflow,
+		Suggestion: "https://atmos.tools/cli/commands/workflow/",
+	},
+	"atmos_about": {
+		Content: atmosAbout,
 	},
 }

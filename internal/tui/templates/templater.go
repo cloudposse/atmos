@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -82,6 +84,23 @@ func isNativeCommandsAvailable(cmds []*cobra.Command) bool {
 
 func isAliasesPresent(cmds []*cobra.Command) bool {
 	return len(filterCommands(cmds, true)) > 0
+}
+
+func formatExamples(example string) string {
+	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	if err != nil {
+		return ""
+	}
+	data, err := render.RenderError("", example, "")
+	if err == nil {
+		return data
+	}
+
+	data, err = render.RenderAscii(example)
+	if err == nil {
+		return data
+	}
+	return ""
 }
 
 // formatCommands formats a slice of cobra commands with proper styling
@@ -184,6 +203,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cobra.AddTemplateFunc("isAliasesPresent", isAliasesPresent)
 	cobra.AddTemplateFunc("isNativeCommandsAvailable", isNativeCommandsAvailable)
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
+	cobra.AddTemplateFunc("formatExamples", formatExamples)
 	return nil
 }
 

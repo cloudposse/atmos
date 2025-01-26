@@ -557,45 +557,25 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 // Markdown usage is not compatible with all outputs. We should therefore have fallback option.
 func showUsageAndExit(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
-		showErrorExampleFromMarkdown(cmd.CommandPath(), "")
+		showErrorExampleFromMarkdown(cmd, "")
 	}
-	var suggestions []string
-	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
-
 	if len(args) > 0 {
-		showErrorExampleFromMarkdown(cmd.CommandPath(), args[0])
-		suggestions = cmd.SuggestionsFor(args[0])
-		unknownCommand = fmt.Sprintf("Error: Unknown command %q for %q\n\n", args[0], cmd.CommandPath())
+		showErrorExampleFromMarkdown(cmd, args[0])
 	}
-	u.PrintErrorInColor(unknownCommand)
-	if len(suggestions) > 0 {
-		u.PrintMessage("Did you mean this?")
-		for _, suggestion := range suggestions {
-			u.PrintMessage(fmt.Sprintf("  %s\n", suggestion))
-		}
-	} else {
-		// Retrieve valid subcommands dynamically
-		validSubcommands := []string{}
-		for _, subCmd := range cmd.Commands() {
-			validSubcommands = append(validSubcommands, subCmd.Name())
-		}
-		if len(validSubcommands) > 0 {
-			u.PrintMessage("Valid subcommands are:")
-			for _, sub := range validSubcommands {
-				u.PrintMessage(fmt.Sprintf("  %s", sub))
-			}
-		} else {
-			u.PrintMessage("No valid subcommands found")
-		}
-	}
-	u.PrintMessage(fmt.Sprintf("\nRun '%s --help' for usage", cmd.CommandPath()))
 	os.Exit(1)
 }
 
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
-	unknownCommand := fmt.Sprintf("Error: %v for command %q\n\n", err.Error(), cmd.CommandPath())
-	u.PrintErrorInColor(unknownCommand)
-	u.PrintMessage(fmt.Sprintf("Run '%s --help' for usage", cmd.CommandPath()))
+	unknownCommand := fmt.Sprintf("%v for command `%s`\n\n", err.Error(), cmd.CommandPath())
+	args := strings.Split(err.Error(), ": ")
+	if len(args) == 2 {
+		unknownCommand = fmt.Sprintf("%s `%s` for command `%s`\n\n", args[0], args[1], cmd.CommandPath())
+	}
+	renderError(ErrorMessage{
+		Title:      "Invalid Flag",
+		Details:    unknownCommand,
+		Suggestion: fmt.Sprintf("Run `%s --help` for usage", cmd.CommandPath()),
+	})
 	os.Exit(1)
 	return nil
 }
@@ -619,4 +599,48 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 	return info
+}
+
+func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
+	commandPath := cmd.CommandPath()
+	contentName := strings.ReplaceAll(commandPath, " ", "_")
+	suggestions := []string{}
+	details := fmt.Sprintf("The command `%s` is not valid\n\n", commandPath)
+	if len(arg) > 0 {
+		details = fmt.Sprintf("Unknown command `%s` for `%s`\n\n", arg, commandPath)
+	} else if len(cmd.Commands()) != 0 && arg == "" {
+		details = fmt.Sprintf("The command `%s` requires a subcommand\n\n", commandPath)
+	}
+	if len(arg) > 0 {
+		suggestions = cmd.SuggestionsFor(arg)
+	}
+	if len(suggestions) > 0 {
+		details = details + "Did you mean this?\n"
+		for _, suggestion := range suggestions {
+			details += "* " + suggestion + "\n"
+		}
+	} else {
+		if len(cmd.Commands()) > 0 {
+			details += "Valid subcommands are:\n"
+		}
+		// Retrieve valid subcommands dynamically
+		for _, subCmd := range cmd.Commands() {
+			details = details + "* " + subCmd.Name() + "\n"
+		}
+		if len(cmd.Commands()) == 0 && arg != "" {
+			details += "No valid subcommands found for `" + cmd.CommandPath() + "`\n"
+		}
+	}
+	suggestion := fmt.Sprintf("\nRun '%s --help' for usage", cmd.CommandPath())
+	if exampleContent, ok := examples[contentName]; ok {
+		suggestion = exampleContent.Suggestion
+		details += "\n## Usage Examples:\n" + exampleContent.Content
+	}
+	if err := renderError(ErrorMessage{
+		Title:      "Incorrect Usage",
+		Details:    details,
+		Suggestion: suggestion,
+	}); err != nil {
+		return
+	}
 }

@@ -2,21 +2,26 @@ package markdown
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/styles"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/muesli/termenv"
 )
 
 // Renderer is a markdown renderer using Glamour
 type Renderer struct {
-	renderer *glamour.TermRenderer
-	width    uint
-	profile  termenv.Profile
+	renderer    *glamour.TermRenderer
+	width       uint
+	profile     termenv.Profile
+	atmosConfig *schema.AtmosConfiguration
 }
 
 // NewRenderer creates a new markdown renderer with the given options
-func NewRenderer(opts ...Option) (*Renderer, error) {
+func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
 		width:   80,                     // default width
 		profile: termenv.ColorProfile(), // default color profile
@@ -28,7 +33,7 @@ func NewRenderer(opts ...Option) (*Renderer, error) {
 	}
 
 	// Get default style
-	style, err := GetDefaultStyle()
+	style, err := GetDefaultStyle(atmosConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +57,19 @@ func NewRenderer(opts ...Option) (*Renderer, error) {
 // Render renders markdown content to ANSI styled text
 func (r *Renderer) Render(content string) (string, error) {
 	return r.renderer.Render(content)
+}
+
+func (r *Renderer) RenderAscii(content string) (string, error) {
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithWordWrap(int(r.width)),
+		glamour.WithColorProfile(r.profile),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return "", err
+	}
+	return renderer.Render(content)
 }
 
 // RenderWithStyle renders markdown content with a specific style
@@ -86,12 +104,12 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	}
 
 	if details != "" {
-		content += fmt.Sprintf("%s\n\n", details)
+		content += fmt.Sprintf("%s", details)
 	}
 
 	if suggestion != "" {
 		if strings.HasPrefix(suggestion, "http") {
-			content += fmt.Sprintf("\nFor more information, refer to the [docs](%s)\n", suggestion)
+			content += fmt.Sprintf("\nFor more information, refer to the [docs](%s)", suggestion)
 		} else {
 			content += suggestion
 		}
@@ -105,19 +123,13 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	// Remove duplicate URLs and trailing newlines
 	lines := strings.Split(rendered, "\n")
 	var result []string
-	seenURL := false
 
 	// Create a purple style
 	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, "https://") {
-			if !seenURL {
-				seenURL = true
-				result = append(result, line)
-			}
-		} else if strings.HasPrefix(trimmed, "$") {
+		if strings.HasPrefix(trimmed, "$") {
 			// Add custom styling for command examples
 			styled := purpleStyle.Styled(strings.TrimSpace(line))
 			result = append(result, " "+styled)
@@ -127,7 +139,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	}
 
 	// Add a single newline at the end plus extra spacing
-	return "\n" + strings.Join(result, "\n") + "\n\n", nil
+	return strings.Join(result, "\n"), nil
 }
 
 // RenderSuccess renders a success message with specific styling
@@ -151,9 +163,22 @@ func WithWidth(width uint) Option {
 	}
 }
 
-// WithColorProfile sets the color profile for the renderer
-func WithColorProfile(profile termenv.Profile) Option {
-	return func(r *Renderer) {
-		r.profile = profile
+func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
+	maxWidth := atmosConfig.Settings.Docs.MaxWidth
+	// Create a terminal writer to get the optimal width
+	termWriter := term.NewResponsiveWriter(os.Stdout)
+	var wr *term.TerminalWriter
+	var ok bool
+	var screenWidth uint = 1000
+	if wr, ok = termWriter.(*term.TerminalWriter); ok {
+		screenWidth = wr.GetWidth()
 	}
+	if maxWidth > 0 {
+		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
+	}
+
+	return NewRenderer(
+		atmosConfig,
+		WithWidth(screenWidth),
+	)
 }

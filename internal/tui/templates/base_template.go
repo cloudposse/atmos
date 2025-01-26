@@ -13,7 +13,6 @@ const (
 	GlobalFlags
 	AdditionalHelpTopics
 	NativeCommands
-	DoubleDashHelp
 	Footer
 )
 
@@ -62,7 +61,7 @@ func getSection(section HelpTemplateSections) string {
 
 {{HeadingStyle "Examples:"}}
 
-{{.Example}}{{end}}`
+{{formatExamples .Example}}{{end}}`
 	case Flags:
 		return `{{if .HasAvailableLocalFlags}}
 
@@ -89,17 +88,8 @@ func getSection(section HelpTemplateSections) string {
 {{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [sub-command] [flags]{{end}}`
-	case DoubleDashHelp:
-		return `
-
-The '--' (double-dash) can be used to signify the end of Atmos-specific options 
-and the beginning of additional native arguments and flags for the specific command being run.
-
-Example:
-  {{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} <component> -s <stack> -- <native-flags>`
 	case Footer:
 		return `{{if .HasAvailableSubCommands}}
-
 Use "{{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} --help" for more information about a command.{{end}}`
 	default:
 		return ""
