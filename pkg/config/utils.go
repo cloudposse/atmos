@@ -350,23 +350,6 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Schemas.Atmos.Manifest = atmosManifestJsonSchemaPath
 	}
 
-	logsFile := os.Getenv("ATMOS_LOGS_FILE")
-	if len(logsFile) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_FILE=%s", logsFile))
-		atmosConfig.Logs.File = logsFile
-	}
-
-	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
-	if len(logsLevel) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
-		// Validate the log level before setting it
-		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
-			return fmt.Errorf("Error: Invalid log level '%s' set in the ATMOS_LOGS_LEVEL environment variable. Valid options are: [Trace, Debug, Info, Warning, Off]", logsLevel)
-		}
-		// Only set the log level if validation passes
-		atmosConfig.Logs.Level = logsLevel
-	}
-
 	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
 	if len(tfAppendUserAgent) > 0 {
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT=%s", tfAppendUserAgent))
@@ -412,6 +395,34 @@ func checkConfig(atmosConfig schema.AtmosConfiguration) error {
 }
 
 func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+	if len(configAndStacksInfo.LogsLevel) > 0 {
+		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
+			return fmt.Errorf("Error: Invalid log level '%s' specified with the --logs-level flag. Valid options are: [Trace, Debug, Info, Warning, Off]", configAndStacksInfo.LogsLevel)
+		}
+		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
+		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
+	}
+	if len(configAndStacksInfo.LogsFile) > 0 {
+		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
+		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
+	}
+
+	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
+	if len(logsLevel) > 0 && len(configAndStacksInfo.LogsLevel) == 0 {
+		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
+		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
+			return fmt.Errorf("Error: Invalid log level '%s' set in the ATMOS_LOGS_LEVEL environment variable. Valid options are: [Trace, Debug, Info, Warning, Off]", logsLevel)
+		}
+		atmosConfig.Logs.Level = logsLevel
+	}
+
+	logsFile := os.Getenv("ATMOS_LOGS_FILE")
+	if len(logsFile) > 0 && len(configAndStacksInfo.LogsFile) == 0 {
+		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_LOGS_FILE=%s", logsFile))
+		atmosConfig.Logs.File = logsFile
+	}
+
+	// Process the rest of the command line arguments
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
@@ -483,17 +494,6 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
 		atmosConfig.Schemas.Atmos.Manifest = configAndStacksInfo.AtmosManifestJsonSchema
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
-	}
-	if len(configAndStacksInfo.LogsLevel) > 0 {
-		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
-			return fmt.Errorf("Error: Invalid log level '%s' specified with the --logs-level flag. Valid options are: [Trace, Debug, Info, Warning, Off]", configAndStacksInfo.LogsLevel)
-		}
-		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
-	}
-	if len(configAndStacksInfo.LogsFile) > 0 {
-		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
 	}
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy

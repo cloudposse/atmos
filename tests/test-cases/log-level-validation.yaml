@@ -68,7 +68,7 @@ tests:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stdout:
-        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
       stderr:
         - "^$"
       exit_code: 0
@@ -104,4 +104,4 @@ tests:
     expect:
       exit_code: 1
       stderr:
-        - "Error: Invalid log level 'XTrace' specified with the --logs-level flag\\. Valid options are: \\[Trace, Debug, Info, Warning, Off\\]\\n"
+        - "Error: Invalid log level 'XTrace' specified with the --logs-level flag\\. Valid options are: \\[Trace, Debug, Info, Warning, Off\\]\n"

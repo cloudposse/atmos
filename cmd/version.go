@@ -8,8 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -23,24 +21,9 @@ var versionCmd = &cobra.Command{
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Get the log level from command line flag
-		logsLevel, err := cmd.Flags().GetString("logs-level")
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
-
-		// Initialize atmosConfig with the log level from flags
-		info := schema.ConfigAndStacksInfo{
-			LogsLevel: logsLevel,
-		}
-		atmosConfig, err := cfg.InitCliConfig(info, false)
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
-
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
+		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
 			u.LogErrorAndExit(atmosConfig, err)
 		}
@@ -50,6 +33,7 @@ var versionCmd = &cobra.Command{
 		u.PrintMessage(fmt.Sprintf("%s Atmos %s on %s/%s", atmosIcon, version.Version, runtime.GOOS, runtime.GOARCH))
 		fmt.Println()
 
+		// Only check for updates when explicitly requested
 		if checkFlag {
 			u.LogDebug(atmosConfig, "Checking for latest Atmos release on Github")
 			// Check for the latest Atmos release on GitHub
@@ -75,12 +59,11 @@ var versionCmd = &cobra.Command{
 					u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
 				}
 			}
-			return
-		}
 
-		// Check for the cache and print update message
-		u.LogDebug(atmosConfig, "Checking for updates from cache...")
-		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+			// Check for the cache and print update message
+			u.LogDebug(atmosConfig, "Checking for updates from cache...")
+			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+		}
 	},
 }
 
