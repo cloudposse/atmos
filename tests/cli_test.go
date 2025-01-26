@@ -664,7 +664,7 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 	if _, err := os.Stat(stdoutPath); errors.Is(err, os.ErrNotExist) {
 		t.Fatalf(`Stdout snapshot file not found: %q
 Run the following command to create it:
-$ go test -run=%q -regenerate-snapshots`, stdoutPath, t.Name())
+$ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
 
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
