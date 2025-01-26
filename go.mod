@@ -46,7 +46,7 @@ require (
 	github.com/open-policy-agent/opa v1.0.0
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
-	github.com/samber/lo v1.47.0
+	github.com/samber/lo v1.48.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3
 	github.com/spf13/cobra v1.8.1
