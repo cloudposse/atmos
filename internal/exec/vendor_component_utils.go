@@ -15,8 +15,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
 	cp "github.com/otiai10/copy"
-	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -363,7 +363,7 @@ func ExecuteComponentVendorInternal(
 		}
 		var opts []tea.ProgramOption
 		// Disable TUI if no TTY support is available
-		if !CheckTTYSupport() {
+		if !term.CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 			u.LogWarning(atmosConfig, "TTY is not supported. Running in non-interactive mode")
 		}
@@ -372,11 +372,4 @@ func ExecuteComponentVendorInternal(
 		}
 	}
 	return nil
-}
-
-// CheckTTYSupport checks if stdout supports TTY for displaying the progress UI.
-func CheckTTYSupport() bool {
-	fd := int(os.Stdout.Fd())
-	isTerminal := term.IsTerminal(fd)
-	return isTerminal
 }

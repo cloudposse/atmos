@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -234,7 +235,7 @@ func GetTerraformOutput(
 	s.Style = theme.Styles.Link
 
 	var opts []tea.ProgramOption
-	if !CheckTTYSupport() {
+	if !term.CheckTTYSupport() {
 		// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		u.LogTrace(*atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")

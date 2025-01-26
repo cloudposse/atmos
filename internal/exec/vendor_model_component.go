@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -51,7 +52,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 		vendorPks = append(vendorPks, vendorPkg)
 
 	}
-	tty := CheckTTYSupport()
+	tty := term.CheckTTYSupport()
 	return modelVendor{
 		packages:    vendorPks,
 		spinner:     s,

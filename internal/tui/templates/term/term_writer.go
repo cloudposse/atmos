@@ -4,7 +4,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/mitchellh/go-wordwrap"
 	"golang.org/x/term"
 )
@@ -31,7 +30,7 @@ func NewResponsiveWriter(w io.Writer) io.Writer {
 		return w
 	}
 
-	if !exec.CheckTTYSupport() {
+	if !CheckTTYSupport() {
 		return w
 	}
 
@@ -77,4 +76,11 @@ func (w *TerminalWriter) Write(p []byte) (int, error) {
 
 func (w *TerminalWriter) GetWidth() uint {
 	return w.width
+}
+
+// CheckTTYSupport checks if stdout supports TTY for displaying the progress UI.
+func CheckTTYSupport() bool {
+	fd := int(os.Stdout.Fd())
+	isTerminal := term.IsTerminal(fd)
+	return isTerminal
 }
