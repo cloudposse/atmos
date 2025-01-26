@@ -2,6 +2,9 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://json.schemastore.org/workflow-manifest.json",
     "title": "Atmos Workflow Manifest",
+    "fileMatch": [
+        "workflows/**/*.{yml,yaml}"
+    ],
     "type": "object",
     "description": "Atmos workflow manifest",
     "additionalProperties": false,

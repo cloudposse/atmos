@@ -2,6 +2,10 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Atmos Vendor Config",
     "description": "Schema for Atmos vendoring manifest",
+    "fileMatch": [
+        "vendor.{yml,yaml}",
+        "vendor.d/**/*.{yml,yaml}"
+    ],
     "type": "object",
     "properties": {
       "apiVersion": {

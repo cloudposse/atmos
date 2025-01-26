@@ -2,6 +2,12 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Atmos CLI Configuration",
     "description": "Schema for Atmos CLI configuration",
+    "fileMatch": [
+        "atmos.{yml,yaml}",
+        "*.atmos.{yml,yaml}",
+        ".atmos.{yml,yaml}",
+        "atmos.d/**/*.{yml,yaml}"
+    ],
     "type": "object",
     "properties": {
       "base_path": {
