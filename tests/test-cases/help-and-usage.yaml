@@ -478,6 +478,8 @@ tests:
     description: "Test 'atmos --help' emits new version available message"
     workdir: "fixtures/scenarios/empty-dir"
     clean: true
+    env:
+      ATMOS_LOGS_LEVEL: Trace
     command: "atmos"
     args:
       - --help
@@ -497,7 +499,7 @@ tests:
     enabled: true
     snapshot: true
     tty: false
-    description: "Test 'atmos --help' command in empty directory"
+    description: "Test 'atmos --help' command does not error in an empty directory"
     workdir: "fixtures/scenarios/empty-dir"
     clean: true
     command: "atmos"
