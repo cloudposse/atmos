@@ -55,6 +55,7 @@ func LoadCache() (CacheConfig, error) {
 	var cfg CacheConfig
 	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
 		// No file yet, return default
+		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Cache file not found at %s", cacheFile))
 		return cfg, nil
 	}
 
@@ -66,6 +67,7 @@ func LoadCache() (CacheConfig, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return cfg, errors.Wrap(err, "failed to unmarshal cache file")
 	}
+	u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Loaded cache from %s", cacheFile))
 	return cfg, nil
 }
 
