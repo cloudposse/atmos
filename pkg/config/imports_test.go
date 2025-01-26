@@ -73,7 +73,7 @@ func TestProcessImports(t *testing.T) {
 	}
 
 	// Step 5: Run the processImports method
-	resolvedPaths, err := configLoader.processImports(imports, "./test", 0, 10)
+	resolvedPaths, err := configLoader.processImports(imports, baseDir, 0, 10)
 
 	// Step 6: Assertions
 	assert.NoError(t, err, "processImports should not return an error")
