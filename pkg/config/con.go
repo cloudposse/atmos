@@ -102,14 +102,19 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 		if err := cl.processConfigImports(); err != nil {
 			cl.debugLogging(fmt.Sprintf("Failed to process imports after system directory configurations: %s", err.Error()))
 		}
+		err = cl.deepMergeConfig()
+		if err != nil {
+			return cl.atmosConfig, err
+		}
 	}
-
-	// Load  user-specific, and other configurations
-	if err := cl.loadSystemAndUserConfigs(configAndStacksInfo); err != nil {
-		return cl.atmosConfig, err
-	}
-
 	// Stage 2: Discover Additional Configurations
+	// load Atmos conflagration from ATMOS_CLI_CONFIG_PATH ENV
+	if atmosCliConfigPathEnv := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmosCliConfigPathEnv != "" {
+		if err := cl.loadAtmosConfigFromEnv(atmosCliConfigPathEnv); err != nil {
+			return cl.atmosConfig, err
+		}
+	}
+
 	if err := cl.discoverAdditionalConfigs(configAndStacksInfo); err != nil {
 		return cl.atmosConfig, err
 	}
@@ -273,6 +278,62 @@ func (cl *ConfigLoader) loadSystemAndUserConfigs(configAndStacksInfo schema.Conf
 
 	return nil
 }
+func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigPathEnv string) error {
+	// 1. Check ATMOS_CLI_CONFIG_PATH ENV
+	atmosFilePath, err := cl.getPathAtmosCLIConfigPath(atmosCliConfigPathEnv)
+	if err != nil {
+		return err
+	}
+	cl.debugLogging(fmt.Sprintf("Found ATMOS_CLI_CONFIG_PATH: %s", atmosFilePath))
+
+	ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosFilePath, cl.viper)
+	if !ok || err != nil {
+		return fmt.Errorf("error processing config file (%s): %w", atmosFilePath, err)
+	}
+	err = cl.deepMergeConfig()
+	if err != nil {
+		return fmt.Errorf("error merge config file (%s): %w", atmosFilePath, err)
+	}
+	// Process Imports and Deep Merge
+	if err := cl.processConfigImports(); err != nil {
+		return fmt.Errorf("error processing imports after ATMOS_CLI_CONFIG_PATH: %w", err)
+	}
+	err = cl.deepMergeConfig()
+	if err != nil {
+		return fmt.Errorf("error merge config file (%s): %w", atmosFilePath, err)
+	}
+	return nil
+
+}
+func (cl *ConfigLoader) getPathAtmosCLIConfigPath(atmosCliConfigPathEnv string) (string, error) {
+
+	isDir, err := u.IsDirectory(atmosCliConfigPathEnv)
+	if err != nil {
+		if err == os.ErrNotExist {
+			return "", fmt.Errorf("error ATMOS_CLI_CONFIG_PATH: %w", err)
+		}
+		return "", fmt.Errorf("error ATMOS_CLI_CONFIG_PATH: %w", err)
+	}
+	if !isDir {
+		return "", fmt.Errorf("ATMOS_CLI_CONFIG_PATH is not a directory")
+	}
+	searchFilePath := filepath.Join(filepath.FromSlash(atmosCliConfigPathEnv), CliConfigFileName)
+	configPath, found := cl.SearchConfigFilePath(searchFilePath)
+	if !found {
+		cl.debugLogging(fmt.Sprintf("Failed to find config file atmos in directory '%s'.", atmosCliConfigPathEnv))
+		searchDir := filepath.Join(filepath.FromSlash(atmosCliConfigPathEnv), "atmos.d/**/*")
+		foundPaths, err := cl.SearchAtmosConfigFileDir(searchDir)
+		if err != nil {
+			return "", fmt.Errorf("error loading configs from ATMOS_CLI_CONFIG_PATH: %w", err)
+		}
+		if len(foundPaths) == 0 {
+			return "", fmt.Errorf("No config files found in ATMOS_CLI_CONFIG_PATH: %s", atmosCliConfigPathEnv)
+		}
+		configPath = foundPaths[0]
+
+	}
+	return configPath, err
+}
 
 // discoverAdditionalConfigs discovers and loads additional configuration files.
 func (cl *ConfigLoader) discoverAdditionalConfigs(configAndStacksInfo schema.ConfigAndStacksInfo) error {
@@ -282,23 +343,6 @@ func (cl *ConfigLoader) discoverAdditionalConfigs(configAndStacksInfo schema.Con
 
 // stageDiscoverAdditionalConfigs handles Stage 2: Discover Additional Configurations as per the flowchart.
 func (cl *ConfigLoader) stageDiscoverAdditionalConfigs(configAndStacksInfo schema.ConfigAndStacksInfo) error {
-	// 1. Check ATMOS_CLI_CONFIG_PATH ENV
-	if atmosCliConfigPathEnv := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmosCliConfigPathEnv != "" {
-		u.LogTrace(cl.atmosConfig, fmt.Sprintf("Checking ATMOS_CLI_CONFIG_PATH: %s", cl.atmosConfig.CliConfigPath))
-		found, paths, err := cl.loadConfigsFromPath(atmosCliConfigPathEnv)
-		if err != nil {
-			return fmt.Errorf("error loading configs from ATMOS_CLI_CONFIG_PATH: %w", err)
-		}
-		if found {
-			cl.atmosConfig.CliConfigPath = strings.Join(paths, string(os.PathListSeparator))
-			u.LogTrace(cl.atmosConfig, fmt.Sprintf("Updated ATMOS_CLI_CONFIG_PATH with absolute paths: %s", cl.atmosConfig.CliConfigPath))
-			// Process Imports and Deep Merge
-			if err := cl.processConfigImports(); err != nil {
-				return fmt.Errorf("error processing imports after ATMOS_CLI_CONFIG_PATH: %w", err)
-			}
-			return nil
-		}
-	}
 
 	// 2. Check Git Repository Root
 	gitRepoRoot, err := getGitRepoRoot()
