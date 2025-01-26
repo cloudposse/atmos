@@ -53,7 +53,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
-	github.com/zclconf/go-cty v1.16.1
+	github.com/zclconf/go-cty v1.16.2
 	golang.org/x/oauth2 v0.25.0
 	golang.org/x/term v0.28.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
