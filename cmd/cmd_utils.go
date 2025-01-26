@@ -569,13 +569,13 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	unknownCommand := fmt.Sprintf("%v for command `%s`\n\n", err.Error(), cmd.CommandPath())
 	args := strings.Split(err.Error(), ": ")
 	if len(args) == 2 {
-		unknownCommand = fmt.Sprintf("%s `%s` for command `%s`\n\n", args[0], args[1], cmd.CommandPath())
+		if strings.Contains(args[0], "flag needs an argument") {
+			unknownCommand = fmt.Sprintf("`%s` %s for command `%s`\n\n", args[1], args[0], cmd.CommandPath())
+		} else {
+			unknownCommand = fmt.Sprintf("%s `%s` for command `%s`\n\n", args[0], args[1], cmd.CommandPath())
+		}
 	}
-	renderError(ErrorMessage{
-		Title:      "Invalid Flag",
-		Details:    unknownCommand,
-		Suggestion: fmt.Sprintf("Run `%s --help` for usage", cmd.CommandPath()),
-	})
+	showUsageExample(cmd, unknownCommand)
 	os.Exit(1)
 	return nil
 }
@@ -603,7 +603,6 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	commandPath := cmd.CommandPath()
-	contentName := strings.ReplaceAll(commandPath, " ", "_")
 	suggestions := []string{}
 	details := fmt.Sprintf("The command `%s` is not valid\n\n", commandPath)
 	if len(arg) > 0 {
@@ -631,6 +630,11 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 			details += "No valid subcommands found for `" + cmd.CommandPath() + "`\n"
 		}
 	}
+	showUsageExample(cmd, details)
+}
+
+func showUsageExample(cmd *cobra.Command, details string) {
+	contentName := strings.ReplaceAll(cmd.CommandPath(), " ", "_")
 	suggestion := fmt.Sprintf("\nRun '%s --help' for usage", cmd.CommandPath())
 	if exampleContent, ok := examples[contentName]; ok {
 		suggestion = exampleContent.Suggestion
