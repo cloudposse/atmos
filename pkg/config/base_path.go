@@ -101,8 +101,8 @@ func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
 		filePaths, _ = u.GetGlobMatches(filepath.ToSlash(filepath.Join(cwd, "atmos.d/**/*.yml")))
 	}
 	if len(filePaths) > 0 {
-		cl.logging(fmt.Sprintf("base path from infra %s: %s", "atmos.d", filePath))
 		filePaths = cl.sortFilesByDepth(filePaths)
+		cl.logging(fmt.Sprintf("base path from infra %s: %s", "atmos.d", filePaths[0]))
 		return filepath.Dir(filePaths[0]), true
 	}
 	gitTopLevel, err := GetGitRoot(cwd)
