@@ -77,7 +77,7 @@ var workflowCmd = &cobra.Command{
 			// Format common error messages
 			if strings.Contains(err.Error(), "does not exist") {
 				err := renderError(ErrorMessage{
-					Title:      "Workflow File Not Found",
+					Title:      "File Not Found",
 					Details:    fmt.Sprintf("`%v` was not found", workflowFile),
 					Suggestion: "",
 				})
