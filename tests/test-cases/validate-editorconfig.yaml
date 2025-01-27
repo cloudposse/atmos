@@ -9,7 +9,8 @@ tests:
       - "validate"
       - "editorconfig"
     expect:
-      diff: []
+      diff:
+        - "Update available!"
       stdout:
         - "No errors found"
       stderr:
@@ -25,7 +26,8 @@ tests:
       - "validate"
       - "editorconfig"
     expect:
-      diff: []
+      diff:
+        - "Update available!"
       stdout:
         - "1 errors found"
       exit_code: 1
