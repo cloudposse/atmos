@@ -29,6 +29,10 @@ tests:
       - "-s"
       - "nonprod"
     expect:
+      stdout:
+        - 'Apply complete! Resources: \d+ added, \d+ changed, \d+ destroyed\.'
+      stderr:
+        - "^$"
       exit_code: 0
 
   - name: atmos terraform deploy locked component
@@ -61,4 +65,9 @@ tests:
       - "-s"
       - "prod"
     expect:
+      stdout:
+        - "Terraform has been successfully initialized"
+        - "Terraform used the selected providers to generate the following execution"
+      stderr:
+        - "^$"
       exit_code: 0
