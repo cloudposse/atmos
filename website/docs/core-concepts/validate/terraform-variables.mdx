@@ -26,11 +26,22 @@ For example:
 <Terminal>
 ```shell
 atmos terraform apply <component> -s <stack> -var name=api
+
+## double-dash -- can be used to signify the end of the options for Atmos and the start
+## of the additional native arguments and flags for the Terraform commands
 atmos terraform apply <component> -s <stack> -- -var name=api -var 'tags={"Team":"api", "Group":"web"}'
 ```
 </Terminal>
 
-:::note
+:::tip
+Double-dash `--` can be used to signify the end of the options for Atmos and the start
+of the additional native arguments and flags for the Terraform commands.
+
+Refer to [Terraform CLI commands usage](/cli/commands/terraform/usage) for more details.
+
+:::
+
+:::info
 Terraform processes variables in the following order of precedence (from highest to lowest):
 
 - Explicit `-var` flags: these variables have the highest priority and will override any other variable values, including those specified in `--var-file`.
@@ -127,8 +138,8 @@ errors["for the 'my-component' component, the variable 'name' must be provided o
 ```
 </File>
 
-When executing the following command, Atmos will validate the component using the OPA policy, which will fail and prevent
-the component from being provisioned:
+When executing the following command (and not passing the `name` variable on the command line), Atmos will validate
+the component using the OPA policy, which will fail and prevent the component from being provisioned:
 
 <Terminal>
 ```shell
