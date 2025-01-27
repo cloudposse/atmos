@@ -2,7 +2,7 @@
 title: Terraform Input Variables Validation
 sidebar_position: 4
 sidebar_label: Terraform Input Variables
-description: Use OPA policies to validate terraform input variables.
+description: Use OPA policies to validate Terraform input variables.
 id: terraform-variables
 ---
 
@@ -12,62 +12,73 @@ import EmbedFile from '@site/src/components/EmbedFile'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA) is the open-source industry standard for policy-as-code validation. It provides a general-purpose policy engine to unify policy enforcement across your stacks.
+Use [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA) policies to validate Terraform input variables.
 </Intro>
 
-The OPA (pronounced “oh-pa”) language (Rego) is a high-level declarative language for specifying policy as code. Atmos has native support for the OPA decision-making engine to enforce policies across all the components in your stacks (e.g. for microservice configurations).
+## Introduction
 
-This is powerful stuff: because you can define many policies, it's possible to apply different policies depending on where a component is defined in the stacks. For example, it could validate differently based on environments or teams.
+When executing `atmos terraform <sub-command>` commands, you can provide
+[Terraform input variables](https://developer.hashicorp.com/terraform/language/values/variables) on the command line
+using the `-var` flag.
 
-## Use Cases
+For example:
 
-Use Open Policy Agent (OPA) policies to validate Atmos stacks and component configurations.
+```shell
+atmos terraform apply <component> -s <stack> -var name=api -var 'tags={"Team":"api", "Group":"web"}'
+```
 
-* Validate component config (`vars`, `settings`, `backend`, `env`, `overrides` and other sections) using JSON Schema
+:::note
+Terraform processes variables in the following order of precedence (from highest to lowest):
 
-* Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
-  OPA/Rego policies
+- Explicit `-var` flags: these variables have the highest priority and will override any other variable values, including those specified in `--var-file`.
 
-## Usage
+- Variables in `--var-file`: values in a variable file override default values set in the Terraform configuration.
+  Atmos generates varfiles from stack configurations and provides it to Terraform using the `--var-file` flag.
 
-Atmos `validate component` command supports `--schema-path`, `--schema-type` and `--module-paths` command line arguments.
-If the arguments are not provided, Atmos will try to find and use the `settings.validation` section defined in the component's YAML config.
+- Environment variables: variables set as environment variables using the `TF_VAR_` prefix.
 
-:::tip
-
-Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
-
+- Default values in the Terraform configuration files: these have the lowest priority.
 :::
 
-<Terminal>
+When log level `Trace` is used, Atmos prints the Terraform variables specified on the command line in the "CLI variables" output.
+For example:
+
 ```shell
-
-# Validate 'vpc' component using OPA policy in the 'plat-ue2-prod' stack
-atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.rego --schema-type opa
-
-# Validate 'vpc' component using OPA policy in the 'plat-ue2-dev' stack with additional module paths 'catalog/constants'
-atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog/constants
-
-# Validate 'vpc' component using OPA policy in the 'plat-ue2-dev' stack with additional module paths 'catalog'
-atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog
-
-# Validate 'vpc' component in the 'plat-ue2-prod' stack
-atmos validate component vpc -s plat-ue2-prod
-
-# Validate 'vpc' component in the 'plat-ue2-dev' stack
-atmos validate component vpc -s plat-ue2-dev
-
-# Validate 'vpc' component in the 'plat-ue2-dev' stack with a timeout of 15 seconds
-atmos validate component vpc -s plat-ue2-dev --timeout 15
+ATMOS_LOGS_LEVEL=Trace /
+atmos terraform apply my-component -s plat-ue2-dev -var name=api -var 'tags={"Team":"api", "Group":"web"}'
 ```
-</Terminal>
 
-### Configure Component Validation
+```console
+Variables for the component 'my-component' in the stack 'plat-ue2-dev':
+
+enabled: true
+environment: ue2
+namespace: cp
+region: us-east-2
+stage: dev
+tenant: plat
+tags:
+    atmos_component: my-component
+    atmos_stack: plat-ue2-dev
+
+Writing the variables to file:
+components/terraform/my-component/plat-ue2-dev-my-component.terraform.tfvars.json
+
+CLI variables (will override the variables defined in the stack manifests):
+
+name: api
+tags:
+    Team: api
+    Group: web
+```
+
+Atmos exposes the Terraform variables passed on the command line in the `cli_vars` section, which can be used in OPA policies.
+
+## Terraform Variables Validation using OPA policies
 
 In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
 section:
 
-<File title="atmos.yaml">
 ```yaml
 # Validation schemas for OPA for validating atmos stacks and components
 schemas:
@@ -77,94 +88,44 @@ schemas:
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
 ```
-</File>
 
 In the component [manifest](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
 the `settings.validation` section:
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml" />
+```yaml
+components:
+  terraform:
+    my-component:
+      settings:
+        # Validation
+        # Supports JSON Schema and OPA policies
+        # All validation steps must succeed to allow the component to be provisioned
+        validation:
+          check-template-functions-test-component-with-opa-policy:
+            schema_type: opa
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
+            schema_path: "my-component/validate-my-component.rego"
+            description: Check 'my-component' component using OPA policy
+            # Validation timeout in seconds
+            timeout: 5
+```
 
-Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego):
+Add the following OPA policy in the file `stacks/schemas/opa/my-component/validate-my-component.rego`
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego" />
+```rego title="stacks/schemas/opa/my-component/validate-my-component.rego"
+# 'package atmos' is required in all `atmos` OPA policies
+package atmos
 
-Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego):
+# Atmos looks for the 'errors' (array of strings) output from all OPA policies
+# If the 'errors' output contains one or more error messages, Atmos considers the policy failed
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
+errors["for the 'my-component' component, the variable 'name' must be provided on the command line using the '-var' flag"] {
+    not input.cli_vars.name
+}
+```
 
-### Use One Policy File or Many
-
-Atmos supports OPA policies for components validation in a single Rego file and in multiple Rego files.
-
-As shown in the example above, you can define some Rego constants, modules and helper functions in a separate
-file `stacks/schemas/opa/catalog/constants/constants.rego`, and then import them into the main policy
-file `stacks/schemas/opa/vpc/validate-vpc-component.rego`.
-
-You also need to specify the `module_paths` attribute in the component's `settings.validation` section.
-The `module_paths` attribute is an array of filesystem paths (folders or individual files) to the additional modules for schema validation.
-Each path can be an absolute path or a path relative to `schemas.opa.base_path` defined in `atmos.yaml`.
-If a folder is specified in `module_paths`, Atmos will recursively process the folder and all its sub-folders and load all Rego files into the OPA
-engine.
-
-This allows you to separate the common OPA modules, constants and helper functions into a catalog of reusable Rego modules,
-and to structure your OPA policies to make them DRY.
-
-## Examples
-
-### Validate VPC Component in Stacks
-
-Run the following commands to validate the component in the stacks:
-
-<Terminal title="atmos validate component vpc -s plat-ue2-prod">
 ```console
-Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'
+Validating the component 'my-component' using OPA file 'my-component/validate-my-component.rego'
 
-exit status 1
+for the 'my-component' component, the variable 'name' must be provided on the command line using the '-var' flag
 ```
-</Terminal>
-
-<Terminal title="atmos validate component vpc -s plat-ue2-dev">
-```console
-In 'dev', only 2 Availability Zones are allowed
-VPC name must be a valid string from 2 to 20 alphanumeric chars
-
-exit status 1
-```
-</Terminal>
-
-
-### Validate Before Provisioning
-
-Try to run the following commands to provision the component in the stacks:
-
-<Terminal>
-```bash
-atmos terraform apply vpc -s plat-ue2-prod
-atmos terraform apply vpc -s plat-ue2-dev
-```
-</Terminal>
-
-Since the OPA validation policies don't pass, Atmos does not allow provisioning the component in the stacks:
-
-<Terminal title="atmos validate vpc --stack=plat-ue2-prod">
-![atmos-validate-vpc-in-plat-ue2-prod](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
-</Terminal>
-
-<Terminal title="atmos validate vpc --stack=plat-ue2-dev">
-![atmos-validate-vpc-in-plat-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
-</Terminal>
-
-### Advanced Policy Examples
-
-<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
-
-:::note
-
-- If a regex pattern in the 're_match' function contains a backslash to escape special chars (e.g. '\.' or '\-'),
-  it must be escaped with another backslash when represented as a regular Go string ('\\.', '\\-').
-
-- The reason is that backslash is also used to escape special characters in Go strings like newline (\n).
-
-- If you want to match the backslash character itself, you'll need four slashes.
-
-:::
