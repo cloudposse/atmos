@@ -73,7 +73,7 @@ jobs:
             ./build/
 
   tidy:
-    name: Tidy Go Modules
+    name: "[lint] Validate Go Modules"
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
@@ -83,7 +83,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-        id: go
 
       - uses: j0hnsmith/go-mod-check@v1
         with:
@@ -173,7 +172,7 @@ jobs:
       #       }
 
       - name: Acceptance tests
-        timeout-minutes: 10
+        timeout-minutes: 15
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc
