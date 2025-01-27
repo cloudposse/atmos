@@ -76,3 +76,8 @@ and the beginning of additional native arguments and flags for the specific comm
 
 Example:
   atmos validate editorconfig  <component> -s <stack> -- <native-flags>
+╭──────────────────────────────────────────────────────────────╮
+│               Update available! test » 1.155.0               │
+│ Atmos Releases: https://github.com/cloudposse/atmos/releases │
+│          Install Atmos: https://atmos.tools/install          │
+╰──────────────────────────────────────────────────────────────╯
