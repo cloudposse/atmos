@@ -62,7 +62,7 @@ const (
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
-	CliVarsSectionName                = "cli_vars"
+	TerraformCliVarsSectionName       = "tf_cli_vars"
 	CliArgsSectionName                = "cli_args"
 
 	LogsLevelFlag = "--logs-level"

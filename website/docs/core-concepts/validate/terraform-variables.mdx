@@ -25,16 +25,14 @@ For example:
 
 <Terminal>
 ```shell
-atmos terraform apply <component> -s <stack> -var name=api
+atmos terraform apply <component> -s <stack> -- -var name=api
 
-## double-dash -- can be used to signify the end of the options for Atmos and the start
-## of the additional native arguments and flags for the Terraform commands
 atmos terraform apply <component> -s <stack> -- -var name=api -var 'tags={"Team":"api", "Group":"web"}'
 ```
 </Terminal>
 
 :::tip
-Double-dash `--` can be used to signify the end of the options for Atmos and the start
+Use double-dash `--` to signify the end of the options for Atmos and the start
 of the additional native arguments and flags for the Terraform commands.
 
 Refer to [Terraform CLI commands usage](/cli/commands/terraform/usage) for more details.
@@ -60,7 +58,7 @@ For example:
 <Terminal>
 ```console
 ATMOS_LOGS_LEVEL=Trace /
-atmos terraform apply my-component -s plat-ue2-dev -var name=api -var 'tags={"Team":"api", "Group":"web"}'
+atmos terraform apply my-component -s plat-ue2-dev -- -var name=api -var 'tags={"Team":"api", "Group":"web"}'
 
 Variables for the component 'my-component' in the stack 'plat-ue2-dev':
 environment: ue2
@@ -80,7 +78,7 @@ tags:
 ```
 </Terminal>
 
-Atmos exposes the Terraform variables passed on the command line in the `cli_vars` section, which can be used in
+Atmos exposes the Terraform variables passed on the command line in the `tf_cli_vars` section, which can be used in
 OPA policies for validation.
 
 ## Terraform Variables Validation using OPA Policies
@@ -133,7 +131,7 @@ package atmos
 # If the 'errors' output contains one or more error messages, Atmos considers the policy failed.
 
 errors["for the 'my-component' component, the variable 'name' must be provided on the command line using the '-var' flag"] {
-    not input.cli_vars.name
+    not input.tf_cli_vars.name
 }
 ```
 </File>
@@ -155,7 +153,7 @@ On the other hand, when passing the `name` variable on the command line using th
 
 <Terminal>
 ```shell
-atmos terraform apply my-component -s plat-ue2-dev -var name=api
+atmos terraform apply my-component -s plat-ue2-dev -- -var name=api
 ```
 </Terminal>
 
@@ -169,7 +167,7 @@ add the following OPA policy in the file `stacks/schemas/opa/my-component/valida
 package atmos
 
 errors["for the 'my-component' component, the variable 'name' cannot be overridden on the command line using the '-var' flag"] {
-    input.cli_vars.name
+    input.tf_cli_vars.name
 }
 ```
 </File>
@@ -179,7 +177,7 @@ the component from being provisioned:
 
 <Terminal>
 ```console
-atmos terraform apply my-component -s plat-ue2-dev -var name=api
+atmos terraform apply my-component -s plat-ue2-dev -- -var name=api
 
 Validating the component 'my-component' using OPA file 'my-component/validate-my-component.rego'
 

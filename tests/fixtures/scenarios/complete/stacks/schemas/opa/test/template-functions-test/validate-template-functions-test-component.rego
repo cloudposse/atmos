@@ -5,7 +5,7 @@ package atmos
 # If the 'errors' output contains one or more error messages, Atmos considers the policy failed
 
 errors["for the 'template-functions-test' component, the variable 'name' must be provided on the command line using the '-var' flag"] {
-    not input.cli_vars.name
+    not input.tf_cli_vars.name
 }
 
 # https://www.openpolicyagent.org/docs/latest/policy-language

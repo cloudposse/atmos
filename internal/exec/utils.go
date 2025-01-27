@@ -674,7 +674,7 @@ func ProcessStacks(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-	configAndStacksInfo.ComponentSection[cfg.CliVarsSectionName] = cliVars
+	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
 
 	return configAndStacksInfo, nil
 }

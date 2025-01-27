@@ -228,7 +228,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		     - Environment variables: variables set as environment variables using the TF_VAR_ prefix
 		     - Default values in the configuration file: these have the lowest priority
 		*/
-		if cliVars, ok := info.ComponentSection[cfg.CliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
+		if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
 			u.LogDebug(atmosConfig, "\nCLI variables (will override the variables defined in the stack manifests):")
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				err = u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars)
