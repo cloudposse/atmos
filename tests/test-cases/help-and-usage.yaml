@@ -442,7 +442,8 @@ tests:
       - "editorconfig"
       - "help"
     expect:
-      diff: []
+      diff:
+        - 'Update available! (\d+\.\d+\.\d+|test) » (\d+\.\d+\.\d+|test)'
       exit_code: 0
   - name: atmos validate editorconfig --help
     enabled: true
@@ -455,7 +456,8 @@ tests:
       - "editorconfig"
       - "--help"
     expect:
-      diff: []
+      diff:
+        - 'Update available! (\d+\.\d+\.\d+|test) » (\d+\.\d+\.\d+|test)'
       exit_code: 0
   - name: atmos validate editorconfig non-existant
     enabled: true
