@@ -76,11 +76,10 @@ Atmos exposes the Terraform variables passed on the command line in the `cli_var
 
 ## Terraform Variables Validation using OPA policies
 
-In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
-section:
+In `atmos.yaml`, configure the `schemas.opa` section:
 
 ```yaml
-# Validation schemas for OPA for validating atmos stacks and components
+# Validation schemas
 schemas:
   # https://www.openpolicyagent.org
   opa:
@@ -89,8 +88,7 @@ schemas:
     base_path: "stacks/schemas/opa"
 ```
 
-In the component [manifest](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
-the `settings.validation` section:
+In the component manifest, add the `settings.validation` section to point to the OPA policy file:
 
 ```yaml
 components:
