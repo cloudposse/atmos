@@ -58,7 +58,7 @@ When log level `Trace` is used, Atmos prints the Terraform variables specified o
 For example:
 
 <Terminal>
-```shell
+```console
 ATMOS_LOGS_LEVEL=Trace /
 atmos terraform apply my-component -s plat-ue2-dev -var name=api -var 'tags={"Team":"api", "Group":"web"}'
 
@@ -142,7 +142,7 @@ When executing the following command (and not passing the `name` variable on the
 the component using the OPA policy, which will fail and prevent the component from being provisioned:
 
 <Terminal>
-```shell
+```console
 atmos terraform apply my-component -s plat-ue2-dev
 
 Validating the component 'my-component' using OPA file 'my-component/validate-my-component.rego'
@@ -178,7 +178,7 @@ When executing the following command, Atmos will validate the component using th
 the component from being provisioned:
 
 <Terminal>
-```shell
+```console
 atmos terraform apply my-component -s plat-ue2-dev -var name=api
 
 Validating the component 'my-component' using OPA file 'my-component/validate-my-component.rego'
