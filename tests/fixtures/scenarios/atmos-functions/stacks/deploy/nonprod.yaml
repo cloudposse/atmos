@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    # We want to test passing and reading multiple terraform outputs to component with atmos functions
+    component-1:
+      metadata:
+        component: mock
+      vars:
+        foo: foo-component-1
+    component-2:
+      metadata:
+        component: mock
+      vars:
+        bar: bar-component-2
+    component-3:
+      metadata:
+        component: mock
+      vars:
+        baz: baz-component-3
+    component-4:
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.output component-1 foo
+        bar: !terraform.output component-2 bar
+        baz: !terraform.output component-3 baz
+

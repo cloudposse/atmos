@@ -666,6 +666,16 @@ func ProcessStacks(
 
 	configAndStacksInfo.ComponentSection["component_info"] = componentInfo
 
+	// Add command-line arguments and vars to the component section
+	// It will allow using them when validating with OPA policies or JSON Schema
+	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = configAndStacksInfo.AdditionalArgsAndFlags
+
+	cliVars, err := getCliVars(configAndStacksInfo.AdditionalArgsAndFlags)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
+
 	return configAndStacksInfo, nil
 }
 
@@ -1130,7 +1140,6 @@ func processArgsAndFlags(
 
 // generateComponentBackendConfig generates backend config for components
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
-
 	// Generate backend config file for Terraform Cloud
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
 	if backendType == "cloud" {
@@ -1203,4 +1212,34 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 	sort.Strings(unique)
 	sort.Strings(uniqueAll)
 	return unique, uniqueAll, nil
+}
+
+// getCliVars returns a map of variables provided on the command-line
+// atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'
+func getCliVars(args []string) (map[string]any, error) {
+	var variables = make(map[string]any)
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-var" && i+1 < len(args) {
+			kv := args[i+1]
+			parts := strings.SplitN(kv, "=", 2)
+			if len(parts) == 2 {
+				varName := parts[0]
+				part2 := parts[1]
+				var varValue any
+				if u.IsJSON(part2) {
+					v, err := u.ConvertFromJSON(part2)
+					if err != nil {
+						return nil, err
+					}
+					varValue = v
+				} else {
+					varValue = strings.TrimSpace(part2)
+				}
+
+				variables[varName] = varValue
+			}
+			i++
+		}
+	}
+	return variables, nil
 }
