@@ -17,10 +17,12 @@ import (
 )
 
 type CacheConfig struct {
+	CacheFile   string
+	CacheDir    string
 	LastChecked int64 `mapstructure:"last_checked"`
 }
 
-func GetCacheFilePath() (string, error) {
+func GetCacheFilePath() (string, string, error) {
 	xdgCacheHome := os.Getenv("XDG_CACHE_HOME")
 	var cacheDir string
 	if xdgCacheHome == "" {
@@ -30,10 +32,10 @@ func GetCacheFilePath() (string, error) {
 	}
 
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return "", errors.Wrap(err, "error creating cache directory")
+		return "", "", errors.Wrap(err, fmt.Sprintf("error creating cache directory: %s", cacheDir))
 	}
 
-	return filepath.Join(cacheDir, "cache.yaml"), nil
+	return cacheDir, filepath.Join(cacheDir, "cache.yaml"), nil
 }
 
 func withCacheFileLock(cacheFile string, fn func() error) error {
@@ -47,12 +49,18 @@ func withCacheFileLock(cacheFile string, fn func() error) error {
 }
 
 func LoadCache() (CacheConfig, error) {
-	cacheFile, err := GetCacheFilePath()
+	var cfg CacheConfig
+	cacheDir, cacheFile, err := GetCacheFilePath()
 	if err != nil {
+		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to get cache file path '%s': %v", cacheFile, err))
 		return CacheConfig{}, err
 	}
 
-	var cfg CacheConfig
+	u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Loading cache from %s", cacheFile))
+
+	cfg.CacheFile = cacheFile
+	cfg.CacheDir = cacheDir
+
 	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
 		// No file yet, return default
 		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Cache file not found at %s", cacheFile))
@@ -62,17 +70,18 @@ func LoadCache() (CacheConfig, error) {
 	v := viper.New()
 	v.SetConfigFile(cacheFile)
 	if err := v.ReadInConfig(); err != nil {
+		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to read cache file '%s': %v", cacheFile, err))
 		return cfg, errors.Wrap(err, "failed to read cache file")
 	}
 	if err := v.Unmarshal(&cfg); err != nil {
+		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to unmarshal cache file '%s': %v", cacheFile, err))
 		return cfg, errors.Wrap(err, "failed to unmarshal cache file")
 	}
-	u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Loaded cache from %s", cacheFile))
 	return cfg, nil
 }
 
 func SaveCache2(cfg CacheConfig) error {
-	cacheFile, err := GetCacheFilePath()
+	_, cacheFile, err := GetCacheFilePath()
 	if err != nil {
 		return err
 	}
@@ -88,7 +97,7 @@ func SaveCache2(cfg CacheConfig) error {
 }
 
 func SaveCache(cfg CacheConfig) error {
-	cacheFile, err := GetCacheFilePath()
+	_, cacheFile, err := GetCacheFilePath()
 	if err != nil {
 		return err
 	}

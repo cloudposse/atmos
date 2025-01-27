@@ -329,6 +329,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}()
 
+	// Create a temporary directory for the test case
+	tempDir, err := os.MkdirTemp("", "test_env")
+	if err != nil {
+		t.Fatalf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
+
+	// Set environment variables for the test case
+	tc.Env["HOME"] = tempDir
+	tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
+	tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
+	tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
+
 	// Change to the specified working directory
 	if tc.Workdir != "" {
 		absoluteWorkdir, err := filepath.Abs(tc.Workdir)
@@ -361,6 +374,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Set environment variables
 	envVars := os.Environ()
 	for key, value := range tc.Env {
+		//t.Logf("Setting env: %s=%s", key, value)
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars

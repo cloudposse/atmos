@@ -502,14 +502,14 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to load cache: %s", err))
+		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to load cache '%s': %s", cacheCfg.CacheFile, err))
 		return
 	}
 
 	// Determine if it's time to check for updates based on frequency and last_checked
 	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency) {
 		// Not due for another check yet, so return without printing anything
-		u.LogDebug(atmosConfig, "Skipping version check - last check was recent")
+		u.LogDebug(atmosConfig, fmt.Sprintf("Skipping version check - last check was recent; last check was %s (%d), %s frequency", time.Unix(cacheCfg.LastChecked, 0).Format("2006-01-02 15:04:05 MST"), cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency))
 		return
 	}
 
