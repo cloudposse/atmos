@@ -19,7 +19,7 @@ Use [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA) poli
 
 When executing `atmos terraform <sub-command>` commands, you can provide
 [Terraform input variables](https://developer.hashicorp.com/terraform/language/values/variables) on the command line
-using the `-var` flag.
+using the `-var` flag. These variables will override the variables configured in Atmos stack manifests.
 
 For example:
 
@@ -74,7 +74,7 @@ tags:
 
 Atmos exposes the Terraform variables passed on the command line in the `cli_vars` section, which can be used in OPA policies.
 
-## Terraform Variables Validation using OPA policies
+## Terraform Variables Validation using OPA Policies
 
 In `atmos.yaml`, configure the `schemas.opa` section:
 
@@ -108,22 +108,70 @@ components:
             timeout: 5
 ```
 
-Add the following OPA policy in the file `stacks/schemas/opa/my-component/validate-my-component.rego`
+### Require a Terraform variable to be specified on the command line
+
+If you need to enforce that a Terraform variable must be specified on the command line (and not in Atmos stack manifests),
+add the following OPA policy in the file `stacks/schemas/opa/my-component/validate-my-component.rego`
 
 ```rego title="stacks/schemas/opa/my-component/validate-my-component.rego"
 # 'package atmos' is required in all `atmos` OPA policies
 package atmos
 
-# Atmos looks for the 'errors' (array of strings) output from all OPA policies
-# If the 'errors' output contains one or more error messages, Atmos considers the policy failed
+# Atmos looks for the 'errors' (array of strings) output from all OPA policies.
+# If the 'errors' output contains one or more error messages, Atmos considers the policy failed.
 
 errors["for the 'my-component' component, the variable 'name' must be provided on the command line using the '-var' flag"] {
     not input.cli_vars.name
 }
 ```
 
+When executing the following command, Atmos will validate the component using the OPA policy, which will fail and prevent
+the component from being provisioned:
+
+```shell
+atmos terraform apply my-component -s plat-ue2-dev
+```
+
 ```console
 Validating the component 'my-component' using OPA file 'my-component/validate-my-component.rego'
 
 for the 'my-component' component, the variable 'name' must be provided on the command line using the '-var' flag
+```
+
+On the other hand, when passing the `name` variable on the command line using the `-var name=api` flag, this command will succeed:
+
+```shell
+atmos terraform apply my-component -s plat-ue2-dev -var name=api
+```
+
+### Restrict a Terraform variable from being provided on the command line
+
+If you need to prevent a Terraform variable from being passed (and overridden) on the command line,
+add the following OPA policy in the file `stacks/schemas/opa/my-component/validate-my-component.rego`
+
+```rego title="stacks/schemas/opa/my-component/validate-my-component.rego"
+package atmos
+
+errors["for the 'my-component' component, the variable 'name' can't be overridden on the command line using the '-var' flag"] {
+    input.cli_vars.name
+}
+```
+
+When executing the following command, Atmos will validate the component using the OP policy, which will fail and prevent
+the component from being provisioned:
+
+```shell
+atmos terraform apply my-component -s plat-ue2-dev -var name=api
+```
+
+```console
+Validating the component 'my-component' using OPA file 'my-component/validate-my-component.rego'
+
+for the 'my-component' component, the variable 'name' can't be overridden on the command line using the '-var' flag
+```
+
+This command will pass the validation and succeed:
+
+```shell
+atmos terraform apply my-component -s plat-ue2-dev
 ```
