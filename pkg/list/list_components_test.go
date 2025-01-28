@@ -45,7 +45,16 @@ func TestListComponentsWithStack(t *testing.T) {
 		nil, false, false, false)
 	assert.Nil(t, err)
 
-	output, err := FilterAndListStacks(stacksMap, testStack)
+	// Create test list config
+	listConfig := schema.ListConfig{
+		Format: "",
+		Columns: []schema.ListColumnConfig{
+			{Name: "Stack", Value: "{{ .atmos_stack }}"},
+			{Name: "File", Value: "{{ .atmos_stack_file }}"},
+		},
+	}
+
+	output, err := FilterAndListStacks(stacksMap, testStack, listConfig, "", "\t")
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
