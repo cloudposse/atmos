@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/tests/test-cases/schema.json
 tests:
   - name: atmos validate editorconfig
     enabled: true
@@ -21,7 +22,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Ensure atmos CLI gives error during validation based on editorconfig"
-    workdir: "../tests/fixtures/scenarios/editorconfig"
+    workdir: "fixtures/scenarios/editorconfig"
     command: "atmos"
     args:
       - "validate"

@@ -29,6 +29,12 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 
 ```
 
+> ![IMPORTANT]
+> #### GitHub API Rate Limits
+>
+> To avoid API rate limits, make sure you've set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`. Atmos will use these automatically for requests to GitHub.
+>
+
 ## Test Cases
 
 Our convention is to implement a test-case configuration file per scenario. Then place all smoke tests related to that scenario in the file.
@@ -39,6 +45,8 @@ The tests will automatically set some environment variables:
 
 - `GO_TEST=1` is always set, so commands in atmos can disable certain functionality during tests
 - `TERM` is set when `tty: true` to emulate a proper terminal
+- `HOME` is set to an empty temporary directory
+- `XDG_*` is set to an empty temporary directory
 
 ### Flags
 

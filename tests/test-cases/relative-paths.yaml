@@ -1,4 +1,5 @@
-# yaml-language-server: $schema=schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/tests/test-cases/schema.json
+
 tests:
   - name: atmos stacks with relative paths
     enabled: true
