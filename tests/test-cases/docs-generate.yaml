@@ -78,3 +78,5 @@ tests:
         - "^$"
       file_exists:
         - "README.md"
+      file_contains:
+        - 'something'        
