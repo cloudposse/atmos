@@ -54,7 +54,7 @@ tests:
         - "^Generated docs at .*README.md.*"
       stdout:
         - "^$"
-      files:
+      file_exists:
         - "README.md"
 
   - name: "atmos docs generate for terraform docs"
