@@ -9,6 +9,7 @@ tests:
     args:
       - "--help"
     expect:
+      timeout: 5s
       diff: []
       stdout:
         - "Available Commands:"
@@ -41,6 +42,7 @@ tests:
     args:
       - "version"
     expect:
+      timeout: 5s
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
@@ -59,6 +61,7 @@ tests:
       - "version"
       - "--check"
     expect:
+      timeout: 5s
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
         - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
@@ -77,6 +80,7 @@ tests:
       - "docs"
       - "myapp"
     expect:
+      timeout: 5s
       diff: []
       stdout:
         - "Example Terraform Weather Component"
@@ -96,6 +100,7 @@ tests:
       - "-f"
       - "yaml"
     expect:
+      timeout: 5s
       diff:
         - "stacksBaseAbsolutePath"
         - "terraformDirAbsolutePath"
@@ -118,6 +123,7 @@ tests:
       - "describe"
       - "config"
     expect:
+      timeout: 5s
       diff:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
         - "stacksBaseAbsolutePath"
@@ -140,6 +146,7 @@ tests:
       - "greet"
       - "Andrey"
     expect:
+      timeout: 5s
       stdout:
         - "Hello, Andrey\n"
       stderr:
@@ -154,6 +161,7 @@ tests:
     args:
       - "greet"
     expect:
+      timeout: 5s
       stdout:
         - "Hello, John Doe\n"
       stderr:
@@ -163,11 +171,23 @@ tests:
     enabled: true
     description: "Ensure atmos vendor pull command executes without errors and files are present."
     workdir: "fixtures/scenarios/vendor"
+    env:
+      ATMOS_LOGS_LEVEL: "Debug"
     command: "atmos"
     args:
       - "vendor"
       - "pull"
     expect:
+      timeout: 2m
+      stdout:
+        - "^$"
+      stderr:
+        - "github/stargazers"
+        - "test-components"
+        - "weather"
+        - "my-vpc1"
+        - "vpc-src"
+        - "Vendored 5 components"
       file_exists:
         - "./components/terraform/github/stargazers/main/main.tf"
         - "./components/terraform/github/stargazers/main/outputs.tf"

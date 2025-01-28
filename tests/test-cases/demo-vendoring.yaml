@@ -15,6 +15,7 @@ tests:
       # PTY not supported on windows
       os: !not windows
     expect:
+      timeout: 2m
       stdout:
         - "Pulling"
         - "github/stargazers"
@@ -35,6 +36,7 @@ tests:
       - "vendor"
       - "pull"
     expect:
+      timeout: 2m
       diff: []
       stderr:
         - 'No TTY detected\. Falling back to basic output\.'

@@ -9,6 +9,7 @@ tests:
       - "validate"
       - "editorconfig"
     expect:
+      timeout: 10s
       diff:
         - "Update available!"
       stdout:
@@ -26,6 +27,7 @@ tests:
       - "validate"
       - "editorconfig"
     expect:
+      timeout: 10s
       diff:
         - "Update available!"
       stdout:

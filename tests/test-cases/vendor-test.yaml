@@ -1,13 +1,14 @@
 tests:
-  - name: atmos vendor pull
+  - name: atmos vendor pull without vendor file
     enabled: true
-    description: ""
-    workdir: "../"
+    description: "Ensure atmos vendor pull command fails without vendor file."
+    workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
     args:
       - "vendor"
       - "pull"
     expect:
+      timeout: 5s
       stderr:
         - "Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/"
       exit_code: 1

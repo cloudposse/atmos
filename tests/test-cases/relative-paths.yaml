@@ -10,6 +10,7 @@ tests:
       - "describe"
       - "stacks"
     expect:
+      timeout: 10s
       diff: []
       stdout:
         - "acme-platform-dev:"

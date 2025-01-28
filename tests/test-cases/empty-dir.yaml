@@ -8,6 +8,7 @@ tests:
     args:
       - "version"
     expect:
+      timeout: 5s
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
@@ -22,6 +23,7 @@ tests:
     command: "atmos"
     args: []
     expect:
+      timeout: 5s
       diff: []
       stdout:
         - "atmos.yaml CLI config file was not found."
@@ -38,6 +40,7 @@ tests:
     command: "atmos"
     args: [--help]
     expect:
+      timeout: 5s
       diff: []
       stdout:
         - "Available Commands:"

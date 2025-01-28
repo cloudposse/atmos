@@ -10,6 +10,7 @@ tests:
       - "greet"
       - "Neo"
     expect:
+      timeout: 5s
       diff: []
       stdout:
         - "Hello, Neo\n"
@@ -26,6 +27,7 @@ tests:
     args:
       - "greet"
     expect:
+      timeout: 5s
       diff: []
       stdout:
         - "Hello, John Doe\n"

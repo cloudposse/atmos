@@ -6,15 +6,16 @@ tests:
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
     args:
-       - "terraform"
-       - "deploy"
-       - "component-4"
-       - "-s"
-       - "nonprod"
+      - "terraform"
+      - "deploy"
+      - "component-4"
+      - "-s"
+      - "nonprod"
     skip:
       # PTY not supported on windows
       os: !not windows
     expect:
+      timeout: 1m
       exit_code: 0
       stdout:
         - "Fetching baz output from component-3 in nonprod"
@@ -30,12 +31,13 @@ tests:
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
     args:
-       - "terraform"
-       - "deploy"
-       - "component-4"
-       - "-s"
-       - "nonprod"
+      - "terraform"
+      - "deploy"
+      - "component-4"
+      - "-s"
+      - "nonprod"
     expect:
+      timeout: 1m
       exit_code: 0
       stdout:
         - "Fetching baz output from component-3 in nonprod"

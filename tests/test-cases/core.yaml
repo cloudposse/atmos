@@ -12,6 +12,7 @@ tests:
       # PTY not supported on windows
       os: !not windows
     expect:
+      timeout: 5s
       stdout:
         - "^(/dev)"
       stderr:
@@ -26,6 +27,7 @@ tests:
     workdir: "../"
     command: "tty"
     expect:
+      timeout: 5s
       stdout:
         - "^not a tty"
       stderr:
@@ -36,11 +38,13 @@ tests:
     enabled: true
     snapshot: false
     description: "Ensure atmos CLI is installed and we're using the one that was built."
-    workdir: "../"
+    workdir: "fixtures/scenarios/empty-dir"
+    clean: true
     command: "which"
     args:
       - "atmos"
     expect:
+      timeout: 5s
       stdout:
         # build/atmos is local
         # atmos/atmos is in GitHub Actions
@@ -56,6 +60,7 @@ tests:
     workdir: "../"
     command: "atmos"
     expect:
+      timeout: 5s
       diff: []
       stdout:
         - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
@@ -73,6 +78,7 @@ tests:
     args:
       - "docs"
     expect:
+      timeout: 5s
       diff: []
       exit_code: 0
       stderr:
@@ -87,6 +93,7 @@ tests:
       - "terraform"
       - "non-existent"
     expect:
+      timeout: 5s
       diff: []
       stderr:
         - 'unknown command "non-existent" for "atmos"'

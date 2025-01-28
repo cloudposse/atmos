@@ -63,6 +63,7 @@ tests:
     args:
       - "terraform"
     expect:
+      timeout: 5s
       stdout:
         - "Valid subcommands are:"
         - "apply"
@@ -80,6 +81,7 @@ tests:
       - "terraform"
       - "help"
     expect:
+      timeout: 5s
       stdout:
         - "\\bapply\\b"
         - "\\bgenerate\\b"
@@ -95,6 +97,7 @@ tests:
       - "terraform"
       - "--help"
     expect:
+      timeout: 5s
       stdout:
         - "\\bapply\\b"
         - "\\bgenerate\\b"
@@ -111,6 +114,7 @@ tests:
       - "apply"
       - "--help"
     expect:
+      timeout: 5s
       stdout:
         - "\\bUsage\\b"
         - "Flags:"
@@ -128,6 +132,7 @@ tests:
       - "apply"
       - "--help"
     expect:
+      timeout: 5s
       stdout:
         - "\\bUsage\\b"
         - "Flags:"
@@ -144,6 +149,7 @@ tests:
       - "terraform"
       - "non-existent"
     expect:
+      timeout: 5s
       stderr:
         - 'Error: Unknown command \"non-existent\" for \"atmos terraform\"'
       exit_code: 1
@@ -157,6 +163,7 @@ tests:
       - "plan"
       - "non-existent"
     expect:
+      timeout: 5s
       stdout:
         - "CLI config file specifies the directory for Atmos stack"
         - "Quick Start"
@@ -171,6 +178,7 @@ tests:
       - "plan"
       - "non-existent"
     expect:
+      timeout: 5s
       stderr:
         - "'stack' is required. Usage: atmos terraform <command> <component> -s <stack>"
       exit_code: 1
@@ -182,6 +190,7 @@ tests:
     args:
       - "helmfile"
     expect:
+      timeout: 5s
       stderr:
         - 'Error: Unknown command: "atmos helmfile"'
       stdout:
@@ -198,6 +207,7 @@ tests:
       - "helmfile"
       - "non-existant"
     expect:
+      timeout: 5s
       stderr:
         - 'Error: Unknown command "non-existant" for "atmos helmfile"'
       stdout:
@@ -214,6 +224,7 @@ tests:
       - "helmfile"
       - "help"
     expect:
+      timeout: 5s
       stdout:
         - "Available Commands:"
         - "apply"
@@ -228,6 +239,7 @@ tests:
       - "helmfile"
       - "help"
     expect:
+      timeout: 5s
       stdout:
         - "Available Commands:"
         - "apply"
@@ -243,6 +255,7 @@ tests:
       - "apply"
       - "non-existent"
     expect:
+      timeout: 5s
       stdout:
         - "CLI config file specifies the directory for Atmos stack"
         - "Quick Start"
@@ -256,6 +269,7 @@ tests:
       - "helmfile"
       - "apply"
     expect:
+      timeout: 5s
       stderr:
         - "'stack' is required. Usage: atmos helmfile <command> <component> -s <stack>"
       exit_code: 1
@@ -269,6 +283,7 @@ tests:
       - "apply"
       - "help"
     expect:
+      timeout: 5s
       stdout:
         - "Flags:"
         - "--logs-file"
@@ -283,6 +298,7 @@ tests:
       - "apply"
       - "--help"
     expect:
+      timeout: 5s
       stdout:
         - "Flags:"
         - "--logs-file"
@@ -295,6 +311,7 @@ tests:
     args:
       - "atlantis"
     expect:
+      timeout: 5s
       stderr:
         - 'Error: Unknown command: "atmos atlantis"'
       exit_code: 1
@@ -307,6 +324,7 @@ tests:
       - "atlantis"
       - "help"
     expect:
+      timeout: 5s
       stdout:
         - "Available Commands:"
         - "generate"
@@ -320,6 +338,7 @@ tests:
       - "atlantis"
       - "--help"
     expect:
+      timeout: 5s
       stdout:
         - "Available Commands:"
         - "generate"
@@ -334,6 +353,7 @@ tests:
       - "atlantis"
       - "generate"
     expect:
+      timeout: 5s
       stderr:
         - 'Error: Unknown command: "atmos atlantis generate"'
       exit_code: 1
@@ -347,6 +367,7 @@ tests:
       - "generate"
       - "help"
     expect:
+      timeout: 5s
       stdout:
         - "Available Commands:"
         - "repo-config"
@@ -361,6 +382,7 @@ tests:
       - "generate"
       - "--help"
     expect:
+      timeout: 5s
       stdout:
         - "Available Commands:"
         - "repo-config"
@@ -375,6 +397,7 @@ tests:
       - "generate"
       - "repo-config"
     expect:
+      timeout: 5s
       stdout:
         - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
         - "To configure and start using Atmos, refer to the following documents:"
@@ -392,6 +415,7 @@ tests:
       - "repo-config"
       - "help"
     expect:
+      timeout: 5s
       stdout:
         - "Flags:"
         - "--affected-only"
@@ -410,6 +434,7 @@ tests:
       - "repo-config"
       - "--help"
     expect:
+      timeout: 5s
       stdout:
         - "Flags:"
         - "--affected-only"
@@ -428,6 +453,7 @@ tests:
       - "repo-config"
       - "non-existant"
     expect:
+      timeout: 5s
       stderr:
         - 'Error: Unknown command "non-existant" for "atmos atlantis generate repo-config"'
       exit_code: 1
@@ -442,6 +468,7 @@ tests:
       - "editorconfig"
       - "help"
     expect:
+      timeout: 5s
       diff:
         - 'Update available! (\d+\.\d+\.\d+|test) » (\d+\.\d+\.\d+|test)'
       exit_code: 0
@@ -456,6 +483,7 @@ tests:
       - "editorconfig"
       - "--help"
     expect:
+      timeout: 5s
       diff:
         - 'Update available! (\d+\.\d+\.\d+|test) » (\d+\.\d+\.\d+|test)'
       exit_code: 0
@@ -470,6 +498,7 @@ tests:
       - "editorconfig"
       - "non-existant"
     expect:
+      timeout: 5s
       diff: []
       exit_code: 1
 
@@ -484,6 +513,7 @@ tests:
     args:
       - --help
     expect:
+      timeout: 5s
       exit_code: 0
       stdout:
         # Update available! test » 1.155.0
@@ -506,6 +536,7 @@ tests:
     args:
       - --help
     expect:
+      timeout: 5s
       exit_code: 0
       diff:
         - "──────────────────────────────────────────────────────────────"

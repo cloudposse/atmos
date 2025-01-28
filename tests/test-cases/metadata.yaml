@@ -11,6 +11,7 @@ tests:
       - "validate"
       - "stacks"
     expect:
+      timeout: 10s
       diff: []
       stdout:
         - "all stacks validated successfully"
@@ -29,6 +30,7 @@ tests:
       - "-s"
       - "nonprod"
     expect:
+      timeout: 10s
       stdout:
         - 'Apply complete! Resources: \d+ added, \d+ changed, \d+ destroyed\.'
       stderr:
@@ -48,6 +50,7 @@ tests:
       - "-s"
       - "prod"
     expect:
+      timeout: 10s
       stderr:
         - "component 'myapp' is locked and cannot be modified \\(metadata.locked = true\\)"
       exit_code: 1
@@ -65,6 +68,7 @@ tests:
       - "-s"
       - "prod"
     expect:
+      timeout: 10s
       stdout:
         - "Terraform has been successfully initialized"
         - "Terraform used the selected providers to generate the following execution"

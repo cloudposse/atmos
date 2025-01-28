@@ -12,6 +12,7 @@ tests:
       - -s
       - test
     expect:
+      timeout: 10s
       diff: []
       exit_code: 1
       stderr:
@@ -32,6 +33,7 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: XTrace
     expect:
+      timeout: 10s
       diff: []
       exit_code: 1
       stderr:
@@ -65,6 +67,7 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
+      timeout: 10s
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stdout:
@@ -84,6 +87,7 @@ tests:
       - Info
       - version
     expect:
+      timeout: 10s
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stdout:
@@ -102,6 +106,7 @@ tests:
       - XTrace
       - version
     expect:
+      timeout: 10s
       exit_code: 1
       stderr:
         - "Error: Invalid log level 'XTrace' specified with the --logs-level flag\\. Valid options are: \\[Trace, Debug, Info, Warning, Off\\]\n"

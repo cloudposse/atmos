@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,9 +11,11 @@ import (
 	"path/filepath" // For resolving absolute paths
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
@@ -44,6 +47,7 @@ type Expectation struct {
 	FileExists   []string                  `yaml:"file_exists"`   // Files to validate
 	FileContains map[string][]MatchPattern `yaml:"file_contains"` // File contents to validate (file to patterns map)
 	Diff         []string                  `yaml:"diff"`          // Acceptable differences in snapshot
+	Timeout      string                    `yaml:"timeout"`       // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
 }
 type TestCase struct {
 	Name        string            `yaml:"name"`        // Name of the test
@@ -83,6 +87,26 @@ func (m *MatchPattern) UnmarshalYAML(value *yaml.Node) error {
 		return fmt.Errorf("unsupported tag %q", value.Tag)
 	}
 	return nil
+}
+
+func parseTimeout(timeoutStr string) (time.Duration, error) {
+	if timeoutStr == "" {
+		return 0, nil // No timeout specified
+	}
+
+	// Try parsing as a duration string
+	duration, err := time.ParseDuration(timeoutStr)
+	if err == nil {
+		return duration, nil
+	}
+
+	// If parsing failed, try interpreting as a number (seconds)
+	seconds, err := strconv.Atoi(timeoutStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid timeout format: %s", timeoutStr)
+	}
+
+	return time.Duration(seconds) * time.Second, nil
 }
 
 func loadTestSuite(filePath string) (*TestSuite, error) {
@@ -264,17 +288,6 @@ func ptyError(err error) error {
 	return nil
 }
 
-// Execute the command and return the exit code
-func executeCommand(t *testing.T, cmd *exec.Cmd) int {
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
-		}
-		t.Fatalf("Command execution failed: %v", err)
-	}
-	return 0
-}
-
 // loadTestSuites loads and merges all .yaml files from the test-cases directory
 func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	var mergedSuite TestSuite
@@ -329,6 +342,26 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}()
 
+	// Create a context with timeout if specified
+	var ctx context.Context
+	var cancel context.CancelFunc
+
+	if tc.Expect.Timeout != "" {
+		// Parse the timeout from the Expectation
+		timeout, err := parseTimeout(tc.Expect.Timeout)
+		if err != nil {
+			t.Fatalf("Failed to parse timeout for test %s: %v", tc.Name, err)
+		}
+		if timeout > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), timeout)
+		} else {
+			ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+		}
+	} else {
+		ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+	}
+	defer cancel()
+
 	// Create a temporary directory for the test case
 	tempDir, err := os.MkdirTemp("", "test_env")
 	if err != nil {
@@ -368,8 +401,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
 	}
 
-	// Prepare the command
-	cmd := exec.Command(binaryPath, tc.Args...)
+	// Prepare the command using the context
+	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
 	// Set environment variables
 	envVars := os.Environ()
@@ -385,11 +418,29 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if tc.Tty {
 		// Run the command in TTY mode
 		ptyOutput, err := simulateTtyCommand(t, cmd, "")
+
+		// Check if the context timeout was exceeded
+		if ctx.Err() == context.DeadlineExceeded {
+			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+			return
+		}
+
 		if err != nil {
+
+			// Check if the error is an ExitError
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				// Capture the actual exit code
-				exitCode = exitErr.ExitCode()
+				exitCode := exitErr.ExitCode()
+
+				if exitCode < 0 {
+					// Negative exit code indicates interruption by a signal
+					t.Errorf("TTY Command interrupted by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
+				} else {
+					// Handle non-signal-related exit errors
+					t.Errorf("TTY Command failed with exit code %d: %s, %v", exitCode, tc.Command, err)
+				}
 			} else {
+				// Handle other types of errors
 				t.Fatalf("Failed to simulate TTY command: %v", err)
 			}
 		}
@@ -402,12 +453,28 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		cmd.Stderr = &stderr
 
 		err := cmd.Run()
+		if ctx.Err() == context.DeadlineExceeded {
+			// Handle the timeout case first
+			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+			return
+		}
+
 		if err != nil {
+			// Handle other command execution errors
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				// Capture the actual exit code
 				exitCode = exitErr.ExitCode()
+
+				if exitCode < 0 {
+					// Negative exit code indicates termination by a signal
+					t.Errorf("Non-TTY Command terminated by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
+				} else {
+					// Non-signal-related exit error
+					t.Errorf("Non-TTY Command failed with exit code %d: %s, %v", exitCode, tc.Command, err)
+				}
 			} else {
-				t.Fatalf("Failed to run command; Error %v", err)
+				// Handle other non-exec-related errors
+				t.Fatalf("Failed to run command; Error: %v", err)
 			}
 		} else {
 			// Successful command execution
@@ -474,7 +541,7 @@ func TestCLICommands(t *testing.T) {
 			continue
 		}
 
-		// Run with `t.Run` for non-TTY tests
+		// Run tests
 		t.Run(tc.Name, func(t *testing.T) {
 			runCLICommandTest(t, tc)
 		})
@@ -728,7 +795,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 			// Generate a colorized diff for better readability
 			diff = colorizeDiffWithThreshold(filteredStderrActual, filteredStderrExpected, 10)
 		}
-		t.Errorf("Stderr mismatch for %q:\n%s", stdoutPath, diff)
+		t.Errorf("Stderr diff mismatch for %q:\n%s", stdoutPath, diff)
 	}
 
 	return true
