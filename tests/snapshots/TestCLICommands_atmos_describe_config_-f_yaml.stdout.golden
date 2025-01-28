@@ -25,6 +25,9 @@ stacks:
         - '**/_defaults.yaml'
     name_pattern: '{stage}'
     name_template: ""
+    list:
+        format: ""
+        columns: []
 logs:
     file: /dev/stderr
     level: Info
