@@ -32,8 +32,10 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 > ![IMPORTANT]
 > #### GitHub API Rate Limits
 >
-> To avoid API rate limits, make sure you've set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`. Atmos will use these automatically for requests to GitHub.
->
+> To avoid API rate limits, make sure you've set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`. Atmos will use these automatically for requests to GitHub. Run the following command to set it. This assumes you've already installed the `gh` CLI and logged in.
+> ```bash
+> export GITHUB_TOKEN=$(gh auth token)
+> ```
 
 ## Test Cases
 
