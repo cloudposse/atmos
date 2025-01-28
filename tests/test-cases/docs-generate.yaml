@@ -16,8 +16,10 @@ tests:
       stderr:
         - "^Generated docs at .*README.md.*"
       exit_code: 0
-      files:
+      file_exists:
         - "README.md"
+      file_contains:
+        - 'something'        
 
   - name: "atmos docs generate with subdirectories"
     enabled: true
