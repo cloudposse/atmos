@@ -1,10 +1,11 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 type contextKey string

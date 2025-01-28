@@ -615,7 +615,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	return nil
 }
 
-// getConfigAndStacksInfo gets the
+// getConfigAndStacksInfo processes the CLI config and stacks
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
 	checkAtmosConfig()
