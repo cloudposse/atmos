@@ -18,11 +18,10 @@ Flags:
 
 Global Flags:
 
-        --                            Double dashes can be used to signify the
-                                      end of Atmos-specific options and the
-                                      beginning of additional native arguments
-                                      and flags for the specific command being
-                                      run. (default "false")
+        --                            Use double dashes to separate
+                                      Atmos-specific options from native
+                                      arguments and flags for the command.
+                                      (default "false")
 
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent
@@ -57,7 +56,7 @@ Global Flags:
 
 Examples:
 
-– Execute a terraform apply                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+– Apply changes to a terraform component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
  [;1m$ atmos terraform apply <component-name> -s <stack-name>[0m
 
 Use [;1m atmos terraform apply --help[0m for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                

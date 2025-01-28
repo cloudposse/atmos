@@ -1,4 +1,4 @@
-- Execute atmos about
+- Learn about atmos
 ```
     $ atmos about 
 ```

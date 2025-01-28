@@ -29,11 +29,9 @@ Flags:
 
 Global Flags:
 
-        --                          Double dashes can be used to signify the end
-                                    of Atmos-specific options and the beginning
-                                    of additional native arguments and flags for
-                                    the specific command being run. (default
-                                    "false")
+        --                          Use double dashes to separate Atmos-specific
+                                    options from native arguments and flags for
+                                    the command. (default "false")
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file
