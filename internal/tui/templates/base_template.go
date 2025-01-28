@@ -27,7 +27,7 @@ func GenerateFromBaseTemplate(parts []HelpTemplateSections) string {
 func getSection(section HelpTemplateSections) string {
 	switch section {
 	case LongDescription:
-		return `{{ .Long }}
+		return `{{renderMarkdown .Long }}
 `
 	case AdditionalHelpTopics:
 		return `{{if .HasHelpSubCommands}}
@@ -61,7 +61,7 @@ func getSection(section HelpTemplateSections) string {
 
 {{HeadingStyle "Examples:"}}
 
-{{formatExamples .Example}}{{end}}`
+{{renderMarkdown .Example}}{{end}}`
 	case Flags:
 		return `{{if .HasAvailableLocalFlags}}
 

@@ -56,7 +56,34 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 // Render renders markdown content to ANSI styled text
 func (r *Renderer) Render(content string) (string, error) {
-	return r.renderer.Render(content)
+	rendered, err := r.renderer.Render(content)
+	if err != nil {
+		// If rendering fails, fallback to ASCII style
+		rendered, err = r.RenderAscii(content)
+		if err != nil {
+			return "", err
+		}
+	}
+	// Remove duplicate URLs and trailing newlines
+	lines := strings.Split(rendered, "\n")
+	var result []string
+
+	// Create a purple style
+	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "$") {
+			// Add custom styling for command examples
+			styled := purpleStyle.Styled(strings.TrimSpace(line))
+			result = append(result, " "+styled)
+		} else if trimmed != "" {
+			result = append(result, line)
+		}
+	}
+
+	// Add a single newline at the end plus extra spacing
+	return strings.Join(result, "\n"), nil
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
@@ -115,31 +142,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 		}
 	}
 
-	rendered, err := r.Render(content)
-	if err != nil {
-		return "", err
-	}
-
-	// Remove duplicate URLs and trailing newlines
-	lines := strings.Split(rendered, "\n")
-	var result []string
-
-	// Create a purple style
-	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "$") {
-			// Add custom styling for command examples
-			styled := purpleStyle.Styled(strings.TrimSpace(line))
-			result = append(result, " "+styled)
-		} else if trimmed != "" {
-			result = append(result, line)
-		}
-	}
-
-	// Add a single newline at the end plus extra spacing
-	return strings.Join(result, "\n"), nil
+	return r.Render(content)
 }
 
 // RenderSuccess renders a success message with specific styling
@@ -176,7 +179,7 @@ func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Render
 	if maxWidth > 0 {
 		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
 	}
-
+	screenWidth += 15
 	return NewRenderer(
 		atmosConfig,
 		WithWidth(screenWidth),

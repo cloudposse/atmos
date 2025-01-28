@@ -86,17 +86,13 @@ func isAliasesPresent(cmds []*cobra.Command) bool {
 	return len(filterCommands(cmds, true)) > 0
 }
 
-func formatExamples(example string) string {
+func renderMarkdown(example string) string {
 	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 	if err != nil {
 		return ""
 	}
-	data, err := render.RenderError("", example, "")
-	if err == nil {
-		return data
-	}
 
-	data, err = render.RenderAscii(example)
+	data, err := render.Render(example)
 	if err == nil {
 		return data
 	}
@@ -132,9 +128,10 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				continue
 			}
 		case "subcommandAliases":
-			if cmd.Annotations["nativeCommand"] == "true" {
-				continue
-			}
+			// if cmd.Annotations["nativeCommand"] == "true" {
+			// 	continue
+			// }
+
 			if cmd.IsAvailableCommand() || cmd.Name() == "help" {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
@@ -186,6 +183,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	}
 	t := &Templater{
 		UsageTemplate: GenerateFromBaseTemplate([]HelpTemplateSections{
+			LongDescription,
 			Usage,
 			Aliases,
 			AvailableCommands,
@@ -203,7 +201,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cobra.AddTemplateFunc("isAliasesPresent", isAliasesPresent)
 	cobra.AddTemplateFunc("isNativeCommandsAvailable", isNativeCommandsAvailable)
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
-	cobra.AddTemplateFunc("formatExamples", formatExamples)
+	cobra.AddTemplateFunc("renderMarkdown", renderMarkdown)
 	return nil
 }
 
