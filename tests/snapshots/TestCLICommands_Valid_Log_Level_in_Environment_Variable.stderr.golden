@@ -1,0 +1,4 @@
+[1;94mDEBU[0m Found ENV var ATMOS_LOGS_LEVEL=Debug
+[1;94mDEBU[0m Using command line argument '--logs-level=Info'
+[1;94mDEBU[0m Using command line argument '--logs-file=/dev/stdout'
+[1;94mDEBU[0m processStoreConfig [2matmosConfig.StoresConfig[0m[2m=[0mmap[]

@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -104,23 +103,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	// If the user just types `atmos terraform`, print Atmos logo and show terraform help
-	if info.SubCommand == "" {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			return err
-		}
-
-		err = processHelp(atmosConfig, "terraform", "")
-		if err != nil {
-			return err
-		}
-
-		fmt.Println()
-		return nil
-	}
-
 	if info.SubCommand == "version" {
 		return ExecuteShellCommand(atmosConfig,
 			"terraform",
@@ -186,7 +168,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if info.SubCommand == "clean" {
 		err := handleCleanSubCommand(info, componentPath, atmosConfig)
 		if err != nil {
-			u.LogTrace(fmt.Errorf("error cleaning the terraform component: %v", err).Error())
+			u.LogDebug(fmt.Errorf("error cleaning the terraform component: %v", err).Error())
 			return err
 		}
 		return nil
@@ -199,7 +181,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
 		u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
-
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
 			if err != nil {
@@ -237,6 +218,25 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				}
 			}
 		}
+
+		/*
+		   Variables provided on the command line
+		   https://developer.hashicorp.com/terraform/language/values/variables#variables-on-the-command-line
+		   Terraform processes variables in the following order of precedence (from highest to lowest):
+		     - Explicit -var flags: these have the highest priority and will override any other variable values, including those in --var-file
+		     - Variables in --var-file: values in a variable file specified with --var-file override default values set in the Terraform configuration
+		     - Environment variables: variables set as environment variables using the TF_VAR_ prefix
+		     - Default values in the configuration file: these have the lowest priority
+		*/
+		if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
+			u.LogDebug("\nCLI variables (will override the variables defined in the stack manifests):")
+			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+				err = u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars)
+				if err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	// Handle `terraform varfile` and `terraform write varfile` legacy commands
@@ -245,7 +245,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if component 'settings.validation' section is specified and validate the component
-	valid, err := ValidateComponent(atmosConfig, info.ComponentFromArg, info.ComponentSection, "", "", nil, 0)
+	valid, err := ValidateComponent(
+		atmosConfig,
+		info.ComponentFromArg,
+		info.ComponentSection,
+		"",
+		"",
+		nil,
+		0,
+	)
 	if err != nil {
 		return err
 	}

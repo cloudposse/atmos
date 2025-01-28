@@ -45,7 +45,7 @@ spec:
         - test
         - networking
     - component: "vpc-flow-logs-bucket"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      source: "git::https://github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
       version: "1.323.0"
       targets:
         - "components/terraform/infra/vpc-flow-logs-bucket/{{.Version}}"

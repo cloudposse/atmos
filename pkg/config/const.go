@@ -62,6 +62,8 @@ const (
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
+	TerraformCliVarsSectionName       = "tf_cli_vars"
+	CliArgsSectionName                = "cli_args"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
@@ -78,7 +80,8 @@ const (
 	AtmosProDefaultEndpoint    = "api"
 
 	// Atmos YAML functions
-	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncExec            = "!exec"
+	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
+	AtmosYamlFuncEnv             = "!env"
 )

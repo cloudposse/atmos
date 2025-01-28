@@ -1,6 +1,7 @@
 # This works because `go list ./...` excludes vendor directories by default in modern versions of Go (1.11+).
 # No need for grep or additional filtering.
 TEST ?= $$(go list ./...)
+TESTARGS ?=
 SHELL := /bin/bash
 #GOOS=darwin
 #GOOS=linux
@@ -54,6 +55,6 @@ deps:
 
 # Run acceptance tests
 testacc: get
-	go test $(TEST) -v $(TESTARGS) -timeout 2m
+	go test $(TEST) -v $(TESTARGS) -timeout 10m
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc

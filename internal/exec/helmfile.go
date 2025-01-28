@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -31,27 +30,6 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
-	}
-
-	if info.NeedHelp {
-		return nil
-	}
-
-	// If the user just types `atmos helmfile`, print Atmos logo and show helmfile help
-	if info.SubCommand == "" {
-		fmt.Println()
-		err = tuiUtils.PrintStyledText("ATMOS")
-		if err != nil {
-			return err
-		}
-
-		err = processHelp(atmosConfig, "helmfile", "")
-		if err != nil {
-			return err
-		}
-
-		fmt.Println()
-		return nil
 	}
 
 	if info.SubCommand == "version" {
@@ -115,7 +93,15 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if component 'settings.validation' section is specified and validate the component
-	valid, err := ValidateComponent(atmosConfig, info.ComponentFromArg, info.ComponentSection, "", "", nil, 0)
+	valid, err := ValidateComponent(
+		atmosConfig,
+		info.ComponentFromArg,
+		info.ComponentSection,
+		"",
+		"",
+		nil,
+		0,
+	)
 	if err != nil {
 		return err
 	}

@@ -21,6 +21,18 @@ const (
 	ColorBorder       = "#5F5FD7" // UI borders
 )
 
+type HelpStyle struct {
+	Headings      *color.Color
+	Commands      *color.Color
+	Example       *color.Color
+	ExecName      *color.Color
+	Flags         *color.Color
+	CmdShortDescr *color.Color
+	FlagsDescr    *color.Color
+	FlagsDataType *color.Color
+	Aliases       *color.Color
+}
+
 // Styles provides pre-configured lipgloss styles for common UI elements
 var Styles = struct {
 	VersionNumber lipgloss.Style
@@ -34,6 +46,7 @@ var Styles = struct {
 	CommandName   lipgloss.Style
 	Description   lipgloss.Style
 	Border        lipgloss.Style
+	Help          HelpStyle
 }{
 	VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGray)),
 	NewVersion:    lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGreen)),
@@ -46,6 +59,13 @@ var Styles = struct {
 	CommandName:   lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGreen)),
 	Description:   lipgloss.NewStyle().Foreground(lipgloss.Color(ColorWhite)),
 	Border:        lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(ColorBorder)),
+	Help: HelpStyle{
+		Headings: color.New(color.FgHiCyan).Add(color.Bold).Add(color.Underline),
+		Commands: color.New(color.FgHiGreen).Add(color.Bold),
+		Example:  color.New(color.Italic),
+		ExecName: color.New(color.Bold),
+		Flags:    color.New(color.Bold),
+	},
 }
 
 // Colors provides color.Attribute mappings for the old color.New style

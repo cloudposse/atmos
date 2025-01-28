@@ -245,7 +245,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			return atmosConfig, err
 		}
 	}
-
+	// We want the editorconfig color by default to be true
+	atmosConfig.Validate.EditorConfig.Color = true
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&atmosConfig)

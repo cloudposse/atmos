@@ -83,17 +83,11 @@ var workflowCmd = &cobra.Command{
 		"For more details refer to https://atmos.tools/cli/commands/workflow/",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
+		handleHelpRequest(cmd, args)
 		// If no arguments are provided, start the workflow UI
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				u.LogErrorAndExit(err)
-			}
-			return
-		}
-
-		if args[0] == "help" {
-			if err := cmd.Help(); err != nil {
 				u.LogErrorAndExit(err)
 			}
 			return

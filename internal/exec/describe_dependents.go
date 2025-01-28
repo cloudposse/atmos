@@ -67,7 +67,7 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 	var res any
 
 	if query != "" {
-		res, err = u.EvaluateYqExpression(atmosConfig, dependents, query)
+		res, err = u.EvaluateYqExpression(&atmosConfig, dependents, query)
 		if err != nil {
 			return err
 		}

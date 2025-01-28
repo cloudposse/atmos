@@ -1,0 +1,7 @@
+[1;96mINFO[0m Vendoring from 'vendor.yaml'
+[1;93mWARN[0m No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
+[1;96mINFO[0m [92m✓[0m github/stargazers (main)
+[1;96mINFO[0m [92m✓[0m weather (main)
+[1;96mINFO[0m [92m✓[0m ipinfo (main)
+[1;96mINFO[0m Vendored 3 components.
+

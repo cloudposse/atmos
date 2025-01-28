@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 
 	l "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/fatih/color"
 )
 
@@ -28,6 +29,11 @@ func PrintMessageInColor(message string, messageColor *color.Color) {
 	_, _ = messageColor.Fprint(os.Stdout, message)
 }
 
+func PrintErrorInColor(message string) {
+	messageColor := theme.Colors.Error
+	_, _ = messageColor.Fprint(os.Stderr, message)
+}
+
 // LogErrorAndExit logs errors to std.Error and exits with an error code
 func LogErrorAndExit(err error) {
 	l.Error(err)
@@ -35,8 +41,7 @@ func LogErrorAndExit(err error) {
 	// Find the executed command's exit code from the error
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
-		exitCode := exitError.ExitCode()
-		os.Exit(exitCode)
+		os.Exit(exitError.ExitCode())
 	}
 
 	os.Exit(1)

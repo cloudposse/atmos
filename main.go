@@ -6,7 +6,6 @@ import (
 )
 
 func main() {
-
 	err := cmd.Execute()
 	if err != nil {
 		u.LogErrorAndExit(err)

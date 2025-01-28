@@ -1,0 +1,57 @@
+---
+title: atmos validate editorconfig
+sidebar_label: editorconfig
+sidebar_class_name: command
+id: editorconfig
+description: Use this command to validate the workdir of the Atmos project against the rules defined in the .editorconfig file.
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note purpose
+Use this command to validate files against the rules defined in .editorconfig file.
+:::
+
+<Screengrab title="atmos validate editorconfig --help" slug="atmos-validate-editorconfig--help" />
+
+## Usage
+
+Execute the `validate editorconfig` command like this:
+
+```shell
+atmos validate editorconfig
+```
+
+This command validates files against the formatting rules defined in your .editorconfig file.
+
+:::tip
+Run `atmos validate editorconfig --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos validate editorconfig
+atmos validate editorconfig --logs-level trace
+atmos validate editorconfig --no-color
+atmos validate editorconfig --dry-run
+```
+
+## Flags
+
+| Flag                                   | Description                                                                                                                                                                                                                               | Alias | Required |
+|:---------------------------------------|:----------------------------------------------------------------------|:------|:---------|
+|`--config string`                       |Path to the configuration file                                         |       |no        |
+|`--disable-end-of-line`                 |Disable end-of-line check (default "false")                            |       |no        |
+|`--disable-indent-size`                 |Disable indent size check (default "false")                            |       |no        |
+|`--disable-indentation`                 |Disable indentation check (default "false")||no|
+|`--disable-insert-final-newline`        |Disable final newline check (default "false")||no|
+|`--disable-max-line-length`             |Disable max line length check (default "false")||no|
+|`--disable-trim-trailing-whitespace`    |Disable trailing whitespace check (default "false")||no|
+|`--dry-run`                             |Show which files would be checked (default "false")||no|
+|`--exclude string`                      |Regex to exclude files from checking||no|
+|`--format string`                       |Specify the output format: default, gcc (default "default")||no|
+|`--help`                                |help for editorconfig (default "false")||no|
+|`--ignore-defaults`                     |Ignore default excludes (default "false")||no|
+|`--init`                                |creates an initial configuration (default "false")||no|
+|`--no-color`                            |Don't print colors (default "false")||no|
+|`--version`                             |Print the version number (default "false")||no|
