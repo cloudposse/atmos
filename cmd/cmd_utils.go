@@ -662,7 +662,7 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 			details = details + "* " + subCmd.Name() + "\n"
 		}
 		if len(cmd.Commands()) == 0 && arg != "" {
-			details += "No valid subcommands found for `" + cmd.CommandPath() + "`\n"
+			details += "\nNo valid subcommands found for `" + cmd.CommandPath() + "`\n"
 		}
 	}
 	showUsageExample(cmd, details)
