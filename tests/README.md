@@ -101,6 +101,7 @@ tests:
       - "help"
 
     expect:                                   # Assertions
+      timeout: 1m                             # Maximum time it should take to run this test
       diff: []                                # List of expected differences
       stdout:                                 # Expected output to stdout or TTY. All TTY output is directed to stdout
       stderr:                                 # Expected output to stderr;

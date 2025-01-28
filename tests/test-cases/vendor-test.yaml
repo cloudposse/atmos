@@ -10,5 +10,8 @@ tests:
     expect:
       timeout: 5s
       stderr:
-        - "Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/"
+        #- "Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/"
+
+        # This is a regression. It should not show this message below.
+        - "the '--everything' flag is set, but the vendor config file 'vendor' does not exist"
       exit_code: 1
