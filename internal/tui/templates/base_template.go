@@ -89,8 +89,9 @@ func getSection(section HelpTemplateSections) string {
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [sub-command] [flags]{{end}}`
 	case Footer:
-		return `{{if .HasAvailableSubCommands}}
-Use "{{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} --help" for more information about a command.{{end}}`
+		return `
+
+{{renderHelpMarkdown .}}`
 	default:
 		return ""
 	}

@@ -39,3 +39,5 @@ Global Flags:
 
     -s, --stack string              atmos helmfile <helmfile_command>
                                     <component> -s <stack>
+
+Use [;1m atmos helmfile apply --help[0m for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 

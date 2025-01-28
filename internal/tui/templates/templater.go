@@ -73,6 +73,23 @@ func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.
 	return filtered
 }
 
+func renderHelpMarkdown(cmd *cobra.Command) string {
+	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	if err != nil {
+		return ""
+	}
+	commandPath := cmd.CommandPath()
+	if cmd.HasSubCommands() {
+		commandPath += " [subcommand]"
+	}
+	help := fmt.Sprintf("Use `%s --help` for more information about a command.", commandPath)
+	data, err := render.Render(help)
+	if err == nil {
+		return data
+	}
+	return ""
+}
+
 func isNativeCommandsAvailable(cmds []*cobra.Command) bool {
 	for _, cmd := range cmds {
 		if cmd.Annotations["nativeCommand"] == "true" {
@@ -202,6 +219,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cobra.AddTemplateFunc("isNativeCommandsAvailable", isNativeCommandsAvailable)
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
 	cobra.AddTemplateFunc("renderMarkdown", renderMarkdown)
+	cobra.AddTemplateFunc("renderHelpMarkdown", renderHelpMarkdown)
 	return nil
 }
 
