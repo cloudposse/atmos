@@ -37,6 +37,8 @@ tests:
         - "^$"
       file_exists:
         - "README.md"
+      file_contains:
+        - 'something'        
 
   - name: "atmos docs generate with path as agrument"
     enabled: true
