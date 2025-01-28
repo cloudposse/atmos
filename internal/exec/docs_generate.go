@@ -22,7 +22,17 @@ import (
 	"github.com/hashicorp/go-getter"
 )
 
-// ExecuteDocsGenerateCmd implements the 'atmos docs generate' logic
+/*
+ExecuteDocsGenerateCmd implements the 'atmos docs generate' logic.
+
+Key changes:
+  - We do NOT call ProcessCommandLineArgs() again for each subdirectory.
+  - Instead, we reuse the initial `info` from the main command call.
+  - We then use `os.Chdir` to move into subdirectories that contain a local `atmos.yaml`,
+    call `cfg.InitCliConfig(infoLocal, false)` so it picks up that subdir's config,
+    then chdir back.
+  - If no local `atmos.yaml` is found, we fallback to the root config we initially loaded.
+*/
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	// 1) Parse CLI flags/args
 	flags := cmd.Flags()
@@ -44,53 +54,140 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 		targetDir = currDir
 	}
 
+	// Load our root config once using the current working directory
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
-
-	atmosConfig, err := cfg.InitCliConfig(info, false)
+	rootConfig, err := cfg.InitCliConfig(info, false)
 	if err != nil {
 		return err
 	}
 
-	docsGenerate := atmosConfig.Settings.Docs.Generate
-
+	docsGenerate := rootConfig.Settings.Docs.Generate
 	if len(docsGenerate.Input) == 0 {
-		u.LogDebug(atmosConfig, "No 'docs.generate.input' sources defined in atmos.yaml.")
+		u.LogDebug(rootConfig, "No 'docs.generate.input' sources defined in atmos.yaml.")
 	}
 	if len(docsGenerate.Template) == 0 {
-		u.LogDebug(atmosConfig, "No 'docs.generate.template' is defined, generating minimal readme.")
+		u.LogDebug(rootConfig, "No 'docs.generate.template' is defined, generating minimal readme.")
 	}
 
 	// If `--all`, walk subdirectories. Otherwise, process just one.
 	if all {
-		return generateAllReadmes(atmosConfig, targetDir, docsGenerate)
+		return generateAllReadmesWithChdir(rootConfig, info, targetDir)
 	} else {
-		return generateSingleReadme(atmosConfig, targetDir, docsGenerate)
+		return generateSingleReadmeWithChdir(rootConfig, info, targetDir, docsGenerate)
 	}
 }
 
-// generateAllReadmes searches recursively for any README.yaml, merges data, and writes README.md
-func generateAllReadmes(atmosConfig schema.AtmosConfiguration, baseDir string, docsGenerate schema.DocsGenerate) error {
-	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, werr error) error {
+/*
+generateAllReadmesWithChdir scans for README.yaml in subdirectories:
+
+- If the subdir has a local 'atmos.yaml', we:
+ 1. Save oldDir = os.Getwd()
+ 2. os.Chdir(subDir)
+ 3. Create a copy of the original info => infoLocal
+ 4. Call cfg.InitCliConfig(infoLocal, false) to load that subdirectory's config
+ 5. Chdir back to oldDir
+ 6. Generate docs with the newly loaded config
+
+- If no local 'atmos.yaml' exists, we just use the root config as a fallback.
+*/
+func generateAllReadmesWithChdir(
+	rootConfig schema.AtmosConfiguration,
+	rootInfo schema.ConfigAndStacksInfo,
+	baseDir string,
+) error {
+	err := filepath.Walk(baseDir, func(path string, infoFile os.FileInfo, werr error) error {
 		if werr != nil {
 			return werr
 		}
-		// If you eventually reintroduce local reading, you'd look for "README.yaml" or similar here.
-		if strings.EqualFold(info.Name(), "README.yaml") {
-			dir := filepath.Dir(path)
-			err := generateSingleReadme(atmosConfig, dir, docsGenerate)
-			if err != nil {
-				return fmt.Errorf("error generating docs in %s: %w", dir, err)
+		if strings.EqualFold(infoFile.Name(), "README.yaml") {
+			subDir := filepath.Dir(path)
+
+			// Check if there's a local atmos.yaml in subDir
+			localAtmos := filepath.Join(subDir, "atmos.yaml")
+
+			// If found, we do an os.Chdir + re-init config from that location
+			if fileExists(localAtmos) {
+				oldDir, err := os.Getwd()
+				if err != nil {
+					return err
+				}
+				defer os.Chdir(oldDir) // ensure we go back no matter what
+
+				if err := os.Chdir(subDir); err != nil {
+					return fmt.Errorf("failed to chdir into %s: %w", subDir, err)
+				}
+
+				// reuse the same info, just copy it
+				infoLocal := rootInfo
+				// we do not re-parse flags, we trust them to be the same
+				localConfig, localErr := cfg.InitCliConfig(infoLocal, false)
+				if localErr != nil {
+					// fallback to root config
+					u.LogDebug(rootConfig, fmt.Sprintf("Error loading local atmos.yaml in %s: %v. Using root config instead.", subDir, localErr))
+					return generateSingleReadme(rootConfig, subDir, rootConfig.Settings.Docs.Generate)
+				}
+
+				// Now we have a subdir config; let's use it
+				return generateSingleReadme(localConfig, subDir, localConfig.Settings.Docs.Generate)
 			}
+
+			// If no local atmos.yaml found, fallback to root config
+			return generateSingleReadme(rootConfig, subDir, rootConfig.Settings.Docs.Generate)
 		}
 		return nil
 	})
 	return err
 }
 
-func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerate) error {
+/*
+generateSingleReadmeWithChdir handles the scenario of 'atmos docs generate [path]' once,
+i.e. not using the --all flag.
+
+- If we find a local 'atmos.yaml' in that path, we do the os.Chdir approach and re-init config.
+- Otherwise, we fallback to the root config from the main call.
+*/
+func generateSingleReadmeWithChdir(
+	rootConfig schema.AtmosConfiguration,
+	rootInfo schema.ConfigAndStacksInfo,
+	targetDir string,
+	rootDocsGenerate schema.DocsGenerate,
+) error {
+	// Check if subDir has a local atmos.yaml
+	localAtmos := filepath.Join(targetDir, "atmos.yaml")
+	if fileExists(localAtmos) {
+		oldDir, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		defer os.Chdir(oldDir)
+
+		if err := os.Chdir(targetDir); err != nil {
+			return fmt.Errorf("failed to chdir into %s: %w", targetDir, err)
+		}
+
+		infoLocal := rootInfo
+		localConfig, localErr := cfg.InitCliConfig(infoLocal, false)
+		if localErr == nil {
+			// If we got a local config, use it
+			return generateSingleReadme(localConfig, targetDir, localConfig.Settings.Docs.Generate)
+		}
+		u.LogDebug(rootConfig, fmt.Sprintf("Error loading local atmos.yaml in %s: %v. Using root config instead.", targetDir, localErr))
+	}
+
+	// fallback to root config if no local atmos or we failed to load it
+	return generateSingleReadme(rootConfig, targetDir, rootDocsGenerate)
+}
+
+// generateSingleReadme merges data from docsGenerate.Input, runs terraform-docs if needed,
+// and writes out a final README.
+func generateSingleReadme(
+	atmosConfig schema.AtmosConfiguration,
+	dir string,
+	docsGenerate schema.DocsGenerate,
+) error {
 	// 1) Merge data from all YAML inputs
 	var allMaps []map[string]any
 	for _, src := range docsGenerate.Input {
@@ -101,11 +198,13 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		}
 		allMaps = append(allMaps, dataMap)
 	}
-	// Use the native Atmos merging:
+
+	// Use the native Atmos merging
 	mergedData, err := merge.Merge(atmosConfig, allMaps)
 	if err != nil {
 		return fmt.Errorf("failed to merge input YAMLs: %w", err)
 	}
+
 	// 2) Generate terraform docs if configured
 	if docsGenerate.Terraform.Enabled {
 		terraformDocs, err := runTerraformDocs(dir, docsGenerate.Terraform)
@@ -115,7 +214,7 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		mergedData["terraform_docs"] = terraformDocs
 	}
 
-	// 3) Fetch the template (via go-getter) or fallback
+	// 3) Fetch template (via go-getter) or fallback
 	var chosenTemplate string
 	if docsGenerate.Template != "" {
 		templateFile, tempDir, err := downloadSource(atmosConfig, docsGenerate.Template, dir)
@@ -131,13 +230,11 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 			}
 		}
 	}
-
-	// 4) If no user-supplied template or if an error occurred, fallback
 	if chosenTemplate == "" {
 		chosenTemplate = "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
 	}
 
-	// 5) Render final README with existing gomplate call
+	// 4) Render final README with existing gomplate call
 	rendered, err := ProcessTmplWithDatasourcesGomplate(
 		atmosConfig,
 		schema.Settings{},
@@ -150,7 +247,7 @@ func generateSingleReadme(atmosConfig schema.AtmosConfiguration, dir string, doc
 		return fmt.Errorf("failed to render template with datasources: %w", err)
 	}
 
-	// 6) Write final README.md (or custom output name)
+	// 5) Write final README.md (or custom output name)
 	outputFile := docsGenerate.Output
 	if outputFile == "" {
 		outputFile = "README.md"
@@ -224,8 +321,6 @@ func downloadSource(
 	pathOrURL string,
 	baseDir string,
 ) (localPath string, temDir string, err error) {
-
-	// If path is relative & not obviously remote, make it absolute
 	if !filepath.IsAbs(pathOrURL) && !isLikelyRemote(pathOrURL) {
 		pathOrURL = filepath.Join(baseDir, pathOrURL)
 	}
@@ -289,4 +384,16 @@ func isLikelyRemote(s string) bool {
 		}
 	}
 	return false
+}
+
+/*
+fileExists checks if a file (not a directory) is present at a given path.
+Used to see if subdirectories have a local 'atmos.yaml' we can load.
+*/
+func fileExists(fp string) bool {
+	info, err := os.Stat(fp)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return err == nil && !info.IsDir()
 }
