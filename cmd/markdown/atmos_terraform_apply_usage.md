@@ -1,6 +1,4 @@
-Examples:
-
-  – Execute a terraform apply
+– Execute a terraform apply
 
 ```
     $ atmos terraform apply <component-name> -s <stack-name>
