@@ -639,11 +639,11 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	commandPath := cmd.CommandPath()
 	suggestions := []string{}
-	details := fmt.Sprintf("The command `%s` is not valid usage\n\n", commandPath)
+	details := fmt.Sprintf("The command `%s` is not valid usage\n", commandPath)
 	if len(arg) > 0 {
-		details = fmt.Sprintf("Unknown command `%s` for `%s`\n\n", arg, commandPath)
+		details = fmt.Sprintf("Unknown command `%s` for `%s`\n", arg, commandPath)
 	} else if len(cmd.Commands()) != 0 && arg == "" {
-		details = fmt.Sprintf("The command `%s` requires a subcommand\n\n", commandPath)
+		details = fmt.Sprintf("The command `%s` requires a subcommand\n", commandPath)
 	}
 	if len(arg) > 0 {
 		suggestions = cmd.SuggestionsFor(arg)
@@ -670,7 +670,7 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(cmd.CommandPath(), " ", "_")
-	suggestion := fmt.Sprintf("\nRun '%s --help' for usage", cmd.CommandPath())
+	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
 	if exampleContent, ok := examples[contentName]; ok {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content

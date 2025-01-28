@@ -30,12 +30,13 @@ func renderError(msg ErrorMessage) error {
 	if err != nil {
 		return err
 	}
+
 	rendered, err := renderer.RenderError(msg.Title, msg.Details, msg.Suggestion)
 	if err != nil {
 		return fmt.Errorf("failed to render error message: %w", err)
 	}
 
-	fmt.Print(rendered + "\n")
+	os.Stderr.WriteString(fmt.Sprint(rendered + "\n"))
 	return nil
 }
 

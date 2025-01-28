@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/muesli/termenv"
+	t "golang.org/x/term"
 )
 
 // Renderer is a markdown renderer using Glamour
@@ -127,7 +128,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	var content string
 
 	if title != "" {
-		content += fmt.Sprintf("\n# %s\n\n", title)
+		content += fmt.Sprintf("\n# %s\n", title)
 	}
 
 	if details != "" {
@@ -141,7 +142,9 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 			content += suggestion
 		}
 	}
-
+	if !t.IsTerminal(int(os.Stderr.Fd())) {
+		return r.RenderAscii(content)
+	}
 	return r.Render(content)
 }
 
