@@ -1,4 +1,5 @@
 
+Generate the repository configuration file required for Atlantis to manage Terraform repositories.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
 
 Usage:
 
@@ -102,6 +103,12 @@ Flags:
 
 Global Flags:
 
+        --                          Double dashes can be used to signify the end
+                                    of Atmos-specific options and the beginning
+                                    of additional native arguments and flags for
+                                    the specific command being run. (default
+                                    "false")
+
         --clone-target-ref          Clone the target reference with which to
                                     compare the current branch: atmos atlantis
                                     generate repo-config --affected-only=true
@@ -131,9 +138,3 @@ Global Flags:
                                     standard file descriptor (including
                                     '/dev/null'): atmos <command>
                                     --redirect-stderr /dev/stdout
-
-The '--' (double-dash) can be used to signify the end of Atmos-specific options 
-and the beginning of additional native arguments and flags for the specific command being run.
-
-Example:
-  atmos atlantis generate repo-config  <component> -s <stack> -- <native-flags>

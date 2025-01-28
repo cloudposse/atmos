@@ -1,4 +1,6 @@
 
+This command reconciles the actual state of Helm releases in the cluster with the desired state defined in your configurations by applying the necessary changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+Example usage: atmos helmfile apply echo-server -s tenant1-ue2-dev atmos helmfile apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
 
 Usage:
 
@@ -11,6 +13,12 @@ Flags:
 
 
 Global Flags:
+
+        --                          Double dashes can be used to signify the end
+                                    of Atmos-specific options and the beginning
+                                    of additional native arguments and flags for
+                                    the specific command being run. (default
+                                    "false")
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file
@@ -31,9 +39,3 @@ Global Flags:
 
     -s, --stack string              atmos helmfile <helmfile_command>
                                     <component> -s <stack>
-
-The '--' (double-dash) can be used to signify the end of Atmos-specific options 
-and the beginning of additional native arguments and flags for the specific command being run.
-
-Example:
-  atmos helmfile apply  <component> -s <stack> -- <native-flags>
