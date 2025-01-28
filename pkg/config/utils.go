@@ -187,12 +187,6 @@ func FindAllStackConfigsInPaths(
 }
 
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
-	basePath := os.Getenv("ATMOS_BASE_PATH")
-	if len(basePath) > 0 {
-		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
-		atmosConfig.BasePath = basePath
-	}
-
 	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
 	if len(vendorBasePath) > 0 {
 		u.LogTrace(*atmosConfig, fmt.Sprintf("Found ENV var ATMOS_VENDOR_BASE_PATH=%s", vendorBasePath))

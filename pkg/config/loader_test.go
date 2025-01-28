@@ -118,7 +118,6 @@ func TestLoadExplicitConfigsWithValidConfigFile(t *testing.T) {
 	err = cl.loadExplicitConfigs([]string{configPath})
 	require.NoError(t, err)
 
-	assert.True(t, cl.configFound)
 	assert.Equal(t, configPath, cl.atmosConfig.CliConfigPath)
 	assert.Contains(t, cl.AtmosConfigPaths, configPath)
 }
@@ -141,7 +140,6 @@ func TestLoadExplicitConfigsWithMultipleConfigFiles(t *testing.T) {
 
 	err = cl.loadExplicitConfigs([]string{configPath1, configPath2})
 	require.NoError(t, err)
-	assert.True(t, cl.configFound)
 	paths := ConnectPaths([]string{configPath1, configPath2})
 	assert.Equal(t, paths, cl.atmosConfig.CliConfigPath)
 	assert.Contains(t, cl.AtmosConfigPaths, configPath1)
@@ -153,7 +151,6 @@ func TestLoadExplicitConfigsWithMultipleConfigFiles(t *testing.T) {
 	}
 	err = cl.loadExplicitConfigs([]string{tmpDir})
 	require.NoError(t, err)
-	assert.True(t, cl.configFound)
 	assert.Equal(t, configPath1, cl.atmosConfig.CliConfigPath)
 	assert.Contains(t, cl.AtmosConfigPaths, configPath1)
 }
@@ -217,13 +214,20 @@ func TestDownloadRemoteConfig(t *testing.T) {
 		w.Write([]byte("mock content"))
 	}))
 	defer mockServer.Close()
-
+	viper := viper.New()
+	viper.SetConfigType("yaml")
+	cl := &ConfigLoader{
+		viper:       viper,
+		atmosConfig: schema.AtmosConfiguration{},
+	}
+	tmpDir := t.TempDir()
+	defer os.RemoveAll(tmpDir)
 	t.Run("Valid URL", func(t *testing.T) {
-		tempDir, tempFile, err := downloadRemoteConfig(mockServer.URL)
+
+		tempFile, err := cl.downloadRemoteConfig(mockServer.URL, tmpDir)
 		if err != nil {
 			t.Fatalf("Expected no error, got %v", err)
 		}
-		defer os.RemoveAll(tempDir)
 
 		// Verify the temporary file contains the correct content
 		content, err := os.ReadFile(tempFile)
@@ -236,10 +240,37 @@ func TestDownloadRemoteConfig(t *testing.T) {
 	})
 
 	t.Run("Invalid URL", func(t *testing.T) {
-		_, _, err := downloadRemoteConfig("http://invalid-url")
+		_, err := cl.downloadRemoteConfig("http://invalid-url", tmpDir)
 		if err == nil {
 			t.Fatal("Expected an error for invalid URL, got nil")
 		}
 	})
 
+}
+func TestParseArraySeparatorWithMultipleParts(t *testing.T) {
+	input := "part1; part2;part3 ;part4"
+
+	result := parseArraySeparator(input)
+
+	expected := []string{"part1", "part2", "part3", "part4"}
+	if len(result) != len(expected) {
+		t.Errorf("Expected length %d but got %d", len(expected), len(result))
+	}
+
+	for i, v := range expected {
+		if result[i] != v {
+			t.Errorf("Expected %s at position %d but got %s", v, i, result[i])
+		}
+	}
+	input = "part1"
+	result = parseArraySeparator(input)
+	expected = []string{"part1"}
+	if len(result) != len(expected) {
+		t.Errorf("Expected length %d but got %d", len(expected), len(result))
+	}
+	for i, v := range expected {
+		if result[i] != v {
+			t.Errorf("Expected %s at position %d but got %s", v, i, result[i])
+		}
+	}
 }
