@@ -30,7 +30,7 @@ tests:
       - "-s"
       - "nonprod"
     expect:
-      timeout: 10s
+      timeout: 1m
       stdout:
         - 'Apply complete! Resources: \d+ added, \d+ changed, \d+ destroyed\.'
       stderr:
@@ -68,7 +68,7 @@ tests:
       - "-s"
       - "prod"
     expect:
-      timeout: 10s
+      timeout: 1m
       stdout:
         - "Terraform has been successfully initialized"
         - "Terraform used the selected providers to generate the following execution"

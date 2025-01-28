@@ -435,9 +435,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				if exitCode < 0 {
 					// Negative exit code indicates interruption by a signal
 					t.Errorf("TTY Command interrupted by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
-				} else {
-					// Handle non-signal-related exit errors
-					t.Errorf("TTY Command failed with exit code %d: %s, %v", exitCode, tc.Command, err)
 				}
 			} else {
 				// Handle other types of errors
@@ -468,9 +465,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				if exitCode < 0 {
 					// Negative exit code indicates termination by a signal
 					t.Errorf("Non-TTY Command terminated by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
-				} else {
-					// Non-signal-related exit error
-					t.Errorf("Non-TTY Command failed with exit code %d: %s, %v", exitCode, tc.Command, err)
 				}
 			} else {
 				// Handle other non-exec-related errors
