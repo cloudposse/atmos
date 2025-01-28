@@ -247,7 +247,15 @@ func downloadSource(
 	return downloadedPath, tempDir, nil
 }
 
-// findSingleFileInDir enforces that exactly one file is present
+/*
+go-getter is used to download files as per provided path by user and
+the function below is a check that user provided a link to a file or a single file in folder,
+not a folder with multiple files, i.e. as of right now we dont have a logic to take just one relevant
+template or yml file from the folder downloaded.
+So this is why an extra check.
+To be decided later: this could be removed
+later to introdce simplier logic (like trust users to provide a single file, etc)
+*/
 func findSingleFileInDir(dir string) (string, error) {
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, werr error) error {

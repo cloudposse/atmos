@@ -19,7 +19,8 @@ tests:
       file_exists:
         - "README.md"
       file_contains:
-        - 'something'        
+        "README.md":
+          - "Atmos"         
 
   - name: "atmos docs generate with subdirectories"
     enabled: true
@@ -40,7 +41,8 @@ tests:
       file_exists:
         - "README.md"
       file_contains:
-        - 'something'        
+        "README.md":
+          - "Atmos"        
 
   - name: "atmos docs generate with path as agrument"
     enabled: true
@@ -61,7 +63,8 @@ tests:
       file_exists:
         - "README.md"
       file_contains:
-        - 'something'
+        "README.md":
+          - "Atmos" 
 
   - name: "atmos docs generate for terraform docs"
     enabled: true
@@ -81,4 +84,7 @@ tests:
       file_exists:
         - "README.md"
       file_contains:
-        - 'something'        
+        "README.md":
+          - "## Requirements"
+          - "## Providers"
+          - "## Inputs"         

@@ -87,7 +87,9 @@ type AtmosSettings struct {
 }
 
 type Docs struct {
-	MaxWidth   int          `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	//Must be deprcated
+	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	//Must be deprcated
 	Pagination bool         `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
 	Generate   DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
 }
