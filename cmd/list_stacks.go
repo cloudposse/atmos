@@ -19,7 +19,10 @@ var listStacksCmd = &cobra.Command{
 	Short: "List all Atmos stacks or stacks for a specific component",
 	Long:  "This command lists all Atmos stacks, or filters the list to show only the stacks associated with a specified component.",
 	Example: "atmos list stacks\n" +
-		"atmos list stacks -c <component>",
+		"atmos list stacks -c <component>\n" +
+		"atmos list stacks --format json\n" +
+		"atmos list stacks --format csv --delimiter ','\n" +
+		"atmos list stacks --format table",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -27,6 +30,8 @@ var listStacksCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		componentFlag, _ := cmd.Flags().GetString("component")
+		formatFlag, _ := cmd.Flags().GetString("format")
+		delimiterFlag, _ := cmd.Flags().GetString("delimiter")
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
@@ -41,7 +46,7 @@ var listStacksCmd = &cobra.Command{
 			return
 		}
 
-		output, err := l.FilterAndListStacks(stacksMap, componentFlag)
+		output, err := l.FilterAndListStacks(stacksMap, componentFlag, atmosConfig.Stacks.List, formatFlag, delimiterFlag)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), theme.Colors.Error)
 			return
@@ -52,6 +57,8 @@ var listStacksCmd = &cobra.Command{
 
 func init() {
 	listStacksCmd.DisableFlagParsing = false
-	listStacksCmd.PersistentFlags().StringP("component", "c", "", "atmos list stacks -c <component>")
+	listStacksCmd.PersistentFlags().StringP("component", "c", "", "Filter stacks by component")
+	listStacksCmd.PersistentFlags().StringP("format", "f", "", "Output format (table, json, csv)")
+	listStacksCmd.PersistentFlags().StringP("delimiter", "d", "\t", "Delimiter for table and csv formats")
 	listCmd.AddCommand(listStacksCmd)
 }

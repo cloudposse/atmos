@@ -25,7 +25,16 @@ func TestListStacks(t *testing.T) {
 		nil, false, false, false)
 	assert.Nil(t, err)
 
-	output, err := FilterAndListStacks(stacksMap, "")
+	// Create test list config
+	listConfig := schema.ListConfig{
+		Format: "",
+		Columns: []schema.ListColumnConfig{
+			{Name: "Stack", Value: "{{ .atmos_stack }}"},
+			{Name: "File", Value: "{{ .atmos_stack_file }}"},
+		},
+	}
+
+	output, err := FilterAndListStacks(stacksMap, "", listConfig, "", "\t")
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.NotEmpty(t, dependentsYaml)
@@ -42,7 +51,16 @@ func TestListStacksWithComponent(t *testing.T) {
 		nil, false, false, false)
 	assert.Nil(t, err)
 
-	output, err := FilterAndListStacks(stacksMap, component)
+	// Create test list config
+	listConfig := schema.ListConfig{
+		Format: "",
+		Columns: []schema.ListColumnConfig{
+			{Name: "Stack", Value: "{{ .atmos_stack }}"},
+			{Name: "File", Value: "{{ .atmos_stack_file }}"},
+		},
+	}
+
+	output, err := FilterAndListStacks(stacksMap, component, listConfig, "", "\t")
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
