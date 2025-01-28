@@ -200,7 +200,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		return output.String(), nil
 
 	default:
-		// If format is empty or "table", use table format
+		// Check for TTY support
 		if format == "" && exec.CheckTTYSupport() {
 			// Create a styled table for TTY
 			t := table.New().
@@ -220,11 +220,17 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			return t.String() + utils.GetLineEnding(), nil
 		}
 
-		// Default to simple tabular format for non-TTY or when format is explicitly "table"
 		var output strings.Builder
-		output.WriteString(strings.Join(headers, delimiter) + utils.GetLineEnding())
+		// Write headers
+		headerRow := make([]string, len(headers))
+		for i, h := range headers {
+			headerRow[i] = h
+		}
+		output.WriteString(strings.Join(headerRow, "\t") + utils.GetLineEnding())
+
+		// Write rows
 		for _, row := range rows {
-			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
+			output.WriteString(strings.Join(row, "\t") + utils.GetLineEnding())
 		}
 		return output.String(), nil
 	}
