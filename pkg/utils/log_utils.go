@@ -56,7 +56,7 @@ func LogError(atmosConfig schema.AtmosConfiguration, err error) {
 		render, printErr := markdown.NewTerminalMarkdownRenderer(atmosConfig)
 		if printErr != nil {
 			theme.Colors.Error.Println("Error logging the error:")
-			theme.Colors.Error.Printf("%s\n", err)
+			theme.Colors.Error.Printf("%s\n", printErr)
 			theme.Colors.Error.Println("Original error:")
 			theme.Colors.Error.Printf("%s\n", err)
 		}
