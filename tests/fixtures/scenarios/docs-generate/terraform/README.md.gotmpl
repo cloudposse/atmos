@@ -8,7 +8,19 @@
 Extra info: {{ $data.extra_info }}
 {{ end }}
 
-{{ if has $data "terraform_docs" }}
+{{ if has $data "terraform_docs" }}# {{ (ds "config").name | default "Project Title" }}
+
+{{ (ds "config").description | default "No description provided." }}
+
+{{ if has (ds "config") "extra_info" }}
+Extra info: {{ (ds "config").extra_info }}
+{{ end }}
+
+{{ if has (ds "config") "terraform_docs" }}
+## Terraform Docs
+{{ (ds "config").terraform_docs }}
+{{ end }}
+
 ## Terraform Docs
 {{ $data.terraform_docs }}
 {{ end }}
