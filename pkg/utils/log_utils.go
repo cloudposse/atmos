@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/fatih/color"
 )
@@ -52,14 +53,24 @@ func LogErrorAndExit(atmosConfig schema.AtmosConfiguration, err error) {
 // LogError logs errors to std.Error
 func LogError(atmosConfig schema.AtmosConfiguration, err error) {
 	if err != nil {
-		_, printErr := theme.Colors.Error.Fprintln(color.Error, err.Error())
+		render, printErr := markdown.NewTerminalMarkdownRenderer(atmosConfig)
 		if printErr != nil {
 			theme.Colors.Error.Println("Error logging the error:")
-			theme.Colors.Error.Printf("%s\n", printErr)
+			theme.Colors.Error.Printf("%s\n", err)
 			theme.Colors.Error.Println("Original error:")
 			theme.Colors.Error.Printf("%s\n", err)
 		}
-
+		errorMarkdown, renderErr := render.RenderError("Error", err.Error(), "")
+		if renderErr != nil {
+			_, printErr = theme.Colors.Error.Fprintln(color.Error, err.Error())
+			if printErr != nil {
+				theme.Colors.Error.Println("Error logging the error:")
+				theme.Colors.Error.Printf("%s\n", printErr)
+				theme.Colors.Error.Println("Original error:")
+				theme.Colors.Error.Printf("%s\n", err)
+			}
+		}
+		os.Stderr.WriteString(fmt.Sprint(errorMarkdown + "\n"))
 		// Print stack trace
 		if atmosConfig.Logs.Level == LogLevelTrace {
 			debug.PrintStack()
