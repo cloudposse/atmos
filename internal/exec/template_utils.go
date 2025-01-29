@@ -272,20 +272,19 @@ func ProcessTmplWithDatasourcesGomplate(
 		defer os.Unsetenv("GOMPLATE_MISSINGKEY")
 	}
 	// Step 1: Write the merged JSON data to a file
-        // This file will contain the combined data that Gomplate uses to fill in the templates.
-        // Gomplate reads this file directly because it's referenced by the "config" option.
+	// This file will contain the combined data that Gomplate uses to fill in the templates.
+	// Gomplate reads this file directly because it's referenced by the "config" option.
 	rawJSON, err := json.Marshal(mergedData)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal merged data to JSON: %w", err)
 	}
 
-// Create a temporary file to store JSON data merged from multiple YAML files (e.g., README.yaml).
-// This file's path is added to the "config" section of the Gomplate options, allowing Gomplate
-// to reference the data during template processing. The "." entry in the "Context" section
-// is included to maintain compatibility with an environment variable and ensure proper behavior,
-// especially on Windows.
-
+	// Create a temporary file to store JSON data merged from multiple YAML files (e.g., README.yaml).
+	// This file's path is added to the "config" section of the Gomplate options, allowing Gomplate
+	// to reference the data during template processing. The "." entry in the "Context" section
+	// is included to maintain compatibility with an environment variable and ensure proper behavior,
+	// especially on Windows.
 	tmpfile, err := os.CreateTemp("", "gomplate-data-*.json")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp data file for gomplate: %w", err)
@@ -301,22 +300,22 @@ func ProcessTmplWithDatasourcesGomplate(
 		return "", fmt.Errorf("failed to close temp data file: %w", err)
 	}
 
-	fileURL, err := toFileURL(tmpName)
+	fileURL, err := toFileScheme(tmpName)
 	if err != nil {
 		return "", fmt.Errorf("failed to convert temp file path to file URL: %w", err)
 	}
 
 	// fixWindowsFileURL transforms the path into a format gomplate can handle uniformly across OSes.
-	finalFileUrl, err := fixWindowsFileURL(fileURL)
+	finalFileUrl, err := fixWindowsFileScheme(fileURL)
 	if err != nil {
 		return "", err
 	}
 
-	// 2) Write the 'outer' top-level
-	//    This top-level file acts as the "outer" data source.
-	//    It stores a reference (README_YAML) to the 'inner' file here so Gomplate can link the environment-like data to the actual merged file.
-	//    Having an outer file allows us to keep a structured hierarchy of references. The "." context references this file.
-	//    This separation primarily deals with environment variable README_YAML.
+	// Step 2: Write the 'outer' top-level
+	// This top-level file acts as the "outer" data source.
+	// It stores a reference (README_YAML) to the 'inner' file here so Gomplate can link the environment-like data to the actual merged file.
+	// Having an outer file allows us to keep a structured hierarchy of references. The "." context references this file.
+	// This separation primarily deals with environment variable README_YAML.
 	topLevel := map[string]interface{}{
 		"Env": map[string]interface{}{
 			"README_YAML": fileURL,
@@ -342,13 +341,13 @@ func ProcessTmplWithDatasourcesGomplate(
 		return "", fmt.Errorf("failed to close top-level JSON: %w", err)
 	}
 
-	topLevelFileURL, err := toFileURL(tmpName2)
+	topLevelFileURL, err := toFileScheme(tmpName2)
 	if err != nil {
 		return "", fmt.Errorf("failed to convert top-level temp file path to file URL: %w", err)
 	}
 
 	// This step is crucial on Windows:
-	finalTopLevelFileURL, err := fixWindowsFileURL(topLevelFileURL)
+	finalTopLevelFileURL, err := fixWindowsFileScheme(topLevelFileURL)
 	if err != nil {
 		return "", err
 	}
