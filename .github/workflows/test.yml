@@ -72,6 +72,27 @@ jobs:
           path: |
             ./build/
 
+  fmt:
+    name: Check if code is formatted
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: aquaproj/aqua-installer@v3.1.1
+        with:
+          aqua_version: v2.43.0
+      - name: Install gofumpt
+        run: gofumpt -version
+      - name: Check if code is formatted
+        run: |
+          git ls-files | grep -E "\.go$" | xargs gofumpt -l -w
+          if ! git diff --quiet; then
+            echo "::error:: Code isn't formatted. Please format code using gofumpt"
+            exit 1
+          fi
+
   tidy:
     name: Tidy Go Modules
     runs-on: ubuntu-latest
