@@ -123,7 +123,7 @@ func toFileScheme(localPath string) (string, error) {
 	return "file://" + pathSlashed, nil
 }
 
-func fixWindowsFileURL(rawURL string) (*url.URL, error) {
+func fixWindowsFileScheme(rawURL string) (*url.URL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL %q: %w", rawURL, err)
