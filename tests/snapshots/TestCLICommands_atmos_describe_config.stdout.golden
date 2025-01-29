@@ -34,7 +34,11 @@
     "name_template": ""
   },
   "workflows": {
-    "base_path": ""
+    "base_path": "",
+    "list": {
+      "format": "",
+      "columns": null
+    }
   },
   "logs": {
     "file": "/dev/stderr",
