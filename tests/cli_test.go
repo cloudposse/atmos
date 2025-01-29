@@ -24,7 +24,6 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/muesli/termenv"
-	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -371,28 +370,30 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
 
-	// Set environment variables for the test case
-	tc.Env["HOME"] = tempDir
-	tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
-	tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
-	tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
+	/*
+		// Set environment variables for the test case
+		tc.Env["HOME"] = tempDir
+		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
+		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
+		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
 
-	// Copy necessary files to the temporary HOME directory
-	// This includes .gitconfig, .ssh, and .netrc
-	// On GitHub Runners for macOS, the .gitconfig is critical for git to work
-	originalHome := os.Getenv("HOME")
-	filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
-	for _, file := range filesToCopy {
-		src := filepath.Join(originalHome, file)
-		dest := filepath.Join(tempDir, file)
+		// Copy necessary files to the temporary HOME directory
+		// This includes .gitconfig, .ssh, and .netrc
+		// On GitHub Runners for macOS, the .gitconfig is critical for git to work
+		originalHome := os.Getenv("HOME")
+		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
+		for _, file := range filesToCopy {
+			src := filepath.Join(originalHome, file)
+			dest := filepath.Join(tempDir, file)
 
-		if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
-			//t.Logf("Copying %s to %s\n", src, dest)
-			if err := copy.Copy(src, dest); err != nil {
-				t.Fatalf("Failed to copy %s to test folder: %v", src, err)
+			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
+				//t.Logf("Copying %s to %s\n", src, dest)
+				if err := copy.Copy(src, dest); err != nil {
+					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
+				}
 			}
 		}
-	}
+	*/
 
 	// Change to the specified working directory
 	if tc.Workdir != "" {
