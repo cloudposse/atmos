@@ -7,6 +7,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -528,7 +529,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Execute the provided command (except for `terraform workspace` which was executed above)
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
-		if info.SubCommand == "plan" {
+		if info.SubCommand == "plan" && slices.Contains(atmosConfig.Terraform.UI.Enable, "plan") {
 			allArgsAndFlags = append(allArgsAndFlags, "-json")
 			pipeformStdin, planStdout := io.Pipe()
 			// Get a plan file
