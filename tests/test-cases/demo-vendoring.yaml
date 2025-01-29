@@ -8,6 +8,8 @@ tests:
     tty: true
     description: "Vendoring works with pull command"
     workdir: "../examples/demo-vendoring/"
+    env:
+      ATMOS_LOGS_LEVEL: "Trace"
     command: "atmos"
     args:
       - "vendor"
@@ -33,6 +35,8 @@ tests:
     clean: true
     description: "Vendoring works with pull command"
     workdir: "../examples/demo-vendoring/"
+    env:
+      ATMOS_LOGS_LEVEL: "Trace"
     command: "atmos"
     args:
       - "vendor"

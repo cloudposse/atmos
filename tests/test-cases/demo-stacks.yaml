@@ -174,7 +174,7 @@ tests:
     description: "Ensure atmos vendor pull command executes without errors and files are present."
     workdir: "fixtures/scenarios/vendor"
     env:
-      ATMOS_LOGS_LEVEL: "Debug"
+      ATMOS_LOGS_LEVEL: "Trace"
     command: "atmos"
     args:
       - "vendor"
