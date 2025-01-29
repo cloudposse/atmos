@@ -87,9 +87,9 @@ type AtmosSettings struct {
 }
 
 type Docs struct {
-	//Must be deprcated
+	// Deprecated: this has moved to `settings.terminal.max-width`
 	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
-	//Must be deprcated
+	// Deprecated: this has moved to `settings.terminal.pagination`
 	Pagination bool         `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
 	Generate   DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
 }
