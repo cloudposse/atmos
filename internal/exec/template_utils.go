@@ -280,25 +280,11 @@ func ProcessTmplWithDatasourcesGomplate(
 		return "", fmt.Errorf("failed to marshal merged data to JSON: %w", err)
 	}
 
-	/*
-		   The below is for creation of temporary file on disk that is later used to write into it the
-		   json coming from the merged yaml files (README.yaml - that could be several) and after fix for Windows
-		   its path goes into config. section of
-			opts := gomplate.Options{
-				Context: map[string]gomplate.Datasource{
-					".": {
-						URL: finalTopLevelFileURL,
-					},
-						"config": {
-						URL: finalFileUrl,
-					},
-				},
-				Funcs: template.FuncMap{},
-			}
-			Please note that the upper section ".": {
-					URL: finalTopLevelFileURL,
-			is needed only for maintaining the ENV_VAR
-	*/
+// Create a temporary file to store JSON data merged from multiple YAML files (e.g., README.yaml).
+// This file's path is added to the "config" section of the Gomplate options, allowing Gomplate
+// to reference the data during template processing. The "." entry in the "Context" section
+// is included to maintain compatibility with an environment variable and ensure proper behavior,
+// especially on Windows.
 
 	tmpfile, err := os.CreateTemp("", "gomplate-data-*.json")
 	if err != nil {
