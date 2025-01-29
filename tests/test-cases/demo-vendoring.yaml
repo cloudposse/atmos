@@ -4,6 +4,7 @@ tests:
   - name: atmos vendor pull (tty)
     enabled: true
     snapshot: false
+    clean: true
     tty: true
     description: "Vendoring works with pull command"
     workdir: "../examples/demo-vendoring/"
@@ -29,6 +30,7 @@ tests:
     enabled: true
     snapshot: true
     tty: false
+    clean: true
     description: "Vendoring works with pull command"
     workdir: "../examples/demo-vendoring/"
     command: "atmos"

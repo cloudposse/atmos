@@ -52,6 +52,7 @@ tests:
   - name: atmos version --check
     enabled: true
     snapshot: false
+    clean: true
     description: "Verify atmos version --check command functions correctly."
     workdir: "../examples/demo-stacks"
     env:
