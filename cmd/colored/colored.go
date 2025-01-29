@@ -51,7 +51,6 @@ type Config struct {
 
 // Init patches Cobra's usage template with configuration provided.
 func Init(cfg *Config) {
-
 	if cfg.RootCmd == nil {
 		panic("coloredcobra: Root command pointer is missing.")
 	}
@@ -147,7 +146,6 @@ func Init(cfg *Config) {
 	if cf != nil || cfd != nil || cfdt != nil {
 
 		cobra.AddTemplateFunc("FlagStyle", func(s string) string {
-
 			// Flags info section is multi-line.
 			// Let's split these lines and iterate them.
 			lines := strings.Split(s, "\n")
@@ -193,7 +191,6 @@ func Init(cfg *Config) {
 			s = strings.Join(lines, "\n")
 
 			return s
-
 		})
 
 		// Patch usage template

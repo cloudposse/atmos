@@ -26,7 +26,7 @@ func ExecuteWorkflow(
 	commandLineStack string,
 	fromStep string,
 ) error {
-	var steps = workflowDefinition.Steps
+	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
 		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
@@ -61,8 +61,8 @@ func ExecuteWorkflow(
 	}
 
 	for stepIdx, step := range steps {
-		var command = strings.TrimSpace(step.Command)
-		var commandType = strings.TrimSpace(step.Type)
+		command := strings.TrimSpace(step.Command)
+		commandType := strings.TrimSpace(step.Type)
 
 		logFunc(atmosConfig, fmt.Sprintf("Executing workflow step: %s", command))
 
@@ -77,9 +77,9 @@ func ExecuteWorkflow(
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
-			var workflowStack = strings.TrimSpace(workflowDefinition.Stack)
-			var stepStack = strings.TrimSpace(step.Stack)
-			var finalStack = ""
+			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
+			stepStack := strings.TrimSpace(step.Stack)
+			finalStack := ""
 
 			// The workflow `stack` attribute overrides the stack in the `command` (if specified)
 			// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute
@@ -132,7 +132,6 @@ func ExecuteWorkflow(
 func ExecuteDescribeWorkflows(
 	atmosConfig schema.AtmosConfiguration,
 ) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
-
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
 	allResult := make(map[string]schema.WorkflowManifest)
@@ -209,7 +208,7 @@ func ExecuteDescribeWorkflows(
 }
 
 func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
-	var steps = workflowDefinition.Steps
+	steps := workflowDefinition.Steps
 
 	if steps == nil {
 		return

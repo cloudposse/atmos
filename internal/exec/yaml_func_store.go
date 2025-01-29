@@ -63,7 +63,6 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 
 	value, err := store.Get(params.stack, params.component, params.key)
 	if err != nil {
-
 		u.LogErrorAndExit(atmosConfig, fmt.Errorf("an error occurred while looking up key %s in stack %s and component %s from store %s\n%v", params.key, params.stack, params.component, params.storeName, err))
 	}
 

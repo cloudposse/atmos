@@ -227,7 +227,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 	stacks []string,
 	components []string,
 ) error {
-
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
@@ -507,7 +506,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 			return err
 		}
 
-		err = u.WriteToFileAsYAML(fileAbsolutePath, atlantisYaml, 0644)
+		err = u.WriteToFileAsYAML(fileAbsolutePath, atlantisYaml, 0o644)
 		if err != nil {
 			return err
 		}

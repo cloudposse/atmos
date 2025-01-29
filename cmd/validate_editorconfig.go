@@ -49,7 +49,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
-	var configPaths = []string{}
+	configPaths := []string{}
 	if configFilePath == "" {
 		configPaths = append(configPaths, defaultConfigFileNames[:]...)
 	} else {

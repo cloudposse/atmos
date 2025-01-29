@@ -16,7 +16,6 @@ func ProcessComponentInStack(
 	atmosCliConfigPath string,
 	atmosBasePath string,
 ) (map[string]any, error) {
-
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -53,7 +52,6 @@ func ProcessComponentFromContext(
 	atmosCliConfigPath string,
 	atmosBasePath string,
 ) (map[string]any, error) {
-
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath

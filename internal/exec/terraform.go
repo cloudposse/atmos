@@ -65,7 +65,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 				return err
 			}
 
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
 			if err != nil {
 				return err
 			}
@@ -84,8 +84,8 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 		u.LogDebug(*atmosConfig, providerOverrideFileName)
 
 		if !info.DryRun {
-			var providerOverrides = generateComponentProviderOverrides(info.ComponentProvidersSection)
-			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
+			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
+			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
 			return err
 		}
 	}
@@ -212,7 +212,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			u.LogDebug(atmosConfig, varFilePath)
 
 			if !info.DryRun {
-				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
 				if err != nil {
 					return err
 				}

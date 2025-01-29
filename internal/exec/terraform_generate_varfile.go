@@ -73,7 +73,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	u.LogDebug(atmosConfig, varFilePath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
 		if err != nil {
 			return err
 		}

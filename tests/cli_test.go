@@ -26,9 +26,11 @@ import (
 )
 
 // Command-line flag for regenerating snapshots
-var regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
-var startingDir string
-var snapshotBaseDir string
+var (
+	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
+	startingDir         string
+	snapshotBaseDir     string
+)
 
 // Define styles using lipgloss
 var (
@@ -561,11 +563,11 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bo
 }
 
 func updateSnapshot(fullPath, output string) {
-	err := os.MkdirAll(filepath.Dir(fullPath), 0755) // Ensure parent directories exist
+	err := os.MkdirAll(filepath.Dir(fullPath), 0o755) // Ensure parent directories exist
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create snapshot directory: %v", err))
 	}
-	err = os.WriteFile(fullPath, []byte(output), 0644) // Write snapshot
+	err = os.WriteFile(fullPath, []byte(output), 0o644) // Write snapshot
 	if err != nil {
 		panic(fmt.Sprintf("Failed to write snapshot file: %v", err))
 	}
@@ -675,7 +677,6 @@ $ go test -run=%q -regenerate-snapshots`, stdoutPath, t.Name())
 		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
 			// Generate a colorized diff for better readability
 			diff = generateUnifiedDiff(filteredStdoutActual, filteredStdoutExpected)
-
 		} else {
 			diff = colorizeDiffWithThreshold(filteredStdoutActual, filteredStdoutExpected, 10)
 		}

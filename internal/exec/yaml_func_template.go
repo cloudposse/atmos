@@ -17,7 +17,6 @@ func processTagTemplate(
 	u.LogTrace(atmosConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
 	str, err := getStringAfterTag(input, config.AtmosYamlFuncTemplate)
-
 	if err != nil {
 		u.LogErrorAndExit(atmosConfig, err)
 	}

@@ -75,7 +75,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Write backend config to file
-	var backendFilePath = filepath.Join(
+	backendFilePath := filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,
@@ -87,7 +87,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	u.LogDebug(atmosConfig, backendFilePath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)
+		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0o644)
 		if err != nil {
 			return err
 		}

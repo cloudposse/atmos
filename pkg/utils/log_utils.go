@@ -119,7 +119,7 @@ func log(atmosConfig schema.AtmosConfiguration, logColor *color.Color, message s
 				theme.Colors.Error.Printf("%s\n", err)
 			}
 		} else {
-			f, err := os.OpenFile(atmosConfig.Logs.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+			f, err := os.OpenFile(atmosConfig.Logs.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
 			if err != nil {
 				theme.Colors.Error.Printf("%s\n", err)
 				return

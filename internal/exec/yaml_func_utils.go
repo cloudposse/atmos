@@ -60,7 +60,6 @@ func processCustomTags(
 	input string,
 	currentStack string,
 ) any {
-
 	switch {
 	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate):
 		return processTagTemplate(atmosConfig, input, currentStack)

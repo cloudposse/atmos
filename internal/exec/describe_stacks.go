@@ -143,7 +143,6 @@ func ExecuteDescribeStacks(
 	processTemplates bool,
 	includeEmptyStacks bool,
 ) (map[string]any, error) {
-
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err

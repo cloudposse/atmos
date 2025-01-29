@@ -108,7 +108,6 @@ func (s *SSMStore) Set(stack string, component string, key string, value interfa
 		Type:      types.ParameterTypeString,
 		Overwrite: aws.Bool(true), // Allow overwriting existing keys
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to set parameter '%s': %w", paramName, err)
 	}

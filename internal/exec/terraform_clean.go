@@ -201,9 +201,7 @@ func getStackTerraformStateFolder(componentPath string, stack string, atmosConfi
 			if directories[i].Files != nil {
 				for j := range directories[i].Files {
 					directories[i].Files[j].Name = folderName + "/" + directories[i].Files[j].Name
-
 				}
-
 			}
 		}
 		stackTfStateFolders = append(stackTfStateFolders, directories...)
@@ -230,6 +228,7 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 
 	return filepath.Base(absBasePath) + "/" + relPath, nil
 }
+
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := huh.ThemeCharm()
@@ -324,12 +323,10 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig schema.
 			}
 		}
 	}
-
 }
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
 func handleTFDataDir(componentPath string, relativePath string, atmosConfig schema.AtmosConfiguration) {
-
 	tfDataDir := os.Getenv("TF_DATA_DIR")
 	if tfDataDir == "" {
 		return
@@ -345,8 +342,8 @@ func handleTFDataDir(componentPath string, relativePath string, atmosConfig sche
 	if err := DeletePathTerraform(filepath.Join(componentPath, tfDataDir), filepath.Join(relativePath, tfDataDir)); err != nil {
 		u.LogWarning(atmosConfig, err.Error())
 	}
-
 }
+
 func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig schema.AtmosConfiguration, everything bool) []string {
 	if everything && info.Stack == "" {
 		return []string{".terraform", ".terraform.lock.hcl", "*.tfvar.json", "terraform.tfstate.d"}
@@ -365,6 +362,7 @@ func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig schema.
 
 	return files
 }
+
 func IsValidDataDir(tfDataDir string) error {
 	if tfDataDir == "" {
 		return fmt.Errorf("ENV TF_DATA_DIR is empty")
