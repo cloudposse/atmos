@@ -103,7 +103,7 @@ func SanitizeFileName(uri string) string {
 //
 // On Windows, e.g. localPath = "D:\Temp\foo.json" => "file://D:/Temp/foo.json"
 // On Linux,  e.g. localPath = "/tmp/foo.json"    => "file:///tmp/foo.json"
-func toFileURL(localPath string) (string, error) {
+func toFileScheme(localPath string) (string, error) {
 	pathSlashed := filepath.ToSlash(localPath)
 
 	if runtime.GOOS == "windows" {
