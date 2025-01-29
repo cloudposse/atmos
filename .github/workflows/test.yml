@@ -170,6 +170,9 @@ jobs:
       #          "**/*.yaml"
       #        ]
       #       }
+      - name: List home
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
+        run: ls -alR ~
 
       - name: Acceptance tests
         timeout-minutes: 20
