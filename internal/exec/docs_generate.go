@@ -22,17 +22,13 @@ import (
 	"github.com/hashicorp/go-getter"
 )
 
-/*
-ExecuteDocsGenerateCmd implements the 'atmos docs generate' logic.
-
-Key changes:
-  - We do NOT call ProcessCommandLineArgs() again for each subdirectory.
-  - Instead, we reuse the initial `info` from the main command call.
-  - We then use `os.Chdir` to move into subdirectories that contain a local `atmos.yaml`,
-    call `cfg.InitCliConfig(infoLocal, false)` so it picks up that subdir's config,
-    then chdir back.
-  - If no local `atmos.yaml` is found, we fallback to the root config we initially loaded.
-*/
+// ExecuteDocsGenerateCmd implements the 'atmos docs generate' logic.
+//
+// This command:
+// 1. Processes command-line arguments once at the start.
+// 2. Uses os.Chdir to move into subdirectories that have a local 'atmos.yaml'.
+// 3. Calls cfg.InitCliConfig(infoLocal, false) in each subdirectory to load its config, then returns (chdir) to the original directory.
+// 4. If no local 'atmos.yaml' is found, falls back to the root config.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	// 1) Parse CLI flags/args
 	flags := cmd.Flags()
@@ -80,19 +76,17 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	}
 }
 
-/*
-generateAllReadmesWithChdir scans for README.yaml in subdirectories:
-
-- If the subdir has a local 'atmos.yaml', we:
- 1. Save oldDir = os.Getwd()
- 2. os.Chdir(subDir)
- 3. Create a copy of the original info => infoLocal
- 4. Call cfg.InitCliConfig(infoLocal, false) to load that subdirectory's config
- 5. Chdir back to oldDir
- 6. Generate docs with the newly loaded config
-
-- If no local 'atmos.yaml' exists, we just use the root config as a fallback.
-*/
+// generateAllReadmesWithChdir scans for README.yaml in subdirectories:
+//
+// - If the subdir has a local 'atmos.yaml':
+//  1. Save oldDir = os.Getwd()
+//  2. os.Chdir(subDir)
+//  3. Create a copy of the original info => infoLocal
+//  4. Call cfg.InitCliConfig(infoLocal, false) to load that subdirectory's config
+//  5. Chdir back to oldDir
+//  6. Generate docs with the newly loaded config
+//
+// - If no local 'atmos.yaml' exists, just use the root config as a fallback.
 func generateAllReadmesWithChdir(
 	rootConfig schema.AtmosConfiguration,
 	rootInfo schema.ConfigAndStacksInfo,
@@ -142,13 +136,11 @@ func generateAllReadmesWithChdir(
 	return err
 }
 
-/*
-generateSingleReadmeWithChdir handles the scenario of 'atmos docs generate [path]' once,
-i.e. not using the --all flag.
-
-- If we find a local 'atmos.yaml' in that path, we do the os.Chdir approach and re-init config.
-- Otherwise, we fallback to the root config from the main call.
-*/
+// generateSingleReadmeWithChdir handles the scenario of 'atmos docs generate [path]' for a single directory,
+// ignoring the --all flag.
+//
+// - If a local 'atmos.yaml' exists in the specified path, os.Chdir is used and config is reinitialized.
+// - Otherwise, falls back to the root config from the main call.
 func generateSingleReadmeWithChdir(
 	rootConfig schema.AtmosConfiguration,
 	rootInfo schema.ConfigAndStacksInfo,
@@ -386,10 +378,6 @@ func isLikelyRemote(s string) bool {
 	return false
 }
 
-/*
-fileExists checks if a file (not a directory) is present at a given path.
-Used to see if subdirectories have a local 'atmos.yaml' we can load.
-*/
 func fileExists(fp string) bool {
 	info, err := os.Stat(fp)
 	if os.IsNotExist(err) {
