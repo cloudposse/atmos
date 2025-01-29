@@ -157,6 +157,15 @@ func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
 	)
 }
 
+func RegisterCustomGetters(atmosConfig schema.AtmosConfiguration) {
+	getter.Detectors = append(
+		[]getter.Detector{
+			&CustomGitHubDetector{AtmosConfig: atmosConfig},
+		},
+		getter.Detectors...,
+	)
+}
+
 // GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination
 func GoGetterGet(
 	atmosConfig schema.AtmosConfiguration,
@@ -178,7 +187,14 @@ func GoGetterGet(
 		Mode: clientMode,
 		Getters: map[string]getter.Getter{
 			// Overriding 'git'
-			"git": &CustomGitGetter{},
+			"git":   &CustomGitGetter{},
+			"file":  &getter.FileGetter{},
+			"hg":    &getter.HgGetter{},
+			"http":  &getter.HttpGetter{},
+			"https": &getter.HttpGetter{},
+			// "s3": &getter.S3Getter{}, // add as needed
+			// "gcs": &getter.GCSGetter{},
+
 		},
 	}
 	if err := client.Get(); err != nil {
