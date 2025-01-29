@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/magodo/pipeform/pipeform"
 )
 
 const (
@@ -558,28 +560,19 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				return err
 			}
 			// pipeform
-			waitPipeform, err := ExecuteShellCommandWithPipe(
-				atmosConfig,
-				"pipeform",
-				nil,
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				info.RedirectStdErr,
-				pipeformStdin,
-				nil,
-			)
-			if err != nil {
-				return err
-			}
-			g := &errgroup.Group{}
-			g.Go(func() error {
+			pipeformRunner := pipeform.NewRunner(&pipeform.FlagSet{})
+			pipeformRunner.Stdin = pipeformStdin
+
+			eg := &errgroup.Group{}
+			eg.Go(func() error {
 				err := waitPlan()
 				planStdout.Close()
 				return err
 			})
-			g.Go(waitPipeform)
-			if err := g.Wait(); err != nil {
+			eg.Go(func() error {
+				return pipeformRunner.Run(context.Background())
+			})
+			if err := eg.Wait(); err != nil {
 				return err
 			}
 			// terraform show
