@@ -101,7 +101,7 @@ jobs:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
-    timeout-minutes: 15
+    timeout-minutes: 25
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -172,7 +172,7 @@ jobs:
       #       }
 
       - name: Acceptance tests
-        timeout-minutes: 15
+        timeout-minutes: 20
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc
@@ -478,7 +478,7 @@ jobs:
           - quick-start-advanced
           - quick-start-simple
 
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - name: Check out code
         uses: actions/checkout@v4

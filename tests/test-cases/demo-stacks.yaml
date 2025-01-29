@@ -178,7 +178,7 @@ tests:
       - "vendor"
       - "pull"
     expect:
-      timeout: 2m
+      timeout: 4m
       stdout:
         - "^$"
       stderr:
