@@ -82,7 +82,7 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 	}
 
 	// Check if --config is provided via cmd args os.args
-	if configAndStacksInfo.AtmosConfigPathFromArg != nil {
+	if len(configAndStacksInfo.AtmosConfigPathFromArg) > 0 {
 		if err := cl.loadExplicitConfigs(configAndStacksInfo.AtmosConfigPathFromArg); err != nil {
 			return cl.atmosConfig, fmt.Errorf("Failed to load --config from provided paths: %v", err)
 		}
