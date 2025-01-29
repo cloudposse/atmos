@@ -20,6 +20,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+const AtmosGitRootFunc = "!repo-root"
+
 const MaximumImportLvL = 10
 
 type Imports struct {
