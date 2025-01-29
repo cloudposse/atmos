@@ -83,7 +83,7 @@ func TestDescribeComponent7(t *testing.T) {
 	component := "infra/vpc"
 	stack := "tenant2-ue2-dev"
 
-	componentSection, err := ExecuteDescribeComponent(component, stack, true)
+	componentSection, err := ExecuteDescribeComponent(component, stack, true, true)
 	assert.Nil(t, err)
 
 	componentSectionYaml, err := u.ConvertToYAML(componentSection)
