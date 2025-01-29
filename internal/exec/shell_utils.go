@@ -127,53 +127,11 @@ func ExecuteShellCommand(
 	dryRun bool,
 	redirectStdError string,
 ) error {
-	newShellLevel, err := getNextShellLevel()
+	wait, err := ExecuteShellCommandWithPipe(atmosConfig, command, args, dir, env, dryRun, redirectStdError, os.Stdin, os.Stdout)
 	if err != nil {
 		return err
 	}
-	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
-
-	cmd := exec.Command(command, args...)
-	cmd.Env = append(os.Environ(), updatedEnv...)
-	cmd.Dir = dir
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-
-	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
-		redirectStdError = "NUL"
-	}
-
-	if redirectStdError == "/dev/stderr" {
-		cmd.Stderr = os.Stderr
-	} else if redirectStdError == "/dev/stdout" {
-		cmd.Stderr = os.Stdout
-	} else if redirectStdError == "" {
-		cmd.Stderr = os.Stderr
-	} else {
-		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			u.LogWarning(atmosConfig, err.Error())
-			return err
-		}
-
-		defer func(f *os.File) {
-			err = f.Close()
-			if err != nil {
-				u.LogWarning(atmosConfig, err.Error())
-			}
-		}(f)
-
-		cmd.Stderr = f
-	}
-
-	u.LogDebug(atmosConfig, "\nExecuting command:")
-	u.LogDebug(atmosConfig, cmd.String())
-
-	if dryRun {
-		return nil
-	}
-
-	return cmd.Run()
+	return wait()
 }
 
 // ExecuteShell runs a shell script
