@@ -176,6 +176,8 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 			cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", configPath, err.Error()))
 			continue
 		}
+		cl.debugLogging(fmt.Sprintf("atmos merged config file %s", configPath))
+
 		// Process Imports and Deep Merge
 		if err := cl.processConfigImports(); err != nil {
 			cl.debugLogging(fmt.Sprintf("error processing imports after config file (file %s):error  %s", configPath, err.Error()))
@@ -241,6 +243,8 @@ func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 			cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 			continue
 		}
+		cl.debugLogging(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
+
 		// Process Imports and Deep Merge
 		if err := cl.processConfigImports(); err != nil {
 			cl.debugLogging(fmt.Sprintf("error processing imports after ATMOS_CLI_CONFIG_PATH (file %s):error  %s", atmosFilePath, err.Error()))
@@ -325,12 +329,12 @@ func (cl *ConfigLoader) loadWorkdirAtmosConfig() (found bool) {
 	}
 	cl.debugLogging(fmt.Sprintf("Check atmos config current working directory: %s", cwd))
 
-	gitAtmosConfigPath, err := cl.getWorkDirAtmosConfigPaths(cwd)
+	workDirAtmosConfigPath, err := cl.getWorkDirAtmosConfigPaths(cwd)
 	if err != nil {
 		cl.debugLogging(fmt.Sprintf("Failed to get work dir atmos config paths: %v", err))
 	}
-	if len(gitAtmosConfigPath) > 0 {
-		for _, atmosFilePath := range gitAtmosConfigPath {
+	if len(workDirAtmosConfigPath) > 0 {
+		for _, atmosFilePath := range workDirAtmosConfigPath {
 			cl.debugLogging(fmt.Sprintf("Found work dir atmos config file: %s", atmosFilePath))
 			ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosFilePath, cl.viper)
 			if !ok || err != nil {
@@ -342,6 +346,7 @@ func (cl *ConfigLoader) loadWorkdirAtmosConfig() (found bool) {
 				cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 				continue
 			}
+			cl.debugLogging(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
 			// Process Imports and Deep Merge
 			if err := cl.processConfigImports(); err != nil {
 				cl.debugLogging(fmt.Sprintf("error processing imports after work dir (file %s):error  %s", atmosFilePath, err.Error()))
@@ -435,6 +440,9 @@ func (cl *ConfigLoader) loadGitAtmosConfig() (found bool) {
 					cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 					continue
 				}
+
+				cl.debugLogging(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
+
 				// Process Imports and Deep Merge
 				if err := cl.processConfigImports(); err != nil {
 					cl.debugLogging(fmt.Sprintf("error processing imports after git (file %s):error  %s", atmosFilePath, err.Error()))
@@ -648,12 +656,12 @@ func (cl *ConfigLoader) loadSystemConfig() error {
 				continue
 			}
 			if ok {
-				u.LogTrace(cl.atmosConfig, fmt.Sprintf(" system config file merged: %s", configSysPath))
 				err := cl.deepMergeConfig()
 				if err != nil {
 					cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", configSysPath, err.Error()))
 					continue
 				}
+				cl.debugLogging(fmt.Sprintf("atmos merged config file %s", configSysPath))
 
 				// Process Imports and Deep Merge
 				if err := cl.processConfigImports(); err != nil {
@@ -908,11 +916,11 @@ func (cl *ConfigLoader) processConfigImports() error {
 		for _, configPath := range resolvedPaths {
 			found, err := cl.loadConfigFileViber(cl.atmosConfig, configPath, cl.viper)
 			if err != nil {
-				u.LogWarning(cl.atmosConfig, fmt.Sprintf("failed to merge configuration from '%s': %v", configPath, err))
+				cl.debugLogging(fmt.Sprintf("failed to merge configuration from '%s': %v", configPath, err))
 				continue
 			}
 			if found {
-				u.LogTrace(cl.atmosConfig, fmt.Sprintf("merge import paths: %v", resolvedPaths))
+				cl.debugLogging(fmt.Sprintf("merge import paths: %v", resolvedPaths))
 			}
 			cl.deepMergeConfig()
 
