@@ -211,6 +211,7 @@ func removeSymlinks(root string) error {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
+			u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Removing symlink: %s", path))
 			// It's a symlink, remove it
 			return os.Remove(path)
 		}
