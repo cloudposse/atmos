@@ -286,6 +286,7 @@ func ProcessStacks(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	checkStack bool,
 	processTemplates bool,
+	processYamlFunctions bool,
 ) (schema.ConfigAndStacksInfo, error) {
 
 	// Check if stack was provided

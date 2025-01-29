@@ -256,7 +256,7 @@ func GetTerraformOutput(
 		close(spinnerDone)
 	}()
 
-	sections, err := ExecuteDescribeComponent(component, stack, true)
+	sections, err := ExecuteDescribeComponent(component, stack, true, true)
 	if err != nil {
 		p.Quit()
 		<-spinnerDone

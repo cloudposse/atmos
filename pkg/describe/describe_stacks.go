@@ -16,5 +16,5 @@ func ExecuteDescribeStacks(
 	includeEmptyStacks bool,
 ) (map[string]any, error) {
 
-	return e.ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, true, includeEmptyStacks)
+	return e.ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, true, true, includeEmptyStacks)
 }

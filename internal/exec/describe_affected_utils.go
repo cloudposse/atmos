@@ -407,7 +407,7 @@ func executeDescribeAffected(
 	u.LogTrace(atmosConfig, fmt.Sprintf("Current HEAD: %s", localRepoHead))
 	u.LogTrace(atmosConfig, fmt.Sprintf("BASE: %s", remoteRepoHead))
 
-	currentStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, true, false)
+	currentStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, true, true, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -443,7 +443,7 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	remoteStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, true, true, false)
+	remoteStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, true, true, true, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}

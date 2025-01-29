@@ -94,6 +94,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	processYamlFunctions, err := flags.GetBool("process-yaml-functions")
+	if err != nil {
+		return err
+	}
+
 	query, err := flags.GetString("query")
 	if err != nil {
 		return err
@@ -107,6 +112,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		sections,
 		false,
 		processTemplates,
+		processYamlFunctions,
 		includeEmptyStacks,
 	)
 	if err != nil {
@@ -141,6 +147,7 @@ func ExecuteDescribeStacks(
 	sections []string,
 	ignoreMissingFiles bool,
 	processTemplates bool,
+	processYamlFunctions bool,
 	includeEmptyStacks bool,
 ) (map[string]any, error) {
 

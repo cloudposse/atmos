@@ -39,7 +39,7 @@ func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stac
 		return existingSections, nil
 	}
 
-	sections, err := ExecuteDescribeComponent(component, stack, true)
+	sections, err := ExecuteDescribeComponent(component, stack, true, true)
 	if err != nil {
 		return nil, err
 	}

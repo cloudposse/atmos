@@ -39,7 +39,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true)
+	info, err = ProcessStacks(atmosConfig, info, true, true, true)
 	if err != nil {
 		return err
 	}

@@ -43,6 +43,11 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	processYamlFunctions, err := flags.GetBool("process-yaml-functions")
+	if err != nil {
+		return err
+	}
+
 	query, err := flags.GetString("query")
 	if err != nil {
 		return err
@@ -50,7 +55,12 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 
 	component := args[0]
 
-	componentSection, err := ExecuteDescribeComponent(component, stack, processTemplates)
+	componentSection, err := ExecuteDescribeComponent(
+		component,
+		stack,
+		processTemplates,
+		processYamlFunctions,
+	)
 	if err != nil {
 		return err
 	}
@@ -84,6 +94,7 @@ func ExecuteDescribeComponent(
 	component string,
 	stack string,
 	processTemplates bool,
+	processYamlFunctions bool,
 ) (map[string]any, error) {
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
@@ -95,10 +106,10 @@ func ExecuteDescribeComponent(
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates)
+	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions)
 		if err != nil {
 			return nil, err
 		}

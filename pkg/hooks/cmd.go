@@ -65,7 +65,7 @@ func RunE(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) e
 		u.LogErrorAndExit(atmosConfig, err)
 	}
 
-	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true)
+	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true, true)
 	if err != nil {
 		u.LogErrorAndExit(atmosConfig, err)
 	}

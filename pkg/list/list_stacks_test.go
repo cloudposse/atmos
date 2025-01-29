@@ -22,7 +22,7 @@ func TestListStacks(t *testing.T) {
 	assert.Nil(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
-		nil, false, false, false)
+		nil, false, false, false, false)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, "")
@@ -39,7 +39,7 @@ func TestListStacksWithComponent(t *testing.T) {
 	component := testComponent
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, component, nil, nil,
-		nil, false, false, false)
+		nil, false, false, false, false)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, component)

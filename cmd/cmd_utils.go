@@ -339,7 +339,7 @@ func executeCustomCommand(
 			}
 
 			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true)
+			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true)
 			if err != nil {
 				u.LogErrorAndExit(atmosConfig, err)
 			}
