@@ -271,9 +271,9 @@ func ProcessTmplWithDatasourcesGomplate(
 		os.Setenv("GOMPLATE_MISSINGKEY", "default")
 		defer os.Unsetenv("GOMPLATE_MISSINGKEY")
 	}
-	// 1) Write the 'inner' data
-	//    This 'inner' file contains the merged JSON data that is directly referenced by the "config" key in Gomplate Options.
-	//    Gomplate will pull in merged data from the JSON in this file when it processes the templates.
+	// Step 1: Write the merged JSON data to a file
+        // This file will contain the combined data that Gomplate uses to fill in the templates.
+        // Gomplate reads this file directly because it's referenced by the "config" option.
 	rawJSON, err := json.Marshal(mergedData)
 
 	if err != nil {
