@@ -655,7 +655,7 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 		}
 	} else {
 		if len(cmd.Commands()) > 0 {
-			details += "Valid subcommands are:\n"
+			details += "\nValid subcommands are:\n"
 		}
 		// Retrieve valid subcommands dynamically
 		for _, subCmd := range cmd.Commands() {
