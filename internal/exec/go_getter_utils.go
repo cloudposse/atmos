@@ -99,6 +99,15 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL.Path)
 	}
 
+	if !strings.Contains(parsedURL.Path, "//") {
+		// If it ends with .git treat it as wanting the entire repo
+		if strings.HasSuffix(parsedURL.Path, ".git") ||
+			len(parts) == 3 { // means /owner/repo only
+			u.LogDebug(d.AtmosConfig, "Detected top-level repo with no subdir: appending '//.\n")
+			parsedURL.Path = parsedURL.Path + "//."
+		}
+	}
+
 	atmosGitHubToken := os.Getenv("ATMOS_GITHUB_TOKEN")
 	gitHubToken := os.Getenv("GITHUB_TOKEN")
 
@@ -158,7 +167,6 @@ func GoGetterGet(
 ) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-
 	// Register custom detectors
 	RegisterCustomDetectors(atmosConfig)
 
@@ -168,13 +176,47 @@ func GoGetterGet(
 		// Destination where the files will be stored. This will create the directory if it doesn't exist
 		Dst:  dest,
 		Mode: clientMode,
+		Getters: map[string]getter.Getter{
+			// Overriding 'git'
+			"git": &CustomGitGetter{},
+		},
 	}
-
+	fmt.Println(src, "src")
 	if err := client.Get(); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// CustomGitGetter is a custom getter for git (git::) that removes symlinks
+type CustomGitGetter struct {
+	getter.GitGetter
+}
+
+// Implements the custom getter logic removing symlinks
+func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
+	// Normal clone
+	if err := c.GitGetter.Get(dst, url); err != nil {
+		return err
+	}
+	// Remove symlinks
+	return removeSymlinks(dst)
+}
+
+// removeSymlinks walks the destination directory and removes any symlinks
+// it encounters.
+func removeSymlinks(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			// It's a symlink, remove it
+			return os.Remove(path)
+		}
+		return nil
+	})
 }
 
 // DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
