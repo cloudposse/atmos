@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/tests/test-cases/schema.json
 
 tests:
-  - name: atmos vendor pull
+  - name: atmos vendor pull (tty)
     enabled: true
     snapshot: false
     tty: true
