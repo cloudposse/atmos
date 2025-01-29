@@ -215,6 +215,11 @@ func ProcessCommandLineArgs(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+	logsLevel, err := cmd.Flags().GetString("logs-level")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	argsAndFlagsInfo.LogsLevel = logsLevel
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
 		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
