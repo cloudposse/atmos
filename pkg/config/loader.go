@@ -304,7 +304,7 @@ func (cl *ConfigLoader) stageDiscoverAdditionalConfigs() error {
 	// 2. Check Git Repository Root
 	found := cl.loadGitAtmosConfig()
 	if found {
-		return nil
+		cl.debugLogging("Git repository root atmos loaded")
 	}
 	// 3. Check Current Working Directory (CWD)
 	found = cl.loadWorkdirAtmosConfig()
@@ -586,7 +586,6 @@ func (cl *ConfigLoader) applyUserPreferences() {
 			}
 			cl.debugLogging(fmt.Sprintf("atmos config file found on XDG_CONFIG_HOME atmos path: %v ", atmosConfigPath))
 			cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPath)
-			return
 		}
 	}
 
