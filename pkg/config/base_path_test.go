@@ -123,7 +123,7 @@ func TestBasePathComputingWithRepoRoot(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 	configLoader := &ConfigLoader{}
-	configLoader.atmosConfig.BasePath = "!repo-root"
+	configLoader.atmosConfig.BasePath = AtmosGitRootFunc
 	info := schema.ConfigAndStacksInfo{
 		BasePathFromArg: "",
 	}

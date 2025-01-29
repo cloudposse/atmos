@@ -31,6 +31,7 @@ type ConfigLoader struct {
 	atmosConfig      schema.AtmosConfiguration
 	debug            bool
 	AtmosConfigPaths []string
+	LogsLevel        string
 }
 
 func NewConfigLoader() *ConfigLoader {
@@ -46,9 +47,15 @@ var embeddedConfigData []byte
 func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
 
 	logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
-	if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace {
+	if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace || configAndStacksInfo.LogsLevel == u.LogLevelDebug {
 		cl.debug = true
+		cl.LogsLevel = configAndStacksInfo.LogsLevel
 	}
+	if configAndStacksInfo.LogsLevel == u.LogLevelDebug || configAndStacksInfo.LogsLevel == u.LogLevelTrace {
+		cl.debug = true
+		cl.LogsLevel = configAndStacksInfo.LogsLevel
+	}
+	cl.debugLogging(fmt.Sprintf("start process loading config..."))
 	// We want the editorconfig color by default to be true
 	cl.atmosConfig.Validate.EditorConfig.Color = true
 
@@ -77,7 +84,7 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 	// Check if --config is provided via cmd args os.args
 	if configAndStacksInfo.AtmosConfigPathFromArg != nil {
 		if err := cl.loadExplicitConfigs(configAndStacksInfo.AtmosConfigPathFromArg); err != nil {
-			return cl.atmosConfig, err
+			return cl.atmosConfig, fmt.Errorf("Failed to load --config from provided paths: %v", err)
 		}
 		return cl.atmosConfig, err
 
@@ -101,6 +108,7 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 
 // loadSchemaDefaults sets the default configuration values.
 func (cl *ConfigLoader) loadSchemaDefaults() error {
+	cl.debugLogging(fmt.Sprintf("start process loading schema defaults..."))
 	cl.viper.SetDefault("components.helmfile.use_eks", true)
 	cl.viper.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	j, err := json.Marshal(defaultCliConfig)
@@ -118,6 +126,7 @@ func (cl *ConfigLoader) loadSchemaDefaults() error {
 
 // loadEmbeddedConfig loads the embedded atmos.yaml configuration.
 func (cl *ConfigLoader) loadEmbeddedConfig() error {
+	cl.debugLogging(fmt.Sprintf("start process loading embedded config..."))
 	// Create a reader from the embedded YAML data
 	reader := bytes.NewReader(embeddedConfigData)
 
@@ -136,46 +145,22 @@ func (cl *ConfigLoader) deepMergeConfig() error {
 
 // loadExplicitConfigs handles the loading of configurations provided via --config.
 func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
-
+	cl.debugLogging("Loading --config configs from provided paths")
 	if configPathsArgs == nil {
 		return fmt.Errorf("No config paths provided. Please provide a list of config paths using the --config flag.")
 	}
 	var configPaths []string
 	//get all --config values from command line arguments
 	for _, configPath := range configPathsArgs {
-		configPath, err := filepath.Abs(configPath)
+		paths, err := cl.SearchAtmosConfigFileDir(configPath)
 		if err != nil {
-			return fmt.Errorf("failed to convert config path to absolute path: %w", err)
+			cl.debugLogging(fmt.Sprintf("Failed to find config file in directory '%s'.", configPath))
+			continue
 		}
-		configPath = filepath.ToSlash(configPath)
-		// check path exist
-		info, err := os.Stat(configPath)
-		if err != nil && err == os.ErrNotExist {
-			return fmt.Errorf("config file %s does not exist", configPath)
-		}
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			paths, err := cl.SearchAtmosConfigFileDir(configPath)
-			if err != nil {
-				cl.debugLogging(fmt.Sprintf("Failed to find config file in directory '%s'.", configPath))
-				continue
-			}
-			configPaths = append(configPaths, paths...)
-			cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPath)
-
-		} else {
-			path, exist := cl.SearchConfigFilePath(configPath)
-			if !exist {
-				cl.debugLogging(fmt.Sprintf("Failed to find config file in path '%s'.", configPath))
-				continue
-			}
-			configPaths = append(configPaths, path)
-			cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPath)
-		}
-
+		configPaths = append(configPaths, paths...)
+		cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPath)
 	}
+
 	if configPaths == nil {
 		return fmt.Errorf("config paths can not be found. Please provide a list of config paths using the --config flag.")
 	}
@@ -219,6 +204,18 @@ func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 	atmosCliConfigEnvPaths := parseArraySeparator(atmosCliConfigEnv)
 	if len(atmosCliConfigEnvPaths) == 0 {
 		return fmt.Errorf("ATMOS_CLI_CONFIG_PATH is not a valid paths")
+	}
+	if atmosCliConfigEnv == AtmosGitRootFunc {
+		pwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		getGitRoot, err := GetGitRoot(pwd)
+		if err != nil {
+			return fmt.Errorf("failed to resolve base path from `!repo-root` Git root error: %w", err)
+		}
+		cl.debugLogging(fmt.Sprintf("ATMOS_CLI_CONFIG_PATH !repo-root Git root dir : %s", getGitRoot))
+		atmosCliConfigEnv = getGitRoot
 	}
 	var atmosFilePaths []string
 	for _, configPath := range atmosCliConfigEnvPaths {
@@ -715,7 +712,12 @@ func (cl *ConfigLoader) getSystemConfigPath() ([]string, bool) {
 
 func (cl *ConfigLoader) debugLogging(msg string) {
 	if cl.debug {
-		u.LogTrace(cl.atmosConfig, msg)
+		cl.atmosConfig.Logs.Level = cl.LogsLevel
+		if cl.atmosConfig.Logs.Level == u.LogLevelTrace {
+			u.LogTrace(cl.atmosConfig, msg)
+			return
+		}
+		u.LogDebug(cl.atmosConfig, msg)
 	}
 }
 func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, error) {

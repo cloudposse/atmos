@@ -25,7 +25,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 	// Check base path from configuration
 	// Check base path from configuration
 	if cl.atmosConfig.BasePath != "" {
-		if cl.atmosConfig.BasePath == "!repo-root" {
+		if cl.atmosConfig.BasePath == AtmosGitRootFunc {
 			pwd, err := os.Getwd()
 			if err != nil {
 				return "", err

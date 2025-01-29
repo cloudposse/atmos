@@ -81,4 +81,5 @@ const (
 	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncExec            = "!exec"
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
+	AtmosGitRootFunc             = "!repo-root"
 )
