@@ -181,7 +181,6 @@ func GoGetterGet(
 			"git": &CustomGitGetter{},
 		},
 	}
-	fmt.Println(src, "src")
 	if err := client.Get(); err != nil {
 		return err
 	}
