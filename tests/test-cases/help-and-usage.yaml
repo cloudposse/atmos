@@ -470,3 +470,15 @@ tests:
       - "--non-existent"
     expect:
       exit_code: 1
+  - name: atmos terraform --help alias subcommand check
+    enabled: true
+    snapshot: true
+    description: "'atmos terraform --help' should show help"
+    workdir: "fixtures/scenarios/subcommand-alias"
+    command: atmos
+    args:
+      - "terraform"
+      - "--help"
+    expect:
+      exit_code: 0
+
