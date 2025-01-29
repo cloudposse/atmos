@@ -78,6 +78,7 @@ func ExecuteShellCommandWithPipe(
 	}
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
+		// In Windows, NUL is the equivalent of /dev/null in Unix-like systems.
 		redirectStdError = "NUL"
 	}
 
