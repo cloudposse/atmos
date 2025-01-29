@@ -422,6 +422,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Check if the context timeout was exceeded
 		if ctx.Err() == context.DeadlineExceeded {
 			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+			t.Errorf("Captured stderr:\n%s", stderr.String())
 			return
 		}
 
@@ -453,6 +455,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if ctx.Err() == context.DeadlineExceeded {
 			// Handle the timeout case first
 			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+			t.Errorf("Captured stderr:\n%s", stderr.String())
 			return
 		}
 
