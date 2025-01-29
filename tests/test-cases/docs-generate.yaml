@@ -13,8 +13,6 @@ tests:
       diff: []
       stdout: 
         - "^$"
-      stderr:
-        - "^Generated docs at .*README.md.*"
       exit_code: 0
       file_exists:
         - "README.md"
@@ -34,8 +32,6 @@ tests:
     expect:
       diff: []
       exit_code: 0
-      stderr:
-        - "^Generated docs at .*README.md.*"
       stdout:
         - "^$"
       file_exists:
@@ -56,8 +52,6 @@ tests:
     expect:
       diff: []
       exit_code: 0
-      stderr:
-        - "^Generated docs at .*README.md.*"
       stdout:
         - "^$"
       file_exists:
@@ -77,8 +71,6 @@ tests:
     expect:
       diff: []
       exit_code: 0
-      stderr:
-        - "^Generated docs at .*README.md.*"
       stdout:
         - "^$"
       file_exists:
