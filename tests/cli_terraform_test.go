@@ -43,6 +43,12 @@ func TestCLITerraformClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
 	}
+	// test terraform clean
+	runTerraformCleanForce(t, binaryPath)
+	runCLITerraformClean(t, binaryPath)
+	runCLITerraformCleanSpecificComponent(t, binaryPath)
+	runCLITerraformCleanComponentStack(t, binaryPath)
+
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
 	verifyStateFilesExist(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
@@ -129,6 +135,53 @@ func verifyStateFilesDeleted(t *testing.T, stateFiles []string) {
 
 func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string) {
 	cmd := exec.Command(binaryPath, "terraform", "clean", "station", "-s", environment, "--force")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	t.Logf("Clean command output:\n%s", stdout.String())
+	if err != nil {
+		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
+	}
+}
+func runCLITerraformClean(t *testing.T, binaryPath string) {
+	cmd := exec.Command(binaryPath, "terraform", "clean")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	t.Logf("Clean command output:\n%s", stdout.String())
+	if err != nil {
+		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
+	}
+
+}
+func runCLITerraformCleanSpecificComponent(t *testing.T, binaryPath string) {
+	cmd := exec.Command(binaryPath, "terraform", "clean", "station")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	t.Logf("Clean command output:\n%s", stdout.String())
+	if err != nil {
+		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
+	}
+
+}
+func runCLITerraformCleanComponentStack(t *testing.T, binaryPath string) {
+	cmd := exec.Command(binaryPath, "terraform", "clean", "station", "-s", "dev")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	t.Logf("Clean command output:\n%s", stdout.String())
+	if err != nil {
+		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
+	}
+
+}
+func runTerraformCleanForce(t *testing.T, binaryPath string) {
+	cmd := exec.Command(binaryPath, "terraform", "clean", "--force")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
