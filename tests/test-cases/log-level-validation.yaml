@@ -13,6 +13,10 @@ tests:
       - test
     expect:
       diff: []
+      stderr:
+        - "Invalid log level"
+        - "XTrace"
+        - "Valid options are"
       exit_code: 1
 
   - name: "Invalid Log Level in Environment Variable"
