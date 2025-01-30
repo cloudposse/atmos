@@ -70,6 +70,7 @@ func IsValidScheme(scheme string) bool {
 // do a git-based clone with a token.
 type CustomGitHubDetector struct {
 	AtmosConfig schema.AtmosConfiguration
+	source      string
 }
 
 // Detect implements the getter.Detector interface for go-getter v1.
@@ -99,11 +100,10 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL.Path)
 	}
 
-	if !strings.Contains(parsedURL.Path, "//") {
-		// If it ends with .git treat it as wanting the entire repo
-		if strings.HasSuffix(parsedURL.Path, ".git") ||
-			len(parts) == 3 { // means /owner/repo only
-			u.LogDebug(d.AtmosConfig, "Detected top-level repo with no subdir: appending '//.\n")
+	if !strings.Contains(d.source, "//") {
+		// means user typed something like "github.com/org/repo.git" with NO subdir
+		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
+			u.LogDebug(d.AtmosConfig, "Detected top-level repo with no subdir: appending '//.'\n")
 			parsedURL.Path = parsedURL.Path + "//."
 		}
 	}
@@ -148,19 +148,10 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 // RegisterCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
+func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration, source string) {
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitHubDetector{AtmosConfig: atmosConfig},
-		},
-		getter.Detectors...,
-	)
-}
-
-func RegisterCustomGetters(atmosConfig schema.AtmosConfiguration) {
-	getter.Detectors = append(
-		[]getter.Detector{
-			&CustomGitHubDetector{AtmosConfig: atmosConfig},
+			&CustomGitHubDetector{AtmosConfig: atmosConfig, source: source},
 		},
 		getter.Detectors...,
 	)
@@ -176,8 +167,12 @@ func GoGetterGet(
 ) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
+
+	// Register custom detectors, passing the original `src` to the CustomGitHubDetector.
+	// go-getter typically strips subdirectories before calling the detector, so the
+	// unaltered source is needed to identify whether a top-level repository or a
+	// subdirectory was specified (e.g., for appending "//." only when no subdir is present).
+	RegisterCustomDetectors(atmosConfig, src)
 
 	client := &getter.Client{
 		Ctx: ctx,
