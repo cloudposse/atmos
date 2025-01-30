@@ -11,4 +11,5 @@ func main() {
 	if err != nil {
 		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
+
 }
