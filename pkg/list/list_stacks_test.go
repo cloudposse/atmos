@@ -70,3 +70,47 @@ func TestListStacksWithComponent(t *testing.T) {
 	// Verify that only stacks with the specified component are included
 	assert.Contains(t, dependentsYaml, testComponent)
 }
+
+func TestFilterAndListStacks(t *testing.T) {
+	// Mock context and config
+	context := map[string]any{
+		"components": map[string]any{},
+		"stacks":     map[string]any{},
+	}
+	stacksBasePath := "examples/quick-start-simple/stacks"
+	stackType := "deploy"
+	component := ""
+
+	tests := []struct {
+		name     string
+		config   schema.ListConfig
+		expected []map[string]string
+	}{
+		{
+			name:   "default columns",
+			config: schema.ListConfig{},
+			expected: []map[string]string{
+				{
+					"Stack": "dev",
+					"File":  "examples/quick-start-simple/stacks/deploy/dev.yaml",
+				},
+				{
+					"Stack": "prod",
+					"File":  "examples/quick-start-simple/stacks/deploy/prod.yaml",
+				},
+				{
+					"Stack": "staging",
+					"File":  "examples/quick-start-simple/stacks/deploy/staging.yaml",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := FilterAndListStacks(context, stacksBasePath, test.config, stackType, component)
+			assert.NoError(t, err)
+			assert.Equal(t, test.expected, result)
+		})
+	}
+}
