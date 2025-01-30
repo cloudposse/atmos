@@ -36,8 +36,7 @@ func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
 	shouldProcessStacks := true
 	shouldCheckStack := true
 
-	if info.SubCommand == "clean" &&
-		u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag) {
+	if info.SubCommand == "clean" {
 		if info.ComponentFromArg == "" {
 			shouldProcessStacks = false
 		}
