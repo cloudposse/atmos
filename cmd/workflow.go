@@ -36,7 +36,9 @@ func renderError(msg ErrorMessage) error {
 		return fmt.Errorf("failed to render error message: %w", err)
 	}
 
-	os.Stderr.WriteString(fmt.Sprint(rendered + "\n"))
+	if _, err := os.Stderr.WriteString(fmt.Sprint(rendered + "\n")); err != nil {
+		return fmt.Errorf("failed to write error message: %w", err)
+	}
 	return nil
 }
 
