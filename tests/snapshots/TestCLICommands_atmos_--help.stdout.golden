@@ -52,6 +52,9 @@ Flags:
                                     '/dev/null'): atmos <command>
                                     --redirect-stderr /dev/stdout
 
+        --template string           Template string to apply to the output using
+                                    gojq syntax (e.g. '.[] | {name: .name}')
+
 The '--' (double-dash) can be used to signify the end of Atmos-specific options 
 and the beginning of additional native arguments and flags for the specific command being run.
 

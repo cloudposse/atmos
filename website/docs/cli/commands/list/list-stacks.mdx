@@ -28,6 +28,12 @@ To view all stacks for a provided component, execute the `list stacks` command l
 atmos list stacks -c <component>
 ```
 
+To format the output using a template, use the `--template` flag with a gojq query:
+
+```shell
+atmos list stacks --template '<query>'
+```
+
 :::tip
 Run `atmos list stacks --help` to see all the available options
 :::
@@ -35,8 +41,16 @@ Run `atmos list stacks --help` to see all the available options
 ## Examples
 
 ```shell
+# List all stacks
 atmos list stacks
+
+# List stacks for a specific component
 atmos list stacks -c vpc
+
+# List stacks with custom JSON formatting
+atmos list stacks --template 'keys'  # Show only stack names
+atmos list stacks --template 'to_entries | map({stack: .key, location: .value.components.terraform.myapp.vars.location})'  # Show stacks with locations
+atmos list stacks --template 'to_entries | map({stack: .key, components: .value.components.terraform | keys})'  # Show stacks with their components
 ```
 
 ## Flags
@@ -44,3 +58,26 @@ atmos list stacks -c vpc
 | Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|----------|
 | `--component`    | Atmos component                                                                                                                                                                                                                         | `-c`  | no       |
+| `--template`     | Template string to apply to the output using gojq syntax (e.g. 'keys')                                                                                                                                                                  |       | no       |
+
+## Template Examples
+
+The `--template` flag accepts gojq syntax for formatting the output. Here are some useful examples:
+
+```shell
+# Show only stack names
+atmos list stacks --template 'keys'
+
+# Show stacks with their locations
+atmos list stacks --template 'to_entries | map({stack: .key, location: .value.components.terraform.myapp.vars.location})'
+
+# Show stacks with their components and variables
+atmos list stacks --template 'to_entries | map({stack: .key, components: .value.components.terraform | keys, vars: .value.components.terraform.myapp.vars})'
+
+# Show full JSON structure
+atmos list stacks --template '.'
+```
+
+:::tip
+The template functionality uses [gojq](https://github.com/itchyny/gojq), which is compatible with jq syntax. You can use any valid jq query to format the output.
+:::

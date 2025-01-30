@@ -25,7 +25,7 @@ func TestListStacks(t *testing.T) {
 		nil, false, false, false)
 	assert.Nil(t, err)
 
-	output, err := FilterAndListStacks(stacksMap, "")
+	output, err := FilterAndListStacks(stacksMap, "", "")
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.NotEmpty(t, dependentsYaml)
@@ -42,7 +42,7 @@ func TestListStacksWithComponent(t *testing.T) {
 		nil, false, false, false)
 	assert.Nil(t, err)
 
-	output, err := FilterAndListStacks(stacksMap, component)
+	output, err := FilterAndListStacks(stacksMap, component, "")
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
