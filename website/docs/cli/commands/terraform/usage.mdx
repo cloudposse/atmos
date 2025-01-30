@@ -59,11 +59,14 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
 
 - `atmos terraform clean` command deletes the `.terraform` folder, `.terraform.lock.hcl` lock file, and the previously generated `planfile`
   and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file. 
-  Use the `--everything` flag to delete all the local Terraform state files and directories (including `terraform.tfstate.d`) for all components and stacks. 
-  Use the `--force` flag to bypass the safety confirmation prompt and force the deletion (use with caution).
+  It deletes all local Terraform state files and directories
+  (including [`terraform.tfstate.d`](https://developer.hashicorp.com/terraform/cli/workspaces#workspace-internals)
+  used for local state) for a component in a stack.
+  The `--force` flag bypasses the safety confirmation prompt and forces the deletion. Use with caution.
 
   :::warning
-  The `--everything` flag performs destructive operations that can lead to permanent state loss. Always ensure you have remote state configured in your components before proceeding.
+  The `clean` command performs destructive operations that can lead to permanent state loss, if not using remote backends.
+  Always ensure you have remote state configured in your components before proceeding.
   :::
 
 - `atmos terraform workspace` command first runs `terraform init -reconfigure`, then `terraform workspace select`, and if the workspace was not
@@ -113,16 +116,16 @@ atmos terraform destroy test/test-component-override -s tenant1-ue2-dev --redire
 atmos terraform init test/test-component-override-3 -s tenant1-ue2-dev
 
 # Clean all components (with confirmation)
-atmos terraform clean --everything
+atmos terraform clean
 
 # Clean a specific component
-atmos terraform clean vpc --everything
+atmos terraform clean vpc
 
 # Clean a specific component in a stack
-atmos terraform clean vpc --stack dev --everything
+atmos terraform clean vpc --stack dev 
 
 # Clean without confirmation prompt
-atmos terraform clean --everything --force
+atmos terraform clean --force
 atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
