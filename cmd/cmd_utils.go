@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -611,10 +613,37 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 
 // isGitRepository checks if the current directory is within a git repository
 func isGitRepository() bool {
-	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
-	cmd.Stderr = nil
+	// Create command with timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree")
+
+	// Capture stderr for debugging
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Run the command
 	err := cmd.Run()
-	return err == nil
+
+	// Check for timeout
+	if ctx.Err() == context.DeadlineExceeded {
+		u.LogTrace(atmosConfig, "git check timed out after 3 seconds")
+		return false
+	}
+
+	// Check if git is not installed
+	if errors.Is(err, exec.ErrNotFound) {
+		u.LogTrace(atmosConfig, "git is not installed")
+		return false
+	}
+
+	if err != nil {
+		u.LogTrace(atmosConfig, fmt.Sprintf("git check failed: %v (stderr: %s)", err, stderr.String()))
+		return false
+	}
+
+	return true
 }
 
 // checkGitAndEnvVars checks if we're in a git repo and if required env vars are set
