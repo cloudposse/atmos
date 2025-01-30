@@ -8,6 +8,7 @@ SHELL := /bin/bash
 #GOARCH=amd64
 VERSION=test
 
+export CGO_ENABLED=0
 # List of targets the `readme` target should call before generating the readme
 export README_DEPS ?= docs/targets.md
 
