@@ -89,7 +89,7 @@ jobs:
         run: |
           git ls-files | grep -E "\.go$" | xargs gofumpt -l -w
           if ! git diff --quiet; then
-            echo "::error:: Code isn't formatted. Please format code using gofumpt"
+            echo "::error:: Code is not properly formatted. Please run 'make fmt' to format it using gofumpt."
             exit 1
           fi
 
