@@ -1,13 +1,10 @@
 package cmd
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
+	"github.com/go-git/go-git/v5"
 )
 
 // ValidateConfig holds configuration options for Atmos validation.
@@ -613,33 +611,15 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 
 // isGitRepository checks if the current directory is within a git repository
 func isGitRepository() bool {
-	// Create command with timeout context
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree")
-
-	// Capture stderr for debugging
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	// Run the command
-	err := cmd.Run()
-
-	// Check for timeout
-	if ctx.Err() == context.DeadlineExceeded {
-		u.LogTrace(atmosConfig, "git check timed out after 3 seconds")
-		return false
-	}
-
-	// Check if git is not installed
-	if errors.Is(err, exec.ErrNotFound) {
-		u.LogTrace(atmosConfig, "git is not installed")
-		return false
-	}
+	// Create a new repository instance pointing to the current directory
+	_, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+		DetectDotGit: true,
+	})
 
 	if err != nil {
-		u.LogTrace(atmosConfig, fmt.Sprintf("git check failed: %v (stderr: %s)", err, stderr.String()))
+		if err != git.ErrRepositoryNotExists {
+			u.LogTrace(atmosConfig, fmt.Sprintf("git check failed: %v", err))
+		}
 		return false
 	}
 
