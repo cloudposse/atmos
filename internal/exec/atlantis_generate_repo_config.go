@@ -434,28 +434,33 @@ func ExecuteAtlantisGenerateRepoConfig(
 					}
 				} else if settingsAtlantisConfigTemplateName, ok := settingsAtlantisSection["config_template_name"].(string); ok && settingsAtlantisConfigTemplateName != "" {
 					if configTemplate, ok = atmosConfig.Integrations.Atlantis.ConfigTemplates[settingsAtlantisConfigTemplateName]; !ok {
-						return errors.Errorf(
-							"atlantis config template name '%s' is specified "+
-								"in the 'settings.atlantis.config_template_name' section, "+
-								"but this atlantis config template is not defined in 'integrations.atlantis.config_templates' in 'atmos.yaml'",
-							settingsAtlantisConfigTemplateName)
+						return errors.Errorf("# Missing Atlantis Config Template\n\n"+
+							"## Configuration Issue\n\n"+
+							"The Atlantis config template **'%s'** is referenced in `settings.atlantis.config_template_name`, "+
+							"but it is **not defined** in `integrations.atlantis.config_templates` inside `atmos.yaml`. "+
+							"Please update `atmos.yaml` to include the missing template.", settingsAtlantisConfigTemplateName)
 					}
 				}
 			}
 		}
 	} else {
 		if configTemplate, ok = atmosConfig.Integrations.Atlantis.ConfigTemplates[configTemplateNameArg]; !ok {
-			return errors.Errorf("atlantis config template '%s' is not defined in 'integrations.atlantis.config_templates' in 'atmos.yaml'", configTemplateNameArg)
+			return errors.Errorf("atlantis config template `%s` is not defined in `integrations.atlantis.config_templates` in `atmos.yaml`", configTemplateNameArg)
 		}
 	}
 
 	if reflect.ValueOf(configTemplate).IsZero() {
-		return errors.Errorf(
-			"atlantis config template is not specified. " +
-				"In needs to be defined in one of these places: 'settings.atlantis.config_template_name' stack config section, " +
-				"'settings.atlantis.config_template' stack config section, " +
-				"or passed on the command line using the '--config-template' flag to select a config template from the " +
-				"collection of templates defined in the 'integrations.atlantis.config_templates' section in 'atmos.yaml'")
+		return errors.Errorf(`## Atlantis config template is not specified
+
+An Atlantis config template must be defined in one of the following places:
+
+1. The ` + "`" + `settings.atlantis.config_template_name` + "`" + ` field in the stack config section.
+2. The ` + "`" + `settings.atlantis.config_template` + "`" + ` field in the stack config section.
+3. Passed on the command line using the ` + "`" + `--config-template` + "`" + ` flag.
+
+Ensure that the config template is defined or selected from the collection of templates 
+specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` section of ` + "`" + `atmos.yaml` + "`" + `.
+`)
 	}
 
 	// Final atlantis config
