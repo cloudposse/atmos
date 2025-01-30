@@ -110,9 +110,6 @@ func Execute() error {
 		}
 	}
 
-	// Check if we're in a git repo and report a warning if not
-	checkGitAndEnvVars()
-
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {

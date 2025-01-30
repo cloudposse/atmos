@@ -46,3 +46,21 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
+
+  - name: run atmos outside git repo
+    enabled: true
+    snapshot: true
+    description: "Test checkGitAndEnvVars function outside of a git repo with ATMOS_LOGS_LEVEL=Warn"
+    workdir: "fixtures/scenarios/empty-dir"
+    command: "atmos"
+    args:
+      - version
+    env:
+      ATMOS_LOGS_LEVEL: Warning
+    expect:
+      diff: []
+      stdout:
+        - "You're not at the root of a git repository. Atmos feels lonely outside - bring it home!"
+      stderr:
+        - "^$"
+      exit_code: 0

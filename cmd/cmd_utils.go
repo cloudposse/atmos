@@ -19,7 +19,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/go-git/go-git/v5"
 )
 
 // ValidateConfig holds configuration options for Atmos validation.
@@ -459,6 +458,9 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		u.LogErrorAndExit(atmosConfig, err)
 	}
 
+	// Check if we're in a git repo and report a warning if not
+	checkGitAndEnvVars()
+
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config
 		u.PrintMessageInColor("atmos.yaml", c1)
@@ -609,15 +611,19 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	return info
 }
 
-// isGitRepository checks if the current directory is within a git repository
+// isGitRepository checks if the current directory is the root of a git repository
 func isGitRepository() bool {
-	// Create a new repository instance pointing to the current directory
-	_, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
-		DetectDotGit: true,
-	})
-
+	// Get current working directory
+	currentDir, err := os.Getwd()
 	if err != nil {
-		if err != git.ErrRepositoryNotExists {
+		u.LogTrace(atmosConfig, fmt.Sprintf("failed to get current directory: %v", err))
+		return false
+	}
+
+	// Check if .git directory exists directly in the current directory
+	_, err = os.Stat(filepath.Join(currentDir, ".git"))
+	if err != nil {
+		if !os.IsNotExist(err) {
 			u.LogTrace(atmosConfig, fmt.Sprintf("git check failed: %v", err))
 		}
 		return false
@@ -626,15 +632,15 @@ func isGitRepository() bool {
 	return true
 }
 
-// checkGitAndEnvVars checks if we're in a git repo and if required env vars are set
+// checkGitAndEnvVars checks if we're at the root of a git repo and if required env vars are set
 func checkGitAndEnvVars() {
 	// Skip check if either env var is set
 	if os.Getenv("ATMOS_BASE_PATH") != "" || os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
 		return
 	}
 
-	// Check if we're in a git repo
+	// Check if we're at the root of a git repo
 	if !isGitRepository() {
-		u.LogWarning(atmosConfig, "You're not inside a git repository. Atmos feels lonely outside - bring it home!")
+		u.LogWarning(atmosConfig, "You're not at the root of a git repository. Atmos feels lonely outside - bring it home!\n")
 	}
 }
