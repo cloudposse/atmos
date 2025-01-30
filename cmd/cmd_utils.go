@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -606,4 +607,25 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
 	}
 	return info
+}
+
+// isGitRepository checks if the current directory is within a git repository
+func isGitRepository() bool {
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd.Stderr = nil
+	err := cmd.Run()
+	return err == nil
+}
+
+// checkGitAndEnvVars checks if we're in a git repo and if required env vars are set
+func checkGitAndEnvVars() {
+	// Skip check if either env var is set
+	if os.Getenv("ATMOS_BASE_PATH") != "" || os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+		return
+	}
+
+	// Check if we're in a git repo
+	if !isGitRepository() {
+		u.LogWarning(atmosConfig, "You're not inside a git repository. Atmos feels lonely outside - bring it home!")
+	}
 }
