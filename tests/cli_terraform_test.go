@@ -43,11 +43,15 @@ func TestCLITerraformClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
 	}
-	// test terraform clean
-	runTerraformCleanForce(t, binaryPath)
-	runCLITerraformClean(t, binaryPath)
-	runCLITerraformCleanSpecificComponent(t, binaryPath)
-	runCLITerraformCleanComponentStack(t, binaryPath)
+
+	// Force clean everything
+	runTerraformCleanCommand(t, binaryPath, "--force")
+	// Clean everything
+	runTerraformCleanCommand(t, binaryPath)
+	// Clean specific component
+	runTerraformCleanCommand(t, binaryPath, "station")
+	// Clean component with stack
+	runTerraformCleanCommand(t, binaryPath, "station", "-s", "dev")
 
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
@@ -156,32 +160,10 @@ func runCLITerraformClean(t *testing.T, binaryPath string) {
 	}
 
 }
-func runCLITerraformCleanSpecificComponent(t *testing.T, binaryPath string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean", "station")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	t.Logf("Clean command output:\n%s", stdout.String())
-	if err != nil {
-		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
-	}
 
-}
-func runCLITerraformCleanComponentStack(t *testing.T, binaryPath string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean", "station", "-s", "dev")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	t.Logf("Clean command output:\n%s", stdout.String())
-	if err != nil {
-		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
-	}
-
-}
-func runTerraformCleanForce(t *testing.T, binaryPath string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean", "--force")
+func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
+	cmdArgs := append([]string{"terraform", "clean"}, args...)
+	cmd := exec.Command(binaryPath, cmdArgs...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
