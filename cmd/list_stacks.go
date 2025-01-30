@@ -22,7 +22,8 @@ var listStacksCmd = &cobra.Command{
 		"atmos list stacks -c <component>\n" +
 		"atmos list stacks --format json\n" +
 		"atmos list stacks --format csv --delimiter ','\n" +
-		"atmos list stacks --format table",
+		"atmos list stacks --format table\n" +
+		"atmos list stacks --template '{{.atmos_stack}}: {{.vars.tenant}}'",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -32,6 +33,7 @@ var listStacksCmd = &cobra.Command{
 		componentFlag, _ := cmd.Flags().GetString("component")
 		formatFlag, _ := cmd.Flags().GetString("format")
 		delimiterFlag, _ := cmd.Flags().GetString("delimiter")
+		templateFlag, _ := cmd.Flags().GetString("template")
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
@@ -46,7 +48,7 @@ var listStacksCmd = &cobra.Command{
 			return
 		}
 
-		output, err := l.FilterAndListStacks(stacksMap, componentFlag, atmosConfig.Stacks.List, formatFlag, delimiterFlag)
+		output, err := l.FilterAndListStacks(stacksMap, componentFlag, atmosConfig.Stacks.List, formatFlag, delimiterFlag, templateFlag)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), theme.Colors.Error)
 			return
@@ -60,5 +62,6 @@ func init() {
 	listStacksCmd.PersistentFlags().StringP("component", "c", "", "Filter stacks by component")
 	listStacksCmd.PersistentFlags().StringP("format", "f", "", "Output format (table, json, csv)")
 	listStacksCmd.PersistentFlags().StringP("delimiter", "d", "\t", "Delimiter for table and csv formats")
+	listStacksCmd.PersistentFlags().StringP("template", "t", "", "Go template for custom output format (e.g. '{{.atmos_stack}}: {{.vars.tenant}}')")
 	listCmd.AddCommand(listStacksCmd)
 }
