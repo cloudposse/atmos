@@ -20,6 +20,7 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	helmfileCmd.DisableFlagParsing = true
 	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile <helmfile_command> <component> -s <stack>")
+	AddStackCompltion(helmfileCmd)
 	RootCmd.AddCommand(helmfileCmd)
 }
 

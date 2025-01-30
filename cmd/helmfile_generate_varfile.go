@@ -14,6 +14,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 	Short:              "Generate a values file for a Helmfile component",
 	Long:               "This command generates a values file for a specified Helmfile component.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	ValidArgsFunction:  ComponentsArgCompletion,
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
@@ -29,6 +30,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 func init() {
 	helmfileGenerateVarfileCmd.DisableFlagParsing = false
 	helmfileGenerateVarfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile generate varfile <component> -s <stack>")
+	AddStackCompltion(helmfileGenerateVarfileCmd)
 	helmfileGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "atmos helmfile generate varfile <component> -s <stack> -f <file>")
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")

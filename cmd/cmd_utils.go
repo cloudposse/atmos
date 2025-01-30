@@ -607,3 +607,39 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	}
 	return info
 }
+
+func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	output, err := listStacks(cmd)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return output, cobra.ShellCompDirectiveNoFileComp
+}
+
+func AddStackCompltion(cmd *cobra.Command) {
+	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+}
+
+func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		output, err := listComponents(cmd)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return output, cobra.ShellCompDirectiveNoFileComp
+	}
+	if len(args) > 0 {
+		flagName := args[len(args)-1]
+		if strings.HasPrefix(flagName, "--") {
+			flagName = strings.ReplaceAll(flagName, "--", "")
+		}
+		if strings.HasPrefix(toComplete, "--") {
+			flagName = strings.ReplaceAll(toComplete, "--", "")
+		}
+		flagName = strings.ReplaceAll(flagName, "=", "")
+		if option, ok := cmd.GetFlagCompletionFunc(flagName); ok {
+			return option(cmd, args, toComplete)
+		}
+	}
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
