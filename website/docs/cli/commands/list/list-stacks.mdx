@@ -44,3 +44,54 @@ atmos list stacks -c vpc
 | Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|----------|
 | `--component`    | Atmos component                                                                                                                                                                                                                         | `-c`  | no       |
+
+## Display Format
+
+The command output can be customized using template variables in your `atmos.yaml` configuration. Here's an example of how to configure the display format:
+
+```yaml
+stacks:
+  display:
+    columns:
+      - name: Stack
+        value: '{{ .atmos_stack }}'
+      - name: Tenant
+        value: '{{ index .vars "tenant" }}'
+```
+
+:::tip Using the `index` Function
+When accessing variables that might not be defined in all stacks, it's recommended to use the Go template `index` function instead of direct access. For example:
+
+- Safe: `{{ index .vars "tenant" }}`
+- Unsafe: `{{ .vars.tenant }}`
+
+The `index` function provides a safer way to access map values as it won't cause a template error if the key doesn't exist. This is particularly useful when dealing with optional variables or when different stacks might have different variable sets.
+:::
+
+## Default Display
+
+By default, the command displays the following columns for each stack:
+- Stack: The name of the stack
+- File: The path to the stack file
+
+You can customize the displayed columns using the `list.stacks.columns` configuration in `atmos.yaml`.
+
+Example of default output:
+```bash
+Stack     File
+dev      examples/quick-start-simple/stacks/deploy/dev.yaml
+prod     examples/quick-start-simple/stacks/deploy/prod.yaml
+staging  examples/quick-start-simple/stacks/deploy/staging.yaml
+```
+
+### Example Output
+
+```shell
+$ atmos list stacks
+STACK                  TENANT
+dev                    acme
+staging                acme
+prod                   acme-corp
+```
+
+This format provides a clear, tabular view of your stacks and their associated tenant information.

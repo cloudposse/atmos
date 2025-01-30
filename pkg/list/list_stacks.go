@@ -142,8 +142,6 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 	if len(listConfig.Columns) == 0 {
 		listConfig.Columns = []schema.ListColumnConfig{
 			{Name: "Stack", Value: "{{ .atmos_stack }}"},
-			{Name: "Tenant", Value: "{{ index .vars \"tenant\" }}"},
-			{Name: "Environment", Value: "{{ index .vars \"environment\" }}"},
 			{Name: "File", Value: "{{ .atmos_stack_file }}"},
 		}
 	}
