@@ -8,27 +8,27 @@ Usage:
 
 Available Commands:
 
-  [92mabout     [0m            [97mLearn about Atmos[0m
-  [92matlantis  [0m            [97mGenerate and manage Atlantis configurations[0m
-  [92maws       [0m            [97mRun AWS-specific commands for interacting with cloud resources[0m
-  [92mcompletion[0m            [97mGenerate autocompletion scripts for Bash, Zsh, Fish, and PowerShell[0m
-  [92mdescribe  [0m            [97mShow details about Atmos configurations and components[0m
-  [92mdocs      [0m            [97mOpen Atmos documentation or display component-specific docs[0m
-  [92mhelmfile  [0m            [97mManage Helmfile-based Kubernetes deployments[0m
-  [92mhelp      [0m            [97mDisplay help information for Atmos commands[0m
-  [92mlist      [0m            [97mList available stacks and components[0m
-  [92mpro       [0m            [97mAccess premium features integrated with app.cloudposse.com[0m
-  [92msupport   [0m            [97mShow Atmos support options[0m
-  [92mterraform [0m            [97mExecute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations[0m
-  [92mvalidate  [0m            [97mValidate configurations against OPA policies and JSON schemas[0m
-  [92mvendor    [0m            [97mManage external dependencies for components or stacks[0m
-  [92mversion   [0m            [97mDisplay the version of Atmos you are running and check for updates[0m
-  [92mworkflow  [0m            [97mRun predefined tasks using workflows[0m
+  about                          Learn about Atmos
+  atlantis                       Generate and manage Atlantis configurations
+  aws                            Run AWS-specific commands for interacting with cloud resources
+  completion                     Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
+  describe                       Show details about Atmos configurations and components
+  docs                           Open Atmos documentation or display component-specific docs
+  helmfile                       Manage Helmfile-based Kubernetes deployments
+  help                           Display help information for Atmos commands
+  list                           List available stacks and components
+  pro                            Access premium features integrated with app.cloudposse.com
+  support                        Show Atmos support options
+  terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
+  validate                       Validate configurations against OPA policies and JSON schemas
+  vendor                         Manage external dependencies for components or stacks
+  version                        Display the version of Atmos you are running and check for updates
+  workflow                       Run predefined tasks using workflows
 
 SubCommand Aliases:
 
-  [92mhf[0m                    [97mAlias of "atmos helmfile" command[0m
-  [92mtf[0m                    [97mAlias of "atmos terraform" command[0m
+  hf                             Alias of "atmos helmfile" command
+  tf                             Alias of "atmos terraform" command
 
 
 Flags:

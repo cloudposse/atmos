@@ -1,11 +1,11 @@
-[1;91mERRO[0m ATMOS_SHLVL (11) exceeds maximum allowed depth (10). Infinite recursion?
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
-[1;91mERRO[0m exit status 1
+ERRO ATMOS_SHLVL (11) exceeds maximum allowed depth (10). Infinite recursion?
+ERRO exit status 1
+ERRO exit status 1
+ERRO exit status 1
+ERRO exit status 1
+ERRO exit status 1
+ERRO exit status 1
+ERRO exit status 1
+ERRO exit status 1
+ERRO exit status 1
+ERRO exit status 1

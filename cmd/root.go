@@ -101,9 +101,6 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	// Disable timestamp in logs so snapshots work. We will address this in a future PR updating styles, etc.
-	log.SetReportTimestamp(false)
-
 	if atmosConfig.Logs.File != "/dev/stderr" {
 		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {

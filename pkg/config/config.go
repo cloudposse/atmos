@@ -391,7 +391,7 @@ func processConfigFile(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(fmt.Sprintf("error closing file '" + configPath + "'. " + err.Error()))
+			u.LogWarning(fmt.Sprintf("error closing file '%s'. %v", configPath, err))
 		}
 	}(reader)
 
