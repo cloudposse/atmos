@@ -1,1 +1,1 @@
-[1;91mERRO[0m component 'myapp' is locked and cannot be modified (metadata.locked = true)
+ERRO component 'myapp' is locked and cannot be modified (metadata.locked = true)
