@@ -76,7 +76,7 @@ func (r *Renderer) Render(content string) (string, error) {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "$") {
 			// Add custom styling for command examples
-			styled := purpleStyle.Styled(strings.TrimSpace(line))
+			styled := purpleStyle.Styled(line)
 			result = append(result, " "+styled)
 		} else if trimmed != "" {
 			result = append(result, line)

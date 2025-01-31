@@ -199,7 +199,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 
 	default:
 		// If format is empty or "table", use table format
-		if format == "" && term.CheckTTYSupport() {
+		if format == "" && term.CheckTTYSupportForStdout() {
 			// Create a styled table for TTY
 			t := table.New().
 				Border(lipgloss.ThickBorder()).

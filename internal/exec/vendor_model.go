@@ -87,7 +87,7 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
 	}
-	isTTY := term.CheckTTYSupport()
+	isTTY := term.CheckTTYSupportForStdout()
 	var vendorPks []pkgVendor
 	for _, pkg := range pkgs {
 		p := pkgVendor{
