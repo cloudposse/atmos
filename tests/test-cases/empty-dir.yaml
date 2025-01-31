@@ -62,7 +62,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "You're not at the root of a git repository. Atmos feels lonely outside - bring it home!"
+        - "You're not inside a git repository. Atmos feels lonely outside - bring it home!"
       stderr:
         - "^$"
       exit_code: 0
