@@ -62,7 +62,7 @@ func processCustomCommands(
 		if _, exist := existingTopLevelCommands[commandConfig.Name]; exist && topLevel {
 			command = existingTopLevelCommands[commandConfig.Name]
 		} else {
-			var customCommand = &cobra.Command{
+			customCommand := &cobra.Command{
 				Use:   commandConfig.Name,
 				Short: commandConfig.Description,
 				Long:  commandConfig.Description,
@@ -132,7 +132,7 @@ func processCommandAliases(
 			aliasCmd := strings.TrimSpace(v)
 			aliasFor := fmt.Sprintf("alias for '%s'", aliasCmd)
 
-			var aliasCommand = &cobra.Command{
+			aliasCommand := &cobra.Command{
 				Use:                alias,
 				Short:              aliasFor,
 				Long:               aliasFor,
@@ -170,7 +170,7 @@ func preCustomCommand(
 ) {
 	var sb strings.Builder
 
-	//checking for zero arguments in config
+	// checking for zero arguments in config
 	if len(commandConfig.Arguments) == 0 {
 		if len(commandConfig.Steps) > 0 {
 			// do nothing here; let the code proceed
@@ -193,7 +193,7 @@ func preCustomCommand(
 		}
 	}
 
-	//Check on many arguments required and have no default value
+	// Check on many arguments required and have no default value
 	requiredNoDefaultCount := 0
 	for _, arg := range commandConfig.Arguments {
 		if arg.Required && arg.Default == "" {
@@ -310,7 +310,7 @@ func executeCustomCommand(
 		}
 
 		// Prepare template data
-		var data = map[string]any{
+		data := map[string]any{
 			"Arguments": argumentsData,
 			"Flags":     flagsData,
 		}
@@ -539,7 +539,6 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
 		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
-
 	}
 }
 
@@ -557,7 +556,6 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 }
 
 func showUsageAndExit(cmd *cobra.Command, args []string) {
-
 	var suggestions []string
 	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
 
@@ -596,7 +594,7 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	checkAtmosConfig()
 
 	var argsAfterDoubleDash []string
-	var finalArgs = args
+	finalArgs := args
 
 	doubleDashIndex := lo.IndexOf(args, "--")
 	if doubleDashIndex > 0 {
@@ -643,6 +641,6 @@ func verifyInsideGitRepo() bool {
 	if !isGitRepository() {
 		u.LogWarning(atmosConfig, "You're not at the root of a git repository. Atmos feels lonely outside - bring it home!\n")
 		return false
-          return true
+		return true
 	}
 }
