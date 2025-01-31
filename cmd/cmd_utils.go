@@ -458,8 +458,8 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		u.LogErrorAndExit(atmosConfig, err)
 	}
 
-	// Check if we're in a git repo and report a warning if not
-	checkGitAndEnvVars()
+	// Check if we're at the root of a git repo. Warn if not.
+	verifyInsideGitRepo()
 
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config
@@ -634,13 +634,14 @@ func isGitRepository() bool {
 func verifyInsideGitRepo() bool {
 	// Skip check if either env var is set
 	if os.Getenv("ATMOS_BASE_PATH") != "" || os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
-		return nil
+		return true
 	}
 
 	// Check if we're at the root of a git repo
 	if !isGitRepository() {
 		u.LogWarning(atmosConfig, "You're not at the root of a git repository. Atmos feels lonely outside - bring it home!\n")
 		return false
-		return true
 	}
+
+	return true
 }
