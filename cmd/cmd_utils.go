@@ -62,7 +62,7 @@ func processCustomCommands(
 		if _, exist := existingTopLevelCommands[commandConfig.Name]; exist && topLevel {
 			command = existingTopLevelCommands[commandConfig.Name]
 		} else {
-			var customCommand = &cobra.Command{
+			customCommand := &cobra.Command{
 				Use:   commandConfig.Name,
 				Short: commandConfig.Description,
 				Long:  commandConfig.Description,
@@ -132,7 +132,7 @@ func processCommandAliases(
 			aliasCmd := strings.TrimSpace(v)
 			aliasFor := fmt.Sprintf("alias for '%s'", aliasCmd)
 
-			var aliasCommand = &cobra.Command{
+			aliasCommand := &cobra.Command{
 				Use:                alias,
 				Short:              aliasFor,
 				Long:               aliasFor,
@@ -310,7 +310,7 @@ func executeCustomCommand(
 		}
 
 		// Prepare template data
-		var data = map[string]any{
+		data := map[string]any{
 			"Arguments": argumentsData,
 			"Flags":     flagsData,
 		}
@@ -594,7 +594,7 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	checkAtmosConfig()
 
 	var argsAfterDoubleDash []string
-	var finalArgs = args
+	finalArgs := args
 
 	doubleDashIndex := lo.IndexOf(args, "--")
 	if doubleDashIndex > 0 {
