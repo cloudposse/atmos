@@ -16,43 +16,41 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.).
-	// These flags get removed from the arg list after atmos uses them so the underlying tool does not get passed a flag it doesn't accept.
-	commonFlags = []string{
-		"--stack",
-		"-s",
-		cfg.DryRunFlag,
-		cfg.SkipInitFlag,
-		cfg.KubeConfigConfigFlag,
-		cfg.TerraformCommandFlag,
-		cfg.TerraformDirFlag,
-		cfg.HelmfileCommandFlag,
-		cfg.HelmfileDirFlag,
-		cfg.CliConfigDirFlag,
-		cfg.StackDirFlag,
-		cfg.BasePathFlag,
-		cfg.VendorBasePathFlag,
-		cfg.GlobalOptionsFlag,
-		cfg.DeployRunInitFlag,
-		cfg.InitRunReconfigure,
-		cfg.AutoGenerateBackendFileFlag,
-		cfg.AppendUserAgentFlag,
-		cfg.FromPlanFlag,
-		cfg.PlanFileFlag,
-		cfg.HelpFlag1,
-		cfg.HelpFlag2,
-		cfg.WorkflowDirFlag,
-		cfg.JsonSchemaDirFlag,
-		cfg.OpaDirFlag,
-		cfg.CueDirFlag,
-		cfg.AtmosManifestJsonSchemaFlag,
-		cfg.RedirectStdErrFlag,
-		cfg.LogsLevelFlag,
-		cfg.LogsFileFlag,
-		cfg.QueryFlag,
-	}
-)
+// `commonFlags` are a list of flags that atmos understands but the underlying tools do not (e.g. terraform, helmfile, etc.).
+// These flags get removed from the arg list after atmos uses them so the underlying tool does not get passed a flag it doesn't accept.
+var commonFlags = []string{
+	"--stack",
+	"-s",
+	cfg.DryRunFlag,
+	cfg.SkipInitFlag,
+	cfg.KubeConfigConfigFlag,
+	cfg.TerraformCommandFlag,
+	cfg.TerraformDirFlag,
+	cfg.HelmfileCommandFlag,
+	cfg.HelmfileDirFlag,
+	cfg.CliConfigDirFlag,
+	cfg.StackDirFlag,
+	cfg.BasePathFlag,
+	cfg.VendorBasePathFlag,
+	cfg.GlobalOptionsFlag,
+	cfg.DeployRunInitFlag,
+	cfg.InitRunReconfigure,
+	cfg.AutoGenerateBackendFileFlag,
+	cfg.AppendUserAgentFlag,
+	cfg.FromPlanFlag,
+	cfg.PlanFileFlag,
+	cfg.HelpFlag1,
+	cfg.HelpFlag2,
+	cfg.WorkflowDirFlag,
+	cfg.JsonSchemaDirFlag,
+	cfg.OpaDirFlag,
+	cfg.CueDirFlag,
+	cfg.AtmosManifestJsonSchemaFlag,
+	cfg.RedirectStdErrFlag,
+	cfg.LogsLevelFlag,
+	cfg.LogsFileFlag,
+	cfg.QueryFlag,
+}
 
 // ProcessComponentConfig processes component config sections
 func ProcessComponentConfig(
@@ -62,7 +60,6 @@ func ProcessComponentConfig(
 	componentType string,
 	component string,
 ) error {
-
 	var stackSection map[string]any
 	var componentsSection map[string]any
 	var componentTypeSection map[string]any
@@ -272,7 +269,6 @@ func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles boo
 		true,
 		ignoreMissingFiles,
 	)
-
 	if err != nil {
 		return nil, nil, err
 	}
@@ -288,7 +284,6 @@ func ProcessStacks(
 	processTemplates bool,
 	processYamlFunctions bool,
 ) (schema.ConfigAndStacksInfo, error) {
-
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
@@ -316,7 +311,7 @@ func ProcessStacks(
 		} else {
 			msg = "\nFound stack manifests:"
 		}
-		u.LogTrace(atmosConfig, msg)
+		u.LogTrace(msg)
 		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -332,7 +327,6 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentType,
 			configAndStacksInfo.ComponentFromArg,
 		)
-
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -403,7 +397,6 @@ func ProcessStacks(
 				foundStacks = append(foundStacks, stackName)
 
 				u.LogDebug(
-					atmosConfig,
 					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
 						configAndStacksInfo.ComponentFromArg,
 						configAndStacksInfo.Stack,
@@ -426,7 +419,7 @@ func ProcessStacks(
 			}
 
 			return configAndStacksInfo,
-				fmt.Errorf("\nCould not find the component '%s' in the stack '%s'.\n"+
+				fmt.Errorf("Could not find the component '%s' in the stack '%s'.\n"+
 					"Check that all the context variables are correctly defined in the stack manifests.\n"+
 					"Are the component and stack names correct? Did you forget an import?%v\n",
 					configAndStacksInfo.ComponentFromArg,
@@ -440,7 +433,7 @@ func ProcessStacks(
 				configAndStacksInfo.Stack,
 				strings.Join(foundStacks, ", "),
 			)
-			u.LogErrorAndExit(atmosConfig, err)
+			u.LogErrorAndExit(err)
 		} else {
 			configAndStacksInfo = foundConfigAndStacksInfo
 		}
@@ -522,7 +515,7 @@ func ProcessStacks(
 		)
 		if err != nil {
 			// If any error returned from the templates processing, log it and exit
-			u.LogErrorAndExit(atmosConfig, err)
+			u.LogErrorAndExit(err)
 		}
 
 		componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
@@ -534,7 +527,7 @@ func ProcessStacks(
 					err = errors.Join(err, errors.New(errorMessage))
 				}
 			}
-			u.LogErrorAndExit(atmosConfig, err)
+			u.LogErrorAndExit(err)
 		}
 
 		componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, configAndStacksInfo.Stack)
@@ -721,7 +714,7 @@ func processArgsAndFlags(
 			}
 			info.TerraformCommand = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.TerraformCommandFlag) {
-			var terraformCommandFlagParts = strings.Split(arg, "=")
+			terraformCommandFlagParts := strings.Split(arg, "=")
 			if len(terraformCommandFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -734,7 +727,7 @@ func processArgsAndFlags(
 			}
 			info.TerraformDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.TerraformDirFlag) {
-			var terraformDirFlagParts = strings.Split(arg, "=")
+			terraformDirFlagParts := strings.Split(arg, "=")
 			if len(terraformDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -747,7 +740,7 @@ func processArgsAndFlags(
 			}
 			info.AppendUserAgent = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AppendUserAgentFlag) {
-			var appendUserAgentFlagParts = strings.Split(arg, "=")
+			appendUserAgentFlagParts := strings.Split(arg, "=")
 			if len(appendUserAgentFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -760,7 +753,7 @@ func processArgsAndFlags(
 			}
 			info.HelmfileCommand = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.HelmfileCommandFlag) {
-			var helmfileCommandFlagParts = strings.Split(arg, "=")
+			helmfileCommandFlagParts := strings.Split(arg, "=")
 			if len(helmfileCommandFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -773,7 +766,7 @@ func processArgsAndFlags(
 			}
 			info.HelmfileDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.HelmfileDirFlag) {
-			var helmfileDirFlagParts = strings.Split(arg, "=")
+			helmfileDirFlagParts := strings.Split(arg, "=")
 			if len(helmfileDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -786,7 +779,7 @@ func processArgsAndFlags(
 			}
 			info.ConfigDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.CliConfigDirFlag) {
-			var configDirFlagParts = strings.Split(arg, "=")
+			configDirFlagParts := strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -799,7 +792,7 @@ func processArgsAndFlags(
 			}
 			info.StacksDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.StackDirFlag) {
-			var stacksDirFlagParts = strings.Split(arg, "=")
+			stacksDirFlagParts := strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -812,7 +805,7 @@ func processArgsAndFlags(
 			}
 			info.BasePath = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.BasePathFlag) {
-			var stacksDirFlagParts = strings.Split(arg, "=")
+			stacksDirFlagParts := strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -825,7 +818,7 @@ func processArgsAndFlags(
 			}
 			info.VendorBasePath = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.VendorBasePathFlag) {
-			var vendorBasePathFlagParts = strings.Split(arg, "=")
+			vendorBasePathFlagParts := strings.Split(arg, "=")
 			if len(vendorBasePathFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -838,7 +831,7 @@ func processArgsAndFlags(
 			}
 			info.DeployRunInit = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.DeployRunInitFlag) {
-			var deployRunInitFlagParts = strings.Split(arg, "=")
+			deployRunInitFlagParts := strings.Split(arg, "=")
 			if len(deployRunInitFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -851,7 +844,7 @@ func processArgsAndFlags(
 			}
 			info.AutoGenerateBackendFile = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AutoGenerateBackendFileFlag) {
-			var autoGenerateBackendFileFlagParts = strings.Split(arg, "=")
+			autoGenerateBackendFileFlagParts := strings.Split(arg, "=")
 			if len(autoGenerateBackendFileFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -864,7 +857,7 @@ func processArgsAndFlags(
 			}
 			info.WorkflowsDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.WorkflowDirFlag) {
-			var workflowDirFlagParts = strings.Split(arg, "=")
+			workflowDirFlagParts := strings.Split(arg, "=")
 			if len(workflowDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -877,7 +870,7 @@ func processArgsAndFlags(
 			}
 			info.InitRunReconfigure = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.InitRunReconfigure) {
-			var initRunReconfigureParts = strings.Split(arg, "=")
+			initRunReconfigureParts := strings.Split(arg, "=")
 			if len(initRunReconfigureParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -890,7 +883,7 @@ func processArgsAndFlags(
 			}
 			info.JsonSchemaDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.JsonSchemaDirFlag) {
-			var jsonschemaDirFlagParts = strings.Split(arg, "=")
+			jsonschemaDirFlagParts := strings.Split(arg, "=")
 			if len(jsonschemaDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -903,7 +896,7 @@ func processArgsAndFlags(
 			}
 			info.OpaDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.OpaDirFlag) {
-			var opaDirFlagParts = strings.Split(arg, "=")
+			opaDirFlagParts := strings.Split(arg, "=")
 			if len(opaDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -916,7 +909,7 @@ func processArgsAndFlags(
 			}
 			info.CueDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.CueDirFlag) {
-			var cueDirFlagParts = strings.Split(arg, "=")
+			cueDirFlagParts := strings.Split(arg, "=")
 			if len(cueDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -929,7 +922,7 @@ func processArgsAndFlags(
 			}
 			info.AtmosManifestJsonSchema = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AtmosManifestJsonSchemaFlag) {
-			var atmosManifestJsonSchemaFlagParts = strings.Split(arg, "=")
+			atmosManifestJsonSchemaFlagParts := strings.Split(arg, "=")
 			if len(atmosManifestJsonSchemaFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -942,7 +935,7 @@ func processArgsAndFlags(
 			}
 			info.RedirectStdErr = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.RedirectStdErrFlag) {
-			var redirectStderrParts = strings.Split(arg, "=")
+			redirectStderrParts := strings.Split(arg, "=")
 			if len(redirectStderrParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -956,7 +949,7 @@ func processArgsAndFlags(
 			info.PlanFile = inputArgsAndFlags[i+1]
 			info.UseTerraformPlan = true
 		} else if strings.HasPrefix(arg+"=", cfg.PlanFileFlag) {
-			var planFileFlagParts = strings.Split(arg, "=")
+			planFileFlagParts := strings.Split(arg, "=")
 			if len(planFileFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -970,7 +963,7 @@ func processArgsAndFlags(
 			}
 			info.LogsLevel = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.LogsLevelFlag) {
-			var logsLevelFlagParts = strings.Split(arg, "=")
+			logsLevelFlagParts := strings.Split(arg, "=")
 			if len(logsLevelFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -983,7 +976,7 @@ func processArgsAndFlags(
 			}
 			info.LogsFile = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.LogsFileFlag) {
-			var logsFileFlagParts = strings.Split(arg, "=")
+			logsFileFlagParts := strings.Split(arg, "=")
 			if len(logsFileFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -996,7 +989,7 @@ func processArgsAndFlags(
 			}
 			info.SettingsListMergeStrategy = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.SettingsListMergeStrategyFlag) {
-			var settingsListMergeStrategyParts = strings.Split(arg, "=")
+			settingsListMergeStrategyParts := strings.Split(arg, "=")
 			if len(settingsListMergeStrategyParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -1009,7 +1002,7 @@ func processArgsAndFlags(
 			}
 			info.Query = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.QueryFlag) {
-			var parts = strings.Split(arg, "=")
+			parts := strings.Split(arg, "=")
 			if len(parts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
@@ -1144,7 +1137,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 	// Generate backend config file for Terraform Cloud
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
 	if backendType == "cloud" {
-		var backendConfigFinal = backendConfig
+		backendConfigFinal := backendConfig
 
 		if terraformWorkspace != "" {
 			// Process template tokens in the backend config
@@ -1218,7 +1211,7 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 // getCliVars returns a map of variables provided on the command-line
 // atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'
 func getCliVars(args []string) (map[string]any, error) {
-	var variables = make(map[string]any)
+	variables := make(map[string]any)
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-var" && i+1 < len(args) {
 			kv := args[i+1]

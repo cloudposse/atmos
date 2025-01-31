@@ -25,16 +25,14 @@ const (
 	AtmosYamlFuncIncludeGoGetter  = "!include-go-getter"
 )
 
-var (
-	AtmosYamlTags = []string{
-		AtmosYamlFuncExec,
-		AtmosYamlFuncStore,
-		AtmosYamlFuncTemplate,
-		AtmosYamlFuncTerraformOutput,
-		AtmosYamlFuncEnv,
-		AtmosYamlFuncInclude,
-	}
-)
+var AtmosYamlTags = []string{
+	AtmosYamlFuncExec,
+	AtmosYamlFuncStore,
+	AtmosYamlFuncTemplate,
+	AtmosYamlFuncTerraformOutput,
+	AtmosYamlFuncEnv,
+	AtmosYamlFuncInclude,
+}
 
 // PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(data any) error {
@@ -60,7 +58,7 @@ func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	if err != nil {
 		return err
 	}
-	LogInfo(atmosConfig, y)
+	LogInfo(y)
 	return nil
 }
 

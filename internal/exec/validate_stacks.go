@@ -98,7 +98,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			return err
 		}
 		atmosConfig.Schemas.Atmos.Manifest = f
-		u.LogTrace(atmosConfig, fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
+		u.LogTrace(fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
 	} else if u.FileExists(atmosConfig.Schemas.Atmos.Manifest) {
 		atmosManifestJsonSchemaFilePath = atmosConfig.Schemas.Atmos.Manifest
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
@@ -138,7 +138,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		return err
 	}
 
-	u.LogDebug(atmosConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
+	u.LogDebug(fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
 		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
@@ -412,7 +412,7 @@ func getEmbeddedSchemaPath() (string, error) {
 		return "", err
 	}
 
-	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0644)
+	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0o644)
 	if err != nil {
 		return "", err
 	}
