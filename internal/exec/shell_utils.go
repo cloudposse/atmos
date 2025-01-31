@@ -222,8 +222,8 @@ func execTerraformShellCommand(
 	varFile string,
 	workingDir string,
 	workspaceName string,
-	componentPath string) error {
-
+	componentPath string,
+) error {
 	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
 	atmosShellVal := 1
 	if atmosShellLvl != "" {

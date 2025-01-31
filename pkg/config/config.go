@@ -336,7 +336,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			includeStackAbsPaths,
 			excludeStackAbsPaths,
 		)
-
 		if err != nil {
 			return atmosConfig, err
 		}
