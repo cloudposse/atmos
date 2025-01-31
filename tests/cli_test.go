@@ -371,7 +371,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
 
-	if runtime.GOOS == "macOS" && isCIEnvironment() {
+	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
 		t.Logf("skipping empty home dir on macOS in CI: %s", runtime.GOOS)
