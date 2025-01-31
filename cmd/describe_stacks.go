@@ -47,7 +47,7 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos describe stacks --process-templates=false")
 
-	describeStacksCmd.PersistentFlags().Bool("process-yaml-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command: atmos describe stacks --process-yaml-functions=false")
+	describeStacksCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command: atmos describe stacks --process-yaml-functions=false")
 
 	describeStacksCmd.PersistentFlags().Bool("include-empty-stacks", false, "Include stacks with no components in the output: atmos describe stacks --include-empty-stacks")
 

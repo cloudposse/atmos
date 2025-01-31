@@ -43,7 +43,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	processYamlFunctions, err := flags.GetBool("process-yaml-functions")
+	processYamlFunctions, err := flags.GetBool("process-functions")
 	if err != nil {
 		return err
 	}
