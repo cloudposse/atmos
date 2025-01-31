@@ -24,6 +24,7 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/muesli/termenv"
+	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -370,16 +371,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
 
-	/*
+	if runtime.GOOS == "macOS" && isCIEnvironment() {
+		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
+		// Copying over the `.gitconfig` was not enough to fix the issue
+		t.Logf("skipping empty home dir on macOS in CI: %s", runtime.GOOS)
+	} else {
 		// Set environment variables for the test case
 		tc.Env["HOME"] = tempDir
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
 		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
 
-		// Copy necessary files to the temporary HOME directory
-		// This includes .gitconfig, .ssh, and .netrc
-		// On GitHub Runners for macOS, the .gitconfig is critical for git to work
+		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
 		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
 		for _, file := range filesToCopy {
@@ -393,7 +396,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				}
 			}
 		}
-	*/
+	}
 
 	// Change to the specified working directory
 	if tc.Workdir != "" {
