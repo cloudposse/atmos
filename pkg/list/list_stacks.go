@@ -38,7 +38,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, template st
 			return fmt.Sprintf("No stacks found for component '%s'"+"\n", component), nil
 		}
 		sort.Strings(filteredStacks)
-		
+
 		// If template is provided, convert to map for JSON processing
 		if template != "" {
 			stacksOutput := make(map[string]interface{})
@@ -47,16 +47,16 @@ func FilterAndListStacks(stacksMap map[string]any, component string, template st
 			}
 			result = stacksOutput
 		} else {
-		return strings.Join(filteredStacks, "\n") + "\n", nil
-	}
+			return strings.Join(filteredStacks, "\n") + "\n", nil
+		}
 	} else {
-	// List all stacks
+		// List all stacks
 		if template != "" {
 			result = stacksMap
 		} else {
-	stacks := lo.Keys(stacksMap)
-	sort.Strings(stacks)
-	return strings.Join(stacks, "\n") + "\n", nil
+			stacks := lo.Keys(stacksMap)
+			sort.Strings(stacks)
+			return strings.Join(stacks, "\n") + "\n", nil
 		}
 	}
 

@@ -53,4 +53,4 @@ func ProcessJSONWithTemplate(input interface{}, template string) (string, error)
 	}
 
 	return buf.String(), nil
-} 
+}
