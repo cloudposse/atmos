@@ -52,8 +52,8 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
-		u.LogDebug(*atmosConfig, "\nWriting the backend config to file:")
-		u.LogDebug(*atmosConfig, backendFileName)
+		u.LogDebug("\nWriting the backend config to file:")
+		u.LogDebug(backendFileName)
 
 		if !info.DryRun {
 			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -61,7 +61,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 				return err
 			}
 
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
 			if err != nil {
 				return err
 			}
@@ -76,12 +76,12 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
-		u.LogDebug(*atmosConfig, "\nWriting the provider overrides to file:")
-		u.LogDebug(*atmosConfig, providerOverrideFileName)
+		u.LogDebug("\nWriting the provider overrides to file:")
+		u.LogDebug(providerOverrideFileName)
 
 		if !info.DryRun {
-			var providerOverrides = generateComponentProviderOverrides(info.ComponentProvidersSection)
-			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
+			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
+			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
 			return err
 		}
 	}
@@ -125,7 +125,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !info.ComponentIsEnabled && info.SubCommand != "clean" {
-		u.LogInfo(atmosConfig, fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		u.LogInfo(fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
 		return nil
 	}
 
@@ -164,7 +164,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if info.SubCommand == "clean" {
 		err := handleCleanSubCommand(info, componentPath, atmosConfig)
 		if err != nil {
-			u.LogTrace(atmosConfig, fmt.Errorf("error cleaning the terraform component: %v", err).Error())
+			u.LogDebug(fmt.Errorf("error cleaning the terraform component: %v", err).Error())
 			return err
 		}
 		return nil
@@ -176,7 +176,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
-		u.LogDebug(atmosConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+		u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
 			if err != nil {
@@ -204,11 +204,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
 			}
 
-			u.LogDebug(atmosConfig, "Writing the variables to file:")
-			u.LogDebug(atmosConfig, varFilePath)
+			u.LogDebug("Writing the variables to file:")
+			u.LogDebug(varFilePath)
 
 			if !info.DryRun {
-				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
 				if err != nil {
 					return err
 				}
@@ -225,7 +225,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		     - Default values in the configuration file: these have the lowest priority
 		*/
 		if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
-			u.LogDebug(atmosConfig, "\nCLI variables (will override the variables defined in the stack manifests):")
+			u.LogDebug("\nCLI variables (will override the variables defined in the stack manifests):")
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				err = u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars)
 				if err != nil {
@@ -275,7 +275,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	for _, envVar := range os.Environ() {
 		if strings.HasPrefix(envVar, "TF_") {
 			varName := strings.SplitN(envVar, "=", 2)[0]
-			u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
+			u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
 		}
 	}
 
@@ -295,9 +295,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
-		u.LogDebug(atmosConfig, "\nUsing ENV vars:")
+		u.LogDebug("\nUsing ENV vars:")
 		for _, v := range info.ComponentEnvList {
-			u.LogDebug(atmosConfig, v)
+			u.LogDebug(v)
 		}
 	}
 
@@ -310,7 +310,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SkipInit {
-		u.LogDebug(atmosConfig, "Skipping over 'terraform init' due to '--skip-init' flag being passed")
+		u.LogDebug("Skipping over 'terraform init' due to '--skip-init' flag being passed")
 		runTerraformInit = false
 	}
 
@@ -353,34 +353,34 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Print command info
-	u.LogDebug(atmosConfig, "\nCommand info:")
-	u.LogDebug(atmosConfig, "Terraform binary: "+info.Command)
+	u.LogDebug("\nCommand info:")
+	u.LogDebug("Terraform binary: " + info.Command)
 
 	if info.SubCommand2 == "" {
-		u.LogDebug(atmosConfig, fmt.Sprintf("Terraform command: %s", info.SubCommand))
+		u.LogDebug(fmt.Sprintf("Terraform command: %s", info.SubCommand))
 	} else {
-		u.LogDebug(atmosConfig, fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
+		u.LogDebug(fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
 	}
 
-	u.LogDebug(atmosConfig, fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
-	u.LogDebug(atmosConfig, "Component: "+info.ComponentFromArg)
+	u.LogDebug(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
+	u.LogDebug("Component: " + info.ComponentFromArg)
 
 	if len(info.BaseComponentPath) > 0 {
-		u.LogDebug(atmosConfig, "Terraform component: "+info.BaseComponentPath)
+		u.LogDebug("Terraform component: " + info.BaseComponentPath)
 	}
 
 	if len(info.ComponentInheritanceChain) > 0 {
-		u.LogDebug(atmosConfig, "Inheritance: "+info.ComponentFromArg+" -> "+strings.Join(info.ComponentInheritanceChain, " -> "))
+		u.LogDebug("Inheritance: " + info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> "))
 	}
 
 	if info.Stack == info.StackFromArg {
-		u.LogDebug(atmosConfig, "Stack: "+info.StackFromArg)
+		u.LogDebug("Stack: " + info.StackFromArg)
 	} else {
-		u.LogDebug(atmosConfig, "Stack: "+info.StackFromArg)
-		u.LogDebug(atmosConfig, "Stack path: "+filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
+		u.LogDebug("Stack: " + info.StackFromArg)
+		u.LogDebug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
-	u.LogDebug(atmosConfig, fmt.Sprintf("Working dir: %s", workingDir))
+	u.LogDebug(fmt.Sprintf("Working dir: %s", workingDir))
 
 	allArgsAndFlags := strings.Fields(info.SubCommand)
 

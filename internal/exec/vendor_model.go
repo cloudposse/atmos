@@ -141,7 +141,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
 			if !m.isTTY {
-				u.LogError(m.atmosConfig, errors.New(errMsg))
+				u.LogError(errors.New(errMsg))
 			}
 			mark = xMark
 			m.failedPkg++
@@ -154,14 +154,14 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Everything's been installed. We're done!
 			m.done = true
 			if !m.isTTY {
-				u.LogInfo(m.atmosConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+				u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 				if m.dryRun {
-					u.LogInfo(m.atmosConfig, "Done! Dry run completed. No components vendored.\n")
+					u.LogInfo("Done! Dry run completed. No components vendored.\n")
 				}
 				if m.failedPkg > 0 {
-					u.LogInfo(m.atmosConfig, fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
+					u.LogInfo(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
 				}
-				u.LogInfo(m.atmosConfig, fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
+				u.LogInfo(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
 			}
 			version := grayColor.Render(version)
 			return m, tea.Sequence(
@@ -170,7 +170,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 		if !m.isTTY {
-			u.LogInfo(m.atmosConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+			u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 		}
 		m.index++
 		// Update progress bar
@@ -257,7 +257,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 		}
 		// Ensure directory permissions are restricted
-		if err := os.Chmod(tempDir, 0700); err != nil {
+		if err := os.Chmod(tempDir, 0o700); err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to set temp directory permissions: %w", err),
 				name: p.name,

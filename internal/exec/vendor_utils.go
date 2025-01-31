@@ -171,7 +171,7 @@ func ReadAndProcessVendorConfigFile(
 
 			if !fileExists {
 				vendorConfigFileExists = false
-				u.LogWarning(atmosConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+				u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
 				return vendorConfig, vendorConfigFileExists, "", nil
 			}
 		}
@@ -267,7 +267,6 @@ func ExecuteAtmosVendorInternal(
 	tags []string,
 	dryRun bool,
 ) error {
-
 	var err error
 	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 
@@ -422,7 +421,7 @@ func ExecuteAtmosVendorInternal(
 		if !term.CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 
 		model, err := newModelAtmosVendorInternal(packages, dryRun, atmosConfig)
@@ -490,7 +489,7 @@ func logInitialMessage(atmosConfig schema.AtmosConfiguration, vendorConfigFileNa
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
-	u.LogInfo(atmosConfig, logMessage)
+	u.LogInfo(logMessage)
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
@@ -600,7 +599,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 				return true, err
 			} else if excludeMatch {
 				// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+				u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 					trimmedSrc,
 					excludePath,
 				))
@@ -617,7 +616,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 					return true, err
 				} else if includeMatch {
 					// If the file matches ANY of the 'included_paths' patterns, include the file
-					u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+					u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 						trimmedSrc,
 						includePath,
 					))
@@ -629,13 +628,13 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 			if anyMatches {
 				return false, nil
 			} else {
-				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+				u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 				return true, nil
 			}
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+		u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
 }

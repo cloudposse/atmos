@@ -12,6 +12,6 @@ tests:
     expect:
       diff: []
       stderr:
-        - "ATMOS_SHLVL.*exceeds maximum allowed depth.*Infinite recursion?"
-        - "exit status 1"
+        - 'ERRO ATMOS_SHLVL \(11\) exceeds maximum allowed depth \(10\)'
+        - "ERRO exit status 1"
       exit_code: 1

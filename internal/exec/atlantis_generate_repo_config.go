@@ -227,7 +227,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 	stacks []string,
 	components []string,
 ) error {
-
 	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
@@ -492,14 +491,14 @@ specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` se
 	fileName := outputPath
 	if fileName == "" {
 		fileName = atmosConfig.Integrations.Atlantis.Path
-		u.LogDebug(atmosConfig, fmt.Sprintf("Using 'atlantis.path: %s' from 'atmos.yaml'", fileName))
+		u.LogDebug(fmt.Sprintf("Using 'atlantis.path: %s' from 'atmos.yaml'", fileName))
 	} else {
-		u.LogDebug(atmosConfig, fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
+		u.LogDebug(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
 	}
 
 	// If the path is empty, dump to 'stdout'
 	if fileName != "" {
-		u.LogDebug(atmosConfig, fmt.Sprintf("Writing atlantis repo config file to '%s'\n", fileName))
+		u.LogDebug(fmt.Sprintf("Writing atlantis repo config file to '%s'\n", fileName))
 
 		fileAbsolutePath, err := filepath.Abs(fileName)
 		if err != nil {
@@ -512,7 +511,7 @@ specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` se
 			return err
 		}
 
-		err = u.WriteToFileAsYAML(fileAbsolutePath, atlantisYaml, 0644)
+		err = u.WriteToFileAsYAML(fileAbsolutePath, atlantisYaml, 0o644)
 		if err != nil {
 			return err
 		}

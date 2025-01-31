@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -61,7 +60,7 @@ var workflowCmd = &cobra.Command{
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 			return
 		}
@@ -85,7 +84,7 @@ var workflowCmd = &cobra.Command{
 					Suggestion: "",
 				})
 				if err != nil {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+					u.LogErrorAndExit(err)
 				}
 			} else if strings.Contains(err.Error(), "does not have the") {
 				err := renderError(ErrorMessage{
@@ -94,11 +93,11 @@ var workflowCmd = &cobra.Command{
 					Suggestion: "",
 				})
 				if err != nil {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+					u.LogErrorAndExit(err)
 				}
 			} else {
 				// For other errors, use the standard error handler
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 			os.Exit(1)
 		}
