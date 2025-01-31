@@ -516,11 +516,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Check for the latest Atmos release on GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease(atmosConfig, "cloudposse", "atmos")
 	if err != nil {
-<<<<<<< HEAD
-		u.LogWarning(atmosConfig, fmt.Sprintf("Failed to check for updates: %v", err))
-=======
-		u.LogWarning(fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
->>>>>>> origin/main
+		u.LogWarning(fmt.Sprintf("Failed to check for updates: %v", err))
 		return
 	}
 
