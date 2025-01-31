@@ -9,14 +9,10 @@ SHELL := /bin/bash
 VERSION=test
 
 export CGO_ENABLED=0
-# List of targets the `readme` target should call before generating the readme
-export README_DEPS ?= docs/targets.md
 
--include $(shell curl -sSL -o .build-harness "https://cloudposse.tools/build-harness"; echo .build-harness)
-
-## Lint terraform code
-lint:
-	$(SELF) terraform/install terraform/get-modules terraform/get-plugins terraform/lint terraform/validate
+readme:
+	@echo "README.md generation temporarily disabled."
+	@exit 0
 
 get:
 	go get
