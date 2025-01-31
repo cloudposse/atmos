@@ -25,7 +25,7 @@ var versionCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(atmosConfig, err)
+			u.LogErrorAndExit(err)
 		}
 
 		atmosIcon := "\U0001F47D"
@@ -40,11 +40,11 @@ var versionCmd = &cobra.Command{
 			latestReleaseTag, err := u.GetLatestGitHubRepoRelease(atmosConfig, "cloudposse", "atmos")
 			if err == nil && latestReleaseTag != "" {
 				if err != nil {
-					u.LogWarning(atmosConfig, fmt.Sprintf("Failed to check for updates: %v", err))
+					u.LogWarning(fmt.Sprintf("Failed to check for updates: %v", err))
 					return
 				}
 				if latestReleaseTag == "" {
-					u.LogWarning(atmosConfig, "No release information available")
+					u.LogWarning("No release information available")
 					return
 				}
 				latestRelease := strings.TrimPrefix(latestReleaseTag, "v")

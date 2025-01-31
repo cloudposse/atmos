@@ -41,7 +41,7 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 
 Our convention is to implement a test-case configuration file per scenario. Then place all smoke tests related to that scenario in the file.
 
-###  Environment Variables
+### Environment Variables
 
 The tests will automatically set some environment variables:
 

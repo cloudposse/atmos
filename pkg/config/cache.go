@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -31,7 +30,7 @@ func GetCacheFilePath() (string, string, error) {
 		cacheDir = filepath.Join(xdgCacheHome, "atmos")
 	}
 
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return "", "", errors.Wrap(err, fmt.Sprintf("error creating cache directory: %s", cacheDir))
 	}
 
@@ -52,29 +51,29 @@ func LoadCache() (CacheConfig, error) {
 	var cfg CacheConfig
 	cacheDir, cacheFile, err := GetCacheFilePath()
 	if err != nil {
-		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to get cache file path '%s': %v", cacheFile, err))
+		u.LogDebug(fmt.Sprintf("Failed to get cache file path '%s': %v", cacheFile, err))
 		return CacheConfig{}, err
 	}
 
-	u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Loading cache from %s", cacheFile))
+	u.LogDebug(fmt.Sprintf("Loading cache from %s", cacheFile))
 
 	cfg.CacheFile = cacheFile
 	cfg.CacheDir = cacheDir
 
 	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
 		// No file yet, return default
-		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Cache file not found at %s", cacheFile))
+		u.LogDebug(fmt.Sprintf("Cache file not found at %s", cacheFile))
 		return cfg, nil
 	}
 
 	v := viper.New()
 	v.SetConfigFile(cacheFile)
 	if err := v.ReadInConfig(); err != nil {
-		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to read cache file '%s': %v", cacheFile, err))
+		u.LogDebug(fmt.Sprintf("Failed to read cache file '%s': %v", cacheFile, err))
 		return cfg, errors.Wrap(err, "failed to read cache file")
 	}
 	if err := v.Unmarshal(&cfg); err != nil {
-		u.LogDebug(schema.AtmosConfiguration{}, fmt.Sprintf("Failed to unmarshal cache file '%s': %v", cacheFile, err))
+		u.LogDebug(fmt.Sprintf("Failed to unmarshal cache file '%s': %v", cacheFile, err))
 		return cfg, errors.Wrap(err, "failed to unmarshal cache file")
 	}
 	return cfg, nil
@@ -116,7 +115,7 @@ func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	interval, err := parseFrequency(frequency)
 	if err != nil {
 		// Log warning and default to daily if we can’t parse
-		u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Unsupported frequency '%s' encountered. Defaulting to daily.", frequency))
+		u.LogWarning(fmt.Sprintf("Unsupported frequency '%s' encountered. Defaulting to daily.", frequency))
 		interval = 86400 // daily
 	}
 	return now-lastChecked >= interval

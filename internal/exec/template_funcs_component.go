@@ -10,12 +10,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	componentFuncSyncMap = sync.Map{}
-)
+var componentFuncSyncMap = sync.Map{}
 
 func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stack string) (any, error) {
-	u.LogTrace(atmosConfig, fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
+	u.LogTrace(fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
 
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
@@ -23,15 +21,15 @@ func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stac
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
 		if atmosConfig.Logs.Level == u.LogLevelTrace {
-			u.LogTrace(atmosConfig, fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
+			u.LogTrace(fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
 
 			if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
-				u.LogTrace(atmosConfig, "'outputs' section:")
+				u.LogTrace("'outputs' section:")
 				y, err2 := u.ConvertToYAML(outputsSection)
 				if err2 != nil {
-					u.LogError(atmosConfig, err2)
+					u.LogError(err2)
 				} else {
-					u.LogTrace(atmosConfig, y)
+					u.LogTrace(y)
 				}
 			}
 		}
@@ -73,12 +71,12 @@ func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stac
 	componentFuncSyncMap.Store(stackSlug, sections)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace {
-		u.LogTrace(atmosConfig, fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
+		u.LogTrace(fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
 		y, err2 := u.ConvertToYAML(terraformOutputs)
 		if err2 != nil {
-			u.LogError(atmosConfig, err2)
+			u.LogError(err2)
 		} else {
-			u.LogTrace(atmosConfig, y)
+			u.LogTrace(y)
 		}
 	}
 

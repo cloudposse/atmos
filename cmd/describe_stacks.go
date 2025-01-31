@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -16,13 +15,12 @@ var describeStacksCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteDescribeStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
