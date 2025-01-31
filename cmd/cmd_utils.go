@@ -495,7 +495,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// If version checking is disabled in the configuration, do nothing
 	if !atmosConfig.Version.Check.Enabled {
-		u.LogDebug(atmosConfig, "Version checking is disabled")
+		u.LogDebug("Version checking is disabled")
 		return
 	}
 
@@ -509,12 +509,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Determine if it's time to check for updates based on frequency and last_checked
 	if !cfg.ShouldCheckForUpdates(cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency) {
 		// Not due for another check yet, so return without printing anything
-		u.LogDebug(atmosConfig, fmt.Sprintf("Skipping version check - last check was recent; last check was %s (%d), %s frequency", time.Unix(cacheCfg.LastChecked, 0).Format("2006-01-02 15:04:05 MST"), cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency))
+		u.LogDebug(fmt.Sprintf("Skipping version check - last check was recent; last check was %s (%d), %s frequency", time.Unix(cacheCfg.LastChecked, 0).Format("2006-01-02 15:04:05 MST"), cacheCfg.LastChecked, atmosConfig.Version.Check.Frequency))
 		return
 	}
 
 	// Check for the latest Atmos release on GitHub
-	latestReleaseTag, err := u.GetLatestGitHubRepoRelease(atmosConfig, "cloudposse", "atmos")
+	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
 		u.LogWarning(fmt.Sprintf("Failed to check for updates: %v", err))
 		return
@@ -533,7 +533,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	if latestVersion != currentVersion {
 		u.PrintMessageToUpgradeToAtmosLatestRelease(latestVersion)
 	} else {
-		u.LogDebug(atmosConfig, "Atmos is up to date")
+		u.LogDebug("Atmos is up to date")
 	}
 
 	// Update the cache to mark the current timestamp

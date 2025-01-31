@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/google/go-github/v59/github"
 	"golang.org/x/oauth2"
 )
@@ -28,8 +27,8 @@ func newGitHubClient(ctx context.Context) *github.Client {
 }
 
 // GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository
-func GetLatestGitHubRepoRelease(atmosConfig schema.AtmosConfiguration, owner string, repo string) (string, error) {
-	LogDebug(atmosConfig, fmt.Sprintf("Fetching latest release for %s/%s from Github API", owner, repo))
+func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
+	LogDebug(fmt.Sprintf("Fetching latest release for %s/%s from Github API", owner, repo))
 
 	// Create a new GitHub client with authentication if available
 	ctx := context.Background()

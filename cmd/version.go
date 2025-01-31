@@ -35,9 +35,9 @@ var versionCmd = &cobra.Command{
 
 		// Only check for updates when explicitly requested
 		if checkFlag {
-			u.LogDebug(atmosConfig, "Checking for latest Atmos release on Github")
+			u.LogDebug("Checking for latest Atmos release on Github")
 			// Check for the latest Atmos release on GitHub
-			latestReleaseTag, err := u.GetLatestGitHubRepoRelease(atmosConfig, "cloudposse", "atmos")
+			latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 			if err == nil && latestReleaseTag != "" {
 				if err != nil {
 					u.LogWarning(fmt.Sprintf("Failed to check for updates: %v", err))
@@ -50,8 +50,8 @@ var versionCmd = &cobra.Command{
 				latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
 				currentRelease := strings.TrimPrefix(version.Version, "v")
 
-				u.LogDebug(atmosConfig, fmt.Sprintf("Latest release tag: v%s", latestRelease))
-				u.LogDebug(atmosConfig, fmt.Sprintf("Current version: %s, Latest version: %s", currentRelease, latestRelease))
+				u.LogDebug(fmt.Sprintf("Latest release tag: v%s", latestRelease))
+				u.LogDebug(fmt.Sprintf("Current version: %s, Latest version: %s", currentRelease, latestRelease))
 
 				if latestRelease == currentRelease {
 					u.PrintMessage(fmt.Sprintf("You are running the latest version of Atmos (%s)", latestRelease))
@@ -61,7 +61,7 @@ var versionCmd = &cobra.Command{
 			}
 
 			// Check for the cache and print update message
-			u.LogDebug(atmosConfig, "Checking for updates from cache...")
+			u.LogDebug("Checking for updates from cache...")
 			CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 		}
 	},
