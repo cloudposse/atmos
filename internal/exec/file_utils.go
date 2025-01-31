@@ -42,7 +42,7 @@ func printOrWriteToFile(
 				return err
 			}
 		} else {
-			err := u.WriteToFileAsYAML(file, data, 0644)
+			err := u.WriteToFileAsYAML(file, data, 0o644)
 			if err != nil {
 				return err
 			}
@@ -55,7 +55,7 @@ func printOrWriteToFile(
 				return err
 			}
 		} else {
-			err := u.WriteToFileAsJSON(file, data, 0644)
+			err := u.WriteToFileAsJSON(file, data, 0o644)
 			if err != nil {
 				return err
 			}

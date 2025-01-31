@@ -49,7 +49,6 @@ func LogErrorAndExit(err error) {
 
 // LogError logs errors to std.Error
 func LogError(err error) {
-
 	l.Error(err)
 
 	// Print stack trace

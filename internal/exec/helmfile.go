@@ -117,7 +117,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	u.LogDebug(varFilePath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0644)
+		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0o644)
 		if err != nil {
 			return err
 		}

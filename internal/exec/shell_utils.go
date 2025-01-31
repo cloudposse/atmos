@@ -78,7 +78,7 @@ func ExecuteShellCommand(
 	} else if redirectStdError == "" {
 		cmd.Stderr = os.Stderr
 	} else {
-		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0644)
+		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
 			u.LogWarning(err.Error())
 			return err
@@ -191,8 +191,8 @@ func execTerraformShellCommand(
 	varFile string,
 	workingDir string,
 	workspaceName string,
-	componentPath string) error {
-
+	componentPath string,
+) error {
 	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
 	atmosShellVal := 1
 	if atmosShellLvl != "" {

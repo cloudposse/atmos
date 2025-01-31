@@ -256,7 +256,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 		}
 		// Ensure directory permissions are restricted
-		if err := os.Chmod(tempDir, 0700); err != nil {
+		if err := os.Chmod(tempDir, 0o700); err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to set temp directory permissions: %w", err),
 				name: p.name,

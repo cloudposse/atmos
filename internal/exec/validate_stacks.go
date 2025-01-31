@@ -412,7 +412,7 @@ func getEmbeddedSchemaPath() (string, error) {
 		return "", err
 	}
 
-	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0644)
+	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0o644)
 	if err != nil {
 		return "", err
 	}

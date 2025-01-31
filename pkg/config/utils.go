@@ -22,10 +22,9 @@ func FindAllStackConfigsInPathsForStack(
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, bool, error) {
-
 	var absolutePaths []string
 	var relativePaths []string
-	var stackIsDir = strings.IndexAny(stack, "/") > 0
+	stackIsDir := strings.IndexAny(stack, "/") > 0
 
 	for _, p := range includeStackPaths {
 		// Try both regular and template patterns
@@ -120,7 +119,6 @@ func FindAllStackConfigsInPaths(
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {
-
 	var absolutePaths []string
 	var relativePaths []string
 
@@ -647,7 +645,6 @@ func GetStackNameFromContextAndStackNamePattern(
 	stage string,
 	stackNamePattern string,
 ) (string, error) {
-
 	if len(stackNamePattern) == 0 {
 		return "",
 			fmt.Errorf("stack name pattern must be provided")

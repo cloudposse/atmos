@@ -305,17 +305,17 @@ func ExecuteTerraformGenerateVarfiles(
 
 					// Write the varfile
 					if format == "yaml" {
-						err = u.WriteToFileAsYAML(fileAbsolutePath, varsSection, 0644)
+						err = u.WriteToFileAsYAML(fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}
 					} else if format == "json" {
-						err = u.WriteToFileAsJSON(fileAbsolutePath, varsSection, 0644)
+						err = u.WriteToFileAsJSON(fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(atmosConfig, fileAbsolutePath, varsSection, 0644)
+						err = u.WriteToFileAsHcl(atmosConfig, fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}

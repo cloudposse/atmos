@@ -27,7 +27,6 @@ func CreateSpaceliftStacks(
 	processImports bool,
 	stackConfigPathTemplate string,
 ) (map[string]any, error) {
-
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		u.LogError(err)
@@ -94,7 +93,6 @@ func TransformStackConfigToSpaceliftStacks(
 	processImports bool,
 	rawStackConfigs map[string]map[string]any,
 ) (map[string]any, error) {
-
 	var err error
 	res := map[string]any{}
 

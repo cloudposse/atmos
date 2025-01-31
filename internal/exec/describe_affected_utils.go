@@ -41,7 +41,6 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	includeSettings bool,
 	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
-
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
@@ -184,7 +183,6 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	includeSettings bool,
 	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
-
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
@@ -335,7 +333,6 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	includeSettings bool,
 	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
-
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -389,7 +386,6 @@ func executeDescribeAffected(
 	includeSettings bool,
 	stack string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
-
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
@@ -529,7 +525,6 @@ func findAffected(
 	includeSettings bool,
 	stackToFilter string,
 ) ([]schema.Affected, error) {
-
 	res := []schema.Affected{}
 	var err error
 
@@ -741,7 +736,6 @@ func findAffected(
 									changedFiles,
 									stackComponentSettings.DependsOn,
 								)
-
 								if err != nil {
 									return nil, err
 								}
@@ -955,7 +949,6 @@ func findAffected(
 									changedFiles,
 									stackComponentSettings.DependsOn,
 								)
-
 								if err != nil {
 									return nil, err
 								}
@@ -1018,7 +1011,6 @@ func appendToAffected(
 	stacks map[string]any,
 	includeSettings bool,
 ) ([]schema.Affected, error) {
-
 	// If the affected component in the stack was already added to the result, don't add it again
 	for _, v := range affectedList {
 		if v.Component == affected.Component && v.Stack == affected.Stack && v.ComponentType == affected.ComponentType {
@@ -1101,7 +1093,6 @@ func isEqual(
 	localSection map[string]any,
 	sectionName string,
 ) bool {
-
 	if remoteStackSection, ok := remoteStacks[localStackName].(map[string]any); ok {
 		if remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any); ok {
 			if remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any); ok {
@@ -1123,7 +1114,6 @@ func isComponentDependentFolderOrFileChanged(
 	changedFiles []string,
 	deps schema.DependsOn,
 ) (bool, string, string, error) {
-
 	hasDependencies := false
 	isChanged := false
 	changedType := ""
@@ -1184,7 +1174,6 @@ func isComponentFolderChanged(
 	atmosConfig schema.AtmosConfiguration,
 	changedFiles []string,
 ) (bool, error) {
-
 	var componentPath string
 
 	switch componentType {
@@ -1226,7 +1215,6 @@ func areTerraformComponentModulesChanged(
 	atmosConfig schema.AtmosConfiguration,
 	changedFiles []string,
 ) (bool, error) {
-
 	componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
 
 	componentPathAbs, err := filepath.Abs(componentPath)
@@ -1282,7 +1270,6 @@ func addAffectedSpaceliftAdminStack(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	includeSettings bool,
 ) ([]schema.Affected, error) {
-
 	// Convert the `settings` section to the `Settings` structure
 	var componentSettings schema.Settings
 	err := mapstructure.Decode(settingsSection, &componentSettings)

@@ -10,9 +10,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	componentFuncSyncMap = sync.Map{}
-)
+var componentFuncSyncMap = sync.Map{}
 
 func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stack string) (any, error) {
 	u.LogTrace(fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))

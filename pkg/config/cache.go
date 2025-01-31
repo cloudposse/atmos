@@ -28,7 +28,7 @@ func GetCacheFilePath() (string, error) {
 		cacheDir = filepath.Join(xdgCacheHome, "atmos")
 	}
 
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return "", errors.Wrap(err, "error creating cache directory")
 	}
 

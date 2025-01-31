@@ -19,9 +19,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	terraformOutputsCache = sync.Map{}
-)
+var terraformOutputsCache = sync.Map{}
 
 func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 	component string,
@@ -98,7 +96,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 				return nil, err
 			}
 
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
 			if err != nil {
 				return nil, err
 			}
@@ -116,8 +114,8 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 			u.LogDebug("\nWriting the provider overrides to file:")
 			u.LogDebug(providerOverrideFileName)
 
-			var providerOverrides = generateComponentProviderOverrides(providersSection)
-			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
+			providerOverrides := generateComponentProviderOverrides(providersSection)
+			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
 			if err != nil {
 				return nil, err
 			}
@@ -315,7 +313,6 @@ func getTerraformOutputVariable(
 	}
 
 	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
-
 	if err != nil {
 		u.LogErrorAndExit(fmt.Errorf("error evaluating terrform output '%s' for the component '%s' in the stack '%s':\n%v",
 			output,
@@ -341,7 +338,6 @@ func getStaticRemoteStateOutput(
 	}
 
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
-
 	if err != nil {
 		u.LogErrorAndExit(fmt.Errorf("error evaluating the 'static' remote state backend output '%s' for the component '%s' in the stack '%s':\n%v",
 			output,

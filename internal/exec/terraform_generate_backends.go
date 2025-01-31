@@ -335,7 +335,7 @@ func ExecuteTerraformGenerateBackends(
 							return err
 						}
 
-						err = u.WriteToFileAsJSON(backendFileAbsolutePath, componentBackendConfig, 0644)
+						err = u.WriteToFileAsJSON(backendFileAbsolutePath, componentBackendConfig, 0o644)
 						if err != nil {
 							return err
 						}
@@ -345,7 +345,7 @@ func ExecuteTerraformGenerateBackends(
 							return err
 						}
 					} else if format == "backend-config" {
-						err = u.WriteToFileAsHcl(atmosConfig, backendFileAbsolutePath, backendSection, 0644)
+						err = u.WriteToFileAsHcl(atmosConfig, backendFileAbsolutePath, backendSection, 0o644)
 						if err != nil {
 							return err
 						}

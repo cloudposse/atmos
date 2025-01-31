@@ -102,7 +102,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	if atmosConfig.Logs.File != "/dev/stderr" {
-		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 		if err != nil {
 			log.Fatal("Failed to open log file:", err)
 		}
@@ -207,7 +207,6 @@ func initCobraConfig() {
 		return nil
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
-
 		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
 			arguments := os.Args[len(strings.Split(command.CommandPath(), " ")):]
 			if len(command.Flags().Args()) > 0 {

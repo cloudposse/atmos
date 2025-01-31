@@ -266,7 +266,6 @@ func ExecuteAtmosVendorInternal(
 	tags []string,
 	dryRun bool,
 ) error {
-
 	var err error
 	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 

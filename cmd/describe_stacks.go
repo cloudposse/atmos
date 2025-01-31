@@ -15,7 +15,6 @@ var describeStacksCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// Check Atmos configuration
 		checkAtmosConfig()
 
