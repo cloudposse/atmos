@@ -1,4 +1,7 @@
 ---
+# The workflow name **must** be "autofix.ci" for Autofix CI to function correctly.
+# Any deviation from this name will cause Autofix CI to fail, as it relies on this 
+# specific identifier for execution. This is a strict requirement of Autofix CI.
 name: autofix.ci
 on: pull_request
 permissions: {}
