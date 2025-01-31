@@ -347,8 +347,8 @@ func handleTFDataDir(componentPath string, relativePath string, atmosConfig sche
 	}
 
 }
-func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig schema.AtmosConfiguration, everything bool) []string {
-	if everything && info.Stack == "" {
+func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig schema.AtmosConfiguration) []string {
+	if info.ComponentFromArg == "" {
 		return []string{".terraform", ".terraform.lock.hcl", "*.tfvar.json", "terraform.tfstate.d"}
 	}
 	varFile := constructTerraformComponentVarfileName(info)
@@ -407,8 +407,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 
 	force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
-	everything := u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag)
-	filesToClear := initializeFilesToClear(info, atmosConfig, everything)
+	filesToClear := initializeFilesToClear(info, atmosConfig)
 	folders, err := CollectDirectoryObjects(cleanPath, filesToClear)
 	if err != nil {
 		u.LogTrace(atmosConfig, fmt.Errorf("error collecting folders and files: %v", err).Error())
@@ -456,7 +455,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 				u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
 			}
 			var message string
-			if everything && info.ComponentFromArg == "" {
+			if info.ComponentFromArg == "" {
 				message = fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
 			} else if info.Component != "" && info.Stack != "" {
 				message = fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, info.Component, info.Stack)
