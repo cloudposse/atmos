@@ -43,7 +43,8 @@ tests:
     args: [--help]
     expect:
       timeout: 5s
-      diff: []
+      diff:
+        - 'Update available! (\d+\.\d+\.\d+|test) » (\d+\.\d+\.\d+|test)'
       stdout:
         - "Available Commands:"
         - "Flags:"
