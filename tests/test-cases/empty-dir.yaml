@@ -32,7 +32,9 @@ tests:
 
   - name: check atmos --help in empty-dir
     enabled: true
-    snapshot: true
+    # Snapshots are temporarily disabled until PR #957 is merged which cleans workdirs
+    # of files which are not part of the git repo
+    snapshot: false
     description: "Check that atmos command outputs help even with no configuration"
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"

@@ -49,7 +49,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
-	var configPaths = []string{}
+	configPaths := []string{}
 	if configFilePath == "" {
 		configPaths = append(configPaths, defaultConfigFileNames[:]...)
 	} else {
@@ -61,7 +61,7 @@ func initializeConfig(cmd *cobra.Command) {
 	if initEditorConfig {
 		err := currentConfig.Save(version.Version)
 		if err != nil {
-			u.LogErrorAndExit(atmosConfig, err)
+			u.LogErrorAndExit(err)
 		}
 	}
 
@@ -93,13 +93,13 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
 		format := outputformat.OutputFormat(atmosConfig.Validate.EditorConfig.Format)
 		if ok := format.IsValid(); !ok {
-			u.LogErrorAndExit(atmosConfig, fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
+			u.LogErrorAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
 		}
 		cliConfig.Format = format
 	} else if cmd.Flags().Changed("format") {
 		format := outputformat.OutputFormat(format)
 		if ok := format.IsValid(); !ok {
-			u.LogErrorAndExit(atmosConfig, fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
+			u.LogErrorAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
 		}
 		cliConfig.Format = format
 	}
@@ -136,27 +136,27 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 // runMainLogic contains the main logic
 func runMainLogic() {
 	config := *currentConfig
-	u.LogDebug(atmosConfig, config.String())
-	u.LogTrace(atmosConfig, fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
+	u.LogDebug(config.String())
+	u.LogTrace(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
 	if err := checkVersion(config); err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	filePaths, err := files.GetFiles(config)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	if config.DryRun {
 		for _, file := range filePaths {
-			u.LogInfo(atmosConfig, file)
+			u.LogInfo(file)
 		}
 		os.Exit(0)
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
-	u.LogDebug(atmosConfig, fmt.Sprintf("%d files checked", len(filePaths)))
+	u.LogDebug(fmt.Sprintf("%d files checked", len(filePaths)))
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
