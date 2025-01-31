@@ -31,9 +31,11 @@ import (
 )
 
 // Command-line flag for regenerating snapshots
-var regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
-var startingDir string
-var snapshotBaseDir string
+var (
+	regenerateSnapshots = flag.Bool("regenerate-snapshots", false, "Regenerate all golden snapshots")
+	startingDir         string
+	snapshotBaseDir     string
+)
 
 // Define styles using lipgloss
 var (
@@ -390,7 +392,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			dest := filepath.Join(tempDir, file)
 
 			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
-				//t.Logf("Copying %s to %s\n", src, dest)
+				// t.Logf("Copying %s to %s\n", src, dest)
 				if err := copy.Copy(src, dest); err != nil {
 					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
 				}
@@ -430,7 +432,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Set environment variables
 	envVars := os.Environ()
 	for key, value := range tc.Env {
-		//t.Logf("Setting env: %s=%s", key, value)
+		// t.Logf("Setting env: %s=%s", key, value)
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars
@@ -451,7 +453,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 
 		if err != nil {
-
 			// Check if the error is an ExitError
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				// Capture the actual exit code
@@ -677,11 +678,11 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bo
 }
 
 func updateSnapshot(fullPath, output string) {
-	err := os.MkdirAll(filepath.Dir(fullPath), 0755) // Ensure parent directories exist
+	err := os.MkdirAll(filepath.Dir(fullPath), 0o755) // Ensure parent directories exist
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create snapshot directory: %v", err))
 	}
-	err = os.WriteFile(fullPath, []byte(output), 0644) // Write snapshot
+	err = os.WriteFile(fullPath, []byte(output), 0o644) // Write snapshot
 	if err != nil {
 		panic(fmt.Sprintf("Failed to write snapshot file: %v", err))
 	}
@@ -791,7 +792,6 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 		if isCIEnvironment() || !term.IsTerminal(int(os.Stdout.Fd())) {
 			// Generate a colorized diff for better readability
 			diff = generateUnifiedDiff(filteredStdoutActual, filteredStdoutExpected)
-
 		} else {
 			diff = colorizeDiffWithThreshold(filteredStdoutActual, filteredStdoutExpected, 10)
 		}
@@ -824,7 +824,6 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 
 // Clean up untracked files in the working directory
 func cleanDirectory(t *testing.T, workdir string) error {
-
 	// Find the root of the Git repository
 	repoRoot, err := findGitRepoRoot(workdir)
 	if err != nil {
