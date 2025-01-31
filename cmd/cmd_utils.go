@@ -632,15 +632,17 @@ func isGitRepository() bool {
 	return true
 }
 
-// checkGitAndEnvVars checks if we're at the root of a git repo and if required env vars are set
-func checkGitAndEnvVars() {
+// verifyInsideGitRepo checks if we're at the root of a git repo, if required env vars are not set
+func verifyInsideGitRepo() bool {
 	// Skip check if either env var is set
 	if os.Getenv("ATMOS_BASE_PATH") != "" || os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
-		return
+		return nil
 	}
 
 	// Check if we're at the root of a git repo
 	if !isGitRepository() {
 		u.LogWarning(atmosConfig, "You're not at the root of a git repository. Atmos feels lonely outside - bring it home!\n")
+		return false
+          return true
 	}
 }

@@ -47,10 +47,10 @@ tests:
         - "^$"
       exit_code: 0
 
-  - name: run atmos outside git repo
+  - name: atmos warns if not in git repo
     enabled: true
     snapshot: true
-    description: "Test checkGitAndEnvVars function outside of a git repo with ATMOS_LOGS_LEVEL=Warn"
+    description: "Test that atmos warns if not run inside of a git repo"
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
     args:
