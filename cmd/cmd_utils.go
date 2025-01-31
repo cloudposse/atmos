@@ -615,7 +615,6 @@ func isGitRepository() bool {
 	_, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
 		DetectDotGit: true,
 	})
-
 	if err != nil {
 		if err != git.ErrRepositoryNotExists {
 			u.LogTrace(fmt.Sprintf("git check failed: %v", err))
