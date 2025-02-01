@@ -123,15 +123,15 @@
     "base_path": ""
   },
   "initialized": true,
-  "stacksBaseAbsolutePath": "/Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks/stacks",
+  "stacksBaseAbsolutePath": "/Users/viniciuscardoso/Developer/atmos/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
-    "/Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks/stacks/deploy/**/*"
+    "/Users/viniciuscardoso/Developer/atmos/examples/demo-stacks/stacks/deploy/**/*"
   ],
   "excludeStackAbsolutePaths": [
-    "/Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks/stacks/**/_defaults.yaml"
+    "/Users/viniciuscardoso/Developer/atmos/examples/demo-stacks/stacks/**/_defaults.yaml"
   ],
-  "terraformDirAbsolutePath": "/Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks/components/terraform",
-  "helmfileDirAbsolutePath": "/Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks",
+  "terraformDirAbsolutePath": "/Users/viniciuscardoso/Developer/atmos/examples/demo-stacks/components/terraform",
+  "helmfileDirAbsolutePath": "/Users/viniciuscardoso/Developer/atmos/examples/demo-stacks",
   "default": false,
   "version": {
     "Check": {
