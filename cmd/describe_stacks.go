@@ -102,9 +102,9 @@ var describeStacksCmd = &cobra.Command{
 
 func init() {
 	describeStacksCmd.DisableFlagParsing = false
-	describeStacksCmd.PersistentFlags().StringP("stack", "s", "", "Filter by a specific stack")
-	describeStacksCmd.PersistentFlags().String("json", "", "Comma-separated list of fields to include in JSON output")
-	describeStacksCmd.PersistentFlags().String("jq", "", "JQ query to transform JSON output (requires --json)")
-	describeStacksCmd.PersistentFlags().String("template", "", "Go template to format JSON output (requires --json)")
+	describeStacksCmd.Flags().StringP("stack", "s", "", "Filter by a specific stack")
+	describeStacksCmd.Flags().String("json", "", "Comma-separated list of fields to include in JSON output")
+	describeStacksCmd.Flags().String("jq", "", "JQ query to transform JSON output (requires --json)")
+	describeStacksCmd.Flags().String("template", "", "Go template to format JSON output (requires --json)")
 	describeCmd.AddCommand(describeStacksCmd)
 }

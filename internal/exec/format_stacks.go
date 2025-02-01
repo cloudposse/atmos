@@ -26,7 +26,11 @@ func FormatStacksOutput(stacksMap map[string]any, jsonFields string, jqQuery str
 		// Use HighlightCodeWithConfig for YAML output
 		highlighted, err := u.HighlightCodeWithConfig(string(yamlBytes), atmosConfig, "yaml")
 		if err != nil {
-			return string(yamlBytes), nil
+			return string(yamlBytes) + "\n", nil
+		}
+		// For YAML output, preserve the original formatting including newlines
+		if !strings.HasSuffix(highlighted, "\n\n") {
+			highlighted += "\n"
 		}
 		return highlighted, nil
 	}
@@ -75,9 +79,10 @@ func FormatStacksOutput(stacksMap map[string]any, jsonFields string, jqQuery str
 	// Use HighlightCodeWithConfig for JSON output
 	highlighted, err := u.HighlightCodeWithConfig(string(jsonBytes), atmosConfig, "json")
 	if err != nil {
-		return string(jsonBytes), nil
+		return string(jsonBytes) + "\n", nil
 	}
-	return highlighted, nil
+	// For JSON output, ensure exactly one newline at the end
+	return strings.TrimRight(highlighted, "\n") + "\n", nil
 }
 
 // filterFields filters the input data to only include specified fields
