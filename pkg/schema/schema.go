@@ -634,9 +634,8 @@ type AtmosVendorConfig struct {
 }
 
 type Vendor struct {
-	// Path to vendor configuration file or directory containing vendor files
-	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	List     ListConfig `yaml:"list" json:"list" mapstructure:"list"`
 }
 
 type MarkdownSettings struct {
