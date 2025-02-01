@@ -10,7 +10,7 @@ import (
 )
 
 // FilterAndListStacks filters stacks by the given component and returns the output based on the format and template
-func FilterAndListStacks(stacksMap map[string]any, component string, template string) (string, error) {
+func FilterAndListStacks(stacksMap map[string]any, component string, jsonFields string, jqQuery string, goTemplate string) (string, error) {
 	var result any
 
 	if component != "" {
@@ -38,12 +38,12 @@ func FilterAndListStacks(stacksMap map[string]any, component string, template st
 			return fmt.Sprintf("No stacks found for component '%s'"+"\n", component), nil
 		}
 		sort.Strings(filteredStacks)
-
-		// If template is provided, convert to map for JSON processing
-		if template != "" {
+		
+		// If JSON output is requested, convert to map
+		if jsonFields != "" || jqQuery != "" || goTemplate != "" {
 			stacksOutput := make(map[string]interface{})
 			for _, stack := range filteredStacks {
-				stacksOutput[stack] = stacksMap[stack]
+				stacksOutput[stack] = filterFields(stacksMap[stack], jsonFields)
 			}
 			result = stacksOutput
 		} else {
@@ -51,8 +51,16 @@ func FilterAndListStacks(stacksMap map[string]any, component string, template st
 		}
 	} else {
 		// List all stacks
-		if template != "" {
-			result = stacksMap
+		if jsonFields != "" || jqQuery != "" || goTemplate != "" {
+			if jsonFields != "" {
+				filteredMap := make(map[string]interface{})
+				for stack, data := range stacksMap {
+					filteredMap[stack] = filterFields(data, jsonFields)
+				}
+				result = filteredMap
+			} else {
+				result = stacksMap
+			}
 		} else {
 			stacks := lo.Keys(stacksMap)
 			sort.Strings(stacks)
@@ -61,9 +69,44 @@ func FilterAndListStacks(stacksMap map[string]any, component string, template st
 	}
 
 	// Process template if provided
-	if template != "" {
-		return templates.ProcessJSONWithTemplate(result, template)
+	if jqQuery != "" {
+		return templates.ProcessJSONWithTemplate(result, jqQuery)
+	}
+	if goTemplate != "" {
+		return templates.ProcessWithGoTemplate(result, goTemplate)
+	}
+
+	// If JSON fields are specified but no template, return JSON string
+	if jsonFields != "" {
+		return templates.ProcessJSONWithTemplate(result, ".")
 	}
 
 	return "", fmt.Errorf("unexpected condition in FilterAndListStacks")
+}
+
+// filterFields filters the input data to only include specified fields
+func filterFields(data interface{}, fields string) interface{} {
+	if fields == "" {
+		return data
+	}
+
+	fieldList := strings.Split(fields, ",")
+	if len(fieldList) == 0 {
+		return data
+	}
+
+	dataMap, ok := data.(map[string]interface{})
+	if !ok {
+		return data
+	}
+
+	result := make(map[string]interface{})
+	for _, field := range fieldList {
+		field = strings.TrimSpace(field)
+		if val, ok := dataMap[field]; ok {
+			result[field] = val
+		}
+	}
+
+	return result
 }

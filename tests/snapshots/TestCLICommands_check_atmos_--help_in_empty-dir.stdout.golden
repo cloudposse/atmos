@@ -35,6 +35,9 @@ Flags:
 
     -h, --help                      help for atmos (default "false")
 
+        --jq string                 JQ query to transform the output (e.g. '.[]
+                                    | {name: .name}')
+
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file
                                     descriptor, including '/dev/stdout',
@@ -52,8 +55,9 @@ Flags:
                                     '/dev/null'): atmos <command>
                                     --redirect-stderr /dev/stdout
 
-        --template string           Template string to apply to the output using
-                                    gojq syntax (e.g. '.[] | {name: .name}')
+        --template string           Go template to format the output (supports
+                                    Go templates, Sprig functions, and
+                                    additional helpers)
 
 The '--' (double-dash) can be used to signify the end of Atmos-specific options 
 and the beginning of additional native arguments and flags for the specific command being run.
