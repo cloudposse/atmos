@@ -23,7 +23,7 @@ func TestListVendors(t *testing.T) {
 
 	// Create vendor directory structure
 	vendorDir := filepath.Join(tmpDir, "vendor.d")
-	err = os.MkdirAll(vendorDir, 0o755)
+	err = os.MkdirAll(vendorDir, 0755)
 	require.NoError(t, err)
 
 	// Create atmos.yaml with vendor configuration
@@ -48,12 +48,12 @@ vendor:
       - name: Folder
         value: '{{ .atmos_vendor_target }}'
 `
-	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
+	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0644)
 	require.NoError(t, err)
 
 	// Create stacks directory and a sample stack file
 	stacksDir := filepath.Join(tmpDir, "stacks")
-	err = os.MkdirAll(stacksDir, 0o755)
+	err = os.MkdirAll(stacksDir, 0755)
 	require.NoError(t, err)
 
 	// Create a sample stack file
@@ -67,40 +67,63 @@ components:
     ecs:
       component: ecs/cluster
 `
-	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackConfig), 0o644)
+	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackConfig), 0644)
 	require.NoError(t, err)
 
 	// Create a component manifest file
 	componentManifestFile := filepath.Join(vendorDir, "component.yaml")
-	componentManifest := map[string]interface{}{
-		"vpc/v1": map[string]interface{}{
-			"component": map[string]interface{}{
-				"name": "vpc/v1",
+	componentManifest := schema.AtmosVendorConfig{
+		ApiVersion: "atmos/v1",
+		Kind:       "AtmosVendorConfig",
+		Metadata: schema.AtmosVendorMetadata{
+			Name:        "component-test",
+			Description: "Test component manifest",
+		},
+		Spec: schema.AtmosVendorSpec{
+			Sources: []schema.AtmosVendorSource{
+				{
+					Component: "vpc/v1",
+					Source:    "github.com/test/repo.git//components/vpc?ref=main",
+					Version:   "main",
+					Targets:   []string{"components/terraform/vpc/v1"},
+				},
 			},
 		},
 	}
 	componentManifestBytes, err := yaml.Marshal(componentManifest)
 	require.NoError(t, err)
-	err = os.WriteFile(componentManifestFile, componentManifestBytes, 0o644)
+	err = os.WriteFile(componentManifestFile, componentManifestBytes, 0644)
 	require.NoError(t, err)
 
 	// Create a vendor manifest file
 	vendorManifestFile := filepath.Join(vendorDir, "vendor.yaml")
-	vendorManifest := map[string]interface{}{
-		"eks/cluster": map[string]interface{}{
-			"vendor": map[string]interface{}{
-				"name": "eks/cluster",
-			},
+	vendorManifest := schema.AtmosVendorConfig{
+		ApiVersion: "atmos/v1",
+		Kind:       "AtmosVendorConfig",
+		Metadata: schema.AtmosVendorMetadata{
+			Name:        "vendor-test",
+			Description: "Test vendor manifest",
 		},
-		"ecs/cluster": map[string]interface{}{
-			"vendor": map[string]interface{}{
-				"name": "ecs/cluster",
+		Spec: schema.AtmosVendorSpec{
+			Sources: []schema.AtmosVendorSource{
+				{
+					Component: "eks/cluster",
+					Source:    "github.com/test/repo.git//components/eks?ref=main",
+					Version:   "main",
+					Targets:   []string{"components/terraform/eks/cluster"},
+				},
+				{
+					Component: "ecs/cluster",
+					Source:    "github.com/test/repo.git//components/ecs?ref=main",
+					Version:   "main",
+					Targets:   []string{"components/terraform/ecs/cluster"},
+				},
 			},
 		},
 	}
 	vendorManifestBytes, err := yaml.Marshal(vendorManifest)
 	require.NoError(t, err)
-	err = os.WriteFile(vendorManifestFile, vendorManifestBytes, 0o644)
+	err = os.WriteFile(vendorManifestFile, vendorManifestBytes, 0644)
 	require.NoError(t, err)
 
 	// Change to the temporary directory for testing
@@ -134,7 +157,7 @@ components:
 			delimiter: "\t",
 			wantErr:   false,
 			contains: []string{
-				"vpc/v1", "Component Manifest",
+				"vpc/v1", "Vendor Manifest",
 				"eks/cluster", "Vendor Manifest",
 				"ecs/cluster", "Vendor Manifest",
 			},
@@ -157,7 +180,7 @@ components:
 				for _, v := range vendors {
 					if v.Component == "vpc/v1" {
 						foundComponent = true
-						assert.Equal(t, "Component Manifest", v.Type)
+						assert.Equal(t, "Vendor Manifest", v.Type)
 					}
 					if v.Component == "eks/cluster" {
 						foundEKS = true
@@ -192,7 +215,7 @@ components:
 					if len(fields) == 4 {
 						if fields[0] == "vpc/v1" {
 							foundComponent = true
-							assert.Equal(t, "Component Manifest", fields[1])
+							assert.Equal(t, "Vendor Manifest", fields[1])
 						}
 						if fields[0] == "eks/cluster" {
 							foundEKS = true
