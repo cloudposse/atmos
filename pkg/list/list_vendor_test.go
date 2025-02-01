@@ -23,7 +23,7 @@ func TestListVendors(t *testing.T) {
 
 	// Create vendor directory structure
 	vendorDir := filepath.Join(tmpDir, "vendor.d")
-	err = os.MkdirAll(vendorDir, 0755)
+	err = os.MkdirAll(vendorDir, 0o755)
 	require.NoError(t, err)
 
 	// Create atmos.yaml with vendor configuration
@@ -48,12 +48,12 @@ vendor:
       - name: Folder
         value: '{{ .atmos_vendor_target }}'
 `
-	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
 	require.NoError(t, err)
 
 	// Create stacks directory and a sample stack file
 	stacksDir := filepath.Join(tmpDir, "stacks")
-	err = os.MkdirAll(stacksDir, 0755)
+	err = os.MkdirAll(stacksDir, 0o755)
 	require.NoError(t, err)
 
 	// Create a sample stack file
@@ -67,7 +67,7 @@ components:
     ecs:
       component: ecs/cluster
 `
-	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackConfig), 0644)
+	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackConfig), 0o644)
 	require.NoError(t, err)
 
 	// Create a component manifest file
@@ -92,7 +92,7 @@ components:
 	}
 	componentManifestBytes, err := yaml.Marshal(componentManifest)
 	require.NoError(t, err)
-	err = os.WriteFile(componentManifestFile, componentManifestBytes, 0644)
+	err = os.WriteFile(componentManifestFile, componentManifestBytes, 0o644)
 	require.NoError(t, err)
 
 	// Create a vendor manifest file
@@ -123,7 +123,7 @@ components:
 	}
 	vendorManifestBytes, err := yaml.Marshal(vendorManifest)
 	require.NoError(t, err)
-	err = os.WriteFile(vendorManifestFile, vendorManifestBytes, 0644)
+	err = os.WriteFile(vendorManifestFile, vendorManifestBytes, 0o644)
 	require.NoError(t, err)
 
 	// Change to the temporary directory for testing
