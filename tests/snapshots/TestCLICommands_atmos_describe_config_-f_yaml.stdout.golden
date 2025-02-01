@@ -32,13 +32,13 @@ settings:
     list_merge_strategy: ""
     inject_github_token: true
 initialized: true
-stacksBaseAbsolutePath: /Users/viniciuscardoso/Developer/atmos/examples/demo-stacks/stacks
+stacksBaseAbsolutePath: /Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks/stacks
 includeStackAbsolutePaths:
-    - /Users/viniciuscardoso/Developer/atmos/examples/demo-stacks/stacks/deploy/**/*
+    - /Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks/stacks/deploy/**/*
 excludeStackAbsolutePaths:
-    - /Users/viniciuscardoso/Developer/atmos/examples/demo-stacks/stacks/**/_defaults.yaml
-terraformDirAbsolutePath: /Users/viniciuscardoso/Developer/atmos/examples/demo-stacks/components/terraform
-helmfileDirAbsolutePath: /Users/viniciuscardoso/Developer/atmos/examples/demo-stacks
+    - /Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks/stacks/**/_defaults.yaml
+terraformDirAbsolutePath: /Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks/components/terraform
+helmfileDirAbsolutePath: /Users/matt/src/github.com/cloudposse/atmos/examples/demo-stacks
 default: false
 validate:
     editorconfig:

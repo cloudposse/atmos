@@ -95,6 +95,7 @@ var describeStacksCmd = &cobra.Command{
 			u.PrintMessageInColor(output, theme.Colors.Success)
 		} else {
 			fmt.Println(output)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
