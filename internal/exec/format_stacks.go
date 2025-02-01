@@ -105,4 +105,4 @@ func filterFields(data interface{}, fields string) interface{} {
 	}
 
 	return result
-} 
+}

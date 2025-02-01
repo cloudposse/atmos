@@ -98,4 +98,4 @@ func TestFormatStacksOutput(t *testing.T) {
 		assert.Contains(t, output, "dev  Development stack")
 		assert.Contains(t, output, "prod  Production stack")
 	})
-} 
+}

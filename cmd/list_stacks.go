@@ -22,7 +22,7 @@ var listStacksCmd = &cobra.Command{
 		"# For detailed stack information and filtering, use:\n" +
 		"atmos describe stacks",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:              cobra.NoArgs,
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()

@@ -31,7 +31,7 @@ var describeStacksCmd = &cobra.Command{
 		"# List available JSON fields\n" +
 		"atmos describe stacks --json",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:              cobra.NoArgs,
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()

@@ -70,4 +70,4 @@ func ProcessWithGoTemplate(input interface{}, templateStr string) (string, error
 	}
 
 	return buf.String(), nil
-} 
+}
