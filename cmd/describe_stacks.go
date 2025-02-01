@@ -1,53 +1,109 @@
 package cmd
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeStacksCmd describes configuration for stacks and components in the stacks
+// describeStacksCmd describes atmos stacks with rich formatting options
 var describeStacksCmd = &cobra.Command{
-	Use:                "stacks",
-	Short:              "Display configuration for Atmos stacks and their components",
-	Long:               "This command shows the configuration details for Atmos stacks and the components within those stacks.",
+	Use:   "stacks",
+	Short: "Show detailed information about Atmos stacks",
+	Long:  "This command shows detailed information about Atmos stacks with rich formatting options for output customization. It supports filtering by stack, selecting specific fields, and transforming output using YQ expressions.",
+	Example: "# Show detailed information for all stacks (colored YAML output)\n" +
+		"atmos describe stacks\n\n" +
+		"# Filter by a specific stack\n" +
+		"atmos describe stacks -s dev\n\n" +
+		"# Show specific fields in JSON format\n" +
+		"atmos describe stacks --json name,components\n\n" +
+		"# Show vars for a specific stack\n" +
+		"atmos describe stacks -s dev --json name,components --jq '.dev.components.terraform.myapp.vars'\n\n" +
+		"# Transform JSON output using YQ expressions\n" +
+		"atmos describe stacks --json name,components --jq '.dev'\n\n" +
+		"# List available JSON fields\n" +
+		"atmos describe stacks --json",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.NoArgs,
+	Args:              cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		err := e.ExecuteDescribeStacksCmd(cmd, args)
+		jsonFlag, _ := cmd.Flags().GetString("json")
+		jqFlag, _ := cmd.Flags().GetString("jq")
+		templateFlag, _ := cmd.Flags().GetString("template")
+		stackFlag, _ := cmd.Flags().GetString("stack")
+
+		// Validate that --json is provided when using --jq or --template
+		if (jqFlag != "" || templateFlag != "") && jsonFlag == "" {
+			u.PrintMessageInColor("Error: --json flag is required when using --jq or --template", theme.Colors.Error)
+			return
+		}
+
+		// Validate that only one of --jq or --template is used
+		if jqFlag != "" && templateFlag != "" {
+			u.PrintMessageInColor("Error: cannot use both --jq and --template flags at the same time", theme.Colors.Error)
+			return
+		}
+
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
+			return
+		}
+
+		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, stackFlag, nil, nil, nil, false, false, false)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
+			return
+		}
+
+		// If --json is provided with no value, show available fields
+		if jsonFlag == "" && (cmd.Flags().Changed("json") || jqFlag != "" || templateFlag != "") {
+			availableFields := []string{
+				"name",
+				"components",
+				"terraform",
+				"helmfile",
+				"description",
+				"namespace",
+				"base_component",
+				"vars",
+				"env",
+				"backend",
+			}
+			u.PrintMessageInColor("Available JSON fields:\n"+strings.Join(availableFields, "\n"), theme.Colors.Info)
+			return
+		}
+
+		output, err := e.FormatStacksOutput(stacksMap, jsonFlag, jqFlag, templateFlag)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error formatting output: %v", err), theme.Colors.Error)
+			return
+		}
+
+		// Only use colored output for non-JSON/template formats
+		if jsonFlag == "" && jqFlag == "" && templateFlag == "" {
+			u.PrintMessageInColor(output, theme.Colors.Success)
+		} else {
+			fmt.Println(output)
 		}
 	},
 }
 
 func init() {
 	describeStacksCmd.DisableFlagParsing = false
-
-	describeStacksCmd.PersistentFlags().String("file", "", "Write the result to file: atmos describe stacks --file=stacks.yaml")
-
-	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify the output format: atmos describe stacks --format=yaml|json ('yaml' is default)")
-
-	describeStacksCmd.PersistentFlags().StringP("stack", "s", "",
-		"Filter by a specific stack: atmos describe stacks -s <stack>\n"+
-			"The filter supports names of the top-level stack manifests (including subfolder paths), and 'atmos' stack names (derived from the context vars)",
-	)
-
-	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific 'atmos' components: atmos describe stacks --components=<component1>,<component2>")
-
-	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types: atmos describe stacks --component-types=terraform|helmfile. Supported component types: terraform, helmfile")
-
-	describeStacksCmd.PersistentFlags().String("sections", "", "Output only the specified component sections: atmos describe stacks --sections=vars,settings. Available component sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
-
-	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos describe stacks --process-templates=false")
-
-	describeStacksCmd.PersistentFlags().Bool("include-empty-stacks", false, "Include stacks with no components in the output: atmos describe stacks --include-empty-stacks")
-
+	describeStacksCmd.PersistentFlags().StringP("stack", "s", "", "Filter by a specific stack")
+	describeStacksCmd.PersistentFlags().String("json", "", "Comma-separated list of fields to include in JSON output")
+	describeStacksCmd.PersistentFlags().String("jq", "", "JQ query to transform JSON output (requires --json)")
+	describeStacksCmd.PersistentFlags().String("template", "", "Go template to format JSON output (requires --json)")
 	describeCmd.AddCommand(describeStacksCmd)
 }

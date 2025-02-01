@@ -3,12 +3,13 @@ title: atmos describe stacks
 sidebar_label: stacks
 sidebar_class_name: command
 id: stacks
-description: Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
+description: Use this command to show detailed information about Atmos stacks with rich formatting options.
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
-Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
+Use this command to show detailed information about Atmos stacks with rich output formatting options.
 :::
 
 <Screengrab title="atmos describe stacks --help" slug="atmos-describe-stacks--help" />
@@ -18,10 +19,18 @@ Use this command to show the fully deep-merged configuration for all stacks and 
 Execute the `describe stacks` command like this:
 
 ```shell
-atmos describe stacks [options]
-```
+# Show detailed information for all stacks
+atmos describe stacks
 
-This command shows configuration for stacks and components in the stacks.
+# Show specific fields in JSON format
+atmos describe stacks --json name,components
+
+# Transform JSON output using JQ
+atmos describe stacks --json name,components --jq '<query>'
+
+# Format output using Go templates
+atmos describe stacks --json name,components --template '<template>'
+```
 
 :::tip
 Run `atmos describe stacks --help` to see all the available options
@@ -30,36 +39,72 @@ Run `atmos describe stacks --help` to see all the available options
 ## Examples
 
 ```shell
-atmos describe stacks
-atmos describe stacks -s tenant1-ue2-dev
-atmos describe stacks --file=stacks.yaml
-atmos describe stacks --file=stacks.json --format=json
-atmos describe stacks --components=infra/vpc
-atmos describe stacks --components=echo-server,infra/vpc
-atmos describe stacks --components=echo-server,infra/vpc --sections=none
-atmos describe stacks --components=echo-server,infra/vpc --sections=none
-atmos describe stacks --components=none --sections=metadata
-atmos describe stacks --components=echo-server,infra/vpc --sections=vars,settings,metadata
-atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings,component,deps,inheritance --file=stacks.yaml
-atmos describe stacks --components=test/test-component-override-3 --sections=vars,settings --format=json --file=stacks.json
-atmos describe stacks --components=test/test-component-override-3 --sections=deps,vars -s=tenant2-ue2-staging
-atmos describe stacks --process-templates=false
-atmos describe stacks --query <yq-expression>
-```
+# Show available JSON fields
+atmos describe stacks --json
 
-:::tip
-Use the `--query` flag (shorthand `-q`) to filter the output.
-:::
+# Show specific stack fields
+atmos describe stacks --json name,components,vars
+
+# Transform output using JQ queries
+atmos describe stacks --json name,components --jq 'to_entries | map({
+  stack: .key,
+  components: .value.components.terraform | keys
+})'
+
+# Format output using Go templates
+atmos describe stacks --json name,components --template '{{range $stack, $data := .}}{{tablerow $stack ($data.components.terraform | keys | join ", ")}}{{end}}'
+```
 
 ## Flags
 
-| Flag                  | Description                                                                                                                                                                                                                                                             | Alias | Required |
-|:----------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`             | Filter by a specific stack.<br/>Supports names of the top-level stack manifests<br/>(including subfolder paths),<br/>and Atmos stack names (derived from the context vars)                                                                                              | `-s`  | no       |
-| `--file`              | If specified, write the result to the file                                                                                                                                                                                                                              |       | no       |
-| `--format`            | Specify the output format: `yaml` or `json` (`yaml` is default)                                                                                                                                                                                                         |       | no       |
-| `--components`        | Filter by specific Atmos components<br/>(comma-separated string of component names)                                                                                                                                                                                     |       | no       |
-| `--component-types`   | Filter by specific component types: `terraform` or `helmfile`                                                                                                                                                                                                           |       | no       |
-| `--sections`          | Output only the specified component sections.<br/>Available component sections: `backend`, `backend_type`, `deps`, `env`,<br/>`inheritance`, `metadata`, `remote_state_backend`,<br/>`remote_state_backend_type`, `settings`, `vars`                                    |       | no       |
-| `--process-templates` | Enable/disable processing of `Go` templates in Atmos stacks manifests<br/>when executing the command.<br/>Use the flag to see the stack configurations<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default |       | no       |
-| `--query`             | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe stacks --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                  | `-q`  | no       |
+| Flag             | Description                                                                                                                                                                                                                               | Required |
+|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
+| `--json`         | Comma-separated list of fields to include in JSON output (use without value to see available fields)                                                                                                                                     | no       |
+| `--jq`          | JQ query to transform JSON output (requires --json)                                                                                                                                                                                     | no       |
+| `--template`     | Go template to format JSON output (requires --json)                                                                                                                                                                                     | no       |
+
+## Output Formatting
+
+### JSON Field Selection
+Use `--json` to specify which fields to include in the output:
+```shell
+# Show available fields
+atmos describe stacks --json
+
+# Select specific fields
+atmos describe stacks --json name,components,vars
+```
+
+### JQ Queries
+Use `--jq` for JSON transformation (requires `--json`):
+```shell
+# List stack names only
+atmos describe stacks --json name --jq 'keys'
+
+# Create custom structure
+atmos describe stacks --json name,components --jq 'to_entries | map({
+  stack: .key,
+  components: .value.components.terraform | keys
+})'
+```
+
+### Go Templates
+Use `--template` for custom formatting (requires `--json`). Supports:
+- Go template syntax
+- Sprig functions
+- Custom functions:
+  - `autocolor`: Automatic terminal coloring
+  - `color`: Explicit color styling (success, error, warning, info)
+  - `tablerow`: Table-style output formatting
+
+```shell
+# Simple table format
+atmos describe stacks --json name,components --template '{{range $stack, $data := .}}{{tablerow $stack ($data.components.terraform | keys | join ", ")}}{{end}}'
+
+# Colored output
+atmos describe stacks --json name,components --template '{{range $stack, $data := .}}{{tablerow (color "success" $stack) (autocolor ($data.components.terraform | keys | join ", "))}}{{end}}'
+```
+
+:::tip
+The template functionality supports all standard Go template functions plus the complete set of [Sprig functions](http://masterminds.github.io/sprig/).
+:::
