@@ -51,3 +51,14 @@ spec:
         - "**/*.tftmpl"
         - "**/modules/**"
       excluded_paths: []
+
+    - component: "test globs"
+      source: "github.com/cloudposse/atmos.git"
+      included_paths:
+        - "**/{demo-library,demo-stacks}/**/*.{tf,md}"
+      excluded_paths:
+        - "**/demo-library/**/*.{tfvars,tf}"
+      targets:
+        - "components/library/"
+      tags:
+        - demo
