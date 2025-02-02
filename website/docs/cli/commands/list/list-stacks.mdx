@@ -59,6 +59,7 @@ stacks:
         value: '{{ index .vars "tenant" }}'
 ```
 
+This example assumes that every component defines `vars.tenant` and `vars.environment`. While [Cloud Posse's Reference Architecture](https://docs.cloudposse.com) follows this convention, any well-defined convention will work.
 :::tip Using the `index` Function
 When accessing variables that might not be defined in all stacks, it's recommended to use the Go template `index` function instead of direct access. For example:
 
