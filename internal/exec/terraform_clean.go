@@ -51,7 +51,7 @@ func findFoldersNamesWithPrefix(root, prefix string, atmosConfig schema.AtmosCon
 			level2Path := filepath.Join(root, dir.Name())
 			level2Dirs, err := os.ReadDir(level2Path)
 			if err != nil {
-				u.LogWarning(atmosConfig, fmt.Sprintf("Error reading subdirectory %s: %v", level2Path, err))
+				u.LogWarning(fmt.Sprintf("Error reading subdirectory %s: %v", level2Path, err))
 				continue
 			}
 
@@ -201,9 +201,7 @@ func getStackTerraformStateFolder(componentPath string, stack string, atmosConfi
 			if directories[i].Files != nil {
 				for j := range directories[i].Files {
 					directories[i].Files[j].Name = folderName + "/" + directories[i].Files[j].Name
-
 				}
-
 			}
 		}
 		stackTfStateFolders = append(stackTfStateFolders, directories...)
@@ -230,6 +228,7 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 
 	return filepath.Base(absBasePath) + "/" + relPath, nil
 }
+
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := huh.ThemeCharm()
@@ -287,7 +286,7 @@ func confirmDeletion(atmosConfig schema.AtmosConfiguration) (bool, error) {
 		return false, err
 	}
 	if !confirm {
-		u.LogWarning(atmosConfig, "Mission aborted.")
+		u.LogWarning("Mission aborted.")
 		return false, nil
 	}
 	return true, nil
@@ -312,7 +311,7 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig schema.
 	}
 	if len(errors) > 0 {
 		for _, err := range errors {
-			u.LogWarning(atmosConfig, err.Error())
+			u.LogWarning(err.Error())
 		}
 	}
 	// check if the folder is empty by using the os.ReadDir function
@@ -320,33 +319,31 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig schema.
 		entries, err := os.ReadDir(folder.FullPath)
 		if err == nil && len(entries) == 0 {
 			if err := os.Remove(folder.FullPath); err != nil {
-				u.LogWarning(atmosConfig, fmt.Sprintf("Error removing directory %s: %v", folder.FullPath, err))
+				u.LogWarning(fmt.Sprintf("Error removing directory %s: %v", folder.FullPath, err))
 			}
 		}
 	}
-
 }
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
 func handleTFDataDir(componentPath string, relativePath string, atmosConfig schema.AtmosConfiguration) {
-
 	tfDataDir := os.Getenv("TF_DATA_DIR")
 	if tfDataDir == "" {
 		return
 	}
 	if err := IsValidDataDir(tfDataDir); err != nil {
-		u.LogWarning(atmosConfig, err.Error())
+		u.LogWarning(err.Error())
 		return
 	}
 	if _, err := os.Stat(filepath.Join(componentPath, tfDataDir)); os.IsNotExist(err) {
-		u.LogWarning(atmosConfig, fmt.Sprintf("TF_DATA_DIR '%s' does not exist", tfDataDir))
+		u.LogWarning(fmt.Sprintf("TF_DATA_DIR '%s' does not exist", tfDataDir))
 		return
 	}
 	if err := DeletePathTerraform(filepath.Join(componentPath, tfDataDir), filepath.Join(relativePath, tfDataDir)); err != nil {
-		u.LogWarning(atmosConfig, err.Error())
+		u.LogWarning(err.Error())
 	}
-
 }
+
 func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig schema.AtmosConfiguration) []string {
 	if info.ComponentFromArg == "" {
 		return []string{".terraform", ".terraform.lock.hcl", "*.tfvar.json", "terraform.tfstate.d"}
@@ -365,6 +362,7 @@ func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig schema.
 
 	return files
 }
+
 func IsValidDataDir(tfDataDir string) error {
 	if tfDataDir == "" {
 		return fmt.Errorf("ENV TF_DATA_DIR is empty")
@@ -410,7 +408,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	filesToClear := initializeFilesToClear(info, atmosConfig)
 	folders, err := CollectDirectoryObjects(cleanPath, filesToClear)
 	if err != nil {
-		u.LogTrace(atmosConfig, fmt.Errorf("error collecting folders and files: %v", err).Error())
+		u.LogTrace(fmt.Errorf("error collecting folders and files: %v", err).Error())
 		return err
 	}
 
@@ -418,7 +416,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		stackFolders, err := getStackTerraformStateFolder(cleanPath, info.Stack, atmosConfig)
 		if err != nil {
 			errMsg := fmt.Errorf("error getting stack terraform state folders: %v", err)
-			u.LogTrace(atmosConfig, errMsg.Error())
+			u.LogTrace(errMsg.Error())
 		}
 		if stackFolders != nil {
 			folders = append(folders, stackFolders...)
@@ -429,11 +427,11 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	var tfDataDirFolders []Directory
 	if tfDataDir != "" {
 		if err := IsValidDataDir(tfDataDir); err != nil {
-			u.LogTrace(atmosConfig, err.Error())
+			u.LogTrace(err.Error())
 		} else {
 			tfDataDirFolders, err = CollectDirectoryObjects(cleanPath, []string{tfDataDir})
 			if err != nil {
-				u.LogTrace(atmosConfig, fmt.Errorf("error collecting folder of ENV TF_DATA_DIR: %v", err).Error())
+				u.LogTrace(fmt.Errorf("error collecting folder of ENV TF_DATA_DIR: %v", err).Error())
 			}
 		}
 	}
