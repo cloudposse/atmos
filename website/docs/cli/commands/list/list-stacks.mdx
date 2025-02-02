@@ -51,12 +51,16 @@ The command output can be customized using template variables in your `atmos.yam
 
 ```yaml
 stacks:
-  display:
+  list:
     columns:
       - name: Stack
         value: '{{ .atmos_stack }}'
       - name: Tenant
         value: '{{ index .vars "tenant" }}'
+      - name: Environment
+        value: '{{ index .vars "environment" }}'
+      - name: File
+        value: '{{ .atmos_stack_file }}'
 ```
 
 This example assumes that every component defines `vars.tenant` and `vars.environment`. While [Cloud Posse's Reference Architecture](https://docs.cloudposse.com) follows this convention, any well-defined convention will work.
