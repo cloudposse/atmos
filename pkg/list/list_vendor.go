@@ -15,7 +15,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -23,45 +22,56 @@ const (
 	DefaultTSVDelimiter = "\t"
 )
 
-// VendorInfo represents a vendor configuration entry
-type VendorInfo struct {
-	Component string `json:"component"`
-	Type      string `json:"type"`
-	Manifest  string `json:"manifest"`
-	Folder    string `json:"folder"`
-	Version   string `json:"version"`
-}
-
 // processVendorFile processes a vendor configuration file and returns vendor information
-func processVendorFile(filePath string, atmosConfig schema.AtmosConfiguration) ([]VendorInfo, error) {
-	var vendors []VendorInfo
-
-	data, err := os.ReadFile(filePath)
+func processVendorFile(filePath string, atmosConfig schema.AtmosConfiguration) ([]schema.AtmosVendorSource, error) {
+	// Use the existing vendoring logic to process the file and its imports
+	vendorConfig, _, _, err := exec.ReadAndProcessVendorConfigFile(atmosConfig, filePath, false)
 	if err != nil {
-		return nil, fmt.Errorf("error reading vendor file %s: %w", filePath, err)
+		return nil, fmt.Errorf("error processing vendor file %s: %w", filePath, err)
 	}
 
-	var vendorConfig schema.AtmosVendorConfig
-	if err := yaml.Unmarshal(data, &vendorConfig); err != nil {
-		return nil, fmt.Errorf("error parsing vendor file %s: %w", filePath, err)
+	// Process all sources from the main config and its imports
+	mergedSources, _, err := exec.ProcessVendorImports(atmosConfig, filePath, vendorConfig.Spec.Imports, vendorConfig.Spec.Sources, []string{})
+	if err != nil {
+		return nil, fmt.Errorf("error processing vendor imports: %w", err)
 	}
 
-	// Process vendor configuration
-	for _, source := range vendorConfig.Spec.Sources {
-		vendorType := "Vendor Manifest"
-		manifest := filepath.Clean(filePath)
-		folder := filepath.Join(atmosConfig.BasePath, source.Targets[0])
+	// Process templates in sources and targets
+	for i := range mergedSources {
+		// Process templates in the target path
+		if len(mergedSources[i].Targets) > 0 {
+			processedTarget, err := exec.ProcessTmpl(
+				"target",
+				mergedSources[i].Targets[0],
+				map[string]string{
+					"Component": mergedSources[i].Component,
+					"Version":   mergedSources[i].Version,
+				},
+				false,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("error processing target template: %w", err)
+			}
+			mergedSources[i].Targets[0] = processedTarget
+		}
 
-		vendors = append(vendors, VendorInfo{
-			Component: source.Component,
-			Type:      vendorType,
-			Manifest:  manifest,
-			Folder:    folder,
-			Version:   source.Version,
-		})
+		// Process templates in the source URI
+		processedSource, err := exec.ProcessTmpl(
+			"source",
+			mergedSources[i].Source,
+			map[string]string{
+				"Component": mergedSources[i].Component,
+				"Version":   mergedSources[i].Version,
+			},
+			false,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error processing source template: %w", err)
+		}
+		mergedSources[i].Source = processedSource
 	}
 
-	return vendors, nil
+	return mergedSources, nil
 }
 
 // FilterAndListVendors lists vendor configurations based on the provided configuration
@@ -90,7 +100,7 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 	}
 
 	// Define default columns if not specified in config
-	header := []string{"Component", "Type", "Manifest", "Folder", "Version"}
+	header := []string{"Component", "Type", "Manifest", "Folder", "Version", "Source"}
 	if len(listConfig.Columns) > 0 {
 		header = make([]string, len(listConfig.Columns))
 		for i, col := range listConfig.Columns {
@@ -130,7 +140,7 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 	}
 
 	// Process all vendor files
-	var allVendors []VendorInfo
+	var allVendors []schema.AtmosVendorSource
 	for _, f := range files {
 		vendors, err := processVendorFile(f, atmosConfig)
 		if err != nil {
@@ -148,13 +158,17 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 			case "Component":
 				row[i] = vendor.Component
 			case "Type":
-				row[i] = vendor.Type
+				row[i] = "Vendor Manifest"
 			case "Manifest":
-				row[i] = vendor.Manifest
+				row[i] = vendor.File
 			case "Folder":
-				row[i] = vendor.Folder
+				if len(vendor.Targets) > 0 {
+					row[i] = filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
+				}
 			case "Version":
 				row[i] = vendor.Version
+			case "Source":
+				row[i] = vendor.Source
 			}
 		}
 		rows = append(rows, row)
@@ -162,7 +176,13 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 
 	// Sort rows for consistent output
 	sort.Slice(rows, func(i, j int) bool {
-		return strings.Join(rows[i], delimiter) < strings.Join(rows[j], delimiter)
+		// Compare each column in order until we find a difference
+		for col := 0; col < len(rows[i]); col++ {
+			if rows[i][col] != rows[j][col] {
+				return rows[i][col] < rows[j][col]
+			}
+		}
+		return false // rows are identical
 	})
 
 	if len(rows) == 0 {

@@ -276,7 +276,7 @@ func ExecuteAtmosVendorInternal(
 	}
 
 	// Process imports and return all sources from all the imports and from `vendor.yaml`
-	sources, _, err := processVendorImports(
+	sources, _, err := ProcessVendorImports(
 		atmosConfig,
 		vendorConfigFileName,
 		atmosVendorSpec.Imports,
@@ -436,7 +436,7 @@ func ExecuteAtmosVendorInternal(
 }
 
 // processVendorImports processes all imports recursively and returns a list of sources
-func processVendorImports(
+func ProcessVendorImports(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
 	imports []string,
@@ -468,7 +468,7 @@ func processVendorImports(
 			return nil, nil, fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", imp)
 		}
 
-		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
+		mergedSources, allImports, err = ProcessVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
 		if err != nil {
 			return nil, nil, err
 		}

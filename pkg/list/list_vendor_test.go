@@ -172,7 +172,7 @@ components:
 			format:  "json",
 			wantErr: false,
 			validate: func(t *testing.T, output string) {
-				var vendors []VendorInfo
+				var vendors []schema.AtmosVendorSource
 				err := json.Unmarshal([]byte(output), &vendors)
 				assert.NoError(t, err)
 				assert.GreaterOrEqual(t, len(vendors), 3)
@@ -184,15 +184,15 @@ components:
 				for _, v := range vendors {
 					if v.Component == "vpc/v1" {
 						foundComponent = true
-						assert.Equal(t, "Vendor Manifest", v.Type)
+						assert.Equal(t, "vendor.d/component.yaml", v.File)
 					}
 					if v.Component == "eks/cluster" {
 						foundEKS = true
-						assert.Equal(t, "Vendor Manifest", v.Type)
+						assert.Equal(t, "vendor.d/vendor.yaml", v.File)
 					}
 					if v.Component == "ecs/cluster" {
 						foundECS = true
-						assert.Equal(t, "Vendor Manifest", v.Type)
+						assert.Equal(t, "vendor.d/vendor.yaml", v.File)
 					}
 				}
 				assert.True(t, foundComponent, "Component manifest not found")
