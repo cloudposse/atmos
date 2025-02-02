@@ -1,10 +1,15 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/hooks"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	h "github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -19,9 +24,29 @@ var terraformCmd = &cobra.Command{
 	Short:              "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
 	Long:               `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	PostRunE: func(cmd *cobra.Command, args []string) error {
-		info := getConfigAndStacksInfo("terraform", cmd, args)
-		return hooks.RunE(cmd, args, &info)
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Get the config and stacks info
+		info := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
+
+		// Initialize the CLI config
+		atmosConfig, err := cfg.InitCliConfig(info, true)
+		if err != nil {
+			return fmt.Errorf("error initializing CLI config: %w", err)
+		}
+
+		// Get the hooks
+		hooks, err := h.GetHooks(&atmosConfig, &info)
+		if err != nil {
+			return fmt.Errorf("error getting hooks: %w", err)
+		}
+
+		// Set the the context so it can be accessed by any chiild commands
+		ctx := context.WithValue(context.Background(), "atmosConfig", &atmosConfig)
+		ctx = context.WithValue(ctx, "info", &info)
+		ctx = context.WithValue(ctx, "hooks", hooks)
+		cmd.SetContext(ctx)
+
+		return nil
 	},
 }
 
@@ -35,13 +60,13 @@ func Contains(slice []string, target string) bool {
 	return false
 }
 
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
-	info := getConfigAndStacksInfo("terraform", cmd, args)
+func terraformRun(info *schema.ConfigAndStacksInfo, actualCmd *cobra.Command, args []string) {
 	if info.NeedHelp {
 		actualCmd.Usage()
 		return
 	}
-	err := e.ExecuteTerraform(info)
+
+	err := e.ExecuteTerraform(*info)
 	if err != nil {
 		u.LogErrorAndExit(err)
 	}

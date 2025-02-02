@@ -75,11 +75,13 @@ func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 	rtDetails := auth.NewArtifactoryDetails()
 	rtDetails.SetUrl(options.URL)
 
-	token, err := getAccessKey(&options)
-	if err != nil {
-		return nil, err
+	if options.AccessToken != nil && *options.AccessToken != "anonymous" {
+		token, err := getAccessKey(&options)
+		if err != nil {
+			return nil, err
+		}
+		rtDetails.SetAccessToken(token)
 	}
-	rtDetails.SetAccessToken(token)
 
 	serviceConfig, err := config.NewConfigBuilder().
 		SetServiceDetails(rtDetails).
@@ -89,7 +91,6 @@ func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 		SetOverallRequestTimeout(1 * time.Minute).
 		SetHttpRetries(0).
 		Build()
-
 	if err != nil {
 		return nil, err
 	}
@@ -112,15 +113,10 @@ func (s *ArtifactoryStore) getKey(stack string, component string, key string) (s
 		return "", fmt.Errorf("stack delimiter is not set")
 	}
 
-	stackParts := strings.Split(stack, *s.stackDelimiter)
-	componentParts := strings.Split(component, "/")
+	prefixParts := []string{s.repoName, s.prefix}
+	prefix := strings.Join(prefixParts, "/")
 
-	parts := []string{s.repoName, s.prefix}
-	parts = append(parts, stackParts...)
-	parts = append(parts, componentParts...)
-	parts = append(parts, key)
-
-	return strings.ReplaceAll(strings.Join(parts, "/"), "//", "/"), nil
+	return getKey(prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
 func (s *ArtifactoryStore) Get(stack string, component string, key string) (interface{}, error) {

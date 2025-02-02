@@ -2,5 +2,13 @@
     "yaml.customTags": [
         "!not scalar"
     ],
-    "[mdx]": { "editor.defaultFormatter": null, "editor.formatOnSave": false },
+    "[mdx]": {
+        "editor.defaultFormatter": null,
+        "editor.formatOnSave": false
+    },
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#2C300C",
+        "titleBar.activeBackground": "#3D4311",
+        "titleBar.activeForeground": "#FAFBEF"
+    },
 }
