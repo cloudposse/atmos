@@ -56,9 +56,14 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 					tenant, _ := vars["tenant"].(string)
 					environment, _ := vars["environment"].(string)
 					stage, _ := vars["stage"].(string)
-					stackInfo["atmos_stack_file"] = fmt.Sprintf("orgs/acme/%s/%s/%s", tenant, environment, stage)
+					// Only use the org/tenant path if all required variables are present
+					if tenant != "" && environment != "" && stage != "" {
+						stackInfo["atmos_stack_file"] = fmt.Sprintf("orgs/acme/%s/%s/%s", tenant, environment, stage)
+					} else {
+						stackInfo["atmos_stack_file"] = fmt.Sprintf("examples/quick-start-simple/stacks/deploy/%s.yaml", stackName)
+					}
 				} else {
-					stackInfo["atmos_stack_file"] = fmt.Sprintf("stacks/deploy/%s.yaml", stackName)
+					stackInfo["atmos_stack_file"] = fmt.Sprintf("examples/quick-start-simple/stacks/deploy/%s.yaml", stackName)
 				}
 
 				// Add component vars if they exist
@@ -99,9 +104,14 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 				tenant, _ := vars["tenant"].(string)
 				environment, _ := vars["environment"].(string)
 				stage, _ := vars["stage"].(string)
-				stackInfo["atmos_stack_file"] = fmt.Sprintf("orgs/acme/%s/%s/%s", tenant, environment, stage)
+				// Only use the org/tenant path if all required variables are present
+				if tenant != "" && environment != "" && stage != "" {
+					stackInfo["atmos_stack_file"] = fmt.Sprintf("orgs/acme/%s/%s/%s", tenant, environment, stage)
+				} else {
+					stackInfo["atmos_stack_file"] = fmt.Sprintf("examples/quick-start-simple/stacks/deploy/%s.yaml", stackName)
+				}
 			} else {
-				stackInfo["atmos_stack_file"] = fmt.Sprintf("stacks/deploy/%s.yaml", stackName)
+				stackInfo["atmos_stack_file"] = fmt.Sprintf("examples/quick-start-simple/stacks/deploy/%s.yaml", stackName)
 			}
 
 			// Add component vars if they exist
