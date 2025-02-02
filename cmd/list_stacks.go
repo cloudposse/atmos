@@ -28,7 +28,7 @@ var listStacksCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listStacks(cmd)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 		if len(output) == 0 {
 			u.PrintMessageInColor("No stacks found\n", theme.Colors.Info)

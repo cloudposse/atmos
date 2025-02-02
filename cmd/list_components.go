@@ -27,7 +27,7 @@ var listComponentsCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listComponents(cmd)
 		if err != nil {
-			u.LogError(schema.AtmosConfiguration{}, err)
+			u.LogError(err)
 			return
 		}
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
