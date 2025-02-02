@@ -131,7 +131,11 @@ components:
 	require.NoError(t, err)
 	err = os.Chdir(tmpDir)
 	require.NoError(t, err)
-	defer os.Chdir(currentDir)
+	defer func() {
+		if err := os.Chdir(currentDir); err != nil {
+			t.Errorf("Failed to restore working directory: %v", err)
+		}
+	}()
 
 	tests := []struct {
 		name        string
