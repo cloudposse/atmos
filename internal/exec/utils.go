@@ -530,57 +530,20 @@ func ProcessStacks(
 			u.LogErrorAndExit(err)
 		}
 
-		componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, configAndStacksInfo.Stack)
+		configAndStacksInfo.ComponentSection = componentSectionConverted
+	}
+
+	if processYamlFunctions {
+		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
 
-		configAndStacksInfo.ComponentSection = componentSectionFinal
+		configAndStacksInfo.ComponentSection = componentSectionConverted
+	}
 
-		// Process Atmos manifest sections after processing `Go` templates and custom YAML tags
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
-			configAndStacksInfo.ComponentProvidersSection = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[string]any); ok {
-			configAndStacksInfo.ComponentVarsSection = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[string]any); ok {
-			configAndStacksInfo.ComponentSettingsSection = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[string]any); ok {
-			configAndStacksInfo.ComponentEnvSection = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[string]any); ok {
-			configAndStacksInfo.ComponentOverridesSection = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[string]any); ok {
-			configAndStacksInfo.ComponentMetadataSection = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[string]any); ok {
-			configAndStacksInfo.ComponentBackendSection = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
-			configAndStacksInfo.ComponentBackendType = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
-			configAndStacksInfo.Component = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
-			configAndStacksInfo.Command = i
-		}
-
-		if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {
-			configAndStacksInfo.TerraformWorkspace = i
-		}
+	if processTemplates || processYamlFunctions {
+		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
 	}
 
 	// Spacelift stack
@@ -1236,4 +1199,51 @@ func getCliVars(args []string) (map[string]any, error) {
 		}
 	}
 	return variables, nil
+}
+
+// postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags
+func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
+		configAndStacksInfo.ComponentProvidersSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.VarsSectionName].(map[string]any); ok {
+		configAndStacksInfo.ComponentVarsSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.SettingsSectionName].(map[string]any); ok {
+		configAndStacksInfo.ComponentSettingsSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[string]any); ok {
+		configAndStacksInfo.ComponentEnvSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[string]any); ok {
+		configAndStacksInfo.ComponentOverridesSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.MetadataSectionName].(map[string]any); ok {
+		configAndStacksInfo.ComponentMetadataSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendSectionName].(map[string]any); ok {
+		configAndStacksInfo.ComponentBackendSection = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.BackendTypeSectionName].(string); ok {
+		configAndStacksInfo.ComponentBackendType = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); ok {
+		configAndStacksInfo.Component = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
+		configAndStacksInfo.Command = i
+	}
+
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {
+		configAndStacksInfo.TerraformWorkspace = i
+	}
 }
