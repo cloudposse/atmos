@@ -179,8 +179,11 @@ func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Render
 	if wr, ok = termWriter.(*term.TerminalWriter); ok {
 		screenWidth = wr.GetWidth()
 	}
-	if maxWidth > 0 {
+	if maxWidth > 0 && ok {
 		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
+	} else if maxWidth > 0 {
+		// Fallback: if type assertion fails, use maxWidth as the screen width.
+		screenWidth = uint(maxWidth)
 	}
 	return NewRenderer(
 		atmosConfig,
