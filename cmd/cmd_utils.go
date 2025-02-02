@@ -670,11 +670,5 @@ func showUsageExample(cmd *cobra.Command, details string) {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
-	if err := renderError(ErrorMessage{
-		Title:      "Incorrect Usage",
-		Details:    details,
-		Suggestion: suggestion,
-	}); err != nil {
-		return
-	}
+	u.PrintErrorMarkdownAndExit("Incorrect Usage", fmt.Errorf(details), suggestion)
 }

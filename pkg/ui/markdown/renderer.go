@@ -182,7 +182,6 @@ func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Render
 	if maxWidth > 0 {
 		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
 	}
-	screenWidth += 15
 	return NewRenderer(
 		atmosConfig,
 		WithWidth(screenWidth),

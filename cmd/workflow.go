@@ -9,37 +9,11 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 //go:embed markdown/workflow.md
 var workflowMarkdown string
-
-// ErrorMessage represents a structured error message
-type ErrorMessage struct {
-	Title      string
-	Details    string
-	Suggestion string
-}
-
-// renderError renders an error message using the markdown renderer
-func renderError(msg ErrorMessage) error {
-	renderer, err := markdown.NewTerminalMarkdownRenderer(atmosConfig)
-	if err != nil {
-		return err
-	}
-
-	rendered, err := renderer.RenderError(msg.Title, msg.Details, msg.Suggestion)
-	if err != nil {
-		return fmt.Errorf("failed to render error message: %w", err)
-	}
-
-	if _, err := os.Stderr.WriteString(fmt.Sprint(rendered + "\n")); err != nil {
-		return fmt.Errorf("failed to write error message: %w", err)
-	}
-	return nil
-}
 
 // workflowCmd executes a workflow
 var workflowCmd = &cobra.Command{
