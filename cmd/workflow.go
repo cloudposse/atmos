@@ -78,26 +78,12 @@ var workflowCmd = &cobra.Command{
 		if err != nil {
 			// Format common error messages
 			if strings.Contains(err.Error(), "does not exist") {
-				err := renderError(ErrorMessage{
-					Title:      "File Not Found",
-					Details:    fmt.Sprintf("`%v` was not found", workflowFile),
-					Suggestion: "",
-				})
-				if err != nil {
-					u.LogErrorAndExit(err)
-				}
+				u.PrintErrorMarkdownAndExit("File Not Found", fmt.Errorf("`%v` was not found", workflowFile), "")
 			} else if strings.Contains(err.Error(), "does not have the") {
-				err := renderError(ErrorMessage{
-					Title:      "Invalid Workflow",
-					Details:    err.Error(),
-					Suggestion: "",
-				})
-				if err != nil {
-					u.LogErrorAndExit(err)
-				}
+				u.PrintErrorMarkdownAndExit("Invalid Workflow", err, "")
 			} else {
 				// For other errors, use the standard error handler
-				u.LogErrorAndExit(err)
+				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 			os.Exit(1)
 		}

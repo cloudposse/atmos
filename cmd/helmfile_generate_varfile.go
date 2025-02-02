@@ -32,7 +32,7 @@ func init() {
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(err)
+		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 
 	helmfileGenerateCmd.AddCommand(helmfileGenerateVarfileCmd)

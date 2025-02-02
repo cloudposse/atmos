@@ -26,7 +26,7 @@ var validateComponentCmd = &cobra.Command{
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
 		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", component, stack)

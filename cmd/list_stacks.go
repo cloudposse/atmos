@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -31,19 +29,19 @@ var listStacksCmd = &cobra.Command{
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
+			u.PrintErrorMarkdownAndExit("Error initializing CLI config", err, "")
 			return
 		}
 
 		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
+			u.PrintErrorMarkdownAndExit("Error describing stacks", err, "")
 			return
 		}
 
 		output, err := l.FilterAndListStacks(stacksMap, componentFlag)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), theme.Colors.Error)
+			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
 			return
 		}
 		u.PrintMessageInColor(output, theme.Colors.Success)

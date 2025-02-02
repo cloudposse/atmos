@@ -35,7 +35,7 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }

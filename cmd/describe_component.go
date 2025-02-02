@@ -19,7 +19,7 @@ var describeComponentCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeComponentCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }

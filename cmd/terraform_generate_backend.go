@@ -21,7 +21,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateBackendCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }

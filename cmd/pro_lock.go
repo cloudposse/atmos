@@ -20,7 +20,7 @@ var proLockCmd = &cobra.Command{
 
 		err := e.ExecuteProLockCommand(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }

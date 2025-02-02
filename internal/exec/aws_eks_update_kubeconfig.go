@@ -93,7 +93,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	roleArn := kubeconfigContext.RoleArn
 
 	if profile != "" && roleArn != "" {
-		return fmt.Errorf("either 'profile' or 'role-arn' can be specified, but not both. Profile: '%s'. Role ARN: '%s'", profile, roleArn)
+		return fmt.Errorf("either `profile` or `role-arn` can be specified, but not both. Profile: `%s`. Role ARN: `%s`", profile, roleArn)
 	}
 
 	// AWS region
@@ -135,7 +135,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 			}
 
 			if len(GetStackNamePattern(atmosConfig)) < 1 {
-				return errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
+				return errors.New("stack name pattern must be provided in `stacks.name_pattern` CLI config or `ATMOS_STACKS_NAME_PATTERN` ENV variable")
 			}
 
 			stack, err := cfg.GetStackNameFromContextAndStackNamePattern(

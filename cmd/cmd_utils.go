@@ -221,10 +221,9 @@ func preCustomCommand(
 			os.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			u.LogError(errors.New(
-				"invalid command: no args, no steps, no sub-commands",
-			))
-			os.Exit(1)
+			u.PrintErrorMarkdownAndExit("Invalid command", errors.New(
+				"no args, no steps, no sub-commands",
+			), "")
 		}
 	}
 

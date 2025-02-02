@@ -20,7 +20,7 @@ var describeDependentsCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeDependentsCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }

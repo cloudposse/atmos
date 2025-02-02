@@ -2,10 +2,8 @@ package cmd
 
 import (
 	_ "embed"
-	"fmt"
-	"os"
 
-	"github.com/charmbracelet/glamour"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -19,23 +17,7 @@ var aboutCmd = &cobra.Command{
 	Long:  `Display information about Atmos, its features, and benefits.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		renderer, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
-			glamour.WithWordWrap(80),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create markdown renderer: %w", err)
-		}
-
-		out, err := renderer.Render(aboutMarkdown)
-		if err != nil {
-			return fmt.Errorf("failed to render about documentation: %w", err)
-		}
-
-		_, err = fmt.Fprint(os.Stdout, out)
-		if err != nil {
-			return err
-		}
+		utils.PrintfMarkdown(aboutMarkdown)
 		return nil
 	},
 }

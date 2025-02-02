@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -30,26 +29,26 @@ var listComponentsCmd = &cobra.Command{
 
 		stackFlag, err := flags.GetString("stack")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'stack' flag: %v", err), color.New(color.FgRed))
+			u.PrintErrorMarkdownAndExit("Invalid Usage", fmt.Errorf("Error getting the `stack` flag: `%v`", err), "")
 			return
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
+			u.PrintErrorMarkdownAndExit("Error Initializing CLI config", err, "")
 			return
 		}
 
 		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
+			u.PrintErrorMarkdownAndExit("Error describing stacks", err, "")
 			return
 		}
 
 		output, err := l.FilterAndListComponents(stackFlag, stacksMap)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), theme.Colors.Warning)
+			u.PrintErrorMarkdownAndExit("", err, "")
 			return
 		}
 
