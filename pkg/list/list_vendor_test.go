@@ -201,8 +201,15 @@ components:
 			},
 		},
 		{
-			name:      "csv format with multiple vendors",
-			config:    schema.ListConfig{},
+			name: "csv format with multiple vendors",
+			config: schema.ListConfig{
+				Columns: []schema.ListColumnConfig{
+					{Name: "Component", Value: "{{ .atmos_component }}"},
+					{Name: "Type", Value: "{{ .atmos_vendor_type }}"},
+					{Name: "Manifest", Value: "{{ .atmos_vendor_file }}"},
+					{Name: "Folder", Value: "{{ .atmos_vendor_target }}"},
+				},
+			},
 			format:    "csv",
 			delimiter: ",",
 			wantErr:   false,

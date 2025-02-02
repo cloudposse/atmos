@@ -50,7 +50,7 @@ func processVendorFile(filePath string, atmosConfig schema.AtmosConfiguration) (
 	for _, source := range vendorConfig.Spec.Sources {
 		vendorType := "Vendor Manifest"
 		manifest := filepath.Clean(filePath)
-		folder := filepath.Join(atmosConfig.BasePath, "components", "terraform", source.Component)
+		folder := filepath.Join(atmosConfig.BasePath, source.Targets[0])
 
 		vendors = append(vendors, VendorInfo{
 			Component: source.Component,
@@ -139,16 +139,25 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 		allVendors = append(allVendors, vendors...)
 	}
 
-	// Convert vendor info to rows
+	// Convert vendor info to rows based on header columns
 	var rows [][]string
 	for _, vendor := range allVendors {
-		rows = append(rows, []string{
-			vendor.Component,
-			vendor.Type,
-			vendor.Manifest,
-			vendor.Folder,
-			vendor.Version,
-		})
+		row := make([]string, len(header))
+		for i, col := range header {
+			switch col {
+			case "Component":
+				row[i] = vendor.Component
+			case "Type":
+				row[i] = vendor.Type
+			case "Manifest":
+				row[i] = vendor.Manifest
+			case "Folder":
+				row[i] = vendor.Folder
+			case "Version":
+				row[i] = vendor.Version
+			}
+		}
+		rows = append(rows, row)
 	}
 
 	// Sort rows for consistent output
