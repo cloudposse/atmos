@@ -36,15 +36,23 @@ func processVendorFile(filePath string, atmosConfig schema.AtmosConfiguration) (
 		return nil, fmt.Errorf("error processing vendor imports: %w", err)
 	}
 
-	// Get relative path from vendor base path
-	relPath, err := filepath.Rel(filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath), filePath)
+	// Get vendor base path
+	var vendorBasePath string
+	if utils.IsPathAbsolute(atmosConfig.Vendor.BasePath) {
+		vendorBasePath = atmosConfig.Vendor.BasePath
+	} else {
+		vendorBasePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
+	}
+
+	// Get relative path from vendor base path's parent directory
+	relPath, err := filepath.Rel(filepath.Dir(vendorBasePath), filePath)
 	if err != nil {
 		return nil, fmt.Errorf("error getting relative path for vendor file: %w", err)
 	}
 
 	// Process templates in sources and targets
 	for i := range mergedSources {
-		// Set the File field with the relative path
+		// Set the File field with the relative path, preserving the vendor directory
 		mergedSources[i].File = filepath.ToSlash(relPath)
 
 		// Process templates in the target path
