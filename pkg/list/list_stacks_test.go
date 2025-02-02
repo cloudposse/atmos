@@ -1,6 +1,7 @@
 package list
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,23 +73,67 @@ func TestListStacksWithComponent(t *testing.T) {
 }
 
 func TestFilterAndListStacks(t *testing.T) {
-	// Mock context and config
-	context := map[string]any{
-		"components": map[string]any{},
-		"stacks":     map[string]any{},
+	// Mock stacks map with actual configurations from examples/quick-start-simple
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			"vars": map[string]any{
+				"stage": "dev",
+			},
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"station": map[string]any{
+						"vars": map[string]any{
+							"location": "Stockholm",
+							"lang":     "se",
+						},
+					},
+				},
+			},
+		},
+		"staging": map[string]any{
+			"vars": map[string]any{
+				"stage": "staging",
+			},
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"station": map[string]any{
+						"vars": map[string]any{
+							"location": "Los Angeles",
+							"lang":     "en",
+						},
+					},
+				},
+			},
+		},
+		"prod": map[string]any{
+			"vars": map[string]any{
+				"stage": "prod",
+			},
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"station": map[string]any{
+						"vars": map[string]any{
+							"location": "Los Angeles",
+							"lang":     "en",
+						},
+					},
+				},
+			},
+		},
 	}
-	stacksBasePath := "examples/quick-start-simple/stacks"
-	stackType := "deploy"
-	component := ""
 
 	tests := []struct {
-		name     string
-		config   schema.ListConfig
-		expected []map[string]string
+		name      string
+		config    schema.ListConfig
+		format    string
+		delimiter string
+		expected  []map[string]string
 	}{
 		{
-			name:   "default columns",
-			config: schema.ListConfig{},
+			name:      "default columns",
+			config:    schema.ListConfig{},
+			format:    "",
+			delimiter: "\t",
 			expected: []map[string]string{
 				{
 					"Stack": "dev",
@@ -108,8 +153,24 @@ func TestFilterAndListStacks(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := FilterAndListStacks(context, stacksBasePath, test.config, stackType, component)
+			output, err := FilterAndListStacks(stacksMap, "", test.config, test.format, test.delimiter)
 			assert.NoError(t, err)
+
+			// Parse the output into a slice of maps for comparison
+			var result []map[string]string
+			lines := strings.Split(strings.TrimSpace(output), u.GetLineEnding())
+			if len(lines) > 1 { // Skip header row
+				headers := strings.Split(lines[0], test.delimiter)
+				for _, line := range lines[1:] {
+					values := strings.Split(line, test.delimiter)
+					row := make(map[string]string)
+					for i, header := range headers {
+						row[header] = values[i]
+					}
+					result = append(result, row)
+				}
+			}
+
 			assert.Equal(t, test.expected, result)
 		})
 	}
