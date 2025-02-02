@@ -533,6 +533,7 @@ func ProcessStacks(
 		configAndStacksInfo.ComponentSection = componentSectionConverted
 	}
 
+	// Process YAML functions in Atmos manifest sections
 	if processYamlFunctions {
 		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack)
 		if err != nil {

@@ -391,12 +391,17 @@ func ExecuteDescribeStacks(
 									u.LogErrorAndExit(err)
 								}
 
-								componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
+								componentSection = componentSectionConverted
+							}
+
+							// Process YAML functions
+							if processYamlFunctions {
+								componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, componentSection, configAndStacksInfo.Stack)
 								if err != nil {
 									return nil, err
 								}
 
-								componentSection = componentSectionFinal
+								componentSection = componentSectionConverted
 							}
 
 							// Add sections
@@ -582,12 +587,17 @@ func ExecuteDescribeStacks(
 									u.LogErrorAndExit(err)
 								}
 
-								componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
+								componentSection = componentSectionConverted
+							}
+
+							// Process YAML functions
+							if processYamlFunctions {
+								componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, componentSection, configAndStacksInfo.Stack)
 								if err != nil {
 									return nil, err
 								}
 
-								componentSection = componentSectionFinal
+								componentSection = componentSectionConverted
 							}
 
 							// Add sections
