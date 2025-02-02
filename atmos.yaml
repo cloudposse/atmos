@@ -76,16 +76,6 @@ stacks:
     - "**/_defaults.yaml"
   # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
   name_pattern: "{tenant}-{environment}-{stage}"
-  list:
-    columns:
-      - name: Stack
-        value: '{{ .atmos_stack }}'
-      - name: Tenant
-        value: '{{ index .vars "tenant" }}'
-      - name: Environment
-        value: '{{ index .vars "environment" }}'
-      - name: File
-        value: '{{ .atmos_stack_file }}'
 
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
@@ -404,4 +394,3 @@ version:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
-
