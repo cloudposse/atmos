@@ -18,6 +18,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	DefaultCSVDelimiter = ","
+	DefaultTSVDelimiter = "\t"
+)
+
 // VendorInfo represents a vendor configuration entry
 type VendorInfo struct {
 	Component string `json:"component"`
@@ -63,6 +68,11 @@ func processVendorFile(filePath string, atmosConfig schema.AtmosConfiguration) (
 func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter string) (string, error) {
 	if err := ValidateFormat(format); err != nil {
 		return "", err
+	}
+
+	// Set default delimiters based on format
+	if format == FormatCSV && delimiter == DefaultTSVDelimiter {
+		delimiter = DefaultCSVDelimiter
 	}
 
 	if format == "" && listConfig.Format != "" {
@@ -152,14 +162,14 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 
 	// Handle different output formats
 	switch format {
-	case "json":
+	case FormatJSON:
 		jsonBytes, err := json.MarshalIndent(allVendors, "", "  ")
 		if err != nil {
 			return "", fmt.Errorf("error formatting JSON output: %w", err)
 		}
 		return string(jsonBytes), nil
 
-	case "csv":
+	case FormatCSV, FormatTSV:
 		var output strings.Builder
 		output.WriteString(strings.Join(header, delimiter) + utils.GetLineEnding())
 		for _, row := range rows {

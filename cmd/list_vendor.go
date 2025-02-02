@@ -19,7 +19,9 @@ var listVendorCmd = &cobra.Command{
 	Long:  "List vendor configurations in a tabular way, including component and vendor manifests",
 	Example: "atmos list vendor\n" +
 		"atmos list vendor --format json\n" +
-		"atmos list vendor --format csv --delimiter ','",
+		"atmos list vendor --format csv     # Uses comma (,) as delimiter\n" +
+		"atmos list vendor --format tsv     # Uses tab (\\t) as delimiter\n" +
+		"atmos list vendor --format csv --delimiter ';'    # Custom delimiter",
 	Run: func(cmd *cobra.Command, args []string) {
 		flags := cmd.Flags()
 
@@ -33,6 +35,11 @@ var listVendorCmd = &cobra.Command{
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'delimiter' flag: %v", err), theme.Colors.Error)
 			return
+		}
+
+		// Set appropriate default delimiter based on format
+		if formatFlag == l.FormatCSV && delimiterFlag == l.DefaultTSVDelimiter {
+			delimiterFlag = l.DefaultCSVDelimiter
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -53,7 +60,7 @@ var listVendorCmd = &cobra.Command{
 }
 
 func init() {
-	listVendorCmd.PersistentFlags().String("format", "", "Output format (table, json, csv)")
-	listVendorCmd.PersistentFlags().String("delimiter", "\t", "Delimiter for csv output")
+	listVendorCmd.PersistentFlags().String("format", "", "Output format (table, json, csv, tsv)")
+	listVendorCmd.PersistentFlags().String("delimiter", "\t", "Delimiter for csv/tsv output (default: tab for tsv, comma for csv)")
 	listCmd.AddCommand(listVendorCmd)
 }
