@@ -24,6 +24,7 @@ type VendorInfo struct {
 	Type      string `json:"type"`
 	Manifest  string `json:"manifest"`
 	Folder    string `json:"folder"`
+	Version   string `json:"version"`
 }
 
 // processVendorFile processes a vendor configuration file and returns vendor information
@@ -51,6 +52,7 @@ func processVendorFile(filePath string, atmosConfig schema.AtmosConfiguration) (
 			Type:      vendorType,
 			Manifest:  manifest,
 			Folder:    folder,
+			Version:   source.Version,
 		})
 	}
 
@@ -78,7 +80,7 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 	}
 
 	// Define default columns if not specified in config
-	header := []string{"Component", "Type", "Manifest", "Folder"}
+	header := []string{"Component", "Type", "Manifest", "Folder", "Version"}
 	if len(listConfig.Columns) > 0 {
 		header = make([]string, len(listConfig.Columns))
 		for i, col := range listConfig.Columns {
@@ -135,6 +137,7 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 			vendor.Type,
 			vendor.Manifest,
 			vendor.Folder,
+			vendor.Version,
 		})
 	}
 
