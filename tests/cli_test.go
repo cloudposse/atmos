@@ -178,19 +178,26 @@ func isCIEnvironment() bool {
 	return os.Getenv("CI") != ""
 }
 
-// sanitizeOutput replaces the absolute repository root path in the provided output
-// with the placeholder "/absolute/path/to/repo".
-// It returns an error if the repository root cannot be determined.
+// sanitizeOutput replaces occurrences of the repository's absolute path in the output
+// with the placeholder "/absolute/path/to/repo". It first normalizes both the repository root
+// and the output to use forward slashes, ensuring that the replacement works reliably.
+// An error is returned if the repository root cannot be determined.
 func sanitizeOutput(output string) (string, error) {
-	repoRoot, err := findGitRepoRoot(startingDir)
+	repoRoot, err := findGitRepoRoot()
 	if err != nil {
 		return "", err
 	}
+
 	if repoRoot == "" {
 		return "", errors.New("failed to determine repository root")
 	}
-	// Replace all instances of the repo root with the placeholder.
-	return strings.ReplaceAll(output, repoRoot, "/absolute/path/to/repo"), nil
+	// Normalize the repository root and output to use forward slashes.
+	normalizedRepoRoot := filepath.ToSlash(repoRoot)
+	normalizedOutput := filepath.ToSlash(output)
+
+	// Replace all occurrences of the normalized repository root with the placeholder.
+	sanitized := strings.ReplaceAll(normalizedOutput, normalizedRepoRoot, "/absolute/path/to/repo")
+	return sanitized, nil
 }
 
 // sanitizeTestName converts t.Name() into a valid filename.
