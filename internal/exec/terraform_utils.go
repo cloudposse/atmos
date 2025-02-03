@@ -26,6 +26,6 @@ func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 // previously used workspace. This happens when different backends are used for the same component.
 func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPath string) {
 	filePath := filepath.Join(componentPath, ".terraform", "environment")
-	u.LogDebug(atmosConfig, fmt.Sprintf("\nDeleting Terraform environment file:\n'%s'", filePath))
+	u.LogDebug(fmt.Sprintf("\nDeleting Terraform environment file:\n'%s'", filePath))
 	_ = os.Remove(filePath)
 }

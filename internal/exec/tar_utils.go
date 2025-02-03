@@ -42,7 +42,7 @@ func extractTarball(atmosConfig schema.AtmosConfiguration, sourceFile, extractPa
 		}
 
 		if strings.Contains(header.Name, "..") {
-			u.LogTrace(atmosConfig, fmt.Sprintf("the header '%s' in the tarball '%s' contains '..', "+
+			u.LogTrace(fmt.Sprintf("the header '%s' in the tarball '%s' contains '..', "+
 				"which can lead to directory traversal attacks or overriding arbitrary files and directories.",
 				header.Name, sourceFile))
 			continue
@@ -84,7 +84,7 @@ func extractTarball(atmosConfig schema.AtmosConfiguration, sourceFile, extractPa
 			}
 
 		default:
-			u.LogTrace(atmosConfig, fmt.Sprintf("the header '%s' in the tarball '%s' has unsupported header type '%v'. "+
+			u.LogTrace(fmt.Sprintf("the header '%s' in the tarball '%s' has unsupported header type '%v'. "+
 				"Supported header types are 'Directory' and 'File'",
 				header.Name, sourceFile, header.Typeflag))
 		}

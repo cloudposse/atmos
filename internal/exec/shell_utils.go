@@ -91,22 +91,22 @@ func ExecuteShellCommandWithPipe(
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
-			u.LogWarning(atmosConfig, err.Error())
+			u.LogWarning(err.Error())
 			return nil, err
 		}
 
 		defer func(f *os.File) {
 			err = f.Close()
 			if err != nil {
-				u.LogWarning(atmosConfig, err.Error())
+				u.LogWarning(err.Error())
 			}
 		}(f)
 
 		cmd.Stderr = f
 	}
 
-	u.LogDebug(atmosConfig, "\nExecuting command:")
-	u.LogDebug(atmosConfig, cmd.String())
+	u.LogDebug("\nExecuting command:")
+	u.LogDebug(cmd.String())
 
 	if dryRun {
 		return nil, nil
@@ -150,8 +150,8 @@ func ExecuteShell(
 	}
 	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
-	u.LogDebug(atmosConfig, "\nExecuting command:")
-	u.LogDebug(atmosConfig, command)
+	u.LogDebug("\nExecuting command:")
+	u.LogDebug(command)
 
 	if dryRun {
 		return nil
@@ -177,8 +177,8 @@ func ExecuteShellAndReturnOutput(
 	}
 	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
-	u.LogDebug(atmosConfig, "\nExecuting command:")
-	u.LogDebug(atmosConfig, command)
+	u.LogDebug("\nExecuting command:")
+	u.LogDebug(command)
 
 	if dryRun {
 		return "", nil
@@ -245,7 +245,7 @@ func execTerraformShellCommand(
 		}
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			u.LogWarning(atmosConfig, fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			u.LogWarning(fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
 			return
 		}
 		// Prevent negative values
@@ -254,7 +254,7 @@ func execTerraformShellCommand(
 			newVal = 0
 		}
 		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
-			u.LogWarning(atmosConfig, fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+			u.LogWarning(fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
 		}
 	}()
 
@@ -292,12 +292,12 @@ func execTerraformShellCommand(
 		}
 	}
 
-	u.LogDebug(atmosConfig, "\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
-	u.LogDebug(atmosConfig, fmt.Sprintf("Component: %s\n", component))
-	u.LogDebug(atmosConfig, fmt.Sprintf("Stack: %s\n", stack))
-	u.LogDebug(atmosConfig, fmt.Sprintf("Working directory: %s\n", workingDir))
-	u.LogDebug(atmosConfig, fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
-	u.LogDebug(atmosConfig, "\nSetting the ENV vars in the shell:\n")
+	u.LogDebug("\nStarting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)")
+	u.LogDebug(fmt.Sprintf("Component: %s\n", component))
+	u.LogDebug(fmt.Sprintf("Stack: %s\n", stack))
+	u.LogDebug(fmt.Sprintf("Working directory: %s\n", workingDir))
+	u.LogDebug(fmt.Sprintf("Terraform workspace: %s\n", workspaceName))
+	u.LogDebug("\nSetting the ENV vars in the shell:\n")
 
 	// Merge env vars, ensuring componentEnvList takes precedence
 	mergedEnv := mergeEnvVars(atmosConfig, componentEnvList)
@@ -345,7 +345,7 @@ func execTerraformShellCommand(
 		}
 	}
 
-	u.LogDebug(atmosConfig, fmt.Sprintf("Starting process: %s\n", shellCommand))
+	u.LogDebug(fmt.Sprintf("Starting process: %s\n", shellCommand))
 
 	args := strings.Fields(shellCommand)
 
@@ -360,7 +360,7 @@ func execTerraformShellCommand(
 		return err
 	}
 
-	u.LogDebug(atmosConfig, fmt.Sprintf("Exited shell: %s\n", state.String()))
+	u.LogDebug(fmt.Sprintf("Exited shell: %s\n", state.String()))
 	return nil
 }
 
@@ -377,7 +377,7 @@ func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []stri
 	for _, env := range os.Environ() {
 		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
 			if strings.HasPrefix(parts[0], "TF_") {
-				u.LogWarning(atmosConfig, fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", parts[0]))
+				u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", parts[0]))
 			}
 			envMap[parts[0]] = parts[1]
 		}
@@ -406,7 +406,7 @@ func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []stri
 	// Convert back to slice
 	merged := make([]string, 0, len(envMap))
 	for k, v := range envMap {
-		u.LogDebug(atmosConfig, fmt.Sprintf("%s=%s", k, v))
+		u.LogDebug(fmt.Sprintf("%s=%s", k, v))
 		merged = append(merged, k+"="+v)
 	}
 	return merged
