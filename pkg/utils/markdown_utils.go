@@ -15,6 +15,10 @@ import (
 var render *markdown.Renderer
 
 func PrintErrorMarkdown(title string, err error, suggestion string) {
+	if render == nil {
+		LogError(err)
+		return
+	}
 	if title == "" {
 		title = "Error"
 	}
@@ -23,7 +27,11 @@ func PrintErrorMarkdown(title string, err error, suggestion string) {
 		LogError(err)
 		return
 	}
-	os.Stderr.WriteString(fmt.Sprint(errorMarkdown + "\n"))
+	_, printErr := os.Stderr.WriteString(fmt.Sprint(errorMarkdown + "\n"))
+	if printErr != nil {
+		LogError(printErr)
+		LogError(err)
+	}
 	// Print stack trace
 	if l.GetLevel() == l.DebugLevel {
 		debug.PrintStack()
@@ -36,6 +44,11 @@ func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 }
 
 func PrintfMarkdown(format string, a ...interface{}) {
+	if render == nil {
+		_, err := os.Stdout.WriteString(fmt.Sprintf(format, a...))
+		LogError(err)
+		return
+	}
 	message := fmt.Sprintf(format, a...)
 	var markdown string
 	var renderErr error
@@ -47,9 +60,14 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	if renderErr != nil {
 		LogErrorAndExit(renderErr)
 	}
-	os.Stdout.WriteString(fmt.Sprint(markdown + "\n"))
+	_, err := os.Stdout.WriteString(fmt.Sprint(markdown + "\n"))
+	LogError(err)
 }
 
 func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
-	render, _ = markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	var err error
+	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	if err != nil {
+		LogErrorAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err))
+	}
 }

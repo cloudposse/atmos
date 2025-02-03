@@ -3,7 +3,6 @@ package cmd
 import (
 	_ "embed"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -59,7 +58,6 @@ var workflowCmd = &cobra.Command{
 				// For other errors, use the standard error handler
 				u.PrintErrorMarkdownAndExit("", err, "")
 			}
-			os.Exit(1)
 		}
 	},
 }
