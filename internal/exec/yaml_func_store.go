@@ -47,24 +47,23 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	params, err := getParams(str, currentStack)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	store := atmosConfig.Stores[params.storeName]
 
 	if store == nil {
-		u.LogErrorAndExit(atmosConfig, fmt.Errorf("invalid Atmos Store YAML function execution:: %s\nstore '%s' not found", input, params.storeName))
+		u.LogErrorAndExit(fmt.Errorf("invalid Atmos Store YAML function execution:: %s\nstore '%s' not found", input, params.storeName))
 	}
 
 	value, err := store.Get(params.stack, params.component, params.key)
 	if err != nil {
-
-		u.LogErrorAndExit(atmosConfig, fmt.Errorf("an error occurred while looking up key %s in stack %s and component %s from store %s\n%v", params.key, params.stack, params.component, params.storeName, err))
+		u.LogErrorAndExit(fmt.Errorf("an error occurred while looking up key %s in stack %s and component %s from store %s\n%v", params.key, params.stack, params.component, params.storeName, err))
 	}
 
 	return value

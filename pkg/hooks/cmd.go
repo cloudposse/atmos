@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,18 +37,18 @@ func storeOutput(atmosConfig schema.AtmosConfiguration, info *schema.ConfigAndSt
 	if store == nil {
 		return fmt.Errorf("store %q not found in configuration", hook.Name)
 	}
-	u.LogInfo(atmosConfig, fmt.Sprintf("  storing terraform output '%s' in store '%s' with key '%s' and value %v", outputKey, hook.Name, key, outputValue))
+	log.Info("storing terraform output", "outputKey", outputKey, "store", hook.Name, "key", key, "value", outputValue)
 
 	return store.Set(info.Stack, info.ComponentFromArg, key, outputValue)
 }
 
 func processStoreCommand(atmosConfig schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, hook Hook) error {
 	if len(hook.Outputs) == 0 {
-		u.LogInfo(atmosConfig, fmt.Sprintf("skipping hook %q: no outputs configured", hook.Name))
+		log.Info("skipping hook. no outputs configured.", "hook", hook.Name, "outputs", hook.Outputs)
 		return nil
 	}
 
-	u.LogInfo(atmosConfig, fmt.Sprintf("\nexecuting 'after-terraform-apply' hook '%s' with command '%s'", hook.Name, hook.Command))
+	log.Info("executing 'after-terraform-apply' hook", "hook", hook.Name, "command", hook.Command)
 	for key, value := range hook.Outputs {
 		outputKey, outputValue := getOutputValue(atmosConfig, info, value)
 
@@ -62,19 +63,19 @@ func processStoreCommand(atmosConfig schema.AtmosConfiguration, info *schema.Con
 func RunE(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
-	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true)
+	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true, true, nil)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	if isTerraformApplyCommand(&info.SubCommand) {
 		hooks := Hooks{}
 		hooks, err = hooks.ConvertToHooks(sections["hooks"].(map[string]any))
 		if err != nil {
-			u.LogErrorAndExit(atmosConfig, fmt.Errorf("invalid hooks section %v", sections["hooks"]))
+			u.LogErrorAndExit(fmt.Errorf("invalid hooks section %v", sections["hooks"]))
 		}
 
 		for _, hook := range hooks {
