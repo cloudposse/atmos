@@ -1,6 +1,8 @@
 package store
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type StoreRegistry map[string]Store
 
@@ -27,6 +29,18 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			}
 
 			store, err := NewSSMStore(opts)
+			if err != nil {
+				return nil, err
+			}
+			registry[key] = store
+
+		case "redis":
+			var opts RedisStoreOptions
+			if err := parseOptions(storeConfig.Options, &opts); err != nil {
+				return nil, fmt.Errorf("failed to parse Redis store options: %w", err)
+			}
+
+			store, err := NewRedisStore(opts)
 			if err != nil {
 				return nil, err
 			}
