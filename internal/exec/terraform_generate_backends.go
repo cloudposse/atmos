@@ -260,7 +260,7 @@ func ExecuteTerraformGenerateBackends(
 					u.LogErrorAndExit(err)
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)
 				if err != nil {
 					return err
 				}
