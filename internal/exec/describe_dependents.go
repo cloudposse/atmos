@@ -2,9 +2,10 @@ package exec
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"reflect"
 	"strings"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -90,7 +91,6 @@ func ExecuteDescribeDependents(
 	stack string,
 	includeSettings bool,
 ) ([]schema.Dependent, error) {
-
 	dependents := []schema.Dependent{}
 	var ok bool
 
