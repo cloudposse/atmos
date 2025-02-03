@@ -33,7 +33,7 @@ var listStacksCmd = &cobra.Command{
 			return
 		}
 
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false)
+		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("Error describing stacks", err, "")
 			return
