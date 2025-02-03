@@ -186,6 +186,9 @@ func sanitizeOutput(output string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if repoRoot == "" {
+		return "", errors.New("failed to determine repository root")
+	}
 	// Replace all instances of the repo root with the placeholder.
 	return strings.ReplaceAll(output, repoRoot, "/absolute/path/to/repo"), nil
 }
