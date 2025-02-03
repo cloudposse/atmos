@@ -32,7 +32,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 	createStackInfo := func(stackName string, v2 map[string]any) map[string]any {
 		stackInfo := map[string]any{
 			"atmos_stack": stackName,
-			"stack_file":  fmt.Sprintf("%s.yaml", stackName),
+			"stack_file":  v2["atmos_stack_file"],
 		}
 		// Copy all stack configuration to allow full access in templates
 		for k, v := range v2 {
