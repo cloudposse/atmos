@@ -3,6 +3,8 @@ package cmd
 import (
 	"os"
 
+	l "github.com/charmbracelet/log"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/spf13/cobra"
 )
 
@@ -27,12 +29,16 @@ func getTerraformCommands() []*cobra.Command {
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
+			PostRunE: func(cmd *cobra.Command, args []string) error {
+				l.Info("running hooks", "event", h.AfterTerraformApply)
+				return runHooks(h.AfterTerraformApply, cmd, args)
+			},
 		},
 		{
 			Use:   "workspace",
 			Short: "Manage Terraform workspaces",
 			Long: `The 'atmos terraform workspace' command initializes Terraform for the current configuration, selects the specified workspace, and creates it if it does not already exist.
-			
+
 It runs the following sequence of Terraform commands:
 1. 'terraform init -reconfigure' to initialize the working directory.
 2. 'terraform workspace select' to switch to the specified workspace.
@@ -57,6 +63,10 @@ Common use cases:
 			Use:   "deploy",
 			Short: "Deploy the specified infrastructure using Terraform",
 			Long:  `Deploys infrastructure by running the Terraform apply command with automatic approval. This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
+			PostRunE: func(cmd *cobra.Command, args []string) error {
+				l.Info("running hooks", "event", h.AfterTerraformApply)
+				return runHooks(h.AfterTerraformApply, cmd, args)
+			},
 		},
 		{
 			Use:   "shell",
@@ -151,12 +161,12 @@ Common use cases:
 			Use:   "import",
 			Short: "Import existing infrastructure into Terraform state.",
 			Long: `The 'atmos terraform import' command imports existing infrastructure resources into Terraform's state.
-			
+
 Before executing the command, it searches for the 'region' variable in the specified component and stack configuration.
 If the 'region' variable is found, it sets the 'AWS_REGION' environment variable with the corresponding value before executing the import command.
-	
+
 The import command runs: 'terraform import [ADDRESS] [ID]'
-	
+
 Arguments:
 - ADDRESS: The Terraform address of the resource to import.
 - ID: The ID of the resource to import.`,
