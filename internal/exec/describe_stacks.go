@@ -104,6 +104,11 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return err
+	}
+
 	finalStacksMap, err := ExecuteDescribeStacks(
 		atmosConfig,
 		filterByStack,
@@ -114,7 +119,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		processTemplates,
 		processYamlFunctions,
 		includeEmptyStacks,
-		nil,
+		skip,
 	)
 	if err != nil {
 		return err

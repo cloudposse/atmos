@@ -49,5 +49,7 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().Bool("include-empty-stacks", false, "Include stacks with no components in the output: atmos describe stacks --include-empty-stacks")
 
+	describeStacksCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command: atmos describe stacks --skip=terraform.output")
+
 	describeCmd.AddCommand(describeStacksCmd)
 }

@@ -104,7 +104,7 @@ func ExecuteAtmosCmd() error {
 	fmt.Println()
 
 	if selectedCommand == "describe component" {
-		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true)
+		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true, nil)
 		if err != nil {
 			return err
 		}

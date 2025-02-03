@@ -82,10 +82,10 @@ func ExecuteValidateComponent(
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true)
+	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
 			return false, err
 		}

@@ -10,6 +10,7 @@ func ExecuteDescribeComponent(
 	stack string,
 	processTemplates bool,
 	processYamlFunctions bool,
+	skip []string,
 ) (map[string]any, error) {
-	return e.ExecuteDescribeComponent(component, stack, processTemplates, processYamlFunctions)
+	return e.ExecuteDescribeComponent(component, stack, processTemplates, processYamlFunctions, skip)
 }

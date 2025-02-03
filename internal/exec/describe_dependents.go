@@ -100,7 +100,7 @@ func ExecuteDescribeDependents(
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true, true)
+	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		return nil, err
 	}

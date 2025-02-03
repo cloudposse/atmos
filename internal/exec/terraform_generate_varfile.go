@@ -39,7 +39,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true, true)
+	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
 	if err != nil {
 		return err
 	}

@@ -283,6 +283,7 @@ func ProcessStacks(
 	checkStack bool,
 	processTemplates bool,
 	processYamlFunctions bool,
+	skip []string,
 ) (schema.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
@@ -535,7 +536,7 @@ func ProcessStacks(
 
 	// Process YAML functions in Atmos manifest sections
 	if processYamlFunctions {
-		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, nil)
+		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
