@@ -32,13 +32,6 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			}
 			registry[key] = store
 
-		case "in-memory":
-			store, err := NewInMemoryStore()
-			if err != nil {
-				return nil, err
-			}
-			registry[key] = store
-
 		default:
 			return nil, fmt.Errorf("store type %s not found", storeConfig.Type)
 		}
