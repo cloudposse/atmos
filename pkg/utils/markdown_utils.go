@@ -1,3 +1,5 @@
+// Package utils provides markdown utilities for error handling and output formatting
+// in the Atmos CLI application.
 package utils
 
 import (
@@ -12,6 +14,7 @@ import (
 	t "golang.org/x/term"
 )
 
+// render is the global markdown renderer instance initialized via InitializeMarkdown
 var render *markdown.Renderer
 
 func PrintErrorMarkdown(title string, err error, suggestion string) {
