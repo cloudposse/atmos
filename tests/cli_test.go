@@ -202,22 +202,27 @@ func sanitizeOutput(output string) (string, error) {
 	normalizedRepoRoot := filepath.ToSlash(cleanRepoRoot)
 	normalizedOutput := filepath.ToSlash(output)
 
-	// Quote the normalized repository root for safe use in a regex.
+	// Quote the cleaned, normalized repo root for safe regex use.
 	quoted := regexp.QuoteMeta(normalizedRepoRoot)
-	// Replace each literal "/" with the regex token "/+" so that it matches one or more slashes.
-	pattern := strings.ReplaceAll(quoted, "/", "/+")
-	// Append a non-capturing group to optionally match any extra trailing slashes.
-	pattern += "(?:/+)?"
+	// Replace each literal "/" with the regex token "/+" so that "a/b/c" becomes "a/+b/+c".
+	patternBody := strings.ReplaceAll(quoted, "/", "/+")
+	// Append a capturing group for any trailing slashes (which might be present in the output).
+	// This pattern matches the repository root (with flexible slashes) followed by zero or more slashes.
+	pattern := "(" + patternBody + ")(/*)"
 
-	// Compile the regex.
 	repoRootRegex, err := regexp.Compile(pattern)
 	if err != nil {
 		return "", err
 	}
 
-	// Replace all occurrences of the repository root (and any extra following slashes)
-	// with the placeholder.
-	sanitized := repoRootRegex.ReplaceAllString(normalizedOutput, "/absolute/path/to/repo")
+	// Use ReplaceAllStringFunc to perform a custom replacement.
+	// For every match (which consists of the repository root and any trailing slashes),
+	// we replace it with "/absolute/path/to/repo/".
+	// This ensures that there is exactly one slash after the placeholder.
+	sanitized := repoRootRegex.ReplaceAllStringFunc(normalizedOutput, func(match string) string {
+		return "/absolute/path/to/repo/"
+	})
+
 	return sanitized, nil
 }
 
