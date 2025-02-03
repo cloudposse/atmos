@@ -163,6 +163,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			stack,
 			true,
 			true,
+			nil,
 		)
 	} else if cloneTargetRef {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
@@ -177,6 +178,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			stack,
 			true,
 			true,
+			nil,
 		)
 	} else {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
@@ -189,6 +191,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			stack,
 			true,
 			true,
+			nil,
 		)
 	}
 

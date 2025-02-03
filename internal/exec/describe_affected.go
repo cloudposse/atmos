@@ -224,6 +224,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.Stack,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	} else if a.CloneTargetRef {
 		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(
@@ -238,6 +239,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.Stack,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	} else {
 		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(
@@ -250,6 +252,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.Stack,
 			a.ProcessTemplates,
 			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	}
 

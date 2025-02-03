@@ -42,6 +42,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	stack string,
 	processTemplates bool,
 	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
@@ -168,6 +169,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		stack,
 		processTemplates,
 		processYamlFunctions,
+		skip,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -188,6 +190,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	stack string,
 	processTemplates bool,
 	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
@@ -323,6 +326,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		stack,
 		processTemplates,
 		processYamlFunctions,
+		skip,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -342,6 +346,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	stack string,
 	processTemplates bool,
 	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
@@ -379,6 +384,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		stack,
 		processTemplates,
 		processYamlFunctions,
+		skip,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -399,6 +405,7 @@ func executeDescribeAffected(
 	stack string,
 	processTemplates bool,
 	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
