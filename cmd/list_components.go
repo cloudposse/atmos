@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -27,28 +26,7 @@ var listComponentsCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		flags := cmd.Flags()
-
-		stackFlag, err := flags.GetString("stack")
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'stack' flag: %v", err), color.New(color.FgRed))
-			return
-		}
-
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
-			return
-		}
-
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
-			return
-		}
-
-		output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+		output, err := listComponents(cmd)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), theme.Colors.Warning)
 			return
@@ -78,14 +56,11 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}
 
 	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
-	if err != nil {
-		return nil, fmt.Errorf("Error: %v"+"\n", err)
-	}
-	return output, nil
+	return output, err
 }

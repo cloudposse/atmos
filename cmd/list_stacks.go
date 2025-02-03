@@ -27,22 +27,7 @@ var listStacksCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		componentFlag, _ := cmd.Flags().GetString("component")
-
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
-			return
-		}
-
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
-			return
-		}
-
-		output, err := l.FilterAndListStacks(stacksMap, componentFlag)
+		output, err := listStacks(cmd)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), theme.Colors.Error)
 			return
@@ -64,13 +49,11 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
 	}
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}
+
 	output, err := l.FilterAndListStacks(stacksMap, componentFlag)
-	if err != nil {
-		return nil, fmt.Errorf("Error filtering stacks: %v", err)
-	}
-	return output, nil
+	return output, err
 }
