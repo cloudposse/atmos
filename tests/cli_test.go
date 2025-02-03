@@ -182,6 +182,12 @@ func isCIEnvironment() bool {
 // with the placeholder "/absolute/path/to/repo". It first normalizes both the repository root
 // and the output to use forward slashes, ensuring that the replacement works reliably.
 // An error is returned if the repository root cannot be determined.
+// Convert something like:
+//
+//	D:\\a\atmos\atmos\examples\demo-stacks\stacks\deploy\**\*
+//	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
+//	/home/runner/work/atmos/atmos/examples/demo-stacks/stacks/deploy/**/*
+//	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
 func sanitizeOutput(output string) (string, error) {
 	repoRoot, err := findGitRepoRoot(startingDir)
 	if err != nil {
@@ -191,12 +197,22 @@ func sanitizeOutput(output string) (string, error) {
 	if repoRoot == "" {
 		return "", errors.New("failed to determine repository root")
 	}
-	// Normalize the repository root and output to use forward slashes.
-	normalizedRepoRoot := filepath.ToSlash(repoRoot)
+	// Clean the repo root to collapse multiple slashes, then normalize it to use forward slashes.
+	cleanRepoRoot := filepath.Clean(repoRoot)
+	normalizedRepoRoot := filepath.ToSlash(cleanRepoRoot)
 	normalizedOutput := filepath.ToSlash(output)
 
-	// Replace all occurrences of the normalized repository root with the placeholder.
-	sanitized := strings.ReplaceAll(normalizedOutput, normalizedRepoRoot, "/absolute/path/to/repo")
+	// Quote the normalized repository root for safe regex use.
+	quoted := regexp.QuoteMeta(normalizedRepoRoot)
+	// Replace each literal "/" with "/+" so that the regex can match one or more slashes.
+	pattern := strings.ReplaceAll(quoted, "/", "/+")
+	repoRootRegex, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", err
+	}
+
+	// Replace all occurrences of the repository root (allowing for extra slashes) with the placeholder.
+	sanitized := repoRootRegex.ReplaceAllString(normalizedOutput, "/absolute/path/to/repo")
 	return sanitized, nil
 }
 
