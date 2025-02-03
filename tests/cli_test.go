@@ -175,7 +175,14 @@ func (pm *PathManager) Apply() error {
 
 // Determine if running in a CI environment
 func isCIEnvironment() bool {
-	return os.Getenv("CI") != ""
+	// Check for common CI environment variables
+	// Note, that the CI variable has many possible truthy values, so we check for any non-empty value that is not "false".
+	return (os.Getenv("CI") != "" && os.Getenv("CI") != "false") || os.Getenv("GITHUB_ACTIONS") == "true"
+}
+
+// collapseExtraSlashes replaces multiple consecutive slashes with a single slash.
+func collapseExtraSlashes(s string) string {
+	return regexp.MustCompile("/+").ReplaceAllString(s, "/")
 }
 
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
@@ -189,6 +196,7 @@ func isCIEnvironment() bool {
 //	/home/runner/work/atmos/atmos/examples/demo-stacks/stacks/deploy/**/*
 //	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
 func sanitizeOutput(output string) (string, error) {
+	// 1. Get the repository root.
 	repoRoot, err := findGitRepoRoot(startingDir)
 	if err != nil {
 		return "", err
@@ -197,33 +205,48 @@ func sanitizeOutput(output string) (string, error) {
 	if repoRoot == "" {
 		return "", errors.New("failed to determine repository root")
 	}
-	// Clean the repository root to collapse any extra slashes, then normalize it to forward slashes.
-	cleanRepoRoot := filepath.Clean(repoRoot)
-	normalizedRepoRoot := filepath.ToSlash(cleanRepoRoot)
+
+	// 2. Normalize the repository root:
+	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
+	//    - Convert to forward slashes,
+	//    - And explicitly collapse extra slashes.
+	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
+	// Also normalize the output to use forward slashes.
 	normalizedOutput := filepath.ToSlash(output)
 
-	// Quote the cleaned, normalized repo root for safe regex use.
+	// 3. Build a regex that matches the repository root even if extra slashes appear.
+	//    First, escape any regex metacharacters in the normalized repository root.
 	quoted := regexp.QuoteMeta(normalizedRepoRoot)
-	// Replace each literal "/" with the regex token "/+" so that "a/b/c" becomes "a/+b/+c".
+	// Replace each literal "/" with the regex token "/+" so that e.g. "a/b/c" becomes "a/+b/+c".
 	patternBody := strings.ReplaceAll(quoted, "/", "/+")
-	// Append a capturing group for any trailing slashes (which might be present in the output).
-	// This pattern matches the repository root (with flexible slashes) followed by zero or more slashes.
-	pattern := "(" + patternBody + ")(/*)"
-
+	// Allow for extra trailing slashes.
+	pattern := patternBody + "/*"
 	repoRootRegex, err := regexp.Compile(pattern)
 	if err != nil {
 		return "", err
 	}
 
-	// Use ReplaceAllStringFunc to perform a custom replacement.
-	// For every match (which consists of the repository root and any trailing slashes),
-	// we replace it with "/absolute/path/to/repo/".
-	// This ensures that there is exactly one slash after the placeholder.
-	sanitized := repoRootRegex.ReplaceAllStringFunc(normalizedOutput, func(match string) string {
-		return "/absolute/path/to/repo/"
+	// 4. Replace any occurrence of the repository root (with extra slashes) with a fixed placeholder.
+	//    The placeholder will end with exactly one slash.
+	placeholder := "/absolute/path/to/repo/"
+	replaced := repoRootRegex.ReplaceAllString(normalizedOutput, placeholder)
+
+	// 5. Now collapse extra slashes in the remainder of file paths that start with the placeholder.
+	//    We use a regex to find segments that start with the placeholder followed by some path characters.
+	//    (We assume that file paths appear in quotes or other delimited contexts, and that URLs won't match.)
+	fixRegex := regexp.MustCompile(`(/absolute/path/to/repo)([^",]+)`)
+	result := fixRegex.ReplaceAllStringFunc(replaced, func(match string) string {
+		// The regex has two groups: group 1 is the placeholder, group 2 is the remainder.
+		groups := fixRegex.FindStringSubmatch(match)
+		if len(groups) < 3 {
+			return match
+		}
+		// Collapse extra slashes in the remainder.
+		fixedRemainder := collapseExtraSlashes(groups[2])
+		return groups[1] + fixedRemainder
 	})
 
-	return sanitized, nil
+	return result, nil
 }
 
 // sanitizeTestName converts t.Name() into a valid filename.
