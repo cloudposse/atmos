@@ -94,7 +94,17 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		return err
+	}
+
 	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
 	if err != nil {
 		return err
 	}
@@ -107,7 +117,9 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		sections,
 		false,
 		processTemplates,
+		processYamlFunctions,
 		includeEmptyStacks,
+		skip,
 	)
 	if err != nil {
 		return err
@@ -141,7 +153,9 @@ func ExecuteDescribeStacks(
 	sections []string,
 	ignoreMissingFiles bool,
 	processTemplates bool,
+	processYamlFunctions bool,
 	includeEmptyStacks bool,
+	skip []string,
 ) (map[string]any, error) {
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
@@ -384,12 +398,22 @@ func ExecuteDescribeStacks(
 									u.LogErrorAndExit(err)
 								}
 
-								componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
+								componentSection = componentSectionConverted
+							}
+
+							// Process YAML functions
+							if processYamlFunctions {
+								componentSectionConverted, err := ProcessCustomYamlTags(
+									atmosConfig,
+									componentSection,
+									configAndStacksInfo.Stack,
+									skip,
+								)
 								if err != nil {
 									return nil, err
 								}
 
-								componentSection = componentSectionFinal
+								componentSection = componentSectionConverted
 							}
 
 							// Add sections
@@ -554,7 +578,7 @@ func ExecuteDescribeStacks(
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
 									atmosConfig,
 									settingsSectionStruct,
-									"describe-stacks-all-sections",
+									"templates-describe-stacks-all-atmos-sections",
 									componentSectionStr,
 									configAndStacksInfo.ComponentSection,
 									true,
@@ -575,12 +599,22 @@ func ExecuteDescribeStacks(
 									u.LogErrorAndExit(err)
 								}
 
-								componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName)
+								componentSection = componentSectionConverted
+							}
+
+							// Process YAML functions
+							if processYamlFunctions {
+								componentSectionConverted, err := ProcessCustomYamlTags(
+									atmosConfig,
+									componentSection,
+									configAndStacksInfo.Stack,
+									skip,
+								)
 								if err != nil {
 									return nil, err
 								}
 
-								componentSection = componentSectionFinal
+								componentSection = componentSectionConverted
 							}
 
 							// Add sections

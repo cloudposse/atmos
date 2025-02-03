@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -25,11 +26,34 @@ var listComponentsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		output, err := listComponents(cmd)
+
+		flags := cmd.Flags()
+
+		stackFlag, err := flags.GetString("stack")
 		if err != nil {
-			u.LogError(err)
+			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'stack' flag: %v", err), color.New(color.FgRed))
 			return
 		}
+
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
+			return
+		}
+
+		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
+			return
+		}
+
+		output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), theme.Colors.Warning)
+			return
+		}
+
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }

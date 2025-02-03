@@ -26,12 +26,25 @@ var listStacksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		output, err := listStacks(cmd)
+
+		componentFlag, _ := cmd.Flags().GetString("component")
+
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
+			return
 		}
-		if len(output) == 0 {
-			u.PrintMessageInColor("No stacks found\n", theme.Colors.Info)
+
+		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
+			return
+		}
+
+		output, err := l.FilterAndListStacks(stacksMap, componentFlag)
+		if err != nil {
+			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), theme.Colors.Error)
 			return
 		}
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
