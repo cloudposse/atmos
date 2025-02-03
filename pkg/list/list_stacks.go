@@ -37,54 +37,30 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			if !ok {
 				continue
 			}
-			components, ok := v2["components"].(map[string]any)
-			if !ok {
-				continue
-			}
-			terraform, ok := components["terraform"].(map[string]any)
-			if !ok {
-				continue
-			}
-			if _, exists := terraform[component]; exists {
-				stackInfo := map[string]any{
-					"atmos_stack": stackName,
-					"vars":        v2["vars"],
-				}
-
-				// Safely get tenant and environment from vars
-				if vars, ok := v2["vars"].(map[string]any); ok {
-					tenant, _ := vars["tenant"].(string)
-					environment, _ := vars["environment"].(string)
-					stage, _ := vars["stage"].(string)
-					// Only use the org/tenant path if all required variables are present
-					if tenant != "" && environment != "" && stage != "" {
-						stackInfo["atmos_stack_file"] = fmt.Sprintf("orgs/acme/%s/%s/%s", tenant, environment, stage)
-					} else {
-						stackInfo["atmos_stack_file"] = fmt.Sprintf("examples/quick-start-simple/stacks/deploy/%s.yaml", stackName)
-					}
-				} else {
-					stackInfo["atmos_stack_file"] = fmt.Sprintf("examples/quick-start-simple/stacks/deploy/%s.yaml", stackName)
-				}
-
-				// Add component vars if they exist
-				if components, ok := v2["components"].(map[string]any); ok {
-					if terraform, ok := components["terraform"].(map[string]any); ok {
-						for _, comp := range terraform {
-							if compSection, ok := comp.(map[string]any); ok {
-								if compVars, ok := compSection["vars"].(map[string]any); ok {
-									// Merge component vars with stack vars
-									if stackInfo["vars"] == nil {
-										stackInfo["vars"] = make(map[string]any)
-									}
-									for k, v := range compVars {
-										stackInfo["vars"].(map[string]any)[k] = v
-									}
-								}
-							}
+			// Check if the component exists in any component type section
+			if components, ok := v2["components"].(map[string]any); ok {
+				componentFound := false
+				for _, componentSection := range components {
+					if compSection, ok := componentSection.(map[string]any); ok {
+						if _, exists := compSection[component]; exists {
+							componentFound = true
+							break
 						}
 					}
 				}
-				filteredStacks = append(filteredStacks, stackInfo)
+				if componentFound {
+					// Create stack info with the entire configuration for template access
+					stackInfo := map[string]any{
+						"atmos_stack": stackName,
+						"stack_file":  fmt.Sprintf("%s.yaml", stackName),
+					}
+
+					// Copy all stack configuration to allow full access in templates
+					for k, v := range v2 {
+						stackInfo[k] = v
+					}
+					filteredStacks = append(filteredStacks, stackInfo)
+				}
 			}
 		}
 	} else {
@@ -94,43 +70,15 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			if !ok {
 				continue
 			}
+			// Create stack info with the entire configuration for template access
 			stackInfo := map[string]any{
 				"atmos_stack": stackName,
-				"vars":        v2["vars"],
+				"stack_file":  fmt.Sprintf("%s.yaml", stackName),
 			}
 
-			// Safely get tenant and environment from vars
-			if vars, ok := v2["vars"].(map[string]any); ok {
-				tenant, _ := vars["tenant"].(string)
-				environment, _ := vars["environment"].(string)
-				stage, _ := vars["stage"].(string)
-				// Only use the org/tenant path if all required variables are present
-				if tenant != "" && environment != "" && stage != "" {
-					stackInfo["atmos_stack_file"] = fmt.Sprintf("orgs/acme/%s/%s/%s", tenant, environment, stage)
-				} else {
-					stackInfo["atmos_stack_file"] = fmt.Sprintf("examples/quick-start-simple/stacks/deploy/%s.yaml", stackName)
-				}
-			} else {
-				stackInfo["atmos_stack_file"] = fmt.Sprintf("examples/quick-start-simple/stacks/deploy/%s.yaml", stackName)
-			}
-
-			// Add component vars if they exist
-			if components, ok := v2["components"].(map[string]any); ok {
-				if terraform, ok := components["terraform"].(map[string]any); ok {
-					for _, comp := range terraform {
-						if compSection, ok := comp.(map[string]any); ok {
-							if compVars, ok := compSection["vars"].(map[string]any); ok {
-								// Merge component vars with stack vars
-								if stackInfo["vars"] == nil {
-									stackInfo["vars"] = make(map[string]any)
-								}
-								for k, v := range compVars {
-									stackInfo["vars"].(map[string]any)[k] = v
-								}
-							}
-						}
-					}
-				}
+			// Copy all stack configuration to allow full access in templates
+			for k, v := range v2 {
+				stackInfo[k] = v
 			}
 			filteredStacks = append(filteredStacks, stackInfo)
 		}
@@ -152,7 +100,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 	if len(listConfig.Columns) == 0 {
 		listConfig.Columns = []schema.ListColumnConfig{
 			{Name: "Stack", Value: "{{ .atmos_stack }}"},
-			{Name: "File", Value: "{{ .atmos_stack_file }}"},
+			{Name: "File", Value: "{{ .stack_file }}"},
 		}
 	}
 
@@ -185,15 +133,25 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 	// Handle different output formats
 	switch format {
 	case FormatJSON:
-		var result []map[string]string
-		for _, row := range rows {
-			item := make(map[string]string)
-			for i, header := range headers {
-				item[header] = row[i]
-			}
-			result = append(result, item)
+		// Convert to JSON format using a proper struct
+		type stack struct {
+			Stack string `json:"stack"`
+			File  string `json:"file"`
 		}
-		jsonBytes, err := json.MarshalIndent(result, "", "  ")
+		var stacks []stack
+		for _, row := range rows {
+			s := stack{}
+			for i, header := range headers {
+				switch header {
+				case "Stack":
+					s.Stack = row[i]
+				case "File":
+					s.File = row[i]
+				}
+			}
+			stacks = append(stacks, s)
+		}
+		jsonBytes, err := json.MarshalIndent(stacks, "", "  ")
 		if err != nil {
 			return "", fmt.Errorf("error formatting JSON output: %w", err)
 		}
@@ -208,7 +166,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		return output.String(), nil
 
 	default:
-		// Check for TTY support
+		// If format is empty or "table", use table format
 		if format == "" && exec.CheckTTYSupport() {
 			// Create a styled table for TTY
 			t := table.New().
@@ -228,17 +186,11 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			return t.String() + utils.GetLineEnding(), nil
 		}
 
+		// Default to simple tabular format for non-TTY or when format is explicitly "table"
 		var output strings.Builder
-		// Write headers
-		headerRow := make([]string, len(headers))
-		for i, h := range headers {
-			headerRow[i] = h
-		}
-		output.WriteString(strings.Join(headerRow, "\t") + utils.GetLineEnding())
-
-		// Write rows
+		output.WriteString(strings.Join(headers, delimiter) + utils.GetLineEnding())
 		for _, row := range rows {
-			output.WriteString(strings.Join(row, "\t") + utils.GetLineEnding())
+			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
 		}
 		return output.String(), nil
 	}
