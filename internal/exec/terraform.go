@@ -1,18 +1,23 @@
 package exec
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/magodo/pipeform/pipeform"
 )
 
 const (
@@ -520,17 +525,78 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Execute the provided command (except for `terraform workspace` which was executed above)
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
-		err = ExecuteShellCommand(
-			atmosConfig,
-			info.Command,
-			allArgsAndFlags,
-			componentPath,
-			info.ComponentEnvList,
-			info.DryRun,
-			info.RedirectStdErr,
-		)
-		if err != nil {
-			return err
+		if info.SubCommand == "plan" && slices.Contains(atmosConfig.Terraform.UI.Enable, "plan") {
+			allArgsAndFlags = append(allArgsAndFlags, "-json")
+			pipeformStdin, planStdout := io.Pipe()
+			// Get a plan file
+			p := ""
+			for i, a := range allArgsAndFlags {
+				if a == "-out" || a == "--out" {
+					p = allArgsAndFlags[i+1]
+					break
+				}
+			}
+			if p == "" {
+				p = planFile
+				allArgsAndFlags = append(allArgsAndFlags, "-out", p)
+			}
+
+			// terraform plan
+			waitPlan, err := ExecuteShellCommandWithPipe(
+				atmosConfig,
+				info.Command,
+				allArgsAndFlags,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+				nil,
+				planStdout,
+			)
+			if err != nil {
+				return err
+			}
+			// pipeform
+			pipeformRunner := pipeform.NewRunner(&pipeform.FlagSet{})
+			pipeformRunner.Stdin = pipeformStdin
+
+			eg := &errgroup.Group{}
+			eg.Go(func() error {
+				err := waitPlan()
+				planStdout.Close()
+				return err
+			})
+			eg.Go(func() error {
+				return pipeformRunner.Run(context.Background())
+			})
+			if err := eg.Wait(); err != nil {
+				return err
+			}
+			// terraform show
+			if err := ExecuteShellCommand(
+				atmosConfig,
+				info.Command,
+				[]string{"show", p},
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			); err != nil {
+				return err
+			}
+		} else {
+			err = ExecuteShellCommand(
+				atmosConfig,
+				info.Command,
+				allArgsAndFlags,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

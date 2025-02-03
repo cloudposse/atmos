@@ -45,8 +45,8 @@ func getNextShellLevel() (int, error) {
 	return shellVal, nil
 }
 
-// ExecuteShellCommand prints and executes the provided command with args and flags
-func ExecuteShellCommand(
+// ExecuteShellCommandWithPipe prints and executes the provided command with args and flags
+func ExecuteShellCommandWithPipe(
 	atmosConfig schema.AtmosConfiguration,
 	command string,
 	args []string,
@@ -54,20 +54,31 @@ func ExecuteShellCommand(
 	env []string,
 	dryRun bool,
 	redirectStdError string,
-) error {
+	stdin io.Reader,
+	stdout io.Writer,
+) (func() error, error) {
 	newShellLevel, err := getNextShellLevel()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), updatedEnv...)
 	cmd.Dir = dir
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
+	if stdin != nil {
+		cmd.Stdin = stdin
+	} else {
+		cmd.Stdin = os.Stdin
+	}
+	if stdout != nil {
+		cmd.Stdout = stdout
+	} else {
+		cmd.Stdout = os.Stdout
+	}
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
+		// In Windows, NUL is the equivalent of /dev/null in Unix-like systems.
 		redirectStdError = "NUL"
 	}
 
@@ -81,7 +92,7 @@ func ExecuteShellCommand(
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
 			u.LogWarning(err.Error())
-			return err
+			return nil, err
 		}
 
 		defer func(f *os.File) {
@@ -98,10 +109,30 @@ func ExecuteShellCommand(
 	u.LogDebug(cmd.String())
 
 	if dryRun {
-		return nil
+		return nil, nil
 	}
 
-	return cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmd.Wait, nil
+}
+
+// ExecuteShellCommand prints and executes the provided command with args and flags
+func ExecuteShellCommand(
+	atmosConfig schema.AtmosConfiguration,
+	command string,
+	args []string,
+	dir string,
+	env []string,
+	dryRun bool,
+	redirectStdError string,
+) error {
+	wait, err := ExecuteShellCommandWithPipe(atmosConfig, command, args, dir, env, dryRun, redirectStdError, os.Stdin, os.Stdout)
+	if err != nil {
+		return err
+	}
+	return wait()
 }
 
 // ExecuteShell runs a shell script
