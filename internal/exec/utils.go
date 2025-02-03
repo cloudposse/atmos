@@ -508,7 +508,7 @@ func ProcessStacks(
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
 			atmosConfig,
 			settingsSectionStruct,
-			"all-atmos-sections",
+			"templates-all-atmos-sections",
 			componentSectionStr,
 			configAndStacksInfo.ComponentSection,
 			true,

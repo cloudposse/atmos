@@ -566,7 +566,7 @@ func ExecuteDescribeStacks(
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
 									atmosConfig,
 									settingsSectionStruct,
-									"describe-stacks-all-sections",
+									"templates-describe-stacks-all-atmos-sections",
 									componentSectionStr,
 									configAndStacksInfo.ComponentSection,
 									true,

@@ -40,6 +40,8 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
@@ -182,6 +184,8 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
@@ -332,6 +336,8 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
