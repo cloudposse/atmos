@@ -103,7 +103,7 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 	if !strings.Contains(d.source, "//") {
 		// means user typed something like "github.com/org/repo.git" with NO subdir
 		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
-			u.LogDebug(d.AtmosConfig, "Detected top-level repo with no subdir: appending '//.'\n")
+			u.LogDebug("Detected top-level repo with no subdir: appending '//.'\n")
 			parsedURL.Path = parsedURL.Path + "//."
 		}
 	}
@@ -222,7 +222,9 @@ func removeSymlinks(root string) error {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			u.LogWarning(schema.AtmosConfiguration{}, fmt.Sprintf("Removing symlink: %s", path))
+			//Symlinks are removed for the entire repo, regardless if there are any subfolders specified
+			//Thus logging is disabled
+			//u.LogWarning(fmt.Sprintf("Removing symlink: %s", path))
 			// It's a symlink, remove it
 			return os.Remove(path)
 		}
