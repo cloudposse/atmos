@@ -183,7 +183,7 @@ func isCIEnvironment() bool {
 // and the output to use forward slashes, ensuring that the replacement works reliably.
 // An error is returned if the repository root cannot be determined.
 func sanitizeOutput(output string) (string, error) {
-	repoRoot, err := findGitRepoRoot()
+	repoRoot, err := findGitRepoRoot(startingDir)
 	if err != nil {
 		return "", err
 	}
