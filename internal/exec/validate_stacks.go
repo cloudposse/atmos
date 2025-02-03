@@ -355,7 +355,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true)
+					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true, true, nil)
 					if err != nil {
 						return nil, err
 					}
