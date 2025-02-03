@@ -60,7 +60,7 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 	m, err := tarball.LoadManifest(func() (io.ReadCloser, error) {
 		f, err := os.Open(tempTarFileName)
 		if err != nil {
-			u.LogError(atmosConfig, err)
+			u.LogError(err)
 			return nil, err
 		}
 		return f, nil
