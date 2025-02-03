@@ -33,7 +33,7 @@ type SSMClient interface {
 	GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 }
 
-// NewInMemoryStore initializes a new MemoryStore.
+// NewSSMStore initializes a new SSM store.
 func NewSSMStore(options SSMStoreOptions) (Store, error) {
 	ctx := context.TODO()
 
