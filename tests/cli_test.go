@@ -16,6 +16,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
+	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
@@ -173,6 +174,18 @@ func (pm *PathManager) Apply() error {
 // Determine if running in a CI environment
 func isCIEnvironment() bool {
 	return os.Getenv("CI") != ""
+}
+
+// sanitizeOutput replaces the absolute repository root path in the provided output
+// with the placeholder "/absolute/path/to/repo".
+// It returns an error if the repository root cannot be determined.
+func sanitizeOutput(output string) (string, error) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	if err != nil {
+		return "", err
+	}
+	// Replace all instances of the repo root with the placeholder.
+	return strings.ReplaceAll(output, repoRoot, "/absolute/path/to/repo"), nil
 }
 
 // sanitizeTestName converts t.Name() into a valid filename.
@@ -645,6 +658,17 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 		return true
 	}
 
+	// Sanitize outputs and fail the test if sanitization fails.
+	var err error
+	stdoutOutput, err = sanitizeOutput(stdoutOutput)
+	if err != nil {
+		t.Fatalf("failed to sanitize stdout output: %v", err)
+	}
+	stderrOutput, err = sanitizeOutput(stderrOutput)
+	if err != nil {
+		t.Fatalf("failed to sanitize stderr output: %v", err)
+	}
+
 	testName := sanitizeTestName(t.Name())
 	stdoutFileName := fmt.Sprintf("%s.stdout.golden", testName)
 	stderrFileName := fmt.Sprintf("%s.stderr.golden", testName)
@@ -704,6 +728,29 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 
 	return true
+}
+
+// findGitRepo finds the Git repository root
+func findGitRepoRoot(path string) (string, error) {
+	// Open the Git repository starting from the given path
+	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
+		return "", fmt.Errorf("failed to find git repository: %w", err)
+	}
+
+	// Get the repository's working tree
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Return the absolute path to the root of the working tree
+	root, err := filepath.Abs(worktree.Filesystem.Root())
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path of repository root: %w", err)
+	}
+
+	return root, nil
 }
 
 func TestUnmarshalMatchPattern(t *testing.T) {
