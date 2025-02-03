@@ -114,6 +114,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		processTemplates,
 		processYamlFunctions,
 		includeEmptyStacks,
+		nil,
 	)
 	if err != nil {
 		return err
@@ -149,6 +150,7 @@ func ExecuteDescribeStacks(
 	processTemplates bool,
 	processYamlFunctions bool,
 	includeEmptyStacks bool,
+	skip []string,
 ) (map[string]any, error) {
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
@@ -396,7 +398,12 @@ func ExecuteDescribeStacks(
 
 							// Process YAML functions
 							if processYamlFunctions {
-								componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, componentSection, configAndStacksInfo.Stack)
+								componentSectionConverted, err := ProcessCustomYamlTags(
+									atmosConfig,
+									componentSection,
+									configAndStacksInfo.Stack,
+									skip,
+								)
 								if err != nil {
 									return nil, err
 								}
@@ -592,7 +599,12 @@ func ExecuteDescribeStacks(
 
 							// Process YAML functions
 							if processYamlFunctions {
-								componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, componentSection, configAndStacksInfo.Stack)
+								componentSectionConverted, err := ProcessCustomYamlTags(
+									atmosConfig,
+									componentSection,
+									configAndStacksInfo.Stack,
+									skip,
+								)
 								if err != nil {
 									return nil, err
 								}

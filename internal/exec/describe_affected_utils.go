@@ -434,6 +434,7 @@ func executeDescribeAffected(
 		processTemplates,
 		processYamlFunctions,
 		false,
+		skip,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -480,6 +481,7 @@ func executeDescribeAffected(
 		processTemplates,
 		processYamlFunctions,
 		false,
+		skip,
 	)
 	if err != nil {
 		return nil, nil, nil, err

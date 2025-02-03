@@ -95,7 +95,7 @@ func ExecuteDescribeDependents(
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -12,6 +12,7 @@ func ProcessCustomYamlTags(
 	atmosConfig schema.AtmosConfiguration,
 	input schema.AtmosSectionMapType,
 	currentStack string,
+	skip []string,
 ) (schema.AtmosSectionMapType, error) {
 	return processNodes(atmosConfig, input, currentStack), nil
 }
