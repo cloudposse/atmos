@@ -35,6 +35,7 @@ type DescribeAffectedCmdArgs struct {
 	Query                       string
 	ProcessTemplates            bool
 	ProcessYamlFunctions        bool
+	Skip                        []string
 }
 
 func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
@@ -171,6 +172,11 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		return DescribeAffectedCmdArgs{}, err
 	}
 
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
 	result := DescribeAffectedCmdArgs{
 		CLIConfig:                   atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
@@ -191,6 +197,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		Query:                       query,
 		ProcessTemplates:            processTemplates,
 		ProcessYamlFunctions:        processYamlFunctions,
+		Skip:                        skip,
 	}
 
 	return result, nil
