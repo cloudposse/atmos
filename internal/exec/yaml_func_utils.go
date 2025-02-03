@@ -75,9 +75,9 @@ func processCustomTags(
 		return processTagTerraformOutput(atmosConfig, input, currentStack)
 	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
 		return processTagEnv(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncIncludeGoGetter) && !skipFunc(skip, u.AtmosYamlFuncIncludeGoGetter):
+	case strings.HasPrefix(input, u.AtmosYamlFuncIncludeGoGetter) && !skipFunc(skip, u.AtmosYamlFuncInclude):
 		return processTagInclude(atmosConfig, input, u.AtmosYamlFuncIncludeGoGetter, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncIncludeLocalFile) && !skipFunc(skip, u.AtmosYamlFuncIncludeLocalFile):
+	case strings.HasPrefix(input, u.AtmosYamlFuncIncludeLocalFile) && !skipFunc(skip, u.AtmosYamlFuncInclude):
 		return processTagInclude(atmosConfig, input, u.AtmosYamlFuncIncludeLocalFile, currentStack)
 	default:
 		// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing
@@ -87,7 +87,8 @@ func processCustomTags(
 
 func skipFunc(skip []string, f string) bool {
 	t := strings.TrimPrefix(f, "!")
-	return u.SliceContainsString(skip, t)
+	c := u.SliceContainsString(skip, t)
+	return c
 }
 
 func getStringAfterTag(input string, tag string) (string, error) {
