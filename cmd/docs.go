@@ -137,7 +137,7 @@ var docsCmd = &cobra.Command{
 			u.LogErrorAndExit(err)
 		}
 
-		fmt.Printf("Openning default browser to '%v'.\n", atmosDocsURL)
+		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
 	},
 }
 
