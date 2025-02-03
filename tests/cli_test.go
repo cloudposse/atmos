@@ -197,21 +197,26 @@ func sanitizeOutput(output string) (string, error) {
 	if repoRoot == "" {
 		return "", errors.New("failed to determine repository root")
 	}
-	// Clean the repo root to collapse multiple slashes, then normalize it to use forward slashes.
+	// Clean the repository root to collapse any extra slashes, then normalize it to forward slashes.
 	cleanRepoRoot := filepath.Clean(repoRoot)
 	normalizedRepoRoot := filepath.ToSlash(cleanRepoRoot)
 	normalizedOutput := filepath.ToSlash(output)
 
-	// Quote the normalized repository root for safe regex use.
+	// Quote the normalized repository root for safe use in a regex.
 	quoted := regexp.QuoteMeta(normalizedRepoRoot)
-	// Replace each literal "/" with "/+" so that the regex can match one or more slashes.
+	// Replace each literal "/" with the regex token "/+" so that it matches one or more slashes.
 	pattern := strings.ReplaceAll(quoted, "/", "/+")
+	// Append a non-capturing group to optionally match any extra trailing slashes.
+	pattern += "(?:/+)?"
+
+	// Compile the regex.
 	repoRootRegex, err := regexp.Compile(pattern)
 	if err != nil {
 		return "", err
 	}
 
-	// Replace all occurrences of the repository root (allowing for extra slashes) with the placeholder.
+	// Replace all occurrences of the repository root (and any extra following slashes)
+	// with the placeholder.
 	sanitized := repoRootRegex.ReplaceAllString(normalizedOutput, "/absolute/path/to/repo")
 	return sanitized, nil
 }
