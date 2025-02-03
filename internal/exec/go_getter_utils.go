@@ -222,9 +222,9 @@ func removeSymlinks(root string) error {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			//Symlinks are removed for the entire repo, regardless if there are any subfolders specified
-			//Thus logging is disabled
-			//u.LogWarning(fmt.Sprintf("Removing symlink: %s", path))
+			// Symlinks are removed for the entire repo, regardless if there are any subfolders specified
+			// Thus logging is disabled
+			// u.LogWarning(fmt.Sprintf("Removing symlink: %s", path))
 			// It's a symlink, remove it
 			return os.Remove(path)
 		}
