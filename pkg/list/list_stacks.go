@@ -28,6 +28,19 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		format = listConfig.Format
 	}
 
+	// Helper function to create stack info
+	createStackInfo := func(stackName string, v2 map[string]any) map[string]any {
+		stackInfo := map[string]any{
+			"atmos_stack": stackName,
+			"stack_file":  fmt.Sprintf("%s.yaml", stackName),
+		}
+		// Copy all stack configuration to allow full access in templates
+		for k, v := range v2 {
+			stackInfo[k] = v
+		}
+		return stackInfo
+	}
+
 	var filteredStacks []map[string]any
 
 	if component != "" {
@@ -49,16 +62,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 					}
 				}
 				if componentFound {
-					// Create stack info with the entire configuration for template access
-					stackInfo := map[string]any{
-						"atmos_stack": stackName,
-						"stack_file":  fmt.Sprintf("%s.yaml", stackName),
-					}
-
-					// Copy all stack configuration to allow full access in templates
-					for k, v := range v2 {
-						stackInfo[k] = v
-					}
+					stackInfo := createStackInfo(stackName, v2)
 					filteredStacks = append(filteredStacks, stackInfo)
 				}
 			}
@@ -70,16 +74,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			if !ok {
 				continue
 			}
-			// Create stack info with the entire configuration for template access
-			stackInfo := map[string]any{
-				"atmos_stack": stackName,
-				"stack_file":  fmt.Sprintf("%s.yaml", stackName),
-			}
-
-			// Copy all stack configuration to allow full access in templates
-			for k, v := range v2 {
-				stackInfo[k] = v
-			}
+			stackInfo := createStackInfo(stackName, v2)
 			filteredStacks = append(filteredStacks, stackInfo)
 		}
 	}
@@ -133,21 +128,13 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 	// Handle different output formats
 	switch format {
 	case FormatJSON:
-		// Convert to JSON format using a proper struct
-		type stack struct {
-			Stack string `json:"stack"`
-			File  string `json:"file"`
-		}
-		var stacks []stack
+		// Convert to JSON format using dynamic fields
+		var stacks []map[string]string
 		for _, row := range rows {
-			s := stack{}
+			s := make(map[string]string)
 			for i, header := range headers {
-				switch header {
-				case "Stack":
-					s.Stack = row[i]
-				case "File":
-					s.File = row[i]
-				}
+				// Convert header to lowercase for consistent JSON field names
+				s[strings.ToLower(header)] = row[i]
 			}
 			stacks = append(stacks, s)
 		}
