@@ -123,15 +123,15 @@
     "base_path": ""
   },
   "initialized": true,
-  "stacksBaseAbsolutePath": "/home/samtholiya/cloudpose/atmos/examples/demo-stacks/stacks",
+  "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
-    "/home/samtholiya/cloudpose/atmos/examples/demo-stacks/stacks/deploy/**/*"
+    "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"
   ],
   "excludeStackAbsolutePaths": [
-    "/home/samtholiya/cloudpose/atmos/examples/demo-stacks/stacks/**/_defaults.yaml"
+    "/absolute/path/to/repo/examples/demo-stacks/stacks/**/_defaults.yaml"
   ],
-  "terraformDirAbsolutePath": "/home/samtholiya/cloudpose/atmos/examples/demo-stacks/components/terraform",
-  "helmfileDirAbsolutePath": "/home/samtholiya/cloudpose/atmos/examples/demo-stacks",
+  "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
+  "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "Check": {
