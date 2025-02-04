@@ -3,19 +3,19 @@ package cmd
 import _ "embed"
 
 //go:embed markdown/atmos_terraform_usage.md
-var terraform string
+var terraformUsage string
 
 //go:embed markdown/atmos_terraform_plan_usage.md
-var terraformPlan string
+var terraformPlanUsage string
 
 //go:embed markdown/atmos_terraform_apply_usage.md
-var terraformApply string
+var terraformApplyUsage string
 
 //go:embed markdown/atmos_workflow_usage.md
-var workflow string
+var workflowUsage string
 
 //go:embed markdown/atmos_about_usage.md
-var atmosAbout string
+var atmosAboutUsage string
 
 type ExampleContent struct {
 	Content    string
@@ -26,24 +26,24 @@ var doubleDashHint string = "Use double dashes to separate Atmos-specific option
 
 var examples map[string]ExampleContent = map[string]ExampleContent{
 	"atmos_terraform": {
-		Content:    terraform,
+		Content:    terraformUsage,
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
 	"atmos_terraform_plan": {
-		Content: terraformPlan,
+		Content: terraformPlanUsage,
 		// TODO: We should update this once we have a page for terraform plan
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
 	"atmos_terraform_apply": {
-		Content: terraformApply,
+		Content: terraformApplyUsage,
 		// TODO: We should update this once we have a page for terraform plan
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
 	"atmos_workflow": {
-		Content:    workflow,
+		Content:    workflowUsage,
 		Suggestion: "https://atmos.tools/cli/commands/workflow/",
 	},
 	"atmos_about": {
-		Content: atmosAbout,
+		Content: atmosAboutUsage,
 	},
 }

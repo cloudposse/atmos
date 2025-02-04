@@ -1,5 +1,5 @@
 - Learn about atmos
 
 ```
-$ atmos about 
+ $ atmos about 
 ```

@@ -11,13 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 
 	l "github.com/charmbracelet/log"
-	t "golang.org/x/term"
 )
 
 // render is the global markdown renderer instance initialized via InitializeMarkdown
 var render *markdown.Renderer
 
 func PrintErrorMarkdown(title string, err error, suggestion string) {
+	if err == nil {
+		return
+	}
 	if render == nil {
 		LogError(err)
 		return
@@ -41,6 +43,24 @@ func PrintErrorMarkdown(title string, err error, suggestion string) {
 	}
 }
 
+// PrintfErrorMarkdown prints a formatted error message in markdown format
+func PrintfErrorMarkdown(format string, a ...interface{}) {
+	if render == nil {
+		LogError(fmt.Errorf(format, a...))
+		return
+	}
+	var markdown string
+	var renderErr error
+	markdown, renderErr = render.RenderErrorf(format, a...)
+	if renderErr != nil {
+		LogError(renderErr)
+		LogError(fmt.Errorf(format, a...))
+		return
+	}
+	_, err := os.Stderr.WriteString(fmt.Sprint(markdown + "\n"))
+	LogError(err)
+}
+
 func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 	PrintErrorMarkdown(title, err, suggestion)
 	os.Exit(1)
@@ -55,11 +75,7 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	message := fmt.Sprintf(format, a...)
 	var markdown string
 	var renderErr error
-	if !t.IsTerminal(int(os.Stdout.Fd())) {
-		markdown, renderErr = render.RenderAscii(message)
-	} else {
-		markdown, renderErr = render.Render(message)
-	}
+	markdown, renderErr = render.Render(message)
 	if renderErr != nil {
 		LogErrorAndExit(renderErr)
 	}

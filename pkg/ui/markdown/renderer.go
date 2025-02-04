@@ -10,7 +10,6 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/muesli/termenv"
-	t "golang.org/x/term"
 )
 
 // Renderer is a markdown renderer using Glamour
@@ -57,13 +56,16 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 // Render renders markdown content to ANSI styled text
 func (r *Renderer) Render(content string) (string, error) {
-	rendered, err := r.renderer.Render(content)
-	if err != nil {
-		// If rendering fails, fallback to ASCII style
+	var rendered string
+	var err error
+	if term.CheckTTYSupportForStdout() {
+		rendered, err = r.renderer.Render(content)
+	} else {
+		// Fallback to ASCII rendering for non-TTY stdout
 		rendered, err = r.RenderAscii(content)
-		if err != nil {
-			return "", err
-		}
+	}
+	if err != nil {
+		return "", err
 	}
 	// Remove duplicate URLs and trailing newlines
 	lines := strings.Split(rendered, "\n")
@@ -142,10 +144,16 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 			content += suggestion
 		}
 	}
-	if !t.IsTerminal(int(os.Stderr.Fd())) {
-		return r.RenderAscii(content)
+	return r.RenderErrorf(content)
+}
+
+// RenderErrorf renders an error message with specific styling
+func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
+	if term.CheckTTYSupportForStderr() {
+		return r.Render(content)
 	}
-	return r.Render(content)
+	// Fallback to ASCII rendering for non-TTY stderr
+	return r.RenderAscii(content)
 }
 
 // RenderSuccess renders a success message with specific styling

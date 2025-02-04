@@ -83,7 +83,12 @@ func renderHelpMarkdown(cmd *cobra.Command) string {
 		commandPath += " [subcommand]"
 	}
 	help := fmt.Sprintf("Use `%s --help` for more information about a command.", commandPath)
-	data, err := render.Render(help)
+	var data string
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		data, err = render.Render(help)
+	} else {
+		data, err = render.RenderAscii(help)
+	}
 	if err == nil {
 		return data
 	}

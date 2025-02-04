@@ -1,5 +1,5 @@
 – Execute a terraform plan
 
 ```
-$ atmos terraform plan <component-name> -s <stack-name>
+ $ atmos terraform plan <component-name> -s <stack-name>
 ```

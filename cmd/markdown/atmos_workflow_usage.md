@@ -1,16 +1,16 @@
 – Use interactive UI
 ```
-$ atmos workflow
+ $ atmos workflow
 ```
 – Execute a workflow
 ```
-$ atmos workflow <workflow-name> --file <file>
+ $ atmos workflow <workflow-name> --file <file>
 ```
 – Execute with stack override
 ```
-$ atmos workflow <workflow-name> --file <file> --stack <stack>
+ $ atmos workflow <workflow-name> --file <file> --stack <stack>
 ```
 – Resume from specific step
 ```
-$ atmos workflow <workflow-name> --file <file> --from-step <step>
+ $ atmos workflow <workflow-name> --file <file> --from-step <step>
 ```

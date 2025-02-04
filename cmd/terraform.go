@@ -19,7 +19,7 @@ var terraformCmd = &cobra.Command{
 	Short:              "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
 	Long:               `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Example:            terraform,
+	Example:            terraformUsage,
 	PostRunE: func(cmd *cobra.Command, args []string) error {
 		info := getConfigAndStacksInfo("terraform", cmd, args)
 		return hooks.RunE(cmd, args, &info)
