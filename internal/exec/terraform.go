@@ -33,18 +33,18 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 }
 
 func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
-	shouldProcessStacks := true
+	shouldProcess := true
 	shouldCheckStack := true
 
 	if info.SubCommand == "clean" {
 		if info.ComponentFromArg == "" {
-			shouldProcessStacks = false
+			shouldProcess = false
 		}
 		shouldCheckStack = info.Stack != ""
 
 	}
 
-	return shouldProcessStacks, shouldCheckStack
+	return shouldProcess, shouldCheckStack
 }
 
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {

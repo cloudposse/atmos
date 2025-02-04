@@ -25,16 +25,6 @@ var terraformCmd = &cobra.Command{
 	},
 }
 
-// Contains checks if a slice of strings contains an exact match for the target string.
-func Contains(slice []string, target string) bool {
-	for _, item := range slice {
-		if item == target {
-			return true
-		}
-	}
-	return false
-}
-
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 	info := getConfigAndStacksInfo("terraform", cmd, args)
 	if info.NeedHelp {
