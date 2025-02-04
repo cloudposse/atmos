@@ -11,12 +11,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -27,20 +30,57 @@ const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-man
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+	// Initialize spinner
+	message := "Validating Atmos Stacks..."
+	s := spinner.New()
+	s.Style = theme.Styles.Link
+
+	var opts []tea.ProgramOption
+	if !CheckTTYSupport() {
+		// Workaround for non-TTY environments
+		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		u.LogTrace("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+		fmt.Println(message)
+	}
+
+	p := tea.NewProgram(modelSpinner{
+		spinner: s,
+		message: message,
+	}, opts...)
+
+	// Use error channel to capture spinner errors
+	spinnerDone := make(chan error, 1)
+
+	go func() {
+		_, err := p.Run()
+		if err != nil {
+			fmt.Println(message)
+			u.LogError(fmt.Errorf("failed to run spinner: %w", err))
+		}
+		spinnerDone <- err
+		close(spinnerDone)
+	}()
+
+	// Process CLI arguments
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
 		return err
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
 		return err
 	}
 
 	flags := cmd.Flags()
-
 	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
 		return err
 	}
 
@@ -48,7 +88,13 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		atmosConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
 	}
 
-	return ValidateStacks(atmosConfig)
+	err = ValidateStacks(atmosConfig)
+
+	// Ensure spinner is stopped before returning
+	p.Quit()
+	<-spinnerDone
+
+	return err
 }
 
 // ValidateStacks validates Atmos stack configuration
@@ -309,7 +355,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true)
+					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true, true, nil)
 					if err != nil {
 						return nil, err
 					}

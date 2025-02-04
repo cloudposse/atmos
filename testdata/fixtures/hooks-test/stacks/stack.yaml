@@ -1,0 +1,23 @@
+components:
+  terraform:
+    random1:
+      metadata:
+        component: random
+      hooks:
+        store-outputs:
+          events:
+            - after-terraform-apply
+          command: store
+          name: testredis
+          outputs:
+            random_id: .random
+      vars:
+        stage: test
+        random: "random1"
+
+    random2:
+      metadata:
+        component: random
+      vars:
+        stage: test
+        random: !store testredis random1 random_id

@@ -36,7 +36,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return ExecuteShellCommand(atmosConfig, "helmfile", []string{info.SubCommand}, "", nil, false, info.RedirectStdErr)
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true)
+	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
 	if err != nil {
 		return err
 	}
