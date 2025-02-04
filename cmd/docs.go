@@ -119,23 +119,24 @@ var docsCmd = &cobra.Command{
 
 		if os.Getenv("GO_TEST") == "1" {
 			u.LogDebug("Skipping browser launch in test environment")
-			return // Skip launching the browser
+		} else {
+			switch runtime.GOOS {
+			case "linux":
+				err = exec.Command("xdg-open", atmosDocsURL).Start()
+			case "windows":
+				err = exec.Command("rundll32", "url.dll,FileProtocolHandler", atmosDocsURL).Start()
+			case "darwin":
+				err = exec.Command("open", atmosDocsURL).Start()
+			default:
+				err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+			}
+
+			if err != nil {
+				u.LogErrorAndExit(err)
+			}
 		}
 
-		switch runtime.GOOS {
-		case "linux":
-			err = exec.Command("xdg-open", atmosDocsURL).Start()
-		case "windows":
-			err = exec.Command("rundll32", "url.dll,FileProtocolHandler", atmosDocsURL).Start()
-		case "darwin":
-			err = exec.Command("open", atmosDocsURL).Start()
-		default:
-			err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-		}
-
-		if err != nil {
-			u.LogErrorAndExit(err)
-		}
+		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
 	},
 }
 
