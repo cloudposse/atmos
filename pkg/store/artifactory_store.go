@@ -93,7 +93,6 @@ func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 		SetOverallRequestTimeout(1 * time.Minute).
 		SetHttpRetries(0).
 		Build()
-
 	if err != nil {
 		return nil, err
 	}
