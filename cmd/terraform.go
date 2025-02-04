@@ -3,14 +3,13 @@ package cmd
 import (
 	"fmt"
 
+	l "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	u "github.com/cloudposse/atmos/pkg/utils"
-
-	l "github.com/charmbracelet/log"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -20,16 +19,6 @@ var terraformCmd = &cobra.Command{
 	Short:              "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
 	Long:               `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-}
-
-// Contains checks if a slice of strings contains an exact match for the target string.
-func Contains(slice []string, target string) bool {
-	for _, item := range slice {
-		if item == target {
-			return true
-		}
-	}
-	return false
 }
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
