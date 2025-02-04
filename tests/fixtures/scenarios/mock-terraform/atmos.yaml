@@ -18,6 +18,7 @@ stacks:
     - "**/*"
   excluded_paths:
     - "**/templates/**/*"
+  name_pattern: "{environment}-{component}"
 
 logs:
   file: "/dev/stderr"

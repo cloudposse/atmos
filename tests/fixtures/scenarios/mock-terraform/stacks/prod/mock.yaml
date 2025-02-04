@@ -1,9 +1,5 @@
 import:
-  - catalog/mock
-
-vars:
-  environment: prod
-  component: mock
+  - ../catalog/terraform/mock
 
 components:
   terraform:
@@ -11,9 +7,12 @@ components:
       metadata:
         component: mock
         environment: prod
-      settings:
-        component: mock
+      backend:
+        type: local
       vars:
+        stage: prod
+        environment: prod
+        tenant: test
         foo: "prod-foo"
         bar: "prod-bar"
-        baz: "prod-baz"
+        baz: "prod-baz" 
