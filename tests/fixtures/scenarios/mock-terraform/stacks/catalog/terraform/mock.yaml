@@ -1,0 +1,13 @@
+components:
+  terraform:
+    mock:
+      metadata:
+        component: mock
+      backend:
+        type: local
+      settings:
+        component: mock
+      vars:
+        foo: "catalog-foo"
+        bar: "catalog-bar"
+        baz: "catalog-baz" 

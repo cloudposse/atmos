@@ -1,1 +1,1 @@
-{"bar":"dev-bar","baz":"dev-baz","foo":"dev-foo"}
+{"bar":"dev-bar","baz":"dev-baz","environment":"dev","foo":"dev-foo","stage":"dev","tenant":"test"}
