@@ -35,6 +35,9 @@ You can customize the columns displayed in the output by configuring them in you
 ```yaml
 vendor:
   list:
+    # Optional: specify the default output format (table, json, csv, tsv)
+    format: table
+    # Configure which columns to display and their order
     columns:
       - name: Component
         value: '{{ .Component }}'
@@ -102,4 +105,4 @@ atmos list vendor --format csv --delimiter ";"
 
 - [atmos vendor pull](/cli/commands/vendor/usage) - Pull vendored components
 - [atmos vendor push](/cli/commands/vendor/usage) - Push vendored components
-- [atmos list components](/cli/commands/list/list-components) - List available components 
+- [atmos list components](/cli/commands/list/components) - List available components 
