@@ -79,7 +79,11 @@ func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	rtDetails.SetAccessToken(token)
+
+	// If the token is set to "anonymous", we don't need to set the access token.
+	if token != "anonymous" {
+		rtDetails.SetAccessToken(token)
+	}
 
 	serviceConfig, err := config.NewConfigBuilder().
 		SetServiceDetails(rtDetails).
