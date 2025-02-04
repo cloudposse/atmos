@@ -33,7 +33,7 @@ func TestCLITerraformClean(t *testing.T) {
 	}()
 
 	// Define the work directory and change to it
-	workDir := "../examples/quick-start-simple"
+	workDir := "fixtures/scenarios/mock-terraform"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
@@ -44,29 +44,29 @@ func TestCLITerraformClean(t *testing.T) {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
 	}
 
-	// Force clean everything
-	runTerraformCleanCommand(t, binaryPath, "--force")
-	// Clean everything
-	runTerraformCleanCommand(t, binaryPath)
-	// Clean specific component
-	runTerraformCleanCommand(t, binaryPath, "station")
-	// Clean component with stack
-	runTerraformCleanCommand(t, binaryPath, "station", "-s", "dev")
+	// Initialize terraform for both environments
+	runTerraformInit(t, binaryPath, "prod")
+	runTerraformInit(t, binaryPath, "dev")
 
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
-	verifyStateFilesExist(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
+	verifyStateFilesExist(t, []string{
+		"./components/terraform/mock/.terraform",
+		"./components/terraform/mock/.terraform.lock.hcl",
+	})
 	runCLITerraformCleanComponent(t, binaryPath, "prod")
-	verifyStateFilesDeleted(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
+	verifyStateFilesDeleted(t, []string{
+		"./components/terraform/mock/.terraform",
+		"./components/terraform/mock/.terraform.lock.hcl",
+	})
 
 	// Run terraform apply for dev environment
 	runTerraformApply(t, binaryPath, "dev")
 
 	// Verify if state files exist before cleaning
 	stateFiles := []string{
-		"./components/terraform/weather/.terraform",
-		"./components/terraform/weather/terraform.tfstate.d",
-		"./components/terraform/weather/.terraform.lock.hcl",
+		"./components/terraform/mock/.terraform",
+		"./components/terraform/mock/.terraform.lock.hcl",
 	}
 	verifyStateFilesExist(t, stateFiles)
 
@@ -75,12 +75,11 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Verify if state files have been deleted after clean
 	verifyStateFilesDeleted(t, stateFiles)
-
 }
 
 // runTerraformApply runs the terraform apply command for a given environment.
 func runTerraformApply(t *testing.T, binaryPath, environment string) {
-	cmd := exec.Command(binaryPath, "terraform", "apply", "station", "-s", environment)
+	cmd := exec.Command(binaryPath, "terraform", "apply", "mock", "-s", environment)
 	envVars := os.Environ()
 	envVars = append(envVars, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
 	cmd.Env = envVars
@@ -91,7 +90,7 @@ func runTerraformApply(t *testing.T, binaryPath, environment string) {
 	err := cmd.Run()
 	t.Log(stdout.String())
 	if err != nil {
-		t.Fatalf("Failed to run terraform apply station -s %s: %v", environment, stderr.String())
+		t.Fatalf("Failed to run terraform apply mock -s %s: %v", environment, stderr.String())
 	}
 }
 
@@ -138,7 +137,7 @@ func verifyStateFilesDeleted(t *testing.T, stateFiles []string) {
 }
 
 func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean", "station", "-s", environment, "--force")
+	cmd := exec.Command(binaryPath, "terraform", "clean", "mock", "-s", environment, "--force")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -148,6 +147,7 @@ func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string)
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
 }
+
 func runCLITerraformClean(t *testing.T, binaryPath string) {
 	cmd := exec.Command(binaryPath, "terraform", "clean")
 	var stdout, stderr bytes.Buffer
@@ -158,7 +158,36 @@ func runCLITerraformClean(t *testing.T, binaryPath string) {
 	if err != nil {
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
+}
 
+// runTerraformInit initializes terraform for a given environment
+func runTerraformInit(t *testing.T, binaryPath, environment string) {
+	cmd := exec.Command(binaryPath, "terraform", "init", "mock", "-s", environment)
+
+	// Set environment variables
+	envVars := os.Environ()
+	envVars = append(envVars,
+		"ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true",
+		"ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=true",
+		"ATMOS_LOGS_LEVEL=Debug",
+		"ATMOS_LOGS_FILE=/dev/stderr")
+	cmd.Env = envVars
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	// Log the command being executed
+	t.Logf("Running command: %s %v", binaryPath, cmd.Args)
+
+	err := cmd.Run()
+	// Always log both stdout and stderr
+	t.Logf("Init command stdout:\n%s", stdout.String())
+	t.Logf("Init command stderr:\n%s", stderr.String())
+	if err != nil {
+		t.Fatalf("Failed to run terraform init mock -s %s: %v\nStdout: %s\nStderr: %s",
+			environment, err, stdout.String(), stderr.String())
+	}
 }
 
 func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {

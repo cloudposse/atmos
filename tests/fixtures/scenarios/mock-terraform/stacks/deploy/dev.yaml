@@ -1,0 +1,19 @@
+import:
+  - catalog/mock
+
+vars:
+  environment: dev
+  component: mock
+
+components:
+  terraform:
+    mock:
+      metadata:
+        component: mock
+        environment: dev
+      settings:
+        component: mock
+      vars:
+        foo: "dev-foo"
+        bar: "dev-bar"
+        baz: "dev-baz"

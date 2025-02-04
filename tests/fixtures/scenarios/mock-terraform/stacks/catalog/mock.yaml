@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    mock:
+      metadata:
+        type: terraform
+        component: mock
+      backend:
+        type: local
+        workspace_dir: terraform.tfstate.d
+      settings:
+        component: mock
+      vars:
+        foo: "test-foo"
+        bar: "test-bar"
+        baz: "test-baz"
