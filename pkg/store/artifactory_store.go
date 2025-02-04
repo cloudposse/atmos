@@ -112,15 +112,9 @@ func (s *ArtifactoryStore) getKey(stack string, component string, key string) (s
 		return "", fmt.Errorf("stack delimiter is not set")
 	}
 
-	stackParts := strings.Split(stack, *s.stackDelimiter)
-	componentParts := strings.Split(component, "/")
-
-	parts := []string{s.repoName, s.prefix}
-	parts = append(parts, stackParts...)
-	parts = append(parts, componentParts...)
-	parts = append(parts, key)
-
-	return strings.ReplaceAll(strings.Join(parts, "/"), "//", "/"), nil
+	prefixParts := []string{s.repoName, s.prefix}
+	prefix := strings.Join(prefixParts, "/")
+	return getKey(prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
 func (s *ArtifactoryStore) Get(stack string, component string, key string) (interface{}, error) {
