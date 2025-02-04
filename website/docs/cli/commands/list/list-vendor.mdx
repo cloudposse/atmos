@@ -33,7 +33,8 @@ This command is particularly useful when working with vendored components to:
 | Flag | Description |
 |------|-------------|
 | `-h, --help` | Help for the vendor command |
-| `-o, --output string` | Output format: table, json, yaml (default "table") |
+| `-o, --format string` | Output format: table, json, csv, tsv (default "table") |
+| `--delimiter string` | Delimiter for csv/tsv output (default: comma for csv, tab for tsv) |
 
 ## Examples
 
@@ -44,12 +45,22 @@ atmos list vendor
 
 List vendored components in JSON format:
 ```shell
-atmos list vendor -o json
+atmos list vendor --format json
 ```
 
-List vendored components in YAML format:
+List vendored components in CSV format:
 ```shell
-atmos list vendor -o yaml
+atmos list vendor --format csv
+```
+
+List vendored components in TSV format:
+```shell
+atmos list vendor --format tsv
+```
+
+List vendored components in CSV format with custom delimiter:
+```shell
+atmos list vendor --format csv --delimiter ";"
 ```
 
 ## Related Commands
