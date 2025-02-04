@@ -24,7 +24,9 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	defer os.RemoveAll(path.Join(origDir, "testdata", "fixtures", "hooks-test", ".terraform"))
 	defer os.Chdir(origDir)
 
-	os.Chdir("testdata/fixtures/hooks-test")
+	if err := os.Chdir("testdata/fixtures/hooks-test"); err != nil {
+	    t.Fatalf("failed to change directory: %v", err)
+	}
 
 	// Capture the original arguments
 	origArgs := os.Args
