@@ -135,7 +135,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 
 	// If the command doesn't exist, create it
 	if cmd == nil {
-		u.LogErrorAndExit(fmt.Errorf("subcommand '%s' not found for alias '%s'", parts[0], alias))
+		u.LogErrorAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias))
 	}
 
 	// If there are more parts, recurse for the next level
