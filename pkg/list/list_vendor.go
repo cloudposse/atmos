@@ -232,7 +232,7 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 				BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
 				StyleFunc(func(row, col int) lipgloss.Style {
 					style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-					if row == 0 {
+					if row == -1 {
 						return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
 					}
 					return style.Inherit(theme.Styles.Description)
