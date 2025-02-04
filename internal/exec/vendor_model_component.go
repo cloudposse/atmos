@@ -52,7 +52,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 		vendorPks = append(vendorPks, vendorPkg)
 
 	}
-	tty := term.CheckTTYSupportForStdout()
+	tty := term.IsTTYSupportForStdout()
 	return modelVendor{
 		packages:    vendorPks,
 		spinner:     s,

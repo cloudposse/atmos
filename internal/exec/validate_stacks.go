@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -36,7 +37,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	s.Style = theme.Styles.Link
 
 	var opts []tea.ProgramOption
-	if !CheckTTYSupport() {
+	if !term.IsTTYSupportForStdout() {
 		// Workaround for non-TTY environments
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		u.LogTrace("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")

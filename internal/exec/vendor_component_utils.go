@@ -363,7 +363,7 @@ func ExecuteComponentVendorInternal(
 		}
 		var opts []tea.ProgramOption
 		// Disable TUI if no TTY support is available
-		if !term.CheckTTYSupportForStdout() {
+		if !term.IsTTYSupportForStdout() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 			u.LogWarning("TTY is not supported. Running in non-interactive mode")
 		}

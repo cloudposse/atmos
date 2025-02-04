@@ -418,7 +418,7 @@ func ExecuteAtmosVendorInternal(
 	// Run TUI to process packages
 	if len(packages) > 0 {
 		var opts []tea.ProgramOption
-		if !term.CheckTTYSupportForStdout() {
+		if !term.IsTTYSupportForStdout() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
