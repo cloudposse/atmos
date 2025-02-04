@@ -17,16 +17,16 @@ atmos list vendor [flags]
 
 The `atmos list vendor` command helps you manage and inspect vendored components in your Atmos project. It provides information about:
 
-- Vendored component locations
-- Source repositories
-- Version information
+- Component names and versions
+- Target folders for vendored components
+- Source repositories and references
 - Component status
 
-This command is particularly useful when working with vendored components to:
-- Track which components are vendored in your project
-- Verify component versions and sources
-- Manage component dependencies
-- Ensure consistency across your infrastructure
+The command displays the following columns by default:
+- Component: The name of the vendored component
+- Version: The version or reference of the component
+- Folder: The target folder where the component is vendored
+- Source: The source repository and path of the component
 
 ## Flags
 

@@ -117,7 +117,7 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 	}
 
 	// Define default columns if not specified in config
-	header := []string{"Component", "Type", "Manifest", "Folder", "Version", "Source"}
+	header := []string{"Component", "Version", "Folder", "Source"}
 	if len(listConfig.Columns) > 0 {
 		header = make([]string, len(listConfig.Columns))
 		for i, col := range listConfig.Columns {
@@ -174,18 +174,18 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 			switch col {
 			case "Component":
 				row[i] = vendor.Component
-			case "Type":
-				row[i] = "Vendor Manifest"
-			case "Manifest":
-				row[i] = vendor.File
+			case "Version":
+				row[i] = vendor.Version
 			case "Folder":
 				if len(vendor.Targets) > 0 {
 					row[i] = filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
 				}
-			case "Version":
-				row[i] = vendor.Version
 			case "Source":
 				row[i] = vendor.Source
+			case "Type":
+				row[i] = "Vendor Manifest"
+			case "Manifest":
+				row[i] = vendor.File
 			}
 		}
 		rows = append(rows, row)
