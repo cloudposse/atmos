@@ -3,7 +3,6 @@ package cmd
 import (
 	"os"
 
-	l "github.com/charmbracelet/log"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/spf13/cobra"
 )
@@ -30,7 +29,6 @@ func getTerraformCommands() []*cobra.Command {
 				"nativeCommand": "true",
 			},
 			PostRunE: func(cmd *cobra.Command, args []string) error {
-				l.Info("running hooks", "event", h.AfterTerraformApply)
 				return runHooks(h.AfterTerraformApply, cmd, args)
 			},
 		},
@@ -64,7 +62,6 @@ Common use cases:
 			Short: "Deploy the specified infrastructure using Terraform",
 			Long:  `Deploys infrastructure by running the Terraform apply command with automatic approval. This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
 			PostRunE: func(cmd *cobra.Command, args []string) error {
-				l.Info("running hooks", "event", h.AfterTerraformApply)
 				return runHooks(h.AfterTerraformApply, cmd, args)
 			},
 		},

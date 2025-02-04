@@ -17,6 +17,10 @@ type Hooks struct {
 	items  map[string]Hook
 }
 
+func (h Hooks) HasHooks() bool {
+	return len(h.items) > 0
+}
+
 func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
 	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true, true, []string{})
 	if err != nil {

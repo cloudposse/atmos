@@ -9,6 +9,8 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	u "github.com/cloudposse/atmos/pkg/utils"
+
+	l "github.com/charmbracelet/log"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -56,7 +58,12 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error getting hooks: %w", err)
 	}
 
-	return hooks.RunAll(event, &atmosConfig, &info, cmd, args)
+	if hooks.HasHooks() {
+		l.Info("running hooks", "event", event)
+		return hooks.RunAll(event, &atmosConfig, &info, cmd, args)
+	}
+
+	return nil
 }
 
 func init() {
