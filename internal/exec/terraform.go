@@ -114,7 +114,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
-		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, true)
+		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, true, true, nil)
 		if err != nil {
 			return err
 		}

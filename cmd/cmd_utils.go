@@ -340,7 +340,7 @@ func executeCustomCommand(
 			}
 
 			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true)
+			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}

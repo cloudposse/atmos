@@ -66,7 +66,7 @@ func RunE(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) e
 		u.LogErrorAndExit(err)
 	}
 
-	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true)
+	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true, true, nil)
 	if err != nil {
 		u.LogErrorAndExit(err)
 	}
