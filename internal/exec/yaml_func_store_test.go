@@ -36,8 +36,8 @@ func TestProcessTagStore(t *testing.T) {
 	}
 
 	// Populate the store with some data
-	redisStore.Set("dev", "vpc", "cidr", "10.0.0.0/16")
-	redisStore.Set("prod", "vpc", "cidr", "172.16.0.0/16")
+		require.NoError(t, redisStore.Set("dev", "vpc", "cidr", "10.0.0.0/16"))
+		require.NoError(t, redisStore.Set("prod", "vpc", "cidr", "172.16.0.0/16"))
 
 	tests := []struct {
 		name         string
