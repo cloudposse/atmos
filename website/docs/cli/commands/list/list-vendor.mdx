@@ -28,6 +28,32 @@ The command displays the following columns by default:
 - Folder: The target folder where the component is vendored
 - Source: The source repository and path of the component
 
+## Configuration
+
+You can customize the columns displayed in the output by configuring them in your `atmos.yaml` file:
+
+```yaml
+vendor:
+  list:
+    columns:
+      - name: Component
+      - name: Version
+      - name: Folder
+      - name: Source
+      - name: Type
+      - name: Manifest
+```
+
+Available columns:
+- `Component`: The name of the vendored component
+- `Version`: The version or reference of the component
+- `Folder`: The target folder where the component is vendored
+- `Source`: The source repository and path of the component
+- `Type`: The type of the vendor manifest (always "Vendor Manifest")
+- `Manifest`: The path to the vendor manifest file
+
+The columns will be displayed in the order specified in the configuration. If no columns are configured, the default columns (Component, Version, Folder, Source) will be used.
+
 ## Flags
 
 <dl>

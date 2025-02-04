@@ -435,7 +435,7 @@ func ExecuteAtmosVendorInternal(
 	return nil
 }
 
-// processVendorImports processes all imports recursively and returns a list of sources
+// ProcessVendorImports processes all imports recursively and returns a list of sources
 func ProcessVendorImports(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
