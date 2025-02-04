@@ -1,8 +1,8 @@
 components:
   terraform:
-    random1:
+    component1:
       metadata:
-        component: random
+        component: hook-and-store
       hooks:
         store-outputs:
           events:
@@ -15,9 +15,9 @@ components:
         stage: test
         random: "random1"
 
-    random2:
+    component2:
       metadata:
-        component: random
+        component: hook-and-store
       vars:
         stage: test
-        random: !store testredis random1 random_id
+        random: !store testredis component1 random_id
