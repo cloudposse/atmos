@@ -1,0 +1,59 @@
+---
+title: "atmos list vendor"
+id: "list-vendor"
+---
+
+# atmos list vendor
+
+The `atmos list vendor` command displays information about vendored components in your Atmos project.
+
+## Usage
+
+```shell
+atmos list vendor [flags]
+```
+
+## Description
+
+The `atmos list vendor` command helps you manage and inspect vendored components in your Atmos project. It provides information about:
+
+- Vendored component locations
+- Source repositories
+- Version information
+- Component status
+
+This command is particularly useful when working with vendored components to:
+- Track which components are vendored in your project
+- Verify component versions and sources
+- Manage component dependencies
+- Ensure consistency across your infrastructure
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `-h, --help` | Help for the vendor command |
+| `-o, --output string` | Output format: table, json, yaml (default "table") |
+
+## Examples
+
+List all vendored components in table format (default):
+```shell
+atmos list vendor
+```
+
+List vendored components in JSON format:
+```shell
+atmos list vendor -o json
+```
+
+List vendored components in YAML format:
+```shell
+atmos list vendor -o yaml
+```
+
+## Related Commands
+
+- [atmos vendor pull](/cli/commands/vendor/vendor-pull) - Pull vendored components
+- [atmos vendor push](/cli/commands/vendor/vendor-push) - Push vendored components
+- [atmos list components](/cli/commands/list/list-components) - List available components 
