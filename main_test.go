@@ -21,10 +21,10 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get current working directory: %v", err)
 	}
-	defer os.RemoveAll(path.Join(origDir, "testdata", "fixtures", "hooks-test", ".terraform"))
+	defer os.RemoveAll(path.Join(origDir, "tests", "fixtures", "scenarios", "hooks-test", ".terraform"))
 	defer os.Chdir(origDir)
 
-	if err := os.Chdir("testdata/fixtures/hooks-test"); err != nil {
+	if err := os.Chdir("tests/fixtures/scenarios/hooks-test"); err != nil {
 		t.Fatalf("failed to change directory: %v", err)
 	}
 
@@ -32,13 +32,13 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
 
-	// Set the arguments for the first call to main() to deeploy the `random1` component, which uses a `hook` to set a
+	// Set the arguments for the first call to main() to deploy the `component1` component, which uses a `hook` to set a
 	// value in Redis
-	os.Args = []string{"atmos", "terraform", "deploy", "random1", "-s", "test"}
+	os.Args = []string{"atmos", "terraform", "deploy", "component1", "-s", "test"}
 	main()
 
-	// Set the arguments for the second call to main() to deeploy the `random2` component, which uses a `store` to read a
+	// Set the arguments for the second call to main() to deeploy the `component2` component, which uses a `store` to read a
 	// value  that was set in the first apply.
-	os.Args = []string{"atmos", "terraform", "deploy", "random2", "-s", "test"}
+	os.Args = []string{"atmos", "terraform", "deploy", "component2", "-s", "test"}
 	main()
 }
