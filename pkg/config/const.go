@@ -34,6 +34,8 @@ const (
 	DryRunFlag         = "--dry-run"
 	SkipInitFlag       = "--skip-init"
 	RedirectStdErrFlag = "--redirect-stderr"
+	AffectedFlag       = "--affected"
+	AllFlag            = "--all"
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"

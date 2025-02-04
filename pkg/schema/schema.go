@@ -225,6 +225,8 @@ type ArgsAndFlagsInfo struct {
 	LogsFile                  string
 	SettingsListMergeStrategy string
 	Query                     string
+	Affected                  bool
+	All                       bool
 }
 
 type ConfigAndStacksInfo struct {
@@ -291,6 +293,8 @@ type ConfigAndStacksInfo struct {
 	LogsFile                      string
 	SettingsListMergeStrategy     string
 	Query                         string
+	Affected                      bool
+	All                           bool
 }
 
 // Workflows

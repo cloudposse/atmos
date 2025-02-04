@@ -50,6 +50,8 @@ var commonFlags = []string{
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
 	cfg.QueryFlag,
+	cfg.AffectedFlag,
+	cfg.AllFlag,
 }
 
 // ProcessComponentConfig processes component config sections
@@ -241,6 +243,8 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
+	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
+	configAndStacksInfo.All = argsAndFlagsInfo.All
 
 	flags := cmd.Flags()
 
@@ -988,6 +992,14 @@ func processArgsAndFlags(
 
 		if arg == cfg.HelpFlag1 || arg == cfg.HelpFlag2 {
 			info.NeedHelp = true
+		}
+
+		if arg == cfg.AffectedFlag {
+			info.Affected = true
+		}
+
+		if arg == cfg.AllFlag {
+			info.All = true
 		}
 
 		for _, f := range commonFlags {
