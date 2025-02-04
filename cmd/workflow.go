@@ -52,8 +52,8 @@ var workflowCmd = &cobra.Command{
 			// Format common error messages
 			if strings.Contains(err.Error(), "does not exist") {
 				u.PrintErrorMarkdownAndExit("File Not Found", fmt.Errorf("`%v` was not found", workflowFile), "")
-			} else if strings.Contains(err.Error(), "does not have the") {
-				u.PrintErrorMarkdownAndExit("Invalid Workflow", err, "")
+			} else if strings.Contains(err.Error(), "No workflow exists with the name") {
+				u.PrintErrorMarkdownAndExit("Invalid Workflow Name", err, "")
 			} else {
 				// For other errors, use the standard error handler
 				u.PrintErrorMarkdownAndExit("", err, "")
