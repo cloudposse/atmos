@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProcessTagStore(t *testing.T) {
@@ -36,8 +37,8 @@ func TestProcessTagStore(t *testing.T) {
 	}
 
 	// Populate the store with some data
-		require.NoError(t, redisStore.Set("dev", "vpc", "cidr", "10.0.0.0/16"))
-		require.NoError(t, redisStore.Set("prod", "vpc", "cidr", "172.16.0.0/16"))
+	require.NoError(t, redisStore.Set("dev", "vpc", "cidr", "10.0.0.0/16"))
+	require.NoError(t, redisStore.Set("prod", "vpc", "cidr", "172.16.0.0/16"))
 
 	tests := []struct {
 		name         string
