@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -253,7 +255,7 @@ Arguments:
 
 // attachTerraformCommands attaches static Terraform commands to a provided parent command
 func attachTerraformCommands(parentCmd *cobra.Command) {
-	parentCmd.PersistentFlags().String("append-user-agent", "", "Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.")
+	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.", version.Version))
 	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running 'terraform init' before executing the command")
 
 	commands := getTerraformCommands()
