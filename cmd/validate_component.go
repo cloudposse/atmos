@@ -29,7 +29,7 @@ var validateComponentCmd = &cobra.Command{
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
-		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", component, stack)
+		m := fmt.Sprintf("component `%s` in stack `%s` validated successfully\n", component, stack)
 		u.PrintMessageInColor(m, theme.Colors.Success)
 	},
 }
