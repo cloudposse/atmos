@@ -83,9 +83,10 @@ stores:
 The Artifactory store supports using an access token for authentication. The access token can be set directly in the
 `atmos.yaml` or via the `JFROG_ACCESS_TOKEN` or `ARTIFACTORY_ACCESS_TOKEN` environment variables.
 
-NOTE: It is not recommended to set the access token in plain text in `atmos.yaml` as it is not secure. Specifying the
-access token via config is allowed so that you can support the use case where you have multiple Artifactory stores
-in `atmos.yaml` and you need to specify different access tokens for each. In this case, you can use the `!env`
+It is also possible to specify the access token as `anonymous` to use the anonymous user to access the Artifactory
+repository if the repository is configured to allow anonymous access.
+
+**NOTE:** Storing sensitive access tokens in plain text in `atmos.yaml` is not secure and should be avoided. However, it's recommended for the `anonymous` use case or when managing multiple Artifactory stores with different access tokens. In such cases, use [`!env`](/core-concepts/stacks/yaml-functions/env) function to reference tokens securely.
 YAML function to set the access token from an environment variable.
 
 ### AWS SSM Parameter Store
