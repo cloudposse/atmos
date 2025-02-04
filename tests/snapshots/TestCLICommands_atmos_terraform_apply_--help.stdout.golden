@@ -26,7 +26,7 @@ Global Flags:
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent
                                       string in Terraform provider requests.
-                                      Example: 'Atmos/%s (Cloud Posse;
+                                      Example: 'Atmos/test (Cloud Posse;
                                       +https://atmos.tools)'. This flag works
                                       with almost all commands.
 
