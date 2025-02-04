@@ -28,7 +28,10 @@ var terraformCmd = &cobra.Command{
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 	info := getConfigAndStacksInfo("terraform", cmd, args)
 	if info.NeedHelp {
-		actualCmd.Usage()
+		err := actualCmd.Usage()
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
 		return
 	}
 	err := e.ExecuteTerraform(info)
