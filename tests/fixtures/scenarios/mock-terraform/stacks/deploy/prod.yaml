@@ -1,0 +1,19 @@
+import:
+  - catalog/mock
+
+vars:
+  environment: prod
+  component: mock
+
+components:
+  terraform:
+    mock:
+      metadata:
+        component: mock
+        environment: prod
+      settings:
+        component: mock
+      vars:
+        foo: "prod-foo"
+        bar: "prod-bar"
+        baz: "prod-baz"

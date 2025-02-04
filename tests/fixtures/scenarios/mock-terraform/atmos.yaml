@@ -1,0 +1,22 @@
+components:
+  terraform:
+    base_path: components/terraform
+    apply:
+      auto_approve: true
+    clean:
+      auto_approve: true
+    deploy_run_init: true
+    init_run_reconfigure: true
+    command: terraform
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/templates/**/*"
+  name_pattern: "{environment}-{component}"
+
+terraform:
+  version_constraint: ">= 1.0"
+  download_url: "https://releases.hashicorp.com/terraform"
