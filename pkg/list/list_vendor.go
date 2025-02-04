@@ -31,7 +31,7 @@ func processVendorFile(filePath string, atmosConfig schema.AtmosConfiguration) (
 	}
 
 	// Process all sources from the main config and its imports
-	mergedSources, _, err := exec.ProcessVendorImports(atmosConfig, filePath, vendorConfig.Spec.Imports, vendorConfig.Spec.Sources, []string{})
+	mergedSources, _, err := exec.ProcessVendorImports(atmosConfig, filePath, vendorConfig.Spec.Imports, vendorConfig.Spec.Sources, []string{}, 0, 10)
 	if err != nil {
 		return nil, fmt.Errorf("error processing vendor imports: %w", err)
 	}
