@@ -69,7 +69,7 @@ var docsCmd = &cobra.Command{
 				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 			if !componentPathExists {
-				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component `%s` not found in path: '%s'", info.Component, componentPath), "")
+				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component `%s` not found in path: `%s`", info.Component, componentPath), "")
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")
