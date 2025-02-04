@@ -25,7 +25,7 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	defer os.Chdir(origDir)
 
 	if err := os.Chdir("testdata/fixtures/hooks-test"); err != nil {
-	    t.Fatalf("failed to change directory: %v", err)
+		t.Fatalf("failed to change directory: %v", err)
 	}
 
 	// Capture the original arguments
