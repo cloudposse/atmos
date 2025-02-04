@@ -444,7 +444,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 					if configTemplate, ok = atmosConfig.Integrations.Atlantis.ConfigTemplates[settingsAtlantisConfigTemplateName]; !ok {
 						return errors.Errorf("# Missing Atlantis Config Template\n\n"+
 							"## Configuration Issue\n\n"+
-							"The Atlantis config template **'%s'** is referenced in `settings.atlantis.config_template_name`, "+
+							"The Atlantis config template **`%s`** is referenced in `settings.atlantis.config_template_name`, "+
 							"but it is **not defined** in `integrations.atlantis.config_templates` inside `atmos.yaml`. "+
 							"Please update `atmos.yaml` to include the missing template.", settingsAtlantisConfigTemplateName)
 					}
