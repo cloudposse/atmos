@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	e "github.com/cloudposse/atmos/internal/exec"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/hooks"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type contextKey string
@@ -25,8 +25,17 @@ var terraformCmd = &cobra.Command{
 	},
 }
 
+func init() {
+	// https://github.com/spf13/cobra/issues/739
+	terraformCmd.DisableFlagParsing = true
+	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
+	attachTerraformCommands(terraformCmd)
+	RootCmd.AddCommand(terraformCmd)
+}
+
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 	info := getConfigAndStacksInfo("terraform", cmd, args)
+
 	if info.NeedHelp {
 		err := actualCmd.Usage()
 		if err != nil {
@@ -34,16 +43,9 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 		}
 		return
 	}
+
 	err := e.ExecuteTerraform(info)
 	if err != nil {
 		u.LogErrorAndExit(err)
 	}
-}
-
-func init() {
-	// https://github.com/spf13/cobra/issues/739
-	terraformCmd.DisableFlagParsing = true
-	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
-	attachTerraformCommands(terraformCmd)
-	RootCmd.AddCommand(terraformCmd)
 }
