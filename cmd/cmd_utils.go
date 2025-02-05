@@ -605,3 +605,13 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	}
 	return info
 }
+
+// Contains checks if a slice of strings contains an exact match for the target string.
+func Contains(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
