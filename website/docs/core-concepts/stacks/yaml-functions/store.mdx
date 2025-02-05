@@ -9,13 +9,13 @@ import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `!store` YAML function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores) (e.g. SSM Parameter Store, Artifactory, etc.)
+The `!store` YAML function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores) (e.g. SSM Parameter Store, Artifactory, Redis, etc.)
 into Atmos stack manifests.
 </Intro>
 
 ## Usage
 
-The `!store` function can be called with either two or three parameters:
+The `!store` function can be called with either two or three parameters, and optionally a default value:
 
 ```yaml
   # Get the `key` from the store of a `component` in the current stack
@@ -23,6 +23,9 @@ The `!store` function can be called with either two or three parameters:
 
   # Get the `key` from the store of a `component` in a different stack
   !store <component> <stack> <key>
+
+  # Get the `key` from the store of a `component` in a different stack, with a default value
+  !store <component> <stack> <key> | default <default_value>
 ```
 
 ## Arguments
@@ -36,6 +39,9 @@ The `!store` function can be called with either two or three parameters:
 
   <dt>`key`</dt>
   <dd>The key to read from the store</dd>
+
+  <dt>`default_value`</dt>
+  <dd>(optional) The default value to return if the key is not found in the store</dd>
 </dl>
 
 
