@@ -306,16 +306,19 @@ func (cl *ConfigLoader) stageDiscoverAdditionalConfigs() error {
 			return err
 		}
 	}
-	// 2. Check Git Repository Root
-	found := cl.loadGitAtmosConfig()
-	if found {
-		cl.debugLogging("Git repository root atmos loaded")
-	}
 	// 3. Check Current Working Directory (CWD)
-	found = cl.loadWorkdirAtmosConfig()
+	found := cl.loadWorkdirAtmosConfig()
 	if found {
+		cl.debugLogging("Workdir atmos loaded")
 		return nil
 	}
+	// 2. Check Git Repository Root
+	found = cl.loadGitAtmosConfig()
+	if found {
+		cl.debugLogging("Git repository root atmos loaded")
+		return nil
+	}
+
 	// 4. No configuration found in Stage 2
 	cl.debugLogging("No configuration found in Stage 2: Discover Additional Configurations")
 	return nil
@@ -597,6 +600,7 @@ func (cl *ConfigLoader) applyUserPreferences() {
 			cl.debugLogging(fmt.Sprintf("atmos config file found on XDG_CONFIG_HOME atmos path: %v ", atmosConfigPath))
 			cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPath)
 		}
+		return
 	}
 
 	userHomeDir, err := homedir.Dir()
@@ -690,7 +694,7 @@ func (cl *ConfigLoader) loadSystemConfig() error {
 func (cl *ConfigLoader) getSystemConfigPath() ([]string, bool) {
 	var systemFilePaths []string
 	if runtime.GOOS == "windows" {
-		programData := os.Getenv("PROGRAMDATA")
+		programData := os.Getenv(WindowsAppDataEnvVar)
 		if programData != "" {
 			systemFilePaths = append(systemFilePaths, programData)
 		}

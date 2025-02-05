@@ -74,15 +74,15 @@ flowchart TD
     I1 -- Found --> I2["Load First Found Config: atmos.yaml or atmos.d/**/* from ATMOS_CLI_CONFIG_PATH"]
     I2 --> I4["Update ATMOS_CLI_CONFIG_PATH with loaded absolute paths"]
     I4 --> J["Process Imports and Deep Merge"]
-    I1 -- Not Found --> I5{"Check Git Repository Root"}
-    I5 -- Found --> I6["Load First Found Config: atmos.yaml, .atmos.yaml, atmos.d/**/*, .atmos.d/**/*, or .github/atmos.yaml from Git Repo Root"]
-    I6 --> I4
-    I5 -- Not Found --> I12{"Check Current Working Directory"}
-    
-    %% New branch for Current Working Directory (note it's not identical to repo root)
+    I1 -- Not Found --> I12{"Check Current Working Directory"}
+     %% New branch for Current Working Directory (note it's not identical to repo root)
     I12 -- Found --> I13["Load First Found Config: atmos.yaml, .atmos.yaml, atmos.d/**/*, .atmos.d/**/* from CWD"]
     I13 --> I4
-    I12 -- Not Found --> I18["No configuration found in Stage 2"]
+    I12 -- Not Found --> I5{"Check Git Repository Root"}
+    I5 -- Found --> I6["Load First Found Config: atmos.yaml, .atmos.yaml, atmos.d/**/*, .atmos.d/**/*, or .github/atmos.yaml from Git Repo Root"]
+    I6 --> I4    
+   
+    I5 -- Not Found --> I18["No configuration found in Stage 2"]
     I18 --> K["Stage 3: Apply User Preferences"]
     
     J --> K["Stage 3: Apply User Preferences"]
