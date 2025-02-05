@@ -39,6 +39,16 @@ vendor:
   base_path: "vendor.d"
   list:
     columns:
+      # Template variables available for vendor list columns:
+      # .atmos_component    - The name of the component (e.g., "vpc/v1", "eks/cluster")
+      # .atmos_vendor_type  - The type of vendor configuration (e.g., "Vendor Manifest")
+      # .atmos_vendor_file  - The path to the vendor manifest file (e.g., "vendor.d/vendor.yaml")
+      # .atmos_vendor_target- The target directory where the component is vendored
+      # Additional variables:
+      # .Component  - Same as .atmos_component
+      # .Version   - The version/ref of the component
+      # .Source    - The source URI of the component
+      # .Tags      - List of tags associated with the component
       - name: Component
         value: '{{ .atmos_component }}'
       - name: Type
