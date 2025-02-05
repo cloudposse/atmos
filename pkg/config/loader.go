@@ -613,15 +613,15 @@ func (cl *ConfigLoader) applyUserPreferences() {
 		if found {
 			ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosConfigPathHomeDir, cl.viper)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("error processing config user HomeDir path: %v error : %v", configPathHomeDIr, err))
+				cl.debugLogging(fmt.Sprintf("error processing config user HomeDir path: %s error : %v", configPathHomeDIr, err))
 			}
 			if ok {
 				foundHomeDirConfig = true
 				err := cl.processConfigImports()
 				if err != nil {
-					cl.debugLogging(fmt.Sprintf("error processing imports after HomeDir atmos path: %v error : %v", atmosConfigPathHomeDir, err))
+					cl.debugLogging(fmt.Sprintf("error processing imports after HomeDir atmos path: %s error : %v", atmosConfigPathHomeDir, err))
 				}
-				cl.debugLogging(fmt.Sprintf("atmos config file found on HomeDir atmos path: %v ", atmosConfigPathHomeDir))
+				cl.debugLogging(fmt.Sprintf("atmos config file found on HomeDir atmos path: %s ", atmosConfigPathHomeDir))
 				cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPathHomeDIr)
 			}
 		}
@@ -631,14 +631,14 @@ func (cl *ConfigLoader) applyUserPreferences() {
 			foundHomeDirConfig = true
 			ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosConfigPathHomeDir, cl.viper)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("error processing config user HomeDir path: %v error : %v", configPathHomeDIr, err))
+				cl.debugLogging(fmt.Sprintf("error processing config user HomeDir path: %s error : %v", configPathHomeDIr, err))
 			}
 			if ok {
 				err := cl.processConfigImports()
 				if err != nil {
-					cl.debugLogging(fmt.Sprintf("error processing imports after HomeDir atmos path: %v error : %v", atmosConfigPathHomeDir, err))
+					cl.debugLogging(fmt.Sprintf("error processing imports after HomeDir atmos path: %s error : %v", atmosConfigPathHomeDir, err))
 				}
-				cl.debugLogging(fmt.Sprintf("atmos config file found on HomeDir atmos path: %v ", atmosConfigPathHomeDir))
+				cl.debugLogging(fmt.Sprintf("atmos config file found on HomeDir atmos path: %s ", atmosConfigPathHomeDir))
 				cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPathHomeDIr)
 			}
 		}
