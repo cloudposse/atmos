@@ -727,7 +727,6 @@ func (cl *ConfigLoader) debugLogging(msg string) {
 		cl.atmosConfig.Logs.Level = cl.LogsLevel
 		if cl.atmosConfig.Logs.Level == u.LogLevelTrace {
 			u.LogTrace(msg)
-			cl.debugLogging(msg)
 			return
 		}
 		u.LogDebug(msg)
