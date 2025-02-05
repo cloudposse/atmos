@@ -157,6 +157,11 @@ const config = {
                         position: 'left',
                         to: '/community'
                     },
+                    {
+                        label: 'Blog',
+                        position: 'left',
+                        to: '/blog'
+                    },
                     // Algolia search configuration
                     {
                         type: 'search',
