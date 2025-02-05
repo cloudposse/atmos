@@ -69,7 +69,7 @@ func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 	os.Exit(1)
 }
 
-func PrintInvalidUsageErrorAndExit(err error) {
+func PrintInvalidUsageErrorAndExit(err error, suggestion string) {
 	PrintErrorMarkdownAndExit("Invalid Usage", err, "")
 }
 

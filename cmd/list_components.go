@@ -29,7 +29,7 @@ var listComponentsCmd = &cobra.Command{
 
 		stackFlag, err := flags.GetString("stack")
 		if err != nil {
-			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `stack` flag: `%v`", err))
+			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `stack` flag: `%v`", err), "")
 			return
 		}
 
