@@ -38,13 +38,12 @@ func TestBasePathComputingWithBasePathArg(t *testing.T) {
 	tempDir = filepath.FromSlash(tempDir)
 	defer os.RemoveAll(tempDir)
 	configFile1 := filepath.Join(tempDir, "config1.yaml")
-	err = os.WriteFile(configFile1, []byte("key1: value1"), 0644)
+	err = os.WriteFile(configFile1, []byte("key1: value1"), 0o644)
 	assert.NoError(t, err)
 	info.BasePathFromArg = configFile1
 	result, err = configLoader.BasePathComputing(info)
 	assert.Error(t, err)
 	assert.Equal(t, "", result)
-
 }
 
 // test env base path
@@ -102,7 +101,7 @@ func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 	}
 	// dir under temp
 	subDirTemp := filepath.Join(tempDir, "sub-dir")
-	err = os.Mkdir(subDirTemp, 0755)
+	err = os.Mkdir(subDirTemp, 0o755)
 	if err != nil {
 		t.Fatalf("Failed to create directory %q: %v", subDirTemp, err)
 	}
@@ -112,7 +111,6 @@ func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 	result, err = configLoader.BasePathComputing(info)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPath, result)
-
 }
 
 // test base path form  "!repo-root"

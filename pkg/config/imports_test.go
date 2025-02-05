@@ -14,7 +14,7 @@ import (
 
 func setupTestFile(content, tempDir string, filename string) (string, error) {
 	filePath := filepath.Join(tempDir, filename)
-	err := os.WriteFile(filePath, []byte(content), 0644)
+	err := os.WriteFile(filePath, []byte(content), 0o644)
 	return filePath, err
 }
 
@@ -31,34 +31,34 @@ func TestProcessImports(t *testing.T) {
 	defer os.Remove(baseDir)
 	// Step 2.1: Create a directory for recursive imports
 	configDir := filepath.Join(baseDir, "configs.d")
-	err := os.MkdirAll(configDir, 0755)
+	err := os.MkdirAll(configDir, 0o755)
 	assert.NoError(t, err)
 
 	// Create mock configuration files in the directory
 	configFile1 := filepath.Join(configDir, "config1.yaml")
-	err = os.WriteFile(configFile1, []byte("key1: value1"), 0644)
+	err = os.WriteFile(configFile1, []byte("key1: value1"), 0o644)
 	assert.NoError(t, err)
 
 	configFile2 := filepath.Join(configDir, "config2.yaml")
-	err = os.WriteFile(configFile2, []byte("key2: value2"), 0644)
+	err = os.WriteFile(configFile2, []byte("key2: value2"), 0o644)
 	assert.NoError(t, err)
 
 	// Step 2.2: Create a specific local file
 	localFile := filepath.Join(baseDir, "logs.yaml")
-	err = os.WriteFile(localFile, []byte("key3: value3"), 0644)
+	err = os.WriteFile(localFile, []byte("key3: value3"), 0o644)
 	assert.NoError(t, err)
 	// step 2.3
 	configDir2 := filepath.Join(baseDir, "config")
-	err = os.MkdirAll(configDir2, 0755)
+	err = os.MkdirAll(configDir2, 0o755)
 	assert.NoError(t, err)
 	configFile3 := filepath.Join(configDir2, "config3.yaml")
-	err = os.WriteFile(configFile3, []byte("key4: value4"), 0644)
+	err = os.WriteFile(configFile3, []byte("key4: value4"), 0o644)
 	assert.NoError(t, err)
 	// Step 3: Define test imports
 	imports := []string{
 		server.URL,               // Remote URL
 		"configs.d/**/*",         // Recursive directory
-		"config/**/*.yaml",       //recursive/**/*.yaml", // Recursive directory with specific pattern extension
+		"config/**/*.yaml",       // recursive/**/*.yaml", // Recursive directory with specific pattern extension
 		"./logs.yaml",            // Specific local file
 		"http://invalid-url.com", // Invalid URL
 		"",                       // Empty import path
@@ -160,6 +160,5 @@ import:
 		}
 		resolved, err := cl.processImports(importPaths, tempDir, 11, 10)
 		assert.Nil(t, resolved, "no resolved paths should be returned on depth limit breach")
-
 	})
 }
