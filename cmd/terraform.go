@@ -2,14 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	e "github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
 
 	l "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
