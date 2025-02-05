@@ -317,7 +317,7 @@ func (cl *ConfigLoader) stageDiscoverAdditionalConfigs() error {
 		return nil
 	}
 	// 4. No configuration found in Stage 2
-	u.LogTrace(cl.atmosConfig, "No configuration found in Stage 2: Discover Additional Configurations")
+	cl.debugLogging("No configuration found in Stage 2: Discover Additional Configurations")
 	return nil
 }
 
@@ -539,7 +539,7 @@ func (cl *ConfigLoader) loadConfigsFromPath(path string) (bool, []string, error)
 					}
 					if found {
 						loadedPaths = append(loadedPaths, cfgPath)
-						u.LogTrace(cl.atmosConfig, fmt.Sprintf("Loaded config file: %s", cfgPath))
+						cl.debugLogging(fmt.Sprintf("Loaded config file: %s", cfgPath))
 					}
 				}
 				return nil
@@ -555,7 +555,7 @@ func (cl *ConfigLoader) loadConfigsFromPath(path string) (bool, []string, error)
 			}
 			if found {
 				loadedPaths = append(loadedPaths, cfgPath)
-				u.LogTrace(cl.atmosConfig, fmt.Sprintf("Loaded config file: %s", cfgPath))
+				cl.debugLogging(fmt.Sprintf("Loaded config file: %s", cfgPath))
 			}
 		}
 	}
@@ -722,10 +722,11 @@ func (cl *ConfigLoader) debugLogging(msg string) {
 	if cl.debug {
 		cl.atmosConfig.Logs.Level = cl.LogsLevel
 		if cl.atmosConfig.Logs.Level == u.LogLevelTrace {
-			u.LogTrace(cl.atmosConfig, msg)
+			u.LogTrace(msg)
+			cl.debugLogging(msg)
 			return
 		}
-		u.LogDebug(cl.atmosConfig, msg)
+		u.LogDebug(msg)
 	}
 }
 
@@ -770,7 +771,7 @@ func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, erro
 	for _, path := range atmosFilePaths {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			u.LogWarning(cl.atmosConfig, fmt.Sprintf("error getting absolute path for file '%s'. %v", path, err))
+			cl.debugLogging(fmt.Sprintf("error getting absolute path for file '%s'. %v", path, err))
 			continue
 		}
 		atmosFilePathsABS = append(atmosFilePathsABS, absPath)
@@ -883,7 +884,7 @@ func (cl *ConfigLoader) loadConfigFileViber(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(atmosConfig, fmt.Sprintf("%s", "error closing file '"+path+"'. "+err.Error()))
+			cl.debugLogging(fmt.Sprintf("%s", "error closing file '"+path+"'. "+err.Error()))
 		}
 	}(reader)
 
