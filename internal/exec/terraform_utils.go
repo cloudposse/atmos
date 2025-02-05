@@ -29,3 +29,59 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	u.LogDebug(fmt.Sprintf("\nDeleting Terraform environment file:\n'%s'", filePath))
 	_ = os.Remove(filePath)
 }
+
+func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
+	shouldProcessStacks := true
+	shouldCheckStack := true
+
+	if info.SubCommand == "clean" {
+		if info.ComponentFromArg == "" {
+			shouldProcessStacks = false
+		}
+		shouldCheckStack = info.Stack != ""
+
+	}
+
+	return shouldProcessStacks, shouldCheckStack
+}
+
+func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	// Auto-generate backend file
+	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
+		backendFileName := filepath.Join(workingDir, "backend.tf.json")
+
+		u.LogDebug("\nWriting the backend config to file:")
+		u.LogDebug(backendFileName)
+
+		if !info.DryRun {
+			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
+			if err != nil {
+				return err
+			}
+
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	if len(info.ComponentProvidersSection) > 0 {
+		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
+
+		u.LogDebug("\nWriting the provider overrides to file:")
+		u.LogDebug(providerOverrideFileName)
+
+		if !info.DryRun {
+			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
+			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
+			return err
+		}
+	}
+	return nil
+}
