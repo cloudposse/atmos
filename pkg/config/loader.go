@@ -47,7 +47,6 @@ var embeddedConfigData []byte
 
 // LoadConfig initiates the configuration loading process based on the defined flowchart.
 func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-
 	logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
 	if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace || configAndStacksInfo.LogsLevel == u.LogLevelDebug {
 		cl.debug = true
@@ -152,7 +151,7 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 		return fmt.Errorf("No config paths provided. Please provide a list of config paths using the --config flag.")
 	}
 	var configPaths []string
-	//get all --config values from command line arguments
+	// get all --config values from command line arguments
 	for _, configPath := range configPathsArgs {
 		paths, err := cl.SearchAtmosConfigFileDir(configPath)
 		if err != nil {
@@ -204,6 +203,7 @@ func parseArraySeparator(s string) []string {
 	}
 	return result
 }
+
 func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 	atmosCliConfigEnvPaths := parseArraySeparator(atmosCliConfigEnv)
 	if len(atmosCliConfigEnvPaths) == 0 {
@@ -258,10 +258,9 @@ func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 		}
 	}
 	return nil
-
 }
-func (cl *ConfigLoader) getPathAtmosCLIConfigPath(atmosCliConfigPathEnv string) ([]string, error) {
 
+func (cl *ConfigLoader) getPathAtmosCLIConfigPath(atmosCliConfigPathEnv string) ([]string, error) {
 	isDir, err := u.IsDirectory(atmosCliConfigPathEnv)
 	if err != nil {
 		if err == os.ErrNotExist {
@@ -301,7 +300,7 @@ func (cl *ConfigLoader) getPathAtmosCLIConfigPath(atmosCliConfigPathEnv string) 
 
 // stageDiscoverAdditionalConfigs handles Stage 2: Discover Additional Configurations as per the flowchart.
 func (cl *ConfigLoader) stageDiscoverAdditionalConfigs() error {
-	//1. load Atmos conflagration from ATMOS_CLI_CONFIG_PATH ENV
+	// 1. load Atmos conflagration from ATMOS_CLI_CONFIG_PATH ENV
 	if atmosCliConfigPathEnv := os.Getenv("ATMOS_CLI_CONFIG_PATH"); atmosCliConfigPathEnv != "" {
 		if err := cl.loadAtmosConfigFromEnv(atmosCliConfigPathEnv); err != nil {
 			return err
@@ -321,6 +320,7 @@ func (cl *ConfigLoader) stageDiscoverAdditionalConfigs() error {
 	u.LogTrace(cl.atmosConfig, "No configuration found in Stage 2: Discover Additional Configurations")
 	return nil
 }
+
 func (cl *ConfigLoader) loadWorkdirAtmosConfig() (found bool) {
 	found = false
 	cwd, err := os.Getwd()
@@ -367,6 +367,7 @@ func (cl *ConfigLoader) loadWorkdirAtmosConfig() (found bool) {
 
 	return found
 }
+
 func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, error) {
 	var atmosFoundFilePaths []string
 	searchFilePath := filepath.Join(filepath.FromSlash(workDir), CliConfigFileName)
@@ -402,7 +403,6 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 	}
 	cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, workDir)
 	return atmosFoundFilePaths, err
-
 }
 
 // loadGitAtmosConfig attempts to load configuration files from the Git repository root. It returns a boolean indicating if any configs were found and successfully loaded.
@@ -463,6 +463,7 @@ func (cl *ConfigLoader) loadGitAtmosConfig() (found bool) {
 	}
 	return found
 }
+
 func (cl *ConfigLoader) getGitAtmosConfigPaths(gitRootDir string) ([]string, error) {
 	var atmosFoundFilePaths []string
 	searchFilePath := filepath.Join(filepath.FromSlash(gitRootDir), CliConfigFileName)
@@ -498,7 +499,6 @@ func (cl *ConfigLoader) getGitAtmosConfigPaths(gitRootDir string) ([]string, err
 	}
 	cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, gitRootDir)
 	return atmosFoundFilePaths, err
-
 }
 
 // loadConfigsFromPath loads configuration files from the specified path.
@@ -716,7 +716,6 @@ func (cl *ConfigLoader) getSystemConfigPath() ([]string, bool) {
 		return configFilesPaths, true
 	}
 	return configFilesPaths, false
-
 }
 
 func (cl *ConfigLoader) debugLogging(msg string) {
@@ -729,6 +728,7 @@ func (cl *ConfigLoader) debugLogging(msg string) {
 		u.LogDebug(cl.atmosConfig, msg)
 	}
 }
+
 func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, error) {
 	// Determine if dirPath is a directory or a pattern
 	isDir := false
@@ -741,7 +741,6 @@ func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, erro
 	if isDir {
 		// For directories, append a default pattern to match all files
 		patterns = []string{filepath.Join(dirPath, "*.yaml"), filepath.Join(dirPath, "*.yml")}
-
 	} else {
 
 		ext := filepath.Ext(dirPath)
@@ -780,8 +779,8 @@ func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, erro
 	atmosFilePathsABS = cl.detectPriorityFiles(atmosFilePathsABS)
 	atmosFilePathsABS = cl.sortFilesByDepth(atmosFilePathsABS)
 	return atmosFilePathsABS, nil
-
 }
+
 func (cl *ConfigLoader) SearchConfigFilePath(path string) (string, bool) {
 	// Check if the provided path has a file extension and the file exists
 	if filepath.Ext(path) != "" {

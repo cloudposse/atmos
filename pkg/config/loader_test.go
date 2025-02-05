@@ -74,7 +74,7 @@ func TestSearchAtmosConfigFileDir_ReturnsConfigFilesWithSupportedExtensions(t *t
 
 	for _, f := range files {
 		path := filepath.Join(tmpDir, f)
-		if err := os.WriteFile(path, []byte(""), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -107,7 +107,7 @@ func TestLoadExplicitConfigsWithValidConfigFile(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	configPath := filepath.Join(tmpDir, "atmos.yaml")
 
-	err := os.WriteFile(configPath, []byte("test: config"), 0644)
+	err := os.WriteFile(configPath, []byte("test: config"), 0o644)
 	require.NoError(t, err)
 
 	cl := &ConfigLoader{
@@ -129,9 +129,9 @@ func TestLoadExplicitConfigsWithMultipleConfigFiles(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	configPath1 := filepath.Join(tmpDir, "atmos.yaml")
 	configPath2 := filepath.Join(tmpDir, "atmos.yml")
-	err := os.WriteFile(configPath1, []byte("test: config1"), 0644)
+	err := os.WriteFile(configPath1, []byte("test: config1"), 0o644)
 	require.NoError(t, err)
-	err = os.WriteFile(configPath2, []byte("test: config2"), 0644)
+	err = os.WriteFile(configPath2, []byte("test: config2"), 0o644)
 	require.NoError(t, err)
 	cl := &ConfigLoader{
 		atmosConfig: schema.AtmosConfiguration{},
@@ -223,7 +223,6 @@ func TestDownloadRemoteConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 	t.Run("Valid URL", func(t *testing.T) {
-
 		tempFile, err := cl.downloadRemoteConfig(mockServer.URL, tmpDir)
 		if err != nil {
 			t.Fatalf("Expected no error, got %v", err)
@@ -245,8 +244,8 @@ func TestDownloadRemoteConfig(t *testing.T) {
 			t.Fatal("Expected an error for invalid URL, got nil")
 		}
 	})
-
 }
+
 func TestParseArraySeparatorWithMultipleParts(t *testing.T) {
 	input := "part1; part2;part3 ;part4"
 

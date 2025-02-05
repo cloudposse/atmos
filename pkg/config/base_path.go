@@ -11,7 +11,6 @@ import (
 )
 
 func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
-
 	// Check base path from CLI argument
 	if configAndStacksInfo.BasePathFromArg != "" {
 		return cl.resolveAndValidatePath(configAndStacksInfo.BasePathFromArg, "CLI argument")
@@ -48,7 +47,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 		return cl.resolveAndValidatePath(cl.atmosConfig.BasePath, source)
 	}
 
-	//Infer base_path
+	// Infer base_path
 	pwd, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -62,7 +61,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 		cl.debugLogging(fmt.Sprintf("base path from %s: %s", "infra", absPath))
 		return absPath, nil
 	}
-	//Set base_path to absolute path of ./
+	// Set base_path to absolute path of ./
 	absPath, err := filepath.Abs("./")
 	if err != nil {
 		return "", err
@@ -126,7 +125,6 @@ func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
 	}
 
 	return "", false
-
 }
 
 // GetGitRoot returns the root directory of the Git repository using go-git.

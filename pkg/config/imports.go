@@ -34,6 +34,7 @@ func (cl *ConfigLoader) downloadRemoteConfig(url string, tempDir string) (string
 	}
 	return tempFile, nil
 }
+
 func (cl *ConfigLoader) processImports(importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []string, err error) {
 	if tempDir == "" {
 		return nil, fmt.Errorf("tempDir required to process imports")
