@@ -85,3 +85,16 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	}
 	return nil
 }
+
+// needProcessTemplatesAndYamlFunctions checks if a Terraform command
+// requires the `Go` templates and Atmos YAML functions to be processed
+func needProcessTemplatesAndYamlFunctions(command string) bool {
+	commands := []string{
+		"plan",
+		"apply",
+		"deploy",
+		"destroy",
+		"generate",
+	}
+	return u.SliceContainsString(commands, command)
+}

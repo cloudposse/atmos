@@ -57,13 +57,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
-		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, true, true, nil)
+		processTemplatesAndYamlFunctions := needProcessTemplatesAndYamlFunctions(info.SubCommand)
+		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, processTemplatesAndYamlFunctions, processTemplatesAndYamlFunctions, nil)
 		if err != nil {
 			return err
 		}
 
 		if len(info.Stack) < 1 && shouldCheckStack {
-			return errors.New("stack must be specified when not using --everything or --force flags")
+			return errors.New("stack must be specified for the terraform command")
 		}
 	}
 
