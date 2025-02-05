@@ -222,8 +222,8 @@ func preCustomCommand(
 		} else {
 			// truly invalid, nothing to do
 			u.PrintErrorMarkdownAndExit("Invalid command", errors.New(
-				"no args, no steps, no sub-commands",
-			), "")
+				fmt.Sprintf("no args, no steps, no sub-commands provided in config for `%s`", cmd.CommandPath()),
+			), "https://atmos.tools/cli/configuration/commands")
 		}
 	}
 
