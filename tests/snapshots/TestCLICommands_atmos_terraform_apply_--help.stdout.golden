@@ -21,7 +21,6 @@ Global Flags:
         --                            Use double dashes to separate
                                       Atmos-specific options from native
                                       arguments and flags for the command.
-                                      (default "false")
 
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent

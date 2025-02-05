@@ -105,7 +105,7 @@ Global Flags:
 
         --                          Use double dashes to separate Atmos-specific
                                     options from native arguments and flags for
-                                    the command. (default "false")
+                                    the command.
 
         --clone-target-ref          Clone the target reference with which to
                                     compare the current branch: atmos atlantis

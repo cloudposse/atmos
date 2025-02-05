@@ -23,7 +23,6 @@ Flags:
 
         --                Use double dashes to separate Atmos-specific options
                           from native arguments and flags for the command.
-                          (default "false")
 
     -h, --help            help for helmfile (default "false")
 

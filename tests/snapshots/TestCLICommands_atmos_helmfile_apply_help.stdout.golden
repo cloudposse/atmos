@@ -16,7 +16,7 @@ Global Flags:
 
         --                          Use double dashes to separate Atmos-specific
                                     options from native arguments and flags for
-                                    the command. (default "false")
+                                    the command.
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file

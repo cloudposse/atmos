@@ -70,7 +70,7 @@ func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 }
 
 func PrintInvalidUsageErrorAndExit(err error, suggestion string) {
-	PrintErrorMarkdownAndExit("Invalid Usage", err, "")
+	PrintErrorMarkdownAndExit("Incorrect Usage", err, suggestion)
 }
 
 func PrintfMarkdown(format string, a ...interface{}) {
