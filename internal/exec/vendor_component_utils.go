@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,12 +13,13 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	tea "github.com/charmbracelet/bubbletea"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hairyhenderson/gomplate/v3"
 	cp "github.com/otiai10/copy"
 	"golang.org/x/term"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
@@ -102,6 +104,7 @@ func ExecuteStackVendorInternal(
 ) error {
 	return fmt.Errorf("command 'atmos vendor pull --stack <stack>' is not supported yet")
 }
+
 func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, componentPath string, vendorComponentSpec schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
 	// Copy from the temp folder to the destination folder and skip the excluded files
 	copyOptions := cp.Options{
@@ -124,7 +127,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 					return true, err
 				} else if excludeMatch {
 					// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-					u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+					u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 						trimmedSrc,
 						excludePath,
 					))
@@ -142,7 +145,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 						return true, err
 					} else if includeMatch {
 						// If the file matches ANY of the 'included_paths' patterns, include the file
-						u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+						u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 							trimmedSrc,
 							includePath,
 						))
@@ -154,13 +157,13 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 				if anyMatches {
 					return false, nil
 				} else {
-					u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+					u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 					return true, nil
 				}
 			}
 
 			// If 'included_paths' is not provided, include all files that were not excluded
-			u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+			u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 			return false, nil
 		},
 
@@ -181,7 +184,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 	componentPath2 := componentPath
 	if sourceIsLocalFile {
 		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, sanitizeFileName(uri))
+			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
 		}
 	}
 
@@ -190,6 +193,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 	}
 	return nil
 }
+
 func ExecuteComponentVendorInternal(
 	atmosConfig schema.AtmosConfiguration,
 	vendorComponentSpec schema.VendorComponentSpec,
@@ -222,6 +226,7 @@ func ExecuteComponentVendorInternal(
 	} else {
 		uri = vendorComponentSpec.Source.Uri
 	}
+
 	useOciScheme := false
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
@@ -244,7 +249,16 @@ func ExecuteComponentVendorInternal(
 				sourceIsLocalFile = true
 			}
 		}
+		u, err := url.Parse(uri)
+		if err == nil && u.Scheme != "" {
+			if u.Scheme == "file" {
+				trimmedPath := strings.TrimPrefix(filepath.ToSlash(u.Path), "/")
+				uri = filepath.Clean(trimmedPath)
+				useLocalFileSystem = true
+			}
+		}
 	}
+
 	var pType pkgType
 	if useOciScheme {
 		pType = pkgTypeOci
@@ -264,8 +278,10 @@ func ExecuteComponentVendorInternal(
 		vendorComponentSpec: vendorComponentSpec,
 		IsComponent:         true,
 	}
+
 	var packages []pkgComponentVendor
 	packages = append(packages, componentPkg)
+
 	// Process mixins
 	if len(vendorComponentSpec.Mixins) > 0 {
 		for _, mixin := range vendorComponentSpec.Mixins {
@@ -338,6 +354,7 @@ func ExecuteComponentVendorInternal(
 			packages = append(packages, pkg)
 		}
 	}
+
 	// Run TUI to process packages
 	if len(packages) > 0 {
 		model, err := newModelComponentVendorInternal(packages, dryRun, atmosConfig)
@@ -348,7 +365,7 @@ func ExecuteComponentVendorInternal(
 		// Disable TUI if no TTY support is available
 		if !CheckTTYSupport() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(atmosConfig, "TTY is not supported. Running in non-interactive mode")
+			u.LogWarning("TTY is not supported. Running in non-interactive mode")
 		}
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)

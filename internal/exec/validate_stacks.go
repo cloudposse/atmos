@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -12,12 +11,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -28,20 +30,57 @@ const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-man
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+	// Initialize spinner
+	message := "Validating Atmos Stacks..."
+	s := spinner.New()
+	s.Style = theme.Styles.Link
+
+	var opts []tea.ProgramOption
+	if !CheckTTYSupport() {
+		// Workaround for non-TTY environments
+		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		u.LogTrace("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+		fmt.Println(message)
+	}
+
+	p := tea.NewProgram(modelSpinner{
+		spinner: s,
+		message: message,
+	}, opts...)
+
+	// Use error channel to capture spinner errors
+	spinnerDone := make(chan error, 1)
+
+	go func() {
+		_, err := p.Run()
+		if err != nil {
+			fmt.Println(message)
+			u.LogError(fmt.Errorf("failed to run spinner: %w", err))
+		}
+		spinnerDone <- err
+		close(spinnerDone)
+	}()
+
+	// Process CLI arguments
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
 		return err
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
 		return err
 	}
 
 	flags := cmd.Flags()
-
 	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
+		p.Quit()
+		<-spinnerDone
 		return err
 	}
 
@@ -49,7 +88,13 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		atmosConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
 	}
 
-	return ValidateStacks(atmosConfig)
+	err = ValidateStacks(atmosConfig)
+
+	// Ensure spinner is stopped before returning
+	p.Quit()
+	<-spinnerDone
+
+	return err
 }
 
 // ValidateStacks validates Atmos stack configuration
@@ -99,7 +144,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			return err
 		}
 		atmosConfig.Schemas.Atmos.Manifest = f
-		u.LogTrace(atmosConfig, fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
+		u.LogTrace(fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
 	} else if u.FileExists(atmosConfig.Schemas.Atmos.Manifest) {
 		atmosManifestJsonSchemaFilePath = atmosConfig.Schemas.Atmos.Manifest
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
@@ -139,7 +184,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		return err
 	}
 
-	u.LogDebug(atmosConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
+	u.LogDebug(fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
 		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
@@ -310,7 +355,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true)
+					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true, true, nil)
 					if err != nil {
 						return nil, err
 					}
@@ -373,37 +418,29 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
 func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error) {
-
 	manifestURL := atmosConfig.Schemas.Atmos.Manifest
 
 	parsedURL, err := url.Parse(manifestURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL '%s': %w", manifestURL, err)
 	}
+
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return "", fmt.Errorf("unsupported URL scheme '%s' for schema manifest", parsedURL.Scheme)
 	}
+
 	tempDir := os.TempDir()
 	fileName, err := u.GetFileNameFromURL(manifestURL)
 	if err != nil || fileName == "" {
 		return "", fmt.Errorf("failed to get the file name from the URL '%s': %w", manifestURL, err)
 	}
+
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
 
-	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
-
-	client := &getter.Client{
-		Ctx:  ctx,
-		Dst:  atmosManifestJsonSchemaFilePath,
-		Src:  manifestURL,
-		Mode: getter.ClientModeFile,
-	}
-	if err = client.Get(); err != nil {
+	if err = GoGetterGet(atmosConfig, manifestURL, atmosManifestJsonSchemaFilePath, getter.ClientModeFile, time.Second*30); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
+
 	return atmosManifestJsonSchemaFilePath, nil
 }
 
@@ -421,7 +458,7 @@ func getEmbeddedSchemaPath() (string, error) {
 		return "", err
 	}
 
-	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0644)
+	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0o644)
 	if err != nil {
 		return "", err
 	}

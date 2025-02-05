@@ -3,10 +3,12 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -47,13 +49,6 @@ var RootCmd = &cobra.Command{
 		logsLevel, _ := cmd.Flags().GetString("logs-level")
 		logsFile, _ := cmd.Flags().GetString("logs-file")
 
-		errorConfig := schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: logsLevel,
-				File:  logsFile,
-			},
-		}
-
 		configAndStacksInfo := schema.ConfigAndStacksInfo{
 			LogsLevel: logsLevel,
 			LogsFile:  logsFile,
@@ -62,8 +57,13 @@ var RootCmd = &cobra.Command{
 		// Only validate the config, don't store it yet since commands may need to add more info
 		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
-			if !errors.Is(err, cfg.NotFound) {
-				u.LogErrorAndExit(errorConfig, err)
+			if errors.Is(err, cfg.NotFound) {
+				// For help commands or when help flag is set, we don't want to show the error
+				if !isHelpRequested {
+					u.LogWarning(err.Error())
+				}
+			} else {
+				u.LogErrorAndExit(err)
 			}
 		}
 	},
@@ -75,14 +75,40 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 
 		err = e.ExecuteAtmosCmd()
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
+}
+
+func setupLogger(atmosConfig *schema.AtmosConfiguration) {
+	switch atmosConfig.Logs.Level {
+	case "Trace":
+		log.SetLevel(log.DebugLevel)
+	case "Debug":
+		log.SetLevel(log.DebugLevel)
+	case "Info":
+		log.SetLevel(log.InfoLevel)
+	case "Warning":
+		log.SetLevel(log.WarnLevel)
+	case "Off":
+		log.SetOutput(io.Discard)
+	default:
+		log.SetLevel(log.InfoLevel)
+	}
+
+	if atmosConfig.Logs.File != "/dev/stderr" {
+		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		if err != nil {
+			log.Fatal("Failed to open log file:", err)
+		}
+		defer logFile.Close()
+		log.SetOutput(logFile)
+	}
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -99,22 +125,26 @@ func Execute() error {
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
-			u.LogTrace(schema.AtmosConfiguration{}, fmt.Sprintf("warning: CLI configuration 'atmos.yaml' file not found. Error: %s", initErr))
+			log.Debug("warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, initErr)
+			u.LogErrorAndExit(initErr)
 		}
 	}
+
+	// Set the log level for the charmbracelet/log package based on the atmosConfig
+	setupLogger(&atmosConfig)
+
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	}
 
@@ -159,7 +189,7 @@ func init() {
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	initCobraConfig()
@@ -178,7 +208,6 @@ func initCobraConfig() {
 		return nil
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
-
 		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
 			arguments := os.Args[len(strings.Split(command.CommandPath(), " ")):]
 			if len(command.Flags().Args()) > 0 {
@@ -191,19 +220,19 @@ func initCobraConfig() {
 		if command.Use != "atmos" || command.Flags().Changed("help") {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 			if err := oldUsageFunc(command); err != nil {
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 		} else {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 			b.HelpFunc(command, args)
 			if err := command.Usage(); err != nil {
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)

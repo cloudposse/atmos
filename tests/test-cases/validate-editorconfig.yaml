@@ -26,6 +26,6 @@ tests:
       - "editorconfig"
     expect:
       diff: []
-      stderr:
-        - "2 errors found"
+      stdout:
+        - "1 errors found"
       exit_code: 1

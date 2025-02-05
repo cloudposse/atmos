@@ -43,7 +43,7 @@ vars:
   vpc_flow_logs_traffic_type: ALL
 `
 
-	atmosConfig := schema.AtmosConfiguration{
+	atmosConfig := &schema.AtmosConfiguration{
 		Logs: schema.Logs{
 			Level: "Trace",
 		},

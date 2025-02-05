@@ -20,3 +20,8 @@ output "test_map" {
   }
   description = "Test map"
 }
+
+output "tags" {
+  value       = module.test_label.tags
+  description = "Tags"
+}

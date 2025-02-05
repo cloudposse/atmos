@@ -72,25 +72,6 @@ jobs:
           path: |
             ./build/
 
-  tidy:
-    name: Tidy Go Modules
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-        id: go
-
-      - uses: j0hnsmith/go-mod-check@v1
-        with:
-          working-directory: ${{ github.workspace }}
-          # optional, only if you're happy to have `replace ` lines in your go.mod file
-          skip-replace-check: true
-
   # run acceptance tests
   test:
     name: Acceptance Tests

@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
@@ -48,7 +49,7 @@ func WriteToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(atmosConfig, err.Error())
+			LogWarning(err.Error())
 		}
 	}(f)
 
@@ -121,7 +122,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 		}
 	}
 
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0644)
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
 		return err
 	}
@@ -129,7 +130,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			LogWarning(atmosConfig, err.Error())
+			LogWarning(err.Error())
 		}
 	}(f)
 
@@ -139,4 +140,14 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	}
 
 	return nil
+}
+
+// IsHCL checks if data is in HCL format
+func IsHCL(data string) bool {
+	if strings.TrimSpace(data) == "" {
+		return false
+	}
+
+	var hclData any
+	return hcl.Unmarshal([]byte(data), &hclData) == nil
 }

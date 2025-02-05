@@ -41,7 +41,7 @@ func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	if err != nil {
 		return err
 	}
-	LogInfo(atmosConfig, j)
+	LogInfo(j)
 	return nil
 }
 
@@ -132,4 +132,14 @@ func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+// IsJSON checks if data is in JSON format
+func IsJSON(data string) bool {
+	if strings.TrimSpace(data) == "" {
+		return false
+	}
+
+	var js json.RawMessage
+	return json.Unmarshal([]byte(data), &js) == nil
 }

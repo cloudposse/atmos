@@ -212,7 +212,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			includeStackAbsPaths,
 			excludeStackAbsPaths,
 		)
-
 		if err != nil {
 			return atmosConfig, err
 		}
@@ -232,7 +231,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		atmosConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 		if stackIsPhysicalPath {
-			u.LogTrace(atmosConfig, fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
+			u.LogTrace(fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
 				configAndStacksInfo.Stack,
 				stackConfigFilesRelativePaths[0]),
 			)
@@ -268,7 +267,7 @@ func processConfigFile(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(atmosConfig, fmt.Sprintf("error closing file '"+configPath+"'. "+err.Error()))
+			u.LogWarning(fmt.Sprintf("error closing file '%s'. %v", configPath, err))
 		}
 	}(reader)
 

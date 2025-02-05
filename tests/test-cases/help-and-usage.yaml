@@ -431,3 +431,43 @@ tests:
       stderr:
         - "Error: Unknown command \"non-existant\" for \"atmos atlantis generate repo-config\""
       exit_code: 1
+  - name: atmos validate editorconfig help
+    enabled: true
+    description: "Should show help for 'atmos validate editorconfig help'"
+    snapshot: true
+    diff: []
+    workdir: "../"
+    command: atmos
+    args:
+      - "validate"
+      - "editorconfig"
+      - "help"
+    expect:
+      exit_code: 0
+  - name: atmos validate editorconfig --help
+    enabled: true
+    description: "Should show help for 'atmos validate editorconfig --help'"
+    snapshot: true
+    diff: []
+    workdir: "../"
+    command: atmos
+    args:
+      - "validate"
+      - "editorconfig"
+      - "--help"
+    expect:
+      exit_code: 0
+  - name: atmos validate editorconfig non-existant
+    enabled: true
+    description: "Should show usage for 'atmos validate editorconfig non-existant'"
+    snapshot: true
+    diff: []
+    workdir: "../"
+    command: atmos
+    args:
+      - "validate"
+      - "editorconfig"
+      - "non-existant"
+    expect:
+      exit_code: 1
+

@@ -1,6 +1,7 @@
 tests:
   - name: "Invalid Log Level in Config File"
     enabled: true
+    snapshot: true
     description: "Test validation of invalid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/invalid-log-level"
     command: "atmos"
@@ -11,12 +12,14 @@ tests:
       - -s
       - test
     expect:
+      diff: []
       exit_code: 1
       stderr:
         - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
 
   - name: "Invalid Log Level in Environment Variable"
     enabled: true
+    snapshot: true
     description: "Test validation of invalid log level in ATMOS_LOGS_LEVEL env var"
     workdir: "../"
     command: "atmos"
@@ -29,52 +32,62 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: XTrace
     expect:
+      diff: []
       exit_code: 1
       stderr:
         - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
 
   - name: "Valid Log Level in Config File"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/valid-log-level"
     command: "atmos"
     args:
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     expect:
-      exit_code: 1
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
+      stderr:
+        - "^$"
+      exit_code: 0
 
   - name: "Valid Log Level in Environment Variable"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in ATMOS_LOGS_LEVEL env var"
     workdir: "../"
     command: "atmos"
     args:
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
-      exit_code: 1
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      stderr:
+        - "DEBU Found ENV var ATMOS_LOGS_LEVEL=Debug"
+      exit_code: 0
 
   - name: "Valid Log Level in Command Line Flag"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in --logs-level flag"
     workdir: "../"
     command: "atmos"
     args:
       - --logs-level
       - Info
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     expect:
-      exit_code: 1
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      stderr:
+        - "^$"
+      exit_code: 0
