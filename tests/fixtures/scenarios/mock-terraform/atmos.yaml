@@ -3,7 +3,7 @@ inherits:
 
 components:
   terraform:
-    base_path: "components/terraform"
+    base_path: "../../"
     apply:
       auto_approve: true
     clean:
