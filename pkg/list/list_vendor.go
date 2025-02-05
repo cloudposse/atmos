@@ -117,12 +117,26 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 	}
 
 	// Define default columns if not specified in config
-	header := []string{"Component", "Version", "Folder", "Source"}
+	defaultColumns := []schema.ListColumnConfig{
+		{Name: "Component", Value: "{{ .Component }}"},
+		{Name: "Version", Value: "{{ .Version | default \"latest\" }}"},
+		{Name: "Folder", Value: "{{ .Target }}"},
+		{Name: "Source", Value: "{{ .Source }}"},
+	}
+
+	var header []string
 	if len(listConfig.Columns) > 0 {
 		header = make([]string, len(listConfig.Columns))
 		for i, col := range listConfig.Columns {
 			header[i] = col.Name
 		}
+	} else {
+		// Use default columns
+		header = make([]string, len(defaultColumns))
+		for i, col := range defaultColumns {
+			header[i] = col.Name
+		}
+		listConfig.Columns = defaultColumns
 	}
 
 	// Get vendor path
@@ -171,22 +185,57 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 	for _, vendor := range allVendors {
 		row := make([]string, len(header))
 		for i, col := range header {
-			switch col {
-			case "Component":
-				row[i] = vendor.Component
-			case "Version":
-				row[i] = vendor.Version
-			case "Folder":
-				if len(vendor.Targets) > 0 {
-					row[i] = filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
+			var colConfig *schema.ListColumnConfig
+			for _, c := range listConfig.Columns {
+				if c.Name == col {
+					colConfig = &c
+					break
 				}
-			case "Source":
-				row[i] = vendor.Source
-			case "Type":
-				row[i] = "Vendor Manifest"
-			case "Manifest":
-				row[i] = vendor.File
 			}
+
+			// If no column config found, use default mapping
+			if colConfig == nil {
+				switch col {
+				case "Component":
+					row[i] = vendor.Component
+				case "Version":
+					row[i] = vendor.Version
+				case "Folder":
+					if len(vendor.Targets) > 0 {
+						row[i] = filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
+					}
+				case "Source":
+					row[i] = vendor.Source
+				case "Type":
+					row[i] = "Vendor Manifest"
+				case "Manifest":
+					row[i] = vendor.File
+				}
+				continue
+			}
+
+			data := map[string]interface{}{
+				"Component": vendor.Component,
+				"Version":   vendor.Version,
+				"Type":      "Vendor Manifest",
+				"File":      vendor.File,
+				"Source":    vendor.Source,
+				"Target":    "",
+				"Tags":      vendor.Tags,
+			}
+
+			// Add target path if available
+			if len(vendor.Targets) > 0 {
+				data["Target"] = filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
+			}
+
+			// Process the template
+			processed, err := exec.ProcessTmpl(col, colConfig.Value, data, false)
+			if err != nil {
+				row[i] = fmt.Sprintf("Error: %v", err)
+				continue
+			}
+			row[i] = processed
 		}
 		rows = append(rows, row)
 	}

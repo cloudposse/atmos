@@ -42,15 +42,15 @@ vendor:
       - name: Component
         value: '{{ .Component }}'
       - name: Version
-        value: {{ .Version | default "unknown" }}'
+        value: '{{ .Version | default "unknown" }}'
       - name: Folder
-        value: '{{ .Folder | trunc 25 }}'
+        value: '{{ .Target | trunc 25 }}'
       - name: Source
         value: '{{ .Source | trunc 25 }}'
       - name: Type
         value: '{{ .Type }}'
       - name: Manifest
-        value: '{{ .Manifest }}'
+        value: '{{ .File }}'
 ```
 
 Available columns:

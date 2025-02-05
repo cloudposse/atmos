@@ -282,8 +282,8 @@ func ExecuteAtmosVendorInternal(
 		atmosVendorSpec.Imports,
 		atmosVendorSpec.Sources,
 		[]string{vendorConfigFileName},
-		0,
-		50,
+		0,  // Initial depth
+		50, // Max depth for imports
 	)
 	if err != nil {
 		return err
