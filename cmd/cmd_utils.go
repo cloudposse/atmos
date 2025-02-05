@@ -670,5 +670,15 @@ func showUsageExample(cmd *cobra.Command, details string) {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
-	u.PrintErrorMarkdownAndExit("Incorrect Usage", errors.New(details), suggestion)
+	u.PrintErrorMarkdownAndExit("Incorrect Usage", fmt.Errorf(details), suggestion)
+}
+
+// Contains checks if a slice of strings contains an exact match for the target string.
+func Contains(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

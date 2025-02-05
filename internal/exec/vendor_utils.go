@@ -371,9 +371,9 @@ func ExecuteAtmosVendorInternal(
 			err = ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
-					return fmt.Errorf("Invalid URI '%s': %w. Please ensure the source is a valid local path or a properly formatted URI.", uri, err)
+					return fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", s.Component, err)
 				}
-				return err
+				return fmt.Errorf("invalid URI for component %s: %w", s.Component, err)
 			}
 		}
 
