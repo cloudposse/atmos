@@ -1,0 +1,34 @@
+base_path: "./"
+
+components:
+  terraform:
+    # Set base path to the shared components directory
+    base_path: "components/terraform"
+    # Enable vendoring for component reuse
+    vendor:
+      enabled: true
+      source_path: "components/terraform"
+      target_path: "vendor/components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+    command: terraform
+
+stacks:
+  base_path: "scenarios"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/templates/**/*"
+    - "**/_defaults.yaml"
+  name_pattern: "{environment}-{component}"
+
+terraform:
+  version_constraint: ">= 1.0"
+  download_url: "https://releases.hashicorp.com/terraform"
+
+logs:
+  file: "/dev/stderr"
+  level: "Info"
+  color: true 

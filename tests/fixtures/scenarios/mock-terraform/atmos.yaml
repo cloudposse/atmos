@@ -1,6 +1,9 @@
+inherits:
+  - ../../atmos.yaml
+
 components:
   terraform:
-    base_path: components/terraform
+    base_path: "components/terraform"
     apply:
       auto_approve: true
     clean:
@@ -10,13 +13,12 @@ components:
     command: terraform
 
 stacks:
-  base_path: stacks
+  base_path: "stacks"
   included_paths:
     - "**/*"
   excluded_paths:
     - "**/templates/**/*"
-  name_pattern: "{environment}-{component}"
 
-terraform:
-  version_constraint: ">= 1.0"
-  download_url: "https://releases.hashicorp.com/terraform"
+logs:
+  file: "/dev/stderr"
+  level: "Info"
