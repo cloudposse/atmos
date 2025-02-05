@@ -107,18 +107,28 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		headers[i] = col.Name
 	}
 
+	// Pre-parse templates for better performance
+	type columnTemplate struct {
+		name     string
+		template *template.Template
+	}
+
+	templates := make([]columnTemplate, len(listConfig.Columns))
+	for i, col := range listConfig.Columns {
+		tmpl, err := template.New(col.Name).Parse(col.Value)
+		if err != nil {
+			return "", fmt.Errorf("error parsing template for column %s: %w", col.Name, err)
+		}
+		templates[i] = columnTemplate{name: col.Name, template: tmpl}
+	}
+
 	// Process each stack and populate rows
 	for i, stack := range filteredStacks {
 		row := make([]string, len(listConfig.Columns))
-		for j, col := range listConfig.Columns {
-			tmpl, err := template.New("column").Parse(col.Value)
-			if err != nil {
-				return "", fmt.Errorf("error parsing template for column %s: %w", col.Name, err)
-			}
-
+		for j, tmpl := range templates {
 			var buf strings.Builder
-			if err := tmpl.Execute(&buf, stack); err != nil {
-				return "", fmt.Errorf("error executing template for column %s: %w", col.Name, err)
+			if err := tmpl.template.Execute(&buf, stack); err != nil {
+				return "", fmt.Errorf("error executing template for column %s: %w", tmpl.name, err)
 			}
 			row[j] = buf.String()
 		}
