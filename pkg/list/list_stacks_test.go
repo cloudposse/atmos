@@ -79,6 +79,7 @@ func TestFilterAndListStacks(t *testing.T) {
 			"vars": map[string]any{
 				"stage": "dev",
 			},
+			"atmos_stack_file": "examples/quick-start-simple/stacks/deploy/dev.yaml",
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"station": map[string]any{
@@ -94,6 +95,7 @@ func TestFilterAndListStacks(t *testing.T) {
 			"vars": map[string]any{
 				"stage": "staging",
 			},
+			"atmos_stack_file": "examples/quick-start-simple/stacks/deploy/staging.yaml",
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"station": map[string]any{
@@ -109,6 +111,7 @@ func TestFilterAndListStacks(t *testing.T) {
 			"vars": map[string]any{
 				"stage": "prod",
 			},
+			"atmos_stack_file": "examples/quick-start-simple/stacks/deploy/prod.yaml",
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"station": map[string]any{
