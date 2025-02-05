@@ -51,7 +51,8 @@ tests:
       stdout:
         - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
       stderr:
-        - "^$"
+        # This is actually an invalid debug statement, we are not passing the log level in the command line
+        - "DEBU Using command line argument"
       exit_code: 0
 
   - name: "Valid Log Level in Environment Variable"
