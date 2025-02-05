@@ -33,3 +33,16 @@ tests:
         - "test-1"
         - "terraform-plan-all-test-components"
       exit_code: 1
+  - name: atmos invalidCommand
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos invalidCommand returns error"
+    workdir: "fixtures/scenarios/complete/"
+    command: "atmos"
+    args:
+      - "invalidCommand"
+    expect:
+      diff: []
+      stderr:
+        - "command has no steps or subcommands configured"
+      exit_code: 1
