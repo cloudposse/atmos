@@ -215,18 +215,24 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 			}
 
 			data := map[string]interface{}{
-				"Component": vendor.Component,
-				"Version":   vendor.Version,
-				"Type":      "Vendor Manifest",
-				"File":      vendor.File,
-				"Source":    vendor.Source,
-				"Target":    "",
-				"Tags":      vendor.Tags,
+				"Component":           vendor.Component,
+				"Version":             vendor.Version,
+				"Type":                "Vendor Manifest",
+				"File":                vendor.File,
+				"Source":              vendor.Source,
+				"Target":              "",
+				"Tags":                vendor.Tags,
+				"atmos_component":     vendor.Component,
+				"atmos_vendor_type":   "Vendor Manifest",
+				"atmos_vendor_file":   vendor.File,
+				"atmos_vendor_target": "",
 			}
 
 			// Add target path if available
 			if len(vendor.Targets) > 0 {
-				data["Target"] = filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
+				target := filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
+				data["Target"] = target
+				data["atmos_vendor_target"] = target
 			}
 
 			// Process the template
