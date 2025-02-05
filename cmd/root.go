@@ -124,6 +124,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	log.SetOutput(output)
 }
 
+// TODO: This is a good function. But we should try to avoid these which are generally handled by cobra.
+// Maybe there is no other way. But this todo is just a reminder to check back on this.
 // Function to manually parse flags with double dash "--" like Cobra
 func parseFlags(args []string) (map[string]string, error) {
 	flags := make(map[string]string)
