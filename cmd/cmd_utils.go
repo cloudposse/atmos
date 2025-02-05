@@ -670,7 +670,7 @@ func showUsageExample(cmd *cobra.Command, details string) {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
-	u.PrintErrorMarkdownAndExit("Incorrect Usage", fmt.Errorf(details), suggestion)
+	u.PrintInvalidUsageErrorAndExit(errors.New(details))
 }
 
 // Contains checks if a slice of strings contains an exact match for the target string.

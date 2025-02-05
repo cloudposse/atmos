@@ -9,6 +9,8 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	l "github.com/charmbracelet/log"
 )
@@ -27,6 +29,7 @@ func PrintErrorMarkdown(title string, err error, suggestion string) {
 	if title == "" {
 		title = "Error"
 	}
+	title = cases.Title(language.English).String(title)
 	errorMarkdown, renderErr := render.RenderError(title, err.Error(), suggestion)
 	if renderErr != nil {
 		LogError(err)
@@ -64,6 +67,10 @@ func PrintfErrorMarkdown(format string, a ...interface{}) {
 func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 	PrintErrorMarkdown(title, err, suggestion)
 	os.Exit(1)
+}
+
+func PrintInvalidUsageErrorAndExit(err error) {
+	PrintErrorMarkdownAndExit("Invalid Usage", err, "")
 }
 
 func PrintfMarkdown(format string, a ...interface{}) {
