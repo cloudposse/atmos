@@ -45,13 +45,15 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 		}
-
-		logsLevel, _ := cmd.Flags().GetString("logs-level")
-		logsFile, _ := cmd.Flags().GetString("logs-file")
-
-		configAndStacksInfo := schema.ConfigAndStacksInfo{
-			LogsLevel: logsLevel,
-			LogsFile:  logsFile,
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		// TODO: Check if these value being set was actually required
+		if cmd.Flags().Changed("logs-level") {
+			logsLevel, _ := cmd.Flags().GetString("logs-level")
+			configAndStacksInfo.LogsLevel = logsLevel
+		}
+		if cmd.Flags().Changed("logs-file") {
+			logsFile, _ := cmd.Flags().GetString("logs-file")
+			configAndStacksInfo.LogsFile = logsFile
 		}
 
 		// Only validate the config, don't store it yet since commands may need to add more info
