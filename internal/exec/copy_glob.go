@@ -7,13 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	l "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	cp "github.com/otiai10/copy" // Using the optimized copy library when no filtering is required.
 )
 
 // copyFile copies a single file from src to dst while preserving file permissions.
-func copyFile(atmosConfig schema.AtmosConfiguration, src, dst string) error {
+func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("opening source file %q: %w", src, err)
@@ -46,13 +47,13 @@ func copyFile(atmosConfig schema.AtmosConfiguration, src, dst string) error {
 
 // skipFunc determines whether to skip a file/directory based on its relative path to baseDir.
 // If an error occurs during matching for an exclusion or inclusion pattern, it logs the error and proceeds.
-func skipFunc(atmosConfig schema.AtmosConfiguration, info os.FileInfo, srcPath, baseDir string, excluded, included []string) (bool, error) {
+func skipFunc(info os.FileInfo, srcPath, baseDir string, excluded, included []string) (bool, error) {
 	if info.Name() == ".git" {
 		return true, nil
 	}
 	relPath, err := filepath.Rel(baseDir, srcPath)
 	if err != nil {
-	l.LogDebug("Error computing relative path", 'srcPath', srcPath, 'err', err)
+		l.Debug("Error computing relative path", "srcPath", srcPath, "error", err)
 		return true, nil // treat error as a signal to skip
 	}
 	relPath = filepath.ToSlash(relPath)
@@ -61,10 +62,10 @@ func skipFunc(atmosConfig schema.AtmosConfiguration, info os.FileInfo, srcPath, 
 	for _, pattern := range excluded {
 		matched, err := u.PathMatch(pattern, relPath)
 		if err != nil {
-			u.LogTrace(fmt.Sprintf("Error matching exclusion pattern %q with %q: %v", pattern, relPath, err))
+			l.Debug("Error matching exclusion pattern", "pattern", pattern, "path", relPath, "error", err)
 			continue
 		} else if matched {
-			u.LogTrace(fmt.Sprintf("Excluding %q because it matches exclusion pattern %q", relPath, pattern))
+			l.Debug("Excluding path due to exclusion pattern", "path", relPath, "pattern", pattern)
 			return true, nil
 		}
 	}
@@ -75,16 +76,16 @@ func skipFunc(atmosConfig schema.AtmosConfiguration, info os.FileInfo, srcPath, 
 		for _, pattern := range included {
 			matched, err := u.PathMatch(pattern, relPath)
 			if err != nil {
-				u.LogTrace(fmt.Sprintf("Error matching inclusion pattern %q with %q: %v", pattern, relPath, err))
+				l.Debug("Error matching inclusion pattern", "pattern", pattern, "path", relPath, "error", err)
 				continue
 			} else if matched {
-				u.LogTrace(fmt.Sprintf("Including %q because it matches inclusion pattern %q", relPath, pattern))
+				l.Debug("Including path due to inclusion pattern", "path", relPath, "pattern", pattern)
 				matchedAny = true
 				break
 			}
 		}
 		if !matchedAny {
-			u.LogTrace(fmt.Sprintf("Excluding %q because it does not match any inclusion pattern", relPath))
+			l.Debug("Excluding path because it does not match any inclusion pattern", "path", relPath)
 			return true, nil
 		}
 	}
@@ -106,7 +107,7 @@ func copyDirRecursive(atmosConfig schema.AtmosConfiguration, srcDir, dstDir, bas
 			return fmt.Errorf("getting info for %q: %w", srcPath, err)
 		}
 
-		skip, err := skipFunc(atmosConfig, info, srcPath, baseDir, excluded, included)
+		skip, err := skipFunc(info, srcPath, baseDir, excluded, included)
 		if err != nil {
 			return err
 		}
@@ -116,7 +117,7 @@ func copyDirRecursive(atmosConfig schema.AtmosConfiguration, srcDir, dstDir, bas
 
 		// Skip symlinks.
 		if info.Mode()&os.ModeSymlink != 0 {
-			u.LogTrace(fmt.Sprintf("Skipping symlink: %q", srcPath))
+			l.Debug("Skipping symlink", "path", srcPath)
 			continue
 		}
 
@@ -128,7 +129,7 @@ func copyDirRecursive(atmosConfig schema.AtmosConfiguration, srcDir, dstDir, bas
 				return err
 			}
 		} else {
-			if err := copyFile(atmosConfig, srcPath, dstPath); err != nil {
+			if err := copyFile(srcPath, dstPath); err != nil {
 				return err
 			}
 		}
@@ -137,9 +138,9 @@ func copyDirRecursive(atmosConfig schema.AtmosConfiguration, srcDir, dstDir, bas
 }
 
 // getMatchesForPattern returns files/directories matching a pattern relative to sourceDir.
-// If no matches are found, it logs a trace and returns an empty slice.
+// If no matches are found, it logs a debug message and returns an empty slice.
 // When the pattern ends with "/*", it retries with a recursive "/**" variant.
-func getMatchesForPattern(atmosConfig schema.AtmosConfiguration, sourceDir, pattern string) ([]string, error) {
+func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 	fullPattern := filepath.Join(sourceDir, pattern)
 	matches, err := u.GetGlobMatches(fullPattern)
 	if err != nil {
@@ -154,12 +155,12 @@ func getMatchesForPattern(atmosConfig schema.AtmosConfiguration, sourceDir, patt
 				return nil, fmt.Errorf("error getting glob matches for recursive pattern %q: %w", fullRecursivePattern, err)
 			}
 			if len(matches) == 0 {
-				u.LogTrace(fmt.Sprintf("No matches found for recursive pattern %q - target directory will be empty", fullRecursivePattern))
+				l.Debug("No matches found for recursive pattern; target directory will be empty", "pattern", fullRecursivePattern)
 				return []string{}, nil
 			}
 			return matches, nil
 		}
-		u.LogTrace(fmt.Sprintf("No matches found for pattern %q - target directory will be empty", fullPattern))
+		l.Debug("No matches found for pattern; target directory will be empty", "pattern", fullPattern)
 		return []string{}, nil
 	}
 	return matches, nil
@@ -181,14 +182,14 @@ func copyToTargetWithPatterns(
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
 		targetPath = filepath.Join(targetPath, SanitizeFileName(uri))
 	}
-	u.LogTrace(fmt.Sprintf("Copying from %q to %q", sourceDir, targetPath))
+	l.Debug("Copying files", "source", sourceDir, "target", targetPath)
 	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
 		return fmt.Errorf("creating target directory %q: %w", targetPath, err)
 	}
 
 	// Optimization: if no inclusion and no exclusion patterns are defined, use the cp library for fast copying.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
-		u.LogTrace("No inclusion or exclusion patterns defined; using cp library for fast copy")
+		l.Debug("No inclusion or exclusion patterns defined; using cp library for fast copy")
 		return cp.Copy(sourceDir, targetPath)
 	}
 
@@ -196,9 +197,9 @@ func copyToTargetWithPatterns(
 	if len(s.IncludedPaths) > 0 {
 		filesToCopy := make(map[string]struct{})
 		for _, pattern := range s.IncludedPaths {
-			matches, err := getMatchesForPattern(atmosConfig, sourceDir, pattern)
+			matches, err := getMatchesForPattern(sourceDir, pattern)
 			if err != nil {
-				u.LogTrace(fmt.Sprintf("Warning: error getting matches for pattern %q: %v", pattern, err))
+				l.Debug("Warning: error getting matches for pattern", "pattern", pattern, "error", err)
 				continue
 			}
 			for _, match := range matches {
@@ -206,7 +207,7 @@ func copyToTargetWithPatterns(
 			}
 		}
 		if len(filesToCopy) == 0 {
-			u.LogTrace("No files matched the inclusion patterns - target directory will be empty")
+			l.Debug("No files matched the inclusion patterns - target directory will be empty")
 			return nil
 		}
 		for file := range filesToCopy {
@@ -219,10 +220,10 @@ func copyToTargetWithPatterns(
 			for _, ex := range s.ExcludedPaths {
 				matched, err := u.PathMatch(ex, relPath)
 				if err != nil {
-					u.LogTrace(fmt.Sprintf("Error matching exclusion pattern %q with %q: %v", ex, relPath, err))
+					l.Debug("Error matching exclusion pattern", "pattern", ex, "path", relPath, "error", err)
 					continue
 				} else if matched {
-					u.LogTrace(fmt.Sprintf("Excluding %q because it matches exclusion pattern %q", relPath, ex))
+					l.Debug("Excluding file due to exclusion pattern", "file", relPath, "pattern", ex)
 					skip = true
 					break
 				}
@@ -240,7 +241,7 @@ func copyToTargetWithPatterns(
 					return err
 				}
 			} else {
-				if err := copyFile(atmosConfig, file, dstPath); err != nil {
+				if err := copyFile(file, dstPath); err != nil {
 					return err
 				}
 			}
