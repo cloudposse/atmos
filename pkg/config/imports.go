@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	"github.com/spf13/viper"
 )
@@ -51,7 +52,7 @@ func (cl *ConfigLoader) processImports(importPaths []string, tempDir string, cur
 			// Handle remote imports
 			paths, err := cl.processRemoteImport(importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("failed to process remote import '%s': %v", importPath, err))
+				u.LogDebug(fmt.Sprintf("failed to process remote import '%s': %v", importPath, err))
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, paths...)
@@ -59,7 +60,7 @@ func (cl *ConfigLoader) processImports(importPaths []string, tempDir string, cur
 			// Handle local imports
 			paths, err := cl.processLocalImport(importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("failed to process local import '%s': %v", importPath, err))
+				u.LogDebug(fmt.Sprintf("failed to process local import '%s': %v", importPath, err))
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, paths...)
@@ -133,13 +134,13 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 		v.SetConfigType("yaml")
 		found, err := cl.loadConfigFileViber(cl.atmosConfig, path, v)
 		if err != nil || !found {
-			cl.debugLogging(fmt.Sprintf("failed to load local config '%s': %v", path, err))
+			u.LogDebug(fmt.Sprintf("failed to load local config '%s': %v", path, err))
 			continue
 		}
 
 		var importedConfig schema.AtmosConfiguration
 		if err := v.Unmarshal(&importedConfig); err != nil {
-			cl.debugLogging(fmt.Sprintf("failed to unmarshal local config '%s': %v", path, err))
+			u.LogDebug(fmt.Sprintf("failed to unmarshal local config '%s': %v", path, err))
 			continue
 		}
 
@@ -147,7 +148,7 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 		if importedConfig.Import != nil {
 			nestedPaths, err := cl.processImports(importedConfig.Import, tempDir, currentDepth+1, maxDepth)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("failed to process nested imports from '%s': %v", path, err))
+				u.LogDebug(fmt.Sprintf("failed to process nested imports from '%s': %v", path, err))
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, nestedPaths...)

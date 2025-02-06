@@ -46,7 +46,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 		if err != nil {
 			return "", err
 		}
-		cl.debugLogging(fmt.Sprintf("base path from %s: %s", "infra", absPath))
+		u.LogDebug(fmt.Sprintf("base path from %s: %s", "infra", absPath))
 		return absPath, nil
 	}
 	// Set base_path to absolute path of ./
@@ -54,7 +54,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 	if err != nil {
 		return "", err
 	}
-	cl.debugLogging(fmt.Sprintf("base path from %s: %s", "PWD", pwd))
+	u.LogDebug(fmt.Sprintf("base path from %s: %s", "PWD", pwd))
 	return absPath, nil
 }
 
@@ -77,7 +77,7 @@ func (cl *ConfigLoader) resolveAndValidatePath(path string, source string) (stri
 		return "", fmt.Errorf("base path from %s is not a directory: %w", source, err)
 	}
 
-	cl.debugLogging(fmt.Sprintf("base path from %s: %s", source, path))
+	u.LogDebug(fmt.Sprintf("base path from %s: %s", source, path))
 	return absPath, nil
 }
 
@@ -86,12 +86,12 @@ func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
 	// if found Set base_path to absolute path containing directory
 	filePath, found := cl.SearchConfigFilePath(filepath.Join(cwd, "atmos"))
 	if found {
-		cl.debugLogging(fmt.Sprintf("base path from infra %s: %s", "atmos", filePath))
+		u.LogDebug(fmt.Sprintf("base path from infra %s: %s", "atmos", filePath))
 		return filepath.Dir(filePath), found
 	}
 	filePath, found = cl.SearchConfigFilePath(filepath.Join(cwd, ".atmos"))
 	if found {
-		cl.debugLogging(fmt.Sprintf("base path from infra %s: %s", ".atmos", filePath))
+		u.LogDebug(fmt.Sprintf("base path from infra %s: %s", ".atmos", filePath))
 		return filepath.Dir(filePath), found
 	}
 	filePaths, _ := u.GetGlobMatches(filepath.ToSlash(filepath.Join(cwd, "atmos.d/**/*.yaml")))
@@ -100,14 +100,14 @@ func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
 	}
 	if len(filePaths) > 0 {
 		filePaths = cl.sortFilesByDepth(filePaths)
-		cl.debugLogging(fmt.Sprintf("base path from infra %s: %s", "atmos.d", filePaths[0]))
+		u.LogDebug(fmt.Sprintf("base path from infra %s: %s", "atmos.d", filePaths[0]))
 		return filepath.Dir(filePaths[0]), true
 	}
 	gitTopLevel, err := u.GetGitRoot()
 	if err == nil {
 		dirAbs, found := cl.SearchConfigFilePath(filepath.Join(gitTopLevel, "atmos"))
 		if found {
-			cl.debugLogging(fmt.Sprintf("base path from infra %s: %s", "git root", filePath))
+			u.LogDebug(fmt.Sprintf("base path from infra %s: %s", "git root", filePath))
 			return dirAbs, found
 		}
 	}

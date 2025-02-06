@@ -54,7 +54,7 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 		cl.debug = true
 		cl.LogsLevel = configAndStacksInfo.LogsLevel
 	}
-	cl.debugLogging(fmt.Sprintf("start process loading config..."))
+	u.LogDebug(fmt.Sprintf("start process loading config..."))
 	// We want the editorconfig color by default to be true
 	cl.atmosConfig.Validate.EditorConfig.Color = true
 
@@ -92,7 +92,7 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 	// Load system directory configurations
 	err = cl.loadSystemConfig()
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to load system directory configurations: %v", err))
+		u.LogDebug(fmt.Sprintf("Failed to load system directory configurations: %v", err))
 	}
 	// Stage 2: Discover Additional Configurations
 	if err := cl.stageDiscoverAdditionalConfigs(); err != nil {
@@ -107,7 +107,7 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 
 // loadSchemaDefaults sets the default configuration values.
 func (cl *ConfigLoader) loadSchemaDefaults() error {
-	cl.debugLogging(fmt.Sprintf("start process loading schema defaults..."))
+	u.LogDebug(fmt.Sprintf("start process loading schema defaults..."))
 	// Default configuration values
 	cl.viper.SetDefault("components.helmfile.use_eks", true)
 	cl.viper.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
@@ -127,7 +127,7 @@ func (cl *ConfigLoader) loadSchemaDefaults() error {
 
 // loadEmbeddedConfig loads the embedded atmos.yaml configuration.
 func (cl *ConfigLoader) loadEmbeddedConfig() error {
-	cl.debugLogging(fmt.Sprintf("start process loading embedded config..."))
+	u.LogDebug(fmt.Sprintf("start process loading embedded config..."))
 	// Create a reader from the embedded YAML data
 	reader := bytes.NewReader(embeddedConfigData)
 
@@ -146,7 +146,7 @@ func (cl *ConfigLoader) deepMergeConfig() error {
 
 // loadExplicitConfigs handles the loading of configurations provided via --config.
 func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
-	cl.debugLogging("Loading --config configs from provided paths")
+	u.LogDebug("Loading --config configs from provided paths")
 	if configPathsArgs == nil {
 		return fmt.Errorf("No config paths provided. Please provide a list of config paths using the --config flag.")
 	}
@@ -155,7 +155,7 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 	for _, configPath := range configPathsArgs {
 		paths, err := cl.SearchAtmosConfigFileDir(configPath)
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("Failed to find config file in directory '%s'.", configPath))
+			u.LogDebug(fmt.Sprintf("Failed to find config file in directory '%s'.", configPath))
 			continue
 		}
 		configPaths = append(configPaths, paths...)
@@ -166,27 +166,27 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 		return fmt.Errorf("config paths can not be found. Please provide a list of config paths using the --config flag.")
 	}
 	for _, configPath := range configPaths {
-		cl.debugLogging(fmt.Sprintf("Found config file: %s", configPath))
+		u.LogDebug(fmt.Sprintf("Found config file: %s", configPath))
 		ok, err := cl.loadConfigFileViber(cl.atmosConfig, configPath, cl.viper)
 		if !ok || err != nil {
-			cl.debugLogging(fmt.Sprintf("error processing config file (%s): %s", configPath, err.Error()))
+			u.LogDebug(fmt.Sprintf("error processing config file (%s): %s", configPath, err.Error()))
 			continue
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", configPath, err.Error()))
+			u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", configPath, err.Error()))
 			continue
 		}
-		cl.debugLogging(fmt.Sprintf("atmos merged config file %s", configPath))
+		u.LogDebug(fmt.Sprintf("atmos merged config file %s", configPath))
 
 		// Process Imports and Deep Merge
 		if err := cl.processConfigImports(); err != nil {
-			cl.debugLogging(fmt.Sprintf("error processing imports after config file (file %s):error  %s", configPath, err.Error()))
+			u.LogDebug(fmt.Sprintf("error processing imports after config file (file %s):error  %s", configPath, err.Error()))
 			continue
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", configPath, err.Error()))
+			u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", configPath, err.Error()))
 		}
 	}
 
@@ -214,14 +214,14 @@ func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 		if err != nil {
 			return fmt.Errorf("failed to resolve base path from `!repo-root` Git root error: %w", err)
 		}
-		cl.debugLogging(fmt.Sprintf("ATMOS_CLI_CONFIG_PATH !repo-root Git root dir : %s", gitRoot))
+		u.LogDebug(fmt.Sprintf("ATMOS_CLI_CONFIG_PATH !repo-root Git root dir : %s", gitRoot))
 		atmosCliConfigEnv = gitRoot
 	}
 	var atmosFilePaths []string
 	for _, configPath := range atmosCliConfigEnvPaths {
 		atmosFilePath, err := cl.getPathAtmosCLIConfigPath(configPath)
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("Failed to find config file in '%s' . error %s", atmosFilePaths, err.Error()))
+			u.LogDebug(fmt.Sprintf("Failed to find config file in '%s' . error %s", atmosFilePaths, err.Error()))
 			continue
 		}
 		atmosFilePaths = append(atmosFilePaths, atmosFilePath...)
@@ -230,27 +230,27 @@ func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 		return fmt.Errorf("Failed to find config files in ATMOS_CLI_CONFIG_PATH '%s'", atmosCliConfigEnv)
 	}
 	for _, atmosFilePath := range atmosFilePaths {
-		cl.debugLogging(fmt.Sprintf("Found ATMOS_CLI_CONFIG_PATH: %s", atmosFilePath))
+		u.LogDebug(fmt.Sprintf("Found ATMOS_CLI_CONFIG_PATH: %s", atmosFilePath))
 		ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosFilePath, cl.viper)
 		if !ok || err != nil {
-			cl.debugLogging(fmt.Sprintf("error processing config file (%s): %s", atmosFilePath, err.Error()))
+			u.LogDebug(fmt.Sprintf("error processing config file (%s): %s", atmosFilePath, err.Error()))
 			continue
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
+			u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 			continue
 		}
-		cl.debugLogging(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
+		u.LogDebug(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
 
 		// Process Imports and Deep Merge
 		if err := cl.processConfigImports(); err != nil {
-			cl.debugLogging(fmt.Sprintf("error processing imports after ATMOS_CLI_CONFIG_PATH (file %s):error  %s", atmosFilePath, err.Error()))
+			u.LogDebug(fmt.Sprintf("error processing imports after ATMOS_CLI_CONFIG_PATH (file %s):error  %s", atmosFilePath, err.Error()))
 			continue
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
+			u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 		}
 	}
 	return nil
@@ -273,15 +273,15 @@ func (cl *ConfigLoader) getPathAtmosCLIConfigPath(atmosCliConfigPathEnv string) 
 	if found {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, configPath)
 	} else {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file atmos in directory '%s'.", atmosCliConfigPathEnv))
+		u.LogDebug(fmt.Sprintf("Failed to find config file atmos in directory '%s'.", atmosCliConfigPathEnv))
 	}
 	searchDir := filepath.Join(filepath.FromSlash(atmosCliConfigPathEnv), "atmos.d/**/*")
 	foundPaths, err := cl.SearchAtmosConfigFileDir(searchDir)
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file in path '%s'.error %s", searchDir, err.Error()))
+		u.LogDebug(fmt.Sprintf("Failed to find config file in path '%s'.error %s", searchDir, err.Error()))
 	}
 	if len(foundPaths) == 0 {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
+		u.LogDebug(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
 	} else {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths...)
 	}
@@ -305,18 +305,18 @@ func (cl *ConfigLoader) stageDiscoverAdditionalConfigs() error {
 	// 3. Check Current Working Directory (CWD)
 	found := cl.loadWorkdirAtmosConfig()
 	if found {
-		cl.debugLogging("Workdir atmos loaded")
+		u.LogDebug("Workdir atmos loaded")
 		return nil
 	}
 	// 2. Check Git Repository Root
 	found = cl.loadGitAtmosConfig()
 	if found {
-		cl.debugLogging("Git repository root atmos loaded")
+		u.LogDebug("Git repository root atmos loaded")
 		return nil
 	}
 
 	// 4. No configuration found in Stage 2
-	cl.debugLogging("No configuration found in Stage 2: Discover Additional Configurations")
+	u.LogDebug("No configuration found in Stage 2: Discover Additional Configurations")
 	return nil
 }
 
@@ -324,43 +324,43 @@ func (cl *ConfigLoader) loadWorkdirAtmosConfig() (found bool) {
 	found = false
 	cwd, err := os.Getwd()
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("unable to get current working directory: %v", err))
+		u.LogDebug(fmt.Sprintf("unable to get current working directory: %v", err))
 		return found
 
 	}
-	cl.debugLogging(fmt.Sprintf("Check atmos config current working directory: %s", cwd))
+	u.LogDebug(fmt.Sprintf("Check atmos config current working directory: %s", cwd))
 
 	workDirAtmosConfigPath, err := cl.getWorkDirAtmosConfigPaths(cwd)
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to get work dir atmos config paths: %v", err))
+		u.LogDebug(fmt.Sprintf("Failed to get work dir atmos config paths: %v", err))
 	}
 	if len(workDirAtmosConfigPath) > 0 {
 		for _, atmosFilePath := range workDirAtmosConfigPath {
-			cl.debugLogging(fmt.Sprintf("Found work dir atmos config file: %s", atmosFilePath))
+			u.LogDebug(fmt.Sprintf("Found work dir atmos config file: %s", atmosFilePath))
 			ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosFilePath, cl.viper)
 			if !ok || err != nil {
-				cl.debugLogging(fmt.Sprintf("error processing config file (%s): %s", atmosFilePath, err.Error()))
+				u.LogDebug(fmt.Sprintf("error processing config file (%s): %s", atmosFilePath, err.Error()))
 				continue
 			}
 			err = cl.deepMergeConfig()
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
+				u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 				continue
 			}
-			cl.debugLogging(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
+			u.LogDebug(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
 			// Process Imports and Deep Merge
 			if err := cl.processConfigImports(); err != nil {
-				cl.debugLogging(fmt.Sprintf("error processing imports after work dir (file %s):error  %s", atmosFilePath, err.Error()))
+				u.LogDebug(fmt.Sprintf("error processing imports after work dir (file %s):error  %s", atmosFilePath, err.Error()))
 				continue
 			}
 			err = cl.deepMergeConfig()
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
+				u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 			}
 			found = true
 		}
 		if !found {
-			cl.debugLogging(fmt.Sprintf("Failed to process atmos config files in path '%s'", cwd))
+			u.LogDebug(fmt.Sprintf("Failed to process atmos config files in path '%s'", cwd))
 		}
 	}
 
@@ -374,25 +374,25 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 	if found {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, configPath)
 	} else {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file atmos in work directory '%s'.", workDir))
+		u.LogDebug(fmt.Sprintf("Failed to find config file atmos in work directory '%s'.", workDir))
 	}
 	searchDir := filepath.Join(filepath.FromSlash(workDir), "atmos.d/**/*")
 	foundPaths, err := cl.SearchAtmosConfigFileDir(searchDir)
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to find work dir atmos config file in path '%s'.error %s", searchDir, err.Error()))
+		u.LogDebug(fmt.Sprintf("Failed to find work dir atmos config file in path '%s'.error %s", searchDir, err.Error()))
 	}
 	if len(foundPaths) == 0 {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
+		u.LogDebug(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
 	} else {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths...)
 	}
 	searchDir = filepath.Join(filepath.FromSlash(workDir), ".atmos.d/**/*")
 	foundPaths, err = cl.SearchAtmosConfigFileDir(searchDir)
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to find work dir atmos config file in path '%s'.error %s", searchDir, err.Error()))
+		u.LogDebug(fmt.Sprintf("Failed to find work dir atmos config file in path '%s'.error %s", searchDir, err.Error()))
 	}
 	if len(foundPaths) == 0 {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
+		u.LogDebug(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
 	} else {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths...)
 	}
@@ -409,54 +409,54 @@ func (cl *ConfigLoader) loadGitAtmosConfig() (found bool) {
 	found = false
 	gitRoot, err := u.GetGitRoot()
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to determine Git repository root: %v", err))
+		u.LogDebug(fmt.Sprintf("Failed to determine Git repository root: %v", err))
 		return found
 	}
 	if gitRoot != "" {
-		cl.debugLogging(fmt.Sprintf("Git repository root found: %s", gitRoot))
+		u.LogDebug(fmt.Sprintf("Git repository root found: %s", gitRoot))
 		isDir, err := u.IsDirectory(gitRoot)
 		if err != nil {
 			if err == os.ErrNotExist {
-				cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRoot))
+				u.LogDebug(fmt.Sprintf("Git repository root not found: %s", gitRoot))
 			}
-			cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRoot))
+			u.LogDebug(fmt.Sprintf("Git repository root not found: %s", gitRoot))
 		}
 		if isDir && err == nil {
-			cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRoot))
+			u.LogDebug(fmt.Sprintf("Git repository root not found: %s", gitRoot))
 		}
 		gitAtmosConfigPath, err := cl.getGitAtmosConfigPaths(gitRoot)
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("Failed to get Git atmos config paths: %v", err))
+			u.LogDebug(fmt.Sprintf("Failed to get Git atmos config paths: %v", err))
 		}
 		if len(gitAtmosConfigPath) > 0 {
 			for _, atmosFilePath := range gitAtmosConfigPath {
-				cl.debugLogging(fmt.Sprintf("Found Git atmos config file: %s", atmosFilePath))
+				u.LogDebug(fmt.Sprintf("Found Git atmos config file: %s", atmosFilePath))
 				ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosFilePath, cl.viper)
 				if !ok || err != nil {
-					cl.debugLogging(fmt.Sprintf("error processing config file (%s): %s", atmosFilePath, err.Error()))
+					u.LogDebug(fmt.Sprintf("error processing config file (%s): %s", atmosFilePath, err.Error()))
 					continue
 				}
 				err = cl.deepMergeConfig()
 				if err != nil {
-					cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
+					u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 					continue
 				}
 
-				cl.debugLogging(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
+				u.LogDebug(fmt.Sprintf("atmos merged config file %s", atmosFilePath))
 
 				// Process Imports and Deep Merge
 				if err := cl.processConfigImports(); err != nil {
-					cl.debugLogging(fmt.Sprintf("error processing imports after git (file %s):error  %s", atmosFilePath, err.Error()))
+					u.LogDebug(fmt.Sprintf("error processing imports after git (file %s):error  %s", atmosFilePath, err.Error()))
 					continue
 				}
 				err = cl.deepMergeConfig()
 				if err != nil {
-					cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
+					u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", atmosFilePath, err.Error()))
 				}
 				found = true
 			}
 			if !found {
-				cl.debugLogging(fmt.Sprintf("Failed to process atmos config files in path '%s'", gitRoot))
+				u.LogDebug(fmt.Sprintf("Failed to process atmos config files in path '%s'", gitRoot))
 			}
 		}
 	}
@@ -470,25 +470,25 @@ func (cl *ConfigLoader) getGitAtmosConfigPaths(gitRootDir string) ([]string, err
 	if found {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, configPath)
 	} else {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file atmos in git directory '%s'.", gitRootDir))
+		u.LogDebug(fmt.Sprintf("Failed to find config file atmos in git directory '%s'.", gitRootDir))
 	}
 	searchDir := filepath.Join(filepath.FromSlash(gitRootDir), "atmos.d/**/*")
 	foundPaths, err := cl.SearchAtmosConfigFileDir(searchDir)
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to find git atmos config file in path '%s'.error %s", searchDir, err.Error()))
+		u.LogDebug(fmt.Sprintf("Failed to find git atmos config file in path '%s'.error %s", searchDir, err.Error()))
 	}
 	if len(foundPaths) == 0 {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
+		u.LogDebug(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
 	} else {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths...)
 	}
 	searchDir = filepath.Join(filepath.FromSlash(gitRootDir), ".atmos.d/**/*")
 	foundPaths, err = cl.SearchAtmosConfigFileDir(searchDir)
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to find git atmos config file in path '%s'.error %s", searchDir, err.Error()))
+		u.LogDebug(fmt.Sprintf("Failed to find git atmos config file in path '%s'.error %s", searchDir, err.Error()))
 	}
 	if len(foundPaths) == 0 {
-		cl.debugLogging(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
+		u.LogDebug(fmt.Sprintf("Failed to find config file in path '%s'", searchDir))
 	} else {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths...)
 	}
@@ -538,7 +538,7 @@ func (cl *ConfigLoader) loadConfigsFromPath(path string) (bool, []string, error)
 					}
 					if found {
 						loadedPaths = append(loadedPaths, cfgPath)
-						cl.debugLogging(fmt.Sprintf("Loaded config file: %s", cfgPath))
+						u.LogDebug(fmt.Sprintf("Loaded config file: %s", cfgPath))
 					}
 				}
 				return nil
@@ -554,7 +554,7 @@ func (cl *ConfigLoader) loadConfigsFromPath(path string) (bool, []string, error)
 			}
 			if found {
 				loadedPaths = append(loadedPaths, cfgPath)
-				cl.debugLogging(fmt.Sprintf("Loaded config file: %s", cfgPath))
+				u.LogDebug(fmt.Sprintf("Loaded config file: %s", cfgPath))
 			}
 		}
 	}
@@ -572,14 +572,14 @@ func (cl *ConfigLoader) applyUserPreferences() {
 	if found {
 		ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosConfigPath, cl.viper)
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("error processing XDG_CONFIG_HOME path: %v error : %v", configPath, err))
+			u.LogDebug(fmt.Sprintf("error processing XDG_CONFIG_HOME path: %v error : %v", configPath, err))
 		}
 		if ok {
 			err := cl.processConfigImports()
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("error processing imports after XDG_CONFIG_HOME atmos path: %v error : %v", atmosConfigPath, err))
+				u.LogDebug(fmt.Sprintf("error processing imports after XDG_CONFIG_HOME atmos path: %v error : %v", atmosConfigPath, err))
 			}
-			cl.debugLogging(fmt.Sprintf("atmos config file found on XDG_CONFIG_HOME atmos path: %v ", atmosConfigPath))
+			u.LogDebug(fmt.Sprintf("atmos config file found on XDG_CONFIG_HOME atmos path: %v ", atmosConfigPath))
 			cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPath)
 		}
 		return
@@ -587,7 +587,7 @@ func (cl *ConfigLoader) applyUserPreferences() {
 
 	userHomeDir, err := homedir.Dir()
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("Failed to get user home directory: %v", err))
+		u.LogDebug(fmt.Sprintf("Failed to get user home directory: %v", err))
 	} else {
 		foundHomeDirConfig := false
 		configPathHomeDIr := filepath.Join(userHomeDir, ".config", CliConfigFileName)
@@ -595,15 +595,15 @@ func (cl *ConfigLoader) applyUserPreferences() {
 		if found {
 			ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosConfigPathHomeDir, cl.viper)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("error processing config user HomeDir path: %s error : %v", configPathHomeDIr, err))
+				u.LogDebug(fmt.Sprintf("error processing config user HomeDir path: %s error : %v", configPathHomeDIr, err))
 			}
 			if ok {
 				foundHomeDirConfig = true
 				err := cl.processConfigImports()
 				if err != nil {
-					cl.debugLogging(fmt.Sprintf("error processing imports after HomeDir atmos path: %s error : %v", atmosConfigPathHomeDir, err))
+					u.LogDebug(fmt.Sprintf("error processing imports after HomeDir atmos path: %s error : %v", atmosConfigPathHomeDir, err))
 				}
-				cl.debugLogging(fmt.Sprintf("atmos config file found on HomeDir atmos path: %s ", atmosConfigPathHomeDir))
+				u.LogDebug(fmt.Sprintf("atmos config file found on HomeDir atmos path: %s ", atmosConfigPathHomeDir))
 				cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPathHomeDIr)
 			}
 		}
@@ -613,14 +613,14 @@ func (cl *ConfigLoader) applyUserPreferences() {
 			foundHomeDirConfig = true
 			ok, err := cl.loadConfigFileViber(cl.atmosConfig, atmosConfigPathHomeDir, cl.viper)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("error processing config user HomeDir path: %s error : %v", configPathHomeDIr, err))
+				u.LogDebug(fmt.Sprintf("error processing config user HomeDir path: %s error : %v", configPathHomeDIr, err))
 			}
 			if ok {
 				err := cl.processConfigImports()
 				if err != nil {
-					cl.debugLogging(fmt.Sprintf("error processing imports after HomeDir atmos path: %s error : %v", atmosConfigPathHomeDir, err))
+					u.LogDebug(fmt.Sprintf("error processing imports after HomeDir atmos path: %s error : %v", atmosConfigPathHomeDir, err))
 				}
-				cl.debugLogging(fmt.Sprintf("atmos config file found on HomeDir atmos path: %s ", atmosConfigPathHomeDir))
+				u.LogDebug(fmt.Sprintf("atmos config file found on HomeDir atmos path: %s ", atmosConfigPathHomeDir))
 				cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPathHomeDIr)
 			}
 		}
@@ -629,7 +629,7 @@ func (cl *ConfigLoader) applyUserPreferences() {
 		}
 
 	}
-	cl.debugLogging("No configuration found in user preferences")
+	u.LogDebug("No configuration found in user preferences")
 	return
 }
 
@@ -637,28 +637,28 @@ func (cl *ConfigLoader) loadSystemConfig() error {
 	configSysPaths, found := cl.getSystemConfigPath()
 	if found {
 		for _, configSysPath := range configSysPaths {
-			cl.debugLogging(fmt.Sprintf("Found system config file at: %s", configSysPath))
+			u.LogDebug(fmt.Sprintf("Found system config file at: %s", configSysPath))
 			ok, err := cl.loadConfigFileViber(cl.atmosConfig, configSysPath, cl.viper)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("system config file merged: %s", configSysPath))
+				u.LogDebug(fmt.Sprintf("system config file merged: %s", configSysPath))
 				continue
 			}
 			if ok {
 				err := cl.deepMergeConfig()
 				if err != nil {
-					cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", configSysPath, err.Error()))
+					u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", configSysPath, err.Error()))
 					continue
 				}
-				cl.debugLogging(fmt.Sprintf("atmos merged config file %s", configSysPath))
+				u.LogDebug(fmt.Sprintf("atmos merged config file %s", configSysPath))
 
 				// Process Imports and Deep Merge
 				if err := cl.processConfigImports(); err != nil {
-					cl.debugLogging(fmt.Sprintf("error processing imports after system config  (file %s):error  %s", configSysPath, err.Error()))
+					u.LogDebug(fmt.Sprintf("error processing imports after system config  (file %s):error  %s", configSysPath, err.Error()))
 					continue
 				}
 				err = cl.deepMergeConfig()
 				if err != nil {
-					cl.debugLogging(fmt.Sprintf("error merge config file (%s): %s", configSysPath, err.Error()))
+					u.LogDebug(fmt.Sprintf("error merge config file (%s): %s", configSysPath, err.Error()))
 				}
 				return nil
 			}
@@ -666,7 +666,7 @@ func (cl *ConfigLoader) loadSystemConfig() error {
 		return nil
 
 	} else {
-		cl.debugLogging(fmt.Sprintf("No system config file found"))
+		u.LogDebug(fmt.Sprintf("No system config file found"))
 	}
 	return nil
 }
@@ -688,11 +688,11 @@ func (cl *ConfigLoader) getSystemConfigPath() ([]string, bool) {
 		configFilePath := filepath.Join(systemPath, CliConfigFileName)
 		resultPath, exist := cl.SearchConfigFilePath(configFilePath)
 		if !exist {
-			cl.debugLogging(fmt.Sprintf("Failed to find config file on system path '%s'", configFilePath))
+			u.LogDebug(fmt.Sprintf("Failed to find config file on system path '%s'", configFilePath))
 			continue
 		}
 		if exist {
-			cl.debugLogging(fmt.Sprintf("Found config file on system path '%s': %s", configFilePath, resultPath))
+			u.LogDebug(fmt.Sprintf("Found config file on system path '%s': %s", configFilePath, resultPath))
 			configFilesPaths = append(configFilesPaths, resultPath)
 			cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, filepath.Dir(configFilePath))
 		}
@@ -702,17 +702,6 @@ func (cl *ConfigLoader) getSystemConfigPath() ([]string, bool) {
 		return configFilesPaths, true
 	}
 	return configFilesPaths, false
-}
-
-func (cl *ConfigLoader) debugLogging(msg string) {
-	if cl.debug {
-		cl.atmosConfig.Logs.Level = cl.LogsLevel
-		if cl.atmosConfig.Logs.Level == u.LogLevelTrace {
-			u.LogTrace(msg)
-			return
-		}
-		u.LogDebug(msg)
-	}
 }
 
 func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, error) {
@@ -756,7 +745,7 @@ func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, erro
 	for _, path := range atmosFilePaths {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("error getting absolute path for file '%s'. %v", path, err))
+			u.LogDebug(fmt.Sprintf("error getting absolute path for file '%s'. %v", path, err))
 			continue
 		}
 		atmosFilePathsABS = append(atmosFilePathsABS, absPath)
@@ -875,13 +864,13 @@ func (cl *ConfigLoader) loadConfigFileViber(
 	}
 	configMap, err := u.UnmarshalYAMLFromFile[baseConfig](&atmosConfig, string(content), path)
 	if err != nil {
-		cl.debugLogging(fmt.Sprintf("error unmarshaling config file (%s): %v", path, err))
+		u.LogDebug(fmt.Sprintf("error unmarshaling config file (%s): %v", path, err))
 		return false, err
 	}
 	if configMap.BasePath != "" {
 		configData, err := json.Marshal(configMap)
 		if err != nil {
-			cl.debugLogging(fmt.Sprintf("error marshaling config data (%s): %v", path, err))
+			u.LogDebug(fmt.Sprintf("error marshaling config data (%s): %v", path, err))
 			return false, err
 		}
 		err = v.MergeConfig(bytes.NewReader(configData))
@@ -915,11 +904,11 @@ func (cl *ConfigLoader) processConfigImports() error {
 		for _, configPath := range resolvedPaths {
 			found, err := cl.loadConfigFileViber(cl.atmosConfig, configPath, cl.viper)
 			if err != nil {
-				cl.debugLogging(fmt.Sprintf("failed to merge configuration from '%s': %v", configPath, err))
+				u.LogDebug(fmt.Sprintf("failed to merge configuration from '%s': %v", configPath, err))
 				continue
 			}
 			if found {
-				cl.debugLogging(fmt.Sprintf("merge import paths: %v", resolvedPaths))
+				u.LogDebug(fmt.Sprintf("merge import paths: %v", resolvedPaths))
 			}
 			cl.deepMergeConfig()
 
