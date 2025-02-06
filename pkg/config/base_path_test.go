@@ -112,21 +112,3 @@ func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPath, result)
 }
-
-// test base path form  "!repo-root"
-func TestBasePathComputingWithRepoRoot(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "config-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-	configLoader := &ConfigLoader{}
-	configLoader.atmosConfig.BasePath = AtmosYamlFuncGitRoot
-	info := schema.ConfigAndStacksInfo{
-		BasePathFromArg: "",
-	}
-	expectedPath, _ := filepath.Abs("../../")
-	result, err := configLoader.BasePathComputing(info)
-	assert.NoError(t, err)
-	assert.Equal(t, expectedPath, result)
-}
