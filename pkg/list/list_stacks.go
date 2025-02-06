@@ -231,6 +231,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			if err := tmpl.template.Execute(&buf, stack); err != nil {
 				return "", fmt.Errorf("error executing template for column %s: %w", tmpl.name, err)
 			}
+			// Just use the raw string value
 			row[j] = buf.String()
 		}
 		rows[i] = row
@@ -239,27 +240,55 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 	// Handle different output formats
 	switch format {
 	case FormatJSON:
-		// Convert to JSON format using dynamic fields
+		// Convert to JSON format using only non-empty columns
 		var stacks []map[string]string
 		for _, row := range rows {
 			s := make(map[string]string)
 			for i, header := range headers {
-				// Convert header to lowercase for consistent JSON field names
-				s[strings.ToLower(header)] = row[i]
+				// Only include non-empty values in JSON output
+				if row[i] != "" {
+					// Use raw value without any color formatting for JSON output
+					s[strings.ToLower(header)] = row[i]
+				}
 			}
 			stacks = append(stacks, s)
 		}
+		// Use plain JSON marshaling without any color formatting
 		jsonBytes, err := json.MarshalIndent(stacks, "", "  ")
 		if err != nil {
 			return "", fmt.Errorf("error formatting JSON output: %w", err)
 		}
-		return string(jsonBytes), nil
+		return string(jsonBytes) + utils.GetLineEnding(), nil
 
 	case FormatCSV:
+		// Only include columns that have values
+		var nonEmptyHeaders []string
+		var nonEmptyColumnIndexes []int
+
+		// Find columns that have at least one non-empty value
+		for i, header := range headers {
+			hasValue := false
+			for _, row := range rows {
+				if row[i] != "" {
+					hasValue = true
+					break
+				}
+			}
+			if hasValue {
+				nonEmptyHeaders = append(nonEmptyHeaders, header)
+				nonEmptyColumnIndexes = append(nonEmptyColumnIndexes, i)
+			}
+		}
+
 		var output strings.Builder
-		output.WriteString(strings.Join(headers, delimiter) + utils.GetLineEnding())
+		output.WriteString(strings.Join(nonEmptyHeaders, delimiter) + utils.GetLineEnding())
+
 		for _, row := range rows {
-			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
+			var nonEmptyRow []string
+			for _, i := range nonEmptyColumnIndexes {
+				nonEmptyRow = append(nonEmptyRow, row[i])
+			}
+			output.WriteString(strings.Join(nonEmptyRow, delimiter) + utils.GetLineEnding())
 		}
 		return output.String(), nil
 
@@ -272,7 +301,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 				BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
 				StyleFunc(func(row, col int) lipgloss.Style {
 					style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-					if row == 0 {
+					if row == -1 {
 						// Apply CommandName style to all header cells
 						return style.Inherit(theme.Styles.CommandName)
 					}
