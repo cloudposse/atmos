@@ -40,6 +40,9 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
@@ -164,6 +167,9 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		includeSpaceliftAdminStacks,
 		includeSettings,
 		stack,
+		processTemplates,
+		processYamlFunctions,
+		skip,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -182,6 +188,9 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
@@ -315,6 +324,9 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		includeSpaceliftAdminStacks,
 		includeSettings,
 		stack,
+		processTemplates,
+		processYamlFunctions,
+		skip,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -332,6 +344,9 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
@@ -367,6 +382,9 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		includeSpaceliftAdminStacks,
 		includeSettings,
 		stack,
+		processTemplates,
+		processYamlFunctions,
+		skip,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -385,6 +403,9 @@ func executeDescribeAffected(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
@@ -403,7 +424,18 @@ func executeDescribeAffected(
 	u.LogTrace(fmt.Sprintf("Current HEAD: %s", localRepoHead))
 	u.LogTrace(fmt.Sprintf("BASE: %s", remoteRepoHead))
 
-	currentStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, true, false)
+	currentStacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		stack,
+		nil,
+		nil,
+		nil,
+		false,
+		processTemplates,
+		processYamlFunctions,
+		false,
+		skip,
+	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -439,7 +471,18 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	remoteStacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, true, true, false)
+	remoteStacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		stack,
+		nil,
+		nil,
+		nil,
+		true,
+		processTemplates,
+		processYamlFunctions,
+		false,
+		skip,
+	)
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -32,62 +32,6 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 	return ExecuteTerraform(info)
 }
 
-func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
-	shouldProcessStacks := true
-	shouldCheckStack := true
-
-	if info.SubCommand == "clean" {
-		if info.ComponentFromArg == "" {
-			shouldProcessStacks = false
-		}
-		shouldCheckStack = info.Stack != ""
-
-	}
-
-	return shouldProcessStacks, shouldCheckStack
-}
-
-func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	// Auto-generate backend file
-	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
-		backendFileName := filepath.Join(workingDir, "backend.tf.json")
-
-		u.LogDebug("\nWriting the backend config to file:")
-		u.LogDebug(backendFileName)
-
-		if !info.DryRun {
-			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
-			if err != nil {
-				return err
-			}
-
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	// Generate `providers_override.tf.json` file if the `providers` section is configured
-	if len(info.ComponentProvidersSection) > 0 {
-		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
-
-		u.LogDebug("\nWriting the provider overrides to file:")
-		u.LogDebug(providerOverrideFileName)
-
-		if !info.DryRun {
-			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
-			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
-			return err
-		}
-	}
-	return nil
-}
-
 // ExecuteTerraform executes terraform commands
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -109,18 +53,18 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
-	// Skip stack processing when cleaning with --everything or --force flags to allow cleaning without requiring stack
-	// configuration
+	// Skip stack processing when cleaning with --force flag to allow cleaning without requiring stack configuration
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
-		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, true)
+		processTemplatesAndYamlFunctions := needProcessTemplatesAndYamlFunctions(info.SubCommand)
+		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, processTemplatesAndYamlFunctions, processTemplatesAndYamlFunctions, nil)
 		if err != nil {
 			return err
 		}
 
 		if len(info.Stack) < 1 && shouldCheckStack {
-			return errors.New("stack must be specified when not using --everything or --force flags")
+			return errors.New("stack must be specified for the terraform command")
 		}
 	}
 

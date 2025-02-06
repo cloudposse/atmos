@@ -339,7 +339,7 @@ func executeCustomCommand(
 			}
 
 			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true)
+			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
@@ -604,4 +604,14 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		u.LogErrorAndExit(err)
 	}
 	return info
+}
+
+// Contains checks if a slice of strings contains an exact match for the target string.
+func Contains(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

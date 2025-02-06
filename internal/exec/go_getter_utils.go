@@ -27,17 +27,12 @@ func ValidateURI(uri string) error {
 	if len(uri) > 2048 {
 		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
 	}
-	// Add more validation as needed
 	// Validate URI format
 	if strings.Contains(uri, "..") {
 		return fmt.Errorf("URI cannot contain path traversal sequences")
 	}
 	if strings.Contains(uri, " ") {
 		return fmt.Errorf("URI cannot contain spaces")
-	}
-	// Validate characters
-	if strings.ContainsAny(uri, "<>|&;$") {
-		return fmt.Errorf("URI contains invalid characters")
 	}
 	// Validate scheme-specific format
 	if strings.HasPrefix(uri, "oci://") {

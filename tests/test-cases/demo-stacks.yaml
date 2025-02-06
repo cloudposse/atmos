@@ -96,12 +96,7 @@ tests:
       - "-f"
       - "yaml"
     expect:
-      diff:
-        - "stacksBaseAbsolutePath"
-        - "terraformDirAbsolutePath"
-        - "helmfileDirAbsolutePath"
-        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+\*\*[/\\]+_defaults.yaml'
-        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]deploy[/\\]+\*\*[/\\]+\*'
+      diff: []
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       stderr:
@@ -120,11 +115,6 @@ tests:
     expect:
       diff:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
-        - "stacksBaseAbsolutePath"
-        - "terraformDirAbsolutePath"
-        - "helmfileDirAbsolutePath"
-        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+\*\*[/\\]+_defaults.yaml'
-        - 'examples[/\\]+demo-stacks[/\\]+stacks[/\\]+deploy[/\\]+\*\*[/\\]+\*'
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stderr:
