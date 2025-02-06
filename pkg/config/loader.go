@@ -108,8 +108,10 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 // loadSchemaDefaults sets the default configuration values.
 func (cl *ConfigLoader) loadSchemaDefaults() error {
 	cl.debugLogging(fmt.Sprintf("start process loading schema defaults..."))
+	// Default configuration values
 	cl.viper.SetDefault("components.helmfile.use_eks", true)
 	cl.viper.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
+	cl.viper.SetDefault("settings.inject_github_token", true)
 	j, err := json.Marshal(defaultCliConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal default CLI config: %w", err)
