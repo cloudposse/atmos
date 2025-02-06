@@ -192,4 +192,5 @@ tests:
         - "./components/library/examples/demo-stacks/components/terraform/myapp/README.md"
         - "./components/library/examples/demo-stacks/components/terraform/myapp/variables.tf"
         - "./components/library/examples/demo-stacks/components/terraform/myapp/versions.tf"
+        - "./components/library/weather/README.md"
       exit_code: 0
