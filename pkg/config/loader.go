@@ -867,19 +867,26 @@ func (cl *ConfigLoader) loadConfigFileViber(
 	if err != nil {
 		return false, err
 	}
-	configMap, err := u.UnmarshalYAMLFromFile[schema.AtmosConfiguration](&atmosConfig, string(content), path)
+
+	type baseConfig struct {
+		BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	}
+	configMap, err := u.UnmarshalYAMLFromFile[baseConfig](&atmosConfig, string(content), path)
 	if err != nil {
 		cl.debugLogging(fmt.Sprintf("error unmarshaling config file (%s): %v", path, err))
 		return false, err
 	}
-	configData, err := json.Marshal(configMap)
-	if err != nil {
-		cl.debugLogging(fmt.Sprintf("error marshaling config data (%s): %v", path, err))
-		return false, err
-	}
-	err = v.MergeConfig(bytes.NewReader(configData))
-	if err != nil {
-		return false, err
+	if configMap.BasePath != "" {
+		configData, err := json.Marshal(configMap)
+		if err != nil {
+			cl.debugLogging(fmt.Sprintf("error marshaling config data (%s): %v", path, err))
+			return false, err
+		}
+		err = v.MergeConfig(bytes.NewReader(configData))
+		if err != nil {
+			return false, err
+
+		}
 	}
 
 	return true, nil
