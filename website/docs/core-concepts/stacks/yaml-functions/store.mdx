@@ -60,9 +60,18 @@ components:
     my_lambda_component:
       vars:
         vpc_config:
+          # AWS SSM Parameter Store example
           security_group_id: !store security-group/lambda id
           security_group_id2: !store security-group/lambda2 {{ .stack }} id
           security_group_id3: !store security-group/lambda3 {{ .atmos_stack }} id
+
+          # Google Secret Manager examples
+          db_password: !store gsm/prod database password
+          api_key: !store gsm/prod api credentials | default "default-key"
+          # Cross-stack example with GSM
+          shared_secret: !store gsm/prod secrets {{ .stack }} api_token
+          # Using template for dynamic stack name with GSM
+          config_value: !store gsm/prod config {{ printf "%s-%s" .vars.environment .vars.stage }} setting
 ```
 </File>
 
