@@ -214,6 +214,7 @@ func ExecuteDescribeStacks(
 		if !u.MapKeyExists(finalStacksMap, stackName) {
 			finalStacksMap[stackName] = make(map[string]any)
 			finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
+			finalStacksMap[stackName].(map[string]any)["atmos_stack_file"] = stackFileName
 		}
 
 		if componentsSection, ok := stackSection.(map[string]any)["components"].(map[string]any); ok {
@@ -307,14 +308,21 @@ func ExecuteDescribeStacks(
 							if err != nil {
 								return nil, err
 							}
-						} else {
+						} else if atmosConfig.Stacks.NamePattern != "" {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
+						} else {
+							// If no name pattern or template is configured, use the stack file name
+							stackName = stackFileName
 						}
+
+						// Update the component section with the final stack name
+						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["stack"] = stackName
 
 						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
 							continue
@@ -327,18 +335,15 @@ func ExecuteDescribeStacks(
 						// Only create the stack entry if it doesn't exist
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
+							finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
+							finalStacksMap[stackName].(map[string]any)["atmos_stack_file"] = stackFileName
 						}
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
-						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
-						configAndStacksInfo.ComponentSection["stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 						configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
-							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
-								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
-							}
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any), "terraform") {
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"] = make(map[string]any)
 							}
@@ -516,14 +521,21 @@ func ExecuteDescribeStacks(
 							if err != nil {
 								return nil, err
 							}
-						} else {
+						} else if atmosConfig.Stacks.NamePattern != "" {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
+						} else {
+							// If no name pattern or template is configured, use the stack file name
+							stackName = stackFileName
 						}
+
+						// Update the component section with the final stack name
+						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+						configAndStacksInfo.ComponentSection["stack"] = stackName
 
 						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
 							continue
@@ -536,18 +548,15 @@ func ExecuteDescribeStacks(
 						// Only create the stack entry if it doesn't exist
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
+							finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
+							finalStacksMap[stackName].(map[string]any)["atmos_stack_file"] = stackFileName
 						}
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
-						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
-						configAndStacksInfo.ComponentSection["stack"] = stackName
 						configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 						configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
 						if len(components) == 0 || u.SliceContainsString(components, componentName) || u.SliceContainsString(derivedComponents, componentName) {
-							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
-								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
-							}
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any), "helmfile") {
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"] = make(map[string]any)
 							}
