@@ -33,6 +33,10 @@ SubCommand Aliases:
 
 Flags:
 
+        --base-path string          Base path for Atmos configuration files.
+
+        --config stringSlice        Paths to configuration files (default "[]")
+
     -h, --help                      help for atmos (default "false")
 
         --logs-file string          The file to write Atmos logs to. Logs can be
