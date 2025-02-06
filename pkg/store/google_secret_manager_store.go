@@ -136,7 +136,7 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 		},
 	}
 
-	log.Debug("creating/updating Google Secret Manager secret", 
+	log.Debug("creating/updating Google Secret Manager secret",
 		"project", s.projectID,
 		"secret_id", secretID,
 		"stack", stack,
@@ -147,13 +147,13 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 	if err != nil {
 		// Ignore error if secret already exists
 		if !strings.Contains(err.Error(), "already exists") {
-			log.Debug("failed to create secret", 
+			log.Debug("failed to create secret",
 				"project", s.projectID,
 				"secret_id", secretID,
 				"error", err)
 			return fmt.Errorf("failed to create secret: %w", err)
 		}
-		log.Debug("secret already exists", 
+		log.Debug("secret already exists",
 			"project", s.projectID,
 			"secret_id", secretID)
 		// If the secret already exists, construct the name manually
@@ -161,7 +161,7 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 			Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
 		}
 	} else {
-		log.Debug("successfully created secret", 
+		log.Debug("successfully created secret",
 			"name", secret.GetName())
 	}
 
@@ -173,18 +173,18 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 		},
 	}
 
-	log.Debug("adding new version to secret", 
+	log.Debug("adding new version to secret",
 		"name", secret.GetName())
 
 	_, err = s.client.AddSecretVersion(ctx, addVersionReq)
 	if err != nil {
-		log.Debug("failed to add version to secret", 
+		log.Debug("failed to add version to secret",
 			"name", secret.GetName(),
 			"error", err)
 		return fmt.Errorf("failed to add secret version: %w", err)
 	}
 
-	log.Debug("successfully added new version to secret", 
+	log.Debug("successfully added new version to secret",
 		"name", secret.GetName())
 	return nil
 }
@@ -211,8 +211,8 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 
 	// Build the resource name for the latest version
 	name := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretID)
-	
-	log.Debug("accessing Google Secret Manager secret", 
+
+	log.Debug("accessing Google Secret Manager secret",
 		"name", name,
 		"project", s.projectID,
 		"secret_id", secretID,
@@ -225,13 +225,13 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 		Name: name,
 	})
 	if err != nil {
-		log.Debug("failed to access secret", 
+		log.Debug("failed to access secret",
 			"name", name,
 			"error", err)
 		return nil, fmt.Errorf("failed to access secret version: %w", err)
 	}
 
-	log.Debug("successfully accessed secret", 
+	log.Debug("successfully accessed secret",
 		"name", name)
 	return string(result.Payload.Data), nil
-} 
+}

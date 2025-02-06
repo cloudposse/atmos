@@ -426,4 +426,4 @@ func TestNewGSMStore(t *testing.T) {
 			t.Skip("GOOGLE_APPLICATION_CREDENTIALS not set")
 		}
 	})
-} 
+}
