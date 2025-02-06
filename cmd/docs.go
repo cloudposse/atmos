@@ -65,10 +65,7 @@ var docsCmd = &cobra.Command{
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
-			if err != nil {
-				u.LogErrorAndExit(err)
-			}
-			if !componentPathExists {
+			if err != nil || !componentPathExists {
 				u.LogErrorAndExit(fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
 			}
 
