@@ -15,4 +15,5 @@ DEBU atmos merged config file /absolute/path/to/repo/tests/fixtures/scenarios/va
 DEBU Workdir atmos loaded
 DEBU No configuration found in user preferences
 DEBU base path from atmos config: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
