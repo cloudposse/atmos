@@ -52,7 +52,7 @@ func skipFunc(atmosConfig schema.AtmosConfiguration, info os.FileInfo, srcPath, 
 	}
 	relPath, err := filepath.Rel(baseDir, srcPath)
 	if err != nil {
-		u.LogTrace(fmt.Sprintf("Error computing relative path for %q: %v", srcPath, err))
+	l.LogDebug("Error computing relative path", 'srcPath', srcPath, 'err', err)
 		return true, nil // treat error as a signal to skip
 	}
 	relPath = filepath.ToSlash(relPath)
