@@ -885,7 +885,6 @@ func (cl *ConfigLoader) loadConfigFileViber(
 		err = v.MergeConfig(bytes.NewReader(configData))
 		if err != nil {
 			return false, err
-
 		}
 	}
 
