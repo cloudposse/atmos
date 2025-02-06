@@ -136,6 +136,13 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		}
 	}
 
+	// Ensure that the query parameter "depth" is set to "1" if not already present.
+	q := parsedURL.Query()
+	if q.Get("depth") == "" {
+		q.Set("depth", "1")
+	}
+	parsedURL.RawQuery = q.Encode()
+
 	finalURL := "git::" + parsedURL.String()
 
 	return finalURL, true, nil
