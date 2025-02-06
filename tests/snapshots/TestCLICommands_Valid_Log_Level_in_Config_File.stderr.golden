@@ -1,1 +1,18 @@
+DEBU start process loading config...
+DEBU start process loading schema defaults...
+DEBU start process loading embedded config...
+DEBU Failed to find config file on system path '/usr/local/etc/atmos/atmos'
+DEBU Failed to find config file on system path '/etc/atmos'
+DEBU No system config file found
+DEBU Check atmos config current working directory: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+DEBU Failed to find work dir atmos config file in path '/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d/**/*'.error no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d/**/*
+DEBU Failed to find config file in path '/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d/**/*'
+DEBU Failed to find work dir atmos config file in path '/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/*'.error no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/*
+DEBU Failed to find config file in path '/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/*'
+DEBU Failed to get work dir atmos config paths: no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/*
+DEBU Found work dir atmos config file: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.yaml
+DEBU atmos merged config file /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.yaml
+DEBU Workdir atmos loaded
+DEBU No configuration found in user preferences
+DEBU base path from atmos config: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
