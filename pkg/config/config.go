@@ -71,7 +71,7 @@ var (
 			BasePath: "stacks/workflows",
 		},
 		Logs: schema.Logs{
-			File:  "/dev/stdout",
+			File:  "/dev/stderr",
 			Level: "Info",
 		},
 		Schemas: schema.Schemas{
