@@ -1,7 +1,7 @@
 
 atmos.yaml CLI config file was not found.
 
-The default Atmos stacks directory is set to stacks,
+The default Atmos stacks directory is set to /absolute/path/to/repo/atmos.yaml/stacks,
 but the directory does not exist in the current path.
 
 To configure and start using Atmos, refer to the following documents:
