@@ -859,7 +859,6 @@ func (cl *ConfigLoader) loadConfigFileViber(
 	path string,
 	v *viper.Viper,
 ) (bool, error) {
-
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
@@ -881,7 +880,6 @@ func (cl *ConfigLoader) loadConfigFileViber(
 	err = v.MergeConfig(bytes.NewReader(configData))
 	if err != nil {
 		return false, err
-
 	}
 
 	return true, nil
