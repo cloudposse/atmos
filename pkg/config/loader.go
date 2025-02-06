@@ -20,8 +20,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-const AtmosGitRootFunc = "!repo-root"
-
 const MaximumImportLvL = 10
 
 type Imports struct {
@@ -209,17 +207,13 @@ func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 	if len(atmosCliConfigEnvPaths) == 0 {
 		return fmt.Errorf("ATMOS_CLI_CONFIG_PATH is not a valid paths")
 	}
-	if atmosCliConfigEnv == AtmosGitRootFunc {
-		pwd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		getGitRoot, err := GetGitRoot(pwd)
+	if atmosCliConfigEnv == AtmosYamlFuncGitRoot {
+		gitRoot, err := u.GetGitRoot()
 		if err != nil {
 			return fmt.Errorf("failed to resolve base path from `!repo-root` Git root error: %w", err)
 		}
-		cl.debugLogging(fmt.Sprintf("ATMOS_CLI_CONFIG_PATH !repo-root Git root dir : %s", getGitRoot))
-		atmosCliConfigEnv = getGitRoot
+		cl.debugLogging(fmt.Sprintf("ATMOS_CLI_CONFIG_PATH !repo-root Git root dir : %s", gitRoot))
+		atmosCliConfigEnv = gitRoot
 	}
 	var atmosFilePaths []string
 	for _, configPath := range atmosCliConfigEnvPaths {
@@ -411,24 +405,24 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 // loadGitAtmosConfig attempts to load configuration files from the Git repository root. It returns a boolean indicating if any configs were found and successfully loaded.
 func (cl *ConfigLoader) loadGitAtmosConfig() (found bool) {
 	found = false
-	gitRepoRoot, err := getGitRepoRoot()
+	gitRoot, err := u.GetGitRoot()
 	if err != nil {
 		cl.debugLogging(fmt.Sprintf("Failed to determine Git repository root: %v", err))
 		return found
 	}
-	if gitRepoRoot != "" {
-		cl.debugLogging(fmt.Sprintf("Git repository root found: %s", gitRepoRoot))
-		isDir, err := u.IsDirectory(gitRepoRoot)
+	if gitRoot != "" {
+		cl.debugLogging(fmt.Sprintf("Git repository root found: %s", gitRoot))
+		isDir, err := u.IsDirectory(gitRoot)
 		if err != nil {
 			if err == os.ErrNotExist {
-				cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRepoRoot))
+				cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRoot))
 			}
-			cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRepoRoot))
+			cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRoot))
 		}
 		if isDir && err == nil {
-			cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRepoRoot))
+			cl.debugLogging(fmt.Sprintf("Git repository root not found: %s", gitRoot))
 		}
-		gitAtmosConfigPath, err := cl.getGitAtmosConfigPaths(gitRepoRoot)
+		gitAtmosConfigPath, err := cl.getGitAtmosConfigPaths(gitRoot)
 		if err != nil {
 			cl.debugLogging(fmt.Sprintf("Failed to get Git atmos config paths: %v", err))
 		}
@@ -460,7 +454,7 @@ func (cl *ConfigLoader) loadGitAtmosConfig() (found bool) {
 				found = true
 			}
 			if !found {
-				cl.debugLogging(fmt.Sprintf("Failed to process atmos config files in path '%s'", gitRepoRoot))
+				cl.debugLogging(fmt.Sprintf("Failed to process atmos config files in path '%s'", gitRoot))
 			}
 		}
 	}
@@ -567,20 +561,6 @@ func (cl *ConfigLoader) loadConfigsFromPath(path string) (bool, []string, error)
 		return true, loadedPaths, nil
 	}
 	return false, loadedPaths, nil
-}
-
-// getGitRepoRoot attempts to find the Git repository root by traversing up the directory tree.
-func getGitRepoRoot() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("unable to get current working directory: %w", err)
-	}
-
-	getGitRoot, err := GetGitRoot(cwd)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve  Git root error: %w", err)
-	}
-	return getGitRoot, nil // Git repository root not found
 }
 
 // applyUserPreferences applies user-specific configuration preferences.
@@ -879,21 +859,29 @@ func (cl *ConfigLoader) loadConfigFileViber(
 	path string,
 	v *viper.Viper,
 ) (bool, error) {
-	reader, err := os.Open(path)
+
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
-
-	defer func(reader *os.File) {
-		err := reader.Close()
-		if err != nil {
-			cl.debugLogging(fmt.Sprintf("%s", "error closing file '"+path+"'. "+err.Error()))
-		}
-	}(reader)
-
-	err = v.MergeConfig(reader)
+	err = v.MergeConfig(bytes.NewReader(content))
 	if err != nil {
 		return false, err
+	}
+	configMap, err := u.UnmarshalYAMLFromFile[schema.AtmosConfiguration](&atmosConfig, string(content), path)
+	if err != nil {
+		cl.debugLogging(fmt.Sprintf("error unmarshaling config file (%s): %v", path, err))
+		return false, err
+	}
+	configData, err := json.Marshal(configMap)
+	if err != nil {
+		cl.debugLogging(fmt.Sprintf("error marshaling config data (%s): %v", path, err))
+		return false, err
+	}
+	err = v.MergeConfig(bytes.NewReader(configData))
+	if err != nil {
+		return false, err
+
 	}
 
 	return true, nil
