@@ -1,0 +1,3 @@
+DEBU Found ENV var ATMOS_LOGS_LEVEL=Info
+DEBU Using command line argument '--logs-level=Debug'
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
