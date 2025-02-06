@@ -1,6 +1,6 @@
 components:
   terraform:
-    base_path: "../../"
+    base_path: "terraform/components"
     apply:
       auto_approve: true
     clean:
@@ -19,4 +19,4 @@ stacks:
 
 logs:
   file: "/dev/stderr"
-  level: "Info"
+  level: "Info" 

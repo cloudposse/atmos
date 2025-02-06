@@ -25,6 +25,8 @@ func TestCLITerraformClean(t *testing.T) {
 		t.Fatalf("Failed to apply updated PATH: %v", err)
 	}
 	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
+
+	// Setup cleanup function to run after test completion
 	defer func() {
 		// Change back to the original working directory after the test
 		if err := os.Chdir(startingDir); err != nil {
@@ -44,6 +46,9 @@ func TestCLITerraformClean(t *testing.T) {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
 	}
 
+	// Clean up any existing Terraform state before starting tests
+	cleanupTerraformState(t)
+
 	// Initialize terraform for both environments
 	runTerraformInit(t, binaryPath, "prod")
 	runTerraformInit(t, binaryPath, "dev")
@@ -51,13 +56,13 @@ func TestCLITerraformClean(t *testing.T) {
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
 	verifyStateFilesExist(t, []string{
-		"./components/terraform/mock/.terraform",
-		"./components/terraform/mock/.terraform.lock.hcl",
+		"terraform/components/mock/.terraform",
+		"terraform/components/mock/.terraform.lock.hcl",
 	})
 	runCLITerraformCleanComponent(t, binaryPath, "prod")
 	verifyStateFilesDeleted(t, []string{
-		"./components/terraform/mock/.terraform",
-		"./components/terraform/mock/.terraform.lock.hcl",
+		"terraform/components/mock/.terraform",
+		"terraform/components/mock/.terraform.lock.hcl",
 	})
 
 	// Run terraform apply for dev environment
@@ -65,8 +70,8 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Verify if state files exist before cleaning
 	stateFiles := []string{
-		"./components/terraform/mock/.terraform",
-		"./components/terraform/mock/.terraform.lock.hcl",
+		"terraform/components/mock/.terraform",
+		"terraform/components/mock/.terraform.lock.hcl",
 	}
 	verifyStateFilesExist(t, stateFiles)
 
@@ -167,8 +172,8 @@ func runTerraformInit(t *testing.T, binaryPath, environment string) {
 	// Set environment variables
 	envVars := os.Environ()
 	envVars = append(envVars,
-		"ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true",
 		"ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=true",
+		"ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true",
 		"ATMOS_LOGS_LEVEL=Debug",
 		"ATMOS_LOGS_FILE=/dev/stderr")
 	cmd.Env = envVars
@@ -178,15 +183,25 @@ func runTerraformInit(t *testing.T, binaryPath, environment string) {
 	cmd.Stderr = &stderr
 
 	// Log the command being executed
-	t.Logf("Running command: %s %v", binaryPath, cmd.Args)
+	t.Logf("Running terraform init for environment %s: %s %v", environment, binaryPath, cmd.Args)
 
 	err := cmd.Run()
 	// Always log both stdout and stderr
 	t.Logf("Init command stdout:\n%s", stdout.String())
 	t.Logf("Init command stderr:\n%s", stderr.String())
+
 	if err != nil {
 		t.Fatalf("Failed to run terraform init mock -s %s: %v\nStdout: %s\nStderr: %s",
 			environment, err, stdout.String(), stderr.String())
+	}
+
+	// Verify that terraform was properly initialized
+	terraformDir := filepath.Join("terraform", "components", "mock")
+	if _, err := os.Stat(filepath.Join(terraformDir, ".terraform")); os.IsNotExist(err) {
+		t.Fatalf("Terraform was not properly initialized: .terraform directory not found in %s", terraformDir)
+	}
+	if _, err := os.Stat(filepath.Join(terraformDir, ".terraform.lock.hcl")); os.IsNotExist(err) {
+		t.Fatalf("Terraform was not properly initialized: .terraform.lock.hcl not found in %s", terraformDir)
 	}
 }
 
@@ -201,4 +216,34 @@ func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
 	if err != nil {
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
+}
+
+func cleanupTerraformState(t *testing.T) {
+	t.Helper()
+
+	// Define paths to clean
+	terraformDir := filepath.Join("terraform", "components", "mock")
+	pathsToClean := []string{
+		filepath.Join(terraformDir, ".terraform"),
+		filepath.Join(terraformDir, ".terraform.lock.hcl"),
+		filepath.Join(terraformDir, "terraform.tfstate"),
+		filepath.Join(terraformDir, "terraform.tfstate.backup"),
+		filepath.Join(terraformDir, ".terraform.tfstate.lock.info"),
+		filepath.Join(terraformDir, "terraform.tfstate.d"),
+	}
+
+	// Remove each path
+	for _, path := range pathsToClean {
+		err := os.RemoveAll(path)
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatalf("Failed to clean up Terraform state at %s: %v", path, err)
+		}
+	}
+
+	// Ensure the terraform directory exists
+	if err := os.MkdirAll(terraformDir, 0755); err != nil {
+		t.Fatalf("Failed to create terraform directory at %s: %v", terraformDir, err)
+	}
+
+	t.Logf("Successfully cleaned up Terraform state in %s", terraformDir)
 }
