@@ -1,4 +1,4 @@
 DEBU Found ENV var ATMOS_LOGS_LEVEL=Debug
 DEBU Using command line argument '--logs-level=Info'
-DEBU Using command line argument '--logs-file=/dev/stdout'
+DEBU Using command line argument '--logs-file=/dev/stderr'
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]

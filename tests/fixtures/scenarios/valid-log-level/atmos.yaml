@@ -1,8 +1,8 @@
 logs:
   level: Trace
-  file: /dev/stdout
+  file: /dev/stderr
 
 stacks:
   base_path: stacks
   included_paths:
-    - "**/*" 
+    - "**/*"

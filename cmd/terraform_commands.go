@@ -3,8 +3,9 @@ package cmd
 import (
 	"os"
 
-	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/spf13/cobra"
+
+	h "github.com/cloudposse/atmos/pkg/hooks"
 )
 
 // getTerraformCommands returns an array of statically defined Terraform commands with flags

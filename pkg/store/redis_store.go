@@ -47,7 +47,7 @@ func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 		return redis.ParseURL(os.Getenv("ATMOS_REDIS_URL"))
 	}
 
-	return &redis.Options{}, fmt.Errorf("either url must be set in options or REDIS_URL environment variable must be set")
+	return &redis.Options{}, fmt.Errorf("either url must be set in options or ATMOS_REDIS_URL environment variable must be set")
 }
 
 func NewRedisStore(options RedisStoreOptions) (Store, error) {
