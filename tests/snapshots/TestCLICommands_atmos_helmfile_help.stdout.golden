@@ -36,7 +36,7 @@ Global Flags:
                                     written to any file or any standard file
                                     descriptor, including '/dev/stdout',
                                     '/dev/stderr' and '/dev/null' (default
-                                    "/dev/stdout")
+                                    "/dev/stderr")
 
         --logs-level string         Logs level. Supported log levels are Trace,
                                     Debug, Info, Warning, Off. If the log level
@@ -53,3 +53,8 @@ Global Flags:
 Use atmos helmfile [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
 
 
+╭──────────────────────────────────────────────────────────────╮
+│               Update available! test » 1.160.2               │
+│ Atmos Releases: https://github.com/cloudposse/atmos/releases │
+│          Install Atmos: https://atmos.tools/install          │
+╰──────────────────────────────────────────────────────────────╯
