@@ -80,7 +80,7 @@ var docsCmd = &cobra.Command{
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(fmt.Errorf("Loading README file for component: %s", info.Component))
 			}
 
 			r, err := glamour.NewTermRenderer(
@@ -95,7 +95,7 @@ var docsCmd = &cobra.Command{
 
 			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(fmt.Errorf("failed to render markdown: %w", err))
 			}
 
 			pager := atmosConfig.Settings.Terminal.Pager
@@ -129,7 +129,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(fmt.Errorf("failed to open default browser: %w", err))
 			}
 		}
 
