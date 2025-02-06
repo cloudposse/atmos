@@ -45,9 +45,9 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-// skipFunc determines whether to skip a file/directory based on its relative path to baseDir.
+// shouldSkipEntry determines whether to skip a file/directory based on its relative path to baseDir.
 // If an error occurs during matching for an exclusion or inclusion pattern, it logs the error and proceeds.
-func skipFunc(info os.FileInfo, srcPath, baseDir string, excluded, included []string) (bool, error) {
+func shouldSkipEntry(info os.FileInfo, srcPath, baseDir string, excluded, included []string) (bool, error) {
 	if info.Name() == ".git" {
 		return true, nil
 	}
@@ -92,8 +92,8 @@ func skipFunc(info os.FileInfo, srcPath, baseDir string, excluded, included []st
 	return false, nil
 }
 
-// copyDirRecursive recursively copies srcDir to dstDir using skipFunc filtering.
-func copyDirRecursive(atmosConfig schema.AtmosConfiguration, srcDir, dstDir, baseDir string, excluded, included []string) error {
+// copyDirRecursive recursively copies srcDir to dstDir using shouldSkipEntry filtering.
+func copyDirRecursive(srcDir, dstDir, baseDir string, excluded, included []string) error {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		return fmt.Errorf("reading directory %q: %w", srcDir, err)
@@ -107,7 +107,7 @@ func copyDirRecursive(atmosConfig schema.AtmosConfiguration, srcDir, dstDir, bas
 			return fmt.Errorf("getting info for %q: %w", srcPath, err)
 		}
 
-		skip, err := skipFunc(info, srcPath, baseDir, excluded, included)
+		skip, err := shouldSkipEntry(info, srcPath, baseDir, excluded, included)
 		if err != nil {
 			return err
 		}
@@ -125,7 +125,7 @@ func copyDirRecursive(atmosConfig schema.AtmosConfiguration, srcDir, dstDir, bas
 			if err := os.MkdirAll(dstPath, info.Mode()); err != nil {
 				return fmt.Errorf("creating directory %q: %w", dstPath, err)
 			}
-			if err := copyDirRecursive(atmosConfig, srcPath, dstPath, baseDir, excluded, included); err != nil {
+			if err := copyDirRecursive(srcPath, dstPath, baseDir, excluded, included); err != nil {
 				return err
 			}
 		} else {
@@ -173,7 +173,6 @@ func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 // In the special case where neither inclusion nor exclusion patterns are defined,
 // the optimized cp library (github.com/otiai10/copy) is used.
 func copyToTargetWithPatterns(
-	atmosConfig schema.AtmosConfiguration,
 	sourceDir, targetPath string,
 	s *schema.AtmosVendorSource,
 	sourceIsLocalFile bool,
@@ -237,7 +236,7 @@ func copyToTargetWithPatterns(
 				return fmt.Errorf("stating file %q: %w", file, err)
 			}
 			if info.IsDir() {
-				if err := copyDirRecursive(atmosConfig, file, dstPath, file, s.ExcludedPaths, nil); err != nil {
+				if err := copyDirRecursive(file, dstPath, file, s.ExcludedPaths, nil); err != nil {
 					return err
 				}
 			} else {
@@ -248,7 +247,7 @@ func copyToTargetWithPatterns(
 		}
 	} else {
 		// No inclusion patterns defined; copy everything except those matching excluded items.
-		if err := copyDirRecursive(atmosConfig, sourceDir, targetPath, sourceDir, s.ExcludedPaths, s.IncludedPaths); err != nil {
+		if err := copyDirRecursive(sourceDir, targetPath, sourceDir, s.ExcludedPaths, s.IncludedPaths); err != nil {
 			return fmt.Errorf("error copying from %q to %q: %w", sourceDir, targetPath, err)
 		}
 	}
