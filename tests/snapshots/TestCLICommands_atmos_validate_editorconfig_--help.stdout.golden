@@ -59,7 +59,7 @@ Global Flags:
                                     written to any file or any standard file
                                     descriptor, including '/dev/stdout',
                                     '/dev/stderr' and '/dev/null' (default
-                                    "/dev/stdout")
+                                    "/dev/stderr")
 
         --logs-level string         Logs level. Supported log levels are Trace,
                                     Debug, Info, Warning, Off. If the log level
