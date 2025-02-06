@@ -214,7 +214,7 @@ func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
 	return removeSymlinks(dst)
 }
 
-// removeSymlinks walks the destination directory and removes any symlinks
+// removeSymlinks walks the directory and removes any symlinks
 // it encounters.
 func removeSymlinks(root string) error {
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
