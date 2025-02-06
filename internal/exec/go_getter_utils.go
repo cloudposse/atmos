@@ -136,9 +136,9 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		}
 	}
 
-	// Ensure that the query parameter "depth" is set to "1" if not already present.
+	// Ensure that the "depth" parameter is set to "1" if the key does not exist.
 	q := parsedURL.Query()
-	if q.Get("depth") == "" {
+	if _, exists := q["depth"]; !exists {
 		q.Set("depth", "1")
 	}
 	parsedURL.RawQuery = q.Encode()
