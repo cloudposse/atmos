@@ -241,7 +241,7 @@ func cleanupTerraformState(t *testing.T) {
 	}
 
 	// Ensure the terraform directory exists
-	if err := os.MkdirAll(terraformDir, 0755); err != nil {
+	if err := os.MkdirAll(terraformDir, 0o755); err != nil {
 		t.Fatalf("Failed to create terraform directory at %s: %v", terraformDir, err)
 	}
 
