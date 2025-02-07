@@ -1,6 +1,6 @@
 components:
   terraform:
-    base_path: "terraform/components"
+    base_path: "../../terraform/components"
     apply:
       auto_approve: true
     clean:
