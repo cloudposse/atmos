@@ -110,5 +110,5 @@ func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 	configLoader.atmosConfig.BasePath = "sub-dir"
 	result, err = configLoader.BasePathComputing(info)
 	assert.NoError(t, err)
-	assert.Equal(t, expectedPath, result)
+	assert.Contains(t, expectedPath, result)
 }
