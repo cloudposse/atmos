@@ -1,9 +1,9 @@
-base_path: ./
+base_path: /absolute/path/to/repo/examples/demo-stacks
 components:
     terraform:
         base_path: components/terraform
         apply_auto_approve: false
-        append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+        append_user_agent: Atmos/test (Cloud Posse; +https:/atmos.tools)
         deploy_run_init: true
         init_run_reconfigure: true
         auto_generate_backend_file: false
@@ -43,4 +43,6 @@ default: false
 validate:
     editorconfig:
         color: true
+cli_config_path: /absolute/path/to/repo/examples/demo-stacks
+import: []
 
