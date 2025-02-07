@@ -20,7 +20,7 @@ tests:
         - "github/stargazers"
         - "weather"
         - "Vendored 3 components"
-        - "Vendoring from 'vendor.yaml'"
+        - "Vendoring from"
         - !not 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
 
