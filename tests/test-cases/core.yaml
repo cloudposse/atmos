@@ -58,7 +58,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks"
         - "but the directory does not exist."
       stderr:
         - "^$"
