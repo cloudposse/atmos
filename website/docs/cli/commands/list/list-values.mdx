@@ -1,0 +1,91 @@
+---
+title: "atmos list values"
+id: "list-values"
+---
+
+# atmos list values
+
+The `atmos list values` command displays component values across all stacks where the component is used.
+
+## Usage
+
+```shell
+atmos list values [component] [flags]
+```
+
+## Description
+
+The `atmos list values` command helps you inspect component values across different stacks. It provides a tabular view where:
+
+- Each column represents a stack (e.g., dev-ue1, staging-ue1, prod-ue1)
+- Each row represents a key in the component's configuration
+- Cells contain the values for each key in each stack
+
+The command is particularly useful for:
+- Comparing component configurations across different environments
+- Verifying values are set correctly in each stack
+- Understanding how a component is configured across your infrastructure
+
+## Flags
+
+<dl>
+  <dt><code>--query string</code></dt>
+  <dd>JMESPath query to filter values (e.g., ".vars" to show only variables)</dd>
+  <dt><code>--abstract</code></dt>
+  <dd>Include abstract components in the output</dd>
+  <dt><code>--max-columns int</code></dt>
+  <dd>Maximum number of columns to display (default 10)</dd>
+  <dt><code>--format string</code></dt>
+  <dd>Output format: `table`, `json`, `csv`, `tsv` (default "`table`")</dd>
+  <dt><code>--delimiter string</code></dt>
+  <dd>Delimiter for csv/tsv output (default: comma for csv, tab for tsv)</dd>
+</dl>
+
+## Examples
+
+List all values for a component:
+```shell
+atmos list values vpc
+```
+
+List only variables for a component (using the alias):
+```shell
+atmos list vars vpc
+```
+
+List values with a custom JMESPath query:
+```shell
+atmos list values vpc --query .config
+```
+
+Include abstract components:
+```shell
+atmos list values vpc --abstract
+```
+
+Limit the number of columns:
+```shell
+atmos list values vpc --max-columns 5
+```
+
+Output in different formats:
+```shell
+atmos list values vpc --format json
+atmos list values vpc --format csv
+atmos list values vpc --format tsv
+```
+
+## Example Output
+
+```shell
+> atmos list vars vpc
+        dev-ue1       staging-ue1   staging-ue2   prod-ue1      prod-ue2
+-----  ------------   ------------  ------------  ------------  ------------
+cidr    10.0.0.0/16   10.0.0.0/16   10.0.0.0/16   10.0.0.0/16   10.0.0.0/16
+region  us-east-1     us-east-1     us-east-2     us-east-1     us-east-2
+```
+
+## Related Commands
+
+- [atmos list components](/cli/commands/list/component) - List available components
+- [atmos describe component](/cli/commands/describe/component) - Show detailed information about a component
