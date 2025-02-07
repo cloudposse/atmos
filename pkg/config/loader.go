@@ -44,7 +44,6 @@ var embeddedConfigData []byte
 
 // LoadConfig initiates the configuration loading process based on the defined flowchart.
 func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-
 	u.LogDebug(fmt.Sprintf("start process loading config..."))
 	// We want the editorconfig color by default to be true
 	cl.atmosConfig.Validate.EditorConfig.Color = true
