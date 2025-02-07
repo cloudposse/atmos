@@ -47,7 +47,6 @@ func TestListComponentsWithStack(t *testing.T) {
 
 	output, err := FilterAndListComponents(testStack, stacksMap)
 	assert.Nil(t, err)
-	assert.Nil(t, err)
 	assert.NotNil(t, output)
 	assert.Greater(t, len(output), 0)
 	assert.ObjectsAreEqualValues([]string{"infra/vpc", "mixin/test-1", "mixin/test-2", "test/test-component", "test/test-component-override", "test/test-component-override-2", "test/test-component-override-3", "top-level-component1", "vpc", "vpc/new"}, output)

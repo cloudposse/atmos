@@ -28,6 +28,64 @@ When the generated completion script is loaded into the shell, pressing the tab 
 Run `atmos completion --help` to see all the available options
 :::
 
+
+## Zsh Completion Setup
+
+To enable tab completion for Atmos in `Zsh`, add the following to your `~/.zshrc`:
+
+```zsh
+# Initialize Zsh completion system
+autoload -Uz compinit && compinit
+
+# Enable Atmos CLI completion
+source <(atmos completion zsh)
+
+# Improve completion behavior
+zstyle ':completion:*' menu select      # Enable menu selection
+zstyle ':completion:*' force-list always # Force vertical menu listing
+
+# Ensure the Tab key triggers autocompletion
+bindkey '\t' expand-or-complete
+```
+
+After saving the file, apply the changes by running:
+
+```zsh
+source ~/.zshrc
+```
+
+Now, pressing `<Tab>` after atmos will display available subcommands.
+
+If completions do not work, try regenerating the completion cache:
+
+```zsh
+rm -f ~/.zcompdump; compinit
+```
+
+## Bash Completion Setup
+
+To enable tab completion for Atmos in `bash`, follow the steps given bellow
+
+1. execute and capture the autocompletion script
+```bash
+atmos completion bash &> ~/.atmos_completion.sh
+```
+2. add the permissions
+```bash
+chmod +x ~/.atmos_completion.sh
+```
+3. Add the following line to your `.bashrc`
+```bash
+source ~/.atmos_completion.sh
+```
+4. After saving the file, apply the changes by running:
+
+```zsh
+source ~/.bashrc
+```
+Now, pressing `<Tab>` after atmos will display available subcommands.
+
+
 ### Examples
 
 ```shell
