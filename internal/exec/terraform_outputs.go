@@ -259,8 +259,7 @@ func GetTerraformOutput(
 		p.Quit()
 		<-spinnerDone
 		fmt.Printf("\r✗ %s\n", message)
-		u.LogError(fmt.Errorf("failed to describe the component '%s' in the stack '%s': %w", component, stack, err))
-		u.LogErrorAndExit(err)
+		u.LogErrorAndExit(fmt.Errorf("failed to describe the component '%s' in the stack '%s': %w", component, stack, err))
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
@@ -270,8 +269,7 @@ func GetTerraformOutput(
 		p.Quit()
 		<-spinnerDone
 		fmt.Printf("\r✗ %s\n", message)
-		u.LogError(fmt.Errorf("failed to get remote state backend static type outputs: %w", err))
-		u.LogErrorAndExit(err)
+		u.LogErrorAndExit(fmt.Errorf("failed to get remote state backend static type outputs: %w", err))
 	}
 
 	var result any
@@ -286,8 +284,7 @@ func GetTerraformOutput(
 			p.Quit()
 			<-spinnerDone
 			fmt.Printf("\r✗ %s\n", message)
-			u.LogError(fmt.Errorf("failed to execute terraform output for the component '%s' in the stack '%s': %w", component, stack, err))
-			u.LogErrorAndExit(err)
+			u.LogErrorAndExit(fmt.Errorf("failed to execute terraform output for the component '%s' in the stack '%s': %w", component, stack, err))
 		}
 
 		// Cache the result
