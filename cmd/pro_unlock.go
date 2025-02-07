@@ -29,6 +29,6 @@ var proUnlockCmd = &cobra.Command{
 func init() {
 	proUnlockCmd.PersistentFlags().StringP("component", "c", "", "Specify the Atmos component to lock")
 	proUnlockCmd.PersistentFlags().StringP("stack", "s", "", "Specify the Atmos stack to lock")
-	AddStackCompltion(proUnlockCmd)
+	AddStackCompletion(proUnlockCmd)
 	proCmd.AddCommand(proUnlockCmd)
 }

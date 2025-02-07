@@ -30,7 +30,7 @@ func init() {
 	describeDependentsCmd.DisableFlagParsing = false
 
 	describeDependentsCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe dependents <component> -s <stack>")
-	AddStackCompltion(describeDependentsCmd)
+	AddStackCompletion(describeDependentsCmd)
 	describeDependentsCmd.PersistentFlags().StringP("format", "f", "json", "The output format: atmos describe dependents <component> -s <stack> --format=json|yaml ('json' is default)")
 	describeDependentsCmd.PersistentFlags().String("file", "", "Write the result to the file: atmos describe dependents <component> -s <stack> --file dependents.yaml")
 

@@ -29,7 +29,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 func init() {
 	helmfileGenerateVarfileCmd.DisableFlagParsing = false
 	helmfileGenerateVarfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile generate varfile <component> -s <stack>")
-	AddStackCompltion(helmfileGenerateVarfileCmd)
+	AddStackCompletion(helmfileGenerateVarfileCmd)
 	helmfileGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "atmos helmfile generate varfile <component> -s <stack> -f <file>")
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")

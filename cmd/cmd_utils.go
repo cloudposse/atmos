@@ -614,7 +614,7 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 	return output, cobra.ShellCompDirectiveNoFileComp
 }
 
-func AddStackCompltion(cmd *cobra.Command) {
+func AddStackCompletion(cmd *cobra.Command) {
 	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
 }
 
