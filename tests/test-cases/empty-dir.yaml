@@ -24,8 +24,8 @@ tests:
     expect:
       diff: []
       stdout:
-        - "atmos.yaml CLI config file was not found."
-        - "https://atmos.tools/cli/configuration"
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as"
+        - "To configure and start using Atmos, refer to the following documents:"
       stderr:
         - "^$"
       exit_code: 1
