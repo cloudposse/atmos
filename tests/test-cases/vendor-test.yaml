@@ -1,5 +1,5 @@
 tests:
-  - name: atmos vendor pull
+  - name: atmos_vendor_pull_failure
     enabled: true
     description: ""
     workdir: "../"

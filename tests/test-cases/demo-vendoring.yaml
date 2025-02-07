@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=schema.json
 
 tests:
-  - name: atmos vendor pull
+  - name: atmos_vendor_pull_tty
     enabled: true
     snapshot: false
     tty: true
@@ -24,7 +24,7 @@ tests:
         - !not 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
 
-  - name: atmos vendor pull (no tty)
+  - name: atmos_vendor_pull_no_tty (no tty)
     enabled: true
     snapshot: true
     tty: false
