@@ -220,7 +220,7 @@ func GetTerraformOutput(
 	if !skipCache {
 		cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 		if found && cachedOutputs != nil {
-			l.Debug("Found the result of the Atmos YAML function '!terraform.output %s %s %s' in the cache", "component", component, "stack", stack, "output", output)
+			l.Debug("Found the result of the Atmos YAML function '!terraform.output %s %s %s' in the cache", component, stack, output)
 			return getTerraformOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
 		}
 	}
