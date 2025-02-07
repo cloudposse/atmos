@@ -1,0 +1,32 @@
+---
+title: atmos completion bash
+sidebar_label: bash
+sidebar_class_name: command
+description: Use this command to generate completion scripts for `Bash`
+---
+
+
+## Bash Completion Setup
+
+To enable tab completion for Atmos in `bash`, follow the steps given bellow
+
+```
+# execute and capture the autocompletion script
+atmos completion bash &> ~/.atmos_completion.sh
+
+# add the permissions
+chmod +x ~/.atmos_completion.sh
+```
+
+Add the following line to your `.bashrc`
+```
+source ~/.atmos_completion.sh
+```
+
+After saving the file, apply the changes by running:
+```
+source ~/.bashrc
+```
+
+Now, pressing `<Tab>` after atmos will display available subcommands.
+

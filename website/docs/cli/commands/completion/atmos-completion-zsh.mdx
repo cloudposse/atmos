@@ -1,0 +1,39 @@
+---
+title: atmos completion bash
+sidebar_label: zsh
+sidebar_class_name: command
+description: Use this command to generate completion scripts for `Zsh`
+---
+
+## Zsh Completion Setup
+
+To enable tab completion for Atmos in `Zsh`, add the following to your `~/.zshrc`:
+
+```zsh
+# Initialize Zsh completion system
+autoload -Uz compinit && compinit
+
+# Enable Atmos CLI completion
+source <(atmos completion zsh)
+
+# Improve completion behavior
+zstyle ':completion:*' menu select      # Enable menu selection
+zstyle ':completion:*' force-list always # Force vertical menu listing
+
+# Ensure the Tab key triggers autocompletion
+bindkey '\t' expand-or-complete
+```
+
+After saving the file, apply the changes by running:
+
+```zsh
+source ~/.zshrc
+```
+
+Now, pressing `<Tab>` after atmos will display available subcommands.
+
+If completions do not work, try regenerating the completion cache:
+
+```zsh
+rm -f ~/.zcompdump; compinit
+```

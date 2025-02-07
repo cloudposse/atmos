@@ -1,0 +1,11 @@
+{
+  "label": "completion",
+  "position": 2,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "usage"
+  }
+}
