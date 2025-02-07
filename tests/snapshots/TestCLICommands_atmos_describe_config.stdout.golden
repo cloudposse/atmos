@@ -1,5 +1,5 @@
 {
-  "base_path": "./",
+  "base_path": "/absolute/path/to/repo/examples/demo-stacks",
   "components": {
     "terraform": {
       "base_path": "components/terraform",
@@ -144,5 +144,7 @@
     "editorconfig": {
       "color": true
     }
-  }
+  },
+  "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks",
+  "import": null
 }

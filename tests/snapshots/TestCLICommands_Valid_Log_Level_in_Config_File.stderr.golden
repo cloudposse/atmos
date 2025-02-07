@@ -15,5 +15,4 @@ DEBU Workdir atmos loaded
 DEBU No configuration found in user preferences
 DEBU base path from infra atmos: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.yaml
 DEBU base path from infra: /absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
-DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
