@@ -44,28 +44,16 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 
 	// Check if the file exists before attempting deletion
 	if _, err := os.Stat(filePath); err == nil {
-		l.LogDebug("Terraform environment file found. Proceeding with deletion.",
-			"file", filePath,
-		)
+		u.LogDebug(fmt.Sprintf("Terraform environment file found. Proceeding with deletion.\nFile: %s", filePath))
 		if err := os.Remove(filePath); err != nil {
-			l.LogDebug("Failed to delete Terraform environment file.",
-				"file", filePath,
-				"error", err,
-			)
+			u.LogDebug(fmt.Sprintf("Failed to delete Terraform environment file.\nFile: %s\nError: %s", filePath, err))
 		} else {
-			l.LogDebug("Successfully deleted Terraform environment file.",
-				"file", filePath,
-			)
+			u.LogDebug(fmt.Sprintf("Successfully deleted Terraform environment file.\nFile: %s", filePath))
 		}
 	} else if os.IsNotExist(err) {
-		l.LogDebug("Terraform environment file not found. No action needed.",
-			"file", filePath,
-		)
+		u.LogDebug(fmt.Sprintf("Terraform environment file not found. No action needed.\nFile: %s", filePath))
 	} else {
-		l.LogDebug("Error checking Terraform environment file.",
-			"file", filePath,
-			"error", err,
-		)
+		u.LogDebug(fmt.Sprintf("Error checking Terraform environment file.\nFile: %s\nError: %s", filePath, err))
 	}
 }
 
