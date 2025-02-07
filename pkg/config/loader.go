@@ -13,11 +13,11 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/version"
 )
 
 const MaximumImportLvL = 10
@@ -29,7 +29,6 @@ type Imports struct {
 type ConfigLoader struct {
 	viper            *viper.Viper
 	atmosConfig      schema.AtmosConfiguration
-	debug            bool
 	AtmosConfigPaths []string
 	LogsLevel        string
 }
@@ -45,15 +44,7 @@ var embeddedConfigData []byte
 
 // LoadConfig initiates the configuration loading process based on the defined flowchart.
 func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-	logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
-	if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace || configAndStacksInfo.LogsLevel == u.LogLevelDebug {
-		cl.debug = true
-		cl.LogsLevel = configAndStacksInfo.LogsLevel
-	}
-	if configAndStacksInfo.LogsLevel == u.LogLevelDebug || configAndStacksInfo.LogsLevel == u.LogLevelTrace {
-		cl.debug = true
-		cl.LogsLevel = configAndStacksInfo.LogsLevel
-	}
+
 	u.LogDebug(fmt.Sprintf("start process loading config..."))
 	// We want the editorconfig color by default to be true
 	cl.atmosConfig.Validate.EditorConfig.Color = true
@@ -61,15 +52,12 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 	// Initialize Viper
 	cl.viper.SetConfigType("yaml")
 	cl.viper.SetTypeByDefaultValue(true)
-
-	// Load Atmos Schema Defaults
-	err := cl.loadSchemaDefaults()
-	if err != nil {
-		return cl.atmosConfig, err
-	}
+	cl.viper.SetDefault("components.helmfile.use_eks", true)
+	cl.viper.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
+	cl.viper.SetDefault("settings.inject_github_token", true)
 
 	// Load Embedded Config
-	err = cl.loadEmbeddedConfig()
+	err := cl.loadEmbeddedConfig()
 	if err != nil {
 		return cl.atmosConfig, err
 	}
@@ -103,26 +91,6 @@ func (cl *ConfigLoader) LoadConfig(configAndStacksInfo schema.ConfigAndStacksInf
 	cl.applyUserPreferences()
 
 	return cl.atmosConfig, nil
-}
-
-// loadSchemaDefaults sets the default configuration values.
-func (cl *ConfigLoader) loadSchemaDefaults() error {
-	u.LogDebug(fmt.Sprintf("start process loading schema defaults..."))
-	// Default configuration values
-	cl.viper.SetDefault("components.helmfile.use_eks", true)
-	cl.viper.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
-	cl.viper.SetDefault("settings.inject_github_token", true)
-	j, err := json.Marshal(defaultCliConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal default CLI config: %w", err)
-	}
-
-	reader := bytes.NewReader(j)
-	err = cl.viper.MergeConfig(reader)
-	if err != nil {
-		return fmt.Errorf("failed to merge schema defaults: %w", err)
-	}
-	return nil
 }
 
 // loadEmbeddedConfig loads the embedded atmos.yaml configuration.

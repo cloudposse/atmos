@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -112,6 +114,9 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	configLoader := NewConfigLoader()
 	atmosConfig, err := configLoader.LoadConfig(configAndStacksInfo)
 	if err != nil {
+		return atmosConfig, err
+	}
+	if len(configLoader.AtmosConfigPaths) == 0 {
 		logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
 		if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace {
 			u.PrintMessageInColor("'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n"+
@@ -124,7 +129,17 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			}
 			fmt.Println()
 		}
-		return defaultCliConfig, err
+		// Load Atmos Schema Defaults
+		j, err := json.Marshal(defaultCliConfig)
+		if err != nil {
+			return atmosConfig, err
+		}
+
+		reader := bytes.NewReader(j)
+		err = configLoader.viper.MergeConfig(reader)
+		if err != nil {
+			return atmosConfig, err
+		}
 	}
 	atmosConfig.CliConfigPath = ConnectPaths(configLoader.AtmosConfigPaths)
 	basePath, err := configLoader.BasePathComputing(configAndStacksInfo)

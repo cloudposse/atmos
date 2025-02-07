@@ -16,24 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadEmbeddedConfigSuccessfullyMergesConfig(t *testing.T) {
-	viper := viper.New()
-	viper.SetConfigType("yaml")
-	cl := &ConfigLoader{
-		viper:       viper,
-		atmosConfig: schema.AtmosConfiguration{},
-	}
-	err := cl.loadSchemaDefaults()
-	assert.NoError(t, err)
-	err = cl.loadEmbeddedConfig()
-
-	assert.NoError(t, err)
-	assert.NotNil(t, viper.AllSettings())
-	// Deep Merge Schema Defaults and Embedded Config
-	err = cl.deepMergeConfig()
-	assert.NoError(t, err)
-}
-
 // Successfully unmarshal valid config data from viper into atmosConfig struct
 func TestDeepMergeConfigUnmarshalValidConfig(t *testing.T) {
 	v := viper.New()
