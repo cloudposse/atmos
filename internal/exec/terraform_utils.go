@@ -25,16 +25,48 @@ func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 // We delete the file to prevent the Terraform prompt asking to select the default or the
 // previously used workspace. This happens when different backends are used for the same component.
 func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPath string) {
-	// If TF_DATA_DIR is set, use the TF_DATA_DIR path
+	// Get TF_DATA_DIR, default to .terraform if not set
 	tfDataDir := os.Getenv("TF_DATA_DIR")
-	// If not set, default to .terraform
 	if tfDataDir == "" {
 		tfDataDir = ".terraform"
 	}
 
-	filePath := filepath.Join(componentPath, tfDataDir, "environment")
-	u.LogDebug(fmt.Sprintf("\nDeleting Terraform environment file:\n'%s'", filePath))
-	_ = os.Remove(filePath)
+	// Convert relative path to absolute
+	if !filepath.IsAbs(tfDataDir) {
+		tfDataDir = filepath.Join(componentPath, tfDataDir)
+	}
+
+	// Ensure the path is cleaned properly
+	tfDataDir = filepath.Clean(tfDataDir)
+
+	// Construct the full file path
+	filePath := filepath.Join(tfDataDir, "environment")
+
+	// Check if the file exists before attempting deletion
+	if _, err := os.Stat(filePath); err == nil {
+		l.LogDebug("Terraform environment file found. Proceeding with deletion.",
+			"file", filePath,
+		)
+		if err := os.Remove(filePath); err != nil {
+			l.LogDebug("Failed to delete Terraform environment file.",
+				"file", filePath,
+				"error", err,
+			)
+		} else {
+			l.LogDebug("Successfully deleted Terraform environment file.",
+				"file", filePath,
+			)
+		}
+	} else if os.IsNotExist(err) {
+		l.LogDebug("Terraform environment file not found. No action needed.",
+			"file", filePath,
+		)
+	} else {
+		l.LogDebug("Error checking Terraform environment file.",
+			"file", filePath,
+			"error", err,
+		)
+	}
 }
 
 func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
