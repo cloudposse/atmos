@@ -56,21 +56,38 @@ func shouldSkipEntry(info os.FileInfo, srcPath, baseDir string, excluded, includ
 		l.Debug("Error computing relative path", "srcPath", srcPath, "error", err)
 		return true, nil // treat error as a signal to skip
 	}
+	// Ensure uniform path separator.
 	relPath = filepath.ToSlash(relPath)
 
 	// Process exclusion patterns.
+	// For directories, check with and without a trailing slash.
 	for _, pattern := range excluded {
+		// First check the plain relative path.
 		matched, err := u.PathMatch(pattern, relPath)
 		if err != nil {
 			l.Debug("Error matching exclusion pattern", "pattern", pattern, "path", relPath, "error", err)
 			continue
-		} else if matched {
-			l.Debug("Excluding path due to exclusion pattern", "path", relPath, "pattern", pattern)
+		}
+		if matched {
+			l.Debug("Excluding path due to exclusion pattern (plain match)", "path", relPath, "pattern", pattern)
 			return true, nil
+		}
+		// If it is a directory, also try matching with a trailing slash.
+		if info.IsDir() {
+			matched, err = u.PathMatch(pattern, relPath+"/")
+			if err != nil {
+				l.Debug("Error matching exclusion pattern with trailing slash", "pattern", pattern, "path", relPath+"/", "error", err)
+				continue
+			}
+			if matched {
+				l.Debug("Excluding directory due to exclusion pattern (with trailing slash)", "path", relPath+"/", "pattern", pattern)
+				return true, nil
+			}
 		}
 	}
 
 	// Process inclusion patterns (only for non-directory files).
+	// (Directories are generally picked up by the inclusion branch in copyToTargetWithPatterns.)
 	if len(included) > 0 && !info.IsDir() {
 		matchedAny := false
 		for _, pattern := range included {
@@ -78,7 +95,8 @@ func shouldSkipEntry(info os.FileInfo, srcPath, baseDir string, excluded, includ
 			if err != nil {
 				l.Debug("Error matching inclusion pattern", "pattern", pattern, "path", relPath, "error", err)
 				continue
-			} else if matched {
+			}
+			if matched {
 				l.Debug("Including path due to inclusion pattern", "path", relPath, "pattern", pattern)
 				matchedAny = true
 				break
@@ -93,6 +111,7 @@ func shouldSkipEntry(info os.FileInfo, srcPath, baseDir string, excluded, includ
 }
 
 // copyDirRecursive recursively copies srcDir to dstDir using shouldSkipEntry filtering.
+// This function is used in cases where the entire sourceDir is the base for relative paths.
 func copyDirRecursive(srcDir, dstDir, baseDir string, excluded, included []string) error {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
@@ -107,11 +126,13 @@ func copyDirRecursive(srcDir, dstDir, baseDir string, excluded, included []strin
 			return fmt.Errorf("getting info for %q: %w", srcPath, err)
 		}
 
+		// Check if this entry should be skipped.
 		skip, err := shouldSkipEntry(info, srcPath, baseDir, excluded, included)
 		if err != nil {
 			return err
 		}
 		if skip {
+			l.Debug("Skipping entry", "srcPath", srcPath)
 			continue
 		}
 
@@ -126,6 +147,80 @@ func copyDirRecursive(srcDir, dstDir, baseDir string, excluded, included []strin
 				return fmt.Errorf("creating directory %q: %w", dstPath, err)
 			}
 			if err := copyDirRecursive(srcPath, dstPath, baseDir, excluded, included); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// copyDirRecursiveWithPrefix recursively copies srcDir to dstDir while preserving the global relative path.
+// Instead of using the local srcDir as the base for computing relative paths, this function uses the original
+// source directory (globalBase) and an accumulated prefix that represents the relative path from globalBase.
+func copyDirRecursiveWithPrefix(srcDir, dstDir, globalBase, prefix string, excluded []string) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("reading directory %q: %w", srcDir, err)
+	}
+	for _, entry := range entries {
+		// Compute the full relative path from the original source.
+		fullRelPath := filepath.ToSlash(filepath.Join(prefix, entry.Name()))
+		srcPath := filepath.Join(srcDir, entry.Name())
+		dstPath := filepath.Join(dstDir, entry.Name())
+
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("getting info for %q: %w", srcPath, err)
+		}
+
+		// Skip .git directories.
+		if entry.Name() == ".git" {
+			l.Debug("Skipping .git directory", "path", fullRelPath)
+			continue
+		}
+
+		// Check exclusion patterns using the full relative path.
+		skip := false
+		for _, pattern := range excluded {
+			// Check plain match.
+			matched, err := u.PathMatch(pattern, fullRelPath)
+			if err != nil {
+				l.Debug("Error matching exclusion pattern in prefix function", "pattern", pattern, "path", fullRelPath, "error", err)
+				continue
+			}
+			if matched {
+				l.Debug("Excluding (prefix) due to exclusion pattern (plain match)", "path", fullRelPath, "pattern", pattern)
+				skip = true
+				break
+			}
+			// For directories, also try with a trailing slash.
+			if info.IsDir() {
+				matched, err = u.PathMatch(pattern, fullRelPath+"/")
+				if err != nil {
+					l.Debug("Error matching exclusion pattern with trailing slash in prefix function", "pattern", pattern, "path", fullRelPath+"/", "error", err)
+					continue
+				}
+				if matched {
+					l.Debug("Excluding (prefix) due to exclusion pattern (with trailing slash)", "path", fullRelPath+"/", "pattern", pattern)
+					skip = true
+					break
+				}
+			}
+		}
+		if skip {
+			continue
+		}
+
+		if info.IsDir() {
+			if err := os.MkdirAll(dstPath, info.Mode()); err != nil {
+				return fmt.Errorf("creating directory %q: %w", dstPath, err)
+			}
+			// Recurse with updated prefix.
+			if err := copyDirRecursiveWithPrefix(srcPath, dstPath, globalBase, fullRelPath, excluded); err != nil {
 				return err
 			}
 		} else {
@@ -210,33 +305,59 @@ func copyToTargetWithPatterns(
 			return nil
 		}
 		for file := range filesToCopy {
+			// Retrieve file information early so that we can adjust exclusion checks if this is a directory.
+			info, err := os.Stat(file)
+			if err != nil {
+				return fmt.Errorf("stating file %q: %w", file, err)
+			}
 			relPath, err := filepath.Rel(sourceDir, file)
 			if err != nil {
 				return fmt.Errorf("computing relative path for %q: %w", file, err)
 			}
 			relPath = filepath.ToSlash(relPath)
 			skip := false
+			// For directories, check both the plain relative path and with a trailing slash.
 			for _, ex := range s.ExcludedPaths {
-				matched, err := u.PathMatch(ex, relPath)
-				if err != nil {
-					l.Debug("Error matching exclusion pattern", "pattern", ex, "path", relPath, "error", err)
-					continue
-				} else if matched {
-					l.Debug("Excluding file due to exclusion pattern", "file", relPath, "pattern", ex)
-					skip = true
-					break
+				if info.IsDir() {
+					matched, err := u.PathMatch(ex, relPath)
+					if err != nil {
+						l.Debug("Error matching exclusion pattern", "pattern", ex, "path", relPath, "error", err)
+					} else if matched {
+						l.Debug("Excluding directory due to exclusion pattern (plain match)", "directory", relPath, "pattern", ex)
+						skip = true
+						break
+					}
+					// Also try matching with a trailing slash.
+					matched, err = u.PathMatch(ex, relPath+"/")
+					if err != nil {
+						l.Debug("Error matching exclusion pattern with trailing slash", "pattern", ex, "path", relPath+"/", "error", err)
+					} else if matched {
+						l.Debug("Excluding directory due to exclusion pattern (with trailing slash)", "directory", relPath+"/", "pattern", ex)
+						skip = true
+						break
+					}
+				} else {
+					// For files, just check the plain relative path.
+					matched, err := u.PathMatch(ex, relPath)
+					if err != nil {
+						l.Debug("Error matching exclusion pattern", "pattern", ex, "path", relPath, "error", err)
+					} else if matched {
+						l.Debug("Excluding file due to exclusion pattern", "file", relPath, "pattern", ex)
+						skip = true
+						break
+					}
 				}
 			}
 			if skip {
 				continue
 			}
+
+			// Build the destination path.
 			dstPath := filepath.Join(targetPath, relPath)
-			info, err := os.Stat(file)
-			if err != nil {
-				return fmt.Errorf("stating file %q: %w", file, err)
-			}
 			if info.IsDir() {
-				if err := copyDirRecursive(file, dstPath, file, s.ExcludedPaths, nil); err != nil {
+				// Instead of resetting the base for relative paths,
+				// use the new recursive function that preserves the global relative path.
+				if err := copyDirRecursiveWithPrefix(file, dstPath, sourceDir, relPath, s.ExcludedPaths); err != nil {
 					return err
 				}
 			} else {
