@@ -120,11 +120,7 @@
     "InjectGithubToken": true
   },
   "vendor": {
-    "base_path": "",
-    "list": {
-      "format": "",
-      "columns": null
-    }
+    "base_path": ""
   },
   "initialized": true,
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
