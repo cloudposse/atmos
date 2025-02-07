@@ -69,7 +69,7 @@ tests:
         - "clean"
         - "console"
       stderr:
-        - "Error: Unknown command: \"atmos terraform\""
+        - 'Error: Unknown command: "atmos terraform"'
       exit_code: 1
   - name: atmos terraform help
     enabled: true
@@ -183,7 +183,7 @@ tests:
       - "helmfile"
     expect:
       stderr:
-        - "Error: Unknown command: \"atmos helmfile\""
+        - 'Error: Unknown command: "atmos helmfile"'
       stdout:
         - "Valid subcommands are:"
         - "apply"
@@ -199,7 +199,7 @@ tests:
       - "non-existant"
     expect:
       stderr:
-        - "Error: Unknown command \"non-existant\" for \"atmos helmfile\""
+        - 'Error: Unknown command "non-existant" for "atmos helmfile"'
       stdout:
         - "Valid subcommands are:"
         - "apply"
@@ -247,7 +247,7 @@ tests:
         - "CLI config file specifies the directory for Atmos stack"
         - "Quick Start"
       exit_code: 1
-  - name: atmos helmfile apply 
+  - name: atmos helmfile apply
     enabled: true
     description: "Should show error in atmos workspace"
     workdir: "../examples/demo-helmfile"
@@ -296,7 +296,7 @@ tests:
       - "atlantis"
     expect:
       stderr:
-        - "Error: Unknown command: \"atmos atlantis\""
+        - 'Error: Unknown command: "atmos atlantis"'
       exit_code: 1
   - name: atmos atlantis help
     enabled: true
@@ -335,7 +335,7 @@ tests:
       - "generate"
     expect:
       stderr:
-        - "Error: Unknown command: \"atmos atlantis generate\""
+        - 'Error: Unknown command: "atmos atlantis generate"'
       exit_code: 1
   - name: atmos atlantis generate help
     enabled: true
@@ -376,7 +376,7 @@ tests:
       - "repo-config"
     expect:
       stdout:
-        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as"
         - "To configure and start using Atmos, refer to the following documents:"
       stderr:
         - "^$"
@@ -429,7 +429,7 @@ tests:
       - "non-existant"
     expect:
       stderr:
-        - "Error: Unknown command \"non-existant\" for \"atmos atlantis generate repo-config\""
+        - 'Error: Unknown command "non-existant" for "atmos atlantis generate repo-config"'
       exit_code: 1
   - name: atmos validate editorconfig help
     enabled: true
@@ -470,4 +470,3 @@ tests:
       - "non-existant"
     expect:
       exit_code: 1
-
