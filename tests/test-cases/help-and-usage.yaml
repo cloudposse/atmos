@@ -50,8 +50,8 @@ tests:
     command: "atmos"
     expect:
       stdout:
-        - "atmos.yaml CLI config file was not found"
-        - "The default Atmos stacks directory is set to stacks"
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as"
+        - "CLI config file specifies the directory for Atmos stacks as"
       stderr:
         - "^$"
       exit_code: 1

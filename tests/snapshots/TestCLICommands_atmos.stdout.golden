@@ -1,5 +1,5 @@
 
-atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,
+atmos.yaml CLI config file specifies the directory for Atmos stacks as
 but the directory does not exist.
 
 To configure and start using Atmos, refer to the following documents:
