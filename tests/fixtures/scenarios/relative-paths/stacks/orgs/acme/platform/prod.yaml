@@ -5,11 +5,15 @@ vars:
 
 import:
   - ./_defaults
-  - catalog/myapp
+  - catalog/random
 
 components:
   terraform:
-    myapp:
+    random:
       vars:
-        location: Los Angeles
-        lang: en
+        stage: prod
+        environment: ue2
+        tenant: platform
+        foo: "test-foo"
+        bar: "test-bar"
+        baz: "test-baz"

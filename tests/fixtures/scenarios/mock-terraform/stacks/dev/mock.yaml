@@ -1,5 +1,5 @@
 import:
-  - ../catalog/terraform/mock
+  - ../catalog/mock
 
 components:
   terraform:
@@ -15,4 +15,4 @@ components:
         tenant: test
         foo: "dev-foo"
         bar: "dev-bar"
-        baz: "dev-baz" 
+        baz: "dev-baz"
