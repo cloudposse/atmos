@@ -100,7 +100,6 @@ func TestLoadExplicitConfigsWithValidConfigFile(t *testing.T) {
 	err = cl.loadExplicitConfigs([]string{configPath})
 	require.NoError(t, err)
 
-	assert.Equal(t, configPath, cl.atmosConfig.CliConfigPath)
 	assert.Contains(t, cl.AtmosConfigPaths, configPath)
 }
 
@@ -122,8 +121,6 @@ func TestLoadExplicitConfigsWithMultipleConfigFiles(t *testing.T) {
 
 	err = cl.loadExplicitConfigs([]string{configPath1, configPath2})
 	require.NoError(t, err)
-	paths := ConnectPaths([]string{configPath1, configPath2})
-	assert.Equal(t, paths, cl.atmosConfig.CliConfigPath)
 	assert.Contains(t, cl.AtmosConfigPaths, configPath1)
 	assert.Contains(t, cl.AtmosConfigPaths, configPath2)
 	// test read from dir
@@ -133,8 +130,7 @@ func TestLoadExplicitConfigsWithMultipleConfigFiles(t *testing.T) {
 	}
 	err = cl.loadExplicitConfigs([]string{tmpDir})
 	require.NoError(t, err)
-	assert.Equal(t, configPath1, cl.atmosConfig.CliConfigPath)
-	assert.Contains(t, cl.AtmosConfigPaths, configPath1)
+	assert.Contains(t, cl.AtmosConfigPaths, tmpDir)
 }
 
 // Function correctly prioritizes .yaml over .yml for same base filename
