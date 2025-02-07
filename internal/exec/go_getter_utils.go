@@ -136,11 +136,11 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		}
 	}
 
-	// Set "depth=1" for a shallow clone if not specified.  
-        // In Go-Getter, "depth" controls how many revisions are cloned:  
-        // - `depth=1` fetches only the latest commit (faster, less bandwidth).  
-        // - `depth=` (empty) performs a full clone (default Git behavior).  
-        // - `depth=N` clones the last N revisions. 
+	// Set "depth=1" for a shallow clone if not specified.
+	// In Go-Getter, "depth" controls how many revisions are cloned:
+	// - `depth=1` fetches only the latest commit (faster, less bandwidth).
+	// - `depth=` (empty) performs a full clone (default Git behavior).
+	// - `depth=N` clones the last N revisions.
 	q := parsedURL.Query()
 	if _, exists := q["depth"]; !exists {
 		q.Set("depth", "1")
