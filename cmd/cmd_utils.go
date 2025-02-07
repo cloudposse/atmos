@@ -641,3 +641,13 @@ func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete strin
 	}
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
+
+// Contains checks if a slice of strings contains an exact match for the target string.
+func Contains(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}

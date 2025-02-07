@@ -3,14 +3,13 @@ package cmd
 import (
 	"fmt"
 
+	l "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	u "github.com/cloudposse/atmos/pkg/utils"
-
-	l "github.com/charmbracelet/log"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -22,26 +21,13 @@ var terraformCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
-// Contains checks if a slice of strings contains an exact match for the target string.
-func Contains(slice []string, target string) bool {
-	for _, item := range slice {
-		if item == target {
-			return true
-		}
-	}
-	return false
-}
-
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
-	info := getConfigAndStacksInfo("terraform", cmd, args)
-	if info.NeedHelp {
-		actualCmd.Usage()
-		return
-	}
-	err := e.ExecuteTerraform(info)
-	if err != nil {
-		u.LogErrorAndExit(err)
-	}
+func init() {
+	// https://github.com/spf13/cobra/issues/739
+	terraformCmd.DisableFlagParsing = true
+	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
+	AddStackCompltion(terraformCmd)
+	attachTerraformCommands(terraformCmd)
+	RootCmd.AddCommand(terraformCmd)
 }
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
@@ -66,11 +52,17 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func init() {
-	// https://github.com/spf13/cobra/issues/739
-	terraformCmd.DisableFlagParsing = true
-	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
-	AddStackCompltion(terraformCmd)
-	attachTerraformCommands(terraformCmd)
-	RootCmd.AddCommand(terraformCmd)
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
+	info := getConfigAndStacksInfo("terraform", cmd, args)
+	if info.NeedHelp {
+		err := actualCmd.Usage()
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
+		return
+	}
+	err := e.ExecuteTerraform(info)
+	if err != nil {
+		u.LogErrorAndExit(err)
+	}
 }
