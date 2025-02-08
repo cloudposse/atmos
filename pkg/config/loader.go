@@ -365,7 +365,7 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 		return nil, fmt.Errorf("Failed to find config files in path '%s'", workDir)
 	}
 	cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, workDir)
-	return atmosFoundFilePaths, err
+	return atmosFoundFilePaths, nil
 }
 
 // loadGitAtmosConfig attempts to load configuration files from the Git repository root. It returns a boolean indicating if any configs were found and successfully loaded.
@@ -466,7 +466,7 @@ func (cl *ConfigLoader) getGitAtmosConfigPaths(gitRootDir string) ([]string, err
 		return nil, fmt.Errorf("Failed to find config files in git root path '%s'", gitRootDir)
 	}
 	cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, gitRootDir)
-	return atmosFoundFilePaths, err
+	return atmosFoundFilePaths, nil
 }
 
 // applyUserPreferences applies user-specific configuration preferences.
