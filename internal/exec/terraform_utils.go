@@ -26,7 +26,7 @@ func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 // We delete the file to prevent the Terraform prompt asking to select the default or the
 // previously used workspace. This happens when different backends are used for the same component.
 func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPath string) {
-	// Get TF_DATA_DIR, default to .terraform if not set
+	// Get `TF_DATA_DIR` ENV variable, default to `.terraform` if not set
 	tfDataDir := os.Getenv("TF_DATA_DIR")
 	if tfDataDir == "" {
 		tfDataDir = ".terraform"
