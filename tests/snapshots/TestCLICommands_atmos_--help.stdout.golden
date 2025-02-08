@@ -33,7 +33,7 @@ SubCommand Aliases:
 
 Flags:
 
-        --base-path string          Base path for Atmos configuration files.
+        --base-path string          Base path for Atmos project
 
         --config stringSlice        Paths to configuration files (default "[]")
 
