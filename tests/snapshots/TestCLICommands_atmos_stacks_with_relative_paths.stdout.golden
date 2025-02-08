@@ -1,15 +1,15 @@
 acme-platform-dev:
     components:
         terraform:
-            myapp:
-                atmos_component: myapp
+            random:
+                atmos_component: random
                 atmos_manifest: orgs/acme/platform/dev
                 atmos_stack: acme-platform-dev
                 atmos_stack_file: orgs/acme/platform/dev
                 backend: {}
                 backend_type: ""
                 command: terraform
-                component: myapp
+                component: random
                 env: {}
                 hooks: {}
                 inheritance: []
@@ -21,27 +21,26 @@ acme-platform-dev:
                 settings: {}
                 stack: acme-platform-dev
                 vars:
-                    format: ""
-                    lang: se
-                    location: Stockholm
+                    bar: test-bar
+                    baz: test-baz
+                    environment: ue2
+                    foo: test-foo
                     namespace: acme
-                    options: "0"
                     stage: dev
                     tenant: platform
-                    units: m
                 workspace: acme-platform-dev
 acme-platform-prod:
     components:
         terraform:
-            myapp:
-                atmos_component: myapp
+            random:
+                atmos_component: random
                 atmos_manifest: orgs/acme/platform/prod
                 atmos_stack: acme-platform-prod
                 atmos_stack_file: orgs/acme/platform/prod
                 backend: {}
                 backend_type: ""
                 command: terraform
-                component: myapp
+                component: random
                 env: {}
                 hooks: {}
                 inheritance: []
@@ -53,27 +52,26 @@ acme-platform-prod:
                 settings: {}
                 stack: acme-platform-prod
                 vars:
-                    format: ""
-                    lang: en
-                    location: Los Angeles
+                    bar: test-bar
+                    baz: test-baz
+                    environment: ue2
+                    foo: test-foo
                     namespace: acme
-                    options: "0"
                     stage: prod
                     tenant: platform
-                    units: m
                 workspace: acme-platform-prod
 acme-platform-staging:
     components:
         terraform:
-            myapp:
-                atmos_component: myapp
+            random:
+                atmos_component: random
                 atmos_manifest: orgs/acme/platform/staging
                 atmos_stack: acme-platform-staging
                 atmos_stack_file: orgs/acme/platform/staging
                 backend: {}
                 backend_type: ""
                 command: terraform
-                component: myapp
+                component: random
                 env: {}
                 hooks: {}
                 inheritance: []
@@ -85,13 +83,12 @@ acme-platform-staging:
                 settings: {}
                 stack: acme-platform-staging
                 vars:
-                    format: ""
-                    lang: en
-                    location: Los Angeles
+                    bar: test-bar
+                    baz: test-baz
+                    environment: ue2
+                    foo: test-foo
                     namespace: acme
-                    options: "0"
                     stage: staging
                     tenant: platform
-                    units: m
                 workspace: acme-platform-staging
 

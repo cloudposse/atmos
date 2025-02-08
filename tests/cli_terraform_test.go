@@ -56,13 +56,13 @@ func TestCLITerraformClean(t *testing.T) {
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
 	verifyStateFilesExist(t, []string{
-		"terraform/components/mock/.terraform",
-		"terraform/components/mock/.terraform.lock.hcl",
+		"../../components/terraform/mock/.terraform",
+		"../../components/terraform/mock/.terraform.lock.hcl",
 	})
 	runCLITerraformCleanComponent(t, binaryPath, "prod")
 	verifyStateFilesDeleted(t, []string{
-		"terraform/components/mock/.terraform",
-		"terraform/components/mock/.terraform.lock.hcl",
+		"../../components/terraform/mock/.terraform",
+		"../../components/terraform/mock/.terraform.lock.hcl",
 	})
 
 	// Run terraform apply for dev environment
@@ -70,8 +70,8 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Verify if state files exist before cleaning
 	stateFiles := []string{
-		"terraform/components/mock/.terraform",
-		"terraform/components/mock/.terraform.lock.hcl",
+		"../../components/terraform/mock/.terraform",
+		"../../components/terraform/mock/.terraform.lock.hcl",
 	}
 	verifyStateFilesExist(t, stateFiles)
 
@@ -196,7 +196,7 @@ func runTerraformInit(t *testing.T, binaryPath, environment string) {
 	}
 
 	// Verify that terraform was properly initialized
-	terraformDir := filepath.Join("terraform", "components", "mock")
+	terraformDir := filepath.Join("../../components/terraform", "mock")
 	if _, err := os.Stat(filepath.Join(terraformDir, ".terraform")); os.IsNotExist(err) {
 		t.Fatalf("Terraform was not properly initialized: .terraform directory not found in %s", terraformDir)
 	}
@@ -222,7 +222,7 @@ func cleanupTerraformState(t *testing.T) {
 	t.Helper()
 
 	// Define paths to clean
-	terraformDir := filepath.Join("terraform", "components", "mock")
+	terraformDir := filepath.Join("../../components/terraform", "mock")
 	pathsToClean := []string{
 		filepath.Join(terraformDir, ".terraform"),
 		filepath.Join(terraformDir, ".terraform.lock.hcl"),

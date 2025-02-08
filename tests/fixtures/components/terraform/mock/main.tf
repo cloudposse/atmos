@@ -1,3 +1,29 @@
+terraform {
+  required_providers {
+    local = {
+      source  = "hashicorp/local"
+      version = ">= 2.0.0"
+    }
+  }
+}
+
+variable "environment" {
+  type = string
+}
+
+variable "stage" {
+  type = string
+}
+
+variable "tenant" {
+  type = string
+}
+
+resource "local_file" "test" {
+  content  = "test-${var.environment}"
+  filename = "./test.txt"
+}
+
 variable "foo" {
   type = string
   default = "foo"
