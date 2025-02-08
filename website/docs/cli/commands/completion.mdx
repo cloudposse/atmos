@@ -1,0 +1,124 @@
+---
+title: atmos completion
+sidebar_label: completion
+sidebar_class_name: command
+description: Use this command to generate completion scripts for `Bash`, `Zsh`, `Fish` and `PowerShell`.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::note Purpose
+Use this command to generate completion scripts for `Bash`, `Zsh`, `Fish` and `PowerShell`.
+:::
+
+<Screengrab title="atmos completion --help" slug="atmos-completion--help" />
+
+## Usage
+
+Execute the `completion` command like this:
+
+```shell
+atmos completion [bash|zsh|fish|powershell]
+```
+
+This command generates completion scripts for `Bash`, `Zsh`, `Fish` and `powershell`.
+
+When the generated completion script is loaded into the shell, pressing the tab key twice displays the available commands and the help.
+
+:::tip
+Run `atmos completion --help` to see all the available options
+:::
+
+
+<Tabs>
+  <TabItem value="bash" label="Bash" default>
+## Bash Completion Setup
+
+To enable tab completion for Atmos in Bash, add the following to your `~/.bashrc` or `~/.bash_profile`:
+
+```bash
+# Enable Atmos CLI completion
+source <(atmos completion bash)
+```
+After saving the file, apply the changes by running:
+
+```zsh
+source ~/.bashrc
+```
+
+Now, you can run any `atmos` command, and pressing `<Tab>` after typing `atmos` will show the available subcommands. The same applies to `--stack` arguments and commands requiring a component (e.g., `atmos terraform plan`).
+
+</TabItem>
+<TabItem value="zsh" name="Zsh">
+
+## Zsh Completion Setup
+
+To enable tab completion for Atmos in `Zsh`, add the following to your `~/.zshrc`:
+
+```zsh
+# Initialize Zsh completion system
+autoload -Uz compinit && compinit
+
+# Enable Atmos CLI completion
+source <(atmos completion zsh)
+
+# Improve completion behavior
+zstyle ':completion:*' menu select      # Enable menu selection
+zstyle ':completion:*' force-list always # Force vertical menu listing
+
+# Ensure the Tab key triggers autocompletion
+bindkey '\t' expand-or-complete
+```
+
+After saving the file, apply the changes by running:
+
+```zsh
+source ~/.zshrc
+```
+
+Now, you can run any `atmos` command, and pressing `<Tab>` after typing `atmos` will show the available subcommands. The same applies to `--stack` arguments and commands requiring a component (e.g., `atmos terraform plan`).
+
+If completions do not work, try regenerating the completion cache:
+
+```zsh
+rm -f ~/.zcompdump && compinit
+```
+</TabItem>
+</Tabs>
+
+:::warning
+Note: The Atmos command completion script is generated based on the currently active workspace. If you create the completion script outside of any workspace, it will not include custom commands from any specific workspace. If you later switch to a workspace with custom commands, the completion script will not be able to suggest them. Additionally, if you create the script in a workspace with custom commands and then switch to another workspace, it might incorrectly suggest those custom commands. To ensure accurate suggestions, it's recommended to generate or regenerate the completion script from within the appropriate workspace.
+:::
+
+### Examples
+
+```shell
+atmos completion bash
+atmos completion zsh
+atmos completion fish
+atmos completion powershell
+```
+
+You can generate and load the shell completion script for `Bash` by executing the following commands:
+
+```shell
+atmos completion bash > /tmp/completion
+source /tmp/completion
+```
+
+or
+
+```shell
+source <(atmos completion bash)
+```
+
+## Arguments
+
+| Argument      | Description                                                         | Required |
+|:--------------|:--------------------------------------------------------------------|:---------|
+| `shell_name ` | Shell name. Valid values are `bash`, `zsh`, `fish` and `powershell` | yes      |
+
+:::info
+Refer to [Command-line completion](https://en.wikipedia.org/wiki/Command-line_completion) for more details
+:::
