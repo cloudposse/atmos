@@ -719,8 +719,9 @@ func (cl *ConfigLoader) sortFilesByDepth(files []string) []string {
 	var fileDepths []fileDepth
 	for _, file := range files {
 		cleanPath := filepath.Clean(file)
-		depth := len(strings.Split(filepath.ToSlash(filepath.Dir(cleanPath)), "/"))
-		fileDepths = append(fileDepths, fileDepth{path: cleanPath, depth: depth})
+		dir := filepath.ToSlash(filepath.Dir(cleanPath))
+		depth := len(strings.Split(dir, "/"))
+		fileDepths = append(fileDepths, fileDepth{path: file, depth: depth})
 	}
 
 	// Sort by depth, and alphabetically by name as a tiebreaker
