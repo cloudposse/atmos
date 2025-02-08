@@ -233,7 +233,7 @@ func GetTerraformOutput(
 	if !CheckTTYSupport() {
 		// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-		u.LogTrace("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+		l.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		fmt.Println(message)
 	}
 
