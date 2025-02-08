@@ -12,6 +12,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
+    - "workflows/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_pattern: "{stage}"

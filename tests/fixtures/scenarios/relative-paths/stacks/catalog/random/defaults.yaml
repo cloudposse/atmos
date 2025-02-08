@@ -4,7 +4,7 @@ components:
       vars:
         stage: dev
         environment: ue2
-        tenant: acme
+        tenant: platform
         foo: "test-foo"
         bar: "test-bar"
-        baz: "test-baz"
+        baz: "test-baz" 
