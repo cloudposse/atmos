@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	"github.com/spf13/viper"
 )
@@ -52,7 +52,7 @@ func (cl *ConfigLoader) processImports(importPaths []string, tempDir string, cur
 			// Handle remote imports
 			paths, err := cl.processRemoteImport(importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				u.LogDebug(fmt.Sprintf("failed to process remote import '%s': %v", importPath, err))
+				log.Debug("failed to process remote import", "path", importPath, "error", err)
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, paths...)
@@ -60,7 +60,7 @@ func (cl *ConfigLoader) processImports(importPaths []string, tempDir string, cur
 			// Handle local imports
 			paths, err := cl.processLocalImport(importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				u.LogDebug(fmt.Sprintf("failed to process local import '%s': %v", importPath, err))
+				log.Debug("failed to process local import", "path", importPath, "error", err)
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, paths...)
@@ -89,8 +89,8 @@ func (cl *ConfigLoader) processRemoteImport(importPath, tempDir string, currentD
 
 	v := viper.New()
 	v.SetConfigType("yaml")
-	found, err := cl.loadConfigFileViber(cl.atmosConfig, tempFile, v)
-	if err != nil || !found {
+	err = cl.loadConfigFileViber(cl.atmosConfig, tempFile, v)
+	if err != nil {
 		return nil, fmt.Errorf("failed to load remote config '%s': %v", importPath, err)
 	}
 
@@ -132,15 +132,15 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 	for _, path := range paths {
 		v := viper.New()
 		v.SetConfigType("yaml")
-		found, err := cl.loadConfigFileViber(cl.atmosConfig, path, v)
-		if err != nil || !found {
-			u.LogDebug(fmt.Sprintf("failed to load local config '%s': %v", path, err))
+		err := cl.loadConfigFileViber(cl.atmosConfig, path, v)
+		if err != nil {
+			log.Debug("failed to load local config", "path", path, "error", err)
 			continue
 		}
 
 		var importedConfig schema.AtmosConfiguration
 		if err := v.Unmarshal(&importedConfig); err != nil {
-			u.LogDebug(fmt.Sprintf("failed to unmarshal local config '%s': %v", path, err))
+			log.Debug("failed to unmarshal local config", "path", path, "error", err)
 			continue
 		}
 
@@ -148,7 +148,7 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 		if importedConfig.Import != nil {
 			nestedPaths, err := cl.processImports(importedConfig.Import, tempDir, currentDepth+1, maxDepth)
 			if err != nil {
-				u.LogDebug(fmt.Sprintf("failed to process nested imports from '%s': %v", path, err))
+				log.Debug("failed to process nested imports from", "path", path, "error", err)
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, nestedPaths...)

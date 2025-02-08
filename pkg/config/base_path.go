@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -12,12 +13,12 @@ import (
 func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	// Check base path from CLI argument
 	if configAndStacksInfo.BasePathFromArg != "" {
-		return cl.resolveAndValidatePath(configAndStacksInfo.BasePathFromArg, "CLI argument")
+		return cl.resolveAndValidatePath(configAndStacksInfo.BasePathFromArg, "--config")
 	}
 
 	// Check base path from ATMOS_BASE_PATH environment variable
 	if envBasePath := os.Getenv("ATMOS_BASE_PATH"); envBasePath != "" {
-		return cl.resolveAndValidatePath(envBasePath, "ENV var")
+		return cl.resolveAndValidatePath(envBasePath, "ATMOS_BASE_PATH")
 	}
 
 	// Check base path from configuration
@@ -46,7 +47,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 		if err != nil {
 			return "", err
 		}
-		u.LogDebug(fmt.Sprintf("base path from %s: %s", "infra", absPath))
+		log.Debug("base path derived from infra", "base_path", absPath)
 		return absPath, nil
 	}
 	// Set base_path to absolute path of ./
@@ -54,7 +55,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 	if err != nil {
 		return "", err
 	}
-	u.LogDebug(fmt.Sprintf("base path from %s: %s", "PWD", pwd))
+	log.Debug("base path derived from PWD", "pwd", pwd)
 	return absPath, nil
 }
 
@@ -74,10 +75,9 @@ func (cl *ConfigLoader) resolveAndValidatePath(path string, source string) (stri
 	}
 
 	if !isDir {
-		return "", fmt.Errorf("base path from %s is not a directory: %w", source, err)
+		return "", fmt.Errorf("base path from %s is not a directory", source)
 	}
-
-	u.LogDebug(fmt.Sprintf("base path from %s: %s", source, path))
+	log.Debug("base path derived from", source, path)
 	return absPath, nil
 }
 
@@ -86,12 +86,12 @@ func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
 	// if found Set base_path to absolute path containing directory
 	filePath, found := cl.SearchConfigFilePath(filepath.Join(cwd, "atmos"))
 	if found {
-		u.LogDebug(fmt.Sprintf("base path from infra %s: %s", "atmos", filePath))
+		log.Debug("base path derived from infra atmos file", "file path", filePath)
 		return filepath.Dir(filePath), found
 	}
 	filePath, found = cl.SearchConfigFilePath(filepath.Join(cwd, ".atmos"))
 	if found {
-		u.LogDebug(fmt.Sprintf("base path from infra %s: %s", ".atmos", filePath))
+		log.Debug("base path derived from infra .atmos file", "file path", filePath)
 		return filepath.Dir(filePath), found
 	}
 	filePaths, _ := u.GetGlobMatches(filepath.ToSlash(filepath.Join(cwd, "atmos.d/**/*.yaml")))
@@ -100,14 +100,14 @@ func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
 	}
 	if len(filePaths) > 0 {
 		filePaths = cl.sortFilesByDepth(filePaths)
-		u.LogDebug(fmt.Sprintf("base path from infra %s: %s", "atmos.d", filePaths[0]))
+		log.Debug("base path derived from infra atmos.d file", "file path", filePaths[0])
 		return filepath.Dir(filePaths[0]), true
 	}
 	gitTopLevel, err := u.GetGitRoot()
 	if err == nil {
 		dirAbs, found := cl.SearchConfigFilePath(filepath.Join(gitTopLevel, "atmos"))
 		if found {
-			u.LogDebug(fmt.Sprintf("base path from infra %s: %s", "git root", filePath))
+			log.Debug("base path derived from infra git root", "root dir", filePath)
 			return dirAbs, found
 		}
 	}
