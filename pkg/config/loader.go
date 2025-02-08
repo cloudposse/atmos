@@ -463,7 +463,7 @@ func (cl *ConfigLoader) getGitAtmosConfigPaths(gitRootDir string) ([]string, err
 	}
 
 	if len(atmosFoundFilePaths) == 0 {
-		return nil, fmt.Errorf("Failed to find config files in git root path", "path", gitRootDir)
+		return nil, fmt.Errorf("Failed to find config files in git root path %v", gitRootDir)
 	}
 	cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, gitRootDir)
 	return atmosFoundFilePaths, nil
