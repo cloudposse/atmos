@@ -234,7 +234,7 @@ func copyDirRecursiveWithPrefix(srcDir, dstDir, globalBase, prefix string, exclu
 
 // getMatchesForPattern returns files/directories matching a pattern relative to sourceDir.
 // If no matches are found, it logs a debug message and returns an empty slice.
-// When the pattern ends with "/*", it retries with a recursive "/**" variant.
+// For patterns ending with "/*" (shallow copy indicator) the function does not fallback to a recursive variant.
 func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 	fullPattern := filepath.Join(sourceDir, pattern)
 	matches, err := u.GetGlobMatches(fullPattern)
@@ -242,6 +242,12 @@ func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 		return nil, fmt.Errorf("error getting glob matches for %q: %w", fullPattern, err)
 	}
 	if len(matches) == 0 {
+		// If the pattern ends with "/*" (and not "/**"), do not fallback.
+		if strings.HasSuffix(pattern, "/*") && !strings.HasSuffix(pattern, "/**") {
+			l.Debug("No matches found for shallow pattern; target directory will be empty", "pattern", fullPattern)
+			return []string{}, nil
+		}
+		// Fallback for patterns ending with "/*" (non-shallow) or others.
 		if strings.HasSuffix(pattern, "/*") {
 			recursivePattern := strings.TrimSuffix(pattern, "/*") + "/**"
 			fullRecursivePattern := filepath.Join(sourceDir, recursivePattern)
@@ -287,25 +293,25 @@ func copyToTargetWithPatterns(
 		return cp.Copy(sourceDir, targetPath)
 	}
 
-	// If inclusion patterns are provided, use them to determine which files to copy.
-	if len(s.IncludedPaths) > 0 {
-		filesToCopy := make(map[string]struct{})
-		for _, pattern := range s.IncludedPaths {
-			matches, err := getMatchesForPattern(sourceDir, pattern)
-			if err != nil {
-				l.Debug("Warning: error getting matches for pattern", "pattern", pattern, "error", err)
-				continue
-			}
-			for _, match := range matches {
-				filesToCopy[match] = struct{}{}
-			}
+	// If inclusion patterns are provided, process each pattern individually.
+	for _, pattern := range s.IncludedPaths {
+		// Determine if the pattern indicates shallow copy.
+		shallow := false
+		if strings.HasSuffix(pattern, "/*") && !strings.HasSuffix(pattern, "/**") {
+			shallow = true
 		}
-		if len(filesToCopy) == 0 {
-			l.Debug("No files matched the inclusion patterns - target directory will be empty")
-			return nil
+
+		matches, err := getMatchesForPattern(sourceDir, pattern)
+		if err != nil {
+			l.Debug("Warning: error getting matches for pattern", "pattern", pattern, "error", err)
+			continue
 		}
-		for file := range filesToCopy {
-			// Retrieve file information early so that we can adjust exclusion checks if this is a directory.
+		if len(matches) == 0 {
+			l.Debug("No files matched the inclusion pattern", "pattern", pattern)
+			continue
+		}
+		for _, file := range matches {
+			// Retrieve file information.
 			info, err := os.Stat(file)
 			if err != nil {
 				return fmt.Errorf("stating file %q: %w", file, err)
@@ -315,8 +321,9 @@ func copyToTargetWithPatterns(
 				return fmt.Errorf("computing relative path for %q: %w", file, err)
 			}
 			relPath = filepath.ToSlash(relPath)
+
+			// Check exclusion patterns (for directories, try both plain and trailing slash).
 			skip := false
-			// For directories, check both the plain relative path and with a trailing slash.
 			for _, ex := range s.ExcludedPaths {
 				if info.IsDir() {
 					matched, err := u.PathMatch(ex, relPath)
@@ -327,7 +334,6 @@ func copyToTargetWithPatterns(
 						skip = true
 						break
 					}
-					// Also try matching with a trailing slash.
 					matched, err = u.PathMatch(ex, relPath+"/")
 					if err != nil {
 						l.Debug("Error matching exclusion pattern with trailing slash", "pattern", ex, "path", relPath+"/", "error", err)
@@ -337,7 +343,6 @@ func copyToTargetWithPatterns(
 						break
 					}
 				} else {
-					// For files, just check the plain relative path.
 					matched, err := u.PathMatch(ex, relPath)
 					if err != nil {
 						l.Debug("Error matching exclusion pattern", "pattern", ex, "path", relPath, "error", err)
@@ -355,10 +360,14 @@ func copyToTargetWithPatterns(
 			// Build the destination path.
 			dstPath := filepath.Join(targetPath, relPath)
 			if info.IsDir() {
-				// Instead of resetting the base for relative paths,
-				// use the new recursive function that preserves the global relative path.
-				if err := copyDirRecursiveWithPrefix(file, dstPath, sourceDir, relPath, s.ExcludedPaths); err != nil {
-					return err
+				if shallow {
+					// Use shallow copy: copy only immediate file entries.
+					l.Debug("Directory is not copied becasue it is a shallow copy", "directory", relPath)
+				} else {
+					// Use the existing recursive copy with prefix.
+					if err := copyDirRecursiveWithPrefix(file, dstPath, sourceDir, relPath, s.ExcludedPaths); err != nil {
+						return err
+					}
 				}
 			} else {
 				if err := copyFile(file, dstPath); err != nil {
@@ -366,8 +375,11 @@ func copyToTargetWithPatterns(
 				}
 			}
 		}
-	} else {
-		// No inclusion patterns defined; copy everything except those matching excluded items.
+	}
+
+	// If no inclusion patterns are defined; copy everything except those matching excluded items.
+	// (This branch is preserved from the original logic.)
+	if len(s.IncludedPaths) == 0 {
 		if err := copyDirRecursive(sourceDir, targetPath, sourceDir, s.ExcludedPaths, s.IncludedPaths); err != nil {
 			return fmt.Errorf("error copying from %q to %q: %w", sourceDir, targetPath, err)
 		}

@@ -193,4 +193,11 @@ tests:
         - "./components/library/examples/demo-stacks/components/terraform/myapp/variables.tf"
         - "./components/library/examples/demo-stacks/components/terraform/myapp/versions.tf"
         - "./components/library/weather/README.md"
+        - "./components/globs/examples/demo-library/ipinfo/README.md"
+        - "./components/globs/examples/demo-library/weather/README.md"
+        - "./components/globs/examples/demo-library/README.md"
+        - "./components/globs/examples/demo-localstack/.gitignore"
+        - "./components/globs/examples/demo-localstack/atmos.yaml"
+        - "./components/globs/examples/demo-localstack/docker-compose.yml"
+        - "./components/globs/examples/demo-localstack/README.md"
       exit_code: 0

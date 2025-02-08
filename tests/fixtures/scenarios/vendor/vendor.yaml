@@ -72,3 +72,16 @@ spec:
         - "components/library/"
       tags:
         - demo
+    
+    - component: "test shallow globs and folder exclusion"
+      source: "github.com/cloudposse/atmos.git"
+      included_paths:
+        - "**/demo-localstack/*"
+        - "**/demo-library/**"
+      excluded_paths:
+        - "**/demo-library/**/stargazers/**"
+        - "**/demo-library/**/*.tf"
+      targets:
+        - "components/globs/"
+      tags:
+        - demo
