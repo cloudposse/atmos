@@ -86,12 +86,12 @@ func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
 	// if found Set base_path to absolute path containing directory
 	filePath, found := cl.SearchConfigFilePath(filepath.Join(cwd, "atmos"))
 	if found {
-		log.Debug("base path derived from infra atmos file", "file path", filePath)
+		log.Debug("base path derived from infra atmos file", "path", filePath)
 		return filepath.Dir(filePath), found
 	}
 	filePath, found = cl.SearchConfigFilePath(filepath.Join(cwd, ".atmos"))
 	if found {
-		log.Debug("base path derived from infra .atmos file", "file path", filePath)
+		log.Debug("base path derived from infra .atmos file", "path", filePath)
 		return filepath.Dir(filePath), found
 	}
 	filePaths, _ := u.GetGlobMatches(filepath.ToSlash(filepath.Join(cwd, "atmos.d/**/*.yaml")))
@@ -100,14 +100,14 @@ func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
 	}
 	if len(filePaths) > 0 {
 		filePaths = cl.sortFilesByDepth(filePaths)
-		log.Debug("base path derived from infra atmos.d file", "file path", filePaths[0])
+		log.Debug("base path derived from infra atmos.d file", "path", filePaths[0])
 		return filepath.Dir(filePaths[0]), true
 	}
 	gitTopLevel, err := u.GetGitRoot()
 	if err == nil {
 		dirAbs, found := cl.SearchConfigFilePath(filepath.Join(gitTopLevel, "atmos"))
 		if found {
-			log.Debug("base path derived from infra git root", "root dir", filePath)
+			log.Debug("base path derived from infra git root", "path", filePath)
 			return dirAbs, found
 		}
 	}

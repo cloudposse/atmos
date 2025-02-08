@@ -180,7 +180,7 @@ func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 		if err != nil {
 			return fmt.Errorf("failed to resolve base path from `!repo-root` Git root error: %w", err)
 		}
-		log.Debug("atmos config from ATMOS_CLI_CONFIG_PATH !repo-root Git root dir", "git path", gitRoot)
+		log.Debug("atmos config from ATMOS_CLI_CONFIG_PATH !repo-root Git root dir", "path", gitRoot)
 		atmosCliConfigEnv = gitRoot
 	}
 	var atmosFilePaths []string
