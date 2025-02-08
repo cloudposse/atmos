@@ -54,7 +54,7 @@ Flags:
 
 Global Flags:
 
-        --base-path string          Base path for Atmos configuration files.
+        --base-path string          Base path for Atmos project
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file
