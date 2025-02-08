@@ -256,7 +256,7 @@ func (cl *ConfigLoader) getPathAtmosCLIConfigPath(atmosCliConfigPathEnv string) 
 	}
 	cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, atmosCliConfigPathEnv)
 
-	return atmosFoundFilePaths, err
+	return atmosFoundFilePaths, nil
 }
 
 // stageDiscoverAdditionalConfigs handles Stage 2: Discover Additional Configurations as per the flowchart.
