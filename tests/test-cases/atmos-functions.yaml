@@ -6,8 +6,9 @@ tests:
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
     args:
-       - "workflow"
+       - "terraform"
        - "deploy"
+       - "component-4"
        - "-s"
        - "nonprod"
     skip:
@@ -29,8 +30,9 @@ tests:
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
     args:
-       - "workflow"
+       - "terraform"
        - "deploy"
+       - "component-4"
        - "-s"
        - "nonprod"
     expect:

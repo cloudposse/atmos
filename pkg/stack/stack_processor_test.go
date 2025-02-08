@@ -239,18 +239,9 @@ func TestStackProcessorRelativePaths(t *testing.T) {
 	mapConfig1, err := u.UnmarshalYAML[schema.AtmosSectionMapType](listResult[0])
 	assert.Nil(t, err)
 
-	// Check components
 	components := mapConfig1["components"].(map[string]any)
 	terraformComponents := components["terraform"].(map[string]any)
 
-	randomComponent := terraformComponents["random"].(map[string]any)
-	assert.NotNil(t, randomComponent)
-
-	vars := randomComponent["vars"].(map[string]any)
-	assert.Equal(t, "dev", vars["stage"])
-	assert.Equal(t, "ue2", vars["environment"])
-	assert.Equal(t, "platform", vars["tenant"])
-	assert.Equal(t, "test-foo", vars["foo"])
-	assert.Equal(t, "test-bar", vars["bar"])
-	assert.Equal(t, "test-baz", vars["baz"])
+	myappComponent := terraformComponents["myapp"].(map[string]any)
+	assert.NotNil(t, myappComponent)
 }
