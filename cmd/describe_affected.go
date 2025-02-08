@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -11,16 +10,17 @@ import (
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
-	Short:              "Execute 'describe affected' command",
-	Long:               `This command produces a list of the affected Atmos components and stacks given two Git commits: atmos describe affected [options]`,
+	Short:              "List Atmos components and stacks affected by two Git commits",
+	Long:               "Identify and list Atmos components and stacks impacted by changes between two Git commits.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteDescribeAffectedCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -44,6 +44,10 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos describe affected --clone-target-ref=true\n"+
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")
+
+	describeAffectedCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos describe affected --process-templates=false")
+	describeAffectedCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command: atmos describe affected --process-functions=false")
+	describeAffectedCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests: atmos describe affected --skip=terraform.output")
 
 	describeCmd.AddCommand(describeAffectedCmd)
 }

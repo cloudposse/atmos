@@ -7,6 +7,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteDescribeComponentCmd executes `describe component` command
@@ -42,14 +43,51 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	component := args[0]
-
-	componentSection, err := ExecuteDescribeComponent(component, stack, processTemplates)
+	processYamlFunctions, err := flags.GetBool("process-functions")
 	if err != nil {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, componentSection)
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return err
+	}
+
+	component := args[0]
+
+	componentSection, err := ExecuteDescribeComponent(
+		component,
+		stack,
+		processTemplates,
+		processYamlFunctions,
+		skip,
+	)
+	if err != nil {
+		return err
+	}
+
+	var res any
+
+	if query != "" {
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		if err != nil {
+			return err
+		}
+
+		res, err = u.EvaluateYqExpression(&atmosConfig, componentSection, query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = componentSection
+	}
+
+	err = printOrWriteToFile(format, file, res)
 	if err != nil {
 		return err
 	}
@@ -62,6 +100,8 @@ func ExecuteDescribeComponent(
 	component string,
 	stack string,
 	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) (map[string]any, error) {
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
@@ -73,10 +113,10 @@ func ExecuteDescribeComponent(
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates)
+	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
 		if err != nil {
 			return nil, err
 		}

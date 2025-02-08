@@ -1,0 +1,172 @@
+---
+title: "!include"
+sidebar_position: 6
+sidebar_label: "!include"
+description: Download local or remote files from different sources, and assign the file contents or individual values to Atmos stack manifests
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+    The `!include` Atmos YAML function allows downloading local or remote files from different sources,
+    and assigning the file contents or individual values to the sections in Atmos stack manifests.
+</Intro>
+
+## Usage
+
+The `!include` function can be called with either one or two parameters:
+
+```yaml
+  # Download the file and assign its content to the variable
+  !include <file-path>
+
+  # Download the file, filter the content using the YQ expression,
+  # and assign the result to the variable
+  !include <file-path> <yq-expression>
+```
+
+## Arguments
+
+<dl>
+    <dt>`file-path`</dt>
+    <dd>
+        Path to a local or remote file
+    </dd>
+
+    <dt>`yq-expression`</dt>
+    <dd>(Optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the file</dd>
+</dl>
+
+## Examples
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    my-component:
+      vars:
+        # Include a local file with the path relative to the current Atmos manifest
+        values: !include ./values.yaml
+        # Include a local file with the path relative to the current Atmos manifest and query the `vars.ipv4_primary_cidr_block` value from the file using YQ
+        ipv4_primary_cidr_block: !include ./vpc_config.yaml .vars.ipv4_primary_cidr_block
+        # Include a local file relative to the `base_path` setting in `atmos.yaml`
+        vpc_defaults: !include stacks/catalog/vpc/defaults.yaml
+        # Include a local file in HCL format with Terraform variables
+        hcl_values: !include ./values.hcl
+        # Include a local file in HCL format with Terraform variables
+        tfvars_values: !include ../components/terraform/vpc/vpc.tfvars
+        # Include a local Markdown file
+        description: !include ./description.md
+        # Include a local text file
+        text: !include a.txt
+        # Include a local text file with spaces in the file name
+        text2: !include '"my config.txt"'
+        # Include a local text file on Windows with spaces in the file name, and get the `config.tests` value from the file
+        tests: !include '"~/My Documents/dev/tests.yaml" .config.tests'
+        # Download and include a remote YAML file using HTTPS protocol, and query the `vars` section from the file
+        region_values: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        # Download and include a remote JSON file and query the `api` section from the file
+        allowed_ips: !include https://api.github.com/meta .api
+      settings:
+        config:
+          # Include a local JSON file and query the `user_id` variable from the file
+          user_id: !include ./user_config.json .user_id
+```
+</File>
+
+## Description
+
+The YAML standard provides [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), that allow you
+to reuse and reference pieces of your YAML file, making it more efficient and reducing duplication.
+
+Atmos supports YAML anchors and aliases, but the biggest limitation is that they are only available within the file in
+which they are defined. You cannot reuse anchors across different files.
+
+The `!include` Atmos YAML function overcomes this limitation by allowing you to include the content or individual values
+from different local and remote sources. The `!include` function also provides the following features:
+
+- Supports local files with absolute and relative paths.
+
+- Supports the remote protocols provided by the [`go-getter`](https://github.com/hashicorp/go-getter) library.
+
+- Allows you to use [YQ](https://mikefarah.gitbook.io/yq) expressions to query and filter the content of the files to retrieve individual values.
+
+- Automatically detects the format of the files regardless of the file extensions. It supports files in JSON, YAML
+  and [HCL](https://github.com/hashicorp/hcl) (`tfvars`) formats, and automatically converts them into correct
+  YAML structures (simple and complex types like maps and lists are supported).
+  All other files are returned unchanged, allowing you, for example, to include text and
+  [Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests.
+
+## Supported File Protocols
+
+The `!include` function supports the following local file paths:
+  - absolute paths (e.g., `/Users/me/Documents/values.yaml`)
+  - paths relative to the current Atmos manifest where the `!include` function is executed (e.g., `./values.yaml`, `../config/values.yaml`)
+  - paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file (e.g., `stacks/catalog/vpc/defaults.yaml`)
+
+To download remote files from different sources, the `!include` function uses [`go-getter`](https://github.com/hashicorp/go-getter)
+(used by [Terraform](https://www.terraform.io/) for downloading modules) and supports the following protocols:
+
+- `tar` - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
+- `zip` - Zip files
+- `http` - HTTP URLs
+- `https` - HTTPS URLs
+- `git` - Git repositories, which can be accessed via HTTPS or SSH
+- `hg` - Mercurial repositories, accessed via HTTP/S or SSH
+- `s3` - Amazon S3 bucket URLs
+- `gcs` - Google Cloud Storage URLs
+- `oci` - Open Container Initiative (OCI) images
+- `scp` - Secure Copy Protocol for SSH-based transfers
+- `sftp` - SSH File Transfer Protocol
+
+:::tip
+You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!include` YAML function parameters.
+Atmos processes the templates first, and then executes the `!include` function, allowing you to provide the parameters to
+the function dynamically.
+:::
+
+## Using YQ Expressions to retrieve individual values from files
+
+To retrieve individual values from complex types such as maps and lists, or do any kind of filtering or querying,
+you can utilize [YQ](https://mikefarah.gitbook.io/yq) expressions.
+
+For example:
+
+- Retrieve the first item from a list
+
+```yaml
+subnet_id1: !include <file-path> .private_subnet_ids[0]
+```
+
+- Read a key from a map
+
+```yaml
+username: !include <file-path> .config_map.username
+```
+
+For more details, review the following docs:
+
+- [YQ Guide](https://mikefarah.gitbook.io/yq)
+- [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
+
+## Handling file paths and YQ expressions with spaces
+
+If you have spaces in the file names or YQ expressions, enclose the file paths and YQ expressions in double quotes
+and use single quotes around the whole expression.
+
+For example, on Windows:
+
+```yaml
+  vars:
+    values: !include '"~/My Documents/dev/values.yaml"'
+    config: !include '"~/My Documents/dev/config.json" "<yq-expression-with-spaces>"'
+```
+
+On macOS and Linux:
+
+```yaml
+  vars:
+    values: !include './values.yaml "<yq-expression-with-spaces>"'
+    description: !include '"component description.md"'
+```

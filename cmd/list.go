@@ -7,9 +7,10 @@ import (
 // listCmd commands list stacks and components
 var listCmd = &cobra.Command{
 	Use:                "list",
-	Short:              "Execute 'list' commands",
-	Long:               `This command lists stacks and components`,
+	Short:              "List available stacks and components",
+	Long:               `Display a list of all available stacks and components defined in your project.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 }
 
 func init() {

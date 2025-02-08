@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=schema.json
+tests:
+  - name: atmos greet with args
+    enabled: true
+    snapshot: true
+    description: "Validate atmos custom command greet runs with argument provided."
+    workdir: "../examples/demo-custom-command/"
+    command: "atmos"
+    args:
+      - "greet"
+      - "Neo"
+    expect:
+      diff: []
+      stdout:
+        - "Hello, Neo\n"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos greet without args
+    enabled: true
+    snapshot: true
+    description: "Validate atmos custom command greet runs without argument provided."
+    workdir: "../examples/demo-custom-command/"
+    command: "atmos"
+    args:
+      - "greet"
+    expect:
+      diff: []
+      stdout:
+        - "Hello, John Doe\n"
+      stderr:
+        - "^$"
+      exit_code: 0

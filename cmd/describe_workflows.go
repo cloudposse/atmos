@@ -4,15 +4,14 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
 var describeWorkflowsCmd = &cobra.Command{
 	Use:   "workflows",
-	Short: "Execute 'describe workflows' commands",
-	Long:  `This command executes 'atmos describe workflows' CLI command`,
+	Short: "List Atmos workflows and their associated files",
+	Long:  "List all Atmos workflows, showing their associated files and workflow names for easy reference.",
 	Example: "describe workflows\n" +
 		"describe workflows --format json\n" +
 		"describe workflows -f yaml\n" +
@@ -21,10 +20,11 @@ var describeWorkflowsCmd = &cobra.Command{
 		"describe workflows -o map\n" +
 		"describe workflows -o all",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeWorkflowsCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }

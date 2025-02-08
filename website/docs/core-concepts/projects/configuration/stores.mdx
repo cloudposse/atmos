@@ -1,0 +1,182 @@
+---
+title: Configure Stores
+sidebar_position: 4
+sidebar_label: Configure Stores
+id: stores
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos supports the concept of remote stores to facilitate the sharing of values between components or between
+some external process and a component. In `atmos`, values are saved to stores via
+[hooks](/core-concepts/stacks/hooks) and are read using the [!store](/core-concepts/stacks/yaml-functions/store.mdx)
+yaml function. Values can also be saved to stores from outside of `atmos`, for example, from a CI/CD pipeline or a
+script.
+
+Currently, the following stores are supported:
+
+- [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
+- [Artifactory](https://jfrog.com/artifactory/)
+- [Redis](https://redis.io/)
+</Intro>
+
+Atmos stores are configured in the `atmos.yaml` file and available to use in stacks via the
+[store](/core-concepts/stacks/yaml-functions/store) YAML function.
+
+## CLI Configuration
+
+All of these settings should be configured in the [Atmos CLI Configuration](/cli/configuration) found in `atmos.yaml`.
+
+### Artifactory
+
+```yaml
+stores:
+  dev/artifactory:
+    type: artifactory
+    options:
+      url: https://mydevartifactory.jfrog.io/artifactory
+      repo_name: tfsharedstore
+
+  prod/artifactory:
+    type: artifactory
+    options:
+      url: https://myprodartifactory.jfrog.io/artifactory
+      repo_name: tfsharedstore
+      access_token: !env PROD_JFROG_ACCESS_TOKEN
+```
+
+<dl>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to `artifactory`</dd>
+
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For Artifactory, the following options are supported:</dd>
+
+  <dt>`stores.[store_name].options.access_token (optional)`</dt>
+  <dd>An access token to use for authentication. This is not recommended as it is less secure than using the
+  `JFROG_ACCESS_TOKEN` or `ARTIFACTORY_ACCESS_TOKEN` environment variables. See [Authentication](#authentication) below
+  for more information.</dd>
+
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix path that will be added to all keys stored or retreived from SSM Parameter Store. For example if the prefix
+  is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
+
+  <dt>`stores.[store_name].options.repo_name (required)`</dt>
+  <dd>The name of the Artifactory repository to use.</dd>
+
+  <dt>`stores.[store_name].options.url (required)`</dt>
+  <dd>The URL of the Artifactory instance.</dd>
+
+  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
+</dl>
+
+#### Authentication
+
+The Artifactory store supports using an access token for authentication. The access token can be set directly in the
+`atmos.yaml` or via the `JFROG_ACCESS_TOKEN` or `ARTIFACTORY_ACCESS_TOKEN` environment variables.
+
+It is also possible to specify the access token as `anonymous` to use the anonymous user to access the Artifactory
+repository if the repository is configured to allow anonymous access.
+
+**NOTE:** Storing sensitive access tokens in plain text in `atmos.yaml` is not secure and should be avoided. However, it's recommended for the `anonymous` use case or when managing multiple Artifactory stores with different access tokens. In such cases, use [`!env`](/core-concepts/stacks/yaml-functions/env) function to reference tokens securely.
+YAML function to set the access token from an environment variable.
+
+### AWS SSM Parameter Store
+
+```yaml
+stores:
+  prod/ssm:
+    type: aws-ssm-parameter-store
+    options:
+      region: us-east-2
+```
+
+<dl>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to `aws-ssm-parameter-store`</dd>
+
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For AWS SSM Parameter Store, the following options are supported:</dd>
+
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix path that will be added to all keys stored or retreived from SSM Parameter Store. For example if the prefix
+  is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
+
+  <dt>`stores.[store_name].options.region (required)`</dt>
+  <dd>The AWS region to use for the SSM Parameter Store.</dd>
+
+  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
+</dl>
+
+#### Authentication
+
+The AWS SSM Parameter Store supports the standard AWS methods for authentication and the `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables.
+
+### Redis
+
+```yaml
+stores:
+  dev/redis:
+    type: redis
+    options:
+      url: redis://localhost:6379
+
+  stage/redis:
+    type: redis
+    options:
+      url: !env ATMOS_STAGE_REDIS_URL
+
+  prod/redis:
+    type: redis
+    # The ATMOS_REDIS_URL environment variable will be used if no URL is specified in the options
+```
+
+<dl>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to `redis`</dd>
+
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For Redis, the following options are supported:</dd>
+
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix path that will be added to all keys stored or retreived from Redis. For example if the prefix
+  is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
+
+  <dt>`stores.[store_name].options.url`</dt>
+  <dd>
+    The URL of the Redis instance. This is optional and the `ATMOS_REDIS_URL` environment variable will be used if no
+    URL is specified in the options.
+  </dd>
+
+  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
+</dl>
+
+#### Authentication
+
+The Redis store supports authentication via the URL in options or via the `ATMOS_REDIS_URL` environment variable. The
+URL format is described in the Redis [docs](https://redis.github.io/lettuce/user-guide/connecting-redis/).

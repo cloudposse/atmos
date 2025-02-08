@@ -12,11 +12,15 @@ import (
 
 // SSMStore is an implementation of the Store interface for AWS SSM Parameter Store.
 type SSMStore struct {
-	client SSMClient
+	client         SSMClient
+	prefix         string
+	stackDelimiter *string
 }
 
 type SSMStoreOptions struct {
-	Region string `mapstructure:"region"`
+	Prefix         *string `mapstructure:"prefix"`
+	Region         string  `mapstructure:"region"`
+	StackDelimiter *string `mapstructure:"stack_delimiter"`
 }
 
 // Ensure SSMStore implements the store.Store interface.
@@ -46,11 +50,43 @@ func NewSSMStore(options SSMStoreOptions) (Store, error) {
 
 	// Create the SSM client
 	client := ssm.NewFromConfig(awsConfig)
-	return &SSMStore{client: client}, nil
+	store := &SSMStore{client: client}
+
+	if options.Prefix != nil {
+		store.prefix = *options.Prefix
+	} else {
+		store.prefix = ""
+	}
+
+	if options.StackDelimiter != nil {
+		store.stackDelimiter = options.StackDelimiter
+	} else {
+		store.stackDelimiter = aws.String("-")
+	}
+
+	return store, nil
+}
+
+func (s *SSMStore) getKey(stack string, component string, key string) (string, error) {
+	if s.stackDelimiter == nil {
+		return "", fmt.Errorf("stack delimiter is not set")
+	}
+
+	return getKey(s.prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
 // Set stores a key-value pair in AWS SSM Parameter Store.
-func (s *SSMStore) Set(key string, value interface{}) error {
+func (s *SSMStore) Set(stack string, component string, key string, value interface{}) error {
+	if stack == "" {
+		return fmt.Errorf("stack cannot be empty")
+	}
+	if component == "" {
+		return fmt.Errorf("component cannot be empty")
+	}
+	if key == "" {
+		return fmt.Errorf("key cannot be empty")
+	}
+
 	ctx := context.TODO()
 
 	// Convert value to string
@@ -59,32 +95,53 @@ func (s *SSMStore) Set(key string, value interface{}) error {
 		return fmt.Errorf("value must be a string")
 	}
 
+	// Construct the full parameter name using getKey
+	paramName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return fmt.Errorf("failed to get key: %w", err)
+	}
+
 	// Put the parameter in SSM Parameter Store
-	_, err := s.client.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(key),
+	_, err = s.client.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:      aws.String(paramName),
 		Value:     aws.String(strValue),
 		Type:      types.ParameterTypeString,
 		Overwrite: aws.Bool(true), // Allow overwriting existing keys
 	})
-
 	if err != nil {
-		return fmt.Errorf("failed to set parameter '%s': %w", key, err)
+		return fmt.Errorf("failed to set parameter '%s': %w", paramName, err)
 	}
 
 	return nil
 }
 
 // Get retrieves a value by key from AWS SSM Parameter Store.
-func (s *SSMStore) Get(key string) (interface{}, error) {
+func (s *SSMStore) Get(stack string, component string, key string) (interface{}, error) {
+	if stack == "" {
+		return nil, fmt.Errorf("stack cannot be empty")
+	}
+	if component == "" {
+		return nil, fmt.Errorf("component cannot be empty")
+	}
+	if key == "" {
+		return nil, fmt.Errorf("key cannot be empty")
+	}
+
 	ctx := context.TODO()
+
+	// Construct the full parameter name using getKey
+	paramName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key: %w", err)
+	}
 
 	// Get the parameter from SSM Parameter Store
 	result, err := s.client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(key),
+		Name:           aws.String(paramName),
 		WithDecryption: aws.Bool(true), // Decrypt secure parameters if necessary
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get parameter '%s': %w", key, err)
+		return nil, fmt.Errorf("failed to get parameter '%s': %w", paramName, err)
 	}
 
 	return aws.ToString(result.Parameter.Value), nil

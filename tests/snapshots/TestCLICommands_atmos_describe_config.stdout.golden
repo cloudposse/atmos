@@ -1,0 +1,148 @@
+{
+  "base_path": "./",
+  "components": {
+    "terraform": {
+      "base_path": "components/terraform",
+      "apply_auto_approve": false,
+      "append_user_agent": "Atmos/test (Cloud Posse; +https://atmos.tools)",
+      "deploy_run_init": true,
+      "init_run_reconfigure": true,
+      "auto_generate_backend_file": false,
+      "command": "",
+      "shell": {
+        "prompt": ""
+      }
+    },
+    "helmfile": {
+      "base_path": "",
+      "use_eks": true,
+      "kubeconfig_path": "",
+      "helm_aws_profile_pattern": "",
+      "cluster_name_pattern": "",
+      "command": ""
+    }
+  },
+  "stacks": {
+    "base_path": "stacks",
+    "included_paths": [
+      "deploy/**/*"
+    ],
+    "excluded_paths": [
+      "**/_defaults.yaml"
+    ],
+    "name_pattern": "{stage}",
+    "name_template": ""
+  },
+  "workflows": {
+    "base_path": "",
+    "list": {
+      "format": "",
+      "columns": null
+    }
+  },
+  "logs": {
+    "file": "/dev/stderr",
+    "level": "Info"
+  },
+  "integrations": {
+    "atlantis": {}
+  },
+  "schemas": {
+    "jsonschema": {},
+    "cue": {},
+    "opa": {},
+    "atmos": {}
+  },
+  "templates": {
+    "settings": {
+      "enabled": false,
+      "sprig": {
+        "enabled": false
+      },
+      "gomplate": {
+        "enabled": false,
+        "timeout": 0,
+        "datasources": null
+      }
+    }
+  },
+  "settings": {
+    "list_merge_strategy": "",
+    "terminal": {
+      "max_width": 0,
+      "pager": false,
+      "colors": false,
+      "unicode": false,
+      "syntax_highlighting": {
+        "enabled": false,
+        "lexer": "",
+        "formatter": "",
+        "theme": "",
+        "pager": false,
+        "line_numbers": false,
+        "wrap": false
+      }
+    },
+    "docs": {
+      "max_width": 0,
+      "pagination": false
+    },
+    "markdown": {
+      "document": {},
+      "block_quote": {},
+      "paragraph": {},
+      "list": {},
+      "list_item": {},
+      "heading": {},
+      "h1": {},
+      "h2": {},
+      "h3": {},
+      "h4": {},
+      "h5": {},
+      "h6": {},
+      "text": {},
+      "strong": {},
+      "emph": {},
+      "hr": {},
+      "item": {},
+      "enumeration": {},
+      "code": {},
+      "code_block": {},
+      "table": {},
+      "definition_list": {},
+      "definition_term": {},
+      "definition_description": {},
+      "html_block": {},
+      "html_span": {},
+      "link": {},
+      "link_text": {}
+    },
+    "InjectGithubToken": true
+  },
+  "vendor": {
+    "base_path": ""
+  },
+  "initialized": true,
+  "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
+  "includeStackAbsolutePaths": [
+    "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"
+  ],
+  "excludeStackAbsolutePaths": [
+    "/absolute/path/to/repo/examples/demo-stacks/stacks/**/_defaults.yaml"
+  ],
+  "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
+  "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "default": false,
+  "version": {
+    "Check": {
+      "Enabled": false,
+      "Timeout": 0,
+      "Frequency": ""
+    }
+  },
+  "validate": {
+    "editorconfig": {
+      "color": true
+    }
+  }
+}

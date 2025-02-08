@@ -27,10 +27,9 @@ func CreateSpaceliftStacks(
 	processImports bool,
 	stackConfigPathTemplate string,
 ) (map[string]any, error) {
-
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
-		u.LogError(atmosConfig, err)
+		u.LogError(err)
 		return nil, err
 	}
 
@@ -46,7 +45,7 @@ func CreateSpaceliftStacks(
 			false,
 		)
 		if err != nil {
-			u.LogError(atmosConfig, err)
+			u.LogError(err)
 			return nil, err
 		}
 
@@ -70,7 +69,7 @@ func CreateSpaceliftStacks(
 			false,
 		)
 		if err != nil {
-			u.LogError(atmosConfig, err)
+			u.LogError(err)
 			return nil, err
 		}
 
@@ -94,7 +93,6 @@ func TransformStackConfigToSpaceliftStacks(
 	processImports bool,
 	rawStackConfigs map[string]map[string]any,
 ) (map[string]any, error) {
-
 	var err error
 	res := map[string]any{}
 
@@ -172,7 +170,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					// Process component metadata and find a base component (if any) and whether the component is real or abstract
-					componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled := e.ProcessComponentMetadata(component, componentMap)
+					componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled, _ := e.ProcessComponentMetadata(component, componentMap)
 
 					if componentIsAbstract || !componentIsEnabled {
 						continue
@@ -187,7 +185,7 @@ func TransformStackConfigToSpaceliftStacks(
 					if stackNamePattern != "" {
 						contextPrefix, err = cfg.GetContextPrefix(stackName, context, stackNamePattern, stackName)
 						if err != nil {
-							u.LogError(atmosConfig, err)
+							u.LogError(err)
 							return nil, err
 						}
 					} else {
@@ -257,7 +255,7 @@ func TransformStackConfigToSpaceliftStacks(
 					// Terraform workspace
 					workspace, err := e.BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 					if err != nil {
-						u.LogError(atmosConfig, err)
+						u.LogError(err)
 						return nil, err
 					}
 					spaceliftConfig["workspace"] = workspace
@@ -300,7 +298,7 @@ func TransformStackConfigToSpaceliftStacks(
 							component,
 						)
 						if err != nil {
-							u.LogError(atmosConfig, err)
+							u.LogError(err)
 							return nil, err
 						}
 						spaceliftStackNameDependsOnLabels1 = append(spaceliftStackNameDependsOnLabels1, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -360,7 +358,7 @@ func TransformStackConfigToSpaceliftStacks(
 							allStackNames,
 						)
 						if err != nil {
-							u.LogError(atmosConfig, err)
+							u.LogError(err)
 							return nil, err
 						}
 						spaceliftStackNameDependsOnLabels2 = append(spaceliftStackNameDependsOnLabels2, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
@@ -378,7 +376,7 @@ func TransformStackConfigToSpaceliftStacks(
 					// Spacelift stack name
 					spaceliftStackName, spaceliftStackNamePattern, err := e.BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 					if err != nil {
-						u.LogError(atmosConfig, err)
+						u.LogError(err)
 						return nil, err
 					}
 
@@ -397,7 +395,7 @@ func TransformStackConfigToSpaceliftStacks(
 							spaceliftStackNamePattern,
 						)
 						er := errors.New(errorMessage)
-						u.LogError(atmosConfig, er)
+						u.LogError(er)
 						return nil, er
 					}
 				}

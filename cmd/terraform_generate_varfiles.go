@@ -4,23 +4,23 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformGenerateVarfilesCmd generates varfiles for all terraform components in all stacks
 var terraformGenerateVarfilesCmd = &cobra.Command{
 	Use:                "varfiles",
-	Short:              "Execute 'terraform generate varfiles' command",
-	Long:               `This command generates varfiles for all atmos terraform components in all stacks`,
+	Short:              "Generate varfiles for all Terraform components in all stacks",
+	Long:               "This command generates varfiles for all Atmos Terraform components across all stacks.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGenerateVarfilesCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -58,7 +58,7 @@ func init() {
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {
-		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+		u.LogErrorAndExit(err)
 	}
 
 	terraformGenerateCmd.AddCommand(terraformGenerateVarfilesCmd)

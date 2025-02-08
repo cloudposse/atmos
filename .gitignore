@@ -34,4 +34,10 @@
 .envrc
 .direnv/
 
-.atmos/cache.yaml
+# Ignore cache files
+**/.atmos/cache.yaml
+**/cache.*.txt
+
+# Ignore components vendored during tests
+tests/fixtures/scenarios/vendor/components/**
+examples/demo-vendoring/components/**

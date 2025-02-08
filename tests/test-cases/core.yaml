@@ -1,0 +1,95 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: "test tty"
+    enabled: true
+    snapshot: false
+    tty: true
+    description: "Ensure tty is enabled."
+    workdir: "../"
+    command: "tty"
+    skip:
+      # PTY not supported on windows
+      os: !not windows
+    expect:
+      stdout:
+        - "^(/dev)"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: "test non-tty"
+    enabled: true
+    snapshot: false
+    tty: false
+    description: "Ensure tty is disabled."
+    workdir: "../"
+    command: "tty"
+    expect:
+      stdout:
+        - "^not a tty"
+      stderr:
+        - "^$"
+      exit_code: 1
+
+  - name: "which atmos"
+    enabled: true
+    snapshot: false
+    description: "Ensure atmos CLI is installed and we're using the one that was built."
+    workdir: "../"
+    command: "which"
+    args:
+      - "atmos"
+    expect:
+      stdout:
+        # build/atmos is local
+        # atmos/atmos is in GitHub Actions
+        - '(build[/\\]atmos|atmos/atmos)'
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: "atmos"
+    enabled: true
+    snapshot: true
+    description: "Verify atmos CLI reports missing stacks directory."
+    workdir: "../"
+    command: "atmos"
+    expect:
+      diff: []
+      stdout:
+        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
+        - "but the directory does not exist."
+      stderr:
+        - "^$"
+      exit_code: 1
+
+  - name: atmos docs
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos docs command executes without errors."
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "docs"
+    expect:
+      diff: []
+      exit_code: 0
+      stdout:
+        - "Opening default browser to 'https://atmos.tools'."
+      stderr:
+        - "^$"
+  - name: atmos terraform non-existent
+    enabled: false
+    snapshot: true
+    description: "Ensure atmos CLI returns an error for a non-existent command."
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "non-existent"
+    expect:
+      diff: []
+      stderr:
+        - 'unknown command "non-existent" for "atmos"'
+      exit_code: 1

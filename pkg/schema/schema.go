@@ -1,6 +1,8 @@
 package schema
 
-import "github.com/cloudposse/atmos/pkg/store"
+import (
+	"github.com/cloudposse/atmos/pkg/store"
+)
 
 type AtmosSectionMapType = map[string]any
 
@@ -30,16 +32,58 @@ type AtmosConfiguration struct {
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
 	Default                       bool               `yaml:"default" json:"default" mapstructure:"default"`
 	Version                       Version            `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
-
+	Validate                      Validate           `yaml:"validate,omitempty" json:"validate,omitempty" mapstructure:"validate"`
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
 	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
 }
 
+type Validate struct {
+	EditorConfig EditorConfig `yaml:"editorconfig,omitempty" json:"editorconfig,omitempty" mapstructure:"editorconfig"`
+}
+
+type EditorConfig struct {
+	IgnoreDefaults bool     `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
+	DryRun         bool     `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
+	Format         string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	Color          bool     `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
+	ConfigFilePath string   `yaml:"config_file_path,omitempty" json:"config_file_path,omitempty" mapstructure:"config_file_path"`
+	Exclude        []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
+	Init           bool     `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
+
+	DisableEndOfLine              bool `yaml:"disable_end_of_line,omitempty" json:"disable_end_of_line,omitempty" mapstructure:"disable_end_of_line"`
+	DisableInsertFinalNewline     bool `yaml:"disable_insert_final_newline,omitempty" json:"disable_insert_final_newline,omitempty" mapstructure:"disable_insert_final_newline"`
+	DisableIndentation            bool `yaml:"disable_indentation,omitempty" json:"disable_indentation,omitempty" mapstructure:"disable_indentation"`
+	DisableIndentSize             bool `yaml:"disable_indent_size,omitempty" json:"disable_indent_size,omitempty" mapstructure:"disable_indent_size"`
+	DisableMaxLineLength          bool `yaml:"disable_max_line_length,omitempty" json:"disable_max_line_length,omitempty" mapstructure:"disable_max_line_length"`
+	DisableTrimTrailingWhitespace bool `yaml:"disable_trim_trailing_whitespace,omitempty" json:"disable_trim_trailing_whitespace,omitempty" mapstructure:"disable_trim_trailing_whitespace"`
+}
+
+type Terminal struct {
+	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
+	Pager              bool               `yaml:"pager" json:"pager" mapstructure:"pager"`
+	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
+	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
+	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
+}
+
+type SyntaxHighlighting struct {
+	Enabled                bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Lexer                  string `yaml:"lexer" json:"lexer" mapstructure:"lexer"`
+	Formatter              string `yaml:"formatter" json:"formatter" mapstructure:"formatter"`
+	Theme                  string `yaml:"theme" json:"theme" mapstructure:"theme"`
+	HighlightedOutputPager bool   `yaml:"pager" json:"pager" mapstructure:"pager"`
+	LineNumbers            bool   `yaml:"line_numbers" json:"line_numbers" mapstructure:"line_numbers"`
+	Wrap                   bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
+}
+
 type AtmosSettings struct {
-	ListMergeStrategy string `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Docs              Docs   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	ListMergeStrategy string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
+	InjectGithubToken bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 }
 
 type Docs struct {
@@ -113,7 +157,8 @@ type Stacks struct {
 }
 
 type Workflows struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	List     ListConfig `yaml:"list" json:"list" mapstructure:"list"`
 }
 
 type Logs struct {
@@ -179,6 +224,7 @@ type ArgsAndFlagsInfo struct {
 	LogsLevel                 string
 	LogsFile                  string
 	SettingsListMergeStrategy string
+	Query                     string
 }
 
 type ConfigAndStacksInfo struct {
@@ -231,6 +277,7 @@ type ConfigAndStacksInfo struct {
 	NeedHelp                      bool
 	ComponentIsAbstract           bool
 	ComponentIsEnabled            bool
+	ComponentIsLocked             bool
 	ComponentMetadataSection      AtmosSectionMapType
 	TerraformWorkspace            string
 	JsonSchemaDir                 string
@@ -243,6 +290,7 @@ type ConfigAndStacksInfo struct {
 	LogsLevel                     string
 	LogsFile                      string
 	SettingsListMergeStrategy     string
+	Query                         string
 }
 
 // Workflows
@@ -343,6 +391,8 @@ type Command struct {
 type CommandArgument struct {
 	Name        string `yaml:"name" json:"name" mapstructure:"name"`
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+	Default     string `yaml:"default" json:"default" mapstructure:"default"`
 }
 
 type CommandFlag struct {
@@ -587,4 +637,70 @@ type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+}
+
+type MarkdownSettings struct {
+	Document              MarkdownStyle `yaml:"document,omitempty" json:"document,omitempty" mapstructure:"document"`
+	BlockQuote            MarkdownStyle `yaml:"block_quote,omitempty" json:"block_quote,omitempty" mapstructure:"block_quote"`
+	Paragraph             MarkdownStyle `yaml:"paragraph,omitempty" json:"paragraph,omitempty" mapstructure:"paragraph"`
+	List                  MarkdownStyle `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	ListItem              MarkdownStyle `yaml:"list_item,omitempty" json:"list_item,omitempty" mapstructure:"list_item"`
+	Heading               MarkdownStyle `yaml:"heading,omitempty" json:"heading,omitempty" mapstructure:"heading"`
+	H1                    MarkdownStyle `yaml:"h1,omitempty" json:"h1,omitempty" mapstructure:"h1"`
+	H2                    MarkdownStyle `yaml:"h2,omitempty" json:"h2,omitempty" mapstructure:"h2"`
+	H3                    MarkdownStyle `yaml:"h3,omitempty" json:"h3,omitempty" mapstructure:"h3"`
+	H4                    MarkdownStyle `yaml:"h4,omitempty" json:"h4,omitempty" mapstructure:"h4"`
+	H5                    MarkdownStyle `yaml:"h5,omitempty" json:"h5,omitempty" mapstructure:"h5"`
+	H6                    MarkdownStyle `yaml:"h6,omitempty" json:"h6,omitempty" mapstructure:"h6"`
+	Text                  MarkdownStyle `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`
+	Strong                MarkdownStyle `yaml:"strong,omitempty" json:"strong,omitempty" mapstructure:"strong"`
+	Emph                  MarkdownStyle `yaml:"emph,omitempty" json:"emph,omitempty" mapstructure:"emph"`
+	Hr                    MarkdownStyle `yaml:"hr,omitempty" json:"hr,omitempty" mapstructure:"hr"`
+	Item                  MarkdownStyle `yaml:"item,omitempty" json:"item,omitempty" mapstructure:"item"`
+	Enumeration           MarkdownStyle `yaml:"enumeration,omitempty" json:"enumeration,omitempty" mapstructure:"enumeration"`
+	Code                  MarkdownStyle `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"`
+	CodeBlock             MarkdownStyle `yaml:"code_block,omitempty" json:"code_block,omitempty" mapstructure:"code_block"`
+	Table                 MarkdownStyle `yaml:"table,omitempty" json:"table,omitempty" mapstructure:"table"`
+	DefinitionList        MarkdownStyle `yaml:"definition_list,omitempty" json:"definition_list,omitempty" mapstructure:"definition_list"`
+	DefinitionTerm        MarkdownStyle `yaml:"definition_term,omitempty" json:"definition_term,omitempty" mapstructure:"definition_term"`
+	DefinitionDescription MarkdownStyle `yaml:"definition_description,omitempty" json:"definition_description,omitempty" mapstructure:"definition_description"`
+	HtmlBlock             MarkdownStyle `yaml:"html_block,omitempty" json:"html_block,omitempty" mapstructure:"html_block"`
+	HtmlSpan              MarkdownStyle `yaml:"html_span,omitempty" json:"html_span,omitempty" mapstructure:"html_span"`
+	Link                  MarkdownStyle `yaml:"link,omitempty" json:"link,omitempty" mapstructure:"link"`
+	LinkText              MarkdownStyle `yaml:"link_text,omitempty" json:"link_text,omitempty" mapstructure:"link_text"`
+}
+
+type MarkdownStyle struct {
+	BlockPrefix     string                 `yaml:"block_prefix,omitempty" json:"block_prefix,omitempty" mapstructure:"block_prefix"`
+	BlockSuffix     string                 `yaml:"block_suffix,omitempty" json:"block_suffix,omitempty" mapstructure:"block_suffix"`
+	Color           string                 `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
+	BackgroundColor string                 `yaml:"background_color,omitempty" json:"background_color,omitempty" mapstructure:"background_color"`
+	Bold            bool                   `yaml:"bold,omitempty" json:"bold,omitempty" mapstructure:"bold"`
+	Italic          bool                   `yaml:"italic,omitempty" json:"italic,omitempty" mapstructure:"italic"`
+	Underline       bool                   `yaml:"underline,omitempty" json:"underline,omitempty" mapstructure:"underline"`
+	Margin          int                    `yaml:"margin,omitempty" json:"margin,omitempty" mapstructure:"margin"`
+	Padding         int                    `yaml:"padding,omitempty" json:"padding,omitempty" mapstructure:"padding"`
+	Indent          int                    `yaml:"indent,omitempty" json:"indent,omitempty" mapstructure:"indent"`
+	IndentToken     string                 `yaml:"indent_token,omitempty" json:"indent_token,omitempty" mapstructure:"indent_token"`
+	LevelIndent     int                    `yaml:"level_indent,omitempty" json:"level_indent,omitempty" mapstructure:"level_indent"`
+	Format          string                 `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	Prefix          string                 `yaml:"prefix,omitempty" json:"prefix,omitempty" mapstructure:"prefix"`
+	StyleOverride   bool                   `yaml:"style_override,omitempty" json:"style_override,omitempty" mapstructure:"style_override"`
+	Chroma          map[string]ChromaStyle `yaml:"chroma,omitempty" json:"chroma,omitempty" mapstructure:"chroma"`
+}
+
+type ChromaStyle struct {
+	Color string `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
+}
+
+type ListConfig struct {
+	// Format specifies the output format (table, json, csv)
+	// If empty, defaults to table format
+	Format  string             `yaml:"format" json:"format" mapstructure:"format" validate:"omitempty,oneof=table json csv"`
+	Columns []ListColumnConfig `yaml:"columns" json:"columns" mapstructure:"columns"`
+}
+
+type ListColumnConfig struct {
+	Name  string `yaml:"name" json:"name" mapstructure:"name"`
+	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }

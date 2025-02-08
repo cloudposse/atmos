@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    template-functions-test:
+      command: tofu
+      metadata:
+        # Point to the Terraform component
+        component: "test/template-functions-test"
+      settings:
+        spacelift:
+          workspace_enabled: false
+        # Validation
+        # Supports JSON Schema and OPA policies
+        # All validation steps must succeed to allow the component to be provisioned
+        validation:
+          check-template-functions-test-component-with-opa-policy:
+            schema_type: opa
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
+            schema_path: "test/template-functions-test/validate-template-functions-test-component.rego"
+            # An array of filesystem paths (folders or individual files) to the additional modules for schema validation
+            # Each path can be an absolute path or a path relative to `schemas.opa.base_path` defined in `atmos.yaml`
+            # In this example, we have the additional Rego modules in `stacks/schemas/opa/catalog/constants`
+            module_paths:
+              - "catalog/constants"
+            description: Check 'template-functions-test' component using OPA policy
+            # Set `disabled` to `true` to skip the validation step
+            # `disabled` is set to `false` by default, the step is allowed if `disabled` is not declared
+            disabled: false
+            # Validation timeout in seconds
+            timeout: 5
+      vars:
+        enabled: true
+        name: "test"

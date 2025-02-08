@@ -5,12 +5,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -40,8 +40,8 @@ func ExecuteAtmosCmd() error {
 	}
 
 	// Get a map of stacks and components in the stacks
-	// Don't process `Go` templates in Atmos stack manifests since we just need to display the stack and component names in the TUI
-	stacksMap, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false)
+	// Don't process `Go` templates and YAML functions in Atmos stack manifests since we just need to display the stack and component names in the TUI
+	stacksMap, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
@@ -99,12 +99,12 @@ func ExecuteAtmosCmd() error {
 	fmt.Println()
 	u.PrintMessageInColor(fmt.Sprintf(
 		"Executing command:\n"+os.Args[0]+" %s %s --stack %s\n", selectedCommand, selectedComponent, selectedStack),
-		color.New(color.FgCyan),
+		theme.Colors.Info,
 	)
 	fmt.Println()
 
 	if selectedCommand == "describe component" {
-		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true)
+		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true, nil)
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ func ExecuteAtmosCmd() error {
 		}
 
 		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", selectedComponent, selectedStack)
-		u.PrintMessageInColor(m, color.New(color.FgGreen))
+		u.PrintMessageInColor(m, theme.Colors.Success)
 		return nil
 	}
 

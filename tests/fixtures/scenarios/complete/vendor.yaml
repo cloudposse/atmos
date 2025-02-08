@@ -1,0 +1,102 @@
+# atmos vendor pull
+# atmos vendor pull --component vpc-mixin-1
+# atmos vendor pull -c vpc-mixin-2
+# atmos vendor pull -c vpc-mixin-3
+# atmos vendor pull -c vpc-mixin-4
+# atmos vendor pull --tags test
+# atmos vendor pull --tags networking,storage
+
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config
+  description: Atmos vendoring manifest
+spec:
+  # `imports` or `sources` (or both) must be defined in a vendoring manifest
+  imports:
+    - "vendor/vendor2"
+    - "vendor/vendor3.yaml"
+
+  sources:
+    # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
+    # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+    # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
+    # In 'source', Golang templates are supported  https://pkg.go.dev/text/template.
+    # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'source'.
+    # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
+    - component: "vpc"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      version: "latest"
+      targets:
+        - "components/terraform/infra/vpc3"
+      # Only include the files that match the 'included_paths' patterns.
+      # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
+      # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
+      # https://en.wikipedia.org/wiki/Glob_(programming)
+      # https://github.com/bmatcuk/doublestar#patterns
+      included_paths:
+        - "**/*.tf"
+        - "**/*.tfvars"
+        - "**/*.md"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+        - networking
+    - component: "vpc-flow-logs-bucket"
+      source: "git::https://github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      version: "1.323.0"
+      targets:
+        - "components/terraform/infra/vpc-flow-logs-bucket/{{.Version}}"
+      excluded_paths:
+        - "**/*.yaml"
+        - "**/*.yml"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags networking,storage`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+        - storage
+    - component: "vpc-mixin-1"
+      source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
+      targets:
+        - "components/terraform/infra/vpc3"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+    - component: "vpc-mixin-2"
+      # Copy a local file into a local folder (keeping the same file name)
+      # This `source` is relative to the current folder
+      source: "components/terraform/mixins/context.tf"
+      targets:
+        - "components/terraform/infra/vpc3"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+    - component: "vpc-mixin-3"
+      # Copy a local folder into a local folder
+      # This `source` is relative to the current folder
+      source: "components/terraform/mixins"
+      targets:
+        - "components/terraform/infra/vpc3"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test
+    - component: "vpc-mixin-4"
+      # Copy a local file into a local file with a different file name
+      # This `source` is relative to the current folder
+      source: "components/terraform/mixins/context.tf"
+      targets:
+        - "components/terraform/infra/vpc3/context-copy.tf"
+      # Tags can be used to vendor component that have the specific tags
+      # `atmos vendor pull --tags test`
+      # Refer to https://atmos.tools/cli/commands/vendor/pull
+      tags:
+        - test

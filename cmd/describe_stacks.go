@@ -4,23 +4,23 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeStacksCmd describes configuration for stacks and components in the stacks
 var describeStacksCmd = &cobra.Command{
 	Use:                "stacks",
-	Short:              "Execute 'describe stacks' command",
-	Long:               `This command shows configuration for atmos stacks and components in the stacks: atmos describe stacks [options]`,
+	Short:              "Display configuration for Atmos stacks and their components",
+	Long:               "This command shows the configuration details for Atmos stacks and the components within those stacks.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteDescribeStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -45,7 +45,11 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos describe stacks --process-templates=false")
 
+	describeStacksCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command: atmos describe stacks --process-functions=false")
+
 	describeStacksCmd.PersistentFlags().Bool("include-empty-stacks", false, "Include stacks with no components in the output: atmos describe stacks --include-empty-stacks")
+
+	describeStacksCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command: atmos describe stacks --skip=terraform.output")
 
 	describeCmd.AddCommand(describeStacksCmd)
 }

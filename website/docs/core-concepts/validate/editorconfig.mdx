@@ -1,0 +1,70 @@
+---
+title: EditorConfig Validation
+sidebar_position: 3
+sidebar_label: EditorConfig
+description: Use EditorConfig Checker to validate your configurations.
+id: editorconfig-validation
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos supports validation of EditorConfigs to check the formatting of your configuration files. By enforcing the canonical rules specified in your `.editorconfig` file, it helps ensure consistent formatting across your project.
+</Intro>
+
+## Example
+
+<Terminal>
+```shell
+# Validate all files in the current project using EditorConfig
+atmos validate editorconfig
+```
+</Terminal>
+
+### Configuration
+
+To use the `atmos validate editorconfig` command, ensure that your project contains a properly configured `.editorconfig` file at the root level or in relevant directories. This file defines the coding styles for the project, such as indentation, line endings, and character encodings.
+
+<File title=".editorconfig">
+```ini
+# EditorConfig is awesome: https://editorconfig.org
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+trim_trailing_whitespace = false
+```
+</File>
+
+
+### Output
+
+The `atmos validate editorconfig` command will provide detailed output indicating whether the files comply with the `.editorconfig` rules or if there are any violations. For example:
+
+<Terminal>
+```console
+scenarios/complete/modules/label/context.tf:
+        267: Wrong amount of left-padding spaces(want multiple of 2)
+        268: Wrong amount of left-padding spaces(want multiple of 2)
+
+2 errors found
+```
+</Terminal>
+
+### Troubleshooting
+
+If validation fails, review your `.editorconfig` file and ensure the rules align with your project's requirements. You can also run the command with verbose output for more details:
+
+<Terminal>
+```shell
+atmos validate editorconfig --logs-level trace
+```
+</Terminal>

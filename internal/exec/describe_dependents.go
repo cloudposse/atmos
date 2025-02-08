@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 
+	u "github.com/cloudposse/atmos/pkg/utils"
+
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -51,6 +53,11 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	dependents, err := ExecuteDescribeDependents(atmosConfig, component, stack, false)
@@ -58,7 +65,18 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = printOrWriteToFile(format, file, dependents)
+	var res any
+
+	if query != "" {
+		res, err = u.EvaluateYqExpression(&atmosConfig, dependents, query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = dependents
+	}
+
+	err = printOrWriteToFile(format, file, res)
 	if err != nil {
 		return err
 	}
@@ -73,17 +91,16 @@ func ExecuteDescribeDependents(
 	stack string,
 	includeSettings bool,
 ) ([]schema.Dependent, error) {
-
 	dependents := []schema.Dependent{}
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true)
+	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		return nil, err
 	}

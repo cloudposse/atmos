@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,10 +12,12 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type pkgType int
@@ -67,11 +68,11 @@ type modelVendor struct {
 }
 
 var (
-	currentPkgNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("211"))
+	currentPkgNameStyle = theme.Styles.PackageName
 	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
-	checkMark           = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).SetString("✓")
-	xMark               = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).SetString("x")
-	grayColor           = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	checkMark           = theme.Styles.Checkmark
+	xMark               = theme.Styles.XMark
+	grayColor           = theme.Styles.GrayText
 )
 
 func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) (modelVendor, error) {
@@ -81,7 +82,7 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig
 		progress.WithoutPercentage(),
 	)
 	s := spinner.New()
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	s.Style = theme.Styles.Link
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
 	}
@@ -112,6 +113,7 @@ func (m *modelVendor) Init() tea.Cmd {
 	}
 	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.atmosConfig), m.spinner.Tick)
 }
+
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -119,6 +121,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.width > 120 {
 			m.width = 120
 		}
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc", "q":
@@ -137,7 +140,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
 			if !m.isTTY {
-				u.LogError(m.atmosConfig, errors.New(errMsg))
+				u.LogError(errors.New(errMsg))
 			}
 			mark = xMark
 			m.failedPkg++
@@ -150,23 +153,23 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Everything's been installed. We're done!
 			m.done = true
 			if !m.isTTY {
-				u.LogInfo(m.atmosConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+				u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 				if m.dryRun {
-					u.LogInfo(m.atmosConfig, "Done! Dry run completed. No components vendored.\n")
+					u.LogInfo("Done! Dry run completed. No components vendored.\n")
 				}
 				if m.failedPkg > 0 {
-					u.LogInfo(m.atmosConfig, fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
+					u.LogInfo(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
 				}
-				u.LogInfo(m.atmosConfig, fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
+				u.LogInfo(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
 			}
 			version := grayColor.Render(version)
 			return m, tea.Sequence(
-				tea.Printf("%s %s %s", mark, pkg.name, version),
+				tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
 				tea.Quit,
 			)
 		}
 		if !m.isTTY {
-			u.LogInfo(m.atmosConfig, fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+			u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 		}
 		m.index++
 		// Update progress bar
@@ -193,7 +196,6 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m modelVendor) View() string {
-
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
@@ -234,6 +236,7 @@ func max(a, b int) int {
 	}
 	return b
 }
+
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
@@ -244,9 +247,8 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				name: p.name,
 			}
 		}
-
 		// Create temp directory
-		tempDir, err := os.MkdirTemp("", fmt.Sprintf("atmos-vendor-%d-*", time.Now().Unix()))
+		tempDir, err := os.MkdirTemp("", "atmos-vendor")
 		if err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to create temp directory: %w", err),
@@ -254,7 +256,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 		}
 		// Ensure directory permissions are restricted
-		if err := os.Chmod(tempDir, 0700); err != nil {
+		if err := os.Chmod(tempDir, 0o700); err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to set temp directory permissions: %w", err),
 				name: p.name,
@@ -262,19 +264,11 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		}
 
 		defer removeTempDir(atmosConfig, tempDir)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
 
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
-			client := &getter.Client{
-				Ctx:  ctx,
-				Dst:  tempDir,
-				Src:  p.uri,
-				Mode: getter.ClientModeAny,
-			}
-			if err := client.Get(); err != nil {
+			if err := GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to download package: %w", err),
 					name: p.name,
@@ -298,7 +292,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 			}
 			if p.sourceIsLocalFile {
-				tempDir = filepath.Join(tempDir, sanitizeFileName(p.uri))
+				tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{

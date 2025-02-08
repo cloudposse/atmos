@@ -1,17 +1,11 @@
 package exec
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/hashicorp/terraform-exec/tfexec"
-	"github.com/samber/lo"
-
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -32,182 +26,76 @@ func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 // previously used workspace. This happens when different backends are used for the same component.
 func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPath string) {
 	filePath := filepath.Join(componentPath, ".terraform", "environment")
-	u.LogDebug(atmosConfig, fmt.Sprintf("\nDeleting Terraform environment file:\n'%s'", filePath))
+	u.LogDebug(fmt.Sprintf("\nDeleting Terraform environment file:\n'%s'", filePath))
 	_ = os.Remove(filePath)
 }
 
-func execTerraformOutput(atmosConfig schema.AtmosConfiguration, component string, stack string, sections map[string]any) (map[string]any, error) {
-	outputProcessed := map[string]any{}
-	componentAbstract := false
-	componentEnabled := true
-	var err error
+func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
+	shouldProcessStacks := true
+	shouldCheckStack := true
 
-	metadataSection, ok := sections[cfg.MetadataSectionName]
-	if ok {
-		metadata, ok2 := metadataSection.(map[string]any)
-		if ok2 {
-			componentAbstract = IsComponentAbstract(metadata)
+	if info.SubCommand == "clean" {
+		if info.ComponentFromArg == "" {
+			shouldProcessStacks = false
+		}
+		shouldCheckStack = info.Stack != ""
+
+	}
+
+	return shouldProcessStacks, shouldCheckStack
+}
+
+func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	// Auto-generate backend file
+	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
+		backendFileName := filepath.Join(workingDir, "backend.tf.json")
+
+		u.LogDebug("\nWriting the backend config to file:")
+		u.LogDebug(backendFileName)
+
+		if !info.DryRun {
+			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
+			if err != nil {
+				return err
+			}
+
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	varsSection, ok := sections[cfg.VarsSectionName]
-	if ok {
-		vars, ok2 := varsSection.(map[string]any)
-		if ok2 {
-			componentEnabled = IsComponentEnabled(vars)
+	return nil
+}
+
+func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	// Generate `providers_override.tf.json` file if the `providers` section is configured
+	if len(info.ComponentProvidersSection) > 0 {
+		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
+
+		u.LogDebug("\nWriting the provider overrides to file:")
+		u.LogDebug(providerOverrideFileName)
+
+		if !info.DryRun {
+			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
+			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
+			return err
 		}
 	}
+	return nil
+}
 
-	// Don't process Terraform output for disabled and abstract components
-	if componentEnabled && !componentAbstract {
-		executable, ok := sections[cfg.CommandSectionName].(string)
-		if !ok {
-			return nil, fmt.Errorf("the component '%s' in the stack '%s' does not have 'command' (executable) defined", component, stack)
-		}
-
-		terraformWorkspace, ok := sections[cfg.WorkspaceSectionName].(string)
-		if !ok {
-			return nil, fmt.Errorf("the component '%s' in the stack '%s' does not have Terraform/OpenTofu workspace defined", component, stack)
-		}
-
-		componentInfo, ok := sections["component_info"]
-		if !ok {
-			return nil, fmt.Errorf("the component '%s' in the stack '%s' does not have 'component_info' defined", component, stack)
-		}
-
-		componentInfoMap, ok := componentInfo.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'component_info' section", component, stack)
-		}
-
-		componentPath, ok := componentInfoMap["component_path"].(string)
-		if !ok {
-			return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'component_info.component_path' section", component, stack)
-		}
-
-		// Auto-generate backend file
-		if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
-			backendFileName := filepath.Join(componentPath, "backend.tf.json")
-
-			u.LogTrace(atmosConfig, "\nWriting the backend config to file:")
-			u.LogTrace(atmosConfig, backendFileName)
-
-			backendTypeSection, ok := sections["backend_type"].(string)
-			if !ok {
-				return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend_type' section", component, stack)
-			}
-
-			backendSection, ok := sections["backend"].(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend' section", component, stack)
-			}
-
-			componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace)
-			if err != nil {
-				return nil, err
-			}
-
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0644)
-			if err != nil {
-				return nil, err
-			}
-
-			u.LogTrace(atmosConfig, "\nWrote the backend config to file:")
-			u.LogTrace(atmosConfig, backendFileName)
-		}
-
-		// Generate `providers_override.tf.json` file if the `providers` section is configured
-		providersSection, ok := sections["providers"].(map[string]any)
-
-		if ok && len(providersSection) > 0 {
-			providerOverrideFileName := filepath.Join(componentPath, "providers_override.tf.json")
-
-			u.LogTrace(atmosConfig, "\nWriting the provider overrides to file:")
-			u.LogTrace(atmosConfig, providerOverrideFileName)
-
-			var providerOverrides = generateComponentProviderOverrides(providersSection)
-			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0644)
-			if err != nil {
-				return nil, err
-			}
-
-			u.LogTrace(atmosConfig, "\nWrote the provider overrides to file:")
-			u.LogTrace(atmosConfig, providerOverrideFileName)
-		}
-
-		// Initialize Terraform/OpenTofu
-		tf, err := tfexec.NewTerraform(componentPath, executable)
-		if err != nil {
-			return nil, err
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
-		defer cancel()
-
-		// 'terraform init'
-		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
-		cleanTerraformWorkspace(atmosConfig, componentPath)
-
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nExecuting 'terraform init %s -s %s'", component, stack))
-		err = tf.Init(ctx, tfexec.Upgrade(false))
-		if err != nil {
-			return nil, err
-		}
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nExecuted 'terraform init %s -s %s'", component, stack))
-
-		// Terraform workspace
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nExecuting 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
-		err = tf.WorkspaceNew(ctx, terraformWorkspace)
-		if err != nil {
-			u.LogTrace(atmosConfig, fmt.Sprintf("\nWorkspace exists. Executing 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
-			err = tf.WorkspaceSelect(ctx, terraformWorkspace)
-			if err != nil {
-				return nil, err
-			}
-			u.LogTrace(atmosConfig, fmt.Sprintf("\nExecuted 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
-		} else {
-			u.LogTrace(atmosConfig, fmt.Sprintf("\nExecuted 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
-		}
-
-		// Terraform output
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nExecuting 'terraform output %s -s %s'", component, stack))
-		outputMeta, err := tf.Output(ctx)
-		if err != nil {
-			return nil, err
-		}
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nExecuted 'terraform output %s -s %s'", component, stack))
-
-		if atmosConfig.Logs.Level == u.LogLevelTrace {
-			y, err2 := u.ConvertToYAML(outputMeta)
-			if err2 != nil {
-				u.LogError(atmosConfig, err2)
-			} else {
-				u.LogTrace(atmosConfig, fmt.Sprintf("\nResult of 'terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
-			}
-		}
-
-		outputProcessed = lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
-			s := string(v.Value)
-			u.LogTrace(atmosConfig, fmt.Sprintf("Converting the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\n", k, s))
-
-			d, err2 := u.ConvertFromJSON(s)
-
-			if err2 != nil {
-				u.LogError(atmosConfig, fmt.Errorf("failed to convert output '%s': %w", k, err2))
-				return k, nil
-			} else {
-				u.LogTrace(atmosConfig, fmt.Sprintf("Converted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", k, s, d))
-			}
-
-			return k, d
-		})
-	} else {
-		componentType := "disabled"
-		if componentAbstract {
-			componentType = "abstract"
-		}
-		u.LogTrace(atmosConfig, fmt.Sprintf("\nNot executing 'terraform output %s -s %s' because the component is %s", component, stack, componentType))
+// needProcessTemplatesAndYamlFunctions checks if a Terraform command
+// requires the `Go` templates and Atmos YAML functions to be processed
+func needProcessTemplatesAndYamlFunctions(command string) bool {
+	commandsThatNeedFuncProcessing := []string{
+		"plan",
+		"apply",
+		"deploy",
+		"destroy",
+		"generate",
+		"output",
 	}
-
-	return outputProcessed, nil
+	return u.SliceContainsString(commandsThatNeedFuncProcessing, command)
 }

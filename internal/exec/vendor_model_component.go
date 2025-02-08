@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,10 +10,11 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 type pkgComponentVendor struct {
@@ -37,7 +37,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 		progress.WithoutPercentage(),
 	)
 	s := spinner.New()
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	s.Style = theme.Styles.Link
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
 	}
@@ -106,6 +106,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 		}
 	}
 }
+
 func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
 
 	// Create temp folder
@@ -116,27 +117,20 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	if err != nil {
 		return fmt.Errorf("Failed to create temp directory %s", err)
 	}
+
 	// Ensure directory permissions are restricted
 	if err := os.Chmod(tempDir, 0700); err != nil {
 		return fmt.Errorf("failed to set temp directory permissions: %w", err)
 	}
+
 	defer removeTempDir(atmosConfig, tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		tempDir = filepath.Join(tempDir, sanitizeFileName(p.uri))
+		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		client := &getter.Client{
-			Ctx: context.Background(),
-			// Define the destination where the files will be stored. This will create the directory if it doesn't exist
-			Dst: tempDir,
-			// Source
-			Src:  p.uri,
-			Mode: getter.ClientModeAny,
-		}
-
-		if err = client.Get(); err != nil {
-			return fmt.Errorf("Failed to download package %s error %s", p.name, err)
+		if err = GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package %s error %s", p.name, err)
 		}
 
 	case pkgTypeOci:
@@ -159,7 +153,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 
 		tempDir2 := tempDir
 		if p.sourceIsLocalFile {
-			tempDir2 = filepath.Join(tempDir, sanitizeFileName(p.uri))
+			tempDir2 = filepath.Join(tempDir, SanitizeFileName(p.uri))
 		}
 
 		if err = cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
@@ -174,8 +168,8 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	}
 
 	return nil
-
 }
+
 func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
@@ -183,26 +177,20 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 	}
 
 	defer removeTempDir(atmosConfig, tempDir)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
+
 	switch p.pkgType {
 	case pkgTypeRemote:
-		client := &getter.Client{
-			Ctx:  ctx,
-			Dst:  filepath.Join(tempDir, p.mixinFilename),
-			Src:  p.uri,
-			Mode: getter.ClientModeFile,
+		if err = GoGetterGet(atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package %s error %s", p.name, err)
 		}
 
-		if err = client.Get(); err != nil {
-			return fmt.Errorf("Failed to download package %s error %s", p.name, err)
-		}
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
+			return fmt.Errorf("failed to process OCI image %s error %s", p.name, err)
 		}
+
 	case pkgTypeLocal:
 		if p.uri == "" {
 			return fmt.Errorf("local mixin URI cannot be empty")
@@ -212,8 +200,8 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 
 	default:
 		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
-
 	}
+
 	// Copy from the temp folder to the destination folder
 	copyOptions := cp.Options{
 		// Preserve the atime and the mtime of the entries

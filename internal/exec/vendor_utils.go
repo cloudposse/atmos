@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -171,7 +170,7 @@ func ReadAndProcessVendorConfigFile(
 
 			if !fileExists {
 				vendorConfigFileExists = false
-				u.LogWarning(atmosConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+				u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
 				return vendorConfig, vendorConfigFileExists, "", nil
 			}
 		}
@@ -180,7 +179,16 @@ func ReadAndProcessVendorConfigFile(
 	// Check if it's a directory
 	fileInfo, err := os.Stat(foundVendorConfigFile)
 	if err != nil {
-		return vendorConfig, false, "", err
+		if os.IsNotExist(err) {
+			// File does not exist
+			return vendorConfig, false, "", fmt.Errorf("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
+		}
+		if os.IsPermission(err) {
+			// Permission error
+			return vendorConfig, false, "", fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions.", foundVendorConfigFile)
+		}
+		// Other errors
+		return vendorConfig, false, "", fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
 	}
 
 	var configFiles []string
@@ -258,7 +266,6 @@ func ExecuteAtmosVendorInternal(
 	tags []string,
 	dryRun bool,
 ) error {
-
 	var err error
 	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 
@@ -354,12 +361,20 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return err
 		}
-		err = validateURI(uri)
+
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
 		if err != nil {
 			return err
 		}
-
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(&uri, vendorConfigFilePath)
+		if !useLocalFileSystem {
+			err = ValidateURI(uri)
+			if err != nil {
+				if strings.Contains(uri, "..") {
+					return fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", s.Component, err)
+				}
+				return fmt.Errorf("invalid URI for component %s: %w", s.Component, err)
+			}
+		}
 
 		// Determine package type
 		var pType pkgType
@@ -377,7 +392,7 @@ func ExecuteAtmosVendorInternal(
 			if err != nil {
 				return err
 			}
-			targetPath := filepath.Join(vendorConfigFilePath, target)
+			targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
 			pkgName := s.Component
 			if pkgName == "" {
 				pkgName = uri
@@ -405,7 +420,7 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 
 		model, err := newModelAtmosVendorInternal(packages, dryRun, atmosConfig)
@@ -473,7 +488,7 @@ func logInitialMessage(atmosConfig schema.AtmosConfiguration, vendorConfigFileNa
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
-	u.LogInfo(atmosConfig, logMessage)
+	u.LogInfo(logMessage)
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
@@ -497,7 +512,7 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool) {
+func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
 	// Determine if the URI is an OCI scheme, a local file, or remote
 	useOciScheme := strings.HasPrefix(*uri, "oci://")
 	if useOciScheme {
@@ -507,44 +522,32 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
 	if !useOciScheme {
-		if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, *uri); err == nil {
+		absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri)
+		// if URI contain path traversal is path should be resolved
+		if err != nil && strings.Contains(*uri, "..") {
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
+		}
+		if err == nil {
 			uri = &absPath
 			useLocalFileSystem = true
 			sourceIsLocalFile = u.FileExists(*uri)
 		}
-	}
-	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
-}
 
-// sanitizeFileName replaces invalid characters and query strings with underscores for Windows.
-func sanitizeFileName(uri string) string {
-
-	// Parse the URI to handle paths and query strings properly
-	parsed, err := url.Parse(uri)
-	if err != nil {
-		// Fallback to basic filepath.Base if URI parsing fails
-		return filepath.Base(uri)
-	}
-
-	// Extract the path component of the URI
-	base := filepath.Base(parsed.Path)
-
-	// This logic applies only to Windows
-	if runtime.GOOS != "windows" {
-		return base
-	}
-
-	// Replace invalid characters for Windows
-	base = strings.Map(func(r rune) rune {
-		switch r {
-		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
-			return '_'
-		default:
-			return r
+		parsedURL, err := url.Parse(*uri)
+		if err != nil {
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, err
 		}
-	}, base)
+		if err == nil && parsedURL.Scheme != "" {
+			if parsedURL.Scheme == "file" {
+				trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
+				*uri = filepath.Clean(trimmedPath)
+				useLocalFileSystem = true
+			}
+		}
 
-	return base
+	}
+
+	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
 func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
@@ -558,7 +561,7 @@ func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath str
 	// Adjust the target path if it's a local file with no extension
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
 		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := sanitizeFileName(uri)
+		sanitizedBase := SanitizeFileName(uri)
 		targetPath = filepath.Join(targetPath, sanitizedBase)
 	}
 
@@ -580,6 +583,8 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
+		tempDir = filepath.ToSlash(tempDir)
+		src = filepath.ToSlash(src)
 
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
@@ -593,7 +598,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 				return true, err
 			} else if excludeMatch {
 				// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+				u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 					trimmedSrc,
 					excludePath,
 				))
@@ -610,7 +615,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 					return true, err
 				} else if includeMatch {
 					// If the file matches ANY of the 'included_paths' patterns, include the file
-					u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+					u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 						trimmedSrc,
 						includePath,
 					))
@@ -622,56 +627,13 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 			if anyMatches {
 				return false, nil
 			} else {
-				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+				u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 				return true, nil
 			}
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+		u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
-}
-
-func validateURI(uri string) error {
-	if uri == "" {
-		return fmt.Errorf("URI cannot be empty")
-	}
-	// Maximum length check
-	if len(uri) > 2048 {
-		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
-	}
-	// Add more validation as needed
-	// Validate URI format
-	if strings.Contains(uri, "..") {
-		return fmt.Errorf("URI cannot contain path traversal sequences")
-	}
-	if strings.Contains(uri, " ") {
-		return fmt.Errorf("URI cannot contain spaces")
-	}
-	// Validate characters
-	if strings.ContainsAny(uri, "<>|&;$") {
-		return fmt.Errorf("URI contains invalid characters")
-	}
-	// Validate scheme-specific format
-	if strings.HasPrefix(uri, "oci://") {
-		if !strings.Contains(uri[6:], "/") {
-			return fmt.Errorf("invalid OCI URI format")
-		}
-	} else if strings.Contains(uri, "://") {
-		scheme := strings.Split(uri, "://")[0]
-		if !isValidScheme(scheme) {
-			return fmt.Errorf("unsupported URI scheme: %s", scheme)
-		}
-	}
-	return nil
-}
-func isValidScheme(scheme string) bool {
-	validSchemes := map[string]bool{
-		"http":  true,
-		"https": true,
-		"git":   true,
-		"ssh":   true,
-	}
-	return validSchemes[scheme]
 }

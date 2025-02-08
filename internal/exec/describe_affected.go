@@ -32,6 +32,10 @@ type DescribeAffectedCmdArgs struct {
 	Verbose                     bool
 	Upload                      bool
 	Stack                       string
+	Query                       string
+	ProcessTemplates            bool
+	ProcessYamlFunctions        bool
+	Skip                        []string
 }
 
 func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
@@ -153,6 +157,26 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		}
 	}
 
+	query, err := flags.GetString("query")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
 	result := DescribeAffectedCmdArgs{
 		CLIConfig:                   atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
@@ -170,6 +194,10 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		Verbose:                     verbose,
 		Upload:                      upload,
 		Stack:                       stack,
+		Query:                       query,
+		ProcessTemplates:            processTemplates,
+		ProcessYamlFunctions:        processYamlFunctions,
+		Skip:                        skip,
 	}
 
 	return result, nil
@@ -194,6 +222,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	} else if a.CloneTargetRef {
 		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(
@@ -206,6 +237,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	} else {
 		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(
@@ -216,6 +250,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	}
 
@@ -231,39 +268,57 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	a.Logger.Trace("\nAffected components and stacks: \n")
+	if a.Query == "" {
+		a.Logger.Trace("\nAffected components and stacks: \n")
 
-	err = printOrWriteToFile(a.Format, a.OutputFile, affected)
-	if err != nil {
-		return err
+		err = printOrWriteToFile(a.Format, a.OutputFile, affected)
+		if err != nil {
+			return err
+		}
+
+		if a.Upload {
+			// Parse the repo URL
+			gitURL, err := giturl.NewGitURL(repoUrl)
+			if err != nil {
+				return err
+			}
+
+			apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
+			if err != nil {
+				return err
+			}
+
+			req := pro.AffectedStacksUploadRequest{
+				HeadSHA:   headHead.Hash().String(),
+				BaseSHA:   baseHead.Hash().String(),
+				RepoURL:   repoUrl,
+				RepoName:  gitURL.GetRepoName(),
+				RepoOwner: gitURL.GetOwnerName(),
+				RepoHost:  gitURL.GetHostName(),
+				Stacks:    affected,
+			}
+
+			err = apiClient.UploadAffectedStacks(req)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		if err != nil {
+			return err
+		}
+
+		res, err := u.EvaluateYqExpression(&atmosConfig, affected, a.Query)
+		if err != nil {
+			return err
+		}
+
+		err = printOrWriteToFile(a.Format, a.OutputFile, res)
+		if err != nil {
+			return err
+		}
 	}
 
-	if a.Upload {
-		// Parse the repo URL
-		gitURL, err := giturl.NewGitURL(repoUrl)
-		if err != nil {
-			return err
-		}
-
-		apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
-		if err != nil {
-			return err
-		}
-
-		req := pro.AffectedStacksUploadRequest{
-			HeadSHA:   headHead.Hash().String(),
-			BaseSHA:   baseHead.Hash().String(),
-			RepoURL:   repoUrl,
-			RepoName:  gitURL.GetRepoName(),
-			RepoOwner: gitURL.GetOwnerName(),
-			RepoHost:  gitURL.GetHostName(),
-			Stacks:    affected,
-		}
-
-		err = apiClient.UploadAffectedStacks(req)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }

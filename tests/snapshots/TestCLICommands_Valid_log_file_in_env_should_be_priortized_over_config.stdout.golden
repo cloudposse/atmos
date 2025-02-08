@@ -1,0 +1,6 @@
+DEBU Found ENV var ATMOS_LOGS_FILE=/dev/stdout
+DEBU Using command line argument '--logs-level=Debug'
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+
+👽 Atmos 0.0.1 on linux/amd64
+

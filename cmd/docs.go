@@ -22,7 +22,7 @@ const atmosDocsURL = "https://atmos.tools"
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
 	Use:                "docs",
-	Short:              "Open the Atmos docs or display component documentation",
+	Short:              "Open Atmos documentation or display component-specific docs",
 	Long:               `This command opens the Atmos docs or displays the documentation for a specified Atmos component.`,
 	Example:            "atmos docs vpc",
 	Args:               cobra.MaximumNArgs(1),
@@ -36,12 +36,16 @@ var docsCmd = &cobra.Command{
 
 			atmosConfig, err := cfg.InitCliConfig(info, true)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 
 			// Detect terminal width if not specified in `atmos.yaml`
 			// The default screen width is 120 characters, but uses maxWidth if set and greater than zero
-			maxWidth := atmosConfig.Settings.Docs.MaxWidth
+			maxWidth := atmosConfig.Settings.Terminal.MaxWidth
+			if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
+				maxWidth = atmosConfig.Settings.Docs.MaxWidth
+				u.LogWarning("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
+			}
 			defaultWidth := 120
 			screenWidth := defaultWidth
 
@@ -62,24 +66,24 @@ var docsCmd = &cobra.Command{
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 			if !componentPathExists {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
+				u.LogErrorAndExit(fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
 				if os.IsNotExist(err) {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("No README found for component: %s", info.Component))
+					u.LogErrorAndExit(fmt.Errorf("No README found for component: %s", info.Component))
 				} else {
-					u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("Component %s not found", info.Component))
+					u.LogErrorAndExit(fmt.Errorf("Component %s not found", info.Component))
 				}
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 
 			r, err := glamour.NewTermRenderer(
@@ -89,16 +93,22 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to initialize markdown renderer: %w", err))
+				u.LogErrorAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err))
 			}
 
 			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+				u.LogErrorAndExit(err)
 			}
 
-			if err := u.DisplayDocs(componentDocs, atmosConfig.Settings.Docs.Pagination); err != nil {
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, fmt.Errorf("failed to display documentation: %w", err))
+			pager := atmosConfig.Settings.Terminal.Pager
+			if !pager && atmosConfig.Settings.Docs.Pagination {
+				pager = atmosConfig.Settings.Docs.Pagination
+				u.LogWarning("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
+			}
+
+			if err := u.DisplayDocs(componentDocs, pager); err != nil {
+				u.LogErrorAndExit(fmt.Errorf("failed to display documentation: %w", err))
 			}
 
 			return
@@ -106,20 +116,27 @@ var docsCmd = &cobra.Command{
 
 		// Opens atmos.tools docs if no component argument is provided
 		var err error
-		switch runtime.GOOS {
-		case "linux":
-			err = exec.Command("xdg-open", atmosDocsURL).Start()
-		case "windows":
-			err = exec.Command("rundll32", "url.dll,FileProtocolHandler", atmosDocsURL).Start()
-		case "darwin":
-			err = exec.Command("open", atmosDocsURL).Start()
-		default:
-			err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+
+		if os.Getenv("GO_TEST") == "1" {
+			u.LogDebug("Skipping browser launch in test environment")
+		} else {
+			switch runtime.GOOS {
+			case "linux":
+				err = exec.Command("xdg-open", atmosDocsURL).Start()
+			case "windows":
+				err = exec.Command("rundll32", "url.dll,FileProtocolHandler", atmosDocsURL).Start()
+			case "darwin":
+				err = exec.Command("open", atmosDocsURL).Start()
+			default:
+				err = fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+			}
+
+			if err != nil {
+				u.LogErrorAndExit(err)
+			}
 		}
 
-		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
-		}
+		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
 	},
 }
 

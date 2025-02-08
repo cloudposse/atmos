@@ -8,12 +8,13 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/fatih/color"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -53,11 +54,28 @@ var (
 				UseEKS:                true,
 			},
 		},
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+			Terminal: schema.Terminal{
+				MaxWidth: templates.GetTerminalWidth(),
+				Pager:    true,
+				Colors:   true,
+				Unicode:  true,
+				SyntaxHighlighting: schema.SyntaxHighlighting{
+					Enabled:                true,
+					Formatter:              "terminal",
+					Theme:                  "dracula",
+					HighlightedOutputPager: true,
+					LineNumbers:            true,
+					Wrap:                   false,
+				},
+			},
+		},
 		Workflows: schema.Workflows{
 			BasePath: "stacks/workflows",
 		},
 		Logs: schema.Logs{
-			File:  "/dev/stdout",
+			File:  "/dev/stderr",
 			Level: "Info",
 		},
 		Schemas: schema.Schemas{
@@ -114,6 +132,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// Default configuration values
 	v.SetDefault("components.helmfile.use_eks", true)
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
+	v.SetDefault("settings.inject_github_token", true)
 
 	// Process config in system folder
 	configFilePath1 := ""
@@ -173,7 +192,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
 	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
 	if len(configFilePath4) > 0 {
-		u.LogTrace(atmosConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
+		u.LogTrace(fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
 		configFile4 := filepath.Join(configFilePath4, CliConfigFileName)
 		found, err = processConfigFile(atmosConfig, configFile4, v)
 		if err != nil {
@@ -206,7 +225,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace {
 			u.PrintMessageInColor("'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n"+
 				"Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'.\n"+
-				"Using the default CLI config:\n\n", color.New(color.FgCyan))
+				"Using the default CLI config:\n\n", theme.Colors.Info)
 
 			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, defaultCliConfig)
 			if err != nil {
@@ -226,7 +245,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			return atmosConfig, err
 		}
 	}
-
+	// We want the editorconfig color by default to be true
+	atmosConfig.Validate.EditorConfig.Color = true
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&atmosConfig)
@@ -315,7 +335,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			includeStackAbsPaths,
 			excludeStackAbsPaths,
 		)
-
 		if err != nil {
 			return atmosConfig, err
 		}
@@ -335,7 +354,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		atmosConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 		if stackIsPhysicalPath {
-			u.LogTrace(atmosConfig, fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
+			u.LogTrace(fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
 				configAndStacksInfo.Stack,
 				stackConfigFilesRelativePaths[0]),
 			)
@@ -371,7 +390,7 @@ func processConfigFile(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(atmosConfig, fmt.Sprintf("error closing file '"+configPath+"'. "+err.Error()))
+			u.LogWarning(fmt.Sprintf("error closing file '%s'. %v", configPath, err))
 		}
 	}(reader)
 

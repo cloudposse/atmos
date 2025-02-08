@@ -4,23 +4,23 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformGenerateBackendsCmd generates backend configs for all terraform components
 var terraformGenerateBackendsCmd = &cobra.Command{
 	Use:                "backends",
-	Short:              "Execute 'terraform generate backends' command",
-	Long:               `This command generates backend configs for all terraform components`,
+	Short:              "Generate backend configurations for all Terraform components",
+	Long:               "This command generates the backend configuration files for all Terraform components in the Atmos environment.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteTerraformGenerateBackendsCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }

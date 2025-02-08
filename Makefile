@@ -1,20 +1,18 @@
 # This works because `go list ./...` excludes vendor directories by default in modern versions of Go (1.11+).
 # No need for grep or additional filtering.
 TEST ?= $$(go list ./...)
+TESTARGS ?=
 SHELL := /bin/bash
 #GOOS=darwin
 #GOOS=linux
 #GOARCH=amd64
 VERSION=test
 
-# List of targets the `readme` target should call before generating the readme
-export README_DEPS ?= docs/targets.md
+export CGO_ENABLED=0
 
--include $(shell curl -sSL -o .build-harness "https://cloudposse.tools/build-harness"; echo .build-harness)
-
-## Lint terraform code
-lint:
-	$(SELF) terraform/install terraform/get-modules terraform/get-plugins terraform/lint terraform/validate
+readme:
+	@echo "README.md generation temporarily disabled."
+	@exit 0
 
 get:
 	go get
@@ -54,6 +52,6 @@ deps:
 
 # Run acceptance tests
 testacc: get
-	go test $(TEST) -v $(TESTARGS) -timeout 2m
+	go test $(TEST) -v $(TESTARGS) -timeout 10m
 
 .PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc

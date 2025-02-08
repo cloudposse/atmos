@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -12,8 +11,8 @@ import (
 var describeDependentsCmd = &cobra.Command{
 	Use:                "dependents",
 	Aliases:            []string{"dependants"},
-	Short:              "Execute 'describe dependents' command",
-	Long:               `This command produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component: atmos describe dependents [options]`,
+	Short:              "List Atmos components that depend on a given component",
+	Long:               "This command generates a list of Atmos components within stacks that depend on the specified Atmos component.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -21,7 +20,7 @@ var describeDependentsCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeDependentsCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -35,7 +34,7 @@ func init() {
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+		u.LogErrorAndExit(err)
 	}
 
 	describeCmd.AddCommand(describeDependentsCmd)
