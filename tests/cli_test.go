@@ -201,7 +201,78 @@ func (pm *PathManager) Apply() error {
 
 // Determine if running in a CI environment
 func isCIEnvironment() bool {
-	return os.Getenv("CI") != ""
+	// Check for common CI environment variables
+	// Note, that the CI variable has many possible truthy values, so we check for any non-empty value that is not "false".
+	return (os.Getenv("CI") != "" && os.Getenv("CI") != "false") || os.Getenv("GITHUB_ACTIONS") == "true"
+}
+
+// collapseExtraSlashes replaces multiple consecutive slashes with a single slash.
+func collapseExtraSlashes(s string) string {
+	return regexp.MustCompile("/+").ReplaceAllString(s, "/")
+}
+
+// sanitizeOutput replaces occurrences of the repository's absolute path in the output
+// with the placeholder "/absolute/path/to/repo". It first normalizes both the repository root
+// and the output to use forward slashes, ensuring that the replacement works reliably.
+// An error is returned if the repository root cannot be determined.
+// Convert something like:
+//
+//	D:\\a\atmos\atmos\examples\demo-stacks\stacks\deploy\**\*
+//	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
+//	/home/runner/work/atmos/atmos/examples/demo-stacks/stacks/deploy/**/*
+//	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
+func sanitizeOutput(output string) (string, error) {
+	// 1. Get the repository root.
+	repoRoot, err := findGitRepoRoot(startingDir)
+	if err != nil {
+		return "", err
+	}
+
+	if repoRoot == "" {
+		return "", errors.New("failed to determine repository root")
+	}
+
+	// 2. Normalize the repository root:
+	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
+	//    - Convert to forward slashes,
+	//    - And explicitly collapse extra slashes.
+	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
+	// Also normalize the output to use forward slashes.
+	normalizedOutput := filepath.ToSlash(output)
+
+	// 3. Build a regex that matches the repository root even if extra slashes appear.
+	//    First, escape any regex metacharacters in the normalized repository root.
+	quoted := regexp.QuoteMeta(normalizedRepoRoot)
+	// Replace each literal "/" with the regex token "/+" so that e.g. "a/b/c" becomes "a/+b/+c".
+	patternBody := strings.ReplaceAll(quoted, "/", "/+")
+	// Allow for extra trailing slashes.
+	pattern := patternBody + "/*"
+	repoRootRegex, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", err
+	}
+
+	// 4. Replace any occurrence of the repository root (with extra slashes) with a fixed placeholder.
+	//    The placeholder will end with exactly one slash.
+	placeholder := "/absolute/path/to/repo/"
+	replaced := repoRootRegex.ReplaceAllString(normalizedOutput, placeholder)
+
+	// 5. Now collapse extra slashes in the remainder of file paths that start with the placeholder.
+	//    We use a regex to find segments that start with the placeholder followed by some path characters.
+	//    (We assume that file paths appear in quotes or other delimited contexts, and that URLs won't match.)
+	fixRegex := regexp.MustCompile(`(/absolute/path/to/repo)([^",]+)`)
+	result := fixRegex.ReplaceAllStringFunc(replaced, func(match string) string {
+		// The regex has two groups: group 1 is the placeholder, group 2 is the remainder.
+		groups := fixRegex.FindStringSubmatch(match)
+		if len(groups) < 3 {
+			return match
+		}
+		// Collapse extra slashes in the remainder.
+		fixedRemainder := collapseExtraSlashes(groups[2])
+		return groups[1] + fixedRemainder
+	})
+
+	return result, nil
 }
 
 // sanitizeTestName converts t.Name() into a valid filename.
@@ -762,6 +833,17 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 		return true
 	}
 
+	// Sanitize outputs and fail the test if sanitization fails.
+	var err error
+	stdoutOutput, err = sanitizeOutput(stdoutOutput)
+	if err != nil {
+		t.Fatalf("failed to sanitize stdout output: %v", err)
+	}
+	stderrOutput, err = sanitizeOutput(stderrOutput)
+	if err != nil {
+		t.Fatalf("failed to sanitize stderr output: %v", err)
+	}
+
 	testName := sanitizeTestName(t.Name())
 	stdoutFileName := fmt.Sprintf("%s.stdout.golden", testName)
 	stderrFileName := fmt.Sprintf("%s.stderr.golden", testName)
@@ -820,48 +902,6 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 
 	return true
-}
-
-// Clean up untracked files in the working directory
-func cleanDirectory(t *testing.T, workdir string) error {
-	// Find the root of the Git repository
-	repoRoot, err := findGitRepoRoot(workdir)
-	if err != nil {
-		return fmt.Errorf("failed to locate git repository from %q: %w", workdir, err)
-	}
-
-	// Open the repository
-	repo, err := git.PlainOpen(repoRoot)
-	if err != nil {
-		return fmt.Errorf("failed to open git repository: %w", err)
-	}
-
-	// Get the worktree
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return fmt.Errorf("failed to get worktree: %w", err)
-	}
-
-	// Get the repository status
-	status, err := worktree.Status()
-	if err != nil {
-		return fmt.Errorf("failed to get git status: %w", err)
-	}
-
-	// Clean only files in the provided working directory
-	for file, statusEntry := range status {
-		if statusEntry.Worktree == git.Untracked {
-			fullPath := filepath.Join(repoRoot, file)
-			if strings.HasPrefix(fullPath, workdir) {
-				t.Logf("Removing untracked file: %q\n", fullPath)
-				if err := os.RemoveAll(fullPath); err != nil {
-					return fmt.Errorf("failed to remove %q: %w", fullPath, err)
-				}
-			}
-		}
-	}
-
-	return nil
 }
 
 // findGitRepo finds the Git repository root
