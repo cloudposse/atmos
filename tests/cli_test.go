@@ -245,6 +245,9 @@ func sanitizeOutput(output string) (string, error) {
 		fixedRemainder := collapseExtraSlashes(groups[2])
 		return groups[1] + fixedRemainder
 	})
+	// 6. Replace lines atmos-import log
+	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
+	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
 	return result, nil
 }

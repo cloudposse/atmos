@@ -799,18 +799,18 @@ func (cl *ConfigLoader) processConfigImports() error {
 			return err
 		}
 
-		for _, configPath := range resolvedPaths {
-			err := cl.loadConfigFileViber(cl.atmosConfig, configPath, cl.viper)
+		for _, resolvedPath := range resolvedPaths {
+			err := cl.loadConfigFileViber(cl.atmosConfig, resolvedPath.filePath, cl.viper)
 			if err != nil {
-				log.Debug("error load config file", "path", configPath, "error", err)
+				log.Debug("error load config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
 				continue
 			}
-			log.Debug("atmos merged config from import path", "path", configPath)
 			err = cl.deepMergeConfig()
 			if err != nil {
-				log.Debug("error merge config after imports", "path", configPath, "error", err)
+				log.Debug("error merge config after imports", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
 				continue
 			}
+			log.Debug("atmos merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
 		}
 		cl.atmosConfig.Import = importPaths
 	}

@@ -15,9 +15,15 @@ import (
 	"github.com/spf13/viper"
 )
 
+// import Resolved Paths
+type ResolvedPaths struct {
+	filePath    string // path to the resolved config file
+	importPaths string // import path from atmos config
+}
+
 func (cl *ConfigLoader) downloadRemoteConfig(url string, tempDir string) (string, error) {
 	// uniq name for the temp file
-	fileName := fmt.Sprintf("atmos-%d.yaml", time.Now().UnixNano())
+	fileName := fmt.Sprintf("atmos-import-%d.yaml", time.Now().UnixNano())
 	tempFile := filepath.Join(tempDir, fileName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -35,7 +41,7 @@ func (cl *ConfigLoader) downloadRemoteConfig(url string, tempDir string) (string
 	return tempFile, nil
 }
 
-func (cl *ConfigLoader) processImports(importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []string, err error) {
+func (cl *ConfigLoader) processImports(importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
 	if tempDir == "" {
 		return nil, fmt.Errorf("tempDir required to process imports")
 	}
@@ -76,7 +82,7 @@ func isRemoteImport(importPath string) bool {
 }
 
 // Process remote imports
-func (cl *ConfigLoader) processRemoteImport(importPath, tempDir string, currentDepth, maxDepth int) ([]string, error) {
+func (cl *ConfigLoader) processRemoteImport(importPath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
 	parsedURL, err := url.Parse(importPath)
 	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
 		return nil, fmt.Errorf("unsupported URL '%s': %v", importPath, err)
@@ -99,7 +105,11 @@ func (cl *ConfigLoader) processRemoteImport(importPath, tempDir string, currentD
 		return nil, fmt.Errorf("failed to unmarshal remote config '%s': %v", importPath, err)
 	}
 
-	resolvedPaths := []string{tempFile}
+	resolvedPaths := make([]ResolvedPaths, 0)
+	resolvedPaths = append(resolvedPaths, ResolvedPaths{
+		filePath:    tempFile,
+		importPaths: importPath,
+	})
 
 	// Recursively process imports from the remote file
 	if importedConfig.Import != nil {
@@ -114,7 +124,7 @@ func (cl *ConfigLoader) processRemoteImport(importPath, tempDir string, currentD
 }
 
 // Process local imports
-func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDepth, maxDepth int) ([]string, error) {
+func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
 	basePath, err := filepath.Abs(cl.atmosConfig.BasePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve base path: %v", err)
@@ -126,7 +136,13 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 		return nil, fmt.Errorf("failed to resolve local import path '%s': %v", importPath, err)
 	}
 
-	resolvedPaths := paths
+	resolvedPaths := make([]ResolvedPaths, 0)
+	for _, path := range paths {
+		resolvedPaths = append(resolvedPaths, ResolvedPaths{
+			filePath:    path,
+			importPaths: importPath,
+		})
+	}
 
 	// Load the local configuration file to check for further imports
 	for _, path := range paths {
