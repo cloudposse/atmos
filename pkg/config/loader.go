@@ -34,7 +34,6 @@ type ConfigLoader struct {
 	viper            *viper.Viper
 	atmosConfig      schema.AtmosConfiguration
 	AtmosConfigPaths []string
-	LogsLevel        string
 }
 
 func NewConfigLoader() *ConfigLoader {
