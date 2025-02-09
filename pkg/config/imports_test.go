@@ -73,10 +73,14 @@ func TestProcessImports(t *testing.T) {
 	}
 
 	// Step 5: Run the processImports method
-	resolvedPaths, err := configLoader.processImports(imports, baseDir, 0, 10)
+	imported, err := configLoader.processImports(imports, baseDir, 0, 10)
 
 	// Step 6: Assertions
 	assert.NoError(t, err, "processImports should not return an error")
+	var resolvedPaths []string
+	for _, resolvedPath := range imported {
+		resolvedPaths = append(resolvedPaths, resolvedPath.filePath)
+	}
 
 	// Verify resolved paths contain expected files
 	expectedPaths := []string{
@@ -145,9 +149,13 @@ import:
 		assert.NoError(t, err)
 		defer os.RemoveAll(tempDir)
 		importPaths := []string{"local.yaml"}
-		resolved, err := cl.processImports(importPaths, tempDir, 1, 5)
+		imported, err := cl.processImports(importPaths, tempDir, 1, 5)
 		assert.NoError(t, err)
-		assert.Contains(t, resolved, nestedLocalConfigPath, "should resolve nested local imports")
+		var resolvedPaths []string
+		for _, resolvedPath := range imported {
+			resolvedPaths = append(resolvedPaths, resolvedPath.filePath)
+		}
+		assert.Contains(t, resolvedPaths, nestedLocalConfigPath, "should resolve nested local imports")
 	})
 
 	t.Run("Test mixed imports with depth limit", func(t *testing.T) {
