@@ -139,15 +139,23 @@ func TestFilterAndListStacks(t *testing.T) {
 			delimiter: "\t",
 			expected: []map[string]string{
 				{
+					"Stack": "-----",
+					"Stage": "-----",
+					"File":  "----",
+				},
+				{
 					"Stack": "dev",
+					"Stage": "dev",
 					"File":  "examples/quick-start-simple/stacks/deploy/dev.yaml",
 				},
 				{
 					"Stack": "prod",
+					"Stage": "prod",
 					"File":  "examples/quick-start-simple/stacks/deploy/prod.yaml",
 				},
 				{
 					"Stack": "staging",
+					"Stage": "staging",
 					"File":  "examples/quick-start-simple/stacks/deploy/staging.yaml",
 				},
 			},
