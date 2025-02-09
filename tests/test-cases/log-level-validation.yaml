@@ -53,9 +53,6 @@ tests:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stdout:
         - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
-      stderr:
-        # This is actually an invalid debug statement, we are not passing the log level in the command line
-        - "DEBU Using command line argument"
       exit_code: 0
 
   - name: "Valid Log Level in Environment Variable"
@@ -97,18 +94,79 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
-
-  - name: "Invalid Log Level in Command Line Flag"
+  - name: "Valid log level in env should be priortized over config"
     enabled: true
-    description: "Test validation of invalid log level in --logs-level flag"
+    snapshot: true
+    description: "Test validation of env priority over config"
     workdir: "../"
     command: "atmos"
     args:
-      - --logs-level
-      - XTrace
       - version
+    env:
+      ATMOS_LOGS_LEVEL: "Debug"
     expect:
-      timeout: 10s
-      exit_code: 1
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
-        - "Error: Invalid log level 'XTrace' specified with the --logs-level flag\\. Valid options are: \\[Trace, Debug, Info, Warning, Off\\]\n"
+        # We are fine with any debug logs config is set to info but if env gets priority we would get debug
+        - "DEBU"
+      exit_code: 0
+  - name: "Valid log level in flag should be priortized over env and config"
+    enabled: true
+    snapshot: true
+    description: "Test validation of env priority over config"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - version
+      - "--logs-level"
+      - "Debug"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        # We are fine with any debug logs config and env is set to info but if flag gets priority we would get debug logs
+        - "DEBU"
+      exit_code: 0
+  - name: "Valid log file in env should be priortized over config"
+    enabled: true
+    snapshot: true
+    description: "Test validation of env priority over config"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - version
+      - "--logs-level"
+      - "Debug"
+    env:
+      ATMOS_LOGS_FILE: "/dev/stdout"
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        # Debug logs should be in stdout as we have choosen /dev/stdout in env
+        - "DEBU"
+      exit_code: 0
+  - name: "Valid log file in flag should be priortized over env and config"
+    enabled: true
+    snapshot: true
+    description: "Test validation of env priority over config"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - version
+      - "--logs-level"
+      - "Debug"
+      - "--logs-file"
+      - "/dev/stdout"
+    env:
+      ATMOS_LOGS_FILE: "/dev/stderr"
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        # Debug logs should be in stdout as we have choosen /dev/stdout in flag
+        - "DEBU"
+      exit_code: 0
