@@ -1,0 +1,3 @@
+DEBU Using command line argument '--logs-level=Info'
+DEBU Using command line argument '--logs-file=/dev/stderr'
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
