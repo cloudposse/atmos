@@ -36,12 +36,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 		return cl.resolveAndValidatePath(cl.atmosConfig.BasePath, source)
 	}
 
-	// Infer base_path
-	pwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	resolvedPath, found := cl.infraBasePath(pwd)
+	resolvedPath, found := cl.infraBasePath()
 	if found {
 		absPath, err := filepath.Abs(resolvedPath)
 		if err != nil {
@@ -55,7 +50,6 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 	if err != nil {
 		return "", err
 	}
-	log.Debug("base path derived from PWD", "pwd", pwd)
 	return absPath, nil
 }
 
@@ -81,9 +75,15 @@ func (cl *ConfigLoader) resolveAndValidatePath(path string, source string) (stri
 	return absPath, nil
 }
 
-func (cl *ConfigLoader) infraBasePath(cwd string) (string, bool) {
+func (cl *ConfigLoader) infraBasePath() (string, bool) {
 	// CWD Check CWD for atmos.yaml, .atmos.yaml, atmos.d/**/*, .github/atmos.yaml
 	// if found Set base_path to absolute path containing directory
+	// Infer base_path
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Debug("failed to get current working directory", "err", err)
+		return "", false
+	}
 	filePath, found := cl.SearchConfigFilePath(filepath.Join(cwd, "atmos"))
 	if found {
 		log.Debug("base path derived from infra atmos file", "path", filePath)
