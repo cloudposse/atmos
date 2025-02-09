@@ -630,10 +630,11 @@ func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, erro
 	var atmosFilePaths []string
 	for _, pattern := range patterns {
 		filePaths, err := u.GetGlobMatches(pattern)
-		if err == nil {
-			atmosFilePaths = append(atmosFilePaths, filePaths...)
+		if err != nil {
+			log.Debug("error getting glob matches for path", "path", pattern, "error", err)
+			continue
 		}
-
+		atmosFilePaths = append(atmosFilePaths, filePaths...)
 	}
 	if atmosFilePaths == nil {
 		return nil, fmt.Errorf("no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: %s", dirPath)
