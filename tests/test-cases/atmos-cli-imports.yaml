@@ -9,5 +9,7 @@ tests:
     args:
       - "describe"
       - "config"
+      - "-f"
+      - "yaml"
     expect:
       exit_code: 0
