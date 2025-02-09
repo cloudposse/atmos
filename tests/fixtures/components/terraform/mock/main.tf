@@ -1,3 +1,12 @@
+terraform {
+  required_providers {
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0.0"
+    }
+  }
+}
+
 variable "foo" {
   type = string
   default = "foo"
@@ -13,6 +22,11 @@ variable "baz" {
   default = "baz"
 }
 
+# Add a random string just to ensure the provider is used
+resource "random_string" "test" {
+  length = 8
+}
+
 output "foo" {
   value = var.foo
 }
@@ -23,4 +37,8 @@ output "bar" {
 
 output "baz" {
   value = var.baz
+}
+
+output "random_string" {
+  value = random_string.test.result
 }
