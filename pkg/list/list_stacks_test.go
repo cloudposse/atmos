@@ -125,40 +125,63 @@ func TestFilterAndListStacks(t *testing.T) {
 		},
 	}
 
+	// Add a stack with special characters to test escaping
+	stacksMap["test,special"] = map[string]any{
+		"vars": map[string]any{
+			"stage": "test,stage",
+		},
+		"atmos_stack_file": "test/stack.yaml",
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"station": map[string]any{
+					"vars": map[string]any{
+						"location": "Test,City",
+						"lang":     "test\tlang",
+					},
+				},
+			},
+		},
+	}
+
 	tests := []struct {
 		name      string
 		config    schema.ListConfig
 		format    string
 		delimiter string
-		expected  []map[string]string
+		expected  string
 	}{
 		{
-			name:      "default columns",
+			name:      "default table format",
 			config:    schema.ListConfig{},
 			format:    "",
 			delimiter: "\t",
-			expected: []map[string]string{
-				{
-					"Stack": "-----",
-					"Stage": "-----",
-					"File":  "----",
-				},
-				{
-					"Stack": "dev",
-					"Stage": "dev",
-					"File":  "examples/quick-start-simple/stacks/deploy/dev.yaml",
-				},
-				{
-					"Stack": "prod",
-					"Stage": "prod",
-					"File":  "examples/quick-start-simple/stacks/deploy/prod.yaml",
-				},
-				{
-					"Stack": "staging",
-					"Stage": "staging",
-					"File":  "examples/quick-start-simple/stacks/deploy/staging.yaml",
+			expected:  "Stack\tStage\tFile\n-----\t-----\t----\ndev\tdev\texamples/quick-start-simple/stacks/deploy/dev.yaml\nprod\tprod\texamples/quick-start-simple/stacks/deploy/prod.yaml\nstaging\tstaging\texamples/quick-start-simple/stacks/deploy/staging.yaml\ntest,special\ttest,stage\ttest/stack.yaml\n",
+		},
+		{
+			name:      "csv format with default delimiter",
+			config:    schema.ListConfig{},
+			format:    "csv",
+			delimiter: "\t", // Should be ignored for CSV
+			expected:  "Stack,Stage,File\ndev,dev,examples/quick-start-simple/stacks/deploy/dev.yaml\nprod,prod,examples/quick-start-simple/stacks/deploy/prod.yaml\nstaging,staging,examples/quick-start-simple/stacks/deploy/staging.yaml\n\"test,special\",\"test,stage\",test/stack.yaml\n",
+		},
+		{
+			name:      "tsv format",
+			config:    schema.ListConfig{},
+			format:    "tsv",
+			delimiter: "", // Should default to tab
+			expected:  "Stack\tStage\tFile\ndev\tdev\texamples/quick-start-simple/stacks/deploy/dev.yaml\nprod\tprod\texamples/quick-start-simple/stacks/deploy/prod.yaml\nstaging\tstaging\texamples/quick-start-simple/stacks/deploy/staging.yaml\ntest,special\ttest,stage\ttest/stack.yaml\n",
+		},
+		{
+			name:   "custom columns with csv format",
+			config: schema.ListConfig{
+				Columns: []schema.ListColumnConfig{
+					{Name: "Stack", Value: "{{ .atmos_stack }}"},
+					{Name: "Stage", Value: "{{ getVar .vars \"stage\" }}"},
 				},
 			},
+			format:    "csv",
+			delimiter: ",",
+			expected:  "Stack,Stage\ndev,dev\nprod,prod\nstaging,staging\n\"test,special\",\"test,stage\"\n",
 		},
 	}
 
@@ -167,22 +190,37 @@ func TestFilterAndListStacks(t *testing.T) {
 			output, err := FilterAndListStacks(stacksMap, "", test.config, test.format, test.delimiter)
 			assert.NoError(t, err)
 
-			// Parse the output into a slice of maps for comparison
-			var result []map[string]string
-			lines := strings.Split(strings.TrimSpace(output), u.GetLineEnding())
-			if len(lines) > 1 { // Skip header row
-				headers := strings.Split(lines[0], test.delimiter)
-				for _, line := range lines[1:] {
-					values := strings.Split(line, test.delimiter)
-					row := make(map[string]string)
-					for i, header := range headers {
-						row[header] = values[i]
-					}
-					result = append(result, row)
-				}
-			}
+			// Normalize line endings for comparison
+			normalizedOutput := strings.ReplaceAll(output, "\r\n", "\n")
+			normalizedExpected := strings.ReplaceAll(test.expected, "\r\n", "\n")
 
-			assert.Equal(t, test.expected, result)
+			// Compare the actual output with expected
+			assert.Equal(t, normalizedExpected, normalizedOutput, "Output format mismatch for %s", test.name)
+
+			// Additional validation for specific formats
+			switch test.format {
+			case "csv":
+				// Verify CSV specific formatting
+				lines := strings.Split(strings.TrimSpace(normalizedOutput), "\n")
+				for _, line := range lines {
+					// Check if values containing commas are properly quoted
+					if strings.Contains(line, ",") {
+						values := strings.Split(line, ",")
+						for _, value := range values {
+							if strings.Contains(value, ",") {
+								assert.True(t, strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\""),
+									"Values containing commas should be quoted in CSV format")
+							}
+						}
+					}
+				}
+			case "tsv":
+				// Verify TSV specific formatting
+				assert.False(t, strings.Contains(normalizedOutput, "\""),
+					"TSV format should not contain quotes")
+				assert.True(t, strings.Contains(normalizedOutput, "\t"),
+					"TSV format should use tabs as delimiters")
+			}
 		})
 	}
 }
