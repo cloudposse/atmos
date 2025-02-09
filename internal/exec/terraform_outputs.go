@@ -351,8 +351,7 @@ func getStaticRemoteStateOutput(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
 	if err != nil {
-		l.Error("Error evaluating the 'static' remote state backend output", "output", output, "component", component, "stack", stack, "error", err)
-		os.Exit(1)
+		l.Fatal("Error evaluating the 'static' remote state backend output", "output", output, "component", component, "stack", stack, "error", err)
 	}
 
 	return res
