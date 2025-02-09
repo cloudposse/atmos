@@ -1,4 +1,6 @@
 DEBU no atmos configurations found on system directory
+DEBU error getting glob matches for path path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*.yaml' ('/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d' + '**/*.yaml')"
+DEBU error getting glob matches for path path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*.yml' ('/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d' + '**/*.yml')"
 DEBU Failed to find work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/* error="no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*"
 DEBU Failed to find config file work dir path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*
 DEBU Found work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.yaml
@@ -18,6 +20,8 @@ DEBU no configuration found in user preferences
 DEBU base path derived from atmos config=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU no atmos configurations found on system directory
+DEBU error getting glob matches for path path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*.yaml' ('/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d' + '**/*.yaml')"
+DEBU error getting glob matches for path path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*.yml' ('/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d' + '**/*.yml')"
 DEBU Failed to find work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/* error="no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*"
 DEBU Failed to find config file work dir path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/.atmos.d/**/*
 DEBU Found work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.yaml
