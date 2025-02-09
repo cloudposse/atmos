@@ -287,8 +287,7 @@ func GetTerraformOutput(
 		p.Quit()
 		<-spinnerDone
 		fmt.Printf("\r✗ %s\n", message)
-		l.Error("Failed to get remote state backend static type outputs", "error", err)
-		os.Exit(1)
+		l.Fatal("Failed to get remote state backend static type outputs", "error", err)
 	}
 
 	var result any
