@@ -276,8 +276,7 @@ func GetTerraformOutput(
 		p.Quit()
 		<-spinnerDone
 		fmt.Printf("\r✗ %s\n", message)
-		l.Error("Failed to describe the component", "component", component, "stack", stack, "error", err)
-		os.Exit(1)
+		l.Fatal("Failed to describe the component", "component", component, "stack", stack, "error", err)
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
