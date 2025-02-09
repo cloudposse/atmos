@@ -7,6 +7,21 @@ terraform {
   }
 }
 
+variable "environment" {
+  type = string
+  description = "Environment name"
+}
+
+variable "stage" {
+  type = string
+  description = "Stage name"
+}
+
+variable "tenant" {
+  type = string
+  description = "Tenant name"
+}
+
 variable "foo" {
   type = string
   default = "foo"
