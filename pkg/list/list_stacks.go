@@ -260,7 +260,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		}
 		return string(jsonBytes) + utils.GetLineEnding(), nil
 
-	case FormatCSV:
+	case FormatCSV, FormatTSV:
 		// Only include columns that have values
 		var nonEmptyHeaders []string
 		var nonEmptyColumnIndexes []int
@@ -280,15 +280,46 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			}
 		}
 
-		var output strings.Builder
-		output.WriteString(strings.Join(nonEmptyHeaders, delimiter) + utils.GetLineEnding())
-
-		for _, row := range rows {
-			var nonEmptyRow []string
-			for _, i := range nonEmptyColumnIndexes {
-				nonEmptyRow = append(nonEmptyRow, row[i])
+		// Set appropriate delimiter based on format
+		fileDelimiter := delimiter
+		if delimiter == "\t" || delimiter == "" {
+			switch format {
+			case FormatCSV:
+				fileDelimiter = ","
+			case FormatTSV:
+				fileDelimiter = "\t"
 			}
-			output.WriteString(strings.Join(nonEmptyRow, delimiter) + utils.GetLineEnding())
+		}
+
+		var output strings.Builder
+
+		// Helper function to escape values
+		escapeValue := func(s string) string {
+			// For TSV, just replace tabs with spaces to maintain format
+			if format == FormatTSV {
+				return strings.ReplaceAll(s, "\t", " ")
+			}
+			// For CSV, use standard CSV escaping
+			if strings.Contains(s, fileDelimiter) || strings.Contains(s, "\n") || strings.Contains(s, "\"") {
+				return "\""+strings.ReplaceAll(s, "\"", "\"\"")+"\""
+			}
+			return s
+		}
+
+		// Write headers
+		escapedHeaders := make([]string, len(nonEmptyHeaders))
+		for i, header := range nonEmptyHeaders {
+			escapedHeaders[i] = escapeValue(header)
+		}
+		output.WriteString(strings.Join(escapedHeaders, fileDelimiter) + utils.GetLineEnding())
+
+		// Write rows
+		for _, row := range rows {
+			var escapedRow []string
+			for _, i := range nonEmptyColumnIndexes {
+				escapedRow = append(escapedRow, escapeValue(row[i]))
+			}
+			output.WriteString(strings.Join(escapedRow, fileDelimiter) + utils.GetLineEnding())
 		}
 		return output.String(), nil
 
