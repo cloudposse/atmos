@@ -209,7 +209,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 				l.Error("failed to convert output”, “output”, "error", err2)
 				return k, nil
 			} else {
-				l.Debug(fmt.Sprintf("Converted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", k, s, d))
+				l.Debug("Converted the variable from JSON to Go data type", “key”, k, “value”, s, “result”, d))
 			}
 
 			return k, d
