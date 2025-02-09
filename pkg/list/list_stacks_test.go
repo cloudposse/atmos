@@ -172,7 +172,7 @@ func TestFilterAndListStacks(t *testing.T) {
 			expected:  "Stack\tStage\tFile\ndev\tdev\texamples/quick-start-simple/stacks/deploy/dev.yaml\nprod\tprod\texamples/quick-start-simple/stacks/deploy/prod.yaml\nstaging\tstaging\texamples/quick-start-simple/stacks/deploy/staging.yaml\ntest,special\ttest,stage\ttest/stack.yaml\n",
 		},
 		{
-			name:   "custom columns with csv format",
+			name: "custom columns with csv format",
 			config: schema.ListConfig{
 				Columns: []schema.ListColumnConfig{
 					{Name: "Stack", Value: "{{ .atmos_stack }}"},
