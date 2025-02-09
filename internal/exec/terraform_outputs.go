@@ -301,8 +301,7 @@ func GetTerraformOutput(
 			p.Quit()
 			<-spinnerDone
 			fmt.Printf("\r✗ %s\n", message)
-			l.Error("Failed to execute terraform output", "component", component, "stack", stack, "error", err)
-			os.Exit(1)
+			l.Fatal("Failed to execute terraform output", "component", component, "stack", stack, "error", err)
 		}
 
 		// Cache the result
