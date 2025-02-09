@@ -51,6 +51,24 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 
 	// Don't process Terraform output for disabled and abstract components
 	if componentEnabled && !componentAbstract {
+		// Detect and set ENV variables from the `env` section
+		envSection, ok := sections[cfg.EnvSectionName]
+		if ok {
+			envMap, ok2 := envSection.(map[string]any)
+			if ok2 && len(envMap) > 0 {
+				for k, v := range envMap {
+					if v != nil {
+						vstr := fmt.Sprintf("%v", v)
+						l.Debug("Setting environment variable %s=%v for component %s in stack %s", k, vstr, component, stack)
+						err := os.Setenv(k, vstr)
+						if err != nil {
+							return nil, err
+						}
+					}
+				}
+			}
+		}
+
 		executable, ok := sections[cfg.CommandSectionName].(string)
 		if !ok {
 			return nil, fmt.Errorf("the component '%s' in the stack '%s' does not have 'command' (executable) defined", component, stack)
@@ -106,7 +124,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 		}
 
 		// Generate `providers_override.tf.json` file if the `providers` section is configured
-		providersSection, ok := sections["providers"].(map[string]any)
+		providersSection, ok := sections[cfg.ProvidersSectionName].(map[string]any)
 
 		if ok && len(providersSection) > 0 {
 			providerOverrideFileName := filepath.Join(componentPath, "providers_override.tf.json")
@@ -147,6 +165,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 		if err != nil {
 			return nil, err
 		}
+
 		l.Debug(fmt.Sprintf("Executed 'terraform init %s -s %s'", component, stack))
 
 		// Terraform workspace
