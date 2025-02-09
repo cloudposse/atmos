@@ -13,3 +13,16 @@ tests:
       - "yaml"
     expect:
       exit_code: 0
+  - name: atmos_describe_configuration
+    snapshot: true
+    enabled: true
+    description: "Ensure atmos configuration"
+    workdir: "fixtures/scenarios/atmos-configuration"
+    command: "atmos"
+    args:
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
+    expect:
+      exit_code: 0
