@@ -11,15 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -32,21 +29,7 @@ const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-man
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	// Initialize spinner
 	message := "Validating Atmos Stacks..."
-	s := spinner.New()
-	s.Style = theme.Styles.Link
-
-	var opts []tea.ProgramOption
-	if !CheckTTYSupport() {
-		// Workaround for non-TTY environments
-		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-		u.LogTrace("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		fmt.Println(message)
-	}
-
-	p := tea.NewProgram(modelSpinner{
-		spinner: s,
-		message: message,
-	}, opts...)
+	p := NewSpinner(message)
 
 	// Use error channel to capture spinner errors
 	spinnerDone := make(chan error, 1)

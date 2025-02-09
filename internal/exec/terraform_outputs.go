@@ -9,15 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
 	l "github.com/charmbracelet/log"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -233,7 +230,6 @@ func GetTerraformOutput(
 	skipCache bool,
 ) any {
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	if !skipCache {
@@ -244,23 +240,10 @@ func GetTerraformOutput(
 		}
 	}
 
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+
 	// Initialize spinner
-	s := spinner.New()
-	s.Style = theme.Styles.Link
-
-	var opts []tea.ProgramOption
-	if !CheckTTYSupport() {
-		// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue
-		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-		l.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		fmt.Println(message)
-	}
-
-	p := tea.NewProgram(modelSpinner{
-		spinner: s,
-		message: message,
-	}, opts...)
-
+	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
 	go func() {
 		if _, err := p.Run(); err != nil {

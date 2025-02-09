@@ -5,6 +5,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	l "github.com/charmbracelet/log"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 type modelSpinner struct {
@@ -36,4 +39,25 @@ func (m modelSpinner) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m modelSpinner) View() string {
 	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.message)
+}
+
+// NewSpinner initializes a spinner and returns a pointer to a tea.Program
+func NewSpinner(message string) *tea.Program {
+	s := spinner.New()
+	s.Style = theme.Styles.Link
+
+	var opts []tea.ProgramOption
+	if !CheckTTYSupport() {
+		// Workaround for non-TTY environments
+		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		l.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+		fmt.Println(message)
+	}
+
+	p := tea.NewProgram(modelSpinner{
+		spinner: s,
+		message: message,
+	}, opts...)
+
+	return p
 }
