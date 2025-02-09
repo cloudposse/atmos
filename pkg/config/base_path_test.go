@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +24,6 @@ func TestBasePathComputingWithBasePathArg(t *testing.T) {
 	assert.Equal(t, expectedPath, result)
 	// test non-existent base path
 	info.BasePathFromArg = "invalid/path"
-	expectedPath, _ = filepath.Abs("invalid/path")
 	result, err = configLoader.BasePathComputing(info)
 	assert.Error(t, err)
 	assert.Equal(t, "", result)
@@ -66,7 +64,6 @@ func TestBasePathComputingWithEnvVar(t *testing.T) {
 	assert.Equal(t, expectedPath, result)
 }
 
-// test  base_path Set in Configuration
 func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "config-test")
 	if err != nil {
@@ -86,8 +83,7 @@ func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 	// change pwd to temp
 	startingDir, err := os.Getwd()
 	if err != nil {
-		fmt.Printf("Failed to get the current working directory: %v\n", err)
-		os.Exit(1) // Exit with a non-zero code to indicate failure
+		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
 	defer func() {
 		// Change back to the original working directory after the test

@@ -131,6 +131,12 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 	}
 
 	localPath := filepath.Join(basePath, importPath)
+	if !strings.HasPrefix(filepath.Clean(localPath), filepath.Clean(basePath)) {
+		log.Warn("Import path is outside of base directory",
+			"importPath", importPath,
+			"basePath", basePath,
+		)
+	}
 	paths, err := cl.SearchAtmosConfigFileDir(localPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve local import path '%s': %v", importPath, err)

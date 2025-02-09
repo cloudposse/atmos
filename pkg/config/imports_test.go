@@ -167,6 +167,7 @@ import:
 			server.URL + "/config.yaml",
 		}
 		resolved, err := cl.processImports(importPaths, tempDir, 11, 10)
+		assert.Error(t, err, "should return an error when maxDepth is exceeded")
 		assert.Nil(t, resolved, "no resolved paths should be returned on depth limit breach")
 	})
 }

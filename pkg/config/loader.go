@@ -690,7 +690,7 @@ func (cl *ConfigLoader) detectPriorityFiles(files []string) []string {
 		if existingFile, exists := priorityMap[key]; exists {
 			if ext == ".yaml" {
 				priorityMap[key] = file // Replace .yml with .yaml
-			} else if ext == ".yml" && strings.HasSuffix(existingFile, ".yaml") {
+			} else if ext == ".yml" && filepath.Ext(existingFile) == ".yaml" {
 				continue // Keep .yaml priority
 			}
 		} else {

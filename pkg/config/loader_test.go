@@ -189,7 +189,10 @@ func TestDownloadRemoteConfig(t *testing.T) {
 	// Create a mock HTTP server
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("mock content"))
+		_, err := w.Write([]byte("mock content"))
+		if err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer mockServer.Close()
 	viper := viper.New()
