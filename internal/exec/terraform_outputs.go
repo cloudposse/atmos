@@ -246,12 +246,12 @@ func GetTerraformOutput(
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
 	go func() {
+		defer close(spinnerDone)
 		if _, err := p.Run(); err != nil {
 			// If there's any error running the spinner, just print the message
 			fmt.Println(message)
 			l.Error("Failed to run spinner:", "error", err)
 		}
-		close(spinnerDone)
 	}()
 
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)

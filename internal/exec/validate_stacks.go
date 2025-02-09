@@ -30,18 +30,15 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	// Initialize spinner
 	message := "Validating Atmos Stacks..."
 	p := NewSpinner(message)
-
-	// Use error channel to capture spinner errors
-	spinnerDone := make(chan error, 1)
+	spinnerDone := make(chan struct{})
 
 	go func() {
+		defer close(spinnerDone)
 		_, err := p.Run()
 		if err != nil {
 			fmt.Println(message)
 			u.LogError(fmt.Errorf("failed to run spinner: %w", err))
 		}
-		spinnerDone <- err
-		close(spinnerDone)
 	}()
 
 	// Process CLI arguments
