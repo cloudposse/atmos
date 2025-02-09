@@ -301,7 +301,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			}
 			// For CSV, use standard CSV escaping
 			if strings.Contains(s, fileDelimiter) || strings.Contains(s, "\n") || strings.Contains(s, "\"") {
-				return "\""+strings.ReplaceAll(s, "\"", "\"\"")+"\""
+				return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
 			}
 			return s
 		}
