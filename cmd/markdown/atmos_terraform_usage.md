@@ -1,5 +1,5 @@
-– Execute a terraform
+– Execute a terraform subcommand
 
 ```
- $ atmos terraform [sub-command] <component-name> -s <stack-name>
+ $ atmos terraform [subcommand] <component-name> -s <stack-name>
 ```
