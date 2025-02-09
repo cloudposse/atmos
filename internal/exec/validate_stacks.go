@@ -31,36 +31,24 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	message := "Validating Atmos Stacks..."
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
-
-	go func() {
-		defer close(spinnerDone)
-		_, err := p.Run()
-		if err != nil {
-			fmt.Println(message)
-			u.LogError(fmt.Errorf("failed to run spinner: %w", err))
-		}
-	}()
+	RunSpinner(p, spinnerDone, message)
+	// Ensure spinner is stopped before returning
+	defer StopSpinner(p, spinnerDone)
 
 	// Process CLI arguments
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
-		p.Quit()
-		<-spinnerDone
 		return err
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		p.Quit()
-		<-spinnerDone
 		return err
 	}
 
 	flags := cmd.Flags()
 	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
-		p.Quit()
-		<-spinnerDone
 		return err
 	}
 
@@ -69,11 +57,6 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	err = ValidateStacks(atmosConfig)
-
-	// Ensure spinner is stopped before returning
-	p.Quit()
-	<-spinnerDone
-
 	return err
 }
 

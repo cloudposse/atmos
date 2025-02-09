@@ -61,3 +61,21 @@ func NewSpinner(message string) *tea.Program {
 
 	return p
 }
+
+// RunSpinner executes the spinner program in a goroutine
+func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
+	go func() {
+		defer close(spinnerChan)
+		if _, err := p.Run(); err != nil {
+			// If there's any error running the spinner, print the message and the error
+			fmt.Println(message)
+			l.Error("Failed to run spinner:", "error", err)
+		}
+	}()
+}
+
+// StopSpinner stops the spinner program and waits for the completion
+func StopSpinner(p *tea.Program, spinnerChan chan struct{}) {
+	p.Quit()
+	<-spinnerChan
+}

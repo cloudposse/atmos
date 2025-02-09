@@ -245,19 +245,12 @@ func GetTerraformOutput(
 	// Initialize spinner
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
-	go func() {
-		defer close(spinnerDone)
-		if _, err := p.Run(); err != nil {
-			// If there's any error running the spinner, just print the message
-			fmt.Println(message)
-			l.Error("Failed to run spinner:", "error", err)
-		}
-	}()
+	RunSpinner(p, spinnerDone, message)
+	// Ensure spinner is stopped before returning
+	defer StopSpinner(p, spinnerDone)
 
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		p.Quit()
-		<-spinnerDone
 		fmt.Printf("\r✗ %s\n", message)
 		l.Fatal("Failed to describe the component", "component", component, "stack", stack, "error", err)
 	}
@@ -266,8 +259,6 @@ func GetTerraformOutput(
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
-		p.Quit()
-		<-spinnerDone
 		fmt.Printf("\r✗ %s\n", message)
 		l.Fatal("Failed to get remote state backend static type outputs", "error", err)
 	}
@@ -281,8 +272,6 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
-			p.Quit()
-			<-spinnerDone
 			fmt.Printf("\r✗ %s\n", message)
 			l.Fatal("Failed to execute terraform output", "component", component, "stack", stack, "error", err)
 		}
@@ -292,9 +281,7 @@ func GetTerraformOutput(
 		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
 
-	// Stop spinner and show success
-	p.Quit()
-	<-spinnerDone
+	// Show success
 	fmt.Printf("\r✓ %s\n", message)
 
 	return result
