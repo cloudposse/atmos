@@ -331,8 +331,7 @@ func getTerraformOutputVariable(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
 	if err != nil {
-		l.Error("Error evaluating terraform output", "output", output, "component", component, "stack", stack, "error", err)
-		os.Exit(1)
+		l.Fatal("Error evaluating terraform output", "output", output, "component", component, "stack", stack, "error", err)
 	}
 
 	return res
