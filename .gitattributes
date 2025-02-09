@@ -1,7 +1,8 @@
 # Always check-out / check-in files with LF line endings.
 * text=auto eol=lf
 
-docs linguist-documentation=true
+docs/** linguist-documentation
+website/** linguist-documentation
 
 # Screengrabs are binary HTML files that are automatically generated
 website/src/components/Screengrabs/**/*.html linguist-generated=true binary
