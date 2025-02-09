@@ -1,0 +1,37 @@
+DEBU no atmos configurations found on system directory
+DEBU Failed to find work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/* error="no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/*"
+DEBU Failed to find config work dir path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/*
+DEBU Failed to find work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/* error="no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/*"
+DEBU Failed to find config file work dir path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/*
+DEBU Found work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.yaml
+DEBU atmos merged config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.yaml
+DEBU atmos merged config from import import=https:/raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU atmos merged config from import import=configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU atmos merged config from import import=configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU atmos merged config from import import=configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU atmos merged config from import import=configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU atmos merged config from import import=./logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU load atmos config from workdir
+DEBU no configuration found in user preferences
+DEBU base path derived from infra atmos file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.yaml
+DEBU base path derived from infra base_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU no atmos configurations found on system directory
+DEBU Failed to find work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/* error="no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/*"
+DEBU Failed to find config work dir path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/*
+DEBU Failed to find work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/* error="no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/*"
+DEBU Failed to find config file work dir path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/*
+DEBU Found work dir atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.yaml
+DEBU atmos merged config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.yaml
+DEBU atmos merged config from import import=https:/raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
+DEBU atmos merged config from import import=configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
+DEBU atmos merged config from import import=configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
+DEBU atmos merged config from import import=configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/stack.yml
+DEBU atmos merged config from import import=configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
+DEBU atmos merged config from import import=./logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
+DEBU load atmos config from workdir
+DEBU no configuration found in user preferences
+DEBU base path derived from infra atmos file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.yaml
+DEBU base path derived from infra base_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
+DEBU Using command line argument '--logs-level=Info'
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]

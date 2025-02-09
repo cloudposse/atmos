@@ -7,7 +7,7 @@ DEBU Found work dir atmos config file path=/absolute/path/to/repo/atmos.yaml
 DEBU atmos merged config file path=/absolute/path/to/repo/atmos.yaml
 DEBU load atmos config from workdir
 DEBU no configuration found in user preferences
-DEBU base path derived from infra atmos file file path=/absolute/path/to/repo/atmos.yaml
+DEBU base path derived from infra atmos file path=/absolute/path/to/repo/atmos.yaml
 DEBU base path derived from infra base_path=/absolute/path/to/repo/
 DEBU Found ENV var ATMOS_LOGS_LEVEL=Debug
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
