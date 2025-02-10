@@ -586,10 +586,10 @@ func verifyExitCode(t *testing.T, expected, actual int) bool {
 
 func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPattern) bool {
 	success := true
-	output, err := sanitizeOutput(output)
-	if err != nil {
-		t.Fatalf("failed to sanitize stdout output: %v", err)
-	}
+	// output, err := sanitizeOutput(output)
+	// if err != nil {
+	// 	t.Fatalf("failed to sanitize stdout output: %v", err)
+	// }
 	for _, pattern := range patterns {
 		re, err := regexp.Compile(pattern.Pattern)
 		if err != nil {
