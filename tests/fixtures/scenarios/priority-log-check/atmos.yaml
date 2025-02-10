@@ -1,5 +1,5 @@
 logs:
-  level: Trace
+  level: Info
   file: /dev/stderr
 
 stacks:

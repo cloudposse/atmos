@@ -21,6 +21,14 @@ var terraformCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
+func init() {
+	// https://github.com/spf13/cobra/issues/739
+	terraformCmd.DisableFlagParsing = true
+	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
+	attachTerraformCommands(terraformCmd)
+	RootCmd.AddCommand(terraformCmd)
+}
+
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	info := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
 
@@ -41,14 +49,6 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func init() {
-	// https://github.com/spf13/cobra/issues/739
-	terraformCmd.DisableFlagParsing = true
-	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
-	attachTerraformCommands(terraformCmd)
-	RootCmd.AddCommand(terraformCmd)
 }
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
