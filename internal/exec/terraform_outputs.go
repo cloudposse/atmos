@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -20,7 +19,8 @@ import (
 
 var terraformOutputsCache = sync.Map{}
 
-func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
+func execTerraformOutput(
+	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	sections map[string]any,
@@ -29,7 +29,6 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 	componentAbstract := false
 	componentEnabled := true
 	var err error
-	envVarsSaved := make(map[string]any)
 
 	metadataSection, ok := sections[cfg.MetadataSectionName]
 	if ok {
@@ -49,35 +48,6 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 
 	// Don't process Terraform output for disabled and abstract components
 	if componentEnabled && !componentAbstract {
-
-		// Detect and set ENV variables from the `env` section
-		envSection, ok := sections[cfg.EnvSectionName]
-		if ok {
-			envMap, ok2 := envSection.(map[string]any)
-			if ok2 && len(envMap) > 0 {
-				for k, v := range envMap {
-					if v != nil {
-						// !terraform.output function is executed in the same process as the main `atmos terraform` command
-						// If !terraform.output function sets ENV variables, they need to be removed to not pollute the process
-						// Save an existing ENV var with the same key (will be restored/removed later)
-						existingEv, exist := os.LookupEnv(k)
-						if exist {
-							envVarsSaved[k] = existingEv
-						} else {
-							envVarsSaved[k] = nil
-						}
-
-						envStr := fmt.Sprintf("%v", v)
-						l.Debug(fmt.Sprintf("Setting environment variable %s=%s for component %s in stack %s", k, envStr, component, stack))
-						err = os.Setenv(k, envStr)
-						if err != nil {
-							return nil, err
-						}
-					}
-				}
-			}
-		}
-
 		executable, ok := sections[cfg.CommandSectionName].(string)
 		if !ok {
 			return nil, fmt.Errorf("the component '%s' in the stack '%s' does not have 'command' (executable) defined", component, stack)
@@ -155,6 +125,20 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 			return nil, err
 		}
 
+		// Set environment variables from the `env` section
+		envSection, ok := sections[cfg.EnvSectionName]
+		if ok {
+			envMap, ok2 := envSection.(map[string]any)
+			if ok2 && len(envMap) > 0 {
+				l.Debug("Setting environment variables", "env", envMap)
+				m := u.MapOfInterfacesToMapOfStrings(envMap)
+				err = tf.SetEnv(m)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 		defer cancel()
 
@@ -229,24 +213,6 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 			componentStatus = "abstract"
 		}
 		l.Debug(fmt.Sprintf("Not executing 'terraform output %s -s %s' because the component is %s", component, stack, componentStatus))
-	}
-
-	// Restore/remove the original ENV variables
-	for k, v := range envVarsSaved {
-		if v != nil {
-			vStr := fmt.Sprint(v)
-			l.Debug(fmt.Sprintf("Restoring environment variable %s=%s", k, vStr))
-			err = os.Setenv(k, fmt.Sprintf("%v", vStr))
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			l.Debug(fmt.Sprintf("Unsetting environment variable %s", k))
-			err = os.Unsetenv(k)
-			if err != nil {
-				return nil, err
-			}
-		}
 	}
 
 	return outputProcessed, nil
