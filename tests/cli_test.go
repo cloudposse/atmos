@@ -488,12 +488,12 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 
 	// Validate stdout
-	if !verifyOutput(t, "stdout", stdout.String(), tc.Expect.Stdout) {
+	if !verifyOutput(t, "stdout", stdout.String(), stderr.String(), tc.Expect.Stdout) {
 		t.Errorf("Stdout mismatch for test: %s", tc.Name)
 	}
 
 	// Validate stderr
-	if !verifyOutput(t, "stderr", stderr.String(), tc.Expect.Stderr) {
+	if !verifyOutput(t, "stderr", stderr.String(), stderr.String(), tc.Expect.Stderr) {
 		t.Errorf("Stderr mismatch for test: %s", tc.Name)
 	}
 
@@ -584,7 +584,7 @@ func verifyExitCode(t *testing.T, expected, actual int) bool {
 	return success
 }
 
-func verifyOutput(t *testing.T, outputType, stdOutput string, patterns []MatchPattern) bool {
+func verifyOutput(t *testing.T, outputType, stdOutput, stderr string, patterns []MatchPattern) bool {
 	success := true
 	output, err := sanitizeOutput(stdOutput)
 	if err != nil {
@@ -602,10 +602,12 @@ func verifyOutput(t *testing.T, outputType, stdOutput string, patterns []MatchPa
 		if pattern.Negate && match {
 			t.Errorf("Reason: %s unexpectedly matched negated pattern %q.", outputType, pattern.Pattern)
 			t.Errorf("Output: %q", output)
+			t.Errorf("stderr: %q", stderr)
 			success = false
 		} else if !pattern.Negate && !match {
 			t.Errorf("Reason: %s did not match pattern %q.", outputType, pattern.Pattern)
 			t.Errorf("Output: %q", output)
+			t.Errorf("stderr: %q", stderr)
 			success = false
 		}
 	}
