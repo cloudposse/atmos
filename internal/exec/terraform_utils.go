@@ -2,9 +2,10 @@ package exec
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+
+	l "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -25,9 +26,37 @@ func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 // We delete the file to prevent the Terraform prompt asking to select the default or the
 // previously used workspace. This happens when different backends are used for the same component.
 func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPath string) {
-	filePath := filepath.Join(componentPath, ".terraform", "environment")
-	u.LogDebug(fmt.Sprintf("\nDeleting Terraform environment file:\n'%s'", filePath))
-	_ = os.Remove(filePath)
+	// Get `TF_DATA_DIR` ENV variable, default to `.terraform` if not set
+	tfDataDir := os.Getenv("TF_DATA_DIR")
+	if tfDataDir == "" {
+		tfDataDir = ".terraform"
+	}
+
+	// Convert relative path to absolute
+	if !filepath.IsAbs(tfDataDir) {
+		tfDataDir = filepath.Join(componentPath, tfDataDir)
+	}
+
+	// Ensure the path is cleaned properly
+	tfDataDir = filepath.Clean(tfDataDir)
+
+	// Construct the full file path
+	filePath := filepath.Join(tfDataDir, "environment")
+
+	// Check if the file exists before attempting deletion
+	if _, err := os.Stat(filePath); err == nil {
+		l.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
+
+		if err := os.Remove(filePath); err != nil {
+			l.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
+		} else {
+			l.Debug("Successfully deleted Terraform environment file.", "file", filePath)
+		}
+	} else if os.IsNotExist(err) {
+		l.Debug("Terraform environment file not found. No action needed.", "file", filePath)
+	} else {
+		l.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
+	}
 }
 
 func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
@@ -50,8 +79,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
-		u.LogDebug("\nWriting the backend config to file:")
-		u.LogDebug(backendFileName)
+		l.Debug("Writing the backend config to file.", "file", backendFileName)
 
 		if !info.DryRun {
 			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -74,8 +102,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
-		u.LogDebug("\nWriting the provider overrides to file:")
-		u.LogDebug(providerOverrideFileName)
+		l.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
