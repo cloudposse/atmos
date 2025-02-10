@@ -4,12 +4,17 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/charmbracelet/log"
 	"github.com/googleapis/gax-go/v2"
 	"google.golang.org/api/option"
+)
+
+const (
+	gsmOperationTimeout = 30 * time.Second
 )
 
 // GSMClient is the interface that wraps the Google Secret Manager client methods we use
@@ -53,6 +58,10 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 
 	client, err := secretmanager.NewClient(ctx, clientOpts...)
 	if err != nil {
+		// Close the client to prevent resource leaks
+		if client != nil {
+			client.Close()
+		}
 		return nil, fmt.Errorf("failed to create Secret Manager client: %w", err)
 	}
 
@@ -98,6 +107,9 @@ func (s *GSMStore) getKey(stack string, component string, key string) (string, e
 
 // Set stores a key-value pair in Google Secret Manager.
 func (s *GSMStore) Set(stack string, component string, key string, value interface{}) error {
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
 	if stack == "" {
 		return fmt.Errorf("stack cannot be empty")
 	}
@@ -113,8 +125,6 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 	if !ok {
 		return fmt.Errorf("value must be a string")
 	}
-
-	ctx := context.Background()
 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
@@ -191,6 +201,9 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 
 // Get retrieves a value by key from Google Secret Manager.
 func (s *GSMStore) Get(stack string, component string, key string) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
 	if stack == "" {
 		return nil, fmt.Errorf("stack cannot be empty")
 	}
@@ -200,8 +213,6 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 	if key == "" {
 		return nil, fmt.Errorf("key cannot be empty")
 	}
-
-	ctx := context.Background()
 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)

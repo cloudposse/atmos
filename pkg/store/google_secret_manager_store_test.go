@@ -48,11 +48,6 @@ func (m *MockGSMClient) Close() error {
 	return args.Error(0)
 }
 
-// Helper function to create a new mock client that satisfies the secretmanager.Client interface
-func newMockGSMClient() *secretmanager.Client {
-	return &secretmanager.Client{}
-}
-
 func TestGSMStore_Set(t *testing.T) {
 	testPrefix := "test-prefix"
 	testDelimiter := "-"
