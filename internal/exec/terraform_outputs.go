@@ -29,6 +29,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 	componentAbstract := false
 	componentEnabled := true
 	var err error
+	var envVarsSaved map[string]any
 
 	metadataSection, ok := sections[cfg.MetadataSectionName]
 	if ok {
@@ -48,6 +49,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 
 	// Don't process Terraform output for disabled and abstract components
 	if componentEnabled && !componentAbstract {
+
 		// Detect and set ENV variables from the `env` section
 		envSection, ok := sections[cfg.EnvSectionName]
 		if ok {
@@ -55,9 +57,19 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 			if ok2 && len(envMap) > 0 {
 				for k, v := range envMap {
 					if v != nil {
-						vstr := fmt.Sprintf("%v", v)
-						l.Debug("Setting environment variable %s=%v for component %s in stack %s", k, vstr, component, stack)
-						err := os.Setenv(k, vstr)
+						// !terraform.output function is executed in the same process as the main `atmos terraform` command
+						// If !terraform.output function sets ENV variables, they need to be removed to not pollute the process
+						// Save an existing ENV var with the same key (will be restored/removed later)
+						ev, exist := os.LookupEnv(k)
+						if exist {
+							envVarsSaved[k] = ev
+						} else {
+							envVarsSaved[k] = nil
+						}
+
+						envStr := fmt.Sprintf("%v", v)
+						l.Debug("Setting environment variable %s=%s for component %s in stack %s", k, envStr, component, stack)
+						err := os.Setenv(k, envStr)
 						if err != nil {
 							return nil, err
 						}
@@ -217,6 +229,21 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 			componentStatus = "abstract"
 		}
 		l.Debug(fmt.Sprintf("Not executing 'terraform output %s -s %s' because the component is %s", component, stack, componentStatus))
+	}
+
+	// Remove/restore the original ENV variables
+	for k, v := range envVarsSaved {
+		if v != nil {
+			err := os.Setenv(k, fmt.Sprintf("%v", v))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			err = os.Unsetenv(k)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return outputProcessed, nil
