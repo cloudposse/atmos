@@ -3,7 +3,7 @@ components:
     terraform:
         base_path: components/terraform
         apply_auto_approve: true
-        append_user_agent: Atmos/test (Cloud Posse; +https:/atmos.tools)
+        append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
         deploy_run_init: true
         init_run_reconfigure: true
         auto_generate_backend_file: false
@@ -292,7 +292,7 @@ validate:
         color: true
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 import:
-    - https:/raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml
+    - https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml
     - configs.d/**/*
     - ./logs.yaml
 
