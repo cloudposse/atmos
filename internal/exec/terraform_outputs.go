@@ -29,7 +29,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 	componentAbstract := false
 	componentEnabled := true
 	var err error
-	var envVarsSaved map[string]any
+	envVarsSaved := make(map[string]any)
 
 	metadataSection, ok := sections[cfg.MetadataSectionName]
 	if ok {
@@ -68,7 +68,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 						}
 
 						envStr := fmt.Sprintf("%v", v)
-						l.Debug("Setting environment variable %s=%s for component %s in stack %s", k, envStr, component, stack)
+						l.Debug(fmt.Sprintf("Setting environment variable %s=%s for component %s in stack %s", k, envStr, component, stack))
 						err = os.Setenv(k, envStr)
 						if err != nil {
 							return nil, err
@@ -234,11 +234,14 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 	// Restore/remove the original ENV variables
 	for k, v := range envVarsSaved {
 		if v != nil {
-			err = os.Setenv(k, fmt.Sprintf("%v", v))
+			vStr := fmt.Sprint(v)
+			l.Debug(fmt.Sprintf("Restoring environment variable %s=%s", k, vStr))
+			err = os.Setenv(k, fmt.Sprintf("%v", vStr))
 			if err != nil {
 				return nil, err
 			}
 		} else {
+			l.Debug(fmt.Sprintf("Unsetting environment variable %s", k))
 			err = os.Unsetenv(k)
 			if err != nil {
 				return nil, err
@@ -262,7 +265,7 @@ func GetTerraformOutput(
 	if !skipCache {
 		cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 		if found && cachedOutputs != nil {
-			l.Debug("cache hit for `!terraform.output %s %s %s`", component, stack, output)
+			l.Debug(fmt.Sprintf("Cache hit for '!terraform.output %s %s %s'", component, stack, output))
 			return getTerraformOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
 		}
 	}
