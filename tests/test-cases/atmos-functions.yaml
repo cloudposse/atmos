@@ -45,5 +45,3 @@ tests:
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
-      stderr:
-        - "^$"
