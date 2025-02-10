@@ -7,11 +7,13 @@ tests:
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
     args:
-      - "terraform"
-      - "deploy"
-      - "component-4"
-      - "-s"
-      - "nonprod"
+       - "terraform"
+       - "deploy"
+       - "component-4"
+       - "-s"
+       - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
     skip:
       # PTY not supported on windows
       os: !not windows
@@ -32,11 +34,13 @@ tests:
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
     args:
-      - "terraform"
-      - "deploy"
-      - "component-4"
-      - "-s"
-      - "nonprod"
+       - "terraform"
+       - "deploy"
+       - "component-4"
+       - "-s"
+       - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
     expect:
       timeout: 1m
       exit_code: 0
@@ -44,5 +48,3 @@ tests:
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
-      stderr:
-        - "^$"

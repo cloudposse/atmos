@@ -32,3 +32,6 @@ components:
       vars:
         enabled: true
         name: "test"
+      env:
+        TEST1: a
+        TEST2: b
