@@ -272,17 +272,21 @@ func GetTerraformOutput(
 
 	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
-	// Initialize spinner
-	p := NewSpinner(message)
-	spinnerDone := make(chan struct{})
-	// Run spinner in a goroutine
-	RunSpinner(p, spinnerDone, message)
-	// Ensure spinner is stopped before returning
-	defer StopSpinner(p, spinnerDone)
+	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		// Initialize spinner
+		p := NewSpinner(message)
+		spinnerDone := make(chan struct{})
+		// Run spinner in a goroutine
+		RunSpinner(p, spinnerDone, message)
+		// Ensure spinner is stopped before returning
+		defer StopSpinner(p, spinnerDone)
+	}
 
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		fmt.Printf("\r✗ %s\n", message)
+		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+			fmt.Printf("\r✗ %s\n", message)
+		}
 		l.Fatal("Failed to describe the component", "component", component, "stack", stack, "error", err)
 	}
 
@@ -290,7 +294,9 @@ func GetTerraformOutput(
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
-		fmt.Printf("\r✗ %s\n", message)
+		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+			fmt.Printf("\r✗ %s\n", message)
+		}
 		l.Fatal("Failed to get remote state backend static type outputs", "error", err)
 	}
 
@@ -303,7 +309,9 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
-			fmt.Printf("\r✗ %s\n", message)
+			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+				fmt.Printf("\r✗ %s\n", message)
+			}
 			l.Fatal("Failed to execute terraform output", "component", component, "stack", stack, "error", err)
 		}
 
@@ -312,8 +320,10 @@ func GetTerraformOutput(
 		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
 
-	// Show success
-	fmt.Printf("\r✓ %s\n", message)
+	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		// Show success
+		fmt.Printf("\r✓ %s\n", message)
+	}
 
 	return result
 }
