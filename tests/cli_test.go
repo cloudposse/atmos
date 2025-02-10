@@ -182,7 +182,25 @@ func isCIEnvironment() bool {
 
 // collapseExtraSlashes replaces multiple consecutive slashes with a single slash.
 func collapseExtraSlashes(s string) string {
-	return regexp.MustCompile("/+").ReplaceAllString(s, "/")
+	// Regex to detect URLs (e.g., https://, s3://, file://, github.com/org/repo.git//)
+	urlPattern := regexp.MustCompile(`\b[a-zA-Z][a-zA-Z0-9+\-.]*://[^\s]+`)
+
+	// Find all URLs in the string
+	urls := urlPattern.FindAllString(s, -1)
+
+	// Placeholder to replace URLs temporarily
+	placeholder := "\x01URL_PLACEHOLDER\x02"
+	modified := urlPattern.ReplaceAllString(s, placeholder)
+
+	// Collapse extra slashes in the non-URL portion
+	modified = regexp.MustCompile("/+").ReplaceAllString(modified, "/")
+
+	// Restore URLs back in place
+	for _, url := range urls {
+		modified = strings.Replace(modified, placeholder, url, 1)
+	}
+
+	return modified
 }
 
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
