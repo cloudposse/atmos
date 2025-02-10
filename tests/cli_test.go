@@ -584,9 +584,9 @@ func verifyExitCode(t *testing.T, expected, actual int) bool {
 	return success
 }
 
-func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPattern) bool {
+func verifyOutput(t *testing.T, outputType, stdOutput string, patterns []MatchPattern) bool {
 	success := true
-	sanitizeOutput, err := sanitizeOutput(output)
+	output, err := sanitizeOutput(stdOutput)
 	if err != nil {
 		t.Fatalf("failed to sanitize stdout output: %v", err)
 	}
@@ -598,16 +598,14 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 			continue
 		}
 
-		match := re.MatchString(sanitizeOutput)
+		match := re.MatchString(output)
 		if pattern.Negate && match {
 			t.Errorf("Reason: %s unexpectedly matched negated pattern %q.", outputType, pattern.Pattern)
-			t.Errorf("sanitize Output: %q", sanitizeOutput)
-			t.Errorf("stdout Output: %q", output)
+			t.Errorf("Output: %q", output)
 			success = false
 		} else if !pattern.Negate && !match {
 			t.Errorf("Reason: %s did not match pattern %q.", outputType, pattern.Pattern)
-			t.Errorf("sanitize Output: %q", sanitizeOutput)
-			t.Errorf("stdout Output: %q", output)
+			t.Errorf("Output: %q", output)
 			success = false
 		}
 	}
