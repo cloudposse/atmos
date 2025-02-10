@@ -11,6 +11,8 @@ tests:
        - "component-4"
        - "-s"
        - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
     skip:
       # PTY not supported on windows
       os: !not windows
@@ -35,6 +37,8 @@ tests:
        - "component-4"
        - "-s"
        - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
     expect:
       exit_code: 0
       stdout:
