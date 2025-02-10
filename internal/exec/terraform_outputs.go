@@ -60,16 +60,16 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 						// !terraform.output function is executed in the same process as the main `atmos terraform` command
 						// If !terraform.output function sets ENV variables, they need to be removed to not pollute the process
 						// Save an existing ENV var with the same key (will be restored/removed later)
-						ev, exist := os.LookupEnv(k)
+						existingEv, exist := os.LookupEnv(k)
 						if exist {
-							envVarsSaved[k] = ev
+							envVarsSaved[k] = existingEv
 						} else {
 							envVarsSaved[k] = nil
 						}
 
 						envStr := fmt.Sprintf("%v", v)
 						l.Debug("Setting environment variable %s=%s for component %s in stack %s", k, envStr, component, stack)
-						err := os.Setenv(k, envStr)
+						err = os.Setenv(k, envStr)
 						if err != nil {
 							return nil, err
 						}
@@ -231,10 +231,10 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 		l.Debug(fmt.Sprintf("Not executing 'terraform output %s -s %s' because the component is %s", component, stack, componentStatus))
 	}
 
-	// Remove/restore the original ENV variables
+	// Restore/remove the original ENV variables
 	for k, v := range envVarsSaved {
 		if v != nil {
-			err := os.Setenv(k, fmt.Sprintf("%v", v))
+			err = os.Setenv(k, fmt.Sprintf("%v", v))
 			if err != nil {
 				return nil, err
 			}
