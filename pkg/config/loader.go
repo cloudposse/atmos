@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/charmbracelet/log"
 
@@ -30,7 +29,6 @@ type Imports struct {
 	Level int
 }
 type ConfigLoader struct {
-	mu               sync.RWMutex
 	viper            *viper.Viper
 	atmosConfig      schema.AtmosConfiguration
 	AtmosConfigPaths []string
@@ -109,8 +107,6 @@ func (cl *ConfigLoader) loadEmbeddedConfig() error {
 
 // deepMergeConfig merges the loaded configurations.
 func (cl *ConfigLoader) deepMergeConfig() error {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
 	return cl.viper.Unmarshal(&cl.atmosConfig)
 }
 
