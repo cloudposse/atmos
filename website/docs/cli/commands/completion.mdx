@@ -30,6 +30,11 @@ When the generated completion script is loaded into the shell, pressing the tab 
 Run `atmos completion --help` to see all the available options
 :::
 
+## Configuring Your Shell
+
+To enable command completion, you need to configure your shell. The setup process depends on which shell you’re using (e.g., `zsh` or `bash`).
+
+Select your shell below for detailed setup instructions.
 
 <Tabs>
   <TabItem value="bash" label="Bash" default>
@@ -88,7 +93,7 @@ rm -f ~/.zcompdump && compinit
 </Tabs>
 
 :::warning
-Note: The Atmos command completion script is generated based on the currently active workspace. If you create the completion script outside of any workspace, it will not include custom commands from any specific workspace. If you later switch to a workspace with custom commands, the completion script will not be able to suggest them. Additionally, if you create the script in a workspace with custom commands and then switch to another workspace, it might incorrectly suggest those custom commands. To ensure accurate suggestions, it's recommended to generate or regenerate the completion script from within the appropriate workspace.
+The Atmos completion script statically completes [custom commands](/core-concepts/custom-commands) based on the Atmos configuration. If completions are generated without this configuration (e.g., outside a project directory), custom commands won’t be included. To ensure accuracy, generate or regenerate the script from the correct working directory. This only affects custom commands. Components, stacks, and built-in commands remain fully dynamic.
 :::
 
 ### Examples
