@@ -245,6 +245,7 @@ func GetTerraformOutput(
 	// Initialize spinner
 	p := NewSpinner(message)
 	spinnerDone := make(chan struct{})
+	// Run spinner in a goroutine
 	RunSpinner(p, spinnerDone, message)
 	// Ensure spinner is stopped before returning
 	defer StopSpinner(p, spinnerDone)
