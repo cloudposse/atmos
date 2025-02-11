@@ -70,6 +70,34 @@ or defaulting to "John Doe"
 atmos greet
 ```
 
+## Trailing Argument
+
+Atmos supports trailing arguments. This aregument is the one that is added by the user after `--`. 
+
+For the example, adding the following to `atmos.yaml` will introduce a new `echo` command that accepts one `name` argument and also uses trailingArgs
+
+```yaml
+- name: echo
+  description: "Displays a args before and after double dash."
+  arguments:
+    - name: name
+      description: >-
+          Enter your string as an argument
+      required: true
+      default: before double dash
+  steps:
+    - "echo Before Trailing Dash: {{ .Arguments.name }}"
+    - "echo After Trailing Dash: {{ .TrailingArgs }}"
+```
+Output:
+
+```bash
+$ atmos echo Sam -- trailing dash
+Before Trailing Dash: Sam
+After Trailing Dash: trailing dash
+```
+
+
 ## Passing Flags
 
 Passing flags works much like passing positional arguments, except for that they are passed using long or short flags.
