@@ -380,7 +380,6 @@ func processConfigFile(
 	path string,
 	v *viper.Viper,
 ) (bool, error) {
-
 	// Check if the config file exists
 	configPath, fileExists := u.SearchConfigFile(path)
 	if !fileExists {
