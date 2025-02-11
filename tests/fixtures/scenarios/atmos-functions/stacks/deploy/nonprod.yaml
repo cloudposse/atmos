@@ -28,3 +28,13 @@ components:
         foo: !terraform.output component-1 foo
         bar: !terraform.output component-2 bar
         baz: !terraform.output component-3 baz
+    component-5:
+      metadata:
+        component: mock
+      vars:
+        foo: !env ATMOS_TEST_1
+    component-6:
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.output component-5 foo
