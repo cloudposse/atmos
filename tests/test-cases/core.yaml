@@ -44,7 +44,7 @@ tests:
       stdout:
         # build/atmos is local
         # atmos/atmos is in GitHub Actions
-        - "/atmos"
+        - '(build[/\\]atmos|atmos/atmos)'
       stderr:
         - "^$"
       exit_code: 0
