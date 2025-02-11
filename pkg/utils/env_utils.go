@@ -21,8 +21,10 @@ func ConvertEnvVars(envVarsMap map[string]any) []string {
 func EnvironToMap() map[string]string {
 	envMap := make(map[string]string)
 	for _, env := range os.Environ() {
-		pair := SplitStringAtFirstOccurrence(env, '=')
-		envMap[pair[0]] = pair[1]
+		pair := SplitStringAtFirstOccurrence(env, "=")
+		k := pair[0]
+		v := pair[1]
+		envMap[k] = v
 	}
 	return envMap
 }

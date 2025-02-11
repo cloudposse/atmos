@@ -34,11 +34,10 @@ func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 }
 
 // SplitStringAtFirstOccurrence splits a string into two parts at the first occurrence of the separator
-func SplitStringAtFirstOccurrence(s string, sep byte) [2]string {
-	for i := 0; i < len(s); i++ {
-		if s[i] == sep {
-			return [2]string{s[:i], s[i+1:]}
-		}
+func SplitStringAtFirstOccurrence(s string, sep string) [2]string {
+	parts := strings.SplitN(s, sep, 2)
+	if len(parts) == 1 {
+		return [2]string{parts[0], ""}
 	}
-	return [2]string{s, ""}
+	return [2]string{parts[0], parts[1]}
 }
