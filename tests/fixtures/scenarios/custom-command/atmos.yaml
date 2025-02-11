@@ -1,0 +1,35 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+  
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+# # Use positional arguments with default values
+- name: echo
+  description: "Displays a args before and after double dash."
+  arguments:
+    - name: name
+      description: >-
+          Enter your string as an argument
+      required: true
+      default: before double dash
+  steps:
+    - "echo Before Double Dash: {{ .Arguments.name }}"
+    - "echo After Double Dash: {{ .NativeArgs }}"

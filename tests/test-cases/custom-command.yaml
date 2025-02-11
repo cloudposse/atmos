@@ -1,0 +1,21 @@
+tests:
+  - name: double dash should work
+    enabled: true
+    description: "Validate atmos custom command greet runs with argument provided."
+    workdir: "fixtures/scenarios/custom-command"
+    command: "atmos"
+    args:
+      - "echo"
+      - "Name"
+      - "--"
+      - "after"
+      - "double"
+      - "dash"
+    expect:
+      diff: []
+      stdout:
+        - "Before Double Dash: Name\n"
+        - "After Double Dash: after double dash\n"
+      stderr:
+        - "^$"
+      exit_code: 0
