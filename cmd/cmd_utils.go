@@ -409,6 +409,7 @@ func executeCustomCommand(
 	}
 }
 
+// Extracts native arguments (everything after "--") signifying the end of Atmos-specific arguments.
 func extractNativeArgs(args []string, osArgs []string) ([]string, string) {
 	doubleDashIndex := lo.IndexOf(osArgs, "--")
 	mainArgs := args
