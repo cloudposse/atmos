@@ -242,6 +242,11 @@ func TestStackProcessorRelativePaths(t *testing.T) {
 	components := mapConfig1["components"].(map[string]any)
 	terraformComponents := components["terraform"].(map[string]any)
 
-	myappComponent := terraformComponents["myapp"].(map[string]any)
-	assert.NotNil(t, myappComponent)
+	randomComponent := terraformComponents["random"].(map[string]any)
+	assert.NotNil(t, randomComponent)
+
+	// Verify the expected variables are present
+	vars := randomComponent["vars"].(map[string]any)
+	assert.Equal(t, "dev", vars["stage"])
+	assert.Equal(t, "ue2", vars["environment"])
 }
