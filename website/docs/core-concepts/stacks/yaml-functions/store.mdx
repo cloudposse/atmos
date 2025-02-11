@@ -64,13 +64,6 @@ components:
           security_group_id: !store security-group/lambda id
           security_group_id2: !store security-group/lambda2 {{ .stack }} id
           security_group_id3: !store security-group/lambda3 {{ .atmos_stack }} id
-
-          # Google Secret Manager examples
-          db_password: !store database password
-          api_key: !store api credentials | default "default-key"
-          # Cross-stack example with GSM
-          shared_secret: !store secrets {{ .stack }} api_token
-          # Using template for dynamic stack name with GSM
           config_value: !store config {{ printf "%s-%s" .vars.environment .vars.stage }} setting
 ```
 </File>

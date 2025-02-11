@@ -15,10 +15,10 @@ script.
 
 Currently, the following stores are supported:
 
-- [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
 - [Artifactory](https://jfrog.com/artifactory/)
-- [Redis](https://redis.io/)
+- [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
 - [Google Secret Manager](https://cloud.google.com/secret-manager)
+- [Redis](https://redis.io/)
 </Intro>
 
 Atmos stores are configured in the `atmos.yaml` file and available to use in stacks via the
@@ -130,58 +130,6 @@ stores:
 The AWS SSM Parameter Store supports the standard AWS methods for authentication and the `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables.
 
-### Redis
-
-```yaml
-stores:
-  dev/redis:
-    type: redis
-    options:
-      url: redis://localhost:6379
-
-  stage/redis:
-    type: redis
-    options:
-      url: !env ATMOS_STAGE_REDIS_URL
-
-  prod/redis:
-    type: redis
-    # The ATMOS_REDIS_URL environment variable will be used if no URL is specified in the options
-```
-
-<dl>
-  <dt>`stores.[store_name]`</dt>
-  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
-
-  <dt>`stores.[store_name].type`</dt>
-  <dd>Must be set to `redis`</dd>
-
-  <dt>`stores.[store_name].options`</dt>
-  <dd>A map of options specific to the store type. For Redis, the following options are supported:</dd>
-
-  <dt>`stores.[store_name].options.prefix (optional)`</dt>
-  <dd>A prefix path that will be added to all keys stored or retreived from Redis. For example if the prefix
-  is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
-  would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
-
-  <dt>`stores.[store_name].options.url`</dt>
-  <dd>
-    The URL of the Redis instance. This is optional and the `ATMOS_REDIS_URL` environment variable will be used if no
-    URL is specified in the options.
-  </dd>
-
-  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
-  <dd>
-    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
-    key path for the store.
-  </dd>
-</dl>
-
-#### Authentication
-
-The Redis store supports authentication via the URL in options or via the `ATMOS_REDIS_URL` environment variable. The
-URL format is described in the Redis [docs](https://redis.github.io/lettuce/user-guide/connecting-redis/).
-
 ### Google Secret Manager
 
 ```yaml
@@ -246,3 +194,55 @@ Google Secret Manager supports multiple authentication methods:
 
 3. **Workload Identity**: When running in GCP, you can use Workload Identity which automatically handles authentication
    between GCP services.
+
+### Redis
+
+```yaml
+stores:
+  dev/redis:
+    type: redis
+    options:
+      url: redis://localhost:6379
+
+  stage/redis:
+    type: redis
+    options:
+      url: !env ATMOS_STAGE_REDIS_URL
+
+  prod/redis:
+    type: redis
+    # The ATMOS_REDIS_URL environment variable will be used if no URL is specified in the options
+```
+
+<dl>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to `redis`</dd>
+
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For Redis, the following options are supported:</dd>
+
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix path that will be added to all keys stored or retreived from Redis. For example if the prefix
+  is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
+
+  <dt>`stores.[store_name].options.url`</dt>
+  <dd>
+    The URL of the Redis instance. This is optional and the `ATMOS_REDIS_URL` environment variable will be used if no
+    URL is specified in the options.
+  </dd>
+
+  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
+</dl>
+
+#### Authentication
+
+The Redis store supports authentication via the URL in options or via the `ATMOS_REDIS_URL` environment variable. The
+URL format is described in the Redis [docs](https://redis.github.io/lettuce/user-guide/connecting-redis/).
