@@ -77,17 +77,15 @@ Atmos supports **trailing arguments** after `--` (a standalone double-dash). The
 For the example, adding the following to `atmos.yaml` will introduce a new `echo` command that accepts one `name` argument and also uses trailingArgs
 
 ```yaml
-- name: echo
-  description: "Displays a args before and after double dash."
+- name: ansible run
+  description: "Runs an Ansible playbook, allowing extra arguments after --."
   arguments:
-    - name: name
-      description: >-
-          Enter your string as an argument
+    - name: playbook
+      description: "The Ansible playbook to run"
+      default: site.yml
       required: true
-      default: before double dash
   steps:
-    - "echo Before Trailing Dash: {{ .Arguments.name }}"
-    - "echo After Trailing Dash: {{ .TrailingArgs }}"
+    - "ansible-playbook {{ .Arguments.playbook }} {{ .TrailingArgs }}"
 ```
 Output:
 
