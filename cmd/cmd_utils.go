@@ -410,7 +410,9 @@ func executeCustomCommand(
 }
 
 // Extracts native arguments (everything after "--") signifying the end of Atmos-specific arguments.
-func extractNativeArgs(args []string, osArgs []string) ([]string, string) {
+// Because of the flag hint for double dash, args is already consumed by Cobra. 
+// So we need to perform manual parsing of os.Args to extract the "trailing args" after the "--" end of args marker. 
+func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
 	doubleDashIndex := lo.IndexOf(osArgs, "--")
 	mainArgs := args
 	nativeArguments := ""
