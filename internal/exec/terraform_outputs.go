@@ -8,20 +8,19 @@ import (
 	"sync"
 	"time"
 
+	l "github.com/charmbracelet/log"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var terraformOutputsCache = sync.Map{}
 
-func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
+func execTerraformOutput(
+	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	sections map[string]any,
@@ -78,8 +77,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 		if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 			backendFileName := filepath.Join(componentPath, "backend.tf.json")
 
-			u.LogDebug("\nWriting the backend config to file:")
-			u.LogDebug(backendFileName)
+			l.Debug("Writing the backend config to file:", "file", backendFileName)
 
 			backendTypeSection, ok := sections["backend_type"].(string)
 			if !ok {
@@ -101,18 +99,16 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 				return nil, err
 			}
 
-			u.LogDebug("\nWrote the backend config to file:")
-			u.LogDebug(backendFileName)
+			l.Debug("Wrote the backend config to file:", "file", backendFileName)
 		}
 
 		// Generate `providers_override.tf.json` file if the `providers` section is configured
-		providersSection, ok := sections["providers"].(map[string]any)
+		providersSection, ok := sections[cfg.ProvidersSectionName].(map[string]any)
 
 		if ok && len(providersSection) > 0 {
 			providerOverrideFileName := filepath.Join(componentPath, "providers_override.tf.json")
 
-			u.LogDebug("\nWriting the provider overrides to file:")
-			u.LogDebug(providerOverrideFileName)
+			l.Debug("Writing the provider overrides to file:", "file", providerOverrideFileName)
 
 			providerOverrides := generateComponentProviderOverrides(providersSection)
 			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
@@ -120,14 +116,33 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 				return nil, err
 			}
 
-			u.LogDebug("\nWrote the provider overrides to file:")
-			u.LogDebug(providerOverrideFileName)
+			l.Debug("Wrote the provider overrides to file:", "file", providerOverrideFileName)
 		}
 
 		// Initialize Terraform/OpenTofu
 		tf, err := tfexec.NewTerraform(componentPath, executable)
 		if err != nil {
 			return nil, err
+		}
+
+		// Set environment variables from the `env` section
+		envSection, ok := sections[cfg.EnvSectionName]
+		if ok {
+			envMap, ok2 := envSection.(map[string]any)
+			if ok2 && len(envMap) > 0 {
+				l.Debug("Setting environment variables from the component's 'env' section", "env", envMap)
+				// Get all environment variables from the parent process
+				environMap := u.EnvironToMap()
+				// Add/override the environment variables from the component's 'env' section
+				for k, v := range envMap {
+					environMap[k] = fmt.Sprintf("%v", v)
+				}
+				// Set the environment variables in the process that executes the `tfexec` functions
+				err = tf.SetEnv(environMap)
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
@@ -137,7 +152,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
 
-		u.LogDebug(fmt.Sprintf("\nExecuting 'terraform init %s -s %s'", component, stack))
+		l.Debug(fmt.Sprintf("Executing 'terraform init %s -s %s'", component, stack))
 
 		var initOptions []tfexec.InitOption
 		initOptions = append(initOptions, tfexec.Upgrade(false))
@@ -149,50 +164,51 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 		if err != nil {
 			return nil, err
 		}
-		u.LogDebug(fmt.Sprintf("\nExecuted 'terraform init %s -s %s'", component, stack))
+
+		l.Debug(fmt.Sprintf("Executed 'terraform init %s -s %s'", component, stack))
 
 		// Terraform workspace
-		u.LogDebug(fmt.Sprintf("\nExecuting 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+		l.Debug(fmt.Sprintf("Executing 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 		err = tf.WorkspaceNew(ctx, terraformWorkspace)
 		if err != nil {
-			u.LogDebug(fmt.Sprintf("\nWorkspace exists. Executing 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+			l.Debug(fmt.Sprintf("Workspace exists. Executing 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 			err = tf.WorkspaceSelect(ctx, terraformWorkspace)
 			if err != nil {
 				return nil, err
 			}
-			u.LogDebug(fmt.Sprintf("\nExecuted 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+			l.Debug(fmt.Sprintf("Executed 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 		} else {
-			u.LogDebug(fmt.Sprintf("\nExecuted 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+			l.Debug(fmt.Sprintf("Executed 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 		}
 
 		// Terraform output
-		u.LogDebug(fmt.Sprintf("\nExecuting 'terraform output %s -s %s'", component, stack))
+		l.Debug(fmt.Sprintf("Executing 'terraform output %s -s %s'", component, stack))
 		outputMeta, err := tf.Output(ctx)
 		if err != nil {
 			return nil, err
 		}
-		u.LogDebug(fmt.Sprintf("\nExecuted 'terraform output %s -s %s'", component, stack))
+		l.Debug(fmt.Sprintf("Executed 'terraform output %s -s %s'", component, stack))
 
 		if atmosConfig.Logs.Level == u.LogLevelTrace {
 			y, err2 := u.ConvertToYAML(outputMeta)
 			if err2 != nil {
-				u.LogError(err2)
+				l.Error("Error converting output to YAML:", "error", err2)
 			} else {
-				u.LogDebug(fmt.Sprintf("\nResult of 'terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
+				l.Debug(fmt.Sprintf("Result of 'terraform output %s -s %s' before processing it:\n%s\n", component, stack, y))
 			}
 		}
 
 		outputProcessed = lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
 			s := string(v.Value)
-			u.LogDebug(fmt.Sprintf("Converting the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\n", k, s))
+			l.Debug(fmt.Sprintf("Converting the variable '%s' with the value\n%s\nfrom JSON to Go data type\n", k, s))
 
 			d, err2 := u.ConvertFromJSON(s)
 
 			if err2 != nil {
-				u.LogError(fmt.Errorf("failed to convert output '%s': %w", k, err2))
+				l.Error("failed to convert output", "output", s, "error", err2)
 				return k, nil
 			} else {
-				u.LogDebug(fmt.Sprintf("Converted the variable '%s' with the value\n%s\nfrom JSON to 'Go' data type\nResult: %v\n", k, s, d))
+				l.Debug("Converted the variable from JSON to Go data type", "key", k, "value", s, "result", d)
 			}
 
 			return k, d
@@ -202,7 +218,7 @@ func execTerraformOutput(atmosConfig *schema.AtmosConfiguration,
 		if componentAbstract {
 			componentStatus = "abstract"
 		}
-		u.LogDebug(fmt.Sprintf("\nNot executing 'terraform output %s -s %s' because the component is %s", component, stack, componentStatus))
+		l.Debug(fmt.Sprintf("Not executing 'terraform output %s -s %s' because the component is %s", component, stack, componentStatus))
 	}
 
 	return outputProcessed, nil
@@ -216,60 +232,44 @@ func GetTerraformOutput(
 	skipCache bool,
 ) any {
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	if !skipCache {
 		cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
 		if found && cachedOutputs != nil {
-			u.LogDebug(fmt.Sprintf("Found the result of the Atmos YAML function '!terraform.output %s %s %s' in the cache", component, stack, output))
+			l.Debug(fmt.Sprintf("Cache hit for '!terraform.output %s %s %s'", component, stack, output))
 			return getTerraformOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
 		}
 	}
 
-	// Initialize spinner
-	s := spinner.New()
-	s.Style = theme.Styles.Link
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
-	var opts []tea.ProgramOption
-	if !CheckTTYSupport() {
-		// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue
-		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-		u.LogTrace("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		fmt.Println(message)
+	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		// Initialize spinner
+		p := NewSpinner(message)
+		spinnerDone := make(chan struct{})
+		// Run spinner in a goroutine
+		RunSpinner(p, spinnerDone, message)
+		// Ensure spinner is stopped before returning
+		defer StopSpinner(p, spinnerDone)
 	}
-
-	p := tea.NewProgram(modelSpinner{
-		spinner: s,
-		message: message,
-	}, opts...)
-
-	spinnerDone := make(chan struct{})
-	go func() {
-		if _, err := p.Run(); err != nil {
-			// If there's any error running the spinner, just print the message
-			fmt.Println(message)
-			u.LogError(fmt.Errorf("failed to run spinner: %w", err))
-		}
-		close(spinnerDone)
-	}()
 
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		p.Quit()
-		<-spinnerDone
-		fmt.Printf("\r✗ %s\n", message)
-		u.LogErrorAndExit(err)
+		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+			fmt.Printf("\r✗ %s\n", message)
+		}
+		l.Fatal("Failed to describe the component", "component", component, "stack", stack, "error", err)
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
-		p.Quit()
-		<-spinnerDone
-		fmt.Printf("\r✗ %s\n", message)
-		u.LogErrorAndExit(err)
+		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+			fmt.Printf("\r✗ %s\n", message)
+		}
+		l.Fatal("Failed to get remote state backend static type outputs", "error", err)
 	}
 
 	var result any
@@ -281,10 +281,10 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
-			p.Quit()
-			<-spinnerDone
-			fmt.Printf("\r✗ %s\n", message)
-			u.LogErrorAndExit(err)
+			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+				fmt.Printf("\r✗ %s\n", message)
+			}
+			l.Fatal("Failed to execute terraform output", "component", component, "stack", stack, "error", err)
 		}
 
 		// Cache the result
@@ -292,10 +292,10 @@ func GetTerraformOutput(
 		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
 
-	// Stop spinner and show success
-	p.Quit()
-	<-spinnerDone
-	fmt.Printf("\r✓ %s\n", message)
+	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		// Show success
+		fmt.Printf("\r✓ %s\n", message)
+	}
 
 	return result
 }
@@ -314,12 +314,7 @@ func getTerraformOutputVariable(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
 	if err != nil {
-		u.LogErrorAndExit(fmt.Errorf("error evaluating terrform output '%s' for the component '%s' in the stack '%s':\n%v",
-			output,
-			component,
-			stack,
-			err,
-		))
+		l.Fatal("Error evaluating terraform output", "output", output, "component", component, "stack", stack, "error", err)
 	}
 
 	return res
@@ -339,12 +334,7 @@ func getStaticRemoteStateOutput(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
 	if err != nil {
-		u.LogErrorAndExit(fmt.Errorf("error evaluating the 'static' remote state backend output '%s' for the component '%s' in the stack '%s':\n%v",
-			output,
-			component,
-			stack,
-			err,
-		))
+		l.Fatal("Error evaluating the 'static' remote state backend output", "output", output, "component", component, "stack", stack, "error", err)
 	}
 
 	return res
