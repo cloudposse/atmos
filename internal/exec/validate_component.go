@@ -32,6 +32,15 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 	componentName := args[0]
 
+	// Initialize spinner
+	message := fmt.Sprintf("Validating Atmos Component: %s", componentName)
+	p := NewSpinner(message)
+	spinnerDone := make(chan struct{})
+	// Run spinner in a goroutine
+	RunSpinner(p, spinnerDone, message)
+	// Ensure spinner is stopped before returning
+	defer StopSpinner(p, spinnerDone)
+
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
