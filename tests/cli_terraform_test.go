@@ -75,7 +75,6 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Verify if state files have been deleted after clean
 	verifyStateFilesDeleted(t, stateFiles)
-
 }
 
 // runTerraformApply runs the terraform apply command for a given environment.
@@ -159,7 +158,6 @@ func runCLITerraformClean(t *testing.T, binaryPath string) {
 	if err != nil {
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
-
 }
 
 func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
