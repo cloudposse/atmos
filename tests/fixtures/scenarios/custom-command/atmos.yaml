@@ -32,4 +32,4 @@ commands:
       default: before double dash
   steps:
     - "echo Before Double Dash: {{ .Arguments.name }}"
-    - "echo After Double Dash: {{ .NativeArgs }}"
+    - "echo After Double Dash: {{ .TrailingArgs }}"

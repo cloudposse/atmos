@@ -271,7 +271,7 @@ func executeCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var err error
-	args, nativeArguments := extractNativeArgs(args, os.Args)
+	args, trailingArgs := extractNativeArgs(args, os.Args)
 	if commandConfig.Verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
@@ -312,9 +312,9 @@ func executeCustomCommand(
 
 		// Prepare template data
 		data := map[string]any{
-			"Arguments":  argumentsData,
-			"Flags":      flagsData,
-			"NativeArgs": nativeArguments,
+			"Arguments":    argumentsData,
+			"Flags":        flagsData,
+			"TrailingArgs": trailingArgs,
 		}
 
 		// If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
@@ -413,10 +413,10 @@ func executeCustomCommand(
 func extractNativeArgs(args []string, osArgs []string) ([]string, string) {
 	doubleDashIndex := lo.IndexOf(osArgs, "--")
 	mainArgs := args
-	nativeArguments := ""
+	trailingArgs := ""
 	if doubleDashIndex > 0 {
 		mainArgs = lo.Slice(osArgs, 0, doubleDashIndex)
-		nativeArguments = strings.Join(lo.Slice(osArgs, doubleDashIndex+1, len(osArgs)), " ")
+		trailingArgs = strings.Join(lo.Slice(osArgs, doubleDashIndex+1, len(osArgs)), " ")
 		result := []string{}
 		lookup := make(map[string]bool)
 
@@ -433,7 +433,7 @@ func extractNativeArgs(args []string, osArgs []string) ([]string, string) {
 		}
 		mainArgs = result
 	}
-	return mainArgs, nativeArguments
+	return mainArgs, trailingArgs
 }
 
 // cloneCommand clones a custom command config into a new struct
