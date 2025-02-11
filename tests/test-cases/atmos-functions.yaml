@@ -11,6 +11,8 @@ tests:
        - "component-4"
        - "-s"
        - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
     skip:
       # PTY not supported on windows
       os: !not windows
@@ -35,11 +37,11 @@ tests:
        - "component-4"
        - "-s"
        - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
     expect:
       exit_code: 0
       stdout:
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
-      stderr:
-        - "^$"
