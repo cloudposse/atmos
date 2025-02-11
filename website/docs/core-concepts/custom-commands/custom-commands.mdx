@@ -70,7 +70,7 @@ or defaulting to "John Doe"
 atmos greet
 ```
 
-## Trailing Argument
+## Trailing Arguments
 
 Atmos supports **trailing arguments** after `--` (a standalone double-dash). The `--` itself is a delimiter that signals the end of Atmos-specific options. Anything after `--` is passed directly to the underlying command without being interpreted by Atmos. The value of these trailing arguments is accessible in `{{ .TrailingArgs }}`.
 
