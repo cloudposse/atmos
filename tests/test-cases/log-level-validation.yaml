@@ -34,6 +34,9 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: XTrace
     expect:
+      stderr:
+        - "XTrace"
+        - "Valid options are"
       diff: []
       exit_code: 1
 
