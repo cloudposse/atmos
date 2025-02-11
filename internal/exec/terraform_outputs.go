@@ -130,9 +130,15 @@ func execTerraformOutput(
 		if ok {
 			envMap, ok2 := envSection.(map[string]any)
 			if ok2 && len(envMap) > 0 {
-				l.Debug("Setting environment variables", "env", envMap)
-				m := u.MapOfInterfacesToMapOfStrings(envMap)
-				err = tf.SetEnv(m)
+				l.Debug("Setting environment variables from the component's 'env' section", "env", envMap)
+				// Get all environment variables from the parent process
+				environMap := u.EnvironToMap()
+				// Add/override the environment variables from the component's 'env' section
+				for k, v := range envMap {
+					environMap[k] = fmt.Sprintf("%v", v)
+				}
+				// Set the environment variables in the process that executes the `tfexec` functions
+				err = tf.SetEnv(environMap)
 				if err != nil {
 					return nil, err
 				}
