@@ -90,9 +90,11 @@ For the example, adding the following to `atmos.yaml` will introduce a new `echo
 Output:
 
 ```bash
-$ atmos echo Sam -- trailing dash
-Before Trailing Dash: Sam
-After Trailing Dash: trailing dash
+$ atmos ansible run -- --limit web
+Running: ansible-playbook site.yml --limit web
+
+PLAY [web] *********************************************************************
+
 ```
 
 
