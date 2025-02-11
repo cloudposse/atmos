@@ -364,32 +364,48 @@ type spinnerViewportModel struct {
 	msgs     chan tea.Msg // Channel for UI updates
 }
 
+// Custom message type for updating logs
+type lineMsg string
+
 func (m spinnerViewportModel) Init() tea.Cmd {
+	// Start listening for updates in a separate goroutine
 	go func() {
 		for line := range m.updates {
 			m.msgs <- lineMsg(line) // Send UI update message for each line
 		}
-		close(m.msgs) // Close when done
+		close(m.msgs) // Close UI update channel when done
 	}()
-	return m.spinner.Tick
+
+	return tea.Batch(m.spinner.Tick, waitForLogMsg(m.msgs))
 }
 
-// Custom message type for updating logs
-type lineMsg string
+// **New Function to Listen for Log Messages**
+func waitForLogMsg(msgs chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-msgs
+		if !ok {
+			return nil // No more messages
+		}
+		return msg
+	}
+}
 
 func (m spinnerViewportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		return m, tea.Batch(cmd, waitForLogMsg(m.msgs)) // Keep listening for log updates
 
 	case lineMsg:
 		m.viewport.SetContent(m.viewport.View() + "\n" + string(msg)) // Append new log line
-		return m, nil
+		return m, waitForLogMsg(m.msgs)                               // Keep waiting for new log messages
 
 	case tea.KeyMsg:
-		return m, tea.Quit
+		return m, tea.Quit // Allow user to quit with a key
+
+	case nil:
+		return m, nil // No update required
 	}
 
 	return m, nil
@@ -412,7 +428,7 @@ func newSpinnerViewportModel(title string, updates chan string, done chan struct
 		title:    title,
 		updates:  updates,
 		done:     done,
-		msgs:     make(chan tea.Msg), // Initialize UI update channel
+		msgs:     make(chan tea.Msg, 100), // Buffered channel for UI updates
 	}
 }
 
