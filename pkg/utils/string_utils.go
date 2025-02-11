@@ -32,3 +32,12 @@ func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 
 	return parts, nil
 }
+
+// SplitStringAtFirstOccurrence splits a string into two parts at the first occurrence of the separator
+func SplitStringAtFirstOccurrence(s string, sep string) [2]string {
+	parts := strings.SplitN(s, sep, 2)
+	if len(parts) == 1 {
+		return [2]string{parts[0], ""}
+	}
+	return [2]string{parts[0], parts[1]}
+}
