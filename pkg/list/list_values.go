@@ -11,7 +11,6 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/jmespath/go-jmespath"
 )
 
 const (
@@ -19,10 +18,26 @@ const (
 	DefaultTSVDelimiter = "\t"
 )
 
+// getMapKeys returns a sorted slice of map keys
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // FilterAndListValues filters and lists component values across stacks
 func FilterAndListValues(stacksMap map[string]interface{}, component, query string, includeAbstract bool, maxColumns int, format, delimiter string) (string, error) {
 	if err := ValidateFormat(format); err != nil {
 		return "", err
+	}
+
+	// Get terminal width for table format
+	termWidth := utils.GetTerminalWidth()
+	if termWidth == 0 {
+		termWidth = 80 // Default width if terminal width cannot be determined
 	}
 
 	// Set default delimiters based on format
@@ -48,16 +63,26 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 			continue
 		}
 
-		if componentConfig, exists := terraform[component]; exists {
-			// Skip abstract components if not included
-			if !includeAbstract {
-				if config, ok := componentConfig.(map[string]interface{}); ok {
+		// Handle both direct and terraform/ prefixed component names
+		componentName := component
+		if strings.HasPrefix(component, "terraform/") {
+			componentName = strings.TrimPrefix(component, "terraform/")
+		}
+
+		if componentConfig, exists := terraform[componentName]; exists {
+			// Extract vars from component config
+			if config, ok := componentConfig.(map[string]interface{}); ok {
+				// Skip abstract components if not included
+				if !includeAbstract {
 					if isAbstract, ok := config["abstract"].(bool); ok && isAbstract {
 						continue
 					}
 				}
+				// Get vars from component config
+				if componentVars, ok := config["vars"].(map[string]interface{}); ok {
+					filteredStacks[stackName] = componentVars
+				}
 			}
-			filteredStacks[stackName] = componentConfig
 		}
 	}
 
@@ -67,13 +92,72 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 
 	// Apply JMESPath query if provided
 	if query != "" {
+		result := make(map[string]interface{})
 		for stackName, stackData := range filteredStacks {
-			result, err := jmespath.Search(query, stackData)
-			if err != nil {
-				return "", fmt.Errorf("error applying query to stack '%s': %w", stackName, err)
+			// Ensure we have a valid map to query
+			data, ok := stackData.(map[string]interface{})
+			if !ok {
+				return "", fmt.Errorf("invalid data structure for stack '%s'", stackName)
 			}
-			filteredStacks[stackName] = result
+
+			// For empty query, return all data
+			if query == "" {
+				result[stackName] = data
+				continue
+			}
+
+			// Process the query path
+			queryPath := strings.TrimPrefix(query, ".")
+
+			// Direct access for single key
+			if value, exists := data[queryPath]; exists {
+				result[stackName] = value
+				continue
+			}
+
+			// For nested paths, attempt to access the nested value
+			parts := strings.Split(queryPath, ".")
+			currentValue := interface{}(data)
+
+			for _, part := range parts {
+				if part == "" {
+					continue
+				}
+				if mapValue, ok := currentValue.(map[string]interface{}); ok {
+					if value, exists := mapValue[part]; exists {
+						currentValue = value
+						continue
+					}
+				}
+				currentValue = nil
+				break
+			}
+
+			// Add the value to the result if we found one
+			if currentValue != nil {
+				result[stackName] = currentValue
+			}
+
 		}
+		filteredStacks = result
+	}
+
+	// For scalar results, create a simple key-value structure
+	isScalar := true
+	for _, val := range filteredStacks {
+		if _, ok := val.(map[string]interface{}); ok {
+			isScalar = false
+			break
+		}
+	}
+
+	if isScalar {
+		// Create a map with stack names as keys and scalar values
+		result := make(map[string]interface{})
+		for stackName, val := range filteredStacks {
+			result[stackName] = val
+		}
+		filteredStacks = result
 	}
 
 	// Get all unique keys from all stacks
@@ -141,28 +225,43 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 
 	// Handle different output formats
 	switch format {
-	case FormatJSON:
+	case FormatJSON, FormatYAML:
 		// Create a map of stacks and their values
 		result := make(map[string]interface{})
-		for i, stackName := range stackNames {
-			stackValues := make(map[string]interface{})
-			for _, row := range rows {
-				if row[i+1] != "" {
-					var value interface{}
-					if err := json.Unmarshal([]byte(row[i+1]), &value); err == nil {
-						stackValues[row[0]] = value
-					} else {
-						stackValues[row[0]] = row[i+1]
+		for _, stackName := range stackNames {
+			val := filteredStacks[stackName]
+			// For scalar values, use them directly
+			if _, ok := val.(map[string]interface{}); !ok {
+				result[stackName] = val
+			} else {
+				// For map values, process each row
+				stackValues := make(map[string]interface{})
+				for _, row := range rows {
+					if row[1] != "" {
+						var value interface{}
+						if err := json.Unmarshal([]byte(row[1]), &value); err == nil {
+							stackValues[row[0]] = value
+						} else {
+							stackValues[row[0]] = row[1]
+						}
 					}
 				}
+				result[stackName] = stackValues
 			}
-			result[stackName] = stackValues
 		}
-		jsonBytes, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			return "", fmt.Errorf("error formatting JSON output: %w", err)
+		if format == FormatJSON {
+			jsonBytes, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				return "", fmt.Errorf("error formatting JSON output: %w", err)
+			}
+			return string(jsonBytes), nil
+		} else {
+			yamlBytes, err := utils.ConvertToYAML(result)
+			if err != nil {
+				return "", fmt.Errorf("error formatting YAML output: %w", err)
+			}
+			return string(yamlBytes), nil
 		}
-		return string(jsonBytes), nil
 
 	case FormatCSV, FormatTSV:
 		var output strings.Builder
@@ -173,6 +272,27 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		return output.String(), nil
 
 	default:
+		// Calculate total table width
+		totalWidth := 0
+		colWidths := make([]int, len(header))
+		
+		// Calculate max width for each column
+		for col := range header {
+			maxWidth := len(header[col])
+			for _, row := range rows {
+				if len(row[col]) > maxWidth {
+					maxWidth = len(row[col])
+				}
+			}
+			colWidths[col] = maxWidth
+			totalWidth += maxWidth + 3 // Add padding and border
+		}
+
+		// Check if table width exceeds terminal width
+		if totalWidth > termWidth {
+			return "", fmt.Errorf("the table is too wide to display properly (width: %d > %d). Try selecting a more specific range (e.g., .vars.tags instead of .vars), reducing the number of stacks, or increasing your terminal width", totalWidth, termWidth)
+		}
+
 		// If format is empty or "table", use table format
 		if format == "" && exec.CheckTTYSupport() {
 			// Create a styled table for TTY

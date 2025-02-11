@@ -23,6 +23,7 @@ var listValuesCmd = &cobra.Command{
 		"atmos list values vpc --abstract\n" +
 		"atmos list values vpc --max-columns 5\n" +
 		"atmos list values vpc --format json\n" +
+		"atmos list values vpc --format yaml\n" +
 		"atmos list values vpc --format csv",
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -100,6 +101,7 @@ var listVarsCmd = &cobra.Command{
 		"atmos list vars vpc --abstract\n" +
 		"atmos list vars vpc --max-columns 5\n" +
 		"atmos list vars vpc --format json\n" +
+		"atmos list vars vpc --format yaml\n" +
 		"atmos list vars vpc --format csv",
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -119,7 +121,7 @@ func init() {
 		cmd.PersistentFlags().String("query", "", "JMESPath query to filter values")
 		cmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
 		cmd.PersistentFlags().Int("max-columns", 10, "Maximum number of columns to display")
-		cmd.PersistentFlags().String("format", "", "Output format (table, json, csv, tsv)")
+		cmd.PersistentFlags().String("format", "", "Output format (table, json, yaml, csv, tsv)")
 		cmd.PersistentFlags().String("delimiter", "\t", "Delimiter for csv/tsv output (default: tab for tsv, comma for csv)")
 	}
 

@@ -22,6 +22,7 @@ import (
 const (
 	FormatTable = "table"
 	FormatJSON  = "json"
+	FormatYAML  = "yaml"
 	FormatCSV   = "csv"
 	FormatTSV   = "tsv"
 )
@@ -31,7 +32,7 @@ func ValidateFormat(format string) error {
 	if format == "" {
 		return nil
 	}
-	validFormats := []string{FormatTable, FormatJSON, FormatCSV, FormatTSV}
+	validFormats := []string{FormatTable, FormatJSON, FormatYAML, FormatCSV, FormatTSV}
 	for _, f := range validFormats {
 		if format == f {
 			return nil
