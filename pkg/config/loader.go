@@ -118,7 +118,7 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 	var configPaths []string
 	// get all --config values from command line arguments
 	for _, configPath := range configPathsArgs {
-		paths, err := cl.SearchAtmosConfigFileDir(configPath)
+		paths, err := cl.SearchAtmosConfig(configPath)
 		if err != nil {
 			log.Debug("Failed to find config file in directory", "path", configPath, "error", err)
 			continue
@@ -240,7 +240,7 @@ func (cl *ConfigLoader) getPathAtmosCLIConfigPath(atmosCliConfigPathEnv string) 
 		log.Debug("Failed to find config", "path", atmosCliConfigPathEnv)
 	}
 	searchDir := filepath.Join(filepath.FromSlash(atmosCliConfigPathEnv), "atmos.d/**/*")
-	foundPaths, err := cl.SearchAtmosConfigFileDir(searchDir)
+	foundPaths, err := cl.SearchAtmosConfig(searchDir)
 	if err != nil {
 		log.Debug("Failed to find config file in directory", "path", searchDir, "error", err)
 	}
@@ -340,7 +340,7 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 		log.Debug("Failed to find config file atmos in work directory", "path", workDir)
 	}
 	searchDir := filepath.Join(filepath.FromSlash(workDir), "atmos.d/**/*")
-	foundPaths, err := cl.SearchAtmosConfigFileDir(searchDir)
+	foundPaths, err := cl.SearchAtmosConfig(searchDir)
 	if err != nil {
 		log.Debug("Failed to find work dir atmos config file", "path", searchDir, "error", err)
 	}
@@ -350,7 +350,7 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths...)
 	}
 	searchDir = filepath.Join(filepath.FromSlash(workDir), ".atmos.d/**/*")
-	foundPaths, err = cl.SearchAtmosConfigFileDir(searchDir)
+	foundPaths, err = cl.SearchAtmosConfig(searchDir)
 	if err != nil {
 		log.Debug("Failed to find work dir atmos config file", "path", searchDir, "error", err)
 	}
@@ -441,7 +441,7 @@ func (cl *ConfigLoader) getGitAtmosConfigPaths(gitRootDir string) ([]string, err
 		log.Debug("Failed to find config file atmos in git directory", "path", gitRootDir)
 	}
 	searchDir := filepath.Join(filepath.FromSlash(gitRootDir), "atmos.d/**/*")
-	foundPaths, err := cl.SearchAtmosConfigFileDir(searchDir)
+	foundPaths, err := cl.SearchAtmosConfig(searchDir)
 	if err != nil {
 		log.Debug("Failed to find git atmos config file in path", "path", searchDir, "error", err)
 	}
@@ -451,7 +451,7 @@ func (cl *ConfigLoader) getGitAtmosConfigPaths(gitRootDir string) ([]string, err
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths...)
 	}
 	searchDir = filepath.Join(filepath.FromSlash(gitRootDir), ".atmos.d/**/*")
-	foundPaths, err = cl.SearchAtmosConfigFileDir(searchDir)
+	foundPaths, err = cl.SearchAtmosConfig(searchDir)
 	if err != nil {
 		log.Debug("Failed to find git atmos config file in path", "path", searchDir, "error", err)
 	}
@@ -600,59 +600,80 @@ func (cl *ConfigLoader) getSystemConfigPath() ([]string, bool) {
 	return configFilesPaths, false
 }
 
-func (cl *ConfigLoader) SearchAtmosConfigFileDir(dirPath string) ([]string, error) {
-	// Determine if dirPath is a directory or a pattern
-	isDir := false
-	if stat, err := os.Stat(dirPath); err == nil && stat.IsDir() {
-		isDir = true
+// SearchAtmosConfig searches for a config file in path. path is directory,file or a pattern .
+func (cl *ConfigLoader) SearchAtmosConfig(path string) ([]string, error) {
+	// Generate patterns based on whether path is a directory or a file/pattern
+	patterns, err := cl.generatePatterns(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate search patterns: %w", err)
 	}
-	// Normalize dirPath to include patterns if it's a directory
-	var patterns []string
-
-	if isDir {
-		// For directories, append a default pattern to match all files
-		patterns = []string{filepath.Join(dirPath, "*.yaml"), filepath.Join(dirPath, "*.yml")}
-	} else {
-
-		ext := filepath.Ext(dirPath)
-		if ext == "" {
-			impYaml := dirPath + ".yaml"
-			impYml := dirPath + ".yml"
-			patterns = append(patterns, impYaml, impYml)
-		} else {
-			patterns = append(patterns, dirPath)
-		}
-
+	// Find files matching the patterns
+	atmosFilePaths, err := cl.findMatchingFiles(patterns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find matching files: %w", err)
 	}
-
-	// sort fileExtension in ascending order to prioritize  .yaml over .yml
-	var atmosFilePaths []string
-	for _, pattern := range patterns {
-		filePaths, err := u.GetGlobMatches(pattern)
-		if err != nil {
-			log.Debug("error getting glob matches for path", "path", pattern, "error", err)
-			continue
-		}
-		atmosFilePaths = append(atmosFilePaths, filePaths...)
+	// Convert paths to absolute paths
+	atmosFilePathsABS, err := cl.convertToAbsolutePaths(atmosFilePaths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert paths to absolute paths: %w", err)
 	}
-	if atmosFilePaths == nil {
-		return nil, fmt.Errorf("no files matching name `atmos` with extensions [.yaml,.yml]  found in the provided directory: %s", dirPath)
-	}
-	var atmosFilePathsABS []string
-	for _, path := range atmosFilePaths {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			log.Debug("error getting absolute path for file", "path", path, "error", err)
-			continue
-		}
-		atmosFilePathsABS = append(atmosFilePathsABS, absPath)
-	}
-
+	// Prioritize and sort files
 	atmosFilePathsABS = cl.detectPriorityFiles(atmosFilePathsABS)
 	atmosFilePathsABS = cl.sortFilesByDepth(atmosFilePathsABS)
 	return atmosFilePathsABS, nil
 }
 
+// Helper function to generate search patterns for extension yaml,yml
+func (cl *ConfigLoader) generatePatterns(path string) ([]string, error) {
+	isDir := false
+	if stat, err := os.Stat(path); err == nil && stat.IsDir() {
+		isDir = true
+	}
+	if isDir {
+		// Search for all .yaml and .yml files in the directory one level
+		patterns := []string{
+			filepath.Join(path, "*.yaml"),
+			filepath.Join(path, "*.yml"),
+		}
+		return patterns, nil
+	}
+	// Handle as a file path or pattern
+	ext := filepath.Ext(path)
+	if ext == "" {
+		// If no extension, append .yaml and .yml
+		patterns := []string{
+			filepath.Join(path, ".yaml"),
+			filepath.Join(path, ".yml"),
+		}
+		return patterns, nil
+	}
+	// If extension is present, use the path as-is
+	patterns := []string{path}
+
+	return patterns, nil
+}
+
+// Helper function to find files matching the patterns
+func (cl *ConfigLoader) findMatchingFiles(patterns []string) ([]string, error) {
+	var filePaths []string
+	for _, pattern := range patterns {
+		matches, err := u.GetGlobMatches(pattern)
+		if err != nil {
+			log.Debug("Error getting glob matches for path", "path", pattern, "error", err)
+			continue
+		}
+		filePaths = append(filePaths, matches...)
+	}
+
+	if len(filePaths) == 0 {
+		return nil, fmt.Errorf("no files matching patterns found")
+	}
+
+	return filePaths, nil
+}
+
+// searchConfigFilePath searches for a config file in path.
+// If no extension is provided it checks for both .yaml and .yml extensions. prioritize  .yaml over .yml
 func (cl *ConfigLoader) SearchConfigFilePath(path string) (string, bool) {
 	// Check if the provided path has a file extension and the file exists
 	if filepath.Ext(path) != "" {
@@ -670,6 +691,25 @@ func (cl *ConfigLoader) SearchConfigFilePath(path string) (string, bool) {
 	}
 
 	return "", false
+}
+
+// Helper function to convert paths to absolute paths
+func (cl *ConfigLoader) convertToAbsolutePaths(filePaths []string) ([]string, error) {
+	var absPaths []string
+	for _, path := range filePaths {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			log.Debug("Error getting absolute path for file", "path", path, "error", err)
+			continue
+		}
+		absPaths = append(absPaths, absPath)
+	}
+
+	if len(absPaths) == 0 {
+		return nil, fmt.Errorf("no valid absolute paths found")
+	}
+
+	return absPaths, nil
 }
 
 // detectPriorityFiles detects which files will have priority .  yaml win over yml if file has same path

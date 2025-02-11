@@ -67,7 +67,7 @@ func TestSearchAtmosConfigFileDir_ReturnsConfigFilesWithSupportedExtensions(t *t
 		viper:       viper,
 		atmosConfig: schema.AtmosConfiguration{},
 	}
-	got, err := cl.SearchAtmosConfigFileDir(tmpDir)
+	got, err := cl.SearchAtmosConfig(tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -84,17 +84,18 @@ func (cl *ConfigLoader) inferBasePath() (string, bool) {
 		return "", false
 	}
 
-	// Check for atmos.yaml or .atmos.yaml
+	// Check for atmos.yaml or atmos.yml
 	if basePath, found := cl.checkConfigFileOrDir(filepath.Join(cwd, CliConfigFileName), "atmos configuration directory", false); found {
 		return basePath, true
 	}
-	// Check for .atmos directory
+	// Check for .atmos.yaml or .atmos.yml
 	if basePath, found := cl.checkConfigFileOrDir(filepath.Join(cwd, ".atmos"), ".atmos configuration directory", false); found {
 		return basePath, true
 	}
+	// Check for atmos.d directory exist
 	found, _ := u.IsDirectory(filepath.ToSlash(filepath.Join(cwd, "atmos.d")))
 	if found {
-		// Check for atmos.d directory
+		// Check for atmos.d directory has .yaml r .yml files
 		if basePath, found := cl.checkConfigFileOrDir(filepath.Join(cwd, "atmos.d"), "atmos.d/ directory", true); found {
 			return basePath, true
 		}
@@ -111,7 +112,7 @@ func (cl *ConfigLoader) inferBasePath() (string, bool) {
 	return "", false
 }
 
-// checkConfigFileOrDir checks for the existence of a file or directory and returns the base path if found.
+// checkConfigFileOrDir checks for the existence of a atmos config file and returns the base path if found.
 func (cl *ConfigLoader) checkConfigFileOrDir(path, desc string, isDir bool) (string, bool) {
 	if isDir {
 		filePaths, _ := u.GetGlobMatches(filepath.ToSlash(filepath.Join(path, "**/*.yaml")))
@@ -119,8 +120,10 @@ func (cl *ConfigLoader) checkConfigFileOrDir(path, desc string, isDir bool) (str
 			filePaths, _ = u.GetGlobMatches(filepath.ToSlash(filepath.Join(path, "**/*.yml")))
 		}
 		if len(filePaths) > 0 {
+			// sort files by depth
 			filePaths = cl.sortFilesByDepth(filePaths)
 			log.Debug("base path inferred from "+desc, "path", filepath.Dir(filePaths[0]))
+			// return directory of first file found
 			return filepath.Dir(filePaths[0]), true
 		}
 

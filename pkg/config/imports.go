@@ -137,7 +137,7 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 			"basePath", basePath,
 		)
 	}
-	paths, err := cl.SearchAtmosConfigFileDir(localPath)
+	paths, err := cl.SearchAtmosConfig(localPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve local import path '%s': %v", importPath, err)
 	}
