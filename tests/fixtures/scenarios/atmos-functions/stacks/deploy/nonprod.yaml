@@ -28,4 +28,3 @@ components:
         foo: !terraform.output component-1 foo
         bar: !terraform.output component-2 bar
         baz: !terraform.output component-3 baz
-

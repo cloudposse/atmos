@@ -148,6 +148,7 @@ func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string)
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
 }
+
 func runCLITerraformClean(t *testing.T, binaryPath string) {
 	cmd := exec.Command(binaryPath, "terraform", "clean")
 	var stdout, stderr bytes.Buffer
