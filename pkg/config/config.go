@@ -134,6 +134,9 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	v.SetDefault("settings.inject_github_token", true)
 
+	v.SetDefault("logs.file", "/dev/stderr")
+	v.SetDefault("logs.level", "Info")
+
 	// Process config in system folder
 	configFilePath1 := ""
 
@@ -382,6 +385,7 @@ func processConfigFile(
 	if !fileExists {
 		return false, nil
 	}
+
 	reader, err := os.Open(configPath)
 	if err != nil {
 		return false, err
