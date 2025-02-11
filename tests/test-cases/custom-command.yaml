@@ -8,14 +8,16 @@ tests:
       - "echo"
       - "Name"
       - "--"
-      - "after"
-      - "double"
-      - "dash"
+      - "-this"
+      - "--is"
+      - "trailing"
+      - "-"
+      - "arg"
     expect:
       diff: []
       stdout:
-        - "Before Double Dash: Name\n"
-        - "After Double Dash: after double dash\n"
+        - "Cobra Args: \\[Name\\]"
+        - "Trailing Args: \\[-this --is trailing - arg\\]"
       stderr:
         - "^$"
       exit_code: 0
