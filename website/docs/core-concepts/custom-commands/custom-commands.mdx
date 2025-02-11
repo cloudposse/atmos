@@ -72,7 +72,7 @@ atmos greet
 
 ## Trailing Argument
 
-Atmos supports trailing arguments. This aregument is the one that is added by the user after `--`. 
+Atmos supports **trailing arguments** after `--` (a standalone double-dash). The `--` itself is a delimiter that signals the end of Atmos-specific options. Anything after `--` is passed directly to the underlying command without being interpreted by Atmos. The value of these trailing arguments is accessible in `{{ .TrailingArgs }}`.
 
 For the example, adding the following to `atmos.yaml` will introduce a new `echo` command that accepts one `name` argument and also uses trailingArgs
 
