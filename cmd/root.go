@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -98,7 +99,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	case "Warning":
 		log.SetLevel(log.WarnLevel)
 	case "Off":
-		log.SetOutput(io.Discard)
+		log.SetLevel(math.MaxInt32)
 	default:
 		log.SetLevel(log.InfoLevel)
 	}

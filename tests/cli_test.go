@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,9 +11,11 @@ import (
 	"path/filepath" // For resolving absolute paths
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/creack/pty"
@@ -21,6 +24,7 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/muesli/termenv"
+	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -46,18 +50,20 @@ type Expectation struct {
 	FileExists   []string                  `yaml:"file_exists"`   // Files to validate
 	FileContains map[string][]MatchPattern `yaml:"file_contains"` // File contents to validate (file to patterns map)
 	Diff         []string                  `yaml:"diff"`          // Acceptable differences in snapshot
+	Timeout      string                    `yaml:"timeout"`       // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
 }
 type TestCase struct {
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	Enabled     bool              `yaml:"enabled"`
-	Workdir     string            `yaml:"workdir"`
-	Command     string            `yaml:"command"`
-	Args        []string          `yaml:"args"`
-	Env         map[string]string `yaml:"env"`
-	Expect      Expectation       `yaml:"expect"`
-	Tty         bool              `yaml:"tty"`
-	Snapshot    bool              `yaml:"snapshot"`
+	Name        string            `yaml:"name"`        // Name of the test
+	Description string            `yaml:"description"` // Description of the test
+	Enabled     bool              `yaml:"enabled"`     // Enable or disable the test
+	Workdir     string            `yaml:"workdir"`     // Working directory for the command
+	Command     string            `yaml:"command"`     // Command to run
+	Args        []string          `yaml:"args"`        // Command arguments
+	Env         map[string]string `yaml:"env"`         // Environment variables
+	Expect      Expectation       `yaml:"expect"`      // Expected output
+	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
+	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
+	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
 	Skip        struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
@@ -84,6 +90,26 @@ func (m *MatchPattern) UnmarshalYAML(value *yaml.Node) error {
 		return fmt.Errorf("unsupported tag %q", value.Tag)
 	}
 	return nil
+}
+
+func parseTimeout(timeoutStr string) (time.Duration, error) {
+	if timeoutStr == "" {
+		return 0, nil // No timeout specified
+	}
+
+	// Try parsing as a duration string
+	duration, err := time.ParseDuration(timeoutStr)
+	if err == nil {
+		return duration, nil
+	}
+
+	// If parsing failed, try interpreting as a number (seconds)
+	seconds, err := strconv.Atoi(timeoutStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid timeout format: %s", timeoutStr)
+	}
+
+	return time.Duration(seconds) * time.Second, nil
 }
 
 func loadTestSuite(filePath string) (*TestSuite, error) {
@@ -336,17 +362,6 @@ func ptyError(err error) error {
 	return nil
 }
 
-// Execute the command and return the exit code
-func executeCommand(t *testing.T, cmd *exec.Cmd) int {
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
-		}
-		t.Fatalf("Command execution failed: %v", err)
-	}
-	return 0
-}
-
 // loadTestSuites loads and merges all .yaml files from the test-cases directory
 func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	var mergedSuite TestSuite
@@ -401,11 +416,78 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}()
 
+	// Create a context with timeout if specified
+	var ctx context.Context
+	var cancel context.CancelFunc
+
+	if tc.Expect.Timeout != "" {
+		// Parse the timeout from the Expectation
+		timeout, err := parseTimeout(tc.Expect.Timeout)
+		if err != nil {
+			t.Fatalf("Failed to parse timeout for test %s: %v", tc.Name, err)
+		}
+		if timeout > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), timeout)
+		} else {
+			ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+		}
+	} else {
+		ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+	}
+	defer cancel()
+
+	// Create a temporary HOME directory for the test case that's clean
+	// Otherwise a test may pass/fail due to existing files in the user's HOME directory
+	tempDir, err := os.MkdirTemp("", "test_home")
+	if err != nil {
+		t.Fatalf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir) // Clean up the temporary directory after the test
+
+	if runtime.GOOS == "darwin" && isCIEnvironment() {
+		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
+		// Copying over the `.gitconfig` was not enough to fix the issue
+		t.Logf("skipping empty home dir on macOS in CI: %s", runtime.GOOS)
+	} else {
+		// Set environment variables for the test case
+		tc.Env["HOME"] = tempDir
+		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
+		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
+		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
+
+		// Copy some files to the temporary HOME directory
+		originalHome := os.Getenv("HOME")
+		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
+		for _, file := range filesToCopy {
+			src := filepath.Join(originalHome, file)
+			dest := filepath.Join(tempDir, file)
+
+			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
+				// t.Logf("Copying %s to %s\n", src, dest)
+				if err := copy.Copy(src, dest); err != nil {
+					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
+				}
+			}
+		}
+	}
+
 	// Change to the specified working directory
 	if tc.Workdir != "" {
-		err := os.Chdir(tc.Workdir)
+		absoluteWorkdir, err := filepath.Abs(tc.Workdir)
+		if err != nil {
+			t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
+		}
+		err = os.Chdir(absoluteWorkdir)
 		if err != nil {
 			t.Fatalf("Failed to change directory to %q: %v", tc.Workdir, err)
+		}
+
+		// Clean the directory if enabled
+		if tc.Clean {
+			t.Logf("Cleaning directory: %q", tc.Workdir)
+			if err := cleanDirectory(t, absoluteWorkdir); err != nil {
+				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
+			}
 		}
 	}
 
@@ -415,12 +497,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
 	}
 
-	// Prepare the command
-	cmd := exec.Command(binaryPath, tc.Args...)
+	// Prepare the command using the context
+	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
 	// Set environment variables
 	envVars := os.Environ()
 	for key, value := range tc.Env {
+		// t.Logf("Setting env: %s=%s", key, value)
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars
@@ -431,11 +514,27 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if tc.Tty {
 		// Run the command in TTY mode
 		ptyOutput, err := simulateTtyCommand(t, cmd, "")
+
+		// Check if the context timeout was exceeded
+		if ctx.Err() == context.DeadlineExceeded {
+			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+			t.Errorf("Captured stderr:\n%s", stderr.String())
+			return
+		}
+
 		if err != nil {
+			// Check if the error is an ExitError
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				// Capture the actual exit code
-				exitCode = exitErr.ExitCode()
+				exitCode := exitErr.ExitCode()
+
+				if exitCode < 0 {
+					// Negative exit code indicates interruption by a signal
+					t.Errorf("TTY Command interrupted by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
+				}
 			} else {
+				// Handle other types of errors
 				t.Fatalf("Failed to simulate TTY command: %v", err)
 			}
 		}
@@ -448,12 +547,27 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		cmd.Stderr = &stderr
 
 		err := cmd.Run()
+		if ctx.Err() == context.DeadlineExceeded {
+			// Handle the timeout case first
+			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+			t.Errorf("Captured stdout:\n%s", stdout.String())
+			t.Errorf("Captured stderr:\n%s", stderr.String())
+			return
+		}
+
 		if err != nil {
+			// Handle other command execution errors
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				// Capture the actual exit code
 				exitCode = exitErr.ExitCode()
+
+				if exitCode < 0 {
+					// Negative exit code indicates termination by a signal
+					t.Errorf("Non-TTY Command terminated by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
+				}
 			} else {
-				t.Fatalf("Failed to run command; Error %v", err)
+				// Handle other non-exec-related errors
+				t.Fatalf("Failed to run command; Error: %v", err)
 			}
 		} else {
 			// Successful command execution
@@ -520,7 +634,7 @@ func TestCLICommands(t *testing.T) {
 			continue
 		}
 
-		// Run with `t.Run` for non-TTY tests
+		// Run tests
 		t.Run(tc.Name, func(t *testing.T) {
 			runCLICommandTest(t, tc)
 		})
@@ -749,7 +863,7 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 	if _, err := os.Stat(stdoutPath); errors.Is(err, os.ErrNotExist) {
 		t.Fatalf(`Stdout snapshot file not found: %q
 Run the following command to create it:
-$ go test -run=%q -regenerate-snapshots`, stdoutPath, t.Name())
+$ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
 
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
@@ -784,10 +898,52 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 			// Generate a colorized diff for better readability
 			diff = colorizeDiffWithThreshold(filteredStderrActual, filteredStderrExpected, 10)
 		}
-		t.Errorf("Stderr mismatch for %q:\n%s", stdoutPath, diff)
+		t.Errorf("Stderr diff mismatch for %q:\n%s", stdoutPath, diff)
 	}
 
 	return true
+}
+
+// Clean up untracked files in the working directory
+func cleanDirectory(t *testing.T, workdir string) error {
+	// Find the root of the Git repository
+	repoRoot, err := findGitRepoRoot(workdir)
+	if err != nil {
+		return fmt.Errorf("failed to locate git repository from %q: %w", workdir, err)
+	}
+
+	// Open the repository
+	repo, err := git.PlainOpen(repoRoot)
+	if err != nil {
+		return fmt.Errorf("failed to open git repository: %w", err)
+	}
+
+	// Get the worktree
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Get the repository status
+	status, err := worktree.Status()
+	if err != nil {
+		return fmt.Errorf("failed to get git status: %w", err)
+	}
+
+	// Clean only files in the provided working directory
+	for file, statusEntry := range status {
+		if statusEntry.Worktree == git.Untracked {
+			fullPath := filepath.Join(repoRoot, file)
+			if strings.HasPrefix(fullPath, workdir) {
+				t.Logf("Removing untracked file: %q\n", fullPath)
+				if err := os.RemoveAll(fullPath); err != nil {
+					return fmt.Errorf("failed to remove %q: %w", fullPath, err)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // findGitRepo finds the Git repository root
