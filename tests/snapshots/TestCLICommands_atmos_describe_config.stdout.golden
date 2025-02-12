@@ -31,11 +31,7 @@
       "**/_defaults.yaml"
     ],
     "name_pattern": "{stage}",
-    "name_template": "",
-    "list": {
-      "format": "",
-      "columns": null
-    }
+    "name_template": ""
   },
   "workflows": {
     "base_path": "",
