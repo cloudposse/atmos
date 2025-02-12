@@ -231,6 +231,9 @@
         },
         "providers": {
           "$ref": "#/definitions/providers"
+        },
+        "hooks": {
+          "$ref": "#/definitions/hooks"
         }
       },
       "required": [],
@@ -735,6 +738,12 @@
       "description": "Templates section",
       "additionalProperties": true,
       "title": "templates"
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Hooks section",
+      "additionalProperties": true,
+      "title": "hooks"
     }
   }
 }
