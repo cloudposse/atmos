@@ -5,12 +5,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/tui/viewport"
+	"github.com/dustin/go-humanize"
 	"github.com/go-git/go-git/v5"
 	"github.com/spf13/cobra"
 )
@@ -80,7 +83,7 @@ func main() {
 	}
 }
 
-// **Run a Command with a Spinner**
+// Run a Command with a Spinner
 func RunCmdWithSpinner(title string, cmd *exec.Cmd) (int, error) {
 	// Ensure we run commands from the repo root
 	repoRoot, err := getGitRoot()
@@ -140,7 +143,7 @@ func ConvertToRelativeFromCWD(absPath string) string {
 	return relPath
 }
 
-// **Git Root Detection**
+// Git Root Detection
 func getGitRoot() (string, error) {
 	currentDir, err := os.Getwd()
 	if err != nil {
@@ -160,7 +163,7 @@ func getGitRoot() (string, error) {
 	return worktree.Filesystem.Root(), nil
 }
 
-// **Ensure Directories Exist**
+// Ensure Directories Exist
 func ensureDirs(dirs ...string) error {
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
@@ -170,7 +173,7 @@ func ensureDirs(dirs ...string) error {
 	return nil
 }
 
-// **Build Process**
+// Build Process
 func Build() error {
 	if err := ensureDirs(mp4OutDir, gifOutDir); err != nil {
 		return err
@@ -187,7 +190,7 @@ func Build() error {
 	return nil
 }
 
-// **Convert Tapes**
+// Convert Tapes
 func convertTapes() error {
 	files, err := filepath.Glob(filepath.Join(tapesDir, "*.tape"))
 	if err != nil {
@@ -206,44 +209,235 @@ func convertTapes() error {
 		outputMp4 := filepath.Join(mp4OutDir, baseName+".mp4")
 		outputGif := filepath.Join(gifOutDir, baseName+".gif")
 
-		if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Converting %s to mp4...", baseName), exec.Command("vhs", tape, "--output", outputMp4)); err != nil || exitCode != 0 {
-			log.Error("Failed to convert tape", "tape", ConvertToRelativeFromCWD(tape), "file", ConvertToRelativeFromCWD(outputMp4), "error", err)
-			os.Exit(exitCode)
+		if isUpToDate(outputMp4, tape) {
+			log.Info("Skipping tape recording", "tape", ConvertToRelativeFromCWD(tape), "reason", "already up-to-date")
 		} else {
-			log.Info("Converted tape to mp4", "file", outputMp4)
+
+			if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Converting %s to mp4...", baseName), exec.Command("vhs", tape, "--output", outputMp4)); err != nil || exitCode != 0 {
+				log.Error("Failed to convert tape", "tape", ConvertToRelativeFromCWD(tape), "file", ConvertToRelativeFromCWD(outputMp4), "error", err)
+				os.Exit(exitCode)
+			} else {
+				log.Info("Converted tape to mp4", "file", ConvertToRelativeFromCWD(outputMp4))
+			}
 		}
 
-		if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Generating GIF for %s...", baseName), exec.Command("ffmpeg", "-i", outputMp4, "-y", outputGif)); err != nil || exitCode != 0 {
-			log.Error("Failed to generate GIF", "file", baseName, "error", err)
-			os.Exit(exitCode)
+		if isUpToDate(outputGif, outputMp4) {
+			log.Info("Skipping GIF generation", "file", ConvertToRelativeFromCWD(outputGif), "reason", "already up-to-date")
+			continue
 		} else {
-			log.Info("Generated GIF", "file", outputGif)
+			if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Generating GIF for %s...", baseName), exec.Command("ffmpeg", "-i", outputMp4, "-y", outputGif)); err != nil || exitCode != 0 {
+				log.Error("Failed to generate GIF", "file", baseName, "error", err)
+				os.Exit(exitCode)
+			} else {
+				log.Info("Generated GIF", "file", ConvertToRelativeFromCWD(outputGif))
+			}
 		}
 	}
 
 	return nil
 }
 
-// **Process Scenes**
+// Process Scenes
 func processScenes() error {
 	files, err := filepath.Glob(filepath.Join(scenesDir, "*.txt"))
 	if err != nil {
 		return fmt.Errorf("failed to list scene files: %w", err)
 	}
+
 	if len(files) == 0 {
 		log.Info("No scene files found. Skipping processing.")
 		return nil
 	}
 
+	log.Info("Processing scenes...", "scenes", len(files))
+
 	for _, sceneFile := range files {
 		sceneName := filepath.Base(sceneFile[:len(sceneFile)-len(filepath.Ext(sceneFile))])
 		outputMp4 := filepath.Join(mp4OutDir, sceneName+".mp4")
+		outputMp4WithAudio := filepath.Join(mp4OutDir, sceneName+"-with-audio.mp4")
+		outputGif := filepath.Join(gifOutDir, sceneName+".gif")
 
-		if exitCode, err := RunCmdWithSpinner(fmt.Sprintf("Concatenating scenes for %s...", sceneName), exec.Command("ffmpeg", "-f", "concat", "-safe", "0", "-i", sceneFile, "-c", "copy", "-y", outputMp4)); err != nil || exitCode != 0 {
-			log.Error("Failed to concatenate scenes", "scene", sceneName, "error", err)
-			os.Exit(exitCode)
+		// Concatenate scene files into MP4
+		if isSceneUpToDate(outputMp4, sceneFile) {
+			log.Info("Skipping concatenation", "scene", sceneName, "reason", "already up-to-date")
+		} else {
+			exitCode, err := RunCmdWithSpinner(fmt.Sprintf("Concatenating scenes for %s...", sceneName),
+				exec.Command("ffmpeg", "-f", "concat", "-safe", "0", "-i", sceneFile, "-c", "copy", "-y", outputMp4))
+			if err != nil || exitCode != 0 {
+				log.Error("Failed to concatenate scenes", "scene", sceneName, "error", err)
+				os.Exit(exitCode)
+			}
+			log.Info("Concatenated scenes", "scene", sceneName, "file", ConvertToRelativeFromCWD(outputMp4), "duration", FormatDuration(GetMP4Duration(outputMp4)), "size", humanize.Bytes(uint64(GetFileSize(outputMp4))))
 		}
-		log.Info("Concatenated scenes", "scene", sceneName, "file", outputMp4)
+
+		// Skip if the audio-enhanced MP4 is already up-to-date
+		if isUpToDate(outputMp4WithAudio, outputMp4) {
+			log.Info("Skipping audio fade", "scene", sceneName, "reason", "already up-to-date")
+		} else {
+
+			// Get fade start time
+			fadeStart, err := getFadeStart(outputMp4)
+			if err != nil {
+				log.Warn("Failed to determine fade-out time, using default", "scene", sceneName, "error", err)
+				fadeStart = 0
+			}
+
+			// Apply audio fade effect
+			exitCode, err := RunCmdWithSpinner(fmt.Sprintf("Adding fade-out audio for scene %s...", sceneName),
+				exec.Command("ffmpeg", "-i", outputMp4, "-i", audioFile,
+					"-filter_complex", fmt.Sprintf("[1:a]afade=t=out:st=%d:d=5[aout]", fadeStart),
+					"-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-y", outputMp4WithAudio))
+			if err != nil || exitCode != 0 {
+				log.Error("Failed to add audio to scene", "scene", sceneName, "error", err)
+				os.Exit(exitCode)
+			} else {
+				log.Info("Added audio to scene", "scene", sceneName, "file", ConvertToRelativeFromCWD(outputMp4WithAudio), "duration", FormatDuration(GetMP4Duration(outputMp4WithAudio)), "size", humanize.Bytes(uint64(GetFileSize(outputMp4WithAudio))))
+			}
+		}
+
+		// Skip if the GIF is already up-to-date
+		if isUpToDate(outputGif, outputMp4WithAudio) {
+			log.Info("Skipping GIF generation", "file", ConvertToRelativeFromCWD(outputGif), "reason", "already up-to-date")
+			return nil
+		} else {
+			// Generate GIF from the scene with mp4
+			if err := createGif(outputMp4WithAudio, outputGif); err != nil {
+				log.Error("Failed to generate GIF", "scene", sceneName, "error", err)
+				os.Exit(1)
+			} else {
+				log.Info("Generated GIF", "scene", sceneName, "file", ConvertToRelativeFromCWD(outputGif))
+			}
+		}
+	}
+
+	return nil
+}
+
+// FormatDuration converts seconds to hh:mm:ss format
+func FormatDuration(seconds float64) string {
+	duration := time.Duration(seconds) * time.Second
+	hours := int(duration.Hours())
+	minutes := int(duration.Minutes()) % 60
+	secondsInt := int(duration.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, secondsInt)
+}
+
+// GetMP4Duration returns the duration of an MP4 file in seconds
+func GetMP4Duration(mp4File string) float64 {
+	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4File)
+	output, err := cmd.Output()
+	if err != nil {
+		return -1
+	}
+
+	duration, err := strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
+	if err != nil {
+		return -1
+	}
+
+	return duration
+}
+
+// GetFileSize returns the size of an MP4 file in bytes
+func GetFileSize(mp4File string) int64 {
+	fileInfo, err := os.Stat(mp4File)
+	if err != nil {
+		return -1
+	}
+
+	return fileInfo.Size()
+}
+
+func isUpToDate(output, input string) bool {
+	outputInfo, err := os.Stat(output)
+	if err != nil {
+		return false // Output file doesn't exist
+	}
+	inputInfo, err := os.Stat(input)
+	if err != nil {
+		return false // Input file doesn't exist (should not happen)
+	}
+	return outputInfo.ModTime().After(inputInfo.ModTime())
+}
+
+// isSceneUpToDate checks if outputMp4 is newer than both the sceneFile and all referenced mp4 files inside it
+func isSceneUpToDate(outputMp4, sceneFile string) bool {
+	// If outputMp4 is outdated compared to sceneFile, return false
+	if !isUpToDate(outputMp4, sceneFile) {
+		return false
+	}
+
+	// Regex to match "file '<filename>.mp4'"
+	var sceneFileRegex = regexp.MustCompile(`file '([^']+\.mp4)'`)
+
+	// Read sceneFile contents
+	data, err := os.ReadFile(sceneFile)
+	if err != nil {
+		log.Warn("Failed to read scene file", "file", ConvertToRelativeFromCWD(sceneFile), "error", err)
+		return false
+	}
+
+	// Find all matching mp4 files in the scene file
+	matches := sceneFileRegex.FindAllStringSubmatch(string(data), -1)
+
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue // Skip invalid matches
+		}
+
+		mp4File := match[1] // Extracted filename
+		mp4FilePath := filepath.Join(filepath.Dir(sceneFile), mp4File)
+
+		// Check if outputMp4 is up-to-date with this mp4 file
+		if !isUpToDate(outputMp4, mp4FilePath) {
+			log.Info("Scene is outdated because an input mp4 is newer",
+				"scene", ConvertToRelativeFromCWD(sceneFile),
+				"mp4", ConvertToRelativeFromCWD(mp4FilePath))
+			return false
+		}
+	}
+
+	// If we got here, outputMp4 is newer than everything
+	return true
+}
+
+// Get fade start time from video duration
+func getFadeStart(mp4File string) (int, error) {
+	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4File)
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get video duration: %w", err)
+	}
+
+	duration, err := strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse video duration: %w", err)
+	}
+
+	fadeStart := int(duration) - 5
+	if fadeStart < 0 {
+		fadeStart = 0
+	}
+	return fadeStart, nil
+}
+
+func createGif(inputMp4, outputGif string) error {
+	palette := outputGif + "-palette.png"
+
+	// Generate palette for better GIF quality, only if outdated
+	if !isUpToDate(palette, inputMp4) {
+		exitCode, err := RunCmdWithSpinner("Generating palette for GIF...", exec.Command(
+			"ffmpeg", "-y", "-i", inputMp4, "-vf", "palettegen", palette))
+		if err != nil || exitCode != 0 {
+			return fmt.Errorf("failed to generate GIF palette: %w", err)
+		}
+	}
+
+	// Create GIF using the palette
+	exitCode, err := RunCmdWithSpinner("Creating GIF...", exec.Command(
+		"ffmpeg", "-i", inputMp4, "-i", palette, "-lavfi", "fps=10 [video]; [video][1:v] paletteuse", "-y", outputGif))
+	if err != nil || exitCode != 0 {
+		return fmt.Errorf("failed to create GIF: %w", err)
 	}
 
 	return nil

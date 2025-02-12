@@ -187,10 +187,11 @@ jobs:
           install-fonts: true
 
       - name: Record screencast
+        working-directory: demo/recordings
         run: |
-          demo/recordings/build.sh
-          mv demo/recordings/gif/atmos.gif docs/demo.gif
-          git add -A
+          go run studio.go build
+          cp demo/recordings/gif/atmos.gif docs/demo.gif
+          git add docs/demo.gif
 
       - name: Upload Assets to S3 (atmos.tools)
         run: |
