@@ -140,9 +140,9 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		// Define all possible columns
 		allColumns := []schema.ListColumnConfig{
 			{Name: "Stack", Value: "{{ .atmos_stack }}"},
-			{Name: "Tenant", Value: "{{ getVar .vars \"tenant\" }}"},
-			{Name: "Environment", Value: "{{ getVar .vars \"environment\" }}"},
-			{Name: "Stage", Value: "{{ getVar .vars \"stage\" }}"},
+			{Name: "Tenant", Value: "{{ index .vars \"tenant\" }}"},
+			{Name: "Environment", Value: "{{ index .vars \"environment\" }}"},
+			{Name: "Stage", Value: "{{ index .vars \"stage\" }}"},
 			{Name: "File", Value: "{{ .atmos_stack_file }}"},
 		}
 
@@ -153,16 +153,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 				return true
 			}
 
-			funcMap := template.FuncMap{
-				"getVar": func(vars map[string]any, key string) string {
-					if val, ok := vars[key]; ok && val != nil {
-						return fmt.Sprintf("%v", val)
-					}
-					return ""
-				},
-			}
-
-			tmpl, err := template.New(col.Name).Funcs(funcMap).Parse(col.Value)
+			tmpl, err := template.New(col.Name).Parse(col.Value)
 			if err != nil {
 				return false
 			}

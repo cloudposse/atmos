@@ -55,14 +55,27 @@ The command output can be customized using template variables in your `atmos.yam
 stacks:
   list:
     columns:
+      # Direct access to stack properties
       - name: Stack
         value: '{{ .atmos_stack }}'
+      - name: Component
+        value: '{{ .atmos_component }}'
+      - name: Stack File
+        value: '{{ .atmos_stack_file }}'
+      
+      # Access to variables using index
       - name: Tenant
         value: '{{ index .vars "tenant" }}'
       - name: Environment
         value: '{{ index .vars "environment" }}'
-      - name: File
-        value: '{{ .atmos_stack_file }}'
+      - name: Stage
+        value: '{{ index .vars "stage" }}'
+      
+      # Access to nested component properties
+      - name: Component Type
+        value: '{{ index .components "terraform" }}'
+      - name: Component Settings
+        value: '{{ index .components "terraform" "settings" }}'
 ```
 
 This example assumes that every component defines `vars.tenant` and `vars.environment`. While [Cloud Posse's Reference Architecture](https://docs.cloudposse.com) follows this convention, any well-defined convention will work.
