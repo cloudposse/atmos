@@ -389,7 +389,7 @@ func environToMap() map[string]string {
 		pair := u.SplitStringAtFirstOccurrence(env, "=")
 		k := pair[0]
 		v := pair[1]
-		if !u.SliceContainsString(prohibitedEnvVars, k) && !u.SliceContainsStringHasPrefix(prohibitedEnvVarPrefixes, k) {
+		if !u.SliceContainsString(prohibitedEnvVars, k) && !u.SliceContainsStringStartsWith(prohibitedEnvVarPrefixes, k) {
 			envMap[k] = v
 		}
 	}
