@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-getter"
@@ -77,6 +78,20 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 	if !strings.Contains(src, "://") {
 		src = "https://" + src
 	}
+
+	// Correct SSH-style GitHub URLs that use ":" as separator.
+	// e.g. transforms "https://git@github.com:cloudposse/terraform-null-label.git?ref=..."
+	// into   "https://git@github.com/cloudposse/terraform-null-label.git?ref=..."
+	if strings.HasPrefix(src, "https://") {
+		const search = "github.com:"
+		if idx := strings.Index(src, search); idx != -1 {
+			// Only replace if the colon isn't followed by a digit (i.e. not a valid port)
+			if len(src) > idx+len(search) && !unicode.IsDigit(rune(src[idx+len(search)])) {
+				src = strings.Replace(src, search, "github.com/", 1)
+			}
+		}
+	}
+	fmt.Println("src: ", src)
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
