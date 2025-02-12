@@ -188,6 +188,7 @@ func init() {
 	workflowCmd.PersistentFlags().StringP("file", "f", "", "atmos workflow <name> --file <file>")
 	workflowCmd.PersistentFlags().Bool("dry-run", false, "atmos workflow <name> --file <file> --dry-run")
 	workflowCmd.PersistentFlags().StringP("stack", "s", "", "atmos workflow <name> --file <file> --stack <stack>")
+	AddStackCompletion(workflowCmd)
 	workflowCmd.PersistentFlags().String("from-step", "", "atmos workflow <name> --file <file> --from-step <step-name>")
 
 	RootCmd.AddCommand(workflowCmd)
