@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -25,7 +26,7 @@ var listStacksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-    output, err := listStacks(cmd)
+		output, err := listStacks(cmd)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
 			return
