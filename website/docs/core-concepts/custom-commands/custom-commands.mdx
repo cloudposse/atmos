@@ -70,6 +70,34 @@ or defaulting to "John Doe"
 atmos greet
 ```
 
+## Trailing Arguments
+
+Atmos supports **trailing arguments** after `--` (a standalone double-dash). The `--` itself is a delimiter that signals the end of Atmos-specific options. Anything after `--` is passed directly to the underlying command without being interpreted by Atmos. The value of these trailing arguments is accessible in `{{ .TrailingArgs }}`.
+
+For the example, adding the following to `atmos.yaml` will introduce a new `echo` command that accepts one `name` argument and also uses trailingArgs
+
+```yaml
+- name: ansible run
+  description: "Runs an Ansible playbook, allowing extra arguments after --."
+  arguments:
+    - name: playbook
+      description: "The Ansible playbook to run"
+      default: site.yml
+      required: true
+  steps:
+    - "ansible-playbook {{ .Arguments.playbook }} {{ .TrailingArgs }}"
+```
+Output:
+
+```bash
+$ atmos ansible run -- --limit web
+Running: ansible-playbook site.yml --limit web
+
+PLAY [web] *********************************************************************
+
+```
+
+
 ## Passing Flags
 
 Passing flags works much like passing positional arguments, except for that they are passed using long or short flags.
