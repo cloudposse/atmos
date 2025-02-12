@@ -11,18 +11,17 @@ import (
 )
 
 // Derive the effective base-base based on multiple inferences
-func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+func (cl *ConfigLoader) ComputeBasePath(configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	// Check base path from CLI argument
 	if configAndStacksInfo.BasePathFromArg != "" {
-		return cl.resolveAndValidatePath(configAndStacksInfo.BasePathFromArg, "--config")
+		return cl.resolveAbsolutePath(configAndStacksInfo.BasePathFromArg, "--config")
 	}
 
 	// Check base path from ATMOS_BASE_PATH environment variable
 	if envBasePath := os.Getenv("ATMOS_BASE_PATH"); envBasePath != "" {
-		return cl.resolveAndValidatePath(envBasePath, "ATMOS_BASE_PATH")
+		return cl.resolveAbsolutePath(envBasePath, "ATMOS_BASE_PATH")
 	}
 
-	// Check base path from configuration
 	if cl.atmosConfig.BasePath != "" {
 		source := "atmos config"
 		if !filepath.IsAbs(cl.atmosConfig.BasePath) {
@@ -33,7 +32,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 			}
 			cl.atmosConfig.BasePath = absPath
 		}
-		return cl.resolveAndValidatePath(cl.atmosConfig.BasePath, source)
+		return cl.resolveAbsolutePath(cl.atmosConfig.BasePath, source)
 	}
 
 	resolvedPath, found := cl.inferBasePath()
@@ -54,7 +53,7 @@ func (cl *ConfigLoader) BasePathComputing(configAndStacksInfo schema.ConfigAndSt
 }
 
 // Helper to resolve and validate base path
-func (cl *ConfigLoader) resolveAndValidatePath(path string, source string) (string, error) {
+func (cl *ConfigLoader) resolveAbsolutePath(path string, source string) (string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return "", fmt.Errorf("base path from %s does not exist: %w", source, err)
@@ -71,7 +70,7 @@ func (cl *ConfigLoader) resolveAndValidatePath(path string, source string) (stri
 	if !isDir {
 		return "", fmt.Errorf("base path from %s is not a directory", source)
 	}
-	log.Debug("base path derived from", source, path)
+	log.Debug("resolved absolute path", "source", source, "path", path)
 	return absPath, nil
 }
 
@@ -113,7 +112,7 @@ func (cl *ConfigLoader) inferBasePath() (string, bool) {
 }
 
 // checkConfigFileOrDir checks for the existence of a atmos config file and returns the base path if found.
-func (cl *ConfigLoader) checkConfigFileOrDir(path, desc string, isDir bool) (string, bool) {
+func (cl *ConfigLoader) checkConfigFileOrDir(path, source string, isDir bool) (string, bool) {
 	if isDir {
 		filePaths, _ := u.GetGlobMatches(filepath.ToSlash(filepath.Join(path, "**/*.yaml")))
 		if len(filePaths) == 0 {
@@ -122,15 +121,14 @@ func (cl *ConfigLoader) checkConfigFileOrDir(path, desc string, isDir bool) (str
 		if len(filePaths) > 0 {
 			// sort files by depth
 			filePaths = cl.sortFilesByDepth(filePaths)
-			log.Debug("base path inferred from "+desc, "path", filepath.Dir(filePaths[0]))
-			// return directory of first file found
+			log.Debug("base-path inferred", "source", source, "path", filepath.Dir(filePaths[0]))
 			return filepath.Dir(filePaths[0]), true
 		}
 
 	} else {
 		filePath, found := cl.SearchConfigFilePath(path)
 		if found {
-			log.Debug("base-path inferred from "+desc, "path", filepath.Dir(filePath))
+			log.Debug("base-path inferred", "source", source, "path", filepath.Dir(filePath))
 			return filepath.Dir(filePath), true
 		}
 	}

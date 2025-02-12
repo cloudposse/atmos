@@ -142,7 +142,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 	}
 	atmosConfig.CliConfigPath = ConnectPaths(configLoader.AtmosConfigPaths)
-	basePath, err := configLoader.BasePathComputing(configAndStacksInfo)
+	basePath, err := configLoader.ComputeBasePath(configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, fmt.Errorf("failed to compute base path: %v", err)
 	}

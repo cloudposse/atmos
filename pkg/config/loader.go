@@ -128,30 +128,30 @@ func (cl *ConfigLoader) loadExplicitConfigs(configPathsArgs []string) error {
 	}
 
 	if configPaths == nil {
-		return fmt.Errorf("config paths can not be found. Please provide a list of config paths using the --config flag.")
+		return fmt.Errorf("Atmos configuration not found. Create one or specify its location with --config.")
 	}
 	for _, configPath := range configPaths {
 		log.Debug("atmos config from config file", "path", configPath)
-		err := cl.loadConfigFileViber(cl.atmosConfig, configPath, cl.viper)
+		err := cl.MergeConfigFile(cl.atmosConfig, configPath, cl.viper)
 		if err != nil {
-			log.Debug("error load config file", "path", configPath, "error", err)
+			log.Debug("error loading config file", "path", configPath, "error", err)
 			continue
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
-			log.Debug("error merge config file", "path", configPath, "error", err)
+			log.Debug("error merging config file", "path", configPath, "error", err)
 			continue
 		}
-		log.Debug("atmos merged config file", "path", configPath)
+		log.Debug("merged config file", "path", configPath)
 
 		// Process Imports and Deep Merge
 		if err := cl.processConfigImports(); err != nil {
-			log.Debug("error processing imports after config file", "path", configPath, "error", err)
+			log.Debug("error processing imports from config file", "path", configPath, "error", err)
 			continue
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
-			log.Debug("error merge config file", "path", configPath, "error", err)
+			log.Debug("error merging config file", "path", configPath, "error", err)
 		}
 	}
 
@@ -172,19 +172,19 @@ func parseArraySeparator(s string) []string {
 func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 	atmosCliConfigEnvPaths := parseArraySeparator(atmosCliConfigEnv)
 	if len(atmosCliConfigEnvPaths) == 0 {
-		return fmt.Errorf("ATMOS_CLI_CONFIG_PATH is not a valid paths")
+		return fmt.Errorf("ATMOS_CLI_CONFIG_PATH is empty")
 	}
 	if atmosCliConfigEnv == AtmosYamlFuncGitRoot {
 		gitRoot, err := u.GetGitRoot()
 		if err != nil {
-			return fmt.Errorf("failed to resolve base path from `!repo-root` Git root error: %w", err)
+			return fmt.Errorf("failed to determine git root: %w", err)
 		}
-		log.Debug("atmos config from ATMOS_CLI_CONFIG_PATH !repo-root Git root dir", "path", gitRoot)
+		log.Debug("Set ATMOS_CLI_CONFIG_PATH to git root", "path", gitRoot)
 		atmosCliConfigEnv = gitRoot
 	}
 	var atmosFilePaths []string
 	for _, configPath := range atmosCliConfigEnvPaths {
-		atmosFilePath, err := cl.getPathAtmosCLIConfigPath(configPath)
+		atmosFilePath, err := cl.getEnvAtmosConfigPaths(configPath)
 		if err != nil {
 			log.Debug("failed to find config file", "path", atmosFilePath, "error", err)
 			continue
@@ -195,36 +195,35 @@ func (cl *ConfigLoader) loadAtmosConfigFromEnv(atmosCliConfigEnv string) error {
 		return fmt.Errorf("Failed to find config files in ATMOS_CLI_CONFIG_PATH '%s'", atmosCliConfigEnv)
 	}
 	for _, atmosFilePath := range atmosFilePaths {
-		log.Debug("atmos config from ATMOS_CLI_CONFIG_PATH ", "path", atmosFilePath)
-		err := cl.loadConfigFileViber(cl.atmosConfig, atmosFilePath, cl.viper)
+		log.Debug("Using ATMOS_CLI_CONFIG_PATH", "path", atmosFilePath)
+		err := cl.MergeConfigFile(cl.atmosConfig, atmosFilePath, cl.viper)
 		if err != nil {
 			log.Debug("error processing config file", "path", atmosFilePath, "error", err)
 			continue
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
-			log.Debug("error merge config file", "path", atmosFilePath, "error", err)
+			log.Debug("error merging config file", "path", atmosFilePath, "error", err)
 			continue
 		}
 		log.Debug("atmos merged config file", "path", atmosFilePath)
 		// Process Imports and Deep Merge
 		if err := cl.processConfigImports(); err != nil {
-			log.Debug("atmos config file found on ATMOS_CLI_CONFIG_PATH", "path", atmosFilePath, "error", err)
+			log.Debug("ATMOS_CLI_CONFIG_PATH specifies invalid config file", "path", atmosFilePath, "error", err)
 			continue
 		}
 		err = cl.deepMergeConfig()
 		if err != nil {
-			log.Debug("error merge config file", "path", atmosFilePath, "error", err)
+			log.Debug("error merging config file", "path", atmosFilePath, "error", err)
 		}
 	}
 	return nil
 }
-
-func (cl *ConfigLoader) getPathAtmosCLIConfigPath(atmosCliConfigPathEnv string) ([]string, error) {
+func (cl *ConfigLoader) getEnvAtmosConfigPaths(atmosCliConfigPathEnv string) ([]string, error) {
 	isDir, err := u.IsDirectory(atmosCliConfigPathEnv)
 	if err != nil {
 		if err == os.ErrNotExist {
-			return nil, fmt.Errorf("error ATMOS_CLI_CONFIG_PATH: %w", err)
+			return nil, fmt.Errorf("path in ATMOS_CLI_CONFIG_PATH does not exist: %w", err)
 		}
 		return nil, fmt.Errorf("error ATMOS_CLI_CONFIG_PATH: %w", err)
 	}
@@ -280,7 +279,7 @@ func (cl *ConfigLoader) stageDiscoverAdditionalConfigs() error {
 	}
 
 	// 4. No configuration found in Stage 2
-	log.Debug("No configuration found in Discover Additional Configurations")
+	log.Debug("No additional configurations discovered")
 	return nil
 }
 
@@ -300,7 +299,7 @@ func (cl *ConfigLoader) loadWorkdirAtmosConfig() (found bool) {
 	if len(workDirAtmosConfigPath) > 0 {
 		for _, atmosFilePath := range workDirAtmosConfigPath {
 			log.Debug("Found work dir atmos config file", "path", atmosFilePath)
-			err := cl.loadConfigFileViber(cl.atmosConfig, atmosFilePath, cl.viper)
+			err := cl.MergeConfigFile(cl.atmosConfig, atmosFilePath, cl.viper)
 			if err != nil {
 				log.Debug("error load config file", "path", atmosFilePath, "error", err)
 				continue
@@ -339,6 +338,8 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 	} else {
 		log.Debug("Failed to find config file atmos in work directory", "path", workDir)
 	}
+
+	// Search for `atmos.d/` configurations
 	searchDir := filepath.Join(filepath.FromSlash(workDir), "atmos.d/**/*")
 	foundPaths, err := cl.SearchAtmosConfig(searchDir)
 	if err != nil {
@@ -349,6 +350,7 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 	} else {
 		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths...)
 	}
+	// Search for `.atmos.d` configurations
 	searchDir = filepath.Join(filepath.FromSlash(workDir), ".atmos.d/**/*")
 	foundPaths, err = cl.SearchAtmosConfig(searchDir)
 	if err != nil {
@@ -361,7 +363,7 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 	}
 
 	if len(atmosFoundFilePaths) == 0 {
-		return nil, fmt.Errorf("Failed to find config files in path '%s'", workDir)
+		return nil, fmt.Errorf("Failed to find any config files in path '%s'", workDir)
 	}
 	cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, workDir)
 	return atmosFoundFilePaths, nil
@@ -375,59 +377,62 @@ func (cl *ConfigLoader) loadGitAtmosConfig() (found bool) {
 		log.Debug("Failed to determine Git repository root", "error", err)
 		return found
 	}
-	if gitRoot != "" {
-		log.Debug("Git repository root atmos loaded", "path", gitRoot)
-		isDir, err := u.IsDirectory(gitRoot)
-		if err != nil {
-			if err == os.ErrNotExist {
-				log.Debug("Git repository root not found", "path", gitRoot)
-				return found
-			}
-		}
-
-		if !isDir {
+	if gitRoot == "" {
+		log.Debug("Failed to determine Git repository root")
+		return found
+	}
+	log.Debug("Git repository root atmos loaded", "path", gitRoot)
+	isDir, err := u.IsDirectory(gitRoot)
+	if err != nil {
+		if err == os.ErrNotExist {
 			log.Debug("Git repository root not found", "path", gitRoot)
 			return found
 		}
-		log.Debug("Git repository root found", "path", gitRoot)
+	}
 
-		gitAtmosConfigPath, err := cl.getGitAtmosConfigPaths(gitRoot)
-		if err != nil {
-			log.Debug("Failed to get Git atmos config paths", "error", err)
-			return found
+	if !isDir {
+		log.Debug("Git repository root not found", "path", gitRoot)
+		return found
+	}
+	log.Debug("Git repository root found", "path", gitRoot)
+
+	gitAtmosConfigPath, err := cl.getGitAtmosConfigPaths(gitRoot)
+	if err != nil {
+		log.Debug("Failed to get Git atmos config paths", "error", err)
+		return found
+	}
+	if len(gitAtmosConfigPath) > 0 {
+		for _, atmosFilePath := range gitAtmosConfigPath {
+			log.Debug("Found Git atmos config file", "path", atmosFilePath)
+			err := cl.MergeConfigFile(cl.atmosConfig, atmosFilePath, cl.viper)
+			if err != nil {
+				log.Debug("error loading config file", "path", atmosFilePath, "error", err)
+				continue
+			}
+			err = cl.deepMergeConfig()
+			if err != nil {
+				log.Debug("error merging config file", "path", atmosFilePath, "error", err)
+				continue
+			}
+
+			log.Debug("merged config file", "path", atmosFilePath)
+			// Process Imports and Deep Merge
+			if err := cl.processConfigImports(); err != nil {
+				log.Debug("error processing imports", "path", atmosFilePath, "error", err)
+				continue
+			}
+			err = cl.deepMergeConfig()
+			if err != nil {
+				log.Debug("error merging config file", "path", atmosFilePath, "error", err)
+			}
+			found = true
 		}
-		if len(gitAtmosConfigPath) > 0 {
-			for _, atmosFilePath := range gitAtmosConfigPath {
-				log.Debug("Found Git atmos config file", "path", atmosFilePath)
-				err := cl.loadConfigFileViber(cl.atmosConfig, atmosFilePath, cl.viper)
-				if err != nil {
-					log.Debug("error load config file", "path", atmosFilePath, "error", err)
-					continue
-				}
-				err = cl.deepMergeConfig()
-				if err != nil {
-					log.Debug("error merge config file", "path", atmosFilePath, "error", err)
-					continue
-				}
-
-				log.Debug("atmos merged config file", "path", atmosFilePath)
-				// Process Imports and Deep Merge
-				if err := cl.processConfigImports(); err != nil {
-					log.Debug("error processing imports after git", "path", atmosFilePath, "error", err)
-					continue
-				}
-				err = cl.deepMergeConfig()
-				if err != nil {
-					log.Debug("error merge config file", "path", atmosFilePath, "error", err)
-				}
-				found = true
-			}
-			if !found {
-				log.Debug("Failed to process atmos config files fom git root path", "path", gitRoot)
-				return false
-			}
+		if !found {
+			log.Debug("Failed to process atmos config files fom git root", "path", gitRoot)
+			return false
 		}
 	}
+
 	return found
 }
 
@@ -473,15 +478,15 @@ func (cl *ConfigLoader) applyUserPreferences() {
 	configPath := filepath.Join(xdg.ConfigHome, CliConfigFileName)
 	atmosConfigPath, found := cl.SearchConfigFilePath(configPath)
 	if found {
-		err := cl.loadConfigFileViber(cl.atmosConfig, atmosConfigPath, cl.viper)
+		err := cl.MergeConfigFile(cl.atmosConfig, atmosConfigPath, cl.viper)
 		if err != nil {
-			log.Debug("error load config file", "path", configPath, "error", err)
+			log.Debug("error loading config file", "path", configPath, "error", err)
 		} else {
 			err = cl.processConfigImports()
 			if err != nil {
-				log.Debug("atmos config file found on XDG_CONFIG_HOME atmos", "path", atmosConfigPath, "error", err)
+				log.Debug("error loading config in XDG_CONFIG_HOME", "path", atmosConfigPath, "error", err)
 			}
-			log.Debug("atmos config file found on XDG_CONFIG_HOME atmos", "path", atmosConfigPath)
+			log.Debug("found config in XDG_CONFIG_HOME", "path", atmosConfigPath)
 			cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPath)
 			return
 		}
@@ -495,14 +500,14 @@ func (cl *ConfigLoader) applyUserPreferences() {
 		configPathHomeDIr := filepath.Join(userHomeDir, ".config", CliConfigFileName)
 		atmosConfigPathHomeDir, found := cl.SearchConfigFilePath(configPathHomeDIr)
 		if found {
-			err := cl.loadConfigFileViber(cl.atmosConfig, atmosConfigPathHomeDir, cl.viper)
+			err := cl.MergeConfigFile(cl.atmosConfig, atmosConfigPathHomeDir, cl.viper)
 			if err != nil {
 				log.Debug("error processing config user HomeDir", "path", configPathHomeDIr, "error", err)
 			} else {
 				foundHomeDirConfig = true
 				err = cl.processConfigImports()
 				if err != nil {
-					log.Debug("error processing imports after HomeDir atmos path", "error", err)
+					log.Debug("error processing imports", "path", atmosConfigPathHomeDir, "error", err)
 				}
 				log.Debug("atmos config file found on HomeDir atmos path", "path", atmosConfigPathHomeDir)
 				cl.AtmosConfigPaths = append(cl.AtmosConfigPaths, configPathHomeDIr)
@@ -511,7 +516,7 @@ func (cl *ConfigLoader) applyUserPreferences() {
 		configPathHomeDIr = filepath.Join(userHomeDir, ".atmos", CliConfigFileName)
 		atmosConfigPathHomeDir, found = cl.SearchConfigFilePath(configPathHomeDIr)
 		if found {
-			err := cl.loadConfigFileViber(cl.atmosConfig, atmosConfigPathHomeDir, cl.viper)
+			err := cl.MergeConfigFile(cl.atmosConfig, atmosConfigPathHomeDir, cl.viper)
 			if err != nil {
 				log.Debug("error processing config user HomeDir", "path", atmosConfigPathHomeDir, "error", err)
 			} else {
@@ -538,7 +543,7 @@ func (cl *ConfigLoader) loadSystemConfig() error {
 	if found {
 		for _, configSysPath := range configSysPaths {
 			log.Debug("atmos configurations found on system directory", "path", configSysPath)
-			err := cl.loadConfigFileViber(cl.atmosConfig, configSysPath, cl.viper)
+			err := cl.MergeConfigFile(cl.atmosConfig, configSysPath, cl.viper)
 			if err != nil {
 				log.Debug("error load config file", "path", configSysPath, "error", err)
 				continue
@@ -783,7 +788,8 @@ func (cl *ConfigLoader) sortFilesByDepth(files []string) []string {
 	return sortedFiles
 }
 
-func (cl *ConfigLoader) loadConfigFileViber(
+// MergeConfigFile merges a new configuration file with an existing config into Viper.
+func (cl *ConfigLoader) MergeConfigFile(
 	atmosConfig schema.AtmosConfiguration,
 	path string,
 	v *viper.Viper,
@@ -840,9 +846,9 @@ func (cl *ConfigLoader) processConfigImports() error {
 		}
 
 		for _, resolvedPath := range resolvedPaths {
-			err := cl.loadConfigFileViber(cl.atmosConfig, resolvedPath.filePath, cl.viper)
+			err := cl.MergeConfigFile(cl.atmosConfig, resolvedPath.filePath, cl.viper)
 			if err != nil {
-				log.Debug("error load config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
+				log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
 				continue
 			}
 			err = cl.deepMergeConfig()

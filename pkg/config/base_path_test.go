@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBasePathComputingWithBasePathArg(t *testing.T) {
+func TestComputeBasePathWithBasePathArg(t *testing.T) {
 	configLoader := &ConfigLoader{}
 
 	info := schema.ConfigAndStacksInfo{
@@ -18,13 +18,13 @@ func TestBasePathComputingWithBasePathArg(t *testing.T) {
 
 	expectedPath, _ := filepath.Abs(".")
 
-	result, err := configLoader.BasePathComputing(info)
+	result, err := configLoader.ComputeBasePath(info)
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPath, result)
 	// test non-existent base path
 	info.BasePathFromArg = "invalid/path"
-	result, err = configLoader.BasePathComputing(info)
+	result, err = configLoader.ComputeBasePath(info)
 	assert.Error(t, err)
 	assert.Equal(t, "", result)
 
@@ -39,13 +39,13 @@ func TestBasePathComputingWithBasePathArg(t *testing.T) {
 	err = os.WriteFile(configFile1, []byte("key1: value1"), 0o644)
 	assert.NoError(t, err)
 	info.BasePathFromArg = configFile1
-	result, err = configLoader.BasePathComputing(info)
+	result, err = configLoader.ComputeBasePath(info)
 	assert.Error(t, err)
 	assert.Equal(t, "", result)
 }
 
 // test env base path
-func TestBasePathComputingWithEnvVar(t *testing.T) {
+func TestComputeBasePathWithEnvVar(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "config-test")
 	if err != nil {
 		t.Fatal(err)
@@ -59,12 +59,12 @@ func TestBasePathComputingWithEnvVar(t *testing.T) {
 		BasePathFromArg: "",
 	}
 	expectedPath, _ := filepath.Abs(tempDir)
-	result, err := configLoader.BasePathComputing(info)
+	result, err := configLoader.ComputeBasePath(info)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPath, result)
 }
 
-func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
+func TestComputeBasePathWithBasePathSetInConfiguration(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "config-test")
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 		BasePathFromArg: "",
 	}
 	expectedPath, _ := filepath.Abs(tempDir)
-	result, err := configLoader.BasePathComputing(info)
+	result, err := configLoader.ComputeBasePath(info)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedPath, result)
 	// test base pat not abs directory
@@ -104,7 +104,7 @@ func TestBasePathComputingWithBasePathSetInConfiguration(t *testing.T) {
 	expectedPath, _ = filepath.Abs(subDirTemp)
 
 	configLoader.atmosConfig.BasePath = "sub-dir"
-	result, err = configLoader.BasePathComputing(info)
+	result, err = configLoader.ComputeBasePath(info)
 	assert.NoError(t, err)
 	assert.Contains(t, result, expectedPath)
 }

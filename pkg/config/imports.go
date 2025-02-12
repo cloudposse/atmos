@@ -76,7 +76,7 @@ func (cl *ConfigLoader) processImports(importPaths []string, tempDir string, cur
 	return resolvedPaths, nil
 }
 
-// Helper to determine if the import path is remote
+// Helper to determine if the import is a supported remote source
 func isRemoteImport(importPath string) bool {
 	return strings.HasPrefix(importPath, "http://") || strings.HasPrefix(importPath, "https://")
 }
@@ -95,7 +95,7 @@ func (cl *ConfigLoader) processRemoteImport(importPath, tempDir string, currentD
 
 	v := viper.New()
 	v.SetConfigType("yaml")
-	err = cl.loadConfigFileViber(cl.atmosConfig, tempFile, v)
+	err = cl.MergeConfigFile(cl.atmosConfig, tempFile, v)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load remote config '%s': %v", importPath, err)
 	}
@@ -115,7 +115,8 @@ func (cl *ConfigLoader) processRemoteImport(importPath, tempDir string, currentD
 	if importedConfig.Import != nil {
 		nestedPaths, err := cl.processImports(importedConfig.Import, tempDir, currentDepth+1, maxDepth)
 		if err != nil {
-			return nil, fmt.Errorf("failed to process nested imports from '%s': %v", importPath, err)
+			log.Debug("failed to process nested imports", "import", importPath, "err", err)
+			return nil, fmt.Errorf("failed to process nested imports")
 		}
 		resolvedPaths = append(resolvedPaths, nestedPaths...)
 	}
@@ -139,7 +140,8 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 	}
 	paths, err := cl.SearchAtmosConfig(localPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve local import path '%s': %v", importPath, err)
+		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
+		return nil, fmt.Errorf("failed to resolve local import path")
 	}
 
 	resolvedPaths := make([]ResolvedPaths, 0)
@@ -154,7 +156,7 @@ func (cl *ConfigLoader) processLocalImport(importPath, tempDir string, currentDe
 	for _, path := range paths {
 		v := viper.New()
 		v.SetConfigType("yaml")
-		err := cl.loadConfigFileViber(cl.atmosConfig, path, v)
+		err := cl.MergeConfigFile(cl.atmosConfig, path, v)
 		if err != nil {
 			log.Debug("failed to load local config", "path", path, "error", err)
 			continue

@@ -263,7 +263,7 @@ func sanitizeOutput(output string) (string, error) {
 		fixedRemainder := collapseExtraSlashes(groups[2])
 		return groups[1] + fixedRemainder
 	})
-	// 6. Replace lines atmos-import log
+	// 6. Remove the random number added to file name like `atmos-import-454656846`
 	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
 	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
@@ -584,11 +584,11 @@ func verifyExitCode(t *testing.T, expected, actual int) bool {
 	return success
 }
 
-func verifyOutput(t *testing.T, outputType, stdOutput string, patterns []MatchPattern) bool {
+func verifyOutput(t *testing.T, outputType, rawOutput string, patterns []MatchPattern) bool {
 	success := true
-	output, err := sanitizeOutput(stdOutput)
+	output, err := sanitizeOutput(rawOutput)
 	if err != nil {
-		t.Fatalf("failed to sanitize stdout output: %v", err)
+		t.Fatalf("failed to sanitize %s output: %v", outputType, err)
 	}
 	for _, pattern := range patterns {
 		re, err := regexp.Compile(pattern.Pattern)
