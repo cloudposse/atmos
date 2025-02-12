@@ -382,6 +382,7 @@ func getStaticRemoteStateOutput(
 
 // environToMap converts all the environment variables (excluding the variables prohibited by terraform-exec/tfexec)
 // in the environment into a map of strings
+// TODO: review this (find another way to execute `terraform output` not using `terraform-exec/tfexec`)
 func environToMap() map[string]string {
 	envMap := make(map[string]string)
 	for _, env := range os.Environ() {
