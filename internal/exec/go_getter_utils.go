@@ -91,7 +91,6 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 			}
 		}
 	}
-	fmt.Println("src: ", src)
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
