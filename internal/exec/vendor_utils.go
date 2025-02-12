@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -169,7 +170,7 @@ func ReadAndProcessVendorConfigFile(
 
 			if !fileExists {
 				vendorConfigFileExists = false
-				u.LogWarning(atmosConfig, fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+				u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
 				return vendorConfig, vendorConfigFileExists, "", nil
 			}
 		}
@@ -265,7 +266,6 @@ func ExecuteAtmosVendorInternal(
 	tags []string,
 	dryRun bool,
 ) error {
-
 	var err error
 	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 
@@ -361,12 +361,20 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return err
 		}
-		err = ValidateURI(uri)
+
+		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
 		if err != nil {
 			return err
 		}
-
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile := determineSourceType(&uri, vendorConfigFilePath)
+		if !useLocalFileSystem {
+			err = ValidateURI(uri)
+			if err != nil {
+				if strings.Contains(uri, "..") {
+					return fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", s.Component, err)
+				}
+				return fmt.Errorf("invalid URI for component %s: %w", s.Component, err)
+			}
+		}
 
 		// Determine package type
 		var pType pkgType
@@ -384,7 +392,7 @@ func ExecuteAtmosVendorInternal(
 			if err != nil {
 				return err
 			}
-			targetPath := filepath.Join(vendorConfigFilePath, target)
+			targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
 			pkgName := s.Component
 			if pkgName == "" {
 				pkgName = uri
@@ -412,7 +420,7 @@ func ExecuteAtmosVendorInternal(
 		if !CheckTTYSupport() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(atmosConfig, "No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 
 		model, err := newModelAtmosVendorInternal(packages, dryRun, atmosConfig)
@@ -480,7 +488,7 @@ func logInitialMessage(atmosConfig schema.AtmosConfiguration, vendorConfigFileNa
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
-	u.LogInfo(atmosConfig, logMessage)
+	u.LogInfo(logMessage)
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
@@ -504,7 +512,7 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool) {
+func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
 	// Determine if the URI is an OCI scheme, a local file, or remote
 	useOciScheme := strings.HasPrefix(*uri, "oci://")
 	if useOciScheme {
@@ -514,13 +522,32 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
 	if !useOciScheme {
-		if absPath, err := u.JoinAbsolutePathWithPath(vendorConfigFilePath, *uri); err == nil {
+		absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri)
+		// if URI contain path traversal is path should be resolved
+		if err != nil && strings.Contains(*uri, "..") {
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
+		}
+		if err == nil {
 			uri = &absPath
 			useLocalFileSystem = true
 			sourceIsLocalFile = u.FileExists(*uri)
 		}
+
+		parsedURL, err := url.Parse(*uri)
+		if err != nil {
+			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, err
+		}
+		if err == nil && parsedURL.Scheme != "" {
+			if parsedURL.Scheme == "file" {
+				trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
+				*uri = filepath.Clean(trimmedPath)
+				useLocalFileSystem = true
+			}
+		}
+
 	}
-	return useOciScheme, useLocalFileSystem, sourceIsLocalFile
+
+	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
 func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
@@ -556,6 +583,8 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
+		tempDir = filepath.ToSlash(tempDir)
+		src = filepath.ToSlash(src)
 
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
@@ -569,7 +598,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 				return true, err
 			} else if excludeMatch {
 				// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+				u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 					trimmedSrc,
 					excludePath,
 				))
@@ -586,7 +615,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 					return true, err
 				} else if includeMatch {
 					// If the file matches ANY of the 'included_paths' patterns, include the file
-					u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+					u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 						trimmedSrc,
 						includePath,
 					))
@@ -598,13 +627,13 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 			if anyMatches {
 				return false, nil
 			} else {
-				u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+				u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 				return true, nil
 			}
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+		u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 		return false, nil
 	}
 }

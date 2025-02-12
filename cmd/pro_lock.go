@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -15,13 +14,14 @@ var proLockCmd = &cobra.Command{
 	Long:               `This command calls the atmos pro API and locks a stack`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
+	ValidArgsFunction:  ComponentsArgCompletion,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		err := e.ExecuteProLockCommand(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.LogErrorAndExit(err)
 		}
 	},
 }
@@ -29,6 +29,7 @@ var proLockCmd = &cobra.Command{
 func init() {
 	proLockCmd.PersistentFlags().StringP("component", "c", "", "Specify the Atmos component to lock")
 	proLockCmd.PersistentFlags().StringP("stack", "s", "", "Specify the Atmos stack to lock")
+	AddStackCompletion(proLockCmd)
 	proLockCmd.PersistentFlags().StringP("message", "m", "", "The lock message to display if someone else tries to lock the stack. Defaults to 'Locked by Atmos'")
 	proLockCmd.PersistentFlags().Int32P("ttl", "t", 0, "The amount of time in seconds to lock the stack for. Defaults to 30")
 

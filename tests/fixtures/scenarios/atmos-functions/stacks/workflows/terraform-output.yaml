@@ -1,0 +1,10 @@
+workflows:
+  deploy:
+    description: Test terraform.output function
+    steps:
+      - command: terraform deploy component-1 -s nonprod
+      - command: terraform deploy component-2 -s nonprod
+      - command: terraform deploy component-3 -s nonprod
+      - command: terraform deploy component-4 -s nonprod
+      - command: terraform deploy component-5 -s nonprod
+      - command: terraform deploy component-6 -s nonprod

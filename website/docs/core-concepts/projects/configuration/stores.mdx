@@ -17,6 +17,7 @@ Currently, the following stores are supported:
 
 - [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
 - [Artifactory](https://jfrog.com/artifactory/)
+- [Redis](https://redis.io/)
 </Intro>
 
 Atmos stores are configured in the `atmos.yaml` file and available to use in stacks via the
@@ -69,6 +70,12 @@ stores:
 
   <dt>`stores.[store_name].options.url (required)`</dt>
   <dd>The URL of the Artifactory instance.</dd>
+
+  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
 </dl>
 
 #### Authentication
@@ -76,9 +83,10 @@ stores:
 The Artifactory store supports using an access token for authentication. The access token can be set directly in the
 `atmos.yaml` or via the `JFROG_ACCESS_TOKEN` or `ARTIFACTORY_ACCESS_TOKEN` environment variables.
 
-NOTE: It is not recommended to set the access token in plain text in `atmos.yaml` as it is not secure. Specifying the
-access token via config is allowed so that you can support the use case where you have multiple Artifactory stores
-in `atmos.yaml` and you need to specify different access tokens for each. In this case, you can use the `!env`
+It is also possible to specify the access token as `anonymous` to use the anonymous user to access the Artifactory
+repository if the repository is configured to allow anonymous access.
+
+**NOTE:** Storing sensitive access tokens in plain text in `atmos.yaml` is not secure and should be avoided. However, it's recommended for the `anonymous` use case or when managing multiple Artifactory stores with different access tokens. In such cases, use [`!env`](/core-concepts/stacks/yaml-functions/env) function to reference tokens securely.
 YAML function to set the access token from an environment variable.
 
 ### AWS SSM Parameter Store
@@ -108,6 +116,12 @@ stores:
 
   <dt>`stores.[store_name].options.region (required)`</dt>
   <dd>The AWS region to use for the SSM Parameter Store.</dd>
+
+  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
 </dl>
 
 #### Authentication
@@ -115,3 +129,54 @@ stores:
 The AWS SSM Parameter Store supports the standard AWS methods for authentication and the `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables.
 
+### Redis
+
+```yaml
+stores:
+  dev/redis:
+    type: redis
+    options:
+      url: redis://localhost:6379
+
+  stage/redis:
+    type: redis
+    options:
+      url: !env ATMOS_STAGE_REDIS_URL
+
+  prod/redis:
+    type: redis
+    # The ATMOS_REDIS_URL environment variable will be used if no URL is specified in the options
+```
+
+<dl>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to `redis`</dd>
+
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For Redis, the following options are supported:</dd>
+
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix path that will be added to all keys stored or retreived from Redis. For example if the prefix
+  is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
+
+  <dt>`stores.[store_name].options.url`</dt>
+  <dd>
+    The URL of the Redis instance. This is optional and the `ATMOS_REDIS_URL` environment variable will be used if no
+    URL is specified in the options.
+  </dd>
+
+  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
+</dl>
+
+#### Authentication
+
+The Redis store supports authentication via the URL in options or via the `ATMOS_REDIS_URL` environment variable. The
+URL format is described in the Redis [docs](https://redis.github.io/lettuce/user-guide/connecting-redis/).

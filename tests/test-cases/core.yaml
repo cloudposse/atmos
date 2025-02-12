@@ -75,6 +75,8 @@ tests:
     expect:
       diff: []
       exit_code: 0
+      stdout:
+        - "Opening default browser to 'https://atmos.tools'."
       stderr:
         - "^$"
   - name: atmos terraform non-existent

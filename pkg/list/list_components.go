@@ -3,7 +3,6 @@ package list
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/samber/lo"
 )
@@ -29,7 +28,7 @@ func getStackComponents(stackData any) ([]string, error) {
 }
 
 // FilterAndListComponents filters and lists components based on the given stack
-func FilterAndListComponents(stackFlag string, stacksMap map[string]any) (string, error) {
+func FilterAndListComponents(stackFlag string, stacksMap map[string]any) ([]string, error) {
 	components := []string{}
 
 	if stackFlag != "" {
@@ -37,11 +36,11 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any) (string
 		if stackData, ok := stacksMap[stackFlag]; ok {
 			stackComponents, err := getStackComponents(stackData)
 			if err != nil {
-				return "", fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
+				return nil, fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
 			}
 			components = append(components, stackComponents...)
 		} else {
-			return "", fmt.Errorf("stack '%s' not found", stackFlag)
+			return nil, fmt.Errorf("stack '%s' not found", stackFlag)
 		}
 	} else {
 		// Get all components from all stacks
@@ -59,7 +58,7 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any) (string
 	sort.Strings(components)
 
 	if len(components) == 0 {
-		return "No components found", nil
+		return []string{}, nil
 	}
-	return strings.Join(components, "\n") + "\n", nil
+	return components, nil
 }

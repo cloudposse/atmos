@@ -75,7 +75,7 @@ var (
 			BasePath: "stacks/workflows",
 		},
 		Logs: schema.Logs{
-			File:  "/dev/stdout",
+			File:  "/dev/stderr",
 			Level: "Info",
 		},
 		Schemas: schema.Schemas{
@@ -133,6 +133,9 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v.SetDefault("components.helmfile.use_eks", true)
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	v.SetDefault("settings.inject_github_token", true)
+
+	v.SetDefault("logs.file", "/dev/stderr")
+	v.SetDefault("logs.level", "Info")
 
 	// Process config in system folder
 	configFilePath1 := ""
@@ -192,7 +195,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
 	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
 	if len(configFilePath4) > 0 {
-		u.LogTrace(atmosConfig, fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
+		u.LogTrace(fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
 		configFile4 := filepath.Join(configFilePath4, CliConfigFileName)
 		found, err = processConfigFile(atmosConfig, configFile4, v)
 		if err != nil {
@@ -284,7 +287,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Check config
-	err = checkConfig(atmosConfig)
+	err = checkConfig(atmosConfig, processStacks)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -335,7 +338,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			includeStackAbsPaths,
 			excludeStackAbsPaths,
 		)
-
 		if err != nil {
 			return atmosConfig, err
 		}
@@ -355,7 +357,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		atmosConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
 
 		if stackIsPhysicalPath {
-			u.LogTrace(atmosConfig, fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
+			u.LogTrace(fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
 				configAndStacksInfo.Stack,
 				stackConfigFilesRelativePaths[0]),
 			)
@@ -383,6 +385,7 @@ func processConfigFile(
 	if !fileExists {
 		return false, nil
 	}
+
 	reader, err := os.Open(configPath)
 	if err != nil {
 		return false, err
@@ -391,7 +394,7 @@ func processConfigFile(
 	defer func(reader *os.File) {
 		err := reader.Close()
 		if err != nil {
-			u.LogWarning(atmosConfig, fmt.Sprintf("error closing file '"+configPath+"'. "+err.Error()))
+			u.LogWarning(fmt.Sprintf("error closing file '%s'. %v", configPath, err))
 		}
 	}(reader)
 

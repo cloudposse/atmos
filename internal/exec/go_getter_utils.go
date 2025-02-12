@@ -27,17 +27,12 @@ func ValidateURI(uri string) error {
 	if len(uri) > 2048 {
 		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
 	}
-	// Add more validation as needed
 	// Validate URI format
 	if strings.Contains(uri, "..") {
 		return fmt.Errorf("URI cannot contain path traversal sequences")
 	}
 	if strings.Contains(uri, " ") {
 		return fmt.Errorf("URI cannot contain spaces")
-	}
-	// Validate characters
-	if strings.ContainsAny(uri, "<>|&;$") {
-		return fmt.Errorf("URI contains invalid characters")
 	}
 	// Validate scheme-specific format
 	if strings.HasPrefix(uri, "oci://") {
@@ -84,18 +79,18 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("Failed to parse URL %q: %v\n", src, err))
+		u.LogDebug(fmt.Sprintf("Failed to parse URL %q: %v\n", src, err))
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
 	}
 
 	if strings.ToLower(parsedURL.Host) != "github.com" {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("Host is %q, not 'github.com', skipping token injection\n", parsedURL.Host))
+		u.LogDebug(fmt.Sprintf("Host is %q, not 'github.com', skipping token injection\n", parsedURL.Host))
 		return "", false, nil
 	}
 
 	parts := strings.SplitN(parsedURL.Path, "/", 4)
 	if len(parts) < 3 {
-		u.LogDebug(d.AtmosConfig, fmt.Sprintf("URL path %q doesn't look like /owner/repo\n", parsedURL.Path))
+		u.LogDebug(fmt.Sprintf("URL path %q doesn't look like /owner/repo\n", parsedURL.Path))
 		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL.Path)
 	}
 
@@ -109,15 +104,15 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 	if atmosGitHubToken != "" {
 		usedToken = atmosGitHubToken
 		tokenSource = "ATMOS_GITHUB_TOKEN"
-		u.LogDebug(d.AtmosConfig, "ATMOS_GITHUB_TOKEN is set\n")
+		u.LogDebug("ATMOS_GITHUB_TOKEN is set\n")
 	} else {
 		// 2. Otherwise, only inject GITHUB_TOKEN if cfg.Settings.InjectGithubToken == true
 		if d.AtmosConfig.Settings.InjectGithubToken && gitHubToken != "" {
 			usedToken = gitHubToken
 			tokenSource = "GITHUB_TOKEN"
-			u.LogTrace(d.AtmosConfig, "InjectGithubToken=true and GITHUB_TOKEN is set, using it\n")
+			u.LogTrace("InjectGithubToken=true and GITHUB_TOKEN is set, using it\n")
 		} else {
-			u.LogTrace(d.AtmosConfig, "No ATMOS_GITHUB_TOKEN or GITHUB_TOKEN found\n")
+			u.LogTrace("No ATMOS_GITHUB_TOKEN or GITHUB_TOKEN found\n")
 		}
 	}
 
@@ -125,10 +120,10 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		user := parsedURL.User.Username()
 		pass, _ := parsedURL.User.Password()
 		if user == "" && pass == "" {
-			u.LogDebug(d.AtmosConfig, fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
+			u.LogDebug(fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
 			parsedURL.User = url.UserPassword("x-access-token", usedToken)
 		} else {
-			u.LogDebug(d.AtmosConfig, "Credentials found, skipping token injection\n")
+			u.LogDebug("Credentials found, skipping token injection\n")
 		}
 	}
 

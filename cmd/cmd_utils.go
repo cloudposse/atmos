@@ -62,7 +62,7 @@ func processCustomCommands(
 		if _, exist := existingTopLevelCommands[commandConfig.Name]; exist && topLevel {
 			command = existingTopLevelCommands[commandConfig.Name]
 		} else {
-			var customCommand = &cobra.Command{
+			customCommand := &cobra.Command{
 				Use:   commandConfig.Name,
 				Short: commandConfig.Description,
 				Long:  commandConfig.Description,
@@ -132,7 +132,7 @@ func processCommandAliases(
 			aliasCmd := strings.TrimSpace(v)
 			aliasFor := fmt.Sprintf("alias for '%s'", aliasCmd)
 
-			var aliasCommand = &cobra.Command{
+			aliasCommand := &cobra.Command{
 				Use:                alias,
 				Short:              aliasFor,
 				Long:               aliasFor,
@@ -140,13 +140,13 @@ func processCommandAliases(
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
 					if err != nil {
-						u.LogErrorAndExit(atmosConfig, err)
+						u.LogErrorAndExit(err)
 					}
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
 					err = e.ExecuteShell(atmosConfig, commandToRun, commandToRun, ".", nil, false)
 					if err != nil {
-						u.LogErrorAndExit(atmosConfig, err)
+						u.LogErrorAndExit(err)
 					}
 				},
 			}
@@ -170,7 +170,7 @@ func preCustomCommand(
 ) {
 	var sb strings.Builder
 
-	//checking for zero arguments in config
+	// checking for zero arguments in config
 	if len(commandConfig.Arguments) == 0 {
 		if len(commandConfig.Steps) > 0 {
 			// do nothing here; let the code proceed
@@ -182,18 +182,18 @@ func preCustomCommand(
 					fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name),
 				)
 			}
-			u.LogInfo(schema.AtmosConfiguration{}, sb.String())
+			u.LogInfo(sb.String())
 			os.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			u.LogError(schema.AtmosConfiguration{}, errors.New(
+			u.LogError(errors.New(
 				"invalid command: no args, no steps, no sub-commands",
 			))
 			os.Exit(1)
 		}
 	}
 
-	//Check on many arguments required and have no default value
+	// Check on many arguments required and have no default value
 	requiredNoDefaultCount := 0
 	for _, arg := range commandConfig.Arguments {
 		if arg.Required && arg.Default == "" {
@@ -218,7 +218,7 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
-		u.LogErrorAndExit(schema.AtmosConfiguration{}, errors.New(sb.String()))
+		u.LogErrorAndExit(errors.New(sb.String()))
 	}
 
 	// Merge user-supplied arguments with defaults
@@ -233,7 +233,7 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				u.LogErrorAndExit(schema.AtmosConfiguration{}, errors.New(sb.String()))
+				u.LogErrorAndExit(errors.New(sb.String()))
 			}
 		}
 	}
@@ -297,20 +297,20 @@ func executeCustomCommand(
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
 				if err != nil {
-					u.LogErrorAndExit(atmosConfig, err)
+					u.LogErrorAndExit(err)
 				}
 				flagsData[fl.Name] = providedFlag
 			} else if fl.Type == "bool" {
 				boolFlag, err := flags.GetBool(fl.Name)
 				if err != nil {
-					u.LogErrorAndExit(atmosConfig, err)
+					u.LogErrorAndExit(err)
 				}
 				flagsData[fl.Name] = boolFlag
 			}
 		}
 
 		// Prepare template data
-		var data = map[string]any{
+		data := map[string]any{
 			"Arguments": argumentsData,
 			"Flags":     flagsData,
 		}
@@ -321,27 +321,27 @@ func executeCustomCommand(
 			// Process Go templates in the command's 'component_config.component'
 			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			if err != nil {
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 			if component == "" || component == "<no value>" {
-				u.LogErrorAndExit(atmosConfig, fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
+				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
 					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			if err != nil {
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 			if stack == "" || stack == "<no value>" {
-				u.LogErrorAndExit(atmosConfig, fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
+				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
 			}
 
 			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true)
+			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
 			if err != nil {
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 			data["ComponentConfig"] = componentConfig
 		}
@@ -358,7 +358,7 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 
 			// If the command to get the value for the ENV var is provided, execute it
@@ -366,28 +366,28 @@ func executeCustomCommand(
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := e.ExecuteShellAndReturnOutput(atmosConfig, valCommand, valCommandName, ".", nil, false)
 				if err != nil {
-					u.LogErrorAndExit(atmosConfig, err)
+					u.LogErrorAndExit(err)
 				}
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
 				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
 				if err != nil {
-					u.LogErrorAndExit(atmosConfig, err)
+					u.LogErrorAndExit(err)
 				}
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
 			err = os.Setenv(key, value)
 			if err != nil {
-				u.LogErrorAndExit(atmosConfig, err)
+				u.LogErrorAndExit(err)
 			}
 		}
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
-			u.LogDebug(atmosConfig, "\nUsing ENV vars:")
+			u.LogDebug("\nUsing ENV vars:")
 			for _, v := range envVarsList {
-				u.LogDebug(atmosConfig, v)
+				u.LogDebug(v)
 			}
 		}
 
@@ -395,14 +395,14 @@ func executeCustomCommand(
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
 		if err != nil {
-			u.LogErrorAndExit(atmosConfig, err)
+			u.LogErrorAndExit(err)
 		}
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, ".", envVarsList, false)
 		if err != nil {
-			u.LogErrorAndExit(atmosConfig, err)
+			u.LogErrorAndExit(err)
 		}
 	}
 }
@@ -435,7 +435,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	if vCfg.CheckStack {
@@ -455,7 +455,7 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	if atmosConfig.Default {
@@ -501,7 +501,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Could not load cache: %s", err))
+		u.LogWarning(fmt.Sprintf("Could not load cache: %s", err))
 		return
 	}
 
@@ -514,12 +514,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		u.LogWarning(fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
 		return
 	}
 
 	if latestReleaseTag == "" {
-		u.LogWarning(atmosConfig, "No release information available")
+		u.LogWarning("No release information available")
 		return
 	}
 
@@ -535,8 +535,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Update the cache to mark the current timestamp
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		u.LogWarning(atmosConfig, fmt.Sprintf("Unable to save cache: %s", saveErr))
-
+		u.LogWarning(fmt.Sprintf("Unable to save cache: %s", saveErr))
 	}
 }
 
@@ -554,7 +553,6 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 }
 
 func showUsageAndExit(cmd *cobra.Command, args []string) {
-
 	var suggestions []string
 	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
 
@@ -587,13 +585,13 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	os.Exit(1)
 }
 
-// getConfigAndStacksInfo gets the
+// getConfigAndStacksInfo processes the CLI config and stacks
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
 	checkAtmosConfig()
 
 	var argsAfterDoubleDash []string
-	var finalArgs = args
+	finalArgs := args
 
 	doubleDashIndex := lo.IndexOf(args, "--")
 	if doubleDashIndex > 0 {
@@ -603,7 +601,53 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
 	if err != nil {
-		u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+		u.LogErrorAndExit(err)
 	}
 	return info
+}
+
+func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	output, err := listStacks(cmd)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return output, cobra.ShellCompDirectiveNoFileComp
+}
+
+func AddStackCompletion(cmd *cobra.Command) {
+	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+}
+
+func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		output, err := listComponents(cmd)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return output, cobra.ShellCompDirectiveNoFileComp
+	}
+	if len(args) > 0 {
+		flagName := args[len(args)-1]
+		if strings.HasPrefix(flagName, "--") {
+			flagName = strings.ReplaceAll(flagName, "--", "")
+		}
+		if strings.HasPrefix(toComplete, "--") {
+			flagName = strings.ReplaceAll(toComplete, "--", "")
+		}
+		flagName = strings.ReplaceAll(flagName, "=", "")
+		if option, ok := cmd.GetFlagCompletionFunc(flagName); ok {
+			return option(cmd, args, toComplete)
+		}
+	}
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
+// Contains checks if a slice of strings contains an exact match for the target string.
+func Contains(slice []string, target string) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

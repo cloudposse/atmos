@@ -1,0 +1,90 @@
+tests:
+  - name: terraform output function
+    enabled: true
+    tty: true
+    description: "Ensure the !terraform.output function works."
+    workdir: "fixtures/scenarios/atmos-functions/"
+    command: "atmos"
+    args:
+       - "terraform"
+       - "deploy"
+       - "component-4"
+       - "-s"
+       - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+    skip:
+      # PTY not supported on windows
+      os: !not windows
+    expect:
+      exit_code: 0
+      stdout:
+        - "Fetching baz output from component-3 in nonprod"
+        - "Fetching foo output from component-1 in nonprod"
+        - "Fetching bar output from component-2 in nonprod"
+      stderr:
+        - "^$"
+
+  - name: terraform output function (no tty)
+    enabled: true
+    tty: false
+    description: "Ensure the !terraform.output function works."
+    workdir: "fixtures/scenarios/atmos-functions/"
+    command: "atmos"
+    args:
+       - "terraform"
+       - "deploy"
+       - "component-4"
+       - "-s"
+       - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+    expect:
+      exit_code: 0
+      stdout:
+        - "Fetching baz output from component-3 in nonprod"
+        - "Fetching foo output from component-1 in nonprod"
+        - "Fetching bar output from component-2 in nonprod"
+
+  - name: "!env function test"
+    enabled: true
+    tty: false
+    description: "Ensure the !env function works."
+    workdir: "fixtures/scenarios/atmos-functions/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "deploy"
+      - "component-5"
+      - "-s"
+      - "nonprod"
+    env:
+      ATMOS_TEST_1: "test-env-and-terraform-output-functions"
+    expect:
+      exit_code: 0
+      stdout:
+        - "test-env-and-terraform-output-functions"
+
+  - name: "!terraform.output from component with !env function test"
+    enabled: true
+    tty: false
+    description: "Ensure !terraform.output from component with !env function works."
+    workdir: "fixtures/scenarios/atmos-functions/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "component-6"
+      - "-s"
+      - "nonprod"
+    env:
+      # The ENV variables will not be set in the child process (that executes the functions from `terraform-exec`)
+      # (because they are prohibited in the `terraform-exec` library)
+      TF_VAR_spacelift_stack: "test"
+      TF_CLI_ARGS_plan: "-refresh=false"
+      TF_IN_AUTOMATION: true
+      TF_APPEND_USER_AGENT: false
+    expect:
+      exit_code: 0
+      stdout:
+        - "test-env-and-terraform-output-functions"

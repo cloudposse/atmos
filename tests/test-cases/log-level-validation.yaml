@@ -1,6 +1,7 @@
 tests:
   - name: "Invalid Log Level in Config File"
     enabled: true
+    snapshot: true
     description: "Test validation of invalid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/invalid-log-level"
     command: "atmos"
@@ -11,12 +12,14 @@ tests:
       - -s
       - test
     expect:
+      diff: []
       exit_code: 1
       stderr:
         - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
 
   - name: "Invalid Log Level in Environment Variable"
     enabled: true
+    snapshot: true
     description: "Test validation of invalid log level in ATMOS_LOGS_LEVEL env var"
     workdir: "../"
     command: "atmos"
@@ -29,52 +32,145 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: XTrace
     expect:
+      diff: []
       exit_code: 1
       stderr:
         - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
 
   - name: "Valid Log Level in Config File"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/valid-log-level"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     expect:
-      exit_code: 1
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
+      exit_code: 0
 
   - name: "Valid Log Level in Environment Variable"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in ATMOS_LOGS_LEVEL env var"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_LOGS_LEVEL: Debug
     command: "atmos"
     args:
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
-    env:
-      ATMOS_LOGS_LEVEL: Debug
+      - version
     expect:
-      exit_code: 1
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      stderr:
+        - "DEBU Found ENV var ATMOS_LOGS_LEVEL=Debug"
+      exit_code: 0
 
   - name: "Valid Log Level in Command Line Flag"
     enabled: true
+    snapshot: true
     description: "Test validation of valid log level in --logs-level flag"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - --logs-level
       - Info
-      - terraform
-      - plan
-      - test
-      - -s
-      - test
+      - version
     expect:
-      exit_code: 1
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      stderr:
+        - "^$"
+      exit_code: 0
+  - name: "Valid log level in env should be priortized over config"
+    enabled: true
+    snapshot: true
+    description: "Test validation of env priority over config"
+    workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_LOGS_LEVEL: "Debug"
+    command: "atmos"
+    args:
+      - version
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        # We are fine with any debug logs config is set to info but if env gets priority we would get debug
+        - "DEBU"
+      exit_code: 0
+  - name: "Valid log level in flag should be priortized over env and config"
+    enabled: true
+    snapshot: true
+    description: "Test validation of env priority over config"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - version
+      - "--logs-level"
+      - "Debug"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        # We are fine with any debug logs config and env is set to info but if flag gets priority we would get debug logs
+        - "DEBU"
+      exit_code: 0
+  - name: "Valid log file in env should be priortized over config"
+    enabled: true
+    snapshot: true
+    description: "Test validation of env priority over config"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - version
+      - "--logs-level"
+      - "Debug"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_LOGS_FILE: "/dev/stdout"
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        # Debug logs should be in stdout as we have choosen /dev/stdout in env
+        - "DEBU"
+      exit_code: 0
+  - name: "Valid log file in flag should be priortized over env and config"
+    enabled: true
+    snapshot: true
+    description: "Test validation of env priority over config"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - version
+      - "--logs-level"
+      - "Debug"
+      - "--logs-file"
+      - "/dev/stdout"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_LOGS_FILE: "/dev/stderr"
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        # Debug logs should be in stdout as we have choosen /dev/stdout in flag
+        - "DEBU"
+      exit_code: 0
