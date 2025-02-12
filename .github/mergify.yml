@@ -28,7 +28,7 @@ pull_request_rules:
     actions:
       comment:
         message: |
-          Triggering the workflow dispatch for preview build...
+          Triggering the workflow dispatch for tests & preview build on `{{ head }}`...
       github_actions:
         workflow:
           dispatch:
