@@ -148,8 +148,8 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 
 		// Helper function to check if a column has any non-empty values
 		hasValues := func(col schema.ListColumnConfig) bool {
-			// Stack and File columns are always shown
-			if col.Name == "Stack" || col.Name == "File" {
+			// Stack is always shown
+			if col.Name == "Stack" {
 				return true
 			}
 
@@ -159,16 +159,19 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			}
 
 			// Check if any stack has a non-empty value for this column
+			hasNonEmptyValue := false
 			for _, stack := range filteredStacks {
 				var buf strings.Builder
 				if err := tmpl.Execute(&buf, stack); err != nil {
 					continue
 				}
-				if buf.String() != "" {
-					return true
+				value := buf.String()
+				if value != "" && value != "<nil>" && value != "<no value>" {
+					hasNonEmptyValue = true
+					break
 				}
 			}
-			return false
+			return hasNonEmptyValue
 		}
 
 		// Filter out columns with no values
