@@ -231,6 +231,9 @@
         },
         "providers": {
           "$ref": "#/definitions/providers"
+        },
+        "hooks": {
+          "$ref": "#/definitions/hooks"
         }
       },
       "required": [],
@@ -349,6 +352,10 @@
           "description": "Custom configuration per component, not inherited by derived components",
           "additionalProperties": true,
           "title": "custom"
+        },
+        "locked": {
+          "type": "boolean",
+          "description": "Flag to lock the component and prevent modifications while allowing read operations"
         }
       },
       "required": [],
@@ -731,6 +738,12 @@
       "description": "Templates section",
       "additionalProperties": true,
       "title": "templates"
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Hooks section",
+      "additionalProperties": true,
+      "title": "hooks"
     }
   }
 }
