@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+import:
+  - catalog/station
+
+components:
+  terraform:
+    station:
+      vars:
+        location: Stockholm
+        lang: se
