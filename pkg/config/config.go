@@ -287,7 +287,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Check config
-	err = checkConfig(atmosConfig)
+	err = checkConfig(atmosConfig, processStacks)
 	if err != nil {
 		return atmosConfig, err
 	}
