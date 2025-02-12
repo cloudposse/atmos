@@ -17,17 +17,21 @@ import (
 )
 
 // Constants
-const viewportHeight = 4
-const outerMargin = 3
+const (
+	viewportHeight = 4
+	outerMargin    = 3
+)
 
 const maxLogLines = 25 // 🔥 Track max number of lines
 
 // Message types
-type outputMsg string
-type doneMsg struct {
-	exitCode int
-	err      error
-}
+type (
+	outputMsg string
+	doneMsg   struct {
+		exitCode int
+		err      error
+	}
+)
 type tickMsg time.Duration
 
 // Run a function with a spinner and viewport

@@ -212,7 +212,6 @@ func convertTapes() error {
 		if isUpToDate(outputMp4, tape) {
 			log.Info("Skipping tape recording", "tape", ConvertToRelativeFromCWD(tape), "reason", "already up-to-date")
 		} else {
-
 			if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Converting %s to mp4...", baseName), exec.Command("vhs", tape, "--output", outputMp4)); err != nil || exitCode != 0 {
 				log.Error("Failed to convert tape", "tape", ConvertToRelativeFromCWD(tape), "file", ConvertToRelativeFromCWD(outputMp4), "error", err)
 				os.Exit(exitCode)
@@ -368,7 +367,7 @@ func isSceneUpToDate(outputMp4, sceneFile string) bool {
 	}
 
 	// Regex to match "file '<filename>.mp4'"
-	var sceneFileRegex = regexp.MustCompile(`file '([^']+\.mp4)'`)
+	sceneFileRegex := regexp.MustCompile(`file '([^']+\.mp4)'`)
 
 	// Read sceneFile contents
 	data, err := os.ReadFile(sceneFile)
