@@ -74,6 +74,7 @@ postprocess_ansi() {
 postprocess_html() {
   local file=$1
   $SED 's/color:blue/color:#005f87/g' $file
+	$SED 's/color:#183691/color:#005f87/g' $file
 }
 
 manifest=$1
