@@ -1,26 +1,16 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/tui/viewport"
 	"github.com/go-git/go-git/v5"
 	"github.com/spf13/cobra"
 )
@@ -37,14 +27,20 @@ var (
 
 // Timeout for VHS processing
 const vhsTimeout = 10 * time.Minute
-const viewportHeight = 10 // Viewport height for command output
+
+// Styles
+var (
+	successMark = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")).Bold(false).Render("✓") // Bright green
+	errorMark   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Bold(false).Render("x") // Bright red
+	neutralMark = lipgloss.NewStyle().Foreground(lipgloss.Color("#555555")).Bold(false).Render("-") // Dark gray
+)
 
 func init() {
 	var err error
-	// Configure the logger
+
 	log.SetDefault(log.NewWithOptions(os.Stderr, log.Options{
-		ReportTimestamp: false, // Disable timestamps
-		ReportCaller:    false, // Optional: Disable caller info
+		ReportTimestamp: false,
+		ReportCaller:    false,
 	}))
 
 	repoRoot, err = getGitRoot()
@@ -66,9 +62,8 @@ func main() {
 		Use:   "clean",
 		Short: "Clean up generated files",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runWithSpinner("Cleaning up generated files...", func(updates chan string) error {
-				return Clean() // Just call Clean inside
-			})
+			_, err := RunCmdWithSpinner("Cleaning up generated files...", exec.Command("rm", "-rf", mp4OutDir, gifOutDir))
+			return err
 		},
 	})
 
@@ -85,6 +80,67 @@ func main() {
 	}
 }
 
+// **Run a Command with a Spinner**
+func RunCmdWithSpinner(title string, cmd *exec.Cmd) (int, error) {
+	// Ensure we run commands from the repo root
+	repoRoot, err := getGitRoot()
+	if err != nil {
+		return -1, fmt.Errorf("failed to get repo root: %w", err)
+	}
+	cmd.Dir = repoRoot // Change working directory
+
+	m, err := viewport.RunWithSpinner(title, func(output chan string, logLines *[]string) (int, error) {
+		return viewport.RunCommand(output, logLines, cmd)
+	})
+
+	exitCode := m.ExitCode // Extract correct exit code
+
+	elapsed := time.Since(m.Start).Round(time.Second)
+	timer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Render(fmt.Sprintf("(%s)", elapsed))
+
+	if exitCode == -1 {
+		fmt.Printf("%s %s. Aborted by user. %s\n", neutralMark, title, timer)
+		os.Exit(130)
+	} else if err != nil || exitCode != 0 {
+		fmt.Printf("%s %s. Error encountered. Command exited with code %d. %s\n", errorMark, title, exitCode, timer)
+		fmt.Println("=== Full Log Dump ===")
+		fmt.Println(strings.Join(*m.LogLines, "\n"))
+		return exitCode, err
+	} else {
+		fmt.Printf("%s %s %s\n", successMark, title, timer)
+	}
+	return exitCode, nil
+}
+
+// ConvertToRelativeFromCWD converts an absolute file path to a relative path based on the current working directory.
+func ConvertToRelativeFromCWD(absPath string) string {
+	// Get the current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Error("Error getting working directory", "error", err)
+		return absPath
+	}
+
+	// Get absolute versions of both paths for consistency
+	absFile, err := filepath.Abs(absPath)
+	if err != nil {
+		log.Error("failed to get absolute file path", "error", err)
+		return absPath
+	}
+
+	// Convert absolute path to relative path
+	relPath, err := filepath.Rel(cwd, absFile)
+	if err != nil {
+		log.Error("failed to compute relative path", "error", err)
+		return absPath
+	}
+
+	return relPath
+}
+
+// **Git Root Detection**
 func getGitRoot() (string, error) {
 	currentDir, err := os.Getwd()
 	if err != nil {
@@ -104,49 +160,26 @@ func getGitRoot() (string, error) {
 	return worktree.Filesystem.Root(), nil
 }
 
-func Clean() error {
-	if err := os.RemoveAll(mp4OutDir); err != nil {
-		return err
-	}
-	if err := os.RemoveAll(gifOutDir); err != nil {
-		return err
+// **Ensure Directories Exist**
+func ensureDirs(dirs ...string) error {
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func getFadeStart(mp4File string) int {
-	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4File)
-	output, err := cmd.Output()
-	if err != nil {
-		log.Error("Failed to get video duration", "file", mp4File, "error", err)
-		return 0
-	}
-
-	duration, err := strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
-	if err != nil {
-		log.Error("Failed to parse video duration", "file", mp4File, "error", err)
-		return 0
-	}
-
-	fadeStart := int(duration) - 5
-	if fadeStart < 0 {
-		fadeStart = 0
-	}
-
-	return fadeStart
-}
-
+// **Build Process**
 func Build() error {
 	if err := ensureDirs(mp4OutDir, gifOutDir); err != nil {
 		return err
 	}
 
-	// Convert tapes to mp4
 	if err := convertTapes(); err != nil {
 		return fmt.Errorf("error converting tapes: %w", err)
 	}
 
-	// Process scenes
 	if err := processScenes(); err != nil {
 		return fmt.Errorf("error processing scenes: %w", err)
 	}
@@ -154,6 +187,7 @@ func Build() error {
 	return nil
 }
 
+// **Convert Tapes**
 func convertTapes() error {
 	files, err := filepath.Glob(filepath.Join(tapesDir, "*.tape"))
 	if err != nil {
@@ -165,54 +199,32 @@ func convertTapes() error {
 	}
 
 	for _, tape := range files {
+		var exitCode int
+		var err error
+
 		baseName := filepath.Base(tape[:len(tape)-len(filepath.Ext(tape))])
 		outputMp4 := filepath.Join(mp4OutDir, baseName+".mp4")
 		outputGif := filepath.Join(gifOutDir, baseName+".gif")
 
-		if isUpToDate(outputMp4, tape) {
-			log.Info("Skipping", "file", baseName, "reason", "already up to date")
-			continue
+		if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Converting %s to mp4...", baseName), exec.Command("vhs", tape, "--output", outputMp4)); err != nil || exitCode != 0 {
+			log.Error("Failed to convert tape", "tape", ConvertToRelativeFromCWD(tape), "file", ConvertToRelativeFromCWD(outputMp4), "error", err)
+			os.Exit(exitCode)
+		} else {
+			log.Info("Converted tape to mp4", "file", outputMp4)
 		}
 
-		// Convert tape to mp4
-		err := runWithSpinner(fmt.Sprintf("Converting %s to mp4...", baseName), func(updates chan string) error {
-			return runCommandWithOutput(updates, "vhs", tape, "--output", outputMp4)
-		})
-		if err != nil {
-			log.Error("Failed to convert tape", "file", baseName, "error", err)
-			continue // Continue processing other tapes
-		}
-
-		// Generate GIF
-		err = runWithSpinner(fmt.Sprintf("Generating GIF for %s...", baseName), func(updates chan string) error {
-			return createGifWithOutput(updates, outputMp4, outputGif)
-		})
-		if err != nil {
+		if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Generating GIF for %s...", baseName), exec.Command("ffmpeg", "-i", outputMp4, "-y", outputGif)); err != nil || exitCode != 0 {
 			log.Error("Failed to generate GIF", "file", baseName, "error", err)
+			os.Exit(exitCode)
+		} else {
+			log.Info("Generated GIF", "file", outputGif)
 		}
 	}
 
 	return nil
 }
 
-func createGifWithOutput(updates chan string, inputMp4, outputGif string) error {
-	palette := filepath.Join(filepath.Dir(outputGif), filepath.Base(outputGif)+".png")
-
-	// Step 1: Generate palette for optimized colors
-	err := runCommandWithOutput(updates, "ffmpeg", "-y", "-i", inputMp4, "-vf", "palettegen", palette)
-	if err != nil {
-		return fmt.Errorf("failed to generate palette for %s: %w", outputGif, err)
-	}
-
-	// Step 2: Generate GIF using the optimized palette
-	err = runCommandWithOutput(updates, "ffmpeg", "-i", inputMp4, "-i", palette, "-lavfi", "fps=10 [video]; [video][1:v] paletteuse", "-y", outputGif)
-	if err != nil {
-		return fmt.Errorf("failed to create GIF for %s: %w", outputGif, err)
-	}
-
-	return nil
-}
-
+// **Process Scenes**
 func processScenes() error {
 	files, err := filepath.Glob(filepath.Join(scenesDir, "*.txt"))
 	if err != nil {
@@ -226,248 +238,13 @@ func processScenes() error {
 	for _, sceneFile := range files {
 		sceneName := filepath.Base(sceneFile[:len(sceneFile)-len(filepath.Ext(sceneFile))])
 		outputMp4 := filepath.Join(mp4OutDir, sceneName+".mp4")
-		outputMp4WithAudio := filepath.Join(mp4OutDir, sceneName+"-with-audio.mp4")
-		outputGif := filepath.Join(gifOutDir, sceneName+".gif")
 
-		// Step 1: Concatenate scenes using ffmpeg
-		err := runWithSpinner(fmt.Sprintf("Concatenating scenes for %s...", sceneName), func(updates chan string) error {
-			return runCommandWithOutput(updates, "ffmpeg", "-f", "concat", "-safe", "0", "-i", sceneFile, "-c", "copy", "-y", outputMp4)
-		})
-		if err != nil {
+		if exitCode, err := RunCmdWithSpinner(fmt.Sprintf("Concatenating scenes for %s...", sceneName), exec.Command("ffmpeg", "-f", "concat", "-safe", "0", "-i", sceneFile, "-c", "copy", "-y", outputMp4)); err != nil || exitCode != 0 {
 			log.Error("Failed to concatenate scenes", "scene", sceneName, "error", err)
-			continue // Continue processing other scenes
+			os.Exit(exitCode)
 		}
-
-		// Step 2: Add fade-out audio
-		fadeStart := getFadeStart(outputMp4)
-		err = runWithSpinner(fmt.Sprintf("Adding fade-out audio for scene %s...", sceneName), func(updates chan string) error {
-			return runCommandWithOutput(updates, "ffmpeg", "-i", outputMp4, "-i", audioFile, "-filter_complex", fmt.Sprintf("[1:a]afade=t=out:st=%d:d=5[aout]", fadeStart), "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-y", outputMp4WithAudio)
-		})
-		if err != nil {
-			log.Error("Failed to add audio to scene", "scene", sceneName, "error", err)
-			continue // Continue processing other scenes
-		}
-
-		// Step 3: Generate GIF from final MP4 with audio
-		err = runWithSpinner(fmt.Sprintf("Generating GIF for scene %s...", sceneName), func(updates chan string) error {
-			return createGifWithOutput(updates, outputMp4WithAudio, outputGif)
-		})
-		if err != nil {
-			log.Error("Failed to generate GIF", "scene", sceneName, "error", err)
-		}
+		log.Info("Concatenated scenes", "scene", sceneName, "file", outputMp4)
 	}
 
 	return nil
-}
-
-func runVHSWithHeartbeat(input, output string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), vhsTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "vhs", input, "--output", output)
-	cmd.Dir = repoRoot
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("VHS failed for %s: %w\nStderr: %s\nStdout: %s", input, err, stderr.String(), stdout.String())
-	}
-	return nil
-}
-
-func createGif(inputMp4, outputGif string) error {
-	palette := filepath.Join(filepath.Dir(outputGif), filepath.Base(outputGif)+".png")
-
-	if err := exec.Command("ffmpeg", "-y", "-i", inputMp4, "-vf", "palettegen", palette).Run(); err != nil {
-		return err
-	}
-
-	if err := exec.Command("ffmpeg", "-i", inputMp4, "-i", palette, "-lavfi", "fps=10 [video]; [video][1:v] paletteuse", "-y", outputGif).Run(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func ensureDirs(dirs ...string) error {
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func isUpToDate(output, input string) bool {
-	outputInfo, err := os.Stat(output)
-	if err != nil {
-		return false
-	}
-	inputInfo, err := os.Stat(input)
-	if err != nil {
-		return false
-	}
-	return outputInfo.ModTime().After(inputInfo.ModTime())
-}
-
-// Spinner + Viewport, handles SIGINT (^C) to terminate safely
-func runWithSpinner(title string, fn func(chan string) error) error {
-	updates := make(chan string)   // Command output channel
-	done := make(chan struct{})    // Signal for UI exit
-	errChan := make(chan error, 1) // Capture command errors
-	sigChan := make(chan os.Signal, 1)
-	var once sync.Once // Ensures updates is closed only once
-
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM) // Handle Ctrl+C
-
-	model := newSpinnerViewportModel(title, updates, done)
-	p := tea.NewProgram(model)
-
-	// Goroutine to run the command
-	go func() {
-		err := fn(updates)                 // Run the command
-		once.Do(func() { close(updates) }) // Ensure updates is closed only once
-		errChan <- err
-	}()
-
-	// Run the UI in a separate goroutine so we can monitor for `Ctrl+C`
-	uiDone := make(chan struct{})
-	go func() {
-		_, _ = p.Run()
-		close(uiDone) // UI is done running
-	}()
-
-	// Handle `Ctrl+C` in the main thread
-	select {
-	case <-sigChan: // 🚨 Wait for `Ctrl+C`
-		close(done)                        // Signal UI to quit
-		p.Quit()                           // Stop Bubble Tea UI
-		once.Do(func() { close(updates) }) // Ensure updates is closed only once
-		os.Exit(1)                         // 🚨 Force exit immediately
-	case <-uiDone: // UI exited naturally
-	}
-
-	once.Do(func() { close(updates) }) // Ensure updates is closed safely
-	close(done)                        // Ensure cleanup after UI exits
-
-	return <-errChan // Return command error if any
-}
-
-type spinnerViewportModel struct {
-	spinner  spinner.Model
-	viewport viewport.Model
-	title    string
-	updates  chan string
-	done     chan struct{}
-	msgs     chan tea.Msg // Channel for UI updates
-}
-
-// Custom message type for updating logs
-type lineMsg string
-
-func (m spinnerViewportModel) Init() tea.Cmd {
-	// Start listening for updates in a separate goroutine
-	go func() {
-		for line := range m.updates {
-			m.msgs <- lineMsg(line) // Send UI update message for each line
-		}
-		close(m.msgs) // Close UI update channel when done
-	}()
-
-	return tea.Batch(m.spinner.Tick, waitForLogMsg(m.msgs))
-}
-
-// **New Function to Listen for Log Messages**
-func waitForLogMsg(msgs chan tea.Msg) tea.Cmd {
-	return func() tea.Msg {
-		msg, ok := <-msgs
-		if !ok {
-			return nil // No more messages
-		}
-		return msg
-	}
-}
-
-func (m spinnerViewportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, tea.Batch(cmd, waitForLogMsg(m.msgs)) // Keep listening for log updates
-
-	case lineMsg:
-		m.viewport.SetContent(m.viewport.View() + "\n" + string(msg)) // Append new log line
-		return m, waitForLogMsg(m.msgs)                               // Keep waiting for new log messages
-
-	case tea.KeyMsg:
-		return m, tea.Quit // Allow user to quit with a key
-
-	case nil:
-		return m, nil // No update required
-	}
-
-	return m, nil
-}
-
-func (m spinnerViewportModel) View() string {
-	return fmt.Sprintf("\n%s %s\n%s", m.spinner.View(), m.title, m.viewport.View())
-}
-
-func newSpinnerViewportModel(title string, updates chan string, done chan struct{}) spinnerViewportModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // Blue Spinner
-
-	vp := viewport.New(80, 10) // Set viewport width and height
-
-	return spinnerViewportModel{
-		spinner:  s,
-		viewport: vp,
-		title:    title,
-		updates:  updates,
-		done:     done,
-		msgs:     make(chan tea.Msg, 100), // Buffered channel for UI updates
-	}
-}
-
-func runCommandWithOutput(updates chan string, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-
-	stdoutPipe, _ := cmd.StdoutPipe()
-	stderrPipe, _ := cmd.StderrPipe()
-
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		streamOutput(stdoutPipe, updates)
-	}()
-
-	go func() {
-		defer wg.Done()
-		streamOutput(stderrPipe, updates)
-	}()
-
-	err := cmd.Wait()
-	wg.Wait() // Ensure all goroutines complete before returning
-
-	return err
-}
-
-func streamOutput(r io.Reader, updates chan string) {
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		select {
-		case updates <- scanner.Text(): // Try sending to the channel
-		default: // If the channel is closed, stop writing
-			return
-		}
-	}
 }
