@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -24,39 +25,41 @@ var listComponentsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-
-		flags := cmd.Flags()
-
-		stackFlag, err := flags.GetString("stack")
-		if err != nil {
-			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `stack` flag: `%v`", err), "")
-			return
-		}
-
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("Error Initializing CLI config", err, "")
-			return
-		}
-
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("Error describing stacks", err, "")
-			return
-		}
-
-		output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+		output, err := listComponents(cmd)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 			return
 		}
 
-		u.PrintMessageInColor(output, theme.Colors.Success)
+		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }
 
 func init() {
 	listComponentsCmd.PersistentFlags().StringP("stack", "s", "", "Filter components by stack (e.g., atmos list components -s stack1)")
+	AddStackCompletion(listComponentsCmd)
 	listCmd.AddCommand(listComponentsCmd)
+}
+
+func listComponents(cmd *cobra.Command) ([]string, error) {
+	flags := cmd.Flags()
+
+	stackFlag, err := flags.GetString("stack")
+	if err != nil {
+		return nil, fmt.Errorf("Error getting the `stack` flag: `%v`", err)
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Error describing stacks: %v", err)
+	}
+
+	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+	return output, err
 }

@@ -21,6 +21,7 @@ func init() {
 	helmfileCmd.DisableFlagParsing = true
 	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile <helmfile_command> <component> -s <stack>")
 	helmfileCmd.PersistentFlags().Bool("", false, doubleDashHint)
+	AddStackCompletion(helmfileCmd)
 	RootCmd.AddCommand(helmfileCmd)
 }
 

@@ -45,6 +45,8 @@ tests:
     snapshot: true
     description: "Test validation of valid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/valid-log-level"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - version
@@ -60,11 +62,12 @@ tests:
     snapshot: true
     description: "Test validation of valid log level in ATMOS_LOGS_LEVEL env var"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_LOGS_LEVEL: Debug
     command: "atmos"
     args:
       - version
-    env:
-      ATMOS_LOGS_LEVEL: Debug
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
@@ -79,6 +82,8 @@ tests:
     snapshot: true
     description: "Test validation of valid log level in --logs-level flag"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - --logs-level
@@ -97,11 +102,12 @@ tests:
     snapshot: true
     description: "Test validation of env priority over config"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_LOGS_LEVEL: "Debug"
     command: "atmos"
     args:
       - version
-    env:
-      ATMOS_LOGS_LEVEL: "Debug"
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
@@ -120,6 +126,7 @@ tests:
       - "--logs-level"
       - "Debug"
     env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_LEVEL: "Info"
     expect:
       diff:
@@ -139,6 +146,7 @@ tests:
       - "--logs-level"
       - "Debug"
     env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_FILE: "/dev/stdout"
     expect:
       diff:
@@ -160,6 +168,7 @@ tests:
       - "--logs-file"
       - "/dev/stdout"
     env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
       ATMOS_LOGS_FILE: "/dev/stderr"
     expect:
       diff:

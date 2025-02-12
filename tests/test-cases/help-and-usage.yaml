@@ -180,7 +180,7 @@ tests:
       - "non-existent"
     expect:
       exit_code: 1
-  - name: atmos helmfile apply 
+  - name: atmos helmfile apply
     enabled: true
     snapshot: true
     description: "Should show error in atmos workspace"
@@ -390,6 +390,8 @@ tests:
     description: "Should show help for 'atmos validate editorconfig help'"
     snapshot: true
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: atmos
     args:
       - "validate"
@@ -407,6 +409,8 @@ tests:
     description: "Should show help for 'atmos validate editorconfig --help'"
     snapshot: true
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: atmos
     args:
       - "validate"
@@ -481,4 +485,3 @@ tests:
       - "--help"
     expect:
       exit_code: 0
-

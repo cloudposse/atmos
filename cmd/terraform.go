@@ -27,6 +27,7 @@ func init() {
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
 	terraformCmd.PersistentFlags().Bool("", false, doubleDashHint)
+	AddStackCompletion(terraformCmd)
 	attachTerraformCommands(terraformCmd)
 	RootCmd.AddCommand(terraformCmd)
 }

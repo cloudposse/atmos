@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+	"strings"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -23,28 +25,12 @@ var listStacksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-
-		componentFlag, _ := cmd.Flags().GetString("component")
-
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("Error initializing CLI config", err, "")
-			return
-		}
-
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("Error describing stacks", err, "")
-			return
-		}
-
-		output, err := l.FilterAndListStacks(stacksMap, componentFlag)
+    output, err := listStacks(cmd)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
 			return
 		}
-		u.PrintMessageInColor(output, theme.Colors.Success)
+		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }
 
@@ -52,4 +38,20 @@ func init() {
 	listStacksCmd.DisableFlagParsing = false
 	listStacksCmd.PersistentFlags().StringP("component", "c", "", "atmos list stacks -c <component>")
 	listCmd.AddCommand(listStacksCmd)
+}
+
+func listStacks(cmd *cobra.Command) ([]string, error) {
+	componentFlag, _ := cmd.Flags().GetString("component")
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
+	}
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Error describing stacks: %v", err)
+	}
+
+	output, err := l.FilterAndListStacks(stacksMap, componentFlag)
+	return output, err
 }

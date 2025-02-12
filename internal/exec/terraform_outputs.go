@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -18,6 +19,44 @@ import (
 )
 
 var terraformOutputsCache = sync.Map{}
+
+const (
+	cliArgsEnvVar            = "TF_CLI_ARGS"
+	inputEnvVar              = "TF_INPUT"
+	automationEnvVar         = "TF_IN_AUTOMATION"
+	logEnvVar                = "TF_LOG"
+	logCoreEnvVar            = "TF_LOG_CORE"
+	logPathEnvVar            = "TF_LOG_PATH"
+	logProviderEnvVar        = "TF_LOG_PROVIDER"
+	reattachEnvVar           = "TF_REATTACH_PROVIDERS"
+	appendUserAgentEnvVar    = "TF_APPEND_USER_AGENT"
+	workspaceEnvVar          = "TF_WORKSPACE"
+	disablePluginTLSEnvVar   = "TF_DISABLE_PLUGIN_TLS"
+	skipProviderVerifyEnvVar = "TF_SKIP_PROVIDER_VERIFY"
+
+	varEnvVarPrefix    = "TF_VAR_"
+	cliArgEnvVarPrefix = "TF_CLI_ARGS_"
+)
+
+var prohibitedEnvVars = []string{
+	cliArgsEnvVar,
+	inputEnvVar,
+	automationEnvVar,
+	logEnvVar,
+	logCoreEnvVar,
+	logPathEnvVar,
+	logProviderEnvVar,
+	reattachEnvVar,
+	appendUserAgentEnvVar,
+	workspaceEnvVar,
+	disablePluginTLSEnvVar,
+	skipProviderVerifyEnvVar,
+}
+
+var prohibitedEnvVarPrefixes = []string{
+	varEnvVarPrefix,
+	cliArgEnvVarPrefix,
+}
 
 func execTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
@@ -131,8 +170,8 @@ func execTerraformOutput(
 			envMap, ok2 := envSection.(map[string]any)
 			if ok2 && len(envMap) > 0 {
 				l.Debug("Setting environment variables from the component's 'env' section", "env", envMap)
-				// Get all environment variables from the parent process
-				environMap := u.EnvironToMap()
+				// Get all environment variables (excluding the variables prohibited by terraform-exec/tfexec) from the parent process
+				environMap := environToMap()
 				// Add/override the environment variables from the component's 'env' section
 				for k, v := range envMap {
 					environMap[k] = fmt.Sprintf("%v", v)
@@ -142,6 +181,7 @@ func execTerraformOutput(
 				if err != nil {
 					return nil, err
 				}
+				l.Debug("Final environment variables", "environ", environMap)
 			}
 		}
 
@@ -338,4 +378,20 @@ func getStaticRemoteStateOutput(
 	}
 
 	return res
+}
+
+// environToMap converts all the environment variables (excluding the variables prohibited by terraform-exec/tfexec)
+// in the environment into a map of strings
+// TODO: review this (find another way to execute `terraform output` not using `terraform-exec/tfexec`)
+func environToMap() map[string]string {
+	envMap := make(map[string]string)
+	for _, env := range os.Environ() {
+		pair := u.SplitStringAtFirstOccurrence(env, "=")
+		k := pair[0]
+		v := pair[1]
+		if !u.SliceContainsString(prohibitedEnvVars, k) && !u.SliceContainsStringStartsWith(prohibitedEnvVarPrefixes, k) {
+			envMap[k] = v
+		}
+	}
+	return envMap
 }
