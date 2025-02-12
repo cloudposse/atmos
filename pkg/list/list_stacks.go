@@ -1,6 +1,7 @@
 package list
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -293,33 +294,53 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 
 		var output strings.Builder
 
-		// Helper function to escape values
-		escapeValue := func(s string) string {
-			// For TSV, just replace tabs with spaces to maintain format
-			if format == FormatTSV {
-				return strings.ReplaceAll(s, "\t", " ")
-			}
-			// For CSV, use standard CSV escaping
-			if strings.Contains(s, fileDelimiter) || strings.Contains(s, "\n") || strings.Contains(s, "\"") {
-				return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
-			}
-			return s
-		}
+		switch format {
+		case FormatCSV:
+			// Use encoding/csv for proper CSV handling
+			writer := csv.NewWriter(&output)
+			writer.Comma = rune(fileDelimiter[0])
 
-		// Write headers
-		escapedHeaders := make([]string, len(nonEmptyHeaders))
-		for i, header := range nonEmptyHeaders {
-			escapedHeaders[i] = escapeValue(header)
-		}
-		output.WriteString(strings.Join(escapedHeaders, fileDelimiter) + utils.GetLineEnding())
-
-		// Write rows
-		for _, row := range rows {
-			var escapedRow []string
-			for _, i := range nonEmptyColumnIndexes {
-				escapedRow = append(escapedRow, escapeValue(row[i]))
+			// Write headers
+			if err := writer.Write(nonEmptyHeaders); err != nil {
+				return "", fmt.Errorf("error writing CSV headers: %w", err)
 			}
-			output.WriteString(strings.Join(escapedRow, fileDelimiter) + utils.GetLineEnding())
+
+			// Write rows
+			for _, row := range rows {
+				csvRow := make([]string, len(nonEmptyColumnIndexes))
+				for j, i := range nonEmptyColumnIndexes {
+					csvRow[j] = row[i]
+				}
+				if err := writer.Write(csvRow); err != nil {
+					return "", fmt.Errorf("error writing CSV row: %w", err)
+				}
+			}
+			writer.Flush()
+			if err := writer.Error(); err != nil {
+				return "", fmt.Errorf("error flushing CSV writer: %w", err)
+			}
+
+		case FormatTSV:
+			// For TSV, replace tabs with spaces in values and use tab as delimiter
+			// Write headers
+			for i, header := range nonEmptyHeaders {
+				if i > 0 {
+					output.WriteString("\t")
+				}
+				output.WriteString(strings.ReplaceAll(header, "\t", " "))
+			}
+			output.WriteString(utils.GetLineEnding())
+
+			// Write rows
+			for _, row := range rows {
+				for j, i := range nonEmptyColumnIndexes {
+					if j > 0 {
+						output.WriteString("\t")
+					}
+					output.WriteString(strings.ReplaceAll(row[i], "\t", " "))
+				}
+				output.WriteString(utils.GetLineEnding())
+			}
 		}
 		return output.String(), nil
 

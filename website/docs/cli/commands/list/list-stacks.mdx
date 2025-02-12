@@ -44,6 +44,8 @@ atmos list stacks -c vpc
 | Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|----------|
 | `--component`    | Atmos component                                                                                                                                                                                                                         | `-c`  | no       |
+| `--format`      | Output format (table, json, csv, tsv). Default is table format with TTY-aware styling                                                                                                                                                    | `-f`  | no       |
+| `--delimiter`   | Delimiter for table and csv formats. Default is tab for table, comma for csv                                                                                                                                                           | `-d`  | no       |
 
 ## Display Format
 
@@ -99,4 +101,94 @@ staging                acme
 prod                   acme-corp
 ```
 
+## Output Behavior
+
+### Terminal Output
+When running in an interactive terminal session, the command provides formatted tabular output with proper column alignment and optional colors (if configured).
+
+### Redirections and Pipes
+When the output is redirected to a file or piped to another command (e.g., `atmos list stacks > stacks.txt` or `atmos list stacks | grep dev`), the command automatically adjusts its output format:
+
+- Table formatting is simplified to ensure consistent spacing
+- ANSI color codes are automatically disabled
+- Output is optimized for machine readability and further processing
+
+### Non-TTY Environment
+In non-interactive environments (when no TTY is attached), such as in CI/CD pipelines or when running through automation tools, the command:
+
+- Disables interactive features
+- Uses a simplified output format
+- Ensures consistent machine-readable output
+
+:::tip
+When scripting or automating `atmos list stacks`, consider using the `--format json` or `--format yaml` flags for more predictable and parseable output.
+:::
+
 This format provides a clear, tabular view of your stacks and their associated tenant information.
+
+## Output Formats
+
+The command supports multiple output formats to accommodate different use cases:
+
+### Table Format (Default)
+```shell
+$ atmos list stacks
+Stack     File
+-----     ----
+dev      examples/quick-start-simple/stacks/deploy/dev.yaml
+prod     examples/quick-start-simple/stacks/deploy/prod.yaml
+```
+
+### JSON Format
+```shell
+$ atmos list stacks --format json
+[
+  {
+    "stack": "dev",
+    "file": "examples/quick-start-simple/stacks/deploy/dev.yaml"
+  },
+  {
+    "stack": "prod",
+    "file": "examples/quick-start-simple/stacks/deploy/prod.yaml"
+  }
+]
+```
+
+### CSV Format
+```shell
+$ atmos list stacks --format csv
+Stack,File
+dev,examples/quick-start-simple/stacks/deploy/dev.yaml
+prod,examples/quick-start-simple/stacks/deploy/prod.yaml
+```
+
+### TSV Format
+```shell
+$ atmos list stacks --format tsv
+Stack	File
+dev	examples/quick-start-simple/stacks/deploy/dev.yaml
+prod	examples/quick-start-simple/stacks/deploy/prod.yaml
+```
+
+## Output Behavior
+
+### Terminal Output
+When running in an interactive terminal session, the command provides formatted tabular output with proper column alignment and optional colors (if configured).
+
+### Redirections and Pipes
+When the output is redirected to a file or piped to another command (e.g., `atmos list stacks > stacks.txt` or `atmos list stacks | grep dev`), the command automatically adjusts its output format:
+
+- Table formatting is simplified to ensure consistent spacing
+- ANSI color codes are automatically disabled
+- Output is optimized for machine readability and further processing
+
+### Non-TTY Environment
+In non-interactive environments (when no TTY is attached), such as in CI/CD pipelines or when running through automation tools, the command:
+
+- Disables interactive features
+- Uses a simplified output format
+- Ensures consistent machine-readable output
+
+:::tip
+When scripting or automating `atmos list stacks`, consider using the `--format json` or `--format csv` flags for more predictable and parseable output.
+:::
