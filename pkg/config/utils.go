@@ -391,12 +391,12 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-func checkConfig(atmosConfig schema.AtmosConfiguration) error {
-	if len(atmosConfig.Stacks.BasePath) < 1 {
+func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) error {
+	if isProcessStack && len(atmosConfig.Stacks.BasePath) < 1 {
 		return errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
 	}
 
-	if len(atmosConfig.Stacks.IncludedPaths) < 1 {
+	if isProcessStack && len(atmosConfig.Stacks.IncludedPaths) < 1 {
 		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	}
 
