@@ -265,6 +265,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		if setFlags, ok := commandMaps[cmd.Use]; ok {
 			setFlags(cmd)
 		}
+		cmd.ValidArgsFunction = ComponentsArgCompletion
 		cmd.Run = func(cmd_ *cobra.Command, args []string) {
 			// Because we disable flag parsing we require manual handle help Request
 			handleHelpRequest(cmd, args)
