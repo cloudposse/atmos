@@ -268,13 +268,13 @@ func (cl *ConfigLoader) stageDiscoverAdditionalConfigs() error {
 	// 3. Check Current Working Directory (CWD)
 	found := cl.loadWorkdirAtmosConfig()
 	if found {
-		log.Debug("load atmos config from workdir")
+		log.Debug("loaded atmos config from current working directory")
 		return nil
 	}
 	// 2. Check Git Repository Root
-	found = cl.loadGitAtmosConfig()
+	found, gitRoot := cl.loadGitAtmosConfig()
 	if found {
-		log.Debug("load atmos config from Git root")
+		log.Debug("loaded atmos config from git root", "path", gitRoot)
 		return nil
 	}
 
@@ -370,70 +370,71 @@ func (cl *ConfigLoader) getWorkDirAtmosConfigPaths(workDir string) ([]string, er
 }
 
 // loadGitAtmosConfig attempts to load configuration files from the Git repository root. It returns a boolean indicating if any configs were found and successfully loaded.
-func (cl *ConfigLoader) loadGitAtmosConfig() (found bool) {
+func (cl *ConfigLoader) loadGitAtmosConfig() (found bool, gitRoot string) {
 	found = false
 	gitRoot, err := u.GetGitRoot()
 	if err != nil {
 		log.Debug("Failed to determine Git repository root", "error", err)
-		return found
+		return found, gitRoot
 	}
 	if gitRoot == "" {
 		log.Debug("Failed to determine Git repository root")
-		return found
+		return found, gitRoot
 	}
 	log.Debug("Git repository root atmos loaded", "path", gitRoot)
 	isDir, err := u.IsDirectory(gitRoot)
 	if err != nil {
 		if err == os.ErrNotExist {
 			log.Debug("Git repository root not found", "path", gitRoot)
-			return found
+			return found, gitRoot
 		}
 	}
 
 	if !isDir {
 		log.Debug("Git repository root not found", "path", gitRoot)
-		return found
+		return found, gitRoot
 	}
 	log.Debug("Git repository root found", "path", gitRoot)
 
 	gitAtmosConfigPath, err := cl.getGitAtmosConfigPaths(gitRoot)
 	if err != nil {
-		log.Debug("Failed to get Git atmos config paths", "error", err)
-		return found
+		log.Debug("Failed to get atmos config paths from Git root ", "path", gitRoot, "error", err)
+		return found, gitRoot
 	}
 	if len(gitAtmosConfigPath) > 0 {
-		for _, atmosFilePath := range gitAtmosConfigPath {
-			log.Debug("Found Git atmos config file", "path", atmosFilePath)
-			err := cl.MergeConfigFile(cl.atmosConfig, atmosFilePath, cl.viper)
-			if err != nil {
-				log.Debug("error loading config file", "path", atmosFilePath, "error", err)
-				continue
-			}
-			err = cl.deepMergeConfig()
-			if err != nil {
-				log.Debug("error merging config file", "path", atmosFilePath, "error", err)
-				continue
-			}
-
-			log.Debug("merged config file", "path", atmosFilePath)
-			// Process Imports and Deep Merge
-			if err := cl.processConfigImports(); err != nil {
-				log.Debug("error processing imports", "path", atmosFilePath, "error", err)
-				continue
-			}
-			err = cl.deepMergeConfig()
-			if err != nil {
-				log.Debug("error merging config file", "path", atmosFilePath, "error", err)
-			}
-			found = true
+		log.Debug("no atmos config found on Git root", "path", gitRoot, "error", err)
+		return found, gitRoot
+	}
+	for _, atmosFilePath := range gitAtmosConfigPath {
+		log.Debug("Found Git atmos config file", "path", atmosFilePath)
+		err := cl.MergeConfigFile(cl.atmosConfig, atmosFilePath, cl.viper)
+		if err != nil {
+			log.Debug("error loading config file", "path", atmosFilePath, "error", err)
+			continue
 		}
-		if !found {
-			log.Debug("Failed to process atmos config files fom git root", "path", gitRoot)
-			return false
+		err = cl.deepMergeConfig()
+		if err != nil {
+			log.Debug("error merging config file", "path", atmosFilePath, "error", err)
+			continue
 		}
+		log.Debug("merged config file", "path", atmosFilePath)
+		// Process Imports and Deep Merge
+		if err := cl.processConfigImports(); err != nil {
+			log.Debug("error processing imports", "path", atmosFilePath, "error", err)
+			continue
+		}
+		err = cl.deepMergeConfig()
+		if err != nil {
+			log.Debug("error merging config file", "path", atmosFilePath, "error", err)
+		}
+		found = true
+	}
+	if !found {
+		log.Debug("Failed to process atmos config files fom git root", "path", gitRoot)
+		return false, gitRoot
 	}
 
-	return found
+	return found, gitRoot
 }
 
 func (cl *ConfigLoader) getGitAtmosConfigPaths(gitRootDir string) ([]string, error) {
@@ -534,7 +535,7 @@ func (cl *ConfigLoader) applyUserPreferences() {
 		}
 
 	}
-	log.Debug("no configuration found in user preferences")
+	log.Debug("no configuration found", "source", "user_preferences")
 	return
 }
 
@@ -570,7 +571,7 @@ func (cl *ConfigLoader) loadSystemConfig() error {
 		return nil
 
 	} else {
-		log.Debug("no atmos configurations found on system directory")
+		log.Debug("no atmos configurations found", "source", "system_directory")
 	}
 	return nil
 }
