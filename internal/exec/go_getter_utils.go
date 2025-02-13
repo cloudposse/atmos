@@ -8,9 +8,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
+	l "github.com/charmbracelet/log"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-getter"
 
@@ -56,76 +58,142 @@ func IsValidScheme(scheme string) bool {
 		"git":        true,
 		"ssh":        true,
 		"git::https": true,
+		"git::ssh":   true,
 	}
 	return validSchemes[scheme]
 }
 
-// CustomGitHubDetector intercepts GitHub URLs and transforms them
-// into something like git::https://<token>@github.com/... so we can
-// do a git-based clone with a token.
-type CustomGitHubDetector struct {
+// CustomGitDetector intercepts Git URLs (for GitHub, Bitbucket, GitLab, etc.)
+// and transforms them into a proper URL for cloning, optionally injecting tokens.
+type CustomGitDetector struct {
 	AtmosConfig schema.AtmosConfiguration
+	source      string
 }
 
 // Detect implements the getter.Detector interface for go-getter v1.
-func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
+func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
+	l.Debug(fmt.Sprintf("CustomGitDetector.Detect(%q, %q)", src, d.source))
+
 	if len(src) == 0 {
 		return "", false, nil
 	}
 
+	// We need this block because many SCP-style URLs aren’t valid according to Go’s URL parser.
+	// SCP-style URLs omit an explicit scheme (like "ssh://" or "https://") and use a colon
+	// to separate the host from the path. Go’s URL parser expects a scheme, so without one,
+	// it fails to parse these URLs correctly.
+	// Below, we check if the URL doesn’t contain a scheme. If so, we attempt to detect an SCP-style URL:
+	// e.g. "git@github.com:cloudposse/terraform-null-label.git?ref=..."
+	// If the URL matches this pattern, we rewrite it to a proper SSH URL.
+	// Otherwise, we default to prepending "https://".
 	if !strings.Contains(src, "://") {
-		src = "https://" + src
+		// Check for SCP-style SSH URL (e.g. "git@github.com:cloudposse/terraform-null-label.git?ref=...")
+		// This regex supports any host with a dot (e.g. github.com, bitbucket.org, gitlab.com)
+		scpPattern := regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
+		if scpPattern.MatchString(src) {
+			matches := scpPattern.FindStringSubmatch(src)
+			// Build proper SSH URL: "ssh://[username@]host/repoPath[.git][additional]"
+			newSrc := "ssh://"
+			if matches[1] != "" {
+				newSrc += matches[1] // includes username and '@'
+			}
+			newSrc += matches[3] + "/" + matches[4]
+			if matches[5] != "" {
+				newSrc += matches[5]
+			}
+			if matches[6] != "" {
+				newSrc += matches[6]
+			}
+			l.Debug(fmt.Sprintf("Rewriting SCP-style SSH URL to proper SSH URL: %s -> %s", src, newSrc))
+			src = newSrc
+		} else {
+			src = "https://" + src
+			l.Debug(fmt.Sprintf("Defaulting to https scheme, url is %q:", src))
+		}
 	}
+
+	l.Debug(fmt.Sprintf("url = %q:", src))
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-		u.LogDebug(fmt.Sprintf("Failed to parse URL %q: %v\n", src, err))
+		l.Debug(fmt.Sprintf("Failed to parse URL %q: %v", src, err))
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
 	}
 
-	if strings.ToLower(parsedURL.Host) != "github.com" {
-		u.LogDebug(fmt.Sprintf("Host is %q, not 'github.com', skipping token injection\n", parsedURL.Host))
+	// If the URL uses the SSH scheme, check for an active SSH agent.
+	if parsedURL.Scheme == "ssh" && os.Getenv("SSH_AUTH_SOCK") == "" {
+		return "", false, fmt.Errorf("SSH URL detected but no SSH agent appears to be active. Please ensure your SSH key is loaded (e.g. run 'eval $(ssh-agent -s)' and 'ssh-add ~/.ssh/id_ed25519')")
+	}
+
+	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
+	host := strings.ToLower(parsedURL.Host)
+	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
+		l.Debug(fmt.Sprintf("Host is %q, not recognized for token injection", parsedURL.Host))
+		// For unrecognized hosts, simply return without injecting tokens.
 		return "", false, nil
 	}
 
-	parts := strings.SplitN(parsedURL.Path, "/", 4)
-	if len(parts) < 3 {
-		u.LogDebug(fmt.Sprintf("URL path %q doesn't look like /owner/repo\n", parsedURL.Path))
-		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL.Path)
-	}
-
-	atmosGitHubToken := os.Getenv("ATMOS_GITHUB_TOKEN")
-	gitHubToken := os.Getenv("GITHUB_TOKEN")
-
-	var usedToken string
-	var tokenSource string
-
-	// 1. If ATMOS_GITHUB_TOKEN is set, always use that
-	if atmosGitHubToken != "" {
-		usedToken = atmosGitHubToken
-		tokenSource = "ATMOS_GITHUB_TOKEN"
-		u.LogDebug("ATMOS_GITHUB_TOKEN is set\n")
-	} else {
-		// 2. Otherwise, only inject GITHUB_TOKEN if cfg.Settings.InjectGithubToken == true
-		if d.AtmosConfig.Settings.InjectGithubToken && gitHubToken != "" {
-			usedToken = gitHubToken
+	// TBC: should we support more tokens for Bitbucket and GitLab at all? Any other hosts?
+	// Any other git-enabled hosts to be added?
+	var token, tokenSource string
+	switch host {
+	case "github.com":
+		token = os.Getenv("ATMOS_GITHUB_TOKEN")
+		if token == "" && d.AtmosConfig.Settings.InjectGithubToken {
+			token = os.Getenv("GITHUB_TOKEN")
 			tokenSource = "GITHUB_TOKEN"
-			u.LogTrace("InjectGithubToken=true and GITHUB_TOKEN is set, using it\n")
 		} else {
-			u.LogTrace("No ATMOS_GITHUB_TOKEN or GITHUB_TOKEN found\n")
+			tokenSource = "ATMOS_GITHUB_TOKEN"
+		}
+	case "bitbucket.org":
+		token = os.Getenv("ATMOS_BITBUCKET_TOKEN")
+		if token == "" {
+			token = os.Getenv("BITBUCKET_TOKEN")
+			tokenSource = "BITBUCKET_TOKEN"
+		} else {
+			tokenSource = "ATMOS_BITBUCKET_TOKEN"
+		}
+	case "gitlab.com":
+		token = os.Getenv("ATMOS_GITLAB_TOKEN")
+		if token == "" {
+			token = os.Getenv("GITLAB_TOKEN")
+			tokenSource = "GITLAB_TOKEN"
+		} else {
+			tokenSource = "ATMOS_GITLAB_TOKEN"
 		}
 	}
 
-	if usedToken != "" {
-		user := parsedURL.User.Username()
-		pass, _ := parsedURL.User.Password()
-		if user == "" && pass == "" {
-			u.LogDebug(fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
-			parsedURL.User = url.UserPassword("x-access-token", usedToken)
+	if token != "" {
+		// Inject token only if no credentials are already provided.
+		if parsedURL.User == nil || parsedURL.User.Username() == "" {
+			l.Debug(fmt.Sprintf("Injecting token from %s for %s", tokenSource, src))
+			parsedURL.User = url.UserPassword("x-access-token", token)
 		} else {
-			u.LogDebug("Credentials found, skipping token injection\n")
+			l.Debug("Credentials already provided, skipping token injection")
 		}
 	}
+
+	//  check if the user typed something like
+	// "github.com/org/repo.git" with NO subdir and, if so, appends '//.'.
+	if !strings.Contains(d.source, "//") {
+		// means user typed something like "github.com/org/repo.git" with NO subdir
+		parts := strings.SplitN(parsedURL.Path, "/", 4)
+		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
+			l.Debug("Detected top-level repo with no subdir: appending '//.'")
+			parsedURL.Path = parsedURL.Path + "//."
+		}
+	}
+
+	// Set "depth=1" for a shallow clone if not specified.
+	// In Go-Getter, "depth" controls how many revisions are cloned:
+	// - `depth=1` fetches only the latest commit (faster, less bandwidth).
+	// - `depth=` (empty) performs a full clone (default Git behavior).
+	// - `depth=N` clones the last N revisions.
+	q := parsedURL.Query()
+	if _, exists := q["depth"]; !exists {
+		q.Set("depth", "1")
+	}
+	parsedURL.RawQuery = q.Encode()
 
 	finalURL := "git::" + parsedURL.String()
 
@@ -137,7 +205,7 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitHubDetector{AtmosConfig: atmosConfig},
+			&CustomGitDetector{AtmosConfig: atmosConfig},
 		},
 		getter.Detectors...,
 	)
