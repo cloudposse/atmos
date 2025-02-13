@@ -79,17 +79,3 @@ tests:
         - "Opening default browser to 'https://atmos.tools'."
       stderr:
         - "^$"
-  - name: atmos terraform non-existent
-    enabled: false
-    snapshot: true
-    description: "Ensure atmos CLI returns an error for a non-existent command."
-    workdir: "../"
-    command: "atmos"
-    args:
-      - "terraform"
-      - "non-existent"
-    expect:
-      diff: []
-      stderr:
-        - 'unknown command "non-existent" for "atmos"'
-      exit_code: 1

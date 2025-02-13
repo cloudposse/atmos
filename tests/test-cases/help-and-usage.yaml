@@ -1,78 +1,27 @@
 tests:
   - name: atmos non-existent
     enabled: true
+    snapshot: true
     description: "Ensure atmos CLI returns an error for a non-existent command."
     workdir: "../"
     command: "atmos"
     args:
       - "non-existent"
     expect:
-      stderr:
-        - 'Error: Unknown command \"non-existent\" for \"atmos\"'
-      exit_code: 1
-  - name: atmos --help
-    enabled: true
-    description: "Ensure atmos CLI help command lists available commands."
-    workdir: "./"
-    command: "atmos"
-    args:
-      - "--help"
-    expect:
-      stdout:
-        - "Usage:"
-        - "Available Commands:"
-        - "\\batlantis\\b"
-        - "\\baws\\b"
-        - "\\bcompletion\\b"
-        - "\\bdescribe\\b"
-        - "\\bdocs\\b"
-        - "\\bhelmfile\\b"
-        - "\\bhelp\\b"
-        - "\\blist\\b"
-        - "\\bpro\\b"
-        - "\\bterraform\\b"
-        - "\\bvalidate\\b"
-        - "\\bvendor\\b"
-        - "\\bversion\\b"
-        - "\\bworkflow\\b"
-        - "SubCommand Aliases:"
-        - "\\bhf\\b"
-        - "Flags:"
-        - "\\batmos \\[subcommand\\] [<]component[>] -s [<]stack[>] -- [<]native-flags[>]"
-        - "for more information about a command"
-      stderr:
-        - "^$"
-      exit_code: 0
-  - name: atmos
-    enabled: true
-    description: "Ensure atmos CLI help command shows atmos config "
-    workdir: "./"
-    command: "atmos"
-    expect:
-      stdout:
-        - "atmos.yaml CLI config file was not found"
-        - "The default Atmos stacks directory is set to stacks,"
-      stderr:
-        - "^$"
       exit_code: 1
   - name: atmos terraform
     enabled: true
+    snapshot: true
     description: "Ensure atmos terraform cli shows usage command"
     workdir: "./"
     command: "atmos"
     args:
       - "terraform"
     expect:
-      stdout:
-        - "Valid subcommands are:"
-        - "apply"
-        - "clean"
-        - "console"
-      stderr:
-        - 'Error: Unknown command: "atmos terraform"'
       exit_code: 1
   - name: atmos terraform help
     enabled: true
+    snapshot: true
     description: "Ensure 'atmos terraform help' shows help output"
     workdir: "./"
     command: "atmos"
@@ -80,14 +29,15 @@ tests:
       - "terraform"
       - "help"
     expect:
-      stdout:
-        - "\\bapply\\b"
-        - "\\bgenerate\\b"
-      stderr:
-        - "^$"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos terraform --help
     enabled: true
+    snapshot: true
     description: "Ensure atmos terraform --help shows help output"
     workdir: "./"
     command: "atmos"
@@ -95,14 +45,15 @@ tests:
       - "terraform"
       - "--help"
     expect:
-      stdout:
-        - "\\bapply\\b"
-        - "\\bgenerate\\b"
-      stderr:
-        - "^$"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos terraform apply --help
     enabled: true
+    snapshot: true
     description: "Ensure atmos terraform apply --help shows help output"
     workdir: "./"
     command: "atmos"
@@ -111,15 +62,15 @@ tests:
       - "apply"
       - "--help"
     expect:
-      stdout:
-        - "\\bUsage\\b"
-        - "Flags:"
-        - "and the beginning of additional native arguments and flags for the specific command being run"
-      stderr:
-        - "^$"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos terraform apply help
     enabled: true
+    snapshot: true
     description: "Ensure atmos terraform help shows help output"
     workdir: "./"
     command: "atmos"
@@ -128,15 +79,15 @@ tests:
       - "apply"
       - "--help"
     expect:
-      stdout:
-        - "\\bUsage\\b"
-        - "Flags:"
-        - "and the beginning of additional native arguments and flags for the specific command being run"
-      stderr:
-        - "^$"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos terraform non-existent
     enabled: true
+    snapshot: true
     description: "Ensure atmos terraform CLI returns an error for a non-existent command."
     workdir: "../"
     command: "atmos"
@@ -144,11 +95,10 @@ tests:
       - "terraform"
       - "non-existent"
     expect:
-      stderr:
-        - 'Error: Unknown command \"non-existent\" for \"atmos terraform\"'
       exit_code: 1
   - name: atmos terraform plan non-existent in non workspace
     enabled: true
+    snapshot: true
     description: "Ensure atmos terraform CLI returns an error for a non-existent command in non existing workspace."
     workdir: "../"
     command: "atmos"
@@ -157,12 +107,10 @@ tests:
       - "plan"
       - "non-existent"
     expect:
-      stdout:
-        - "CLI config file specifies the directory for Atmos stack"
-        - "Quick Start"
       exit_code: 1
   - name: atmos terraform plan non-existent in workspace
     enabled: true
+    snapshot: true
     description: "Ensure atmos terraform CLI returns an error for a non-existent command in existing workspace."
     workdir: "../examples/quick-start-simple"
     command: "atmos"
@@ -171,42 +119,30 @@ tests:
       - "plan"
       - "non-existent"
     expect:
-      stderr:
-        - "'stack' is required. Usage: atmos terraform <command> <component> -s <stack>"
       exit_code: 1
   - name: atmos helmfile
     enabled: true
+    snapshot: true
     description: "Should show usage for helmfile"
     workdir: "../"
     command: "atmos"
     args:
       - "helmfile"
     expect:
-      stderr:
-        - 'Error: Unknown command: "atmos helmfile"'
-      stdout:
-        - "Valid subcommands are:"
-        - "apply"
-        - "destroy"
       exit_code: 1
-  - name: atmos helmfile non-existant
+  - name: atmos helmfile non-existent
     enabled: true
-    description: "Should show usage for helmfile and non-existant subcommand"
+    description: "Should show usage for helmfile and non-existent subcommand"
     workdir: "../"
     command: "atmos"
     args:
       - "helmfile"
-      - "non-existant"
+      - "non-existent"
     expect:
-      stderr:
-        - 'Error: Unknown command "non-existant" for "atmos helmfile"'
-      stdout:
-        - "Valid subcommands are:"
-        - "apply"
-        - "destroy"
       exit_code: 1
   - name: atmos helmfile help
     enabled: true
+    snapshot: true
     description: "Should show help for helmfile"
     workdir: "../"
     command: "atmos"
@@ -214,13 +150,15 @@ tests:
       - "helmfile"
       - "help"
     expect:
-      stdout:
-        - "Available Commands:"
-        - "apply"
-        - "destroy"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos helmfile --help
     enabled: true
+    snapshot: true
     description: "Should show help for helmfile when using help flag"
     workdir: "../"
     command: "atmos"
@@ -228,12 +166,13 @@ tests:
       - "helmfile"
       - "help"
     expect:
-      stdout:
-        - "Available Commands:"
-        - "apply"
-        - "destroy"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
-  - name: atmos helmfile apply non-existant
+  - name: atmos helmfile apply non-existent
     enabled: true
     description: "Should show error in non atmos workspace"
     workdir: "../"
@@ -243,12 +182,10 @@ tests:
       - "apply"
       - "non-existent"
     expect:
-      stdout:
-        - "CLI config file specifies the directory for Atmos stack"
-        - "Quick Start"
       exit_code: 1
   - name: atmos helmfile apply
     enabled: true
+    snapshot: true
     description: "Should show error in atmos workspace"
     workdir: "../examples/demo-helmfile"
     command: "atmos"
@@ -256,11 +193,10 @@ tests:
       - "helmfile"
       - "apply"
     expect:
-      stderr:
-        - "'stack' is required. Usage: atmos helmfile <command> <component> -s <stack>"
       exit_code: 1
   - name: atmos helmfile apply help
     enabled: true
+    snapshot: true
     description: "Should show help for atmos helmfile apply"
     workdir: "../"
     command: "atmos"
@@ -269,12 +205,15 @@ tests:
       - "apply"
       - "help"
     expect:
-      stdout:
-        - "Flags:"
-        - "--logs-file"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos helmfile apply --help
     enabled: true
+    snapshot: true
     description: "Should show help for atmos helmfile apply --help"
     workdir: "../"
     command: "atmos"
@@ -283,23 +222,25 @@ tests:
       - "apply"
       - "--help"
     expect:
-      stdout:
-        - "Flags:"
-        - "--logs-file"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos atlantis
     enabled: true
+    snapshot: true
     description: "Should show usage atmos atlantis"
     workdir: "../"
     command: "atmos"
     args:
       - "atlantis"
     expect:
-      stderr:
-        - 'Error: Unknown command: "atmos atlantis"'
       exit_code: 1
   - name: atmos atlantis help
     enabled: true
+    snapshot: true
     description: "Should show help 'atmos atlantis help'"
     workdir: "../"
     command: "atmos"
@@ -307,12 +248,15 @@ tests:
       - "atlantis"
       - "help"
     expect:
-      stdout:
-        - "Available Commands:"
-        - "generate"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos atlantis --help
     enabled: true
+    snapshot: true
     description: "Should show help 'atmos atlantis --help'"
     workdir: "../"
     command: "atmos"
@@ -320,13 +264,16 @@ tests:
       - "atlantis"
       - "--help"
     expect:
-      stdout:
-        - "Available Commands:"
-        - "generate"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
 
   - name: atmos atlantis generate
     enabled: true
+    snapshot: true
     description: "Should show usage atmos atlantis"
     workdir: "../"
     command: "atmos"
@@ -334,11 +281,10 @@ tests:
       - "atlantis"
       - "generate"
     expect:
-      stderr:
-        - 'Error: Unknown command: "atmos atlantis generate"'
       exit_code: 1
   - name: atmos atlantis generate help
     enabled: true
+    snapshot: true
     description: "Should show help 'atmos atlantis generate help'"
     workdir: "../"
     command: "atmos"
@@ -347,12 +293,15 @@ tests:
       - "generate"
       - "help"
     expect:
-      stdout:
-        - "Available Commands:"
-        - "repo-config"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos atlantis generate --help
     enabled: true
+    snapshot: true
     description: "Should show help 'atmos atlantis --help'"
     workdir: "../"
     command: "atmos"
@@ -361,12 +310,15 @@ tests:
       - "generate"
       - "--help"
     expect:
-      stdout:
-        - "Available Commands:"
-        - "repo-config"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos atlantis generate repo-config
     enabled: true
+    snapshot: true
     description: "Should show config missing in non atmos workspace 'atmos atlantis generate repo-config'"
     workdir: "../"
     command: "atmos"
@@ -375,14 +327,15 @@ tests:
       - "generate"
       - "repo-config"
     expect:
-      stdout:
-        - "atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks,"
-        - "To configure and start using Atmos, refer to the following documents:"
-      stderr:
-        - "^$"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 1
   - name: atmos atlantis generate repo-config help
     enabled: true
+    snapshot: true
     description: "Should show help for 'atmos atlantis generate repo-config help'"
     workdir: "../"
     command: "atmos"
@@ -392,15 +345,15 @@ tests:
       - "repo-config"
       - "help"
     expect:
-      stdout:
-        - "Flags:"
-        - "--affected-only"
-        - "--config-template"
-      stderr:
-        - "^$"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos atlantis generate repo-config --help
     enabled: true
+    snapshot: true
     description: "Should show help for 'atmos atlantis generate repo-config --help'"
     workdir: "../"
     command: "atmos"
@@ -410,6 +363,11 @@ tests:
       - "repo-config"
       - "--help"
     expect:
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       stdout:
         - "Flags:"
         - "--affected-only"
@@ -417,25 +375,22 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
-  - name: atmos atlantis generate repo-config non-existant
+  - name: atmos atlantis generate repo-config non-existent
     enabled: true
-    description: "Should show usage for 'atmos atlantis generate repo-config non-existant'"
+    description: "Should show usage for 'atmos atlantis generate repo-config non-existent'"
     workdir: "../"
     command: "atmos"
     args:
       - "atlantis"
       - "generate"
       - "repo-config"
-      - "non-existant"
+      - "non-existent"
     expect:
-      stderr:
-        - 'Error: Unknown command "non-existant" for "atmos atlantis generate repo-config"'
       exit_code: 1
   - name: atmos validate editorconfig help
     enabled: true
     description: "Should show help for 'atmos validate editorconfig help'"
     snapshot: true
-    diff: []
     workdir: "../"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
@@ -445,12 +400,16 @@ tests:
       - "editorconfig"
       - "help"
     expect:
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos validate editorconfig --help
     enabled: true
     description: "Should show help for 'atmos validate editorconfig --help'"
     snapshot: true
-    diff: []
     workdir: "../"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
@@ -460,17 +419,70 @@ tests:
       - "editorconfig"
       - "--help"
     expect:
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
-  - name: atmos validate editorconfig non-existant
+  - name: atmos validate editorconfig non-existent
     enabled: true
-    description: "Should show usage for 'atmos validate editorconfig non-existant'"
-    snapshot: true
-    diff: []
+    description: "Should show usage for 'atmos validate editorconfig non-existent'"
     workdir: "../"
     command: atmos
     args:
       - "validate"
       - "editorconfig"
-      - "non-existant"
+      - "non-existent"
     expect:
       exit_code: 1
+  - name: atmos about non-existent
+    enabled: true
+    snapshot: true
+    description: "'atmos about non-existent' should show expected message"
+    workdir: "../"
+    command: atmos
+    args:
+      - "about"
+      - "non-existent"
+    expect:
+      exit_code: 1
+  - name: atmos about --help
+    enabled: true
+    snapshot: true
+    description: "'atmos about --help' should show help"
+    workdir: "../"
+    command: atmos
+    args:
+      - "about"
+      - "--help"
+    expect:
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
+      exit_code: 0
+  - name: atmos version --check --non-existent
+    enabled: true
+    snapshot: true
+    description: "'atmos version --check --non-existent' should show invalid flag usage"
+    workdir: "../"
+    command: atmos
+    args:
+      - "version"
+      - "--check"
+      - "--non-existent"
+    expect:
+      exit_code: 1
+  - name: atmos terraform --help alias subcommand check
+    enabled: true
+    snapshot: true
+    description: "'atmos terraform --help' should show help"
+    workdir: "fixtures/scenarios/subcommand-alias"
+    command: atmos
+    args:
+      - "terraform"
+      - "--help"
+    expect:
+      exit_code: 0

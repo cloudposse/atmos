@@ -10,7 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
-	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -199,7 +199,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 
 	default:
 		// If format is empty or "table", use table format
-		if format == "" && exec.CheckTTYSupport() {
+		if format == "" && term.IsTTYSupportForStdout() {
 			// Create a styled table for TTY
 			t := table.New().
 				Border(lipgloss.ThickBorder()).

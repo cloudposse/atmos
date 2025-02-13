@@ -14,5 +14,6 @@ var awsCmd = &cobra.Command{
 }
 
 func init() {
+	awsCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	RootCmd.AddCommand(awsCmd)
 }
