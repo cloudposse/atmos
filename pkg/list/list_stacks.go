@@ -377,5 +377,4 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		}
 		return output.String(), nil
 	}
-
 }
