@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -29,29 +30,12 @@ var listStacksCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		componentFlag, _ := cmd.Flags().GetString("component")
-		formatFlag, _ := cmd.Flags().GetString("format")
-		delimiterFlag, _ := cmd.Flags().GetString("delimiter")
-
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
-			return
-		}
-
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
-			return
-		}
-
-		output, err := l.FilterAndListStacks(stacksMap, componentFlag, atmosConfig.Stacks.List, formatFlag, delimiterFlag)
+		output, err := listStacks(cmd)
 		if err != nil {
 			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), theme.Colors.Error)
 			return
 		}
-		u.PrintMessageInColor(output, theme.Colors.Success)
+		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }
 
@@ -61,4 +45,24 @@ func init() {
 	listStacksCmd.PersistentFlags().StringP("format", "f", "", "Output format (table, json, csv)")
 	listStacksCmd.PersistentFlags().StringP("delimiter", "d", "\t", "Delimiter for table and csv formats")
 	listCmd.AddCommand(listStacksCmd)
+}
+
+func listStacks(cmd *cobra.Command) ([]string, error) {
+	componentFlag, _ := cmd.Flags().GetString("component")
+	formatFlag, _ := cmd.Flags().GetString("format")
+	delimiterFlag, _ := cmd.Flags().GetString("delimiter")
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Error describing stacks: %v", err)
+	}
+
+	output, err := l.FilterAndListStacks(stacksMap, componentFlag, atmosConfig.Stacks.List, formatFlag, delimiterFlag)
+	return []string{output}, err
 }

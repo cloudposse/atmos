@@ -45,21 +45,9 @@ func TestListComponentsWithStack(t *testing.T) {
 		nil, false, false, false, false, nil)
 	assert.Nil(t, err)
 
-	// Create test list config
-	listConfig := schema.ListConfig{
-		Format: "",
-		Columns: []schema.ListColumnConfig{
-			{Name: "Stack", Value: "{{ .atmos_stack }}"},
-			{Name: "File", Value: "{{ .atmos_stack_file }}"},
-		},
-	}
-
-	output, err := FilterAndListStacks(stacksMap, testStack, listConfig, "", "\t")
+	output, err := FilterAndListComponents(testStack, stacksMap)
 	assert.Nil(t, err)
-	dependentsYaml, err := u.ConvertToYAML(output)
-	assert.Nil(t, err)
-	assert.NotNil(t, dependentsYaml)
-	assert.Greater(t, len(dependentsYaml), 0)
-	assert.Contains(t, dependentsYaml, testStack)
-	t.Log(dependentsYaml)
+	assert.NotNil(t, output)
+	assert.Greater(t, len(output), 0)
+	assert.ObjectsAreEqualValues([]string{"infra/vpc", "mixin/test-1", "mixin/test-2", "test/test-component", "test/test-component-override", "test/test-component-override-2", "test/test-component-override-3", "top-level-component1", "vpc", "vpc/new"}, output)
 }

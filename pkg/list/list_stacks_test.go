@@ -12,10 +12,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const (
-	testComponent = "infra/vpc"
-)
-
 func TestListStacks(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
@@ -46,9 +42,8 @@ func TestListStacksWithComponent(t *testing.T) {
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
-	component := testComponent
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, component, nil, nil,
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
 		nil, false, false, false, false, nil)
 	assert.Nil(t, err)
 
@@ -61,7 +56,7 @@ func TestListStacksWithComponent(t *testing.T) {
 		},
 	}
 
-	output, err := FilterAndListStacks(stacksMap, component, listConfig, "", "\t")
+	output, err := FilterAndListStacks(stacksMap, "eks-blue/cluster", listConfig, "", "\t")
 	assert.Nil(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	assert.Nil(t, err)
@@ -69,7 +64,8 @@ func TestListStacksWithComponent(t *testing.T) {
 	// Verify the output structure
 	assert.NotEmpty(t, dependentsYaml)
 	// Verify that only stacks with the specified component are included
-	assert.Contains(t, dependentsYaml, testComponent)
+	assert.Contains(t, dependentsYaml, "tenant1-uw1-test-1")
+	assert.Contains(t, dependentsYaml, "tenant1-uw2-test-1")
 }
 
 func TestFilterAndListStacks(t *testing.T) {
