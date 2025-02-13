@@ -29,11 +29,8 @@ tests:
       - "terraform"
       - "help"
     expect:
-      diff:
-        - "──────────────────────────────────────────────────────────────"
-        - "Update available!"
-        - "Atmos Releases:"
-        - "Install Atmos:"
+      stdout:
+        - "atmos terraform [subcommand] <component-name> -s <stack-name>"
       exit_code: 0
   - name: atmos terraform --help
     enabled: true
@@ -46,6 +43,8 @@ tests:
       - "--help"
     expect:
       exit_code: 0
+      stdout:
+        - "atmos terraform [subcommand] <component-name> -s <stack-name>"
   - name: atmos terraform apply --help
     enabled: true
     snapshot: true
@@ -125,15 +124,15 @@ tests:
       - "helmfile"
     expect:
       exit_code: 1
-  - name: atmos helmfile non-existant
+  - name: atmos helmfile non-existent
     enabled: true
     snapshot: true
-    description: "Should show usage for helmfile and non-existant subcommand"
+    description: "Should show usage for helmfile and non-existent subcommand"
     workdir: "../"
     command: "atmos"
     args:
       - "helmfile"
-      - "non-existant"
+      - "non-existent"
     expect:
       exit_code: 1
   - name: atmos helmfile help
@@ -168,7 +167,7 @@ tests:
         - "Atmos Releases:"
         - "Install Atmos:"
       exit_code: 0
-  - name: atmos helmfile apply non-existant
+  - name: atmos helmfile apply non-existent
     enabled: true
     snapshot: true
     description: "Should show error in non atmos workspace"
@@ -372,17 +371,17 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
-  - name: atmos atlantis generate repo-config non-existant
+  - name: atmos atlantis generate repo-config non-existent
     enabled: true
     snapshot: true
-    description: "Should show usage for 'atmos atlantis generate repo-config non-existant'"
+    description: "Should show usage for 'atmos atlantis generate repo-config non-existent'"
     workdir: "../"
     command: "atmos"
     args:
       - "atlantis"
       - "generate"
       - "repo-config"
-      - "non-existant"
+      - "non-existent"
     expect:
       exit_code: 1
   - name: atmos validate editorconfig help
@@ -423,16 +422,16 @@ tests:
         - "Atmos Releases:"
         - "Install Atmos:"
       exit_code: 0
-  - name: atmos validate editorconfig non-existant
+  - name: atmos validate editorconfig non-existent
     enabled: true
-    description: "Should show usage for 'atmos validate editorconfig non-existant'"
+    description: "Should show usage for 'atmos validate editorconfig non-existent'"
     snapshot: true
     workdir: "../"
     command: atmos
     args:
       - "validate"
       - "editorconfig"
-      - "non-existant"
+      - "non-existent"
     expect:
       exit_code: 1
   - name: atmos about non-existent
