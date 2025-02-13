@@ -22,7 +22,7 @@ var vendorDiffCmd = &cobra.Command{
 
 		err := e.ExecuteVendorDiffCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }

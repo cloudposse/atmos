@@ -15,3 +15,34 @@ tests:
         - 'ERRO ATMOS_SHLVL \(11\) exceeds maximum allowed depth \(10\)'
         - "ERRO exit status 1"
       exit_code: 1
+  - name: atmos workflow pla --file workflow1
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow pla --file workflow1 runs successfully."
+    workdir: "fixtures/scenarios/complete/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pla"
+      - "--file"
+      - "workflow1"
+    expect:
+      diff: []
+      stderr:
+        - "No workflow exists"
+        - "test-1"
+        - "terraform-plan-all-test-components"
+      exit_code: 1
+  - name: atmos invalidCommand
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos invalidCommand returns error"
+    workdir: "fixtures/scenarios/complete/"
+    command: "atmos"
+    args:
+      - "invalidCommand"
+    expect:
+      diff: []
+      stderr:
+        - "command has no steps or subcommands configured"
+      exit_code: 1

@@ -21,7 +21,7 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }
