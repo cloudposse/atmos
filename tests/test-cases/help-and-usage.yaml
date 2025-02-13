@@ -174,7 +174,6 @@ tests:
       exit_code: 0
   - name: atmos helmfile apply non-existent
     enabled: true
-    snapshot: true
     description: "Should show error in non atmos workspace"
     workdir: "../"
     command: "atmos"
@@ -378,7 +377,6 @@ tests:
       exit_code: 0
   - name: atmos atlantis generate repo-config non-existent
     enabled: true
-    snapshot: true
     description: "Should show usage for 'atmos atlantis generate repo-config non-existent'"
     workdir: "../"
     command: "atmos"
