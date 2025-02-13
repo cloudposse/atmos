@@ -65,10 +65,7 @@ var docsCmd = &cobra.Command{
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
-			if err != nil {
-				u.LogErrorAndExit(err)
-			}
-			if !componentPathExists {
+			if err != nil || !componentPathExists {
 				u.LogErrorAndExit(fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
 			}
 
@@ -83,7 +80,7 @@ var docsCmd = &cobra.Command{
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(fmt.Errorf("Loading README file for component: %s", info.Component))
 			}
 
 			r, err := glamour.NewTermRenderer(
@@ -98,7 +95,7 @@ var docsCmd = &cobra.Command{
 
 			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(fmt.Errorf("failed to render markdown: %w", err))
 			}
 
 			pager := atmosConfig.Settings.Terminal.Pager
@@ -132,7 +129,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.LogErrorAndExit(fmt.Errorf("failed to open default browser: %w", err))
 			}
 		}
 
