@@ -46,6 +46,12 @@ func processCustomCommands(
 	var command *cobra.Command
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
+	// Build commands and their hierarchy from the alias map
+	for alias, fullCmd := range atmosConfig.CommandAliases {
+		parts := strings.Fields(fullCmd)
+		addCommandWithAlias(RootCmd, alias, parts)
+	}
+
 	if topLevel {
 		existingTopLevelCommands = getTopLevelCommands()
 	}
@@ -73,7 +79,8 @@ func processCustomCommands(
 					executeCustomCommand(atmosConfig, cmd, args, parentCommand, commandConfig)
 				},
 			}
-
+			// TODO: we need to update this post https://github.com/cloudposse/atmos/pull/959 gets merged
+			customCommand.PersistentFlags().Bool("", false, "Use double dashes to separate Atmos-specific options from native arguments and flags for the command.")
 			// Process and add flags to the command
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
@@ -110,6 +117,35 @@ func processCustomCommands(
 	}
 
 	return nil
+}
+
+// addCommandWithAlias adds a command hierarchy based on the full command
+func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
+	if len(parts) == 0 {
+		return
+	}
+
+	// Check if a command with the current part already exists
+	var cmd *cobra.Command
+	for _, c := range parentCmd.Commands() {
+		if c.Use == parts[0] {
+			cmd = c
+			break
+		}
+	}
+
+	// If the command doesn't exist, create it
+	if cmd == nil {
+		u.LogErrorAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias))
+	}
+
+	// If there are more parts, recurse for the next level
+	if len(parts) > 1 {
+		addCommandWithAlias(cmd, alias, parts[1:])
+	} else if !Contains(cmd.Aliases, alias) {
+		// This is the last part of the command, add the alias
+		cmd.Aliases = append(cmd.Aliases, alias)
+	}
 }
 
 // processCommandAliases processes the command aliases
@@ -186,10 +222,9 @@ func preCustomCommand(
 			os.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			u.LogError(errors.New(
-				"invalid command: no args, no steps, no sub-commands",
-			))
-			os.Exit(1)
+			u.PrintErrorMarkdownAndExit("Invalid command", errors.New(
+				fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()),
+			), "https://atmos.tools/cli/configuration/commands")
 		}
 	}
 
@@ -270,7 +305,7 @@ func executeCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var err error
-
+	args, trailingArgs := extractTrailingArgs(args, os.Args)
 	if commandConfig.Verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
@@ -311,8 +346,9 @@ func executeCustomCommand(
 
 		// Prepare template data
 		data := map[string]any{
-			"Arguments": argumentsData,
-			"Flags":     flagsData,
+			"Arguments":    argumentsData,
+			"Flags":        flagsData,
+			"TrailingArgs": trailingArgs,
 		}
 
 		// If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
@@ -405,6 +441,35 @@ func executeCustomCommand(
 			u.LogErrorAndExit(err)
 		}
 	}
+}
+
+// Extracts native arguments (everything after "--") signifying the end of Atmos-specific arguments.
+// Because of the flag hint for double dash, args is already consumed by Cobra.
+// So we need to perform manual parsing of os.Args to extract the "trailing args" after the "--" end of args marker.
+func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
+	doubleDashIndex := lo.IndexOf(osArgs, "--")
+	mainArgs := args
+	trailingArgs := ""
+	if doubleDashIndex > 0 {
+		mainArgs = lo.Slice(osArgs, 0, doubleDashIndex)
+		trailingArgs = strings.Join(lo.Slice(osArgs, doubleDashIndex+1, len(osArgs)), " ")
+		result := []string{}
+		lookup := make(map[string]bool)
+
+		// Populate a lookup map for quick existence check
+		for _, val := range mainArgs {
+			lookup[val] = true
+		}
+
+		// Iterate over leftArr and collect matching elements in order
+		for _, val := range args {
+			if lookup[val] {
+				result = append(result, val)
+			}
+		}
+		mainArgs = result
+	}
+	return mainArgs, trailingArgs
 }
 
 // cloneCommand clones a custom command config into a new struct
@@ -552,37 +617,31 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 	}
 }
 
+// showUsageAndExit we display the markdown usage or fallback to our custom usage
+// Markdown usage is not compatible with all outputs. We should therefore have fallback option.
 func showUsageAndExit(cmd *cobra.Command, args []string) {
-	var suggestions []string
-	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
-
+	if len(args) == 0 {
+		showErrorExampleFromMarkdown(cmd, "")
+	}
 	if len(args) > 0 {
-		suggestions = cmd.SuggestionsFor(args[0])
-		unknownCommand = fmt.Sprintf("Error: Unknown command %q for %q\n\n", args[0], cmd.CommandPath())
+		showErrorExampleFromMarkdown(cmd, args[0])
 	}
-	u.PrintErrorInColor(unknownCommand)
-	if len(suggestions) > 0 {
-		u.PrintMessage("Did you mean this?")
-		for _, suggestion := range suggestions {
-			u.PrintMessage(fmt.Sprintf("  %s\n", suggestion))
-		}
-	} else {
-		// Retrieve valid subcommands dynamically
-		validSubcommands := []string{}
-		for _, subCmd := range cmd.Commands() {
-			validSubcommands = append(validSubcommands, subCmd.Name())
-		}
-		if len(validSubcommands) > 0 {
-			u.PrintMessage("Valid subcommands are:")
-			for _, sub := range validSubcommands {
-				u.PrintMessage(fmt.Sprintf("  %s", sub))
-			}
-		} else {
-			u.PrintMessage("No valid subcommands found")
-		}
-	}
-	u.PrintMessage(fmt.Sprintf("\nRun '%s --help' for usage", cmd.CommandPath()))
 	os.Exit(1)
+}
+
+func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
+	unknownCommand := fmt.Sprintf("%v for command `%s`\n\n", err.Error(), cmd.CommandPath())
+	args := strings.Split(err.Error(), ": ")
+	if len(args) == 2 {
+		if strings.Contains(args[0], "flag needs an argument") {
+			unknownCommand = fmt.Sprintf("`%s` %s for command `%s`\n\n", args[1], args[0], cmd.CommandPath())
+		} else {
+			unknownCommand = fmt.Sprintf("%s `%s` for command `%s`\n\n", args[0], args[1], cmd.CommandPath())
+		}
+	}
+	showUsageExample(cmd, unknownCommand)
+	os.Exit(1)
+	return nil
 }
 
 // getConfigAndStacksInfo processes the CLI config and stacks
@@ -604,6 +663,45 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		u.LogErrorAndExit(err)
 	}
 	return info
+}
+
+func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
+	commandPath := cmd.CommandPath()
+	suggestions := []string{}
+	details := fmt.Sprintf("The command `%s` is not valid usage\n", commandPath)
+	if len(arg) > 0 {
+		details = fmt.Sprintf("Unknown command `%s` for `%s`\n", arg, commandPath)
+	} else if len(cmd.Commands()) != 0 && arg == "" {
+		details = fmt.Sprintf("The command `%s` requires a subcommand\n", commandPath)
+	}
+	if len(arg) > 0 {
+		suggestions = cmd.SuggestionsFor(arg)
+	}
+	if len(suggestions) > 0 {
+		details = details + "Did you mean this?\n"
+		for _, suggestion := range suggestions {
+			details += "* " + suggestion + "\n"
+		}
+	} else {
+		if len(cmd.Commands()) > 0 {
+			details += "\nValid subcommands are:\n"
+		}
+		// Retrieve valid subcommands dynamically
+		for _, subCmd := range cmd.Commands() {
+			details = details + "* " + subCmd.Name() + "\n"
+		}
+	}
+	showUsageExample(cmd, details)
+}
+
+func showUsageExample(cmd *cobra.Command, details string) {
+	contentName := strings.ReplaceAll(cmd.CommandPath(), " ", "_")
+	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+	if exampleContent, ok := examples[contentName]; ok {
+		suggestion = exampleContent.Suggestion
+		details += "\n## Usage Examples:\n" + exampleContent.Content
+	}
+	u.PrintInvalidUsageErrorAndExit(errors.New(details), suggestion)
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
