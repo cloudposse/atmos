@@ -36,7 +36,7 @@ var docsCmd = &cobra.Command{
 
 			atmosConfig, err := cfg.InitCliConfig(info, true)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 
 			// Detect terminal width if not specified in `atmos.yaml`
@@ -66,10 +66,10 @@ var docsCmd = &cobra.Command{
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 			if !componentPathExists {
-				u.LogErrorAndExit(fmt.Errorf("Component '%s' not found in path: '%s'", info.Component, componentPath))
+				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component `%s` not found in path: `%s`", info.Component, componentPath), "")
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")

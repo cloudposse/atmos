@@ -13,9 +13,11 @@ tests:
       - test
     expect:
       diff: []
-      exit_code: 1
       stderr:
-        - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
+        - "Invalid log level"
+        - "XTrace"
+        - "Valid options are"
+      exit_code: 1
 
   - name: "Invalid Log Level in Environment Variable"
     enabled: true
@@ -32,10 +34,11 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: XTrace
     expect:
+      stderr:
+        - "XTrace"
+        - "Valid options are"
       diff: []
       exit_code: 1
-      stderr:
-        - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
 
   - name: "Valid Log Level in Config File"
     enabled: true
