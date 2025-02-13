@@ -103,7 +103,8 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	descIndent := p.maxFlagLen + 4
 
 	description := flag.Usage
-	if flag.DefValue != "" {
+	// if Name is empty it is our double dash.
+	if flag.DefValue != "" && flag.Name != "" {
 		description = fmt.Sprintf("%s (default %q)", description, flag.DefValue)
 	}
 

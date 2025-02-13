@@ -17,7 +17,7 @@ var describeConfigCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeConfigCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdown("", err, "")
 		}
 	},
 }

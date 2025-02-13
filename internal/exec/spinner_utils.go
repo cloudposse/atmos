@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	l "github.com/charmbracelet/log"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -47,7 +48,7 @@ func NewSpinner(message string) *tea.Program {
 	s.Style = theme.Styles.Link
 
 	var opts []tea.ProgramOption
-	if !CheckTTYSupport() {
+	if !term.IsTTYSupportForStdout() {
 		// Workaround for non-TTY environments
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		l.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")

@@ -26,10 +26,9 @@ var listStacksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-
 		output, err := listStacks(cmd)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error filtering stacks: %v", err), theme.Colors.Error)
+			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
 			return
 		}
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
