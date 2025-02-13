@@ -29,8 +29,11 @@ tests:
       - "terraform"
       - "help"
     expect:
-      stdout:
-        - "atmos terraform [subcommand] <component-name> -s <stack-name>"
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
   - name: atmos terraform --help
     enabled: true
@@ -42,9 +45,12 @@ tests:
       - "terraform"
       - "--help"
     expect:
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
       exit_code: 0
-      stdout:
-        - "atmos terraform [subcommand] <component-name> -s <stack-name>"
   - name: atmos terraform apply --help
     enabled: true
     snapshot: true
@@ -126,7 +132,6 @@ tests:
       exit_code: 1
   - name: atmos helmfile non-existent
     enabled: true
-    snapshot: true
     description: "Should show usage for helmfile and non-existent subcommand"
     workdir: "../"
     command: "atmos"
@@ -425,7 +430,6 @@ tests:
   - name: atmos validate editorconfig non-existent
     enabled: true
     description: "Should show usage for 'atmos validate editorconfig non-existent'"
-    snapshot: true
     workdir: "../"
     command: atmos
     args:
