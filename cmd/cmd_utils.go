@@ -705,11 +705,29 @@ func showUsageExample(cmd *cobra.Command, details string) {
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	output, err := listStacks(cmd)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	return output, cobra.ShellCompDirectiveNoFileComp
+
+	// Get all stacks
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Extract stack names
+	stackNames := make([]string, 0)
+	for stackName := range stacksMap {
+		// Only include actual stack names, not file paths
+		if strings.HasPrefix(stackName, "stacks/") {
+			continue
+		}
+		stackNames = append(stackNames, stackName)
+	}
+
+	return stackNames, cobra.ShellCompDirectiveNoFileComp
 }
 
 func AddStackCompletion(cmd *cobra.Command) {
