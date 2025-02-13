@@ -19,18 +19,21 @@ The `!store` function can be called with either two or three parameters, and opt
 
 ```yaml
   # Get the `key` from the store of a `component` in the current stack
-  !store <component> <key>
+  !store <store_name> <component> <key>
 
   # Get the `key` from the store of a `component` in a different stack
-  !store <component> <stack> <key>
+  !store <store_name> <component> <stack> <key>
 
   # Get the `key` from the store of a `component` in a different stack, with a default value
-  !store <component> <stack> <key> | default <default_value>
+  !store <store_name> <component> <stack> <key> | default <default_value>
 ```
 
 ## Arguments
 
 <dl>
+  <dt>`store_name`</dt>
+  <dd>The name of the store to read from (as defined in the `atmos.yaml` file)</dd>
+
   <dt>`component`</dt>
   <dd>Atmos component name</dd>
 
@@ -60,9 +63,9 @@ components:
     my_lambda_component:
       vars:
         vpc_config:
-          security_group_id: !store security-group/lambda id
-          security_group_id2: !store security-group/lambda2 {{ .stack }} id
-          security_group_id3: !store security-group/lambda3 {{ .atmos_stack }} id
+          security_group_id: !store prod/ssm security-group/lambda id
+          security_group_id2: !store prod/ssm security-group/lambda2 {{ .stack }} id
+          security_group_id3: !store prod/ssm security-group/lambda3 {{ .atmos_stack }} id
 ```
 </File>
 
@@ -82,7 +85,7 @@ For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires 
     terraform:
       tgw:
         vars:
-          vpc_id: !store vpc plat-ue2-prod vpc_id
+          vpc_id: !store prod/ssm vpc plat-ue2-prod vpc_id
 ```
 
 ### Reference the Current Stack Name
@@ -91,8 +94,8 @@ Use the `.stack` (or `.atmos_stack`) template identifier to specify the same sta
 (for which the `!store` function is executed):
 
 ```yaml
-  !store <component> {{ .stack }} <key>
-  !store <component> {{ .atmos_stack }} <key>
+  !store <store_name> <component> {{ .stack }} <key>
+  !store <store_name> <component> {{ .atmos_stack }} <key>
 ```
 
 For example, you have a `tgw` component that requires the `vpc_id` key from the store for the `vpc` component in the same stack:
@@ -102,7 +105,7 @@ For example, you have a `tgw` component that requires the `vpc_id` key from the 
     terraform:
       tgw:
         vars:
-          vpc_id: !store vpc {{ .stack }} vpc_id
+          vpc_id: !store prod/ssm vpc {{ .stack }} vpc_id
 ```
 
 :::note Using the `.stack` or `.atmos_stack` template identifiers to specify the stack is the same as calling the
@@ -116,11 +119,11 @@ Use the `printf` template function to construct stack names using static strings
 This is convenient when you want to override some identifiers in the stack name:
 
 ```yaml
-  !store <component> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <key>
+  !store <store_name> <component> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <key>
 
-  !store <component> {{ printf "plat-%s-prod" .vars.environment }} <key>
+  !store <store_name> <component> {{ printf "plat-%s-prod" .vars.environment }} <key>
 
-  !store <component> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <key>
+  !store <store_name> <component> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <key>
 ```
 
 <dl>
@@ -140,7 +143,7 @@ tenant `net` (instead of `plat`):
     terraform:
       tgw:
         vars:
-          vpc_id: !store vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id
+          vpc_id: !store prod/ssm vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id
 ```
 
 :::tip Important

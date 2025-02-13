@@ -14,5 +14,6 @@ var atlantisCmd = &cobra.Command{
 }
 
 func init() {
+	atlantisCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	RootCmd.AddCommand(atlantisCmd)
 }

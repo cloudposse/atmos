@@ -19,6 +19,7 @@ var validateComponentCmd = &cobra.Command{
 		"atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa>\n" +
 		"atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type opa --module-paths catalog",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	ValidArgsFunction:  ComponentsArgCompletion,
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
@@ -26,10 +27,10 @@ var validateComponentCmd = &cobra.Command{
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
-		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", component, stack)
+		m := fmt.Sprintf("component `%s` in stack `%s` validated successfully\n", component, stack)
 		u.PrintMessageInColor(m, theme.Colors.Success)
 	},
 }
@@ -38,6 +39,7 @@ func init() {
 	validateComponentCmd.DisableFlagParsing = false
 
 	validateComponentCmd.PersistentFlags().StringP("stack", "s", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa>")
+	AddStackCompletion(validateComponentCmd)
 	validateComponentCmd.PersistentFlags().String("schema-path", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa>")
 	validateComponentCmd.PersistentFlags().String("schema-type", "", "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type <jsonschema|opa>")
 	validateComponentCmd.PersistentFlags().StringSlice("module-paths", nil, "atmos validate component <component> -s <stack> --schema-path <schema_path> --schema-type opa --module-paths catalog")

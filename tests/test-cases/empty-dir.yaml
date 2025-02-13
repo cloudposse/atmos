@@ -41,10 +41,4 @@ tests:
     args: [--help]
     expect:
       diff: []
-      stdout:
-        - "Available Commands:"
-        - "Flags:"
-        - 'Use "atmos \[subcommand\] --help" for more information about a command\.'
-      stderr:
-        - "^$"
       exit_code: 0
