@@ -17,7 +17,7 @@ var aboutCmd = &cobra.Command{
 	Long:  `Display information about Atmos, its features, and benefits.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		utils.PrintfMarkdown(aboutMarkdown)
+		utils.PrintfMarkdown("%s", aboutMarkdown)
 		return nil
 	},
 }
