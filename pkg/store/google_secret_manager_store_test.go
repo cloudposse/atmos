@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/googleapis/gax-go/v2"
