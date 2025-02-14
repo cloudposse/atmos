@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -51,7 +52,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 		vendorPks = append(vendorPks, vendorPkg)
 
 	}
-	tty := CheckTTYSupport()
+	tty := term.IsTTYSupportForStdout()
 	return modelVendor{
 		packages:    vendorPks,
 		spinner:     s,
@@ -79,7 +80,6 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 					err:  err,
 					name: p.name,
 				}
-
 			}
 			return installedPkgMsg{
 				err:  nil,
@@ -93,7 +93,6 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 					err:  err,
 					name: p.name,
 				}
-
 			}
 			return installedPkgMsg{
 				err:  nil,
@@ -108,7 +107,6 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 }
 
 func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
-
 	// Create temp folder
 	// We are using a temp folder for the following reasons:
 	// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
@@ -119,7 +117,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	}
 
 	// Ensure directory permissions are restricted
-	if err := os.Chmod(tempDir, 0700); err != nil {
+	if err := os.Chmod(tempDir, 0o700); err != nil {
 		return fmt.Errorf("failed to set temp directory permissions: %w", err)
 	}
 
