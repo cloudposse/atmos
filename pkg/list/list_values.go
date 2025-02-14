@@ -3,7 +3,6 @@ package list
 import (
 	"encoding/json"
 	"fmt"
-
 	"sort"
 	"strings"
 
