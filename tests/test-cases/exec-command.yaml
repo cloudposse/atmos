@@ -1,0 +1,16 @@
+tests:
+  - name: atmos exit code should be same as command exit code
+    enabled: true
+    description: "Ensure the exit code equals the command exit code"
+    workdir: "fixtures/scenarios/exitCode"
+    command: "atmos"
+    args:
+      - terraform
+      - plan
+      - station
+      - "-s"
+      - dev
+      - "--"
+      - "-detailed-exitcode"
+    expect:
+      exit_code: 2

@@ -1,0 +1,11 @@
+vars:
+  stage: dev
+
+import:
+  - catalog/station
+
+components:
+  terraform:
+    station:
+      vars:
+        my_param: "fail"
