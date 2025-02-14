@@ -670,7 +670,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 }
 
 func TestCLICommands(t *testing.T) {
-
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
