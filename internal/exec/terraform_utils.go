@@ -124,6 +124,7 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 		"generate",
 		"output",
 		"shell",
+		"clean",
 		"write",
 		"force-unlock",
 		"import",
