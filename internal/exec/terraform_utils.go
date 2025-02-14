@@ -123,6 +123,7 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 		"destroy",
 		"generate",
 		"output",
+		"clean",
 		"shell",
 		"write",
 		"force-unlock",
