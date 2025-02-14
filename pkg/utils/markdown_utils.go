@@ -7,12 +7,12 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
+	l "github.com/charmbracelet/log"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	l "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 // render is the global markdown renderer instance initialized via InitializeMarkdown
