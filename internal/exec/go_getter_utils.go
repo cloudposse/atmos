@@ -72,7 +72,7 @@ type CustomGitDetector struct {
 
 // Detect implements the getter.Detector interface for go-getter v1.
 func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
-	l.Debug(fmt.Sprintf("CustomGitDetector.Detect(%q, %q)", src, d.source))
+	l.Debug("CustomGitDetector.Detect", "src", src, "source", d.source)
 
 	if len(src) == 0 {
 		return "", false, nil
@@ -104,11 +104,11 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 			if matches[6] != "" {
 				newSrc += matches[6]
 			}
-			l.Debug(fmt.Sprintf("Rewriting SCP-style SSH URL to proper SSH URL: %s -> %s", src, newSrc))
+			l.Debug("Rewriting SCP-style SSH URL", "old_url", src, "new_url", newSrc)
 			src = newSrc
 		} else {
 			src = "https://" + src
-			l.Debug(fmt.Sprintf("Defaulting to https scheme, url is %q:", src))
+			l.Debug("Defaulting to https scheme", "url", src)
 		}
 	}
 
@@ -116,70 +116,92 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-		l.Debug(fmt.Sprintf("Failed to parse URL %q: %v", src, err))
+		l.Debug("Failed to parse URL", "url", src, "error", err)
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
 	}
 
+	// Normalize Windows path separators and URL-encoded backslashes to forward slashes.
+	unescapedPath, err := url.PathUnescape(parsedURL.Path)
+	if err == nil {
+		parsedURL.Path = filepath.ToSlash(unescapedPath)
+	} else {
+		parsedURL.Path = filepath.ToSlash(parsedURL.Path)
+	}
+
 	// If the URL uses the SSH scheme, check for an active SSH agent.
+	// Unlike HTTPS where public repos can be accessed without authentication,
+	// SSH requires authentication. If no SSH agent is detected, log a debug message.
 	if parsedURL.Scheme == "ssh" && os.Getenv("SSH_AUTH_SOCK") == "" {
-		return "", false, fmt.Errorf("SSH URL detected but no SSH agent appears to be active. Please ensure your SSH key is loaded (e.g. run 'eval $(ssh-agent -s)' and 'ssh-add ~/.ssh/id_ed25519')")
+		l.Debug("No SSH authentication method found")
 	}
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
 	host := strings.ToLower(parsedURL.Host)
 	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
-		l.Debug(fmt.Sprintf("Host is %q, not recognized for token injection", parsedURL.Host))
-		// For unrecognized hosts, simply return without injecting tokens.
-		return "", false, nil
+		l.Debug("Skipping token injection for a non-supported host", "host", parsedURL.Host)
+		l.Debug("Supported hosts", "supported_hosts", "github.com, bitbucket.org, gitlab.com")
 	}
 
-	// TBC: should we support more tokens for Bitbucket and GitLab at all? Any other hosts?
-	// Any other git-enabled hosts to be added?
+	// 3 types of tokens are supported for now: Github, Bitbucket and GitLab
 	var token, tokenSource string
 	switch host {
 	case "github.com":
-		token = os.Getenv("ATMOS_GITHUB_TOKEN")
+		tokenSource = "ATMOS_GITHUB_TOKEN"
+		token = os.Getenv(tokenSource)
 		if token == "" && d.AtmosConfig.Settings.InjectGithubToken {
-			token = os.Getenv("GITHUB_TOKEN")
 			tokenSource = "GITHUB_TOKEN"
-		} else {
-			tokenSource = "ATMOS_GITHUB_TOKEN"
+			token = os.Getenv(tokenSource)
 		}
 	case "bitbucket.org":
-		token = os.Getenv("ATMOS_BITBUCKET_TOKEN")
+		tokenSource = "ATMOS_BITBUCKET_TOKEN"
+		token = os.Getenv(tokenSource)
 		if token == "" {
-			token = os.Getenv("BITBUCKET_TOKEN")
 			tokenSource = "BITBUCKET_TOKEN"
-		} else {
-			tokenSource = "ATMOS_BITBUCKET_TOKEN"
+			token = os.Getenv(tokenSource)
 		}
 	case "gitlab.com":
-		token = os.Getenv("ATMOS_GITLAB_TOKEN")
+		tokenSource = "ATMOS_GITLAB_TOKEN"
+		token = os.Getenv(tokenSource)
 		if token == "" {
-			token = os.Getenv("GITLAB_TOKEN")
 			tokenSource = "GITLAB_TOKEN"
-		} else {
-			tokenSource = "ATMOS_GITLAB_TOKEN"
+			token = os.Getenv(tokenSource)
 		}
 	}
 
+	// Note that Bitbucket uses 2 tokens (username and app password) for authentication.
 	if token != "" {
 		// Inject token only if no credentials are already provided.
 		if parsedURL.User == nil || parsedURL.User.Username() == "" {
-			l.Debug(fmt.Sprintf("Injecting token from %s for %s", tokenSource, src))
-			parsedURL.User = url.UserPassword("x-access-token", token)
+			l.Debug("Injecting token", "token_source", tokenSource, "url", src)
+			var defaultUsername string
+			switch host {
+			case "github.com":
+				defaultUsername = "x-access-token"
+			case "gitlab.com":
+				defaultUsername = "oauth2"
+			case "bitbucket.org":
+				defaultUsername = os.Getenv("BITBUCKET_USERNAME")
+				if defaultUsername == "" {
+					defaultUsername = "x-token-auth"
+				}
+				l.Debug("Using Bitbucket username", "username", defaultUsername)
+			default:
+				defaultUsername = "x-access-token"
+			}
+			parsedURL.User = url.UserPassword(defaultUsername, token)
 		} else {
-			l.Debug("Credentials already provided, skipping token injection")
+			l.Debug("Skipping token injection", "reason", "credentials already provided")
 		}
 	}
 
-	//  check if the user typed something like
-	// "github.com/org/repo.git" with NO subdir and, if so, appends '//.'.
-	if !strings.Contains(d.source, "//") {
-		// means user typed something like "github.com/org/repo.git" with NO subdir
+	// Normalize d.source for Windows path separators.
+	normalizedSource := filepath.ToSlash(d.source)
+	// If d.source is provided (non‑empty), use it for subdir checking;
+	// otherwise, skip appending '//.' (so the user-defined subdir isn’t mistakenly processed).
+	if normalizedSource != "" && !strings.Contains(normalizedSource, "//") {
 		parts := strings.SplitN(parsedURL.Path, "/", 4)
 		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
-			l.Debug("Detected top-level repo with no subdir: appending '//.'")
+			l.Debug("Detected top-level repo with no subdir: appending '//.'", "url", src)
 			parsedURL.Path = parsedURL.Path + "//."
 		}
 	}

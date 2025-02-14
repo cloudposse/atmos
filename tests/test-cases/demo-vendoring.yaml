@@ -39,3 +39,21 @@ tests:
       stderr:
         - 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
+
+  - name: atmos vendor pull ssh
+    enabled: false
+    snapshot: true
+    tty: false
+    description: "Dry-run vendoring with SSH style URL; no SSH key provided, so tokens are not used"
+    workdir: "fixtures/scenarios/vendor-pulls-ssh"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--logs-level=Debug"
+      - "--dry-run"
+    expect:
+      diff: []
+      stderr:
+        - "No SSH authentication method found"  
+      exit_code: 0

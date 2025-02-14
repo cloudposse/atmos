@@ -1,0 +1,11 @@
+DEBU Using command line argument '--logs-level=Debug'
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+INFO Vendoring from 'vendor.yaml'
+WARN No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
+INFO ✓ terrafrom-null-label (0.25.0)
+INFO Done! Dry run completed. No components vendored.
+
+INFO Vendored 1 components.
+
