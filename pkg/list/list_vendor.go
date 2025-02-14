@@ -1,6 +1,8 @@
 package list
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -271,16 +274,36 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 		return string(jsonBytes), nil
 
 	case FormatCSV, FormatTSV:
-		var output strings.Builder
-		output.WriteString(strings.Join(header, delimiter) + utils.GetLineEnding())
-		for _, row := range rows {
-			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
+		// Use bytes.Buffer to store the CSV output
+		buf := &bytes.Buffer{}
+		writer := csv.NewWriter(buf)
+		
+		// Configure the delimiter (comma for CSV, tab for TSV)
+		writer.Comma = rune(delimiter[0])
+
+		// Write header
+		if err := writer.Write(header); err != nil {
+			return "", fmt.Errorf("error writing CSV header: %w", err)
 		}
-		return output.String(), nil
+
+		// Write rows
+		for _, row := range rows {
+			if err := writer.Write(row); err != nil {
+				return "", fmt.Errorf("error writing CSV row: %w", err)
+			}
+		}
+
+		// Flush any buffered data and check for errors
+		writer.Flush()
+		if err := writer.Error(); err != nil {
+			return "", fmt.Errorf("error flushing CSV writer: %w", err)
+		}
+
+		return buf.String(), nil
 
 	default:
 		// If format is empty or "table", use table format
-		if format == "" && exec.CheckTTYSupport() {
+		if format == "" && term.IsTTYSupportForStdout() {
 			// Create a styled table for TTY
 			t := table.New().
 				Border(lipgloss.ThickBorder()).
