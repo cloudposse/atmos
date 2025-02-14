@@ -3,12 +3,14 @@ package list
 import (
 	"encoding/json"
 	"fmt"
+
 	"sort"
 	"strings"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
-	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -285,7 +287,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 				}
 			}
 			colWidths[col] = maxWidth
-			totalWidth += maxWidth + 3 // Add padding and border
+			totalWidth += maxWidth + 3
 		}
 
 		// Check if table width exceeds terminal width
@@ -294,7 +296,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		}
 
 		// If format is empty or "table", use table format
-		if format == "" && exec.CheckTTYSupport() {
+		if format == "" && term.IsTTYSupportForStdout() {
 			// Create a styled table for TTY
 			t := table.New().
 				Border(lipgloss.ThickBorder()).
