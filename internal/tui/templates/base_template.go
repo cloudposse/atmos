@@ -13,7 +13,6 @@ const (
 	GlobalFlags
 	AdditionalHelpTopics
 	NativeCommands
-	DoubleDashHelp
 	Footer
 )
 
@@ -28,7 +27,7 @@ func GenerateFromBaseTemplate(parts []HelpTemplateSections) string {
 func getSection(section HelpTemplateSections) string {
 	switch section {
 	case LongDescription:
-		return `{{ .Long }}
+		return `{{renderMarkdown .Long }}
 `
 	case AdditionalHelpTopics:
 		return `{{if .HasHelpSubCommands}}
@@ -46,7 +45,7 @@ func getSection(section HelpTemplateSections) string {
 	case SubCommandAliases:
 		return `{{if (isAliasesPresent .Commands)}}
 
-{{HeadingStyle "SubCommand Aliases:"}}
+{{HeadingStyle "Subcommand Aliases:"}}
 
 {{formatCommands .Commands "subcommandAliases"}}{{end}}`
 	case AvailableCommands:
@@ -62,7 +61,7 @@ func getSection(section HelpTemplateSections) string {
 
 {{HeadingStyle "Examples:"}}
 
-{{.Example}}{{end}}`
+{{renderMarkdown .Example}}{{end}}`
 	case Flags:
 		return `{{if .HasAvailableLocalFlags}}
 
@@ -89,18 +88,10 @@ func getSection(section HelpTemplateSections) string {
 {{if .Runnable}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [sub-command] [flags]{{end}}`
-	case DoubleDashHelp:
+	case Footer:
 		return `
 
-The '--' (double-dash) can be used to signify the end of Atmos-specific options 
-and the beginning of additional native arguments and flags for the specific command being run.
-
-Example:
-  {{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} <component> -s <stack> -- <native-flags>`
-	case Footer:
-		return `{{if .HasAvailableSubCommands}}
-
-Use "{{.CommandPath}} {{if gt (len .Commands) 0}}[subcommand]{{end}} --help" for more information about a command.{{end}}`
+{{renderHelpMarkdown .}}`
 	default:
 		return ""
 	}
