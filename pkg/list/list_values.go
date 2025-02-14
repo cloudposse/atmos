@@ -275,7 +275,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		// Calculate total table width
 		totalWidth := 0
 		colWidths := make([]int, len(header))
-		
+
 		// Calculate max width for each column
 		for col := range header {
 			maxWidth := len(header[col])
