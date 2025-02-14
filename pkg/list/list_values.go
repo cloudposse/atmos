@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 
 	"github.com/charmbracelet/lipgloss"
@@ -35,11 +36,8 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		return "", err
 	}
 
-	// Get terminal width for table format
-	termWidth := utils.GetTerminalWidth()
-	if termWidth == 0 {
-		termWidth = 80 // Default width if terminal width cannot be determined
-	}
+	// Get terminal width for table format using templater's GetTerminalWidth
+	termWidth := templates.GetTerminalWidth()
 
 	// Set default delimiters based on format
 	if format == FormatCSV && delimiter == DefaultTSVDelimiter {
