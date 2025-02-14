@@ -277,7 +277,7 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 		// Use bytes.Buffer to store the CSV output
 		buf := &bytes.Buffer{}
 		writer := csv.NewWriter(buf)
-		
+
 		// Configure the delimiter (comma for CSV, tab for TSV)
 		writer.Comma = rune(delimiter[0])
 
