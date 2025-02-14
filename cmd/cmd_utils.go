@@ -669,7 +669,6 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	return info
 }
 
-<<<<<<< HEAD
 // isGitRepository checks if the current directory is within a git repository
 func isGitRepository() bool {
 	_, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{

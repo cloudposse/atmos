@@ -97,7 +97,6 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
-
   - name: "Valid log level in env should be priortized over config"
     enabled: true
     snapshot: true
@@ -116,7 +115,6 @@ tests:
         # We are fine with any debug logs config is set to info but if env gets priority we would get debug
         - "DEBU"
       exit_code: 0
-
   - name: "Valid log level in flag should be priortized over env and config"
     enabled: true
     snapshot: true
@@ -137,7 +135,6 @@ tests:
         # We are fine with any debug logs config and env is set to info but if flag gets priority we would get debug logs
         - "DEBU"
       exit_code: 0
-
   - name: "Valid log file in env should be priortized over config"
     enabled: true
     snapshot: true
@@ -158,7 +155,6 @@ tests:
         # Debug logs should be in stdout as we have choosen /dev/stdout in env
         - "DEBU"
       exit_code: 0
-
   - name: "Valid log file in flag should be priortized over env and config"
     enabled: true
     snapshot: true

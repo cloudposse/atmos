@@ -47,7 +47,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Test that atmos warns if not run inside of a git repo"
-    workdir: "fixtures/scenarios/empty-dir"
+    workdir: "/"
     command: "atmos"
     args:
       - version
