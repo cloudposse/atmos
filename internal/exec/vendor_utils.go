@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -370,9 +371,9 @@ func ExecuteAtmosVendorInternal(
 			err = ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
-					return fmt.Errorf("Invalid URI '%s': %w. Please ensure the source is a valid local path or a properly formatted URI.", uri, err)
+					return fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", s.Component, err)
 				}
-				return err
+				return fmt.Errorf("invalid URI for component %s: %w", s.Component, err)
 			}
 		}
 
@@ -417,7 +418,7 @@ func ExecuteAtmosVendorInternal(
 	// Run TUI to process packages
 	if len(packages) > 0 {
 		var opts []tea.ProgramOption
-		if !CheckTTYSupport() {
+		if !term.IsTTYSupportForStdout() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")

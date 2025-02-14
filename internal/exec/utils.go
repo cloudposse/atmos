@@ -287,13 +287,13 @@ func ProcessStacks(
 ) (schema.ConfigAndStacksInfo, error) {
 	// Check if stack was provided
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
-		message := fmt.Sprintf("'stack' is required. Usage: atmos %s <command> <component> -s <stack>", configAndStacksInfo.ComponentType)
+		message := fmt.Sprintf("`stack` is required.\n\nUsage:\n\n`atmos %s <command> <component> -s <stack>`", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
 	}
 
 	// Check if component was provided
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
-		message := fmt.Sprintf("'component' is required. Usage: atmos %s <command> <component> <arguments_and_flags>", configAndStacksInfo.ComponentType)
+		message := fmt.Sprintf("`component` is required.\n\nUsage:\n\n`atmos %s <command> <component> <arguments_and_flags>`", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
 	}
 

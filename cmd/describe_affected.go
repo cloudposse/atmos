@@ -20,7 +20,7 @@ var describeAffectedCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeAffectedCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }
@@ -41,6 +41,7 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("include-settings", false, "Include the 'settings' section for each affected component: atmos describe affected --include-settings=true")
 	describeAffectedCmd.PersistentFlags().Bool("upload", false, "Upload the affected components and stacks to a specified HTTP endpoint: atmos describe affected --upload=true")
 	describeAffectedCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe affected -s <stack>")
+	AddStackCompletion(describeAffectedCmd)
 	describeAffectedCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos describe affected --clone-target-ref=true\n"+
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")

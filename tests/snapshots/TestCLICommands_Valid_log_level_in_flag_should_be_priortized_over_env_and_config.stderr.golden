@@ -1,0 +1,4 @@
+DEBU Found ENV var ATMOS_LOGS_LEVEL=Info
+DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
+DEBU Using command line argument '--logs-level=Debug'
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]

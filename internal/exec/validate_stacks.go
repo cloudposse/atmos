@@ -27,6 +27,16 @@ const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-man
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+	// Initialize spinner
+	message := "Validating Atmos Stacks..."
+	p := NewSpinner(message)
+	spinnerDone := make(chan struct{})
+	// Run spinner in a goroutine
+	RunSpinner(p, spinnerDone, message)
+	// Ensure spinner is stopped before returning
+	defer StopSpinner(p, spinnerDone)
+
+	// Process CLI arguments
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -38,7 +48,6 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	flags := cmd.Flags()
-
 	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
 		return err
@@ -48,7 +57,8 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		atmosConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
 	}
 
-	return ValidateStacks(atmosConfig)
+	err = ValidateStacks(atmosConfig)
+	return err
 }
 
 // ValidateStacks validates Atmos stack configuration

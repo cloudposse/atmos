@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -45,13 +47,15 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
 		}
-
-		logsLevel, _ := cmd.Flags().GetString("logs-level")
-		logsFile, _ := cmd.Flags().GetString("logs-file")
-
-		configAndStacksInfo := schema.ConfigAndStacksInfo{
-			LogsLevel: logsLevel,
-			LogsFile:  logsFile,
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		// TODO: Check if these value being set was actually required
+		if cmd.Flags().Changed("logs-level") {
+			logsLevel, _ := cmd.Flags().GetString("logs-level")
+			configAndStacksInfo.LogsLevel = logsLevel
+		}
+		if cmd.Flags().Changed("logs-file") {
+			logsFile, _ := cmd.Flags().GetString("logs-file")
+			configAndStacksInfo.LogsFile = logsFile
 		}
 
 		// Only validate the config, don't store it yet since commands may need to add more info
@@ -75,7 +79,7 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
 		err = e.ExecuteAtmosCmd()
@@ -96,19 +100,66 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	case "Warning":
 		log.SetLevel(log.WarnLevel)
 	case "Off":
-		log.SetOutput(io.Discard)
+		log.SetLevel(math.MaxInt32)
 	default:
 		log.SetLevel(log.InfoLevel)
 	}
 
-	if atmosConfig.Logs.File != "/dev/stderr" {
+	var output io.Writer
+
+	switch atmosConfig.Logs.File {
+	case "/dev/stderr":
+		output = os.Stderr
+	case "/dev/stdout":
+		output = os.Stdout
+	case "/dev/null":
+		output = io.Discard // More efficient than opening os.DevNull
+	default:
 		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 		if err != nil {
 			log.Fatal("Failed to open log file:", err)
 		}
 		defer logFile.Close()
-		log.SetOutput(logFile)
+		output = logFile
 	}
+
+	log.SetOutput(output)
+}
+
+// TODO: This function works well, but we should generally avoid implementing manual flag parsing,
+// as Cobra typically handles this.
+
+// If there's no alternative, this approach may be necessary.
+// However, this TODO serves as a reminder to revisit and verify if a better solution exists.
+
+// Function to manually parse flags with double dash "--" like Cobra
+func parseFlags(args []string) (map[string]string, error) {
+	flags := make(map[string]string)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Check if the argument starts with '--' (double dash)
+		if strings.HasPrefix(arg, "--") {
+			// Strip the '--' prefix and check if it's followed by a value
+			arg = arg[2:]
+			if strings.Contains(arg, "=") {
+				// Case like --flag=value
+				parts := strings.SplitN(arg, "=", 2)
+				flags[parts[0]] = parts[1]
+			} else if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+				// Case like --flag value
+				flags[arg] = args[i+1]
+				i++ // Skip the next argument as it's the value
+			} else {
+				// Case where flag has no value, e.g., --flag (we set it to "true")
+				flags[arg] = "true"
+			}
+		} else {
+			// It's a regular argument, not a flag, so we skip
+			continue
+		}
+	}
+	return flags, nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -123,12 +174,28 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	utils.InitializeMarkdown(atmosConfig)
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
 			log.Debug("warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
 			u.LogErrorAndExit(initErr)
 		}
+	}
+
+	// TODO: This is a quick patch to mitigate the issue we can look for better code later
+	if os.Getenv("ATMOS_LOGS_LEVEL") != "" {
+		atmosConfig.Logs.Level = os.Getenv("ATMOS_LOGS_LEVEL")
+	}
+	flagKeyValue, _ := parseFlags(os.Args)
+	if v, ok := flagKeyValue["logs-level"]; ok {
+		atmosConfig.Logs.Level = v
+	}
+	if os.Getenv("ATMOS_LOGS_FILE") != "" {
+		atmosConfig.Logs.File = os.Getenv("ATMOS_LOGS_FILE")
+	}
+	if v, ok := flagKeyValue["logs-file"]; ok {
+		atmosConfig.Logs.File = v
 	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig
@@ -183,7 +250,7 @@ func init() {
 		"Errors can be redirected to any file or any standard file descriptor (including '/dev/null'): atmos <command> --redirect-stderr /dev/stdout")
 
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
-	RootCmd.PersistentFlags().String("logs-file", "/dev/stdout", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
+	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
@@ -199,6 +266,9 @@ func initCobraConfig() {
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 	oldUsageFunc := RootCmd.UsageFunc()
+	RootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+		return showFlagUsageAndExit(c, err)
+	})
 	RootCmd.SetUsageFunc(func(c *cobra.Command) error {
 		if c.Use == "atmos" {
 			return b.UsageFunc(c)

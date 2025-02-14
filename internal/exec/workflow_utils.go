@@ -109,12 +109,12 @@ func ExecuteWorkflow(
 			workflowFileName := filepath.Base(workflowPath)
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
-			failedMsg := theme.Colors.Error.Sprintf("\nStep '%s' failed!", step.Name)
+			failedMsg := fmt.Sprintf("\nStep '%s' failed!", step.Name)
 
 			u.LogDebug(fmt.Sprintf("\nCommand failed: %s", command))
 			u.LogDebug(fmt.Sprintf("Error: %v", err))
 
-			resumeMsg := theme.Colors.Success.Sprintf(
+			resumeMsg := fmt.Sprintf(
 				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",
 				workflow,
 				workflowFileName,
