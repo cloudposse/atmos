@@ -60,6 +60,7 @@ require (
 	github.com/zclconf/go-cty v1.16.2
 	golang.org/x/oauth2 v0.26.0
 	golang.org/x/term v0.29.0
+	golang.org/x/text v0.21.0
 	google.golang.org/api v0.171.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
