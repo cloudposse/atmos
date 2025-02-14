@@ -25,10 +25,9 @@ var listComponentsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-
 		output, err := listComponents(cmd)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), theme.Colors.Warning)
+			u.PrintErrorMarkdownAndExit("", err, "")
 			return
 		}
 
@@ -47,7 +46,7 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 
 	stackFlag, err := flags.GetString("stack")
 	if err != nil {
-		return nil, fmt.Errorf("Error getting the 'stack' flag: %v", err)
+		return nil, fmt.Errorf("Error getting the `stack` flag: `%v`", err)
 	}
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}

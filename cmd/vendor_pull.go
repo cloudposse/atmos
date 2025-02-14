@@ -21,7 +21,7 @@ var vendorPullCmd = &cobra.Command{
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }

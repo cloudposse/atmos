@@ -20,7 +20,7 @@ var describeStacksCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }
