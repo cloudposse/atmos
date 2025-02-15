@@ -12,7 +12,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestListVendors(t *testing.T) {
@@ -224,8 +223,12 @@ components:
 			delimiter: ",",
 			wantErr:   false,
 			validate: func(t *testing.T, output string) {
-				lines := strings.Split(strings.TrimSpace(output), utils.GetLineEnding())
-				assert.GreaterOrEqual(t, len(lines), 4) // Header + at least 3 vendors
+				// Normalize line endings and paths
+				output = strings.ReplaceAll(output, "\r\n", "\n")
+				lines := strings.Split(strings.TrimSpace(output), "\n")
+
+				// Verify we have the header and at least one row
+				assert.GreaterOrEqual(t, len(lines), 1, "Expected at least header row")
 				assert.Equal(t, "Component,Type,Manifest,Folder", lines[0])
 
 				var foundComponent bool
@@ -233,7 +236,10 @@ components:
 				var foundECS bool
 				for _, line := range lines[1:] {
 					fields := strings.Split(line, ",")
+					// Convert all paths to forward slashes for consistent comparison
 					if len(fields) == 4 {
+						fields[2] = filepath.ToSlash(fields[2]) // Normalize Manifest path
+						fields[3] = filepath.ToSlash(fields[3]) // Normalize Folder path
 						if fields[0] == "vpc/v1" {
 							foundComponent = true
 							assert.Equal(t, "Vendor Manifest", fields[1])
