@@ -172,7 +172,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if token != "" {
 		// Inject token only if no credentials are already provided.
 		if parsedURL.User == nil || parsedURL.User.Username() == "" {
-			l.Debug("Injecting token", "token_source", tokenSource, "url", src)
+			l.Debug("Injecting token", "env", tokenSource, "url", src)
 			var defaultUsername string
 			switch host {
 			case "github.com":
