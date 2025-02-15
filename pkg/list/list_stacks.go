@@ -327,24 +327,30 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		return output.String(), nil
 
 	default:
-		// If format is empty or "table", use table format
-		if format == "" && term.IsTTYSupportForStdout() {
-			// Create a styled table for TTY
-			t := table.New().
-				Border(lipgloss.ThickBorder()).
-				BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
-				StyleFunc(func(row, col int) lipgloss.Style {
-					style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-					if row == -1 {
-						// Apply CommandName style to all header cells
-						return style.Inherit(theme.Styles.CommandName)
-					}
-					return style.Inherit(theme.Styles.Description)
-				}).
-				Headers(headers...).
-				Rows(rows...)
+		// If format is empty, use table format for TTY and csv for non-TTY
+		if format == "" {
+			if term.IsTTYSupportForStdout() {
+				// Create a styled table for TTY
+				t := table.New().
+					Border(lipgloss.ThickBorder()).
+					BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
+					StyleFunc(func(row, col int) lipgloss.Style {
+						style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+						if row == -1 {
+							// Apply CommandName style to all header cells
+							return style.Inherit(theme.Styles.CommandName)
+						}
+						return style.Inherit(theme.Styles.Description)
+					}).
+					Headers(headers...).
+					Rows(rows...)
 
-			return t.String() + utils.GetLineEnding(), nil
+				return t.String() + utils.GetLineEnding(), nil
+			} else {
+				// For non-TTY, use CSV format for better machine readability
+				format = FormatCSV
+				return FilterAndListStacks(stacksMap, component, listConfig, format, delimiter)
+			}
 		}
 
 		// For non-TTY or when format is explicitly "table", use consistent tabular format

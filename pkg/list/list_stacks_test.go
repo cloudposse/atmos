@@ -162,11 +162,11 @@ func TestFilterAndListStacks(t *testing.T) {
 		expected  string
 	}{
 		{
-			name:      "default table format",
+			name:      "default format for non-TTY",
 			config:    schema.ListConfig{},
 			format:    "",
 			delimiter: "\t",
-			expected:  "Stack\tStage\tFile\n-----\t-----\t----\ndev\tdev\texamples/quick-start-simple/stacks/deploy/dev.yaml\nprod\tprod\texamples/quick-start-simple/stacks/deploy/prod.yaml\nstaging\tstaging\texamples/quick-start-simple/stacks/deploy/staging.yaml\ntest,special\ttest,stage\ttest/stack.yaml\n",
+			expected:  "Stack,Stage,File\ndev,dev,examples/quick-start-simple/stacks/deploy/dev.yaml\nprod,prod,examples/quick-start-simple/stacks/deploy/prod.yaml\nstaging,staging,examples/quick-start-simple/stacks/deploy/staging.yaml\n\"test,special\",\"test,stage\",test/stack.yaml\n",
 		},
 		{
 			name:      "csv format with default delimiter",
