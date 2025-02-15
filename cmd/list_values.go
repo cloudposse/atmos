@@ -8,6 +8,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -30,35 +31,49 @@ var listValuesCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
+		// Initialize logger from CLI config
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+		if err != nil {
+			fmt.Printf("Error initializing CLI config: %v\n", err)
+			return
+		}
+
+		log, err := logger.NewLoggerFromCliConfig(atmosConfig)
+		if err != nil {
+			fmt.Printf("Error initializing logger: %v\n", err)
+			return
+		}
+
 		flags := cmd.Flags()
 
 		queryFlag, err := flags.GetString("query")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'query' flag: %v", err), theme.Colors.Error)
+			log.Error(fmt.Errorf("failed to get query flag: %w", err))
 			return
 		}
 
 		abstractFlag, err := flags.GetBool("abstract")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'abstract' flag: %v", err), theme.Colors.Error)
+			log.Error(fmt.Errorf("failed to get abstract flag: %w", err))
 			return
 		}
 
 		maxColumnsFlag, err := flags.GetInt("max-columns")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'max-columns' flag: %v", err), theme.Colors.Error)
+			log.Error(fmt.Errorf("failed to get max-columns flag: %w", err))
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'format' flag: %v", err), theme.Colors.Error)
+			log.Error(fmt.Errorf("failed to get format flag: %w", err))
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'delimiter' flag: %v", err), theme.Colors.Error)
+			log.Error(fmt.Errorf("failed to get delimiter flag: %w", err))
 			return
 		}
 
@@ -68,27 +83,21 @@ var listValuesCmd = &cobra.Command{
 		}
 
 		component := args[0]
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
-			return
-		}
 
 		// Get all stacks
 		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
+			log.Error(fmt.Errorf("failed to describe stacks: %w", err))
 			return
 		}
 
 		output, err := l.FilterAndListValues(stacksMap, component, queryFlag, abstractFlag, maxColumnsFlag, formatFlag, delimiterFlag)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), theme.Colors.Warning)
+			log.Warning(fmt.Sprintf("Failed to filter and list values: %v", err))
 			return
 		}
 
-		u.PrintMessageInColor(output, theme.Colors.Success)
+		log.Info(output)
 	},
 }
 
