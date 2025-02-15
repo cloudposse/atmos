@@ -264,13 +264,13 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		}
 
 		// Set appropriate delimiter based on format
-		fieldDelimiter := delimiter
+		csvDelimiter := delimiter
 		if delimiter == "\t" || delimiter == "" {
 			switch format {
 			case FormatCSV:
-				fileDelimiter = ","
+				csvDelimiter = ","
 			case FormatTSV:
-				fileDelimiter = "\t"
+				csvDelimiter = "\t"
 			}
 		}
 
@@ -280,7 +280,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		case FormatCSV:
 			// Use encoding/csv for proper CSV handling
 			writer := csv.NewWriter(&output)
-			writer.Comma = rune(fileDelimiter[0])
+			writer.Comma = rune(csvDelimiter[0])
 
 			// Write headers
 			if err := writer.Write(nonEmptyHeaders); err != nil {
@@ -327,48 +327,27 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		return output.String(), nil
 
 	default:
-		// If format is empty, use table format for TTY and csv for non-TTY
-		if format == "" {
-			if term.IsTTYSupportForStdout() {
-				// Create a styled table for TTY
-				t := table.New().
-					Border(lipgloss.ThickBorder()).
-					BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
-					StyleFunc(func(row, col int) lipgloss.Style {
-						style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-						if row == -1 {
-							// Apply CommandName style to all header cells
-							return style.Inherit(theme.Styles.CommandName)
-						}
-						return style.Inherit(theme.Styles.Description)
-					}).
-					Headers(headers...).
-					Rows(rows...)
+		t := table.New()
 
-				return t.String() + utils.GetLineEnding(), nil
-			} else {
-				// For non-TTY, use CSV format for better machine readability
-				format = FormatCSV
-				return FilterAndListStacks(stacksMap, component, listConfig, format, delimiter)
-			}
+		if term.IsTTYSupportForStdout() {
+			t = t.Border(lipgloss.ThickBorder()).
+				BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
+				StyleFunc(func(row, col int) lipgloss.Style {
+					style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+					if row == 0 {
+						return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
+					}
+					return style.Inherit(theme.Styles.Description)
+				})
+		} else {
+			t = t.Border(lipgloss.HiddenBorder()).
+				StyleFunc(func(row, col int) lipgloss.Style {
+					return lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+				})
 		}
 
-		// For non-TTY or when format is explicitly "table", use consistent tabular format
-		// that matches the column configuration of the TTY output
-		var output strings.Builder
+		t = t.Headers(headers...).Rows(rows...)
 
-		// Add a separator line after headers for better readability
-		headerLine := make([]string, len(headers))
-		for i := range headers {
-			headerLine[i] = strings.Repeat("-", len(headers[i]))
-		}
-
-		output.WriteString(strings.Join(headers, delimiter) + utils.GetLineEnding())
-		output.WriteString(strings.Join(headerLine, delimiter) + utils.GetLineEnding())
-
-		for _, row := range rows {
-			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
-		}
-		return output.String(), nil
+		return t.String() + utils.GetLineEnding(), nil
 	}
 }
