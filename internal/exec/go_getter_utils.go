@@ -138,7 +138,8 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
 	host := strings.ToLower(parsedURL.Host)
 	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
-		l.Debug("Skipping token injection for a non-supported host", "host", parsedURL.Host)
+		l.Debug("Skipping token injection for a unsupported host", "host", parsedURL.Host)
+		l.Debug("Supported hosts", "supported_hosts", "github.com, bitbucket.org, gitlab.com")
 	}
 
 	// 3 types of tokens are supported for now: Github, Bitbucket and GitLab
@@ -171,7 +172,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if token != "" {
 		// Inject token only if no credentials are already provided.
 		if parsedURL.User == nil || parsedURL.User.Username() == "" {
-			l.Debug("Injecting token", "token_source", tokenSource, "url", src)
+			l.Debug("Injecting token", "env", tokenSource, "url", src)
 			var defaultUsername string
 			switch host {
 			case "github.com":

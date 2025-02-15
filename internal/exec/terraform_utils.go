@@ -123,6 +123,22 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 		"destroy",
 		"generate",
 		"output",
+		"shell",
+		"write",
+		"force-unlock",
+		"import",
+		"refresh",
+		"show",
+		"taint",
+		"untaint",
+		"validate",
+		"state list",
+		"state mv",
+		"state pull",
+		"state push",
+		"state replace-provider",
+		"state rm",
+		"state show",
 	}
 	return u.SliceContainsString(commandsThatNeedFuncProcessing, command)
 }
