@@ -412,22 +412,17 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
-			cliConfigYaml := ""
-
 			if atmosConfig.Logs.Level == u.LogLevelTrace {
 				y, _ := u.ConvertToYAML(atmosConfig)
-				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
+				u.LogTrace(fmt.Sprintf("\n\n\nCLI config: %v\n", y))
 			}
 
 			return configAndStacksInfo,
-				fmt.Errorf("Could not find the component '%s' in the stack '%s'.\n"+
-					"Check that all the context variables are correctly defined in the stack manifests.\n"+
-					"Are the component and stack names correct? Did you forget an import?%v\n",
+				fmt.Errorf("Could not find the component `%s` in the stack `%s`.\n\nTips:\n- Check that all the context variables are correctly defined in the stack manifests.\n- Are the component and stack names correct?\n- Did you forget to import?",
 					configAndStacksInfo.ComponentFromArg,
-					configAndStacksInfo.Stack,
-					cliConfigYaml)
+					configAndStacksInfo.Stack)
 		} else if foundStackCount > 1 {
-			err = fmt.Errorf("\nFound duplicate config for the component '%s' in the stack '%s' in the manifests: %v.\n"+
+			err = fmt.Errorf("\nFound duplicate config for the component `%s` in the stack `%s` in the manifests: %v.\n"+
 				"Check that all the context variables are correctly defined in the manifests and not duplicated.\n"+
 				"Check that all imports are valid.",
 				configAndStacksInfo.ComponentFromArg,
