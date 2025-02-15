@@ -55,7 +55,6 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 }
 
 func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
-
 	// Render without line wrapping
 	out, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(), // Uses terminal's default style
