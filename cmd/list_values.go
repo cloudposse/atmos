@@ -7,8 +7,8 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
-	l "github.com/cloudposse/atmos/pkg/list"
-	"github.com/cloudposse/atmos/pkg/logger"
+	list "github.com/cloudposse/atmos/pkg/list"
+	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -39,7 +39,7 @@ var listValuesCmd = &cobra.Command{
 			return
 		}
 
-		log, err := logger.NewLoggerFromCliConfig(atmosConfig)
+		logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 		if err != nil {
 			fmt.Printf("Error initializing logger: %v\n", err)
 			return
@@ -49,37 +49,37 @@ var listValuesCmd = &cobra.Command{
 
 		queryFlag, err := flags.GetString("query")
 		if err != nil {
-			log.Error(fmt.Errorf("failed to get query flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get query flag: %w", err))
 			return
 		}
 
 		abstractFlag, err := flags.GetBool("abstract")
 		if err != nil {
-			log.Error(fmt.Errorf("failed to get abstract flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get abstract flag: %w", err))
 			return
 		}
 
 		maxColumnsFlag, err := flags.GetInt("max-columns")
 		if err != nil {
-			log.Error(fmt.Errorf("failed to get max-columns flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get max-columns flag: %w", err))
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			log.Error(fmt.Errorf("failed to get format flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get format flag: %w", err))
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			log.Error(fmt.Errorf("failed to get delimiter flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get delimiter flag: %w", err))
 			return
 		}
 
 		// Set appropriate default delimiter based on format
-		if formatFlag == l.FormatCSV && delimiterFlag == l.DefaultTSVDelimiter {
-			delimiterFlag = l.DefaultCSVDelimiter
+		if formatFlag == list.FormatCSV && delimiterFlag == list.DefaultTSVDelimiter {
+			delimiterFlag = list.DefaultCSVDelimiter
 		}
 
 		component := args[0]
@@ -87,17 +87,17 @@ var listValuesCmd = &cobra.Command{
 		// Get all stacks
 		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 		if err != nil {
-			log.Error(fmt.Errorf("failed to describe stacks: %w", err))
+			logger.Error(fmt.Errorf("failed to describe stacks: %w", err))
 			return
 		}
 
-		output, err := l.FilterAndListValues(stacksMap, component, queryFlag, abstractFlag, maxColumnsFlag, formatFlag, delimiterFlag)
+		output, err := list.FilterAndListValues(stacksMap, component, queryFlag, abstractFlag, maxColumnsFlag, formatFlag, delimiterFlag)
 		if err != nil {
-			log.Warning(fmt.Sprintf("Failed to filter and list values: %v", err))
+			logger.Warning(fmt.Sprintf("Failed to filter and list values: %v", err))
 			return
 		}
 
-		log.Info(output)
+		logger.Info(output)
 	},
 }
 
