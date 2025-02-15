@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -93,7 +94,12 @@ var listValuesCmd = &cobra.Command{
 
 		output, err := list.FilterAndListValues(stacksMap, component, queryFlag, abstractFlag, maxColumnsFlag, formatFlag, delimiterFlag)
 		if err != nil {
-			logger.Warning(fmt.Sprintf("Failed to filter and list values: %v", err))
+			// Check if this is a 'no values found' error
+			if strings.Contains(err.Error(), "no values found for component") {
+				logger.Error(err)
+			} else {
+				logger.Warning(fmt.Sprintf("Failed to filter and list values: %v", err))
+			}
 			return
 		}
 

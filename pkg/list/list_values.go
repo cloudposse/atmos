@@ -86,7 +86,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 	}
 
 	if len(filteredStacks) == 0 {
-		return fmt.Sprintf("No values found for component '%s'", component), nil
+		return "", fmt.Errorf("no values found for component '%s'", component)
 	}
 
 	// Apply JMESPath query if provided
