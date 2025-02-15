@@ -1,0 +1,17 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: demo-vendoring
+  description: Atmos vendoring manifest for Atmos demo component library
+spec:
+  # Import other vendor manifests, if necessary
+  imports: []
+
+  sources:
+    - component: "terrafrom-null-label"
+      source: "git::git@github.com:cloudposse/terraform-null-label.git?ref={{.Version}}"
+      version: "0.25.0"
+      targets:
+        - "library/"
+      tags:
+        - demo

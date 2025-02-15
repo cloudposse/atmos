@@ -72,7 +72,7 @@ type CustomGitDetector struct {
 
 // Detect implements the getter.Detector interface for go-getter v1.
 func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
-	l.Debug("CustomGitDetector.Detect", "src", src, "source", d.source)
+	l.Debug("CustomGitDetector.Detect called")
 
 	if len(src) == 0 {
 		return "", false, nil
@@ -112,7 +112,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 		}
 	}
 
-	l.Debug(fmt.Sprintf("url = %q:", src))
+	l.Debug("Parsed URL", "url", src)
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
@@ -130,16 +130,15 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 
 	// If the URL uses the SSH scheme, check for an active SSH agent.
 	// Unlike HTTPS where public repos can be accessed without authentication,
-	// SSH requires authentication. If no SSH agent is detected, log a debug message.
+	// SSH requires authentication. An SSH agent being one of the popular ones, so we log a debug message in case it is missing (could be false alert thoguh).
 	if parsedURL.Scheme == "ssh" && os.Getenv("SSH_AUTH_SOCK") == "" {
-		l.Debug("No SSH authentication method found")
+		l.Debug("SSH agent-based authentication may not work because SSH_AUTH_SOCK is not set")
 	}
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
 	host := strings.ToLower(parsedURL.Host)
 	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
 		l.Debug("Skipping token injection for a non-supported host", "host", parsedURL.Host)
-		l.Debug("Supported hosts", "supported_hosts", "github.com, bitbucket.org, gitlab.com")
 	}
 
 	// 3 types of tokens are supported for now: Github, Bitbucket and GitLab
@@ -180,9 +179,12 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 			case "gitlab.com":
 				defaultUsername = "oauth2"
 			case "bitbucket.org":
-				defaultUsername = os.Getenv("BITBUCKET_USERNAME")
+				defaultUsername = os.Getenv("ATMOS_BITBUCKET_USERNAME")
 				if defaultUsername == "" {
-					defaultUsername = "x-token-auth"
+					defaultUsername = os.Getenv("BITBUCKET_USERNAME")
+					if defaultUsername == "" {
+						defaultUsername = "x-token-auth"
+					}
 				}
 				l.Debug("Using Bitbucket username", "username", defaultUsername)
 			default:
