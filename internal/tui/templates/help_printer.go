@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/mitchellh/go-wordwrap"
 	"github.com/spf13/pflag"
 )
@@ -70,8 +72,13 @@ func calculateMaxFlagLength(flags *pflag.FlagSet) int {
 
 func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	nameIndent := nameIndentWidth
+	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	if err != nil {
+		return
+	}
 
 	flagName := ""
+
 	if flag.Shorthand != "" {
 		if flag.Value.Type() != "bool" {
 			flagName = fmt.Sprintf("%s-%s, --%s %s", strings.Repeat(" ", nameIndent),
@@ -109,7 +116,14 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	}
 
 	wrapped := wordwrap.WrapString(description, uint(availWidth))
+	wrapped, err = render.RenderWithoutWordWrap(wrapped)
+	if err != nil {
+		return
+	}
 	lines := strings.Split(wrapped, "\n")
+	if len(lines) > 0 {
+		lines = lines[1:]
+	}
 
 	if _, err := fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0]); err != nil {
 		return
