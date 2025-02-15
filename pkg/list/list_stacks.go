@@ -264,7 +264,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		}
 
 		// Set appropriate delimiter based on format
-		fileDelimiter := delimiter
+		fieldDelimiter := delimiter
 		if delimiter == "\t" || delimiter == "" {
 			switch format {
 			case FormatCSV:
