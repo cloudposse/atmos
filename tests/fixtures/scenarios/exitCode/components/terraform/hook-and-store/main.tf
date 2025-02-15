@@ -8,7 +8,7 @@ terraform {
 }
 
 variable "stage" {
-  description = "The file used as a flag to indicate that Terraform has already been applied."
+  description = "Stage. Used to define an Atmos stack."
   type        = string
   default     = "/tmp/terraform_once"
 }
