@@ -31,7 +31,7 @@ tests:
       exit_code: 0
   - name: atmos exit code should be same as command exit code (1)
     enabled: true
-    description: "Ensure the exit code equals the command exit code should be 0 for terraform apply"
+    description: "Ensure the exit code equals the command exit code for a failing terraform apply (expected to be 1)"
     workdir: "fixtures/scenarios/exitCode"
     command: "atmos"
     args:
