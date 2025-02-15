@@ -10,7 +10,7 @@ terraform {
 variable "stage" {
   description = "Stage. Used to define an Atmos stack."
   type        = string
-  default     = "/tmp/terraform_once"
+  default     = "test"
 }
 
 resource "null_resource" "run_once" {
