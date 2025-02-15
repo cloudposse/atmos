@@ -1,5 +1,5 @@
 tests:
-  - name: atmos exit code should be same as command exit code
+  - name: atmos exit code should be same as command exit code (2)
     enabled: true
     description: "Ensure the exit code equals the command exit code"
     workdir: "fixtures/scenarios/exitCode"
@@ -14,3 +14,33 @@ tests:
       - "-detailed-exitcode"
     expect:
       exit_code: 2
+  - name: atmos exit code should be same as command exit code (0)
+    enabled: true
+    description: "Ensure the exit code equals the command exit code should be 0 for terraform apply"
+    workdir: "fixtures/scenarios/exitCode"
+    command: "atmos"
+    args:
+      - terraform
+      - apply
+      - component1
+      - "-s"
+      - test
+      - "--"
+      - "-auto-approve"
+    expect:
+      exit_code: 0
+  - name: atmos exit code should be same as command exit code (1)
+    enabled: true
+    description: "Ensure the exit code equals the command exit code should be 0 for terraform apply"
+    workdir: "fixtures/scenarios/exitCode"
+    command: "atmos"
+    args:
+      - terraform
+      - apply
+      - component1
+      - "-s"
+      - test
+      - "--"
+      - "-auto-approve"
+    expect:
+      exit_code: 1
