@@ -84,8 +84,8 @@ func TestFilterAndListStacks(t *testing.T) {
 							"lang":     "se",
 						},
 						"settings": map[string]any{
-							"backend_type":    "s3",
-							"backend_region":  "us-west-2",
+							"backend_type":   "s3",
+							"backend_region": "us-west-2",
 							"component_type": "terraform",
 						},
 					},
@@ -105,8 +105,8 @@ func TestFilterAndListStacks(t *testing.T) {
 							"lang":     "en",
 						},
 						"settings": map[string]any{
-							"backend_type":    "s3",
-							"backend_region":  "us-west-2",
+							"backend_type":   "s3",
+							"backend_region": "us-west-2",
 							"component_type": "terraform",
 						},
 					},
@@ -126,8 +126,8 @@ func TestFilterAndListStacks(t *testing.T) {
 							"lang":     "en",
 						},
 						"settings": map[string]any{
-							"backend_type":    "s3",
-							"backend_region":  "us-west-2",
+							"backend_type":   "s3",
+							"backend_region": "us-west-2",
 							"component_type": "terraform",
 						},
 					},
