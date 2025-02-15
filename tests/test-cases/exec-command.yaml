@@ -7,9 +7,9 @@ tests:
     args:
       - terraform
       - plan
-      - station
+      - component1
       - "-s"
-      - dev
+      - test
       - "--"
       - "-detailed-exitcode"
     expect:
