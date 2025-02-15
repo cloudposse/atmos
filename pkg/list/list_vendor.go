@@ -205,14 +205,14 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 					row[i] = vendor.Version
 				case "Folder":
 					if len(vendor.Targets) > 0 {
-						row[i] = filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
+						row[i] = filepath.ToSlash(filepath.Join(atmosConfig.BasePath, vendor.Targets[0]))
 					}
 				case "Source":
 					row[i] = vendor.Source
 				case "Type":
 					row[i] = "Vendor Manifest"
 				case "Manifest":
-					row[i] = vendor.File
+					row[i] = filepath.ToSlash(vendor.File)
 				}
 				continue
 			}
@@ -233,7 +233,7 @@ func FilterAndListVendors(listConfig schema.ListConfig, format string, delimiter
 
 			// Add target path if available
 			if len(vendor.Targets) > 0 {
-				target := filepath.Join(atmosConfig.BasePath, vendor.Targets[0])
+				target := filepath.ToSlash(filepath.Join(atmosConfig.BasePath, vendor.Targets[0]))
 				data["Target"] = target
 				data["atmos_vendor_target"] = target
 			}
