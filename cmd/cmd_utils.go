@@ -720,33 +720,10 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 	// Extract stack names
 	stackNames := make([]string, 0)
 	for stackName := range stacksMap {
-		// Skip if the stack path is within excluded_paths
-		skip := false
-		for _, excludePath := range atmosConfig.Stacks.ExcludedPaths {
-			if strings.HasPrefix(stackName, excludePath) {
-				skip = true
-				break
-			}
-		}
-		if skip {
+		// Only include actual stack names, not file paths
+		if strings.HasPrefix(stackName, "stacks/") {
 			continue
 		}
-
-		// Only include paths that match included_paths if specified
-		if len(atmosConfig.Stacks.IncludedPaths) > 0 {
-			included := false
-			for _, includePath := range atmosConfig.Stacks.IncludedPaths {
-				if strings.HasPrefix(stackName, includePath) {
-					included = true
-					break
-				}
-			}
-			if !included {
-				continue
-			}
-		}
-
-		// Add the stack name if it passes all filters
 		stackNames = append(stackNames, stackName)
 	}
 
