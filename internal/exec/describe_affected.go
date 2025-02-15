@@ -203,16 +203,22 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	return result, nil
 }
 
-// ExecuteDescribeAffectedCmd executes `describe affected` command
+// ExecuteDescribeAffectedCmd executes `atmos describe affected` command
 func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	a, err := parseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
 		return err
 	}
 
+	return ExecuteDescribeAffected(a)
+}
+
+// ExecuteDescribeAffected executes `atmos describe affected`
+func ExecuteDescribeAffected(a DescribeAffectedCmdArgs) error {
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
+	var err error
 
 	if a.RepoPath != "" {
 		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRepoPath(
