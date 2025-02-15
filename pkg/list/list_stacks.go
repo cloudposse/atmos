@@ -196,7 +196,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 
 	templates := make([]columnTemplate, len(listConfig.Columns))
 	for i, col := range listConfig.Columns {
-			// Use standard Go template functions
+		// Use standard Go template functions
 		funcMap := template.FuncMap{}
 
 		tmpl, err := template.New(col.Name).Funcs(funcMap).Parse(col.Value)
