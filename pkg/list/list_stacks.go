@@ -196,38 +196,8 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 
 	templates := make([]columnTemplate, len(listConfig.Columns))
 	for i, col := range listConfig.Columns {
-		// Add custom template functions for accessing stack properties
-		funcMap := template.FuncMap{
-			// getVar safely accesses variables from the stack's vars map
-			// Example: {{ getVar .vars "environment" }}
-			"getVar": func(vars map[string]any, key string) string {
-				if val, ok := vars[key]; ok && val != nil {
-					return fmt.Sprintf("%v", val)
-				}
-				return ""
-			},
-			// getNestedValue safely accesses nested properties from a map using a path
-			// Example: {{ getNestedValue .components "terraform" "station" "settings" "backend_type" }}
-			// Returns empty string if any part of the path is nil or missing
-			"getNestedValue": func(obj map[string]any, path ...string) string {
-				current := obj
-				for _, key := range path {
-					if current == nil {
-						return ""
-					}
-					val, ok := current[key]
-					if !ok || val == nil {
-						return ""
-					}
-					if nextMap, ok := val.(map[string]any); ok {
-						current = nextMap
-					} else {
-						return fmt.Sprintf("%v", val)
-					}
-				}
-				return ""
-			},
-		}
+			// Use standard Go template functions
+		funcMap := template.FuncMap{}
 
 		tmpl, err := template.New(col.Name).Funcs(funcMap).Parse(col.Value)
 		if err != nil {

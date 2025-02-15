@@ -187,7 +187,7 @@ func TestFilterAndListStacks(t *testing.T) {
 			config: schema.ListConfig{
 				Columns: []schema.ListColumnConfig{
 					{Name: "Stack", Value: "{{ .atmos_stack }}"},
-					{Name: "Stage", Value: "{{ getVar .vars \"stage\" }}"},
+					{Name: "Stage", Value: "{{ index .vars \"stage\" }}"},
 				},
 			},
 			format:    "csv",
@@ -199,9 +199,9 @@ func TestFilterAndListStacks(t *testing.T) {
 			config: schema.ListConfig{
 				Columns: []schema.ListColumnConfig{
 					{Name: "Stack", Value: "{{ .atmos_stack }}"},
-					{Name: "Backend", Value: "{{ getNestedValue .components \"terraform\" \"station\" \"settings\" \"backend_type\" }}"},
-					{Name: "Region", Value: "{{ getNestedValue .components \"terraform\" \"station\" \"settings\" \"backend_region\" }}"},
-					{Name: "Type", Value: "{{ getNestedValue .components \"terraform\" \"station\" \"settings\" \"component_type\" }}"},
+					{Name: "Backend", Value: "{{ if (index .components \"terraform\" \"station\" \"settings\") }}{{ index .components \"terraform\" \"station\" \"settings\" \"backend_type\" }}{{ end }}"},
+					{Name: "Region", Value: "{{ if (index .components \"terraform\" \"station\" \"settings\") }}{{ index .components \"terraform\" \"station\" \"settings\" \"backend_region\" }}{{ end }}"},
+					{Name: "Type", Value: "{{ if (index .components \"terraform\" \"station\" \"settings\") }}{{ index .components \"terraform\" \"station\" \"settings\" \"component_type\" }}{{ end }}"},
 				},
 			},
 			format:    "csv",
