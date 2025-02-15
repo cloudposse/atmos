@@ -83,6 +83,11 @@ func TestFilterAndListStacks(t *testing.T) {
 							"location": "Stockholm",
 							"lang":     "se",
 						},
+						"settings": map[string]any{
+							"backend_type":    "s3",
+							"backend_region":  "us-west-2",
+							"component_type": "terraform",
+						},
 					},
 				},
 			},
@@ -99,6 +104,11 @@ func TestFilterAndListStacks(t *testing.T) {
 							"location": "Los Angeles",
 							"lang":     "en",
 						},
+						"settings": map[string]any{
+							"backend_type":    "s3",
+							"backend_region":  "us-west-2",
+							"component_type": "terraform",
+						},
 					},
 				},
 			},
@@ -114,6 +124,11 @@ func TestFilterAndListStacks(t *testing.T) {
 						"vars": map[string]any{
 							"location": "Los Angeles",
 							"lang":     "en",
+						},
+						"settings": map[string]any{
+							"backend_type":    "s3",
+							"backend_region":  "us-west-2",
+							"component_type": "terraform",
 						},
 					},
 				},
@@ -178,6 +193,20 @@ func TestFilterAndListStacks(t *testing.T) {
 			format:    "csv",
 			delimiter: ",",
 			expected:  "Stack,Stage\ndev,dev\nprod,prod\nstaging,staging\n\"test,special\",\"test,stage\"\n",
+		},
+		{
+			name: "access to settings and nested properties",
+			config: schema.ListConfig{
+				Columns: []schema.ListColumnConfig{
+					{Name: "Stack", Value: "{{ .atmos_stack }}"},
+					{Name: "Backend", Value: "{{ getNestedValue .components \"terraform\" \"station\" \"settings\" \"backend_type\" }}"},
+					{Name: "Region", Value: "{{ getNestedValue .components \"terraform\" \"station\" \"settings\" \"backend_region\" }}"},
+					{Name: "Type", Value: "{{ getNestedValue .components \"terraform\" \"station\" \"settings\" \"component_type\" }}"},
+				},
+			},
+			format:    "csv",
+			delimiter: ",",
+			expected:  "Stack,Backend,Region,Type\ndev,s3,us-west-2,terraform\nprod,s3,us-west-2,terraform\nstaging,s3,us-west-2,terraform\n\"test,special\",,,\n",
 		},
 	}
 

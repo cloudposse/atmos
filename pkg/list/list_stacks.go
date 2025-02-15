@@ -35,6 +35,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			"atmos_stack":      stackName,
 			"atmos_stack_file": v2["atmos_stack_file"],
 			"vars":             make(map[string]any),
+			"components":       make(map[string]any),
 		}
 
 		// Extract variables from stack level
@@ -46,27 +47,21 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			}
 		}
 
-		// Extract variables from components
+		// Copy components with their full structure
 		if components, ok := v2["components"].(map[string]any); ok {
-			// Helper function to extract vars from component section
-			extractComponentVars := func(componentSection map[string]any) {
-				for _, comp := range componentSection {
-					if compMap, ok := comp.(map[string]any); ok {
-						if vars, ok := compMap["vars"].(map[string]any); ok {
-							for k, v := range vars {
-								if _, exists := stackInfo["vars"].(map[string]any)[k]; !exists && v != nil {
-									stackInfo["vars"].(map[string]any)[k] = v
-								}
-							}
+			for compType, compSection := range components {
+				if sectionMap, ok := compSection.(map[string]any); ok {
+					// Create component type section if it doesn't exist
+					if _, exists := stackInfo["components"].(map[string]any)[compType]; !exists {
+						stackInfo["components"].(map[string]any)[compType] = make(map[string]any)
+					}
+
+					// Copy all component configurations
+					for compName, compConfig := range sectionMap {
+						if configMap, ok := compConfig.(map[string]any); ok {
+							stackInfo["components"].(map[string]any)[compType].(map[string]any)[compName] = configMap
 						}
 					}
-				}
-			}
-
-			// Process terraform and helmfile components
-			for _, section := range components {
-				if sectionMap, ok := section.(map[string]any); ok {
-					extractComponentVars(sectionMap)
 				}
 			}
 		}
@@ -201,11 +196,34 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 
 	templates := make([]columnTemplate, len(listConfig.Columns))
 	for i, col := range listConfig.Columns {
-		// Add custom template functions
+		// Add custom template functions for accessing stack properties
 		funcMap := template.FuncMap{
+			// getVar safely accesses variables from the stack's vars map
+			// Example: {{ getVar .vars "environment" }}
 			"getVar": func(vars map[string]any, key string) string {
 				if val, ok := vars[key]; ok && val != nil {
 					return fmt.Sprintf("%v", val)
+				}
+				return ""
+			},
+			// getNestedValue safely accesses nested properties from a map using a path
+			// Example: {{ getNestedValue .components "terraform" "station" "settings" "backend_type" }}
+			// Returns empty string if any part of the path is nil or missing
+			"getNestedValue": func(obj map[string]any, path ...string) string {
+				current := obj
+				for _, key := range path {
+					if current == nil {
+						return ""
+					}
+					val, ok := current[key]
+					if !ok || val == nil {
+						return ""
+					}
+					if nextMap, ok := val.(map[string]any); ok {
+						current = nextMap
+					} else {
+						return fmt.Sprintf("%v", val)
+					}
 				}
 				return ""
 			},
