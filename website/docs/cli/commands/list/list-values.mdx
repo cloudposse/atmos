@@ -55,11 +55,14 @@ atmos list vars vpc
 
 List values with a custom JMESPath query:
 ```shell
-TODO: define more outputs
-```
+# Query specific variables
+atmos list values vpc --query .vars.enabled
 
-```shell
-atmos list values vpc --query .settings
+# Query environment settings
+atmos list values vpc --query .vars.environment
+
+# Query network configuration
+atmos list values vpc --query .vars.ipv4_primary_cidr_block
 ```
 
 Include abstract components:
@@ -74,16 +77,34 @@ atmos list values vpc --max-columns 5
 
 Output in different formats:
 ```shell
+# JSON format for machine processing
 atmos list values vpc --format json
+
+# CSV format for spreadsheet compatibility
 atmos list values vpc --format csv
+
+# TSV format with tab delimiters
 atmos list values vpc --format tsv
+
+# Note: Use JSON or CSV formats when dealing with wide datasets
+# The table format will show a width error if the data is too wide for your terminal
 ```
 
 ## Example Output
 
 ```shell
 > atmos list vars vpc
-TODO: define example output
+┌──────────────┬──────────────┬──────────────┬──────────────┐
+│              │   dev-ue1    │  staging-ue1 │   prod-ue1   │
+├──────────────┼──────────────┼──────────────┼──────────────┤
+│ enabled      │ true         │ true         │ true         │
+│ name         │ dev-vpc      │ staging-vpc  │ prod-vpc     │
+│ cidr_block   │ 10.0.0.0/16  │ 10.1.0.0/16  │ 10.2.0.0/16  │
+│ environment  │ dev          │ staging      │ prod         │
+│ namespace    │ example      │ example      │ example      │
+│ stage        │ dev          │ staging      │ prod         │
+│ region       │ us-east-1    │ us-east-1    │ us-east-1    │
+└──────────────┴──────────────┴──────────────┴──────────────┘
 ```
 
 ## Related Commands
