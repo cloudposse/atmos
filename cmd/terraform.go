@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	l "github.com/charmbracelet/log"
@@ -69,12 +70,18 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 	info := getConfigAndStacksInfo("terraform", cmd, args)
+
 	if info.NeedHelp {
 		err := actualCmd.Usage()
 		if err != nil {
-			u.LogErrorAndExit(err)
+			l.Fatal(err)
 		}
 		return
+	}
+
+	if info.Affected && info.All {
+		err := errors.New("only one of '--affected' or '--all' flag can be specified")
+		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 
 	err := e.ExecuteTerraform(info)
