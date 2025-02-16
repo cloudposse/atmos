@@ -14,21 +14,14 @@ variable "stage" {
 }
 
 resource "null_resource" "run_once" {
-  # Use a changing trigger to force the provisioner to run every time.
+  # Force the provisioner to run on every apply.
   triggers = {
     always_run = timestamp()
   }
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      if [ -f "${var.stage}" ]; then
-        echo "Flag file exists. Exiting with error as intended."
-        exit 1
-      else
-        echo "Flag file not found. Creating flag file."
-        touch "${var.stage}"
-      fi
-    EOT
+    command = <<EOF
+python -c "import os, sys, tempfile; flag = './terraform_once.tfstate.temp'; print('Using flag file:', flag); sys.exit(1) if os.path.exists(flag) else (open(flag,'w').close() or sys.exit(0))"
+EOF
   }
 }

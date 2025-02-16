@@ -1,7 +1,7 @@
 tests:
   - name: atmos exit code should be same as command exit code (2)
     enabled: true
-    description: "Ensure the exit code equals the command exit code"
+    description: "Ensure the exit code equals the command exit code for a passing terraform plan (expected to be 2)"
     workdir: "fixtures/scenarios/exitCode"
     command: "atmos"
     args:
@@ -13,10 +13,11 @@ tests:
       - "--"
       - "-detailed-exitcode"
     expect:
+      # we are expecting exit code 2 because terraform plan with flag -detailed-exitcode returns exit code 2 in case the plan was displayed
       exit_code: 2
   - name: atmos exit code should be same as command exit code (0)
     enabled: true
-    description: "Ensure the exit code equals the command exit code should be 0 for terraform apply"
+    description: "Ensure the exit code equals the command exit code for a passing terraform apply (expected to be 0)"
     workdir: "fixtures/scenarios/exitCode"
     command: "atmos"
     args:
@@ -28,6 +29,8 @@ tests:
       - "--"
       - "-auto-approve"
     expect:
+      # we are expecting exit code 0 because terraform apply on successful returns exit code 0. We would be successful for the first time we run terraform apply.
+      # first time a file named `terraform_once.flag` won't be present so the resource would be applied.
       exit_code: 0
   - name: atmos exit code should be same as command exit code (1)
     enabled: true
@@ -43,4 +46,6 @@ tests:
       - "--"
       - "-auto-approve"
     expect:
+      # we are expecting exit code 1 because terraform apply on successful returns exit code 0. We would not be successful for the second time we run this test case because
+      # second time a file named `terraform_once.flag` is present so the resource would fail to be created.
       exit_code: 1
