@@ -319,7 +319,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 
 	default:
 		// For non-TTY output with no specific format, default to CSV
-		if !term.IsTTYSupportForStdout() && format == "" {
+		if !term.IsTTYSupportForStdout() || format == "csv" {
 			var output strings.Builder
 			writer := csv.NewWriter(&output)
 			writer.Comma = ','
@@ -340,6 +340,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			return output.String(), nil
 		}
 
+		// For TTY output or when format is not specified, use table format
 		t := table.New()
 
 		if term.IsTTYSupportForStdout() {
