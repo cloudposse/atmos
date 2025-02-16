@@ -36,13 +36,13 @@ var listValuesCmd = &cobra.Command{
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			fmt.Printf("Error initializing CLI config: %v\n", err)
+			u.PrintMessageInColor(fmt.Sprintf("failed to initialize CLI config: %v", err), theme.Colors.Error)
 			return
 		}
 
 		logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 		if err != nil {
-			fmt.Printf("Error initializing logger: %v\n", err)
+			u.PrintMessageInColor(fmt.Sprintf("failed to initialize logger: %v", err), theme.Colors.Error)
 			return
 		}
 
