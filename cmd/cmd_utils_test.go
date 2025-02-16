@@ -18,9 +18,9 @@ func TestFilterStackNames(t *testing.T) {
 			stacksBasePath: "stacks",
 			stacksMap: map[string]any{
 				"stacks/test1.yaml": nil,
-				"test1":            nil,
-				"test2":            nil,
-				"stacks/test2":     nil,
+				"test1":             nil,
+				"test2":             nil,
+				"stacks/test2":      nil,
 			},
 			expectedStacks: []string{"test1", "test2"},
 		},
