@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    # Test 'terraform apply --affected'
+    component-1:
+      metadata:
+        component: mock
+      vars:
+        foo: foo-component-1
+    component-2:
+      metadata:
+        component: mock
+      vars:
+        bar: bar-component-2
+    component-3:
+      metadata:
+        component: mock
+      vars:
+        baz: baz-component-3
+    component-4:
+      metadata:
+        component: mock
+      vars:
+        foo: ""
+        bar: ""
+        baz: ""
+    component-5:
+      metadata:
+        component: mock
+      vars:
+        foo: ""
+    component-6:
+      metadata:
+        component: mock
+      vars:
+        foo: ""
