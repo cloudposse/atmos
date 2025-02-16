@@ -704,6 +704,19 @@ func showUsageExample(cmd *cobra.Command, details string) {
 	u.PrintInvalidUsageErrorAndExit(errors.New(details), suggestion)
 }
 
+// filterStackNames filters out file paths and returns valid stack names
+func filterStackNames(stacksMap map[string]any, basePath string) []string {
+	stackNames := make([]string, 0)
+	for stackName := range stacksMap {
+		// Skip if it's a file path (starts with base path)
+		if basePath != "" && strings.HasPrefix(stackName, basePath+"/") {
+			continue
+		}
+		stackNames = append(stackNames, stackName)
+	}
+	return stackNames
+}
+
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -717,15 +730,8 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	// Extract stack names
-	stackNames := make([]string, 0)
-	for stackName := range stacksMap {
-		// Only include actual stack names, not file paths
-		if strings.HasPrefix(stackName, "stacks/") {
-			continue
-		}
-		stackNames = append(stackNames, stackName)
-	}
+	// Filter stack names using configured base path
+	stackNames := filterStackNames(stacksMap, atmosConfig.Stacks.BasePath)
 
 	return stackNames, cobra.ShellCompDirectiveNoFileComp
 }
