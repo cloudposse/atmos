@@ -210,68 +210,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return ExecuteDescribeAffected(a)
-}
-
-// ExecuteDescribeAffected executes `atmos describe affected`
-func ExecuteDescribeAffected(a DescribeAffectedCmdArgs) error {
-	var affected []schema.Affected
-	var headHead, baseHead *plumbing.Reference
-	var repoUrl string
-	var err error
-
-	if a.RepoPath != "" {
-		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRepoPath(
-			a.CLIConfig,
-			a.RepoPath,
-			a.Verbose,
-			a.IncludeSpaceliftAdminStacks,
-			a.IncludeSettings,
-			a.Stack,
-			a.ProcessTemplates,
-			a.ProcessYamlFunctions,
-			a.Skip,
-		)
-	} else if a.CloneTargetRef {
-		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(
-			a.CLIConfig,
-			a.Ref,
-			a.SHA,
-			a.SSHKeyPath,
-			a.SSHKeyPassword,
-			a.Verbose,
-			a.IncludeSpaceliftAdminStacks,
-			a.IncludeSettings,
-			a.Stack,
-			a.ProcessTemplates,
-			a.ProcessYamlFunctions,
-			a.Skip,
-		)
-	} else {
-		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(
-			a.CLIConfig,
-			a.Ref,
-			a.SHA,
-			a.Verbose,
-			a.IncludeSpaceliftAdminStacks,
-			a.IncludeSettings,
-			a.Stack,
-			a.ProcessTemplates,
-			a.ProcessYamlFunctions,
-			a.Skip,
-		)
-	}
-
+	affected, headHead, baseHead, repoUrl, err := ExecuteDescribeAffected(a)
 	if err != nil {
 		return err
-	}
-
-	// Add dependent components and stacks for each affected component
-	if len(affected) > 0 && a.IncludeDependents {
-		err = addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
-		if err != nil {
-			return err
-		}
 	}
 
 	if a.Query == "" {
@@ -327,4 +268,68 @@ func ExecuteDescribeAffected(a DescribeAffectedCmdArgs) error {
 	}
 
 	return nil
+}
+
+// ExecuteDescribeAffected executes `describe affected`
+func ExecuteDescribeAffected(a DescribeAffectedCmdArgs) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	var affected []schema.Affected
+	var headHead, baseHead *plumbing.Reference
+	var repoUrl string
+	var err error
+
+	if a.RepoPath != "" {
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRepoPath(
+			a.CLIConfig,
+			a.RepoPath,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	} else if a.CloneTargetRef {
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.SSHKeyPath,
+			a.SSHKeyPassword,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	} else {
+		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	}
+
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+
+	// Add dependent components and stacks for each affected component
+	if len(affected) > 0 && a.IncludeDependents {
+		err = addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
+		if err != nil {
+			return nil, nil, nil, "", err
+		}
+	}
+
+	return affected, headHead, baseHead, repoUrl, err
 }
