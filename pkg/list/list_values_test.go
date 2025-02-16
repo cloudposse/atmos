@@ -62,6 +62,7 @@ func TestFilterAndListValues(t *testing.T) {
 		format          string
 		delimiter       string
 		expectError     bool
+		expectedError   string
 		checkFunc       func(t *testing.T, output string)
 	}{
 		{
@@ -139,11 +140,10 @@ func TestFilterAndListValues(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:      "component not found",
-			component: "nonexistent",
-			checkFunc: func(t *testing.T, output string) {
-				assert.Contains(t, output, "No values found for component 'nonexistent'")
-			},
+			name:          "component not found",
+			component:     "nonexistent",
+			expectError:   true,
+			expectedError: "no values found for component 'nonexistent'",
 		},
 	}
 
@@ -153,6 +153,9 @@ func TestFilterAndListValues(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				if tt.expectedError != "" {
+					assert.Equal(t, tt.expectedError, err.Error())
+				}
 				return
 			}
 
