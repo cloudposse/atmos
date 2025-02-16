@@ -16,6 +16,100 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
+// BuildStackMetadata creates a standardized stack metadata map from raw stack data.
+// It extracts and organizes variables, components, and other stack properties into a consistent structure.
+func BuildStackMetadata(stackName string, stackData map[string]any) map[string]any {
+	stackInfo := map[string]any{
+		"atmos_stack":      stackName,
+		"atmos_stack_file": stackData["atmos_stack_file"],
+		"vars":             make(map[string]any),
+		"components":       make(map[string]any),
+	}
+
+	// Extract variables from stack level
+	if stackVars, ok := stackData["vars"].(map[string]any); ok {
+		for k, v := range stackVars {
+			if v != nil {
+				stackInfo["vars"].(map[string]any)[k] = v
+			}
+		}
+	}
+
+	// Copy components with their full structure
+	if components, ok := stackData["components"].(map[string]any); ok {
+		for compType, compSection := range components {
+			if sectionMap, ok := compSection.(map[string]any); ok {
+				if _, exists := stackInfo["components"].(map[string]any)[compType]; !exists {
+					stackInfo["components"].(map[string]any)[compType] = make(map[string]any)
+				}
+
+				// Copy all component configurations
+				for compName, compConfig := range sectionMap {
+					if configMap, ok := compConfig.(map[string]any); ok {
+						stackInfo["components"].(map[string]any)[compType].(map[string]any)[compName] = configMap
+					}
+				}
+			}
+		}
+	}
+
+	// Extract stage from stack name if not set in vars
+	if _, ok := stackInfo["vars"].(map[string]any)["stage"]; !ok {
+		// Only set stage from stack name if it's not already set in vars
+		if stackName != stackInfo["atmos_stack_file"].(string) {
+			stackInfo["vars"].(map[string]any)["stage"] = stackName
+		}
+	}
+
+	// Copy other stack configuration
+	for k, v := range stackData {
+		if k != "vars" && k != "components" {
+			stackInfo[k] = v
+		}
+	}
+
+	return stackInfo
+}
+
+// ContainsComponent checks if a stack's components map contains the specified component.
+func ContainsComponent(components map[string]any, targetComponent string) bool {
+	for _, section := range components {
+		if compSection, ok := section.(map[string]any); ok {
+			if _, exists := compSection[targetComponent]; exists {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HasNonEmptyTemplateValues checks if a column template produces any non-empty values
+// when executed against a slice of stack data.
+func HasNonEmptyTemplateValues(columnName, templateStr string, stacks []map[string]any) bool {
+	// Stack is always shown
+	if columnName == "Stack" {
+		return true
+	}
+
+	tmpl, err := template.New(columnName).Parse(templateStr)
+	if err != nil {
+		return false
+	}
+
+	// Check if any stack has a non-empty value for this column
+	for _, stack := range stacks {
+		var buf strings.Builder
+		if err := tmpl.Execute(&buf, stack); err != nil {
+			continue
+		}
+		value := buf.String()
+		if value != "" && value != "<nil>" && value != "<no value>" {
+			return true
+		}
+	}
+	return false
+}
+
 // FilterAndListStacks filters and lists stacks based on the given configuration
 func FilterAndListStacks(stacksMap map[string]any, component string, listConfig schema.ListConfig, format string, delimiter string) (string, error) {
 	if err := ValidateFormat(format); err != nil {
@@ -29,73 +123,6 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		format = listConfig.Format
 	}
 
-	// Helper function to create stack info
-	createStackInfo := func(stackName string, v2 map[string]any) map[string]any {
-		stackInfo := map[string]any{
-			"atmos_stack":      stackName,
-			"atmos_stack_file": v2["atmos_stack_file"],
-			"vars":             make(map[string]any),
-			"components":       make(map[string]any),
-		}
-
-		// Extract variables from stack level
-		if stackVars, ok := v2["vars"].(map[string]any); ok {
-			for k, v := range stackVars {
-				if v != nil {
-					stackInfo["vars"].(map[string]any)[k] = v
-				}
-			}
-		}
-
-		// Copy components with their full structure
-		if components, ok := v2["components"].(map[string]any); ok {
-			for compType, compSection := range components {
-				if sectionMap, ok := compSection.(map[string]any); ok {
-					// Create component type section if it doesn't exist
-					if _, exists := stackInfo["components"].(map[string]any)[compType]; !exists {
-						stackInfo["components"].(map[string]any)[compType] = make(map[string]any)
-					}
-
-					// Copy all component configurations
-					for compName, compConfig := range sectionMap {
-						if configMap, ok := compConfig.(map[string]any); ok {
-							stackInfo["components"].(map[string]any)[compType].(map[string]any)[compName] = configMap
-						}
-					}
-				}
-			}
-		}
-
-		// Extract stage from stack name if not set in vars
-		if _, ok := stackInfo["vars"].(map[string]any)["stage"]; !ok {
-			// Only set stage from stack name if it's not already set in vars
-			if stackName != stackInfo["atmos_stack_file"].(string) {
-				stackInfo["vars"].(map[string]any)["stage"] = stackName
-			}
-		}
-
-		// Copy other stack configuration
-		for k, v := range v2 {
-			if k != "vars" && k != "components" {
-				stackInfo[k] = v
-			}
-		}
-
-		return stackInfo
-	}
-
-	// Helper function to check if stack has component
-	hasComponent := func(components map[string]any, targetComponent string) bool {
-		for _, section := range components {
-			if compSection, ok := section.(map[string]any); ok {
-				if _, exists := compSection[targetComponent]; exists {
-					return true
-				}
-			}
-		}
-		return false
-	}
-
 	var filteredStacks []map[string]any
 
 	// Filter and process stacks
@@ -107,13 +134,13 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 
 		if component != "" {
 			// Only include stacks with the specified component
-			if components, ok := v2["components"].(map[string]any); ok && hasComponent(components, component) {
-				stackInfo := createStackInfo(stackName, v2)
+			if components, ok := v2["components"].(map[string]any); ok && ContainsComponent(components, component) {
+				stackInfo := BuildStackMetadata(stackName, v2)
 				filteredStacks = append(filteredStacks, stackInfo)
 			}
 		} else {
 			// Include all stacks when no component filter is specified
-			stackInfo := createStackInfo(stackName, v2)
+			stackInfo := BuildStackMetadata(stackName, v2)
 			filteredStacks = append(filteredStacks, stackInfo)
 		}
 	}
@@ -141,38 +168,10 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			{Name: "File", Value: "{{ .atmos_stack_file }}"},
 		}
 
-		// Helper function to check if a column has any non-empty values
-		hasValues := func(col schema.ListColumnConfig) bool {
-			// Stack is always shown
-			if col.Name == "Stack" {
-				return true
-			}
-
-			tmpl, err := template.New(col.Name).Parse(col.Value)
-			if err != nil {
-				return false
-			}
-
-			// Check if any stack has a non-empty value for this column
-			hasNonEmptyValue := false
-			for _, stack := range filteredStacks {
-				var buf strings.Builder
-				if err := tmpl.Execute(&buf, stack); err != nil {
-					continue
-				}
-				value := buf.String()
-				if value != "" && value != "<nil>" && value != "<no value>" {
-					hasNonEmptyValue = true
-					break
-				}
-			}
-			return hasNonEmptyValue
-		}
-
 		// Filter out columns with no values
 		var activeColumns []schema.ListColumnConfig
 		for _, col := range allColumns {
-			if hasValues(col) {
+			if HasNonEmptyTemplateValues(col.Name, col.Value, filteredStacks) {
 				activeColumns = append(activeColumns, col)
 			}
 		}
@@ -196,10 +195,7 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 
 	templates := make([]columnTemplate, len(listConfig.Columns))
 	for i, col := range listConfig.Columns {
-		// Use standard Go template functions
-		funcMap := template.FuncMap{}
-
-		tmpl, err := template.New(col.Name).Funcs(funcMap).Parse(col.Value)
+		tmpl, err := template.New(col.Name).Parse(col.Value)
 		if err != nil {
 			return "", fmt.Errorf("error parsing template for column %s: %w", col.Name, err)
 		}
@@ -244,11 +240,9 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		return string(jsonBytes) + utils.GetLineEnding(), nil
 
 	case FormatCSV, FormatTSV:
-		// Only include columns that have values
 		var nonEmptyHeaders []string
 		var nonEmptyColumnIndexes []int
 
-		// Find columns that have at least one non-empty value
 		for i, header := range headers {
 			hasValue := false
 			for _, row := range rows {
@@ -263,7 +257,6 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			}
 		}
 
-		// Set appropriate delimiter based on format
 		csvDelimiter := delimiter
 		if delimiter == "\t" || delimiter == "" {
 			switch format {
@@ -282,12 +275,10 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 			writer := csv.NewWriter(&output)
 			writer.Comma = rune(csvDelimiter[0])
 
-			// Write headers
 			if err := writer.Write(nonEmptyHeaders); err != nil {
 				return "", fmt.Errorf("error writing CSV headers: %w", err)
 			}
 
-			// Write rows
 			for _, row := range rows {
 				csvRow := make([]string, len(nonEmptyColumnIndexes))
 				for j, i := range nonEmptyColumnIndexes {
@@ -327,6 +318,28 @@ func FilterAndListStacks(stacksMap map[string]any, component string, listConfig 
 		return output.String(), nil
 
 	default:
+		// For non-TTY output with no specific format, default to CSV
+		if !term.IsTTYSupportForStdout() && format == "" {
+			var output strings.Builder
+			writer := csv.NewWriter(&output)
+			writer.Comma = ','
+
+			if err := writer.Write(headers); err != nil {
+				return "", fmt.Errorf("error writing CSV headers: %w", err)
+			}
+
+			for _, row := range rows {
+				if err := writer.Write(row); err != nil {
+					return "", fmt.Errorf("error writing CSV row: %w", err)
+				}
+			}
+			writer.Flush()
+			if err := writer.Error(); err != nil {
+				return "", fmt.Errorf("error flushing CSV writer: %w", err)
+			}
+			return output.String(), nil
+		}
+
 		t := table.New()
 
 		if term.IsTTYSupportForStdout() {
