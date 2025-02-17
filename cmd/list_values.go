@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -35,13 +36,13 @@ var listValuesCmd = &cobra.Command{
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("failed to initialize CLI config: %v", err), theme.Colors.Error)
+			fmt.Fprintf(os.Stderr, "Error initializing CLI config: %v\n", err)
 			return
 		}
 
 		logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("failed to initialize logger: %v", err), theme.Colors.Error)
+			fmt.Fprintf(os.Stderr, "Error initializing logger: %v\n", err)
 			return
 		}
 
