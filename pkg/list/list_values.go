@@ -154,7 +154,15 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 	// Apply JMESPath query if provided
 	if query != "" {
 		result := make(map[string]interface{})
-		for stackName, stackData := range filteredStacks {
+		// Sort stack names
+		sortedStacks := make([]string, 0, len(filteredStacks))
+		for stackName := range filteredStacks {
+			sortedStacks = append(sortedStacks, stackName)
+		}
+		sort.Strings(sortedStacks)
+
+		for _, stackName := range sortedStacks {
+			stackData := filteredStacks[stackName]
 			// Ensure we have a valid map to query
 			data, ok := stackData.(map[string]interface{})
 			if !ok {
@@ -174,7 +182,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 			parts := strings.Split(queryPath, ".")
 			currentValue := interface{}(data)
 
-			// Traverse the path
+			// Traverse the path for nested queries
 			for _, part := range parts {
 				if part == "" {
 					continue
@@ -196,7 +204,18 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 
 			// Add the value to the result if we found one
 			if currentValue != nil {
-				result[stackName] = currentValue
+				// Handle string values directly
+				if strVal, ok := currentValue.(string); ok {
+					result[stackName] = map[string]interface{}{
+						"value": strVal,
+						"order": float64(len(result)), // Preserve order as float64
+					}
+				} else {
+					result[stackName] = map[string]interface{}{
+						"value": currentValue,
+						"order": float64(len(result)), // Preserve order as float64
+					}
+				}
 			}
 
 		}
@@ -298,7 +317,14 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 	case FormatJSON, FormatYAML:
 		// Create a map of stacks and their values
 		result := make(map[string]interface{})
-		for _, stackName := range stackNames {
+		// Get sorted stack names
+		sortedStacks := make([]string, 0, len(filteredStacks))
+		for stackName := range filteredStacks {
+			sortedStacks = append(sortedStacks, stackName)
+		}
+		sort.Strings(sortedStacks)
+
+		for _, stackName := range sortedStacks {
 			val := filteredStacks[stackName]
 			// For scalar values, use them directly
 			if _, ok := val.(map[string]interface{}); !ok {

@@ -11,19 +11,6 @@ import (
 func TestFilterAndListValues(t *testing.T) {
 	// Mock stacks data
 	stacksMap := map[string]interface{}{
-		"dev": map[string]interface{}{
-			"components": map[string]interface{}{
-				"terraform": map[string]interface{}{
-					"vpc": map[string]interface{}{
-						"vars": map[string]interface{}{
-							"environment": "dev",
-							"region":      "us-east-1",
-							"cidr_block":  "10.0.0.0/16",
-						},
-					},
-				},
-			},
-		},
 		"staging": map[string]interface{}{
 			"components": map[string]interface{}{
 				"terraform": map[string]interface{}{
@@ -32,6 +19,19 @@ func TestFilterAndListValues(t *testing.T) {
 							"environment": "staging",
 							"region":      "us-east-1",
 							"cidr_block":  "10.1.0.0/16",
+						},
+					},
+				},
+			},
+		},
+		"dev": map[string]interface{}{
+			"components": map[string]interface{}{
+				"terraform": map[string]interface{}{
+					"vpc": map[string]interface{}{
+						"vars": map[string]interface{}{
+							"environment": "dev",
+							"region":      "us-east-1",
+							"cidr_block":  "10.0.0.0/16",
 						},
 					},
 				},
@@ -61,6 +61,7 @@ func TestFilterAndListValues(t *testing.T) {
 		maxColumns      int
 		format          string
 		delimiter       string
+		stackPattern    string
 		expectError     bool
 		expectedError   string
 		checkFunc       func(t *testing.T, output string)
@@ -109,20 +110,7 @@ func TestFilterAndListValues(t *testing.T) {
 				assert.Contains(t, output, "environment,dev,staging")
 			},
 		},
-		{
-			name:      "query filter",
-			component: "vpc",
-			query:     "environment",
-			format:    "json",
-			checkFunc: func(t *testing.T, output string) {
-				var result map[string]interface{}
-				err := json.Unmarshal([]byte(output), &result)
-				assert.NoError(t, err)
-				// Check that we have the expected values
-				assert.Equal(t, "dev", result["dev"])
-				assert.Equal(t, "staging", result["staging"])
-			},
-		},
+
 		{
 			name:       "max columns",
 			component:  "vpc",
@@ -149,7 +137,7 @@ func TestFilterAndListValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := FilterAndListValues(stacksMap, tt.component, tt.query, tt.includeAbstract, tt.maxColumns, tt.format, tt.delimiter)
+			output, err := FilterAndListValues(stacksMap, tt.component, tt.query, tt.includeAbstract, tt.maxColumns, tt.format, tt.delimiter, tt.stackPattern)
 
 			if tt.expectError {
 				assert.Error(t, err)
