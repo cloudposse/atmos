@@ -4,7 +4,7 @@ env:
 
 components:
   terraform:
-    example:
+    env-example:
       metadata:
-        component: example
+        component: env-example
       vars: {}
