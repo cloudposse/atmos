@@ -20,15 +20,6 @@ const (
 	TableColumnPadding  = 3
 )
 
-// getMapKeys returns a sorted slice of map keys
-func getMapKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
 
 // matchStackPattern checks if a stack name matches the given pattern
 func matchStackPattern(stackName, pattern string) (bool, error) {
