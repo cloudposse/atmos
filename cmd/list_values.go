@@ -26,7 +26,9 @@ var listValuesCmd = &cobra.Command{
 		"atmos list values vpc --max-columns 5\n" +
 		"atmos list values vpc --format json\n" +
 		"atmos list values vpc --format yaml\n" +
-		"atmos list values vpc --format csv",
+		"atmos list values vpc --format csv\n" +
+		"atmos list values vpc --stack '*-dev-*'\n" +
+		"atmos list values vpc --stack 'prod-*'",
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -85,6 +87,13 @@ var listValuesCmd = &cobra.Command{
 
 		component := args[0]
 
+		// Get stack pattern
+		stackPattern, err := flags.GetString("stack")
+		if err != nil {
+			logger.Error(fmt.Errorf("failed to get stack pattern flag: %v", err))
+			return
+		}
+
 		// Get all stacks
 		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 		if err != nil {
@@ -92,7 +101,7 @@ var listValuesCmd = &cobra.Command{
 			return
 		}
 
-		output, err := list.FilterAndListValues(stacksMap, component, queryFlag, abstractFlag, maxColumnsFlag, formatFlag, delimiterFlag)
+		output, err := list.FilterAndListValues(stacksMap, component, queryFlag, abstractFlag, maxColumnsFlag, formatFlag, delimiterFlag, stackPattern)
 		if err != nil {
 			// Check if this is a 'no values found' error
 			if list.IsNoValuesFoundError(err) {
@@ -138,6 +147,9 @@ func init() {
 		cmd.PersistentFlags().Int("max-columns", 10, "Maximum number of columns to display")
 		cmd.PersistentFlags().String("format", "", "Output format (table, json, yaml, csv, tsv)")
 		cmd.PersistentFlags().String("delimiter", "\t", "Delimiter for csv/tsv output (default: tab for tsv, comma for csv)")
+		cmd.PersistentFlags().String("stack", "", "Stack pattern to filter (supports glob patterns, e.g., '*-dev-*', 'prod-*')")
+		// Add stack pattern completion
+		AddStackCompletion(cmd)
 	}
 
 	commonFlags(listValuesCmd)

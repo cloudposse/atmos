@@ -30,8 +30,36 @@ func getMapKeys(m map[string]interface{}) []string {
 	return keys
 }
 
+// matchStackPattern checks if a stack name matches the given pattern
+func matchStackPattern(stackName, pattern string) (bool, error) {
+	if pattern == "" {
+		return true, nil // No pattern means match all
+	}
+
+	// Use filepath.Match for glob pattern matching
+	matched, err := utils.MatchWildcard(pattern, stackName)
+	if err != nil {
+		return false, fmt.Errorf("invalid stack pattern '%s': %v", pattern, err)
+	}
+	return matched, nil
+}
+
 // FilterAndListValues filters and lists component values across stacks
-func FilterAndListValues(stacksMap map[string]interface{}, component, query string, includeAbstract bool, maxColumns int, format, delimiter string) (string, error) {
+func FilterAndListValues(stacksMap map[string]interface{}, component, query string, includeAbstract bool, maxColumns int, format, delimiter string, stackPattern string) (string, error) {
+	// For settings and metadata commands, if no query is provided, use appropriate defaults
+	if component == "" {
+		if strings.Contains(query, ".settings") || component == "settings" {
+			component = "settings"
+			if query == "" {
+				query = ".settings"
+			}
+		} else if strings.Contains(query, ".metadata") || component == "metadata" {
+			component = "metadata"
+			if query == "" {
+				query = ".metadata"
+			}
+		}
+	}
 	if err := ValidateFormat(format); err != nil {
 		return "", err
 	}
@@ -44,21 +72,39 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		delimiter = DefaultCSVDelimiter
 	}
 
-	// Filter out stacks that don't have the component
+	// Filter stacks by pattern and component
 	filteredStacks := make(map[string]interface{})
 	for stackName, stackData := range stacksMap {
+		// Skip stacks that don't match the pattern
+		matched, err := matchStackPattern(stackName, stackPattern)
+		if err != nil {
+			return "", err
+		}
+		if !matched {
+			continue
+		}
+
+		// Process stack data
 		stack, ok := stackData.(map[string]interface{})
 		if !ok {
 			continue
 		}
 
-		components, ok := stack["components"].(map[string]interface{})
-		if !ok {
+		// Handle special components (settings, metadata)
+		if component == "settings" || component == "metadata" {
+			filteredStacks[stackName] = stack
 			continue
 		}
 
-		terraform, ok := components["terraform"].(map[string]interface{})
-		if !ok {
+		// For regular components, look for the component in the stack
+		components, hasComponents := stack["components"].(map[string]interface{})
+		if !hasComponents {
+			continue
+		}
+
+		// Look for terraform components
+		terraformComponents, hasTerraform := components["terraform"].(map[string]interface{})
+		if !hasTerraform {
 			continue
 		}
 
@@ -68,20 +114,36 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 			componentName = strings.TrimPrefix(component, "terraform/")
 		}
 
-		if componentConfig, exists := terraform[componentName]; exists {
-			// Extract vars from component config
-			if config, ok := componentConfig.(map[string]interface{}); ok {
-				// Skip abstract components if not included
-				if !includeAbstract {
-					if isAbstract, ok := config["abstract"].(bool); ok && isAbstract {
-						continue
-					}
-				}
-				// Get vars from component config
-				if componentVars, ok := config["vars"].(map[string]interface{}); ok {
-					filteredStacks[stackName] = componentVars
-				}
+		// Look for the specific component
+		componentConfig, exists := terraformComponents[componentName]
+		if !exists {
+			continue
+		}
+
+		// Extract config from component
+		config, ok := componentConfig.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Skip abstract components if not included
+		if !includeAbstract {
+			if isAbstract, ok := config["abstract"].(bool); ok && isAbstract {
+				continue
 			}
+		}
+
+		// For settings and metadata commands, use the appropriate section
+		if component == "settings" || component == "metadata" {
+			if section, ok := stack[component].(map[string]interface{}); ok {
+				filteredStacks[stackName] = section
+			}
+			continue
+		}
+
+		// For regular components, get the vars
+		if componentVars, ok := config["vars"].(map[string]interface{}); ok {
+			filteredStacks[stackName] = componentVars
 		}
 	}
 
@@ -108,28 +170,28 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 			// Process the query path
 			queryPath := strings.TrimPrefix(query, ".")
 
-			// Direct access for single key
-			if value, exists := data[queryPath]; exists {
-				result[stackName] = value
-				continue
-			}
-
 			// For nested paths, attempt to access the nested value
 			parts := strings.Split(queryPath, ".")
 			currentValue := interface{}(data)
 
+			// Traverse the path
 			for _, part := range parts {
 				if part == "" {
 					continue
 				}
+
+				// Try to access the next level
 				if mapValue, ok := currentValue.(map[string]interface{}); ok {
 					if value, exists := mapValue[part]; exists {
 						currentValue = value
-						continue
+					} else {
+						currentValue = nil
+						break
 					}
+				} else {
+					currentValue = nil
+					break
 				}
-				currentValue = nil
-				break
 			}
 
 			// Add the value to the result if we found one
@@ -154,7 +216,9 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		// Create a map with stack names as keys and scalar values
 		result := make(map[string]interface{})
 		for stackName, val := range filteredStacks {
-			result[stackName] = val
+			valMap := make(map[string]interface{})
+			valMap["value"] = val
+			result[stackName] = valMap
 		}
 		filteredStacks = result
 	}
@@ -203,6 +267,13 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 						row[i+1] = v
 					case nil:
 						row[i+1] = "null"
+					case []interface{}:
+						// Format arrays more compactly
+						strVals := make([]string, len(v))
+						for i, item := range v {
+							strVals[i] = fmt.Sprintf("%v", item)
+						}
+						row[i+1] = "[" + strings.Join(strVals, ",") + "]"
 					default:
 						jsonBytes, err := json.Marshal(v)
 						if err != nil {
@@ -283,9 +354,13 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 					maxWidth = len(row[col])
 				}
 			}
+			// Add padding for column
 			colWidths[col] = maxWidth
-			totalWidth += maxWidth + 3
+			totalWidth += maxWidth + TableColumnPadding
 		}
+
+		// Add border width
+		totalWidth += 2 // Account for outer borders
 
 		// Check if table width exceeds terminal width
 		if totalWidth > termWidth {
@@ -293,7 +368,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		}
 
 		// If format is empty or "table", use table format
-		if format == "" && term.IsTTYSupportForStdout() {
+		if (format == "" || format == FormatTable) && term.IsTTYSupportForStdout() {
 			// Create a styled table for TTY
 			t := table.New().
 				Border(lipgloss.ThickBorder()).
@@ -303,9 +378,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 					if row == -1 {
 						return style.Inherit(theme.Styles.CommandName).Align(lipgloss.Center)
 					}
-					if col == 0 {
-						return style.Inherit(theme.Styles.CommandName)
-					}
+					// Use consistent style for all rows
 					return style.Inherit(theme.Styles.Description)
 				}).
 				Headers(header...).
