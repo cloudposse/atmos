@@ -22,7 +22,8 @@ Flags:
                                      atmos atlantis generate repo-config
                                      --config-template <config_template>
                                      --project-template <project_template>
-                                     --components ,
+                                     --components
+                                     <component1>,<component2>
                                      
                                      
 
@@ -52,8 +53,9 @@ Flags:
         --ref string                 Git reference with which to compare the
                                      current branch: atmos atlantis generate
                                      repo-config --affected-only=true --ref
-                                     refs/heads/main. Refer to
-                                     https://git-scm.com/book/en/v2/Git-Internals-Git-References https://git-scm.com/book/en/v2/Git-Internals-Git-References
+                                     refs/heads/main. Refer to 10.3 Git
+                                     Internals Git
+                                     References https://git-scm.com/book/en/v2/Git-Internals-Git-References
                                      for more details
                                      
                                      
@@ -62,7 +64,8 @@ Flags:
                                      target repository with which to compare the
                                      current branch: atmos atlantis generate
                                      repo-config --affected-only=true
-                                     --repo-path <path_to_already_cloned_repo>
+                                     --repo-path
+                                     <path_to_already_cloned_repo>
                                      
                                      
 
@@ -86,7 +89,7 @@ Flags:
                                      atlantis generate repo-config
                                      --affected-only=true --ssh-key
                                      <path_to_ssh_key> --ssh-key-password
-                                     
+                                     <password>
                                      
                                      
 
@@ -96,7 +99,7 @@ Flags:
                                      atmos atlantis generate repo-config
                                      --config-template <config_template>
                                      --project-template <project_template>
-                                     --stacks ,
+                                     --stacks <stack1>,<stack2>
                                      The filter can contain the names of the
                                      top-level stack manifests and the logical
                                      stack names (derived from the context vars)
@@ -173,8 +176,3 @@ Global Flags:
 Use atmos atlantis generate repo-config --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
 
-╭──────────────────────────────────────────────────────────────╮
-│               Update available! test » 1.162.1               │
-│ Atmos Releases: https://github.com/cloudposse/atmos/releases │
-│          Install Atmos: https://atmos.tools/install          │
-╰──────────────────────────────────────────────────────────────╯

@@ -12,7 +12,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 	Use:                "backend",
 	Short:              "Generate backend configuration for a Terraform component",
 	Long:               `This command generates the backend configuration for a Terraform component using the specified stack`,
-	Example:            `atmos terraform generate backend <component> -s <stack>`,
+	Example:            `atmos terraform generate backend &ltcomponent&gt -s &ltstack&gt`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -29,7 +29,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 
 func init() {
 	terraformGenerateBackendCmd.DisableFlagParsing = false
-	terraformGenerateBackendCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform generate backend <component> -s <stack>")
+	terraformGenerateBackendCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform generate backend &ltcomponent&gt -s &ltstack&gt")
 	AddStackCompletion(terraformGenerateBackendCmd)
 	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

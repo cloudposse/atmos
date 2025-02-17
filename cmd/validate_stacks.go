@@ -32,7 +32,7 @@ var ValidateStacksCmd = &cobra.Command{
 func init() {
 	ValidateStacksCmd.DisableFlagParsing = false
 
-	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "atmos validate stacks --schemas-atmos-manifest <path-to-atmos-json-schema>")
+	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "atmos validate stacks --schemas-atmos-manifest &ltpath-to-atmos-json-schema&gt")
 
 	validateCmd.AddCommand(ValidateStacksCmd)
 }

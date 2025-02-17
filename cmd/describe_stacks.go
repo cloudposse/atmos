@@ -33,11 +33,11 @@ func init() {
 	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify the output format: atmos describe stacks --format=yaml|json ('yaml' is default)")
 
 	describeStacksCmd.PersistentFlags().StringP("stack", "s", "",
-		"Filter by a specific stack: atmos describe stacks -s <stack>\n"+
+		"Filter by a specific stack: atmos describe stacks -s &ltstack&gt\n"+
 			"The filter supports names of the top-level stack manifests (including subfolder paths), and 'atmos' stack names (derived from the context vars)",
 	)
 	AddStackCompletion(describeStacksCmd)
-	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific 'atmos' components: atmos describe stacks --components=<component1>,<component2>")
+	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific 'atmos' components: atmos describe stacks --components=&ltcomponent1&gt,&ltcomponent2&gt")
 
 	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types: atmos describe stacks --component-types=terraform|helmfile. Supported component types: terraform, helmfile")
 

@@ -28,9 +28,9 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 
 func init() {
 	terraformGenerateVarfileCmd.DisableFlagParsing = false
-	terraformGenerateVarfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform generate varfile <component> -s <stack>")
+	terraformGenerateVarfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform generate varfile &ltcomponent&gt -s &ltstack&gt")
 	AddStackCompletion(terraformGenerateVarfileCmd)
-	terraformGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "atmos terraform generate varfile <component> -s <stack> -f <file>")
+	terraformGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "atmos terraform generate varfile &ltcomponent&gt -s &ltstack&gt -f &ltfile&gt")
 
 	err := terraformGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

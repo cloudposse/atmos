@@ -44,7 +44,7 @@ func init() {
 
 	terraformGenerateBackendsCmd.PersistentFlags().String("stacks", "",
 		"Only process the specified stacks (comma-separated values).\n"+
-			"atmos terraform generate backends --file-template <file_template> --stacks <stack1>,<stack2>\n"+
+			"atmos terraform generate backends --file-template &ltfile_template&gt --stacks &ltstack1&gt,&ltstack2&gt\n"+
 			"The filter can contain names of the top-level stack manifests (including subfolder paths), and 'atmos' stack names (derived from the context vars)\n"+
 			"atmos terraform generate backends --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
 			"atmos terraform generate backends --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
@@ -53,7 +53,7 @@ func init() {
 
 	terraformGenerateBackendsCmd.PersistentFlags().String("components", "",
 		"Only generate the backend files for the specified 'atmos' components (comma-separated values).\n"+
-			"atmos terraform generate backends --file-template <file_template> --components <component1>,<component2>",
+			"atmos terraform generate backends --file-template &ltfile_template&gt --components &ltcomponent1&gt,&ltcomponent2&gt",
 	)
 
 	terraformGenerateBackendsCmd.PersistentFlags().String("format", "hcl", "Output format.\n"+

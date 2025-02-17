@@ -80,7 +80,7 @@ Flags:
                                       
 
     -s, --stack string                atmos terraform <terraform_command>
-                                       -s
+                                      <component> -s <stack>
 
 
 Global Flags:

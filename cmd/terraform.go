@@ -25,7 +25,7 @@ var terraformCmd = &cobra.Command{
 func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
-	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
+	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform &ltterraform_command&gt &ltcomponent&gt -s &ltstack&gt")
 	terraformCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	AddStackCompletion(terraformCmd)
 	attachTerraformCommands(terraformCmd)

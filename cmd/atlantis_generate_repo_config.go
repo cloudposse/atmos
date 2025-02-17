@@ -36,16 +36,16 @@ func init() {
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("stacks", "",
 		"Generate Atlantis projects for the specified stacks only (comma-separated values).\n"+
-			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks <stack1>,<stack2>\n"+
+			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --stacks &ltstack1&gt,&ltstack2&gt\n"+
 			"The filter can contain the names of the top-level stack manifests and the logical stack names (derived from the context vars)\n"+
-			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
-			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
-			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
+			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
+			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
+			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
 	)
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("components", "",
 		"Generate Atlantis projects for the specified components only (comma-separated values).\n"+
-			"atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --components <component1>,<component2>",
+			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --components &ltcomponent1&gt,&ltcomponent2&gt",
 	)
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool("affected-only", false,
@@ -53,12 +53,12 @@ func init() {
 			"atmos atlantis generate repo-config --affected-only=true",
 	)
 
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --repo-path <path_to_already_cloned_repo>")
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --repo-path &ltpath_to_already_cloned_repo&gt")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --ref refs/heads/main. Refer to [10.3 Git Internals Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References) for more details")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool("verbose", false, "Print more detailed output when cloning and checking out the Git repository: atmos atlantis generate repo-config --affected-only=true --verbose=true")
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key>")
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos atlantis generate repo-config --affected-only=true --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos atlantis generate repo-config --affected-only=true --ssh-key &ltpath_to_ssh_key&gt")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos atlantis generate repo-config --affected-only=true --ssh-key &ltpath_to_ssh_key&gt --ssh-key-password &ltpassword&gt")
 
 	atlantisGenerateCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: "+
 		"atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true\n"+
