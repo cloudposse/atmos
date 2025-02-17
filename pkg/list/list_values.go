@@ -20,7 +20,6 @@ const (
 	TableColumnPadding  = 3
 )
 
-
 // matchStackPattern checks if a stack name matches the given pattern
 func matchStackPattern(stackName, pattern string) (bool, error) {
 	if pattern == "" {
