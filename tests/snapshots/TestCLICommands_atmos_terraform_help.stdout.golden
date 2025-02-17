@@ -53,6 +53,8 @@ Flags:
         --                            Use double dashes to separate
                                       Atmos-specific options from native
                                       arguments and flags for the command.
+                                      
+                                      
 
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent
@@ -60,14 +62,20 @@ Flags:
                                       Example: 'Atmos/test (Cloud Posse;
                                       +https://atmos.tools)'. This flag works
                                       with almost all commands.
+                                      
+                                      
 
     -h, --help                        help for terraform (default "false")
+                                      
+                                      
 
         --skip-init                   Skip running 'terraform init' before
                                       executing the command (default "false")
+                                      
+                                      
 
     -s, --stack string                atmos terraform <terraform_command>
-                                      <component> -s <stack>
+                                       -s
 
 
 Global Flags:
@@ -77,11 +85,15 @@ Global Flags:
                                     descriptor, including '/dev/stdout',
                                     '/dev/stderr' and '/dev/null' (default
                                     "/dev/stderr")
+                                    
+                                    
 
         --logs-level string         Logs level. Supported log levels are Trace,
                                     Debug, Info, Warning, Off. If the log level
                                     is set to Off, Atmos will not log any
                                     messages (default "Info")
+                                    
+                                    
 
         --redirect-stderr string    File descriptor to redirect 'stderr' to.
                                     Errors can be redirected to any file or any
@@ -100,7 +112,7 @@ Use atmos terraform [subcommand] --help for more information about a command.
 
 
 ╭──────────────────────────────────────────────────────────────╮
-│               Update available! test » 1.161.0               │
+│               Update available! test » 1.162.1               │
 │ Atmos Releases: https://github.com/cloudposse/atmos/releases │
 │          Install Atmos: https://atmos.tools/install          │
 ╰──────────────────────────────────────────────────────────────╯
