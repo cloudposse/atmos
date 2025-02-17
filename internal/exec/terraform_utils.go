@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	l "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -142,4 +143,27 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 		"state show",
 	}
 	return u.SliceContainsString(commandsThatNeedFuncProcessing, command)
+}
+
+// ExecuteTerraformAffected executes `atmos terraform --affected`
+func ExecuteTerraformAffected(cmd *cobra.Command, args []string) error {
+	a, err := parseDescribeAffectedCliArgs(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	a.IncludeDependents = true
+
+	affected, _, _, _, err := ExecuteDescribeAffected(a)
+	if err != nil {
+		return err
+	}
+
+	u.PrintAsYAML(affected)
+	return nil
+}
+
+// ExecuteTerraformAll executes `atmos terraform --all`
+func ExecuteTerraformAll(cmd *cobra.Command, args []string) error {
+	return nil
 }
