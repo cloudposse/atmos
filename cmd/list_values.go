@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -50,31 +49,31 @@ var listValuesCmd = &cobra.Command{
 
 		queryFlag, err := flags.GetString("query")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get query flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get query flag: %v", err))
 			return
 		}
 
 		abstractFlag, err := flags.GetBool("abstract")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get abstract flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get abstract flag: %v", err))
 			return
 		}
 
 		maxColumnsFlag, err := flags.GetInt("max-columns")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get max-columns flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get max-columns flag: %v", err))
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get format flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get format flag: %v", err))
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get delimiter flag: %w", err))
+			logger.Error(fmt.Errorf("failed to get delimiter flag: %v", err))
 			return
 		}
 
@@ -88,14 +87,14 @@ var listValuesCmd = &cobra.Command{
 		// Get all stacks
 		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to describe stacks: %w", err))
+			logger.Error(fmt.Errorf("failed to describe stacks: %v", err))
 			return
 		}
 
 		output, err := list.FilterAndListValues(stacksMap, component, queryFlag, abstractFlag, maxColumnsFlag, formatFlag, delimiterFlag)
 		if err != nil {
 			// Check if this is a 'no values found' error
-			if strings.Contains(err.Error(), "no values found for component") {
+			if list.IsNoValuesFoundError(err) {
 				logger.Error(err)
 			} else {
 				logger.Warning(fmt.Sprintf("Failed to filter and list values: %v", err))

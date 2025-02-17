@@ -6,11 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cloudposse/atmos/internal/tui/templates"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
-
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -18,6 +16,7 @@ import (
 const (
 	DefaultCSVDelimiter = ","
 	DefaultTSVDelimiter = "\t"
+	TableColumnPadding  = 3
 )
 
 // getMapKeys returns a sorted slice of map keys
@@ -36,7 +35,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		return "", err
 	}
 
-	// Get terminal width for table format using templater's GetTerminalWidth
+	// Get terminal width for table format
 	termWidth := templates.GetTerminalWidth()
 
 	// Set default delimiters based on format
@@ -86,7 +85,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 	}
 
 	if len(filteredStacks) == 0 {
-		return "", fmt.Errorf("no values found for component '%s'", component)
+		return "", &ErrNoValuesFound{Component: component}
 	}
 
 	// Apply JMESPath query if provided
@@ -293,7 +292,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		}
 
 		// If format is empty or "table", use table format
-		if format == "" && term.IsTTYSupportForStdout() {
+		if format == "" && templates.IsTTYSupported() {
 			// Create a styled table for TTY
 			t := table.New().
 				Border(lipgloss.ThickBorder()).
