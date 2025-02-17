@@ -13,15 +13,19 @@ variable "stage" {
   default     = "test"
 }
 
-resource "null_resource" "run_once" {
-  # Force the provisioner to run on every apply.
+variable "exit_code" {
+  description = "Stage. Used to define an Atmos stack."
+  type        =  number
+  default     =  0
+}
+
+
+resource "null_resource" "fail_on_second_apply" {
   triggers = {
     always_run = timestamp()
   }
 
   provisioner "local-exec" {
-    command = <<EOF
-python -c "import os, sys, tempfile; flag = './terraform_once.tfstate.temp'; print('Using flag file:', flag); sys.exit(1) if os.path.exists(flag) else (open(flag,'w').close() or sys.exit(0))"
-EOF
+    command = "exit ${var.exit_code}"
   }
 }

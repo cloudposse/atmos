@@ -40,7 +40,7 @@ tests:
     args:
       - terraform
       - apply
-      - component1
+      - component2
       - "-s"
       - test
       - "--"
