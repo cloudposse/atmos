@@ -41,19 +41,19 @@ func init() {
 	terraformGenerateVarfilesCmd.PersistentFlags().String("stacks", "",
 		"Only process the specified stacks (comma-separated values).\n"+
 			"atmos terraform generate varfiles --file-template &ltfile_template&gt --stacks &ltstack1&gt,&ltstack2&gt\n"+
-			"The filter can contain names of the top-level stack manifests (including subfolder paths), and 'atmos' stack names (derived from the context vars)\n"+
+			"The filter can contain names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)\n"+
 			"atmos terraform generate varfiles --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
 			"atmos terraform generate varfiles --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
 			"atmos terraform generate varfiles --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("components", "",
-		"Generate Terraform '.tfvar' files only for the specified 'atmos' components (use comma-separated values to specify multiple components).\n"+
+		"Generate Terraform `.tfvar` files only for the specified `atmos` components (use comma-separated values to specify multiple components).\n"+
 			"atmos terraform generate varfiles --file-template &ltfile_template&gt --components &ltcomponent1&gt,&ltcomponent2&gt",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "json", "Output format.\n"+
-		"Supported formats: json, yaml, hcl ('json' is default).\n"+
+		"Supported formats: json, yaml, hcl (`json` is default).\n"+
 		"atmos terraform generate varfiles --file-template &ltfile_template&gt --format=json|yaml|hcl")
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")

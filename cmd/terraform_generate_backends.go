@@ -39,25 +39,25 @@ func init() {
 			"atmos terraform generate backends --file-template /{tenant}/{stage}/{region}/{component}.tf\n"+
 			"atmos terraform generate backends --file-template backends/{tenant}-{environment}-{stage}-{component}.tfbackend --format backend-config\n"+
 			"All subdirectories in the path will be created automatically\n"+
-			"If '--file-template' flag is not specified, all backend config files will be written to the corresponding terraform component folders.",
+			"If `--file-template` flag is not specified, all backend config files will be written to the corresponding terraform component folders.",
 	)
 
 	terraformGenerateBackendsCmd.PersistentFlags().String("stacks", "",
 		"Only process the specified stacks (comma-separated values).\n"+
 			"atmos terraform generate backends --file-template &ltfile_template&gt --stacks &ltstack1&gt,&ltstack2&gt\n"+
-			"The filter can contain names of the top-level stack manifests (including subfolder paths), and 'atmos' stack names (derived from the context vars)\n"+
+			"The filter can contain names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)\n"+
 			"atmos terraform generate backends --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
 			"atmos terraform generate backends --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
 			"atmos terraform generate backends --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
 	)
 
 	terraformGenerateBackendsCmd.PersistentFlags().String("components", "",
-		"Only generate the backend files for the specified 'atmos' components (comma-separated values).\n"+
+		"Only generate the backend files for the specified `atmos` components (comma-separated values).\n"+
 			"atmos terraform generate backends --file-template &ltfile_template&gt --components &ltcomponent1&gt,&ltcomponent2&gt",
 	)
 
 	terraformGenerateBackendsCmd.PersistentFlags().String("format", "hcl", "Output format.\n"+
-		"Supported formats: 'hcl', 'json', 'backend-config' ('hcl' is default).\n"+
+		"Supported formats: `hcl`, `json`, `backend-config` (`hcl` is default).\n"+
 		"atmos terraform generate backends --format=hcl|json|backend-config")
 
 	terraformGenerateCmd.AddCommand(terraformGenerateBackendsCmd)

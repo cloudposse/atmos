@@ -31,7 +31,7 @@ func init() {
 
 	describeDependentsCmd.PersistentFlags().StringP("stack", "s", "", "atmos describe dependents &ltcomponent&gt -s &ltstack&gt")
 	AddStackCompletion(describeDependentsCmd)
-	describeDependentsCmd.PersistentFlags().StringP("format", "f", "json", "The output format: atmos describe dependents &ltcomponent&gt -s &ltstack&gt --format=json|yaml ('json' is default)")
+	describeDependentsCmd.PersistentFlags().StringP("format", "f", "json", "The output format: atmos describe dependents &ltcomponent&gt -s &ltstack&gt --format=json|yaml (`json` is default)")
 	describeDependentsCmd.PersistentFlags().String("file", "", "Write the result to the file: atmos describe dependents &ltcomponent&gt -s &ltstack&gt --file dependents.yaml")
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")

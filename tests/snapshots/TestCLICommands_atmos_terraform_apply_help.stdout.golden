@@ -31,8 +31,8 @@ Global Flags:
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent
                                       string in Terraform provider requests.
-                                      Example: 'Atmos/test (Cloud Posse;
-                                      +https://atmos.tools)'. This flag works
+                                      Example: Atmos/test (Cloud Posse;
+                                      +https://atmos.tools). This flag works
                                       with almost all commands.
                                       
                                       
@@ -60,7 +60,7 @@ Global Flags:
                                       
                                       
 
-        --skip-init                   Skip running 'terraform init' before
+        --skip-init                   Skip running terraform init before
                                       executing the command (default "false")
                                       
                                       

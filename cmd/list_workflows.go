@@ -20,7 +20,7 @@ var listWorkflowsCmd = &cobra.Command{
 	Example: "atmos list workflows\n" +
 		"atmos list workflows -f &ltfile&gt\n" +
 		"atmos list workflows --format json\n" +
-		"atmos list workflows --format csv --delimiter ','",
+		"atmos list workflows --format csv --delimiter `,`",
 	Run: func(cmd *cobra.Command, args []string) {
 		flags := cmd.Flags()
 
