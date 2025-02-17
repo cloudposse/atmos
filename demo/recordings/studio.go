@@ -46,6 +46,8 @@ func init() {
 		ReportCaller:    false,
 	}))
 
+	log.SetLevel(log.DebugLevel)
+
 	repoRoot, err = getGitRoot()
 	if err != nil {
 		log.Fatal("Error detecting Git root", "error", err)
@@ -56,6 +58,8 @@ func init() {
 	mp4OutDir = filepath.Join(repoRoot, "demo", "recordings", "mp4")
 	gifOutDir = filepath.Join(repoRoot, "demo", "recordings", "gif")
 	audioFile = filepath.Join(repoRoot, "demo", "recordings", "background.mp3")
+
+	log.Info("Initialized", "repoRoot", ConvertToRelativeFromCWD(repoRoot), "tapesDir", ConvertToRelativeFromCWD(tapesDir), "scenesDir", ConvertToRelativeFromCWD(scenesDir), "mp4OutDir", ConvertToRelativeFromCWD(mp4OutDir), "gifOutDir", ConvertToRelativeFromCWD(gifOutDir), "audioFile", ConvertToRelativeFromCWD(audioFile))
 }
 
 func main() {

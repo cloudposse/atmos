@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -14,6 +15,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
+	"golang.org/x/term"
 )
 
 // Constants
@@ -143,6 +146,7 @@ type Model struct {
 	Start    time.Time
 	width    int
 	ExitCode int
+	hasTTY   bool
 	done     bool
 }
 
@@ -152,11 +156,18 @@ func newModel(title string, fn func(chan string, *[]string) (int, error)) Model 
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
 
-	vp := viewport.New(80, viewportHeight)
-	vp.SetContent("")
-
-	// ✅ Allocate logLines as a pointer
+	// Allocate logLines as a pointer
 	logLines := &[]string{}
+
+	tty := term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("TERM") != "dumb"
+
+	log.Debug("tty", "enabled", tty)
+
+	var vp viewport.Model
+	if tty {
+		vp = viewport.New(80, viewportHeight)
+		vp.SetContent("")
+	}
 
 	return Model{
 		title:    title,
@@ -167,6 +178,7 @@ func newModel(title string, fn func(chan string, *[]string) (int, error)) Model 
 		viewport: vp,
 		Start:    time.Now(),
 		ExitCode: -1,
+		hasTTY:   tty,
 		width:    80,
 	}
 }
@@ -198,9 +210,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width - (2 * outerMargin)
-		m.viewport.Width = m.width - 4
-		m.viewport.Height = viewportHeight
+		if m.hasTTY {
+			// Adjust the viewport width
+			m.width = msg.Width - (2 * outerMargin)
+			m.viewport.Width = m.width - 4
+			m.viewport.Height = viewportHeight
+		}
 	case tea.KeyMsg:
 		if msg.String() == "q" || msg.String() == "ctrl+c" || msg.String() == "esc" {
 			m.done = true
@@ -224,7 +239,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
+	if m.hasTTY {
+		m.viewport, cmd = m.viewport.Update(msg)
+	}
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
@@ -237,16 +254,17 @@ func (m *Model) appendOutput(s string) {
 	}
 
 	// Update viewport content
+	if m.hasTTY {
+		// Manually wrap lines for viewport display
+		var wrappedLines []string
+		for _, line := range *m.LogLines {
+			wrappedLines = append(wrappedLines, wrapText(line, m.viewport.Width-4)...) // Adjust for borders
+		}
 
-	// Manually wrap lines for viewport display
-	var wrappedLines []string
-	for _, line := range *m.LogLines {
-		wrappedLines = append(wrappedLines, wrapText(line, m.viewport.Width-4)...) // Adjust for borders
+		// Set viewport content
+		m.viewport.SetContent(strings.Join(wrappedLines, "\n"))
+		m.viewport.GotoBottom()
 	}
-
-	// Set viewport content
-	m.viewport.SetContent(strings.Join(wrappedLines, "\n"))
-	m.viewport.GotoBottom()
 }
 
 func wrapText(text string, width int) []string {
@@ -281,9 +299,17 @@ func (m Model) View() string {
 		Render(timer)
 
 	// Header
-	header := lipgloss.NewStyle().
+	spinner := lipgloss.NewStyle().
 		Bold(true).
 		Render(m.spinner.View() + m.title + timerStyled)
+
+	// If no TTY, only show spinner or error logs
+	if !m.hasTTY {
+		if m.done && m.ExitCode != 0 {
+			return fmt.Sprintf("%s\nError output:\n%s", spinner, strings.Join(*m.LogLines, "\n"))
+		}
+		return spinner // Only show the spinner with elapsed time
+	}
 
 	// Viewport box
 	viewportBox := lipgloss.NewStyle().
@@ -301,5 +327,5 @@ func (m Model) View() string {
 		Render("press `q` to quit")
 
 	return lipgloss.NewStyle().
-		Render(header + "\n" + viewportBox + "\n" + footer)
+		Render(spinner + "\n" + viewportBox + "\n" + footer)
 }
