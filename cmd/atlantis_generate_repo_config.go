@@ -62,9 +62,9 @@ func init() {
 
 	atlantisGenerateCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: "+
 		"atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true\n"+
-		"The flag is only used when '--affected-only=true'\n"+
-		"If set to 'false' (default), the target reference will be checked out instead\n"+
-		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")
+		"The flag is only used when `--affected-only=true`\n"+
+		"If set to `false` (default), the target reference will be checked out instead\n"+
+		"This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory")
 
 	atlantisGenerateCmd.AddCommand(atlantisGenerateRepoConfigCmd)
 }

@@ -30,8 +30,8 @@ var describeWorkflowsCmd = &cobra.Command{
 }
 
 func init() {
-	describeWorkflowsCmd.PersistentFlags().StringP("format", "f", "yaml", "Specify the output format: atmos describe workflows --format=&ltyaml|json&gt ('yaml' is default)")
-	describeWorkflowsCmd.PersistentFlags().StringP("output", "o", "list", "Specify the output type: atmos describe workflows --output=&ltlist|map|all&gt ('list' is default)")
+	describeWorkflowsCmd.PersistentFlags().StringP("format", "f", "yaml", "Specify the output format: atmos describe workflows --format=&ltyaml|json&gt (`yaml` is default)")
+	describeWorkflowsCmd.PersistentFlags().StringP("output", "o", "list", "Specify the output type: atmos describe workflows --output=&ltlist|map|all&gt (`list` is default)")
 
 	describeCmd.AddCommand(describeWorkflowsCmd)
 }

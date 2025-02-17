@@ -166,7 +166,7 @@ func processCommandAliases(
 
 		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
 			aliasCmd := strings.TrimSpace(v)
-			aliasFor := fmt.Sprintf("alias for '%s'", aliasCmd)
+			aliasFor := fmt.Sprintf("alias for `%s`", aliasCmd)
 
 			aliasCommand := &cobra.Command{
 				Use:                alias,

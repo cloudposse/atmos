@@ -17,12 +17,12 @@ Flags:
                               the current branch: atmos atlantis generate
                               repo-config --affected-only=true
                               --clone-target-ref=true
-                              The flag is only used when '--affected-only=true'
-                              If set to 'false' (default), the target reference
+                              The flag is only used when --affected-only=true
+                              If set to false (default), the target reference
                               will be checked out instead
                               This requires that the target reference is already
                               cloned by Git, and the information about it exists
-                              in the '.git' directory (default "false")
+                              in the .git directory (default "false")
                               
                               
 
