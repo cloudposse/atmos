@@ -14,7 +14,7 @@ variable "stage" {
 }
 
 variable "exit_code" {
-  description = "Stage. Used to define an Atmos stack."
+  description = "Exit code used to simulate the command's exit status."
   type        =  number
   default     =  0
 }
