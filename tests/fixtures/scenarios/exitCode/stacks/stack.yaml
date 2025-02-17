@@ -5,3 +5,9 @@ components:
         component: hook-and-store
       vars:
         stage: test
+    component2:
+      metadata:
+        component: hook-and-store
+      vars:
+        stage: test
+        exit_code: 1
