@@ -154,6 +154,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string) error {
 
 	a.IncludeDependents = true
 
+	// https://atmos.tools/cli/commands/describe/affected
 	affected, _, _, _, err := ExecuteDescribeAffected(a)
 	if err != nil {
 		return err
