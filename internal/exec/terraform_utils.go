@@ -146,14 +146,14 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 }
 
 // ExecuteTerraformAffected executes `atmos terraform --affected`
-func ExecuteTerraformAffected(cmd *cobra.Command, args []string) error {
+func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
 
 	// Add these flags here because `atmos describe affected` reads/needs them, but `atmos terraform --affected` does not define them
 	cmd.PersistentFlags().String("file", "", "")
-	cmd.PersistentFlags().String("format", "json", "")
+	cmd.PersistentFlags().String("format", "yaml", "")
 	cmd.PersistentFlags().Bool("verbose", false, "")
 	cmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
-	cmd.PersistentFlags().Bool("include-dependents", false, "")
+	cmd.PersistentFlags().Bool("include-dependents", true, "")
 	cmd.PersistentFlags().Bool("include-settings", false, "")
 	cmd.PersistentFlags().Bool("upload", false, "")
 	cmd.PersistentFlags().Bool("process-templates", true, "")
@@ -178,12 +178,12 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	l.Debug("\n" + affectedYaml)
+	l.Debug("Affected components:\n" + affectedYaml)
 
 	return nil
 }
 
 // ExecuteTerraformAll executes `atmos terraform --all`
-func ExecuteTerraformAll(cmd *cobra.Command, args []string) error {
+func ExecuteTerraformAll(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
 	return nil
 }

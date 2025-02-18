@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/spf13/cobra"
 )
 
 // getTerraformCommands returns an array of statically defined Terraform commands with flags
@@ -282,24 +283,23 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 var commandMaps = map[string]func(cmd *cobra.Command){
 	"plan": func(cmd *cobra.Command) {
-		cmd.PersistentFlags().String("affected", "", "Plan the affected components")
-		cmd.PersistentFlags().String("all", "", "Plan all components in all stacks")
+		cmd.PersistentFlags().Bool("affected", false, "Plan the affected components")
+		cmd.PersistentFlags().Bool("all", false, "Plan all components in all stacks")
 	},
 	"deploy": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("deploy-run-init", false, "If set atmos will run `terraform init` before executing the command")
 		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
 		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
-		cmd.PersistentFlags().String("affected", "", "Deploy the affected components")
-		cmd.PersistentFlags().String("all", "", "Deploy all components in all stacks")
+		cmd.PersistentFlags().Bool("affected", false, "Deploy the affected components")
+		cmd.PersistentFlags().Bool("all", false, "Deploy all components in all stacks")
 	},
 	"apply": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
 		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
-		cmd.PersistentFlags().String("affected", "", "Apply the affected components")
-		cmd.PersistentFlags().String("all", "", "Apply all components in all stacks")
+		cmd.PersistentFlags().Bool("affected", false, "Apply the affected components")
+		cmd.PersistentFlags().Bool("all", false, "Apply all components in all stacks")
 	},
 	"clean": func(cmd *cobra.Command) {
-		cmd.PersistentFlags().Bool("everything", false, "If set atmos will also delete the Terraform state files and directories for the component.")
 		cmd.PersistentFlags().Bool("force", false, "Forcefully delete Terraform state files and directories without interaction")
 		cmd.PersistentFlags().Bool("skip-lock-file", false, "Skip deleting the `.terraform.lock.hcl` file")
 	},

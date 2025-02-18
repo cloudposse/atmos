@@ -32,12 +32,12 @@ func init() {
 
 	// Flags related to `--affected` flag (similar to `atmos describe affected`)
 	// These flags are only used then executing `atmos terraform plan/apply/deploy --affected`
-	terraformCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos describe affected --repo-path <path_to_already_cloned_repo>")
-	terraformCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos describe affected --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details")
-	terraformCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")
-	terraformCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos describe affected --ssh-key <path_to_ssh_key>")
-	terraformCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
-	terraformCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos terraform apply --affected --clone-target-ref=true\n"+
+	terraformCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos terraform <sub-command> --affected --repo-path <path_to_already_cloned_repo>")
+	terraformCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos terraform <sub-command> --affected --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details")
+	terraformCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos terraform <sub-command> --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")
+	terraformCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos terraform <sub-command> --affected --ssh-key <path_to_ssh_key>")
+	terraformCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos terraform <sub-command> --affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
+	terraformCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos terraform <sub-command> --affected --clone-target-ref=true\n"+
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")
 
@@ -85,7 +85,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 	}
 
 	if info.Affected {
-		err := e.ExecuteTerraformAffected(cmd, args)
+		err := e.ExecuteTerraformAffected(cmd, args, info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
@@ -93,7 +93,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 	}
 
 	if info.All {
-		err := e.ExecuteTerraformAll(cmd, args)
+		err := e.ExecuteTerraformAll(cmd, args, info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
