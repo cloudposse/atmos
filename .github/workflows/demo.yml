@@ -89,7 +89,10 @@ jobs:
 
   vhs:
     needs: [prepare]
-    runs-on: ubuntu-24.04
+    #runs-on: ubuntu-24.04
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=large
     # Longer timeouts typically indicate VHS has hung
     timeout-minutes: 20
     environment: demo
@@ -191,9 +194,16 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           install-fonts: true
 
+      - name: Set up FFmpeg (Latest release)
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: "release" # Installs the latest release version
+          github-token: ${{ secrets.GITHUB_TOKEN }} # Optional: helps prevent rate limit errors
+
       - name: Record screencast
         working-directory: demo/recordings
         run: |
+          ffmpeg -version
           go run studio.go build
           cp demo/recordings/gif/atmos.gif docs/demo.gif
           git add docs/demo.gif
