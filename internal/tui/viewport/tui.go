@@ -44,7 +44,7 @@ func RunWithSpinner(title string, fn func(chan string, *[]string) (int, error)) 
 	// Conditionally disable input handling when there's no TTY
 	opts := []tea.ProgramOption{}
 	if !m.hasTTY {
-		log.Debug("disabling bubbletea input/output handling")
+		log.Debug("degrading to headless input/output handling")
 		opts = append(opts,
 			tea.WithInput(strings.NewReader("")), // 🚀 Prevents input handling
 			tea.WithOutput(os.Stderr),            // 🚀 Prevents UI rendering to TTY
@@ -172,7 +172,7 @@ func newModel(title string, fn func(chan string, *[]string) (int, error)) Model 
 	// Allocate logLines as a pointer
 	logLines := &[]string{}
 
-	tty := term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("TERM") != "dumb"
+	tty := term.IsTerminal(int(os.Stdout.Fd())) && (os.Getenv("TERM") != "dumb") || isTruthyEnv("FORCE_TTY") || !isTruthyEnv("CI")
 
 	log.Debug("tty", "enabled", tty)
 
@@ -341,4 +341,24 @@ func (m Model) View() string {
 
 	return lipgloss.NewStyle().
 		Render(spinner + "\n" + viewportBox + "\n" + footer)
+}
+
+// isTruthyEnv checks if an environment variable is set to a truthy value
+func isTruthyEnv(key string) bool {
+	val, exists := os.LookupEnv(key)
+	if !exists {
+		return false
+	}
+
+	// Convert to lowercase and check common truthy values
+	val = strings.ToLower(strings.TrimSpace(val))
+	truthyValues := map[string]bool{
+		"1":      true,
+		"true":   true,
+		"yes":    true,
+		"on":     true,
+		"enable": true,
+	}
+
+	return truthyValues[val]
 }
