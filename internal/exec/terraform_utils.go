@@ -118,6 +118,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 // requires the `Go` templates and Atmos YAML functions to be processed
 func needProcessTemplatesAndYamlFunctions(command string) bool {
 	commandsThatNeedFuncProcessing := []string{
+		"init",
 		"plan",
 		"apply",
 		"deploy",
