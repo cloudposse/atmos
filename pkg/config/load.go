@@ -206,22 +206,3 @@ func mergeConfig(v *viper.Viper, path string, fileName string) error {
 
 	return nil
 }
-
-// applyDefaultConfiguration apply default configuration for the atmos config.
-func applyDefaultConfiguration(v *viper.Viper) error {
-	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
-	if logsLevel == u.LogLevelDebug || logsLevel == u.LogLevelTrace {
-		var atmosConfig schema.AtmosConfiguration
-		u.PrintMessageInColor("Using default configuration...\n", theme.Colors.Info)
-		err := u.PrintAsYAMLToFileDescriptor(atmosConfig, defaultCliConfig)
-		if err != nil {
-			return err
-		}
-	}
-
-	defaultConfig, err := json.Marshal(defaultCliConfig)
-	if err != nil {
-		return err
-	}
-	return v.MergeConfig(bytes.NewReader(defaultConfig))
-}
