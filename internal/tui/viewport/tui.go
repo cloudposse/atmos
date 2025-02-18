@@ -256,7 +256,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	//if m.hasTTY {
+	// if m.hasTTY {
 	m.viewport, cmd = m.viewport.Update(msg)
 	//}
 	cmds = append(cmds, cmd)
