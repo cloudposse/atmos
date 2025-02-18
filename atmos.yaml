@@ -15,7 +15,7 @@
 # are independent settings (supporting both absolute and relative paths).
 # If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
 # are considered paths relative to 'base_path'.
-base_path: "./tests/fixtures/scenarios/terraform-apply-affected"
+base_path: ""
 
 vendor:
   # Path to vendor configuration file or directory containing vendor files
@@ -68,11 +68,14 @@ stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
   # Supports both absolute and relative paths
   base_path: "stacks"
+  # Can also be set using 'ATMOS_STACKS_INCLUDED_PATHS' ENV var (comma-separated values string)
   included_paths:
-    - "deploy/**/*"
+    - "orgs/**/*"
+  # Can also be set using 'ATMOS_STACKS_EXCLUDED_PATHS' ENV var (comma-separated values string)
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  name_pattern: "{tenant}-{environment}-{stage}"
 
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument

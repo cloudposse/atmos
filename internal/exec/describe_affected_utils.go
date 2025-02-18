@@ -215,7 +215,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	defer removeTempDir(atmosConfig, tempDir)
 
 	// Copy the local repo into the temp directory
-	u.LogTrace(fmt.Sprintf("\nCopying the local repo into the temp directory '%s' ...", tempDir))
+	u.LogTrace(fmt.Sprintf("Copying the local repo into the temp directory '%s' ...", tempDir))
 
 	copyOptions := cp.Options{
 		PreserveTimes: false,
@@ -286,7 +286,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			ref = "refs/remotes/origin/HEAD"
 		}
 
-		u.LogTrace(fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
+		u.LogTrace(fmt.Sprintf("Checking out Git ref '%s' ...", ref))
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -487,7 +487,7 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("\nGetting current working repo commit object..."))
+	u.LogTrace(fmt.Sprintf("Getting current working repo commit object..."))
 
 	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
 	if err != nil {
