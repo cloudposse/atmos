@@ -112,7 +112,6 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Info")
-
 }
 
 // readSystemConfig load config from system dir
@@ -137,7 +136,6 @@ func readSystemConfig(v *viper.Viper) error {
 		}
 	}
 	return nil
-
 }
 
 // readHomeConfig load config from user's HOME dir
