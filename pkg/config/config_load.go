@@ -18,39 +18,28 @@ import (
 	"github.com/spf13/viper"
 )
 
+type ConfigSources struct {
+	paths          string
+	atmosFileNames string
+}
+
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-	var err error
 	v := viper.New()
+	//var source []configSources
+	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
+	setDefaultConfiguration(v)
+	err := readSystemConfig(v)
+	if err != nil {
+		return schema.AtmosConfiguration{}, err
+	}
 	wd, err := os.Getwd()
 	if err != nil {
 		return schema.AtmosConfiguration{}, err
 	}
-	IsEnvConfigPathRequired := os.Getenv("ATMOS_CLI_CONFIG_PATH") != ""
-	// Set default values
-	setDefaultConfiguration(v)
-	configSources := []struct {
-		paths    []string
-		required bool
-		name     string
-	}{
-		{paths: getSystemConfigPaths(), required: false, name: "system"},
-		{paths: []string{getHomeConfigPath()}, required: false, name: "home"},
-		{paths: []string{wd}, required: false, name: "work-dir"},
-		{paths: []string{os.Getenv("ATMOS_CLI_CONFIG_PATH")}, required: IsEnvConfigPathRequired, name: "env"},
-		{paths: []string{configAndStacksInfo.AtmosCliConfigPath}, required: false, name: "provider"},
-	}
-	// Read and merge configurations
-	configFound, err := readAndMergeConfigs(v, configSources)
+	err = readConfig(v, wd, CliConfigFileName, true)
 	if err != nil {
 		return schema.AtmosConfiguration{}, err
-	}
-
-	// Handle missing configurations
-	if !configFound {
-		if err := applyDefaultConfiguration(v); err != nil {
-			return schema.AtmosConfiguration{}, err
-		}
 	}
 
 	// Unmarshal configuration
@@ -173,62 +162,18 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
 }
-
-// readAndMergeConfigs handles all config loading logic
-func readAndMergeConfigs(v *viper.Viper, configSources []struct {
-	paths    []string
-	required bool
-	name     string
-}) (bool, error) {
-	configFound := false
-
-	for _, source := range configSources {
-		for _, rawPath := range source.paths {
-			if rawPath == "" {
-				continue
-			}
-
-			path := expandPath(rawPath)
-			absPath, err := filepath.Abs(path)
-			if err != nil {
-				if source.required {
-					return false, fmt.Errorf("invalid config path %s: %w", path, err)
-				}
-				continue
-			}
-
-			// Check if path exists for required sources
-			if source.required {
-				if _, err := os.Stat(absPath); os.IsNotExist(err) {
-					return false, fmt.Errorf("required config path not found: %s", absPath)
-				}
-			}
-
-			v.AddConfigPath(absPath)
+func readConfig(v *viper.Viper, path string, fileName string, required bool) error {
+	v.AddConfigPath(path)
+	v.SetConfigName(fileName)
+	err := v.ReadInConfig()
+	if err != nil {
+		if required {
+			return err
 		}
-	}
-	// Try all configuration names and extensions
-	configNames := []string{"atmos", ".atmos"}
-	configExtensions := []string{"yaml", "yml"}
-	// Try all combinations of config names and extensions
-	for _, name := range configNames {
-		v.SetConfigName(name)
-		yamlExist := false
-		for _, ext := range configExtensions {
-			if yamlExist {
-				continue
-			}
-			v.SetConfigType(ext)
-			if err := v.MergeInConfig(); err == nil {
-				configFound = true
-				yamlExist = true
-			} else if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-				return false, err
-			}
-		}
+		return err
 	}
 
-	return configFound, nil
+	return nil
 }
 
 // Helper functions
@@ -242,14 +187,25 @@ func setDefaultConfiguration(v *viper.Viper) {
 
 }
 
-func getSystemConfigPaths() []string {
+func readSystemConfig(v *viper.Viper) error {
+	configFilePath := ""
 	if runtime.GOOS == "windows" {
-		if appData := os.Getenv(WindowsAppDataEnvVar); appData != "" {
-			return []string{filepath.Join(appData, "atmos")}
+		appDataDir := os.Getenv(WindowsAppDataEnvVar)
+		if len(appDataDir) > 0 {
+			configFilePath = appDataDir
 		}
-		return []string{}
+	} else {
+		configFilePath = SystemDirConfigFilePath
 	}
-	return []string{SystemDirConfigFilePath}
+
+	if len(configFilePath) > 0 {
+		err := readConfig(v, configFilePath, CliConfigFileName, false)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+
 }
 
 func getHomeConfigPath() string {
