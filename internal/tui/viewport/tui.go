@@ -172,9 +172,9 @@ func newModel(title string, fn func(chan string, *[]string) (int, error)) Model 
 	// Allocate logLines as a pointer
 	logLines := &[]string{}
 
-	tty := (term.IsTerminal(int(os.Stdout.Fd())) || isTruthyEnv("FORCE_TTY") || !isTruthyEnv("CI")) &&
-		(os.Getenv("TERM") != "dumb")
-
+	tty := (term.IsTerminal(int(os.Stdout.Fd())) || isTruthyEnv("FORCE_TTY")) &&
+		!isTruthyEnv("CI") &&
+		os.Getenv("TERM") != "dumb"
 	log.Debug("tty", "enabled", tty)
 
 	var vp viewport.Model
