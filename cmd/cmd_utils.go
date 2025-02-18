@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
+	"github.com/go-git/go-git/v5"
 )
 
 // ValidateConfig holds configuration options for Atmos validation.
@@ -523,6 +524,9 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 		u.LogErrorAndExit(err)
 	}
 
+	// Check if we're in a git repo. Warn if not.
+	verifyInsideGitRepo()
+
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config
 		u.PrintMessageInColor("atmos.yaml", c1)
@@ -663,6 +667,36 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		u.LogErrorAndExit(err)
 	}
 	return info
+}
+
+// isGitRepository checks if the current directory is within a git repository
+func isGitRepository() bool {
+	_, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{
+		DetectDotGit: true,
+	})
+	if err != nil {
+		if err != git.ErrRepositoryNotExists {
+			u.LogTrace(fmt.Sprintf("git check failed: %v", err))
+		}
+		return false
+	}
+
+	return true
+}
+
+// verifyInsideGitRepo checks if we're in a git repo
+func verifyInsideGitRepo() bool {
+	// Skip check if either env var is set
+	if os.Getenv("ATMOS_BASE_PATH") != "" || os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+		return true
+	}
+
+	// Check if we're in a git repo
+	if !isGitRepository() {
+		u.LogWarning("You're not inside a git repository. Atmos feels lonely outside - bring it home!\n")
+		return false
+	}
+	return true
 }
 
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
