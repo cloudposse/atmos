@@ -108,7 +108,7 @@ func RunCommand(outputChan chan string, logLines *[]string, cmd *exec.Cmd) (int,
 		if exitError, ok := err.(*exec.ExitError); ok {
 			// 🔥 Use syscall.WaitStatus to get termination signal
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				if status.Signaled() { // ✅ Check if the process was killed by a signal
+				if status.Signaled() { // Check if the process was killed by a signal
 					sig := status.Signal()
 					return -int(sig), fmt.Errorf("terminated by signal: %v", sig)
 				}
@@ -213,7 +213,8 @@ func (m Model) Init() tea.Cmd {
 
 // Tick function to update duration timer
 func tickCmd(start time.Time) tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		log.Debug("Process still running...                           ", "time", time.Since(start).Round(time.Second))
 		return tickMsg(time.Since(start))
 	})
 }
@@ -290,10 +291,10 @@ func wrapText(text string, width int) []string {
 
 	var lines []string
 	for len(text) > width {
-		lines = append(lines, text[:width]) // ✅ Store a chunk
-		text = text[width:]                 // ✅ Remove chunk from original text
+		lines = append(lines, text[:width]) // Store a chunk
+		text = text[width:]                 // Remove chunk from original text
 	}
-	lines = append(lines, text) // ✅ Add the last piece
+	lines = append(lines, text) // Add the last piece
 	return lines
 }
 
