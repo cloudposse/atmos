@@ -1,20 +1,15 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 
-	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -112,7 +107,7 @@ var (
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 	// atmosConfig is loaded from the following locations (from lower to higher priority):
 	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 	// home dir (~/.atmos)
@@ -120,156 +115,9 @@ func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processSta
 	// ENV vars
 	// Command-line arguments
 
-	var atmosConfig schema.AtmosConfiguration
-	var err error
-	configFound := false
-	var found bool
-
-	v := viper.New()
-	v.SetConfigType("yaml")
-	v.SetTypeByDefaultValue(true)
-
-	// Default configuration values
-	v.SetDefault("components.helmfile.use_eks", true)
-	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
-	v.SetDefault("settings.inject_github_token", true)
-
-	v.SetDefault("logs.file", "/dev/stderr")
-	v.SetDefault("logs.level", "Info")
-
-	// Process config in system folder
-	configFilePath1 := ""
-	atmosConfigFilePath := ""
-	// https://pureinfotech.com/list-environment-variables-windows-10/
-	// https://docs.microsoft.com/en-us/windows/deployment/usmt/usmt-recognized-environment-variables
-	// https://softwareengineering.stackexchange.com/questions/299869/where-is-the-appropriate-place-to-put-application-configuration-files-for-each-p
-	// https://stackoverflow.com/questions/37946282/why-does-appdata-in-windows-7-seemingly-points-to-wrong-folder
-	if runtime.GOOS == "windows" {
-		appDataDir := os.Getenv(WindowsAppDataEnvVar)
-		if len(appDataDir) > 0 {
-			configFilePath1 = appDataDir
-		}
-	} else {
-		configFilePath1 = SystemDirConfigFilePath
-	}
-
-	if len(configFilePath1) > 0 {
-		configFile1 := filepath.Join(configFilePath1, CliConfigFileName)
-		found, err = processConfigFile(atmosConfig, configFile1, v)
-		if err != nil {
-			return atmosConfig, err
-		}
-		if found {
-			configFound = true
-			atmosConfigFilePath = configFile1
-		}
-	}
-
-	// Process config in user's HOME dir
-	configFilePath2, err := homedir.Dir()
+	atmosConfig, err := LoadConfig(configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, err
-	}
-	configFile2 := filepath.Join(configFilePath2, ".atmos", CliConfigFileName)
-	found, err = processConfigFile(atmosConfig, configFile2, v)
-	if err != nil {
-		return atmosConfig, err
-	}
-	if found {
-		configFound = true
-		atmosConfigFilePath = configFile2
-	}
-
-	// Process config in the current dir
-	configFilePath3, err := os.Getwd()
-	if err != nil {
-		return atmosConfig, err
-	}
-	configFile3 := filepath.Join(configFilePath3, CliConfigFileName)
-	found, err = processConfigFile(atmosConfig, configFile3, v)
-	if err != nil {
-		return atmosConfig, err
-	}
-	if found {
-		configFound = true
-		atmosConfigFilePath = configFile3
-	}
-
-	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
-	configFilePath4 := os.Getenv("ATMOS_CLI_CONFIG_PATH")
-	if len(configFilePath4) > 0 {
-		u.LogTrace(fmt.Sprintf("Found ENV var ATMOS_CLI_CONFIG_PATH=%s", configFilePath4))
-		configFile4 := filepath.Join(configFilePath4, CliConfigFileName)
-		found, err = processConfigFile(atmosConfig, configFile4, v)
-		if err != nil {
-			return atmosConfig, err
-		}
-		if found {
-			configFound = true
-			atmosConfigFilePath = configFile4
-		}
-	}
-
-	// Process config from the path specified in the Terraform provider (which calls into the atmos code)
-	if configAndStacksInfo.AtmosCliConfigPath != "" {
-		configFilePath5 := configAndStacksInfo.AtmosCliConfigPath
-		if len(configFilePath5) > 0 {
-			configFile5 := filepath.Join(configFilePath5, CliConfigFileName)
-			found, err = processConfigFile(atmosConfig, configFile5, v)
-			if err != nil {
-				return atmosConfig, err
-			}
-			if found {
-				configFound = true
-				atmosConfigFilePath = configFile5
-			}
-		}
-	}
-
-	if !configFound {
-		// If `atmos.yaml` not found, use the default config
-		// Set `ATMOS_LOGS_LEVEL` ENV var to "Debug" to see the message about Atmos using the default CLI config
-		logsLevelEnvVar := os.Getenv("ATMOS_LOGS_LEVEL")
-		if logsLevelEnvVar == u.LogLevelDebug || logsLevelEnvVar == u.LogLevelTrace {
-			u.PrintMessageInColor("'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars.\n"+
-				"Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'.\n"+
-				"Using the default CLI config:\n\n", theme.Colors.Info)
-
-			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, defaultCliConfig)
-			if err != nil {
-				return atmosConfig, err
-			}
-			fmt.Println()
-		}
-
-		j, err := json.Marshal(defaultCliConfig)
-		if err != nil {
-			return atmosConfig, err
-		}
-
-		reader := bytes.NewReader(j)
-		err = v.MergeConfig(reader)
-		if err != nil {
-			return atmosConfig, err
-		}
-	}
-	// We want the editorconfig color by default to be true
-	atmosConfig.Validate.EditorConfig.Color = true
-	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
-	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
-	err = v.Unmarshal(&atmosConfig)
-	if err != nil {
-		return atmosConfig, err
-	}
-	// Set the CLI config path in the atmosConfig struct
-	if filepath.IsAbs(atmosConfigFilePath) {
-		atmosConfig.CliConfigPath = atmosConfigFilePath
-	} else {
-		absPath, err := filepath.Abs(atmosConfigFilePath)
-		if err != nil {
-			return atmosConfig, err
-		}
-		atmosConfig.CliConfigPath = absPath
 	}
 	// Process ENV vars
 	err = processEnvVars(&atmosConfig)
