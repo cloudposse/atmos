@@ -89,10 +89,11 @@ jobs:
 
   vhs:
     needs: [prepare]
-    #runs-on: ubuntu-24.04
-    runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=large
+    runs-on: ubuntu-24.04
+    #runs-on:
+    #  - runs-on=${{ github.run_id }}
+    #  - runner=large
+
     # Longer timeouts typically indicate VHS has hung
     timeout-minutes: 20
     environment: demo
