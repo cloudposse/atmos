@@ -42,6 +42,12 @@ func RunWithSpinner(title string, fn func(chan string, *[]string) (int, error)) 
 	m := newModel(title, fn)
 	p := tea.NewProgram(m)
 
+	// Conditionally disable input handling when there's no TTY
+	opts := []tea.ProgramOption{}
+	if !m.hasTTY {
+		opts = append(opts, tea.WithInput(strings.NewReader(""))) // 🚀 Prevents unwanted input handling
+	}
+
 	updatedModel, err := p.Run()       // ✅ Get the final updated model
 	finalModel := updatedModel.(Model) // ✅ Type assertion to model
 
