@@ -216,11 +216,11 @@ func convertTapes() error {
 		if isUpToDate(outputMp4, tape) {
 			log.Info("Skipping tape recording", "tape", ConvertToRelativeFromCWD(tape), "reason", "already up-to-date")
 		} else {
-			if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Converting %s to mp4...", baseName), exec.Command("vhs", tape, "--output", outputMp4)); err != nil || exitCode != 0 {
-				log.Error("Failed to convert tape", "tape", ConvertToRelativeFromCWD(tape), "file", ConvertToRelativeFromCWD(outputMp4), "error", err)
+			if exitCode, err = RunCmdWithSpinner(fmt.Sprintf("Recording %s to mp4...", baseName), exec.Command("vhs", tape, "--output", outputMp4)); err != nil || exitCode != 0 {
+				log.Error("Failed to record tape", "tape", ConvertToRelativeFromCWD(tape), "file", ConvertToRelativeFromCWD(outputMp4), "error", err)
 				os.Exit(exitCode)
 			} else {
-				log.Info("Converted tape to mp4", "file", ConvertToRelativeFromCWD(outputMp4))
+				log.Info("Recorded tape to mp4", "file", ConvertToRelativeFromCWD(outputMp4))
 			}
 		}
 

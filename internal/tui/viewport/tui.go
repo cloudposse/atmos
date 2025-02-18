@@ -45,7 +45,10 @@ func RunWithSpinner(title string, fn func(chan string, *[]string) (int, error)) 
 	// Conditionally disable input handling when there's no TTY
 	opts := []tea.ProgramOption{}
 	if !m.hasTTY {
-		opts = append(opts, tea.WithInput(strings.NewReader(""))) // 🚀 Prevents unwanted input handling
+		opts = append(opts,
+			tea.WithInput(strings.NewReader("")), // 🚀 Prevents input handling
+			tea.WithoutRenderer(),                // 🚀 Prevents UI rendering
+		)
 	}
 
 	updatedModel, err := p.Run()       // ✅ Get the final updated model
@@ -58,14 +61,17 @@ func RunWithSpinner(title string, fn func(chan string, *[]string) (int, error)) 
 func RunCommand(outputChan chan string, logLines *[]string, cmd *exec.Cmd) (int, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		log.Debug("failed to get stdout pipe", "error", err)
 		return 1, err
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
+		log.Debug("failed to get stderr pipe", "error", err)
 		return 1, err
 	}
 
 	if err := cmd.Start(); err != nil {
+		log.Debug("failed to start command", "error", err)
 		return 1, err
 	}
 
