@@ -46,3 +46,17 @@ tests:
       stderr:
         - "command has no steps or subcommands configured"
       exit_code: 1
+  - name: invalid component error message should be displayed correctly
+    enabled: true
+    snapshot: true
+    description: "Invalid component error message should be displayed with the help of markdown"
+    workdir: "fixtures/scenarios/complete"
+    command: atmos
+    args:
+      - terraform
+      - plan
+      - invalid-component
+      - "-s"
+      - "infra/vpc"
+    expect:
+      exit_code: 1
