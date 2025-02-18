@@ -214,7 +214,6 @@ func (m Model) Init() tea.Cmd {
 // Tick function to update duration timer
 func tickCmd(start time.Time) tea.Cmd {
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
-		log.Debug("Process still running...                           ", "time", time.Since(start).Round(time.Second))
 		return tickMsg(time.Since(start))
 	})
 }
@@ -252,6 +251,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ExitCode = msg.exitCode
 		return m, tea.Quit
 	case tickMsg:
+
+		if !m.hasTTY {
+			spinner := m.getSpinner()
+			log.Info(spinner, "lines", len(*m.LogLines))
+		} else {
+			log.Debug("Process still running...", "time", time.Since(m.Start).Round(time.Second))
+		}
 		cmds = append(cmds, tickCmd(m.Start))
 	}
 
@@ -298,12 +304,7 @@ func wrapText(text string, width int) []string {
 	return lines
 }
 
-// Render the UI
-func (m Model) View() string {
-	if m.done {
-		return ""
-	}
-
+func (m Model) getSpinner() string {
 	// Compute elapsed time
 	elapsed := time.Since(m.Start).Round(time.Second)
 	timer := lipgloss.NewStyle().
@@ -319,15 +320,24 @@ func (m Model) View() string {
 	spinner := lipgloss.NewStyle().
 		Bold(true).
 		Render(m.spinner.View() + m.title + timerStyled)
+	return spinner
+}
+
+// Render the UI
+func (m Model) View() string {
+	if m.done {
+		return ""
+	}
 
 	// If no TTY, only show spinner or error logs
 	if !m.hasTTY {
 		if m.done && m.ExitCode != 0 {
-			return fmt.Sprintf("%s\nError output:\n%s", spinner, strings.Join(*m.LogLines, "\n"))
+			log.Error(strings.Join(*m.LogLines, "\n"))
 		}
-		// Only show the spinner with elapsed time
-		return spinner
+		return ""
 	}
+
+	spinner := m.getSpinner()
 
 	// Viewport box
 	viewportBox := lipgloss.NewStyle().
