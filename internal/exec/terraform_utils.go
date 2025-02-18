@@ -167,6 +167,12 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	}
 
 	a.IncludeDependents = true
+	a.IncludeSpaceliftAdminStacks = false
+	a.OutputFile = ""
+	a.ProcessTemplates = true
+	a.ProcessYamlFunctions = true
+	a.Skip = nil
+	a.Query = ""
 
 	// https://atmos.tools/cli/commands/describe/affected
 	affected, _, _, _, err := ExecuteDescribeAffected(a)
