@@ -153,10 +153,16 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	var token, tokenSource string
 	switch host {
 	case "github.com":
-		tokenSource = "GITHUB_TOKEN"
-		token = os.Getenv(tokenSource)
-		if token == "" && d.AtmosConfig.Settings.InjectGithubToken {
+		// Prioritize ATMOS_GITHUB_TOKEN if InjectGithubToken is enabled; otherwise, fallback to GITHUB_TOKEN.
+		if d.AtmosConfig.Settings.InjectGithubToken {
 			tokenSource = "ATMOS_GITHUB_TOKEN"
+			token = os.Getenv(tokenSource)
+			if token == "" {
+				tokenSource = "GITHUB_TOKEN"
+				token = os.Getenv(tokenSource)
+			}
+		} else {
+			tokenSource = "GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	case "bitbucket.org":
