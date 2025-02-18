@@ -40,16 +40,17 @@ type tickMsg time.Duration
 // Run a function with a spinner and viewport
 func RunWithSpinner(title string, fn func(chan string, *[]string) (int, error)) (*Model, error) {
 	m := newModel(title, fn)
-	p := tea.NewProgram(m)
 
 	// Conditionally disable input handling when there's no TTY
 	opts := []tea.ProgramOption{}
 	if !m.hasTTY {
+		log.Debug("disabling bubbletea input/output handling")
 		opts = append(opts,
 			tea.WithInput(strings.NewReader("")), // 🚀 Prevents input handling
-			tea.WithoutRenderer(),                // 🚀 Prevents UI rendering
+			tea.WithOutput(os.Stderr),            // 🚀 Prevents UI rendering to TTY
 		)
 	}
+	p := tea.NewProgram(m, opts...)
 
 	updatedModel, err := p.Run()       // ✅ Get the final updated model
 	finalModel := updatedModel.(Model) // ✅ Type assertion to model
