@@ -254,7 +254,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if !m.hasTTY {
 			spinner := m.getSpinner()
-			log.Info(spinner, "lines", len(*m.LogLines))
+			log.Info(spinner, "lines", len(*m.LogLines), "status", (*m.LogLines)[len(*m.LogLines)-1])
 		} else {
 			log.Debug("Process still running...", "time", time.Since(m.Start).Round(time.Second))
 		}
