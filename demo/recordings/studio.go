@@ -330,11 +330,13 @@ func GetMP4Duration(mp4File string) float64 {
 	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4File)
 	output, err := cmd.Output()
 	if err != nil {
+		log.Debug("Failed to get video duration", "file", ConvertToRelativeFromCWD(mp4File), "error", err)
 		return -1
 	}
 
 	duration, err := strconv.ParseFloat(strings.TrimSpace(string(output)), 64)
 	if err != nil {
+		log.Debug("Failed to parse video duration", "file", ConvertToRelativeFromCWD(mp4File), "error", err)
 		return -1
 	}
 
@@ -345,6 +347,7 @@ func GetMP4Duration(mp4File string) float64 {
 func GetFileSize(mp4File string) int64 {
 	fileInfo, err := os.Stat(mp4File)
 	if err != nil {
+		log.Debug("Failed to get file size", "file", ConvertToRelativeFromCWD(mp4File), "error", err)
 		return -1
 	}
 

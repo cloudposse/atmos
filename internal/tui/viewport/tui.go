@@ -183,7 +183,7 @@ func newModel(title string, fn func(chan string, *[]string) (int, error)) Model 
 		LogLines: logLines,
 		viewport: vp,
 		Start:    time.Now(),
-		ExitCode: -1,
+		ExitCode: 0,
 		hasTTY:   tty,
 		width:    80,
 	}
