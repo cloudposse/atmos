@@ -12,6 +12,10 @@ import (
 
 // BuildTerraformWorkspace builds Terraform workspace
 func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+	// Return 'default' workspace if workspaces are disabled
+	if !isWorkspacesEnabled(&atmosConfig, &configAndStacksInfo) {
+		return "default", nil
+	}
 	var contextPrefix string
 	var err error
 	var tmpl string

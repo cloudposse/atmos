@@ -105,6 +105,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
+	// Check if trying to use workspace commands with HTTP backend
+	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
+		return fmt.Errorf("workspaces are not supported for the HTTP backend")
+	}
+
 	if info.SubCommand == "clean" {
 		err := handleCleanSubCommand(info, componentPath, atmosConfig)
 		if err != nil {
@@ -378,8 +383,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Run `terraform workspace` before executing other terraform commands
-	// only if the `TF_WORKSPACE` environment variable is not set by the caller
+	// only if workspaces are enabled and the `TF_WORKSPACE` environment variable is not set by the caller
 	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
+		// Check if workspaces are enabled
+		if !isWorkspacesEnabled(&atmosConfig, &info) {
+			// Skip workspace commands and continue
+			goto executeCommand
+		}
+
 		tfWorkspaceEnvVar := os.Getenv("TF_WORKSPACE")
 
 		if tfWorkspaceEnvVar == "" {
@@ -462,6 +473,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
+executeCommand:
 	// Execute the provided command (except for `terraform workspace` which was executed above)
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
 		err = ExecuteShellCommand(
