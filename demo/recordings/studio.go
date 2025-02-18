@@ -94,6 +94,8 @@ func RunCmdWithSpinner(title string, cmd *exec.Cmd) (int, error) {
 	if err != nil {
 		return -1, fmt.Errorf("failed to get repo root: %w", err)
 	}
+
+	cmd.Stdin = nil    // Explicitly detach input
 	cmd.Dir = repoRoot // Change working directory
 
 	m, err := viewport.RunWithSpinner(title, func(output chan string, logLines *[]string) (int, error) {
