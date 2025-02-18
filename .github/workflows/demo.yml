@@ -96,6 +96,11 @@ jobs:
     env:
       AWS_REGION: us-east-2
     steps:
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+          limit-access-to-actor: true
       # Determine environment-specific settings
       - name: Set Environment Variables
         id: set-env
