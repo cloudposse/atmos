@@ -148,5 +148,6 @@
     "editorconfig": {
       "color": true
     }
-  }
+  },
+  "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks/atmos"
 }
