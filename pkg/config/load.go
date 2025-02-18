@@ -16,11 +16,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-type ConfigSources struct {
-	paths          string
-	atmosFileNames string
-}
-
 func LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
 	v := viper.New()
 	var atmosConfig schema.AtmosConfiguration
@@ -201,7 +196,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string) error {
 	v.SetConfigName(fileName)
 	err := v.MergeInConfig()
 	if err != nil {
-		return nil
+		return err
 	}
 
 	return nil
