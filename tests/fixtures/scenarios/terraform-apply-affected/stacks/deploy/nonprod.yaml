@@ -21,20 +21,38 @@ components:
         component: mock
       vars:
         baz: baz-component-3
+      settings:
+        depends_on:
+          1:
+            component: component-1
     component-4:
       metadata:
         component: mock
       vars:
-        foo: ""
-        bar: ""
-        baz: ""
+        foo: foo-component-4
+        bar: bar-component-4
+        baz: baz-component-4
+      settings:
+        depends_on:
+          1:
+            component: component-2
+          2:
+            component: component-3
     component-5:
       metadata:
         component: mock
       vars:
-        foo: ""
+        foo: foo-component-5
     component-6:
       metadata:
         component: mock
       vars:
-        foo: ""
+        foo: foo-component-6
+      settings:
+        depends_on:
+          1:
+            component: component-1
+          2:
+            component: component-4
+          3:
+            component: component-5
