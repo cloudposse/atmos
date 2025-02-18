@@ -104,20 +104,25 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 			if matches[6] != "" {
 				newSrc += matches[6]
 			}
-			l.Debug("Rewriting SCP-style SSH URL", "old_url", src, "new_url", newSrc)
+			maskedOld, _ := u.MaskBasicAuth(src)
+			maskedNew, _ := u.MaskBasicAuth(newSrc)
+			l.Debug("Rewriting SCP-style SSH URL", "old_url", maskedOld, "new_url", maskedNew)
+
 			src = newSrc
 		} else {
 			src = "https://" + src
-			l.Debug("Defaulting to https scheme", "url", src)
+			maskedSrc, _ := u.MaskBasicAuth(src)
+			l.Debug("Defaulting to https scheme", "url", maskedSrc)
+
 		}
 	}
 
-	l.Debug("Parsed URL", "url", src)
-
+	// Parse the URL to extract the host and path.
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-		l.Debug("Failed to parse URL", "url", src, "error", err)
-		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
+		maskedSrc, _ := u.MaskBasicAuth(src)
+		l.Debug("Failed to parse URL", "url", maskedSrc, "error", err)
+		return "", false, fmt.Errorf("failed to parse URL %q: %w", maskedSrc, err)
 	}
 
 	// Normalize Windows path separators and URL-encoded backslashes to forward slashes.
@@ -132,69 +137,69 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	// Unlike HTTPS where public repos can be accessed without authentication,
 	// SSH requires authentication. An SSH agent being one of the popular ones, so we log a debug message in case it is missing (could be false alert thoguh).
 	if parsedURL.Scheme == "ssh" && os.Getenv("SSH_AUTH_SOCK") == "" {
-		l.Debug("SSH agent-based authentication may not work because SSH_AUTH_SOCK is not set")
+		maskedSrc, _ := u.MaskBasicAuth(src)
+		l.Debug("SSH agent-based authentication may not work because SSH_AUTH_SOCK is not set", "url", maskedSrc)
 	}
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
 	host := strings.ToLower(parsedURL.Host)
 	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
 		l.Debug("Skipping token injection for a unsupported host", "host", parsedURL.Host)
-		l.Debug("Supported hosts", "supported_hosts", "github.com, bitbucket.org, gitlab.com")
 	}
+
+	l.Debug("Reading config param", "InjectGithubToken", d.AtmosConfig.Settings.InjectGithubToken)
 
 	// 3 types of tokens are supported for now: Github, Bitbucket and GitLab
 	var token, tokenSource string
 	switch host {
 	case "github.com":
-		tokenSource = "ATMOS_GITHUB_TOKEN"
+		tokenSource = "GITHUB_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" && d.AtmosConfig.Settings.InjectGithubToken {
-			tokenSource = "GITHUB_TOKEN"
+			tokenSource = "ATMOS_GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	case "bitbucket.org":
-		tokenSource = "ATMOS_BITBUCKET_TOKEN"
+		tokenSource = "BITBUCKET_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
-			tokenSource = "BITBUCKET_TOKEN"
+			tokenSource = "ATMOS_BITBUCKET_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	case "gitlab.com":
-		tokenSource = "ATMOS_GITLAB_TOKEN"
+		tokenSource = "GITLAB_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
-			tokenSource = "GITLAB_TOKEN"
+			tokenSource = "ATMOS_GITLAB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	}
 
-	// Note that Bitbucket uses 2 tokens (username and app password) for authentication.
+	// Always inject token if available, regardless of existing credentials.
 	if token != "" {
-		// Inject token only if no credentials are already provided.
-		if parsedURL.User == nil || parsedURL.User.Username() == "" {
-			l.Debug("Injecting token", "env", tokenSource, "url", src)
-			var defaultUsername string
-			switch host {
-			case "github.com":
-				defaultUsername = "x-access-token"
-			case "gitlab.com":
-				defaultUsername = "oauth2"
-			case "bitbucket.org":
-				defaultUsername = os.Getenv("ATMOS_BITBUCKET_USERNAME")
+		var defaultUsername string
+		switch host {
+		case "github.com":
+			defaultUsername = "x-access-token"
+		case "gitlab.com":
+			defaultUsername = "oauth2"
+		case "bitbucket.org":
+			defaultUsername = os.Getenv("ATMOS_BITBUCKET_USERNAME")
+			if defaultUsername == "" {
+				defaultUsername = os.Getenv("BITBUCKET_USERNAME")
 				if defaultUsername == "" {
-					defaultUsername = os.Getenv("BITBUCKET_USERNAME")
-					if defaultUsername == "" {
-						defaultUsername = "x-token-auth"
-					}
+					defaultUsername = "x-token-auth"
 				}
-				l.Debug("Using Bitbucket username", "username", defaultUsername)
-			default:
-				defaultUsername = "x-access-token"
 			}
-			parsedURL.User = url.UserPassword(defaultUsername, token)
-		} else {
-			l.Debug("Skipping token injection", "reason", "credentials already provided")
+			l.Debug("Using Bitbucket username", "username", defaultUsername)
+		default:
+			defaultUsername = "x-access-token"
 		}
+		parsedURL.User = url.UserPassword(defaultUsername, token)
+		maskedURL, _ := u.MaskBasicAuth(parsedURL.String())
+		l.Debug("Injected token", "env", tokenSource, "url", maskedURL)
+	} else {
+		l.Debug("No token found for injection")
 	}
 
 	// Normalize d.source for Windows path separators.
@@ -204,16 +209,17 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if normalizedSource != "" && !strings.Contains(normalizedSource, "//") {
 		parts := strings.SplitN(parsedURL.Path, "/", 4)
 		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
-			l.Debug("Detected top-level repo with no subdir: appending '//.'", "url", src)
+			maskedSrc, _ := u.MaskBasicAuth(src)
+			l.Debug("Detected top-level repo with no subdir: appending '//.'", "url", maskedSrc)
 			parsedURL.Path = parsedURL.Path + "//."
 		}
 	}
 
 	// Set "depth=1" for a shallow clone if not specified.
 	// In Go-Getter, "depth" controls how many revisions are cloned:
-	// - `depth=1` fetches only the latest commit (faster, less bandwidth).
-	// - `depth=` (empty) performs a full clone (default Git behavior).
-	// - `depth=N` clones the last N revisions.
+	// - depth=1 fetches only the latest commit (faster, less bandwidth).
+	// - depth= (empty) performs a full clone (default Git behavior).
+	// - depth=N clones the last N revisions.
 	q := parsedURL.Query()
 	if _, exists := q["depth"]; !exists {
 		q.Set("depth", "1")
@@ -221,6 +227,13 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	parsedURL.RawQuery = q.Encode()
 
 	finalURL := "git::" + parsedURL.String()
+	urlForMasking := strings.TrimPrefix(finalURL, "git::")
+	maskedFinal, err := u.MaskBasicAuth(urlForMasking)
+	if err != nil {
+		l.Debug("Masking failed", "error", err)
+	} else {
+		l.Debug("Final URL", "final_url", "git::"+maskedFinal)
+	}
 
 	return finalURL, true, nil
 }

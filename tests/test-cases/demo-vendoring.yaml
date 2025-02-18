@@ -57,3 +57,25 @@ tests:
       stderr:
         - "No SSH authentication method found"  
       exit_code: 0
+      
+  - name: atmos vendor pull custom detector credentials leakage
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Ensure that injected credentials are never leaked in logs"
+    workdir: "fixtures/scenarios/vendor-pulls-ssh"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--logs-level=Debug"
+    env:
+      ATMOS_GITHUB_TOKEN: supersecret
+    expect:
+      diff: []
+    stderr:
+      - "Injecting token" 
+    stdout:
+      - "!supersecret"  
+      - "!ATMOS_GITHUB_TOKEN"
+    exit_code: 0
