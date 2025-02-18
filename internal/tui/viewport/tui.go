@@ -229,6 +229,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = msg.Width - (2 * outerMargin)
 			m.viewport.Width = m.width - 4
 			m.viewport.Height = viewportHeight
+		} else {
+			log.Debug("headless mode: ignoring window size message")
 		}
 	case tea.KeyMsg:
 		if msg.String() == "q" || msg.String() == "ctrl+c" || msg.String() == "esc" {
@@ -253,9 +255,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	if m.hasTTY {
-		m.viewport, cmd = m.viewport.Update(msg)
-	}
+	//if m.hasTTY {
+	m.viewport, cmd = m.viewport.Update(msg)
+	//}
 	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
@@ -322,7 +324,8 @@ func (m Model) View() string {
 		if m.done && m.ExitCode != 0 {
 			return fmt.Sprintf("%s\nError output:\n%s", spinner, strings.Join(*m.LogLines, "\n"))
 		}
-		return spinner // Only show the spinner with elapsed time
+		// Only show the spinner with elapsed time
+		return spinner
 	}
 
 	// Viewport box
