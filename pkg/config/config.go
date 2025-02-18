@@ -139,7 +139,7 @@ func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processSta
 
 	// Process config in system folder
 	configFilePath1 := ""
-
+	atmosConfigFilePath := ""
 	// https://pureinfotech.com/list-environment-variables-windows-10/
 	// https://docs.microsoft.com/en-us/windows/deployment/usmt/usmt-recognized-environment-variables
 	// https://softwareengineering.stackexchange.com/questions/299869/where-is-the-appropriate-place-to-put-application-configuration-files-for-each-p
@@ -161,6 +161,7 @@ func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processSta
 		}
 		if found {
 			configFound = true
+			atmosConfigFilePath = configFile1
 		}
 	}
 
@@ -176,6 +177,7 @@ func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processSta
 	}
 	if found {
 		configFound = true
+		atmosConfigFilePath = configFile2
 	}
 
 	// Process config in the current dir
@@ -190,6 +192,7 @@ func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processSta
 	}
 	if found {
 		configFound = true
+		atmosConfigFilePath = configFile3
 	}
 
 	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
@@ -203,6 +206,7 @@ func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processSta
 		}
 		if found {
 			configFound = true
+			atmosConfigFilePath = configFile4
 		}
 	}
 
@@ -217,6 +221,7 @@ func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processSta
 			}
 			if found {
 				configFound = true
+				atmosConfigFilePath = configFile5
 			}
 		}
 	}
@@ -256,7 +261,16 @@ func InitCliConfigOld(configAndStacksInfo schema.ConfigAndStacksInfo, processSta
 	if err != nil {
 		return atmosConfig, err
 	}
-
+	// Set the CLI config path in the atmosConfig struct
+	if filepath.IsAbs(atmosConfigFilePath) {
+		atmosConfig.CliConfigPath = atmosConfigFilePath
+	} else {
+		absPath, err := filepath.Abs(atmosConfigFilePath)
+		if err != nil {
+			return atmosConfig, err
+		}
+		atmosConfig.CliConfigPath = absPath
+	}
 	// Process ENV vars
 	err = processEnvVars(&atmosConfig)
 	if err != nil {
