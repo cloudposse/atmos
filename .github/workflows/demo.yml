@@ -196,7 +196,7 @@ jobs:
           install-fonts: true
 
       - name: Set up FFmpeg (Latest release)
-        uses: FedericoCarboni/setup-ffmpeg@v3
+        uses: FedericoCarboni/setup-ffmpeg@v3.1
         with:
           ffmpeg-version: "release" # Installs the latest release version
           github-token: ${{ secrets.GITHUB_TOKEN }} # Optional: helps prevent rate limit errors
