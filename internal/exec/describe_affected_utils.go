@@ -243,7 +243,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	u.LogTrace(fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
+	u.LogTrace(fmt.Sprintf("Copied the local repo into the temp directory '%s'", tempDir))
 
 	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -311,7 +311,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(fmt.Sprintf("Checked out Git ref '%s'\n", ref))
+		u.LogTrace(fmt.Sprintf("Checked out Git ref '%s'", ref))
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(

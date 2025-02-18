@@ -178,7 +178,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	l.Debug(affectedYaml)
+	l.Debug("\n" + affectedYaml)
 
 	return nil
 }
