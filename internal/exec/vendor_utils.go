@@ -277,12 +277,14 @@ func ExecuteAtmosVendorInternal(
 	}
 
 	// Process imports and return all sources from all the imports and from `vendor.yaml`
-	sources, _, err := processVendorImports(
+	sources, _, err := ProcessVendorImports(
 		atmosConfig,
 		vendorConfigFileName,
 		atmosVendorSpec.Imports,
 		atmosVendorSpec.Sources,
 		[]string{vendorConfigFileName},
+		0,  // Initial depth
+		50, // Max depth for imports
 	)
 	if err != nil {
 		return err
@@ -436,14 +438,22 @@ func ExecuteAtmosVendorInternal(
 	return nil
 }
 
-// processVendorImports processes all imports recursively and returns a list of sources
-func processVendorImports(
+// ProcessVendorImports processes all imports recursively and returns a list of sources
+// maxDepth limits the recursion depth to prevent stack overflow from deeply nested imports
+func ProcessVendorImports(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
 	imports []string,
 	sources []schema.AtmosVendorSource,
 	allImports []string,
+	depth int,
+	maxDepth int,
 ) ([]schema.AtmosVendorSource, []string, error) {
+	// Prevent stack overflow from deeply nested imports
+	if depth > maxDepth {
+		return nil, nil, fmt.Errorf("maximum import depth of %d exceeded in vendor config file '%s'", maxDepth, vendorConfigFile)
+	}
+
 	var mergedSources []schema.AtmosVendorSource
 
 	for _, imp := range imports {
@@ -469,7 +479,8 @@ func processVendorImports(
 			return nil, nil, fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", imp)
 		}
 
-		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
+		// Pass depth + 1 to track recursion depth
+		mergedSources, allImports, err = ProcessVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports, depth+1, maxDepth)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -1,0 +1,108 @@
+---
+title: "atmos list vendor"
+id: "list-vendor"
+---
+
+# atmos list vendor
+
+The `atmos list vendor` command displays information about vendored components in your Atmos project.
+
+## Usage
+
+```shell
+atmos list vendor [flags]
+```
+
+## Description
+
+The `atmos list vendor` command helps you manage and inspect vendored components in your Atmos project. It provides information about:
+
+- Component names and versions
+- Target folders for vendored components
+- Source repositories and references
+- Component status
+
+The command displays the following columns by default:
+- Component: The name of the vendored component
+- Version: The version or reference of the component
+- Folder: The target folder where the component is vendored
+- Source: The source repository and path of the component
+
+## Configuration
+
+You can customize the columns displayed in the output by configuring them in your `atmos.yaml` file:
+
+```yaml
+vendor:
+  list:
+    # Optional: specify the default output format (table, json, csv, tsv)
+    format: table
+    # Configure which columns to display and their order
+    columns:
+      - name: Component
+        value: '{{ .Component }}'
+      - name: Version
+        value: '{{ .Version | default "unknown" }}'
+      - name: Folder
+        value: '{{ .Target | trunc 25 }}'
+      - name: Source
+        value: '{{ .Source | trunc 25 }}'
+      - name: Type
+        value: '{{ .Type }}'
+      - name: Manifest
+        value: '{{ .File }}'
+```
+
+Available columns:
+- `Component`: The name of the vendored component
+- `Version`: The version or reference of the component
+- `Folder`: The target folder where the component is vendored
+- `Source`: The source repository and path of the component
+- `Type`: The type of the vendor manifest (always "Vendor Manifest")
+- `Manifest`: The path to the vendor manifest file
+
+The columns will be displayed in the order specified in the configuration. If no columns are configured, the default columns (Component, Version, Folder, Source) will be used.
+
+## Flags
+
+<dl>
+  <dt><code>-h, --help</code></dt>
+  <dd>Help for the vendor command</dd>
+  <dt><code>-o, --format string</code></dt>
+  <dd>Output format: `table`, `json`, `csv`, `tsv` (default "`table`")</dd>
+  <dt><code>--delimiter string</code></dt>
+  <dd>Delimiter for csv/tsv output (default: comma for csv, tab for tsv)</dd>
+</dl>
+
+## Examples
+
+List all vendored components in table format (default):
+```shell
+atmos list vendor
+```
+
+List vendored components in JSON format:
+```shell
+atmos list vendor --format json
+```
+
+List vendored components in CSV format:
+```shell
+atmos list vendor --format csv
+```
+
+List vendored components in TSV format:
+```shell
+atmos list vendor --format tsv
+```
+
+List vendored components in CSV format with custom delimiter:
+```shell
+atmos list vendor --format csv --delimiter ";"
+```
+
+## Related Commands
+
+- [atmos vendor pull](/cli/commands/vendor/usage) - Pull vendored components
+- [atmos vendor push](/cli/commands/vendor/usage) - Push vendored components
+- [atmos list components](/cli/commands/list/component) - List available components 
