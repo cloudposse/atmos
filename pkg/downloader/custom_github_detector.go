@@ -14,7 +14,7 @@ import (
 // into something like git::https://<token>@github.com/... so we can
 // do a git-based clone with a token.
 type CustomGitHubDetector struct {
-	AtmosConfig schema.AtmosConfiguration
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 // Detect implements the getter.Detector interface for go-getter v1.

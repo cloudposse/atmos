@@ -41,7 +41,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 
 // registerCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func registerCustomDetectors(atmosConfig schema.AtmosConfiguration) {
+func registerCustomDetectors(atmosConfig *schema.AtmosConfiguration) {
 	getter.Detectors = append(
 		[]getter.Detector{
 			&CustomGitHubDetector{AtmosConfig: atmosConfig},
@@ -50,7 +50,7 @@ func registerCustomDetectors(atmosConfig schema.AtmosConfiguration) {
 	)
 }
 
-func NewGoGetterDownloader(atmosConfig schema.AtmosConfiguration) FileDownloader {
+func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration) FileDownloader {
 	registerCustomDetectors(atmosConfig)
 	return NewFileDownloader(&goGetterClientFactory{})
 }
