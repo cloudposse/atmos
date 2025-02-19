@@ -66,6 +66,7 @@ func IsValidScheme(scheme string) bool {
 // do a git-based clone with a token.
 type CustomGitHubDetector struct {
 	AtmosConfig schema.AtmosConfiguration
+	source      string
 }
 
 // Detect implements the getter.Detector interface for go-getter v1.
@@ -93,6 +94,14 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 	if len(parts) < 3 {
 		u.LogDebug(fmt.Sprintf("URL path %q doesn't look like /owner/repo\n", parsedURL.Path))
 		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL.Path)
+	}
+
+	if !strings.Contains(d.source, "//") {
+		// means user typed something like "github.com/org/repo.git" with NO subdir
+		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
+			u.LogDebug("Detected top-level repo with no subdir: appending '//.'\n")
+			parsedURL.Path = parsedURL.Path + "//."
+		}
 	}
 
 	atmosGitHubToken := os.Getenv("ATMOS_GITHUB_TOKEN")
@@ -128,6 +137,17 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		}
 	}
 
+	// Set "depth=1" for a shallow clone if not specified.
+	// In Go-Getter, "depth" controls how many revisions are cloned:
+	// - `depth=1` fetches only the latest commit (faster, less bandwidth).
+	// - `depth=` (empty) performs a full clone (default Git behavior).
+	// - `depth=N` clones the last N revisions.
+	q := parsedURL.Query()
+	if _, exists := q["depth"]; !exists {
+		q.Set("depth", "1")
+	}
+	parsedURL.RawQuery = q.Encode()
+
 	finalURL := "git::" + parsedURL.String()
 
 	return finalURL, true, nil
@@ -135,10 +155,10 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 // RegisterCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
+func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration, source string) {
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitHubDetector{AtmosConfig: atmosConfig},
+			&CustomGitHubDetector{AtmosConfig: atmosConfig, source: source},
 		},
 		getter.Detectors...,
 	)
@@ -155,8 +175,11 @@ func GoGetterGet(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
+	// Register custom detectors, passing the original `src` to the CustomGitHubDetector.
+	// go-getter typically strips subdirectories before calling the detector, so the
+	// unaltered source is needed to identify whether a top-level repository or a
+	// subdirectory was specified (e.g., for appending "//." only when no subdir is present).
+	RegisterCustomDetectors(atmosConfig, src)
 
 	client := &getter.Client{
 		Ctx: ctx,
@@ -164,13 +187,56 @@ func GoGetterGet(
 		// Destination where the files will be stored. This will create the directory if it doesn't exist
 		Dst:  dest,
 		Mode: clientMode,
-	}
+		Getters: map[string]getter.Getter{
+			// Overriding 'git'
+			"git":   &CustomGitGetter{},
+			"file":  &getter.FileGetter{},
+			"hg":    &getter.HgGetter{},
+			"http":  &getter.HttpGetter{},
+			"https": &getter.HttpGetter{},
+			// "s3": &getter.S3Getter{}, // add as needed
+			// "gcs": &getter.GCSGetter{},
 
+		},
+	}
 	if err := client.Get(); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// CustomGitGetter is a custom getter for git (git::) that removes symlinks
+type CustomGitGetter struct {
+	getter.GitGetter
+}
+
+// Implements the custom getter logic removing symlinks
+func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
+	// Normal clone
+	if err := c.GitGetter.Get(dst, url); err != nil {
+		return err
+	}
+	// Remove symlinks
+	return removeSymlinks(dst)
+}
+
+// removeSymlinks walks the directory and removes any symlinks
+// it encounters.
+func removeSymlinks(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Symlinks are removed for the entire repo, regardless if there are any subfolders specified
+			// Thus logging is disabled
+			// u.LogWarning(fmt.Sprintf("Removing symlink: %s", path))
+			// It's a symlink, remove it
+			return os.Remove(path)
+		}
+		return nil
+	})
 }
 
 // DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
