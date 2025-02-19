@@ -12,10 +12,10 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -269,7 +269,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
-			if err := GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to download package: %w", err),
 					name: p.name,
