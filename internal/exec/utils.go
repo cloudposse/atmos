@@ -651,6 +651,7 @@ func processArgsAndFlags(
 	var additionalArgsAndFlags []string
 	var globalOptions []string
 	var indexesToRemove []int
+
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "clean" {
 		info.SubCommand = inputArgsAndFlags[0]
 	}

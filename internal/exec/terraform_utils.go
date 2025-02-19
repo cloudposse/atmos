@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -148,7 +149,6 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 
 // ExecuteTerraformAffected executes `atmos terraform --affected`
 func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
-
 	// Add these flags here because `atmos describe affected` reads/needs them, but `atmos terraform --affected` does not define them
 	cmd.PersistentFlags().String("file", "", "")
 	cmd.PersistentFlags().String("format", "yaml", "")
@@ -162,21 +162,21 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	cmd.PersistentFlags().StringSlice("skip", nil, "")
 	cmd.PersistentFlags().StringP("query", "q", "", "")
 
-	a, err := parseDescribeAffectedCliArgs(cmd, args)
+	cliArgs, err := parseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
 		return err
 	}
 
-	a.IncludeDependents = true
-	a.IncludeSpaceliftAdminStacks = false
-	a.OutputFile = ""
-	a.ProcessTemplates = true
-	a.ProcessYamlFunctions = true
-	a.Skip = nil
-	a.Query = ""
+	cliArgs.IncludeDependents = true
+	cliArgs.IncludeSpaceliftAdminStacks = false
+	cliArgs.OutputFile = ""
+	cliArgs.ProcessTemplates = true
+	cliArgs.ProcessYamlFunctions = true
+	cliArgs.Skip = nil
+	cliArgs.Query = ""
 
 	// https://atmos.tools/cli/commands/describe/affected
-	affected, _, _, _, err := ExecuteDescribeAffected(a)
+	affected, _, _, _, err := ExecuteDescribeAffected(cliArgs)
 	if err != nil {
 		return err
 	}
@@ -186,6 +186,25 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 		return err
 	}
 	l.Debug("Affected components:\n" + affectedYaml)
+
+	for _, a := range affected {
+		// If the affected component is included as dependent in other components, don't process it now,
+		// it will be processed in the dependency order
+		if a.IncludedInDependents {
+			continue
+		}
+
+		info.Component = a.Component
+		info.ComponentFromArg = a.Component
+		info.Stack = a.Stack
+
+		l.Debug(fmt.Sprintf("Executing: atmos terraform %s %s -s %s", info.SubCommand, a.Component, a.Stack))
+
+		err = ExecuteTerraform(info)
+		if err != nil {
+			u.PrintErrorMarkdownAndExit("", err, "")
+		}
+	}
 
 	return nil
 }
