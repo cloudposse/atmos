@@ -236,7 +236,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	urlForMasking := strings.TrimPrefix(finalURL, "git::")
 	maskedFinal, err := u.MaskBasicAuth(urlForMasking)
 	if err != nil {
-		l.Debug("Masking failed", "error", err)
+		l.Debug("Masking of URL failed", "error", err)
 	} else {
 		l.Debug("normalized SSH vendor URL ", "url", "git::"+maskedFinal)
 	}
