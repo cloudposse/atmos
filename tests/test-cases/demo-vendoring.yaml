@@ -39,3 +39,43 @@ tests:
       stderr:
         - 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
+
+  - name: atmos vendor pull ssh
+    enabled: false
+    snapshot: true
+    tty: false
+    description: "Dry-run vendoring with SSH style URL; no SSH key provided, so tokens are not used"
+    workdir: "fixtures/scenarios/vendor-pulls-ssh"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--logs-level=Debug"
+      - "--dry-run"
+    expect:
+      diff: []
+      stderr:
+        - "No SSH authentication method found"  
+      exit_code: 0
+      
+  - name: atmos vendor pull custom detector credentials leakage
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Ensure that injected credentials are never leaked in logs"
+    workdir: "fixtures/scenarios/vendor-pulls-ssh"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--logs-level=Debug"
+    env:
+      ATMOS_GITHUB_TOKEN: supersecret
+    expect:
+      diff: []
+    stderr:
+      - "Injecting token" 
+    stdout:
+      - "!supersecret"  
+      - "!ATMOS_GITHUB_TOKEN"
+    exit_code: 0
