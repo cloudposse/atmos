@@ -18,7 +18,7 @@ var listValuesCmd = &cobra.Command{
 	Use:   "values [component]",
 	Short: "List component values across stacks",
 	Long:  "List values for a component across all stacks where it is used",
-	Args: cobra.ExactArgs(1),
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
