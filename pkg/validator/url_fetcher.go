@@ -12,6 +12,7 @@ type URLFetcher struct {
 }
 
 func (u *URLFetcher) Fetch() ([]byte, error) {
+
 	resp, err := http.Get(u.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download URL: %w", err)
