@@ -188,7 +188,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	l.Debug("Affected components:\n" + affectedYaml)
 
 	for _, affected := range affectedList {
-		err = executeTerraformAffectedComponent(affected, info)
+		err = executeTerraformAffectedComponent(affected, info, "", "")
 		if err != nil {
 			return err
 		}
@@ -197,7 +197,8 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	return nil
 }
 
-func executeTerraformAffectedComponent(affected schema.Affected, info schema.ConfigAndStacksInfo) error {
+// executeTerraformAffectedComponent recursively processes the affected components in the dependency order
+func executeTerraformAffectedComponent(affected schema.Affected, info schema.ConfigAndStacksInfo, parentComponent string, parentStack string) error {
 	// If the affected component is included as dependent in other components, don't process it now,
 	// it will be processed in the dependency order
 	if !affected.IncludedInDependents {
@@ -205,9 +206,51 @@ func executeTerraformAffectedComponent(affected schema.Affected, info schema.Con
 		info.ComponentFromArg = affected.Component
 		info.Stack = affected.Stack
 
-		l.Debug(fmt.Sprintf("Executing: atmos terraform %s %s -s %s", info.SubCommand, affected.Component, affected.Stack))
+		if parentComponent != "" && parentStack != "" {
+			l.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s' as dependency of component '%s' in stack '%s'",
+				info.SubCommand,
+				affected.Component,
+				affected.Stack,
+				parentComponent,
+				parentStack,
+			))
+		} else {
+			l.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s'",
+				info.SubCommand,
+				affected.Component,
+				affected.Stack,
+			))
+		}
 
-		err := ExecuteTerraform(info)
+		//err := ExecuteTerraform(info)
+		//if err != nil {
+		//	return err
+		//}
+	} else {
+		if parentComponent != "" && parentStack != "" {
+			l.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of component '%s' in stack '%s'",
+				info.SubCommand,
+				affected.Component,
+				affected.Stack,
+				parentComponent,
+				parentStack,
+			))
+		} else {
+			l.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of another component",
+				info.SubCommand,
+				affected.Component,
+				affected.Stack,
+			))
+		}
+	}
+
+	for _, dep := range affected.Dependents {
+		affectedDep := schema.Affected{
+			Component:  dep.Component,
+			Stack:      dep.Stack,
+			Dependents: dep.Dependents,
+		}
+		err := executeTerraformAffectedComponent(affectedDep, info, affected.Component, affected.Stack)
 		if err != nil {
 			return err
 		}
