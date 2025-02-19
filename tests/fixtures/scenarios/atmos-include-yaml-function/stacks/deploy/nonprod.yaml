@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    component-1:
+      metadata:
+        component: mock
+      vars:
+        foo: foo-component-1
+        bar: bar-component-1
+        baz: baz-component-1
+    component-2:
+      metadata:
+        component: mock
+      vars:
+        foo: foo-component-2
+        bar: bar-component-2
+        baz: baz-component-2

@@ -1,0 +1,21 @@
+tests:
+  - name: "terraform !include function"
+    enabled: true
+    tty: true
+    description: "Ensure the !include function works."
+    workdir: "fixtures/scenarios/atmos-include-yaml-function/"
+    command: "atmos"
+    args:
+       - "describe"
+       - "component"
+       - "component-1"
+       - "-s"
+       - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+    expect:
+      exit_code: 0
+      stdout:
+        - ""
+      stderr:
+        - "^$"
