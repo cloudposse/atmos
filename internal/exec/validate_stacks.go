@@ -408,7 +408,7 @@ func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, erro
 
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 
-	if err = downloader.NewGoGetterDownloader(&atmosConfig).Fetch(manifestURL, atmosManifestJsonSchemaFilePath, downloader.ClientModeFile, 30*time.Second); err != nil {
+	if err = downloader.NewGoGetterDownloader(atmosConfig).Fetch(manifestURL, atmosManifestJsonSchemaFilePath, downloader.ClientModeFile, 30*time.Second); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
 
