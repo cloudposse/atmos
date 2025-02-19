@@ -120,6 +120,11 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	if err != nil {
 		return
 	}
+	if len(wrapped) > 2 {
+		wrapped = wrapped[:len(wrapped)-2]
+	} else {
+		wrapped = "" // Or handle accordingly
+	}
 	lines := strings.Split(wrapped, "\n")
 	if len(lines) > 0 {
 		lines = lines[1:]
