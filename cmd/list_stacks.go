@@ -1,17 +1,15 @@
 package cmd
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // listStacksCmd lists atmos stacks
@@ -28,10 +26,10 @@ var listStacksCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listStacks(cmd)
 		if err != nil {
-			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
+			log.Error("error filtering stacks", "error", err)
 			return
 		}
-		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
+		log.Info("stacks list", "output", strings.Join(output, "\n"))
 	},
 }
 
@@ -46,11 +44,13 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
+		log.Error("failed to initialize CLI config", "error", err)
+		return nil, err
 	}
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Error describing stacks: %v", err)
+		log.Error("failed to describe stacks", "error", err)
+		return nil, err
 	}
 
 	output, err := l.FilterAndListStacks(stacksMap, componentFlag)

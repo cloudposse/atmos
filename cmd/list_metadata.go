@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	list "github.com/cloudposse/atmos/pkg/list"
-	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -35,41 +35,35 @@ var listMetadataCmd = &cobra.Command{
 			return
 		}
 
-		logger, err := l.NewLoggerFromCliConfig(atmosConfig)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error initializing logger: %v\n", err)
-			return
-		}
-
 		flags := cmd.Flags()
 
 		queryFlag, err := flags.GetString("query")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get query flag: %v", err))
+			log.Error("failed to get query flag", "error", err)
 			return
 		}
 
 		maxColumnsFlag, err := flags.GetInt("max-columns")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get max-columns flag: %v", err))
+			log.Error("failed to get max-columns flag", "error", err)
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get format flag: %v", err))
+			log.Error("failed to get format flag", "error", err)
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get delimiter flag: %v", err))
+			log.Error("failed to get delimiter flag", "error", err)
 			return
 		}
 
 		stackPattern, err := flags.GetString("stack")
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to get stack pattern flag: %v", err))
+			log.Error("failed to get stack pattern flag", "error", err)
 			return
 		}
 
@@ -81,7 +75,7 @@ var listMetadataCmd = &cobra.Command{
 		// Get all stacks
 		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 		if err != nil {
-			logger.Error(fmt.Errorf("failed to describe stacks: %v", err))
+			log.Error("failed to describe stacks", "error", err)
 			return
 		}
 
@@ -94,14 +88,14 @@ var listMetadataCmd = &cobra.Command{
 		if err != nil {
 			// Check if this is a 'no values found' error
 			if list.IsNoValuesFoundError(err) {
-				logger.Error(err)
+				log.Error("no values found", "error", err)
 			} else {
-				logger.Warning(fmt.Sprintf("Failed to filter and list metadata: %v", err))
+				log.Warn("failed to filter and list metadata", "error", err)
 			}
 			return
 		}
 
-		logger.Info(output)
+		log.Info(output)
 	},
 }
 
