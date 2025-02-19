@@ -4,6 +4,8 @@ tests:
     snapshot: true
     description: "Ensure atmos CLI returns an error for a non-existent command."
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "non-existent"
@@ -14,6 +16,8 @@ tests:
     snapshot: true
     description: "Ensure atmos terraform cli shows usage command"
     workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "terraform"
@@ -24,6 +28,8 @@ tests:
     snapshot: true
     description: "Ensure 'atmos terraform help' shows help output"
     workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "terraform"
@@ -40,6 +46,8 @@ tests:
     snapshot: true
     description: "Ensure atmos terraform --help shows help output"
     workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "terraform"
@@ -56,6 +64,8 @@ tests:
     snapshot: true
     description: "Ensure atmos terraform apply --help shows help output"
     workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "terraform"
@@ -73,6 +83,8 @@ tests:
     snapshot: true
     description: "Ensure atmos terraform help shows help output"
     workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "terraform"
@@ -90,6 +102,8 @@ tests:
     snapshot: true
     description: "Ensure atmos terraform CLI returns an error for a non-existent command."
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "terraform"
@@ -101,6 +115,8 @@ tests:
     snapshot: true
     description: "Ensure atmos terraform CLI returns an error for a non-existent command in non existing workspace."
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "terraform"
@@ -113,6 +129,8 @@ tests:
     snapshot: true
     description: "Ensure atmos terraform CLI returns an error for a non-existent command in existing workspace."
     workdir: "../examples/quick-start-simple"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "terraform"
@@ -134,6 +152,8 @@ tests:
     enabled: true
     description: "Should show usage for helmfile and non-existent subcommand"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "helmfile"
@@ -145,6 +165,8 @@ tests:
     snapshot: true
     description: "Should show help for helmfile"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "helmfile"
@@ -161,6 +183,8 @@ tests:
     snapshot: true
     description: "Should show help for helmfile when using help flag"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "helmfile"
@@ -176,6 +200,8 @@ tests:
     enabled: true
     description: "Should show error in non atmos workspace"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "helmfile"
@@ -188,6 +214,8 @@ tests:
     snapshot: true
     description: "Should show error in atmos workspace"
     workdir: "../examples/demo-helmfile"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "helmfile"
@@ -199,6 +227,8 @@ tests:
     snapshot: true
     description: "Should show help for atmos helmfile apply"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "helmfile"
@@ -216,6 +246,8 @@ tests:
     snapshot: true
     description: "Should show help for atmos helmfile apply --help"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "helmfile"
@@ -233,6 +265,8 @@ tests:
     snapshot: true
     description: "Should show usage atmos atlantis"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -243,6 +277,8 @@ tests:
     snapshot: true
     description: "Should show help 'atmos atlantis help'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -259,6 +295,8 @@ tests:
     snapshot: true
     description: "Should show help 'atmos atlantis --help'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -276,6 +314,8 @@ tests:
     snapshot: true
     description: "Should show usage atmos atlantis"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -287,6 +327,8 @@ tests:
     snapshot: true
     description: "Should show help 'atmos atlantis generate help'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -304,6 +346,8 @@ tests:
     snapshot: true
     description: "Should show help 'atmos atlantis --help'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -321,6 +365,8 @@ tests:
     snapshot: true
     description: "Should show config missing in non atmos workspace 'atmos atlantis generate repo-config'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -338,6 +384,8 @@ tests:
     snapshot: true
     description: "Should show help for 'atmos atlantis generate repo-config help'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -356,6 +404,8 @@ tests:
     snapshot: true
     description: "Should show help for 'atmos atlantis generate repo-config --help'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -379,6 +429,8 @@ tests:
     enabled: true
     description: "Should show usage for 'atmos atlantis generate repo-config non-existent'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: "atmos"
     args:
       - "atlantis"
@@ -429,6 +481,8 @@ tests:
     enabled: true
     description: "Should show usage for 'atmos validate editorconfig non-existent'"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: atmos
     args:
       - "validate"
@@ -441,6 +495,8 @@ tests:
     snapshot: true
     description: "'atmos about non-existent' should show expected message"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: atmos
     args:
       - "about"
@@ -452,6 +508,8 @@ tests:
     snapshot: true
     description: "'atmos about --help' should show help"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: atmos
     args:
       - "about"
@@ -468,6 +526,8 @@ tests:
     snapshot: true
     description: "'atmos version --check --non-existent' should show invalid flag usage"
     workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: atmos
     args:
       - "version"
@@ -480,6 +540,8 @@ tests:
     snapshot: true
     description: "'atmos terraform --help' should show help"
     workdir: "fixtures/scenarios/subcommand-alias"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
     command: atmos
     args:
       - "terraform"

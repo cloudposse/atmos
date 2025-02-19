@@ -20,7 +20,8 @@ Flags:
                                      atmos atlantis generate repo-config
                                      --config-template <config_template>
                                      --project-template <project_template>
-                                     --components <component1>,<component2>
+                                     --components
+                                     <component1>,<component2>
 
         --config-template string     atmos atlantis generate repo-config
                                      --config-template config-1
@@ -40,15 +41,17 @@ Flags:
         --ref string                 Git reference with which to compare the
                                      current branch: atmos atlantis generate
                                      repo-config --affected-only=true --ref
-                                     refs/heads/main. Refer to
-                                     https://git-scm.com/book/en/v2/Git-Internals-Git-References
+                                     refs/heads/main. Refer to 10.3 Git
+                                     Internals Git
+                                     References https://git-scm.com/book/en/v2/Git-Internals-Git-References
                                      for more details
 
         --repo-path string           Filesystem path to the already cloned
                                      target repository with which to compare the
                                      current branch: atmos atlantis generate
                                      repo-config --affected-only=true
-                                     --repo-path <path_to_already_cloned_repo>
+                                     --repo-path
+                                     <path_to_already_cloned_repo>
 
         --sha string                 Git commit SHA with which to compare the
                                      current branch: atmos atlantis generate
@@ -112,18 +115,18 @@ Global Flags:
                                     generate repo-config --affected-only=true
                                     --clone-target-ref=true
                                     The flag is only used when
-                                    '--affected-only=true'
-                                    If set to 'false' (default), the target
+                                    --affected-only=true
+                                    If set to false (default), the target
                                     reference will be checked out instead
                                     This requires that the target reference is
                                     already cloned by Git, and the information
-                                    about it exists in the '.git' directory
+                                    about it exists in the .git directory
                                     (default "false")
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file
-                                    descriptor, including '/dev/stdout',
-                                    '/dev/stderr' and '/dev/null' (default
+                                    descriptor, including /dev/stdout,
+                                    /dev/stderr and /dev/null (default
                                     "/dev/stderr")
 
         --logs-level string         Logs level. Supported log levels are Trace,
@@ -131,10 +134,10 @@ Global Flags:
                                     is set to Off, Atmos will not log any
                                     messages (default "Info")
 
-        --redirect-stderr string    File descriptor to redirect 'stderr' to.
+        --redirect-stderr string    File descriptor to redirect stderr to.
                                     Errors can be redirected to any file or any
                                     standard file descriptor (including
-                                    '/dev/null'): atmos <command>
+                                    /dev/null): atmos <command>
                                     --redirect-stderr /dev/stdout
 
 

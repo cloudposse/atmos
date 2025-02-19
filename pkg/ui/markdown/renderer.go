@@ -54,6 +54,27 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	return r, nil
 }
 
+func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
+	// Render without line wrapping
+	out, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(), // Uses terminal's default style
+		glamour.WithWordWrap(0),
+		glamour.WithColorProfile(r.profile),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return "", err
+	}
+	result := ""
+	if term.IsTTYSupportForStdout() {
+		result, err = out.Render(content)
+	} else {
+		// Fallback to ASCII rendering for non-TTY stdout
+		result, err = r.RenderAsciiWithoutWordWrap(content)
+	}
+	return result, err
+}
+
 // Render renders markdown content to ANSI styled text
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
@@ -87,6 +108,19 @@ func (r *Renderer) Render(content string) (string, error) {
 
 	// Add a single newline at the end plus extra spacing
 	return strings.Join(result, "\n"), nil
+}
+
+func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithWordWrap(0),
+		glamour.WithColorProfile(r.profile),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return "", err
+	}
+	return renderer.Render(content)
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {

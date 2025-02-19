@@ -18,9 +18,9 @@ var listWorkflowsCmd = &cobra.Command{
 	Short: "List all Atmos workflows",
 	Long:  "List Atmos workflows, with options to filter results by specific files.",
 	Example: "atmos list workflows\n" +
-		"atmos list workflows -f <file>\n" +
+		"atmos list workflows -f &ltfile&gt\n" +
 		"atmos list workflows --format json\n" +
-		"atmos list workflows --format csv --delimiter ','",
+		"atmos list workflows --format csv --delimiter `,`",
 	Run: func(cmd *cobra.Command, args []string) {
 		flags := cmd.Flags()
 

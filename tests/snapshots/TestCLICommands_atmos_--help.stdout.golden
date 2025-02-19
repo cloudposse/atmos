@@ -38,8 +38,8 @@ Flags:
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file
-                                    descriptor, including '/dev/stdout',
-                                    '/dev/stderr' and '/dev/null' (default
+                                    descriptor, including /dev/stdout,
+                                    /dev/stderr and /dev/null (default
                                     "/dev/stderr")
 
         --logs-level string         Logs level. Supported log levels are Trace,
@@ -47,10 +47,10 @@ Flags:
                                     is set to Off, Atmos will not log any
                                     messages (default "Info")
 
-        --redirect-stderr string    File descriptor to redirect 'stderr' to.
+        --redirect-stderr string    File descriptor to redirect stderr to.
                                     Errors can be redirected to any file or any
                                     standard file descriptor (including
-                                    '/dev/null'): atmos <command>
+                                    /dev/null): atmos <command>
                                     --redirect-stderr /dev/stdout
 
 

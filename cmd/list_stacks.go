@@ -20,7 +20,7 @@ var listStacksCmd = &cobra.Command{
 	Short: "List all Atmos stacks or stacks for a specific component",
 	Long:  "This command lists all Atmos stacks, or filters the list to show only the stacks associated with a specified component.",
 	Example: "atmos list stacks\n" +
-		"atmos list stacks -c <component>",
+		"atmos list stacks -c &ltcomponent&gt",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -37,7 +37,7 @@ var listStacksCmd = &cobra.Command{
 
 func init() {
 	listStacksCmd.DisableFlagParsing = false
-	listStacksCmd.PersistentFlags().StringP("component", "c", "", "atmos list stacks -c <component>")
+	listStacksCmd.PersistentFlags().StringP("component", "c", "", "atmos list stacks -c &ltcomponent&gt")
 	listCmd.AddCommand(listStacksCmd)
 }
 

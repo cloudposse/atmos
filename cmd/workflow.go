@@ -20,9 +20,9 @@ var workflowCmd = &cobra.Command{
 	Short: "Run predefined tasks using workflows",
 	Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
 	Example: "atmos workflow\n" +
-		"atmos workflow <name> --file <file>\n" +
-		"atmos workflow <name> --file <file> --stack <stack>\n" +
-		"atmos workflow <name> --file <file> --from-step <step-name>\n\n" +
+		"atmos workflow &ltname&gt --file &ltfile&gt\n" +
+		"atmos workflow &ltname&gt --file &ltfile&gt --stack &ltstack&gt\n" +
+		"atmos workflow &ltname&gt --file &ltfile&gt --from-step &ltstep-name&gt\n\n" +
 		"To resume the workflow from this step, run:\n" +
 		"atmos workflow deploy-infra --file workflow1 --from-step deploy-vpc\n\n" +
 		"For more details refer to https://atmos.tools/cli/commands/workflow/",
@@ -64,11 +64,11 @@ var workflowCmd = &cobra.Command{
 
 func init() {
 	workflowCmd.DisableFlagParsing = false
-	workflowCmd.PersistentFlags().StringP("file", "f", "", "atmos workflow <name> --file <file>")
-	workflowCmd.PersistentFlags().Bool("dry-run", false, "atmos workflow <name> --file <file> --dry-run")
-	workflowCmd.PersistentFlags().StringP("stack", "s", "", "atmos workflow <name> --file <file> --stack <stack>")
+	workflowCmd.PersistentFlags().StringP("file", "f", "", "atmos workflow &ltname&gt --file &ltfile&gt")
+	workflowCmd.PersistentFlags().Bool("dry-run", false, "atmos workflow &ltname&gt --file &ltfile&gt --dry-run")
+	workflowCmd.PersistentFlags().StringP("stack", "s", "", "atmos workflow &ltname&gt --file &ltfile&gt --stack &ltstack&gt")
 	AddStackCompletion(workflowCmd)
-	workflowCmd.PersistentFlags().String("from-step", "", "atmos workflow <name> --file <file> --from-step <step-name>")
+	workflowCmd.PersistentFlags().String("from-step", "", "atmos workflow &ltname&gt --file &ltfile&gt --from-step &ltstep-name&gt")
 
 	RootCmd.AddCommand(workflowCmd)
 }
