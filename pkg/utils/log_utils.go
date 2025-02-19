@@ -49,11 +49,12 @@ func LogErrorAndExit(err error) {
 
 // LogError logs errors to std.Error
 func LogError(err error) {
-	l.Error(err)
-
-	// Print stack trace
-	if l.GetLevel() == l.DebugLevel {
-		debug.PrintStack()
+	if err != nil {
+		l.Error(err)
+		// Print stack trace
+		if l.GetLevel() == l.DebugLevel {
+			debug.PrintStack()
+		}
 	}
 }
 
