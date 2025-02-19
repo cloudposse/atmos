@@ -89,10 +89,10 @@ jobs:
 
   vhs:
     needs: [prepare]
-    #runs-on: ubuntu-24.04
-    runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=large
+    runs-on: ubuntu-24.04
+    #runs-on:
+    #  - runs-on=${{ github.run_id }}
+    #  - runner=large
 
     # Longer timeouts typically indicate VHS has hung
     timeout-minutes: 20
@@ -198,7 +198,7 @@ jobs:
       - name: Set up FFmpeg (Latest release)
         uses: FedericoCarboni/setup-ffmpeg@v3.1
         with:
-          ffmpeg-version: "release" # Installs the latest release version
+          ffmpeg-version: "7.1"
           github-token: ${{ secrets.GITHUB_TOKEN }} # Optional: helps prevent rate limit errors
 
       - name: Record screencast
