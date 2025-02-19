@@ -8,7 +8,6 @@ import (
 // FileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
 type FileDownloader interface {
-
 	// Fetch fetches content from a given source and saves it to the destination
 	Fetch(src, dest string, mode ClientMode, timeout time.Duration) error
 
