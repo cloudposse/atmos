@@ -238,7 +238,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if err != nil {
 		l.Debug("Masking failed", "error", err)
 	} else {
-		l.Debug("Final URL", "final_url", "git::"+maskedFinal)
+		l.Debug("normalized SSH vendor URL ", "url", "git::"+maskedFinal)
 	}
 
 	return finalURL, true, nil
