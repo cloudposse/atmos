@@ -176,33 +176,40 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	cliArgs.Query = ""
 
 	// https://atmos.tools/cli/commands/describe/affected
-	affected, _, _, _, err := ExecuteDescribeAffected(cliArgs)
+	affectedList, _, _, _, err := ExecuteDescribeAffected(cliArgs)
 	if err != nil {
 		return err
 	}
 
-	affectedYaml, err := u.ConvertToYAML(affected)
+	affectedYaml, err := u.ConvertToYAML(affectedList)
 	if err != nil {
 		return err
 	}
 	l.Debug("Affected components:\n" + affectedYaml)
 
-	for _, a := range affected {
-		// If the affected component is included as dependent in other components, don't process it now,
-		// it will be processed in the dependency order
-		if a.IncludedInDependents {
-			continue
-		}
-
-		info.Component = a.Component
-		info.ComponentFromArg = a.Component
-		info.Stack = a.Stack
-
-		l.Debug(fmt.Sprintf("Executing: atmos terraform %s %s -s %s", info.SubCommand, a.Component, a.Stack))
-
-		err = ExecuteTerraform(info)
+	for _, affected := range affectedList {
+		err = executeTerraformAffectedComponent(affected, info)
 		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
+			return err
+		}
+	}
+
+	return nil
+}
+
+func executeTerraformAffectedComponent(affected schema.Affected, info schema.ConfigAndStacksInfo) error {
+	// If the affected component is included as dependent in other components, don't process it now,
+	// it will be processed in the dependency order
+	if !affected.IncludedInDependents {
+		info.Component = affected.Component
+		info.ComponentFromArg = affected.Component
+		info.Stack = affected.Stack
+
+		l.Debug(fmt.Sprintf("Executing: atmos terraform %s %s -s %s", info.SubCommand, affected.Component, affected.Stack))
+
+		err := ExecuteTerraform(info)
+		if err != nil {
+			return err
 		}
 	}
 

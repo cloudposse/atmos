@@ -997,10 +997,12 @@ func processArgsAndFlags(
 
 		if arg == cfg.AffectedFlag {
 			info.Affected = true
+			info.SubCommand = inputArgsAndFlags[0]
 		}
 
 		if arg == cfg.AllFlag {
 			info.All = true
+			info.SubCommand = inputArgsAndFlags[0]
 		}
 
 		for _, f := range commonFlags {
