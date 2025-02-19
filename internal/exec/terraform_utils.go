@@ -142,3 +142,21 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 	}
 	return u.SliceContainsString(commandsThatNeedFuncProcessing, command)
 }
+
+// isWorkspacesEnabled checks if workspaces are enabled for a component
+// Workspaces are enabled by default except for:
+// 1. When explicitly disabled via workspaces_enabled: false
+// 2. When using HTTP backend (which doesn't support workspaces)
+func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	// Check if workspaces are explicitly disabled
+	if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && !*atmosConfig.Components.Terraform.WorkspacesEnabled {
+		return false
+	}
+
+	// Check if using HTTP backend
+	if info.ComponentBackendType == "http" {
+		return false
+	}
+
+	return true
+}
