@@ -96,7 +96,6 @@ var listSettingsCmd = &cobra.Command{
 		}
 
 		log.Info(output)
-
 	},
 }
 
