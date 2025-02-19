@@ -38,7 +38,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
-	github.com/lrstanley/bubblezone v0.0.0-20250208020128-be525e7e10ed
+	github.com/lrstanley/bubblezone v0.0.0-20250219025839-4a28266a24d6
 	github.com/mikefarah/yq/v4 v4.45.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/go-wordwrap v1.0.1
