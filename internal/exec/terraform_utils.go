@@ -222,10 +222,11 @@ func executeTerraformAffectedComponent(affected schema.Affected, info schema.Con
 			))
 		}
 
-		//err := ExecuteTerraform(info)
-		//if err != nil {
-		//	return err
-		//}
+		// Execute the terraform command for the affected component
+		err := ExecuteTerraform(info)
+		if err != nil {
+			return err
+		}
 	} else {
 		if parentComponent != "" && parentStack != "" {
 			l.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of component '%s' in stack '%s'",
