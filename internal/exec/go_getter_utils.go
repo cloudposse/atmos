@@ -133,14 +133,6 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 		parsedURL.Path = filepath.ToSlash(parsedURL.Path)
 	}
 
-	// If the URL uses the SSH scheme, check for an active SSH agent.
-	// Unlike HTTPS where public repos can be accessed without authentication,
-	// SSH requires authentication. An SSH agent being one of the popular ones, so we log a debug message in case it is missing (could be false alert thoguh).
-	if parsedURL.Scheme == "ssh" && os.Getenv("SSH_AUTH_SOCK") == "" {
-		maskedSrc, _ := u.MaskBasicAuth(src)
-		l.Debug("SSH agent-based authentication may not work because SSH_AUTH_SOCK is not set", "url", maskedSrc)
-	}
-
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
 	host := strings.ToLower(parsedURL.Host)
 	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
