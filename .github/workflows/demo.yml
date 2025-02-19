@@ -204,6 +204,7 @@ jobs:
       - name: Record screencast
         working-directory: demo/recordings
         run: |
+          echo "PATH=$PATH" > /tmp/path.sh
           ffmpeg -version
           go run studio.go build
           cp demo/recordings/gif/atmos.gif docs/demo.gif
