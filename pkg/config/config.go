@@ -2,11 +2,9 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -17,12 +15,6 @@ import (
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-	// atmosConfig is loaded from the following locations (from lower to higher priority):
-	// system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
-	// home dir (~/.atmos)
-	// current directory
-	// ENV vars
-	// Command-line arguments
 
 	atmosConfig, err := LoadConfig(configAndStacksInfo)
 	if err != nil {
@@ -141,38 +133,4 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
-}
-
-// https://github.com/NCAR/go-figure
-// https://github.com/spf13/viper/issues/181
-// https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
-func processConfigFile(
-	atmosConfig schema.AtmosConfiguration,
-	path string,
-	v *viper.Viper,
-) (bool, error) {
-	// Check if the config file exists
-	configPath, fileExists := u.SearchConfigFile(path)
-	if !fileExists {
-		return false, nil
-	}
-
-	reader, err := os.Open(configPath)
-	if err != nil {
-		return false, err
-	}
-
-	defer func(reader *os.File) {
-		err := reader.Close()
-		if err != nil {
-			u.LogWarning(fmt.Sprintf("error closing file '%s'. %v", configPath, err))
-		}
-	}(reader)
-
-	err = v.MergeConfig(reader)
-	if err != nil {
-		return false, err
-	}
-
-	return true, nil
 }
