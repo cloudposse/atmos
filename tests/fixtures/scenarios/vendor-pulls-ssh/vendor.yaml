@@ -27,7 +27,7 @@ spec:
 
     # SSH implicit
     - component: "terraform-null-label-cred"
-      source: "github.com:cloudposse/terraform-null-label.git?ref={{ .Version }}"
+      source: "github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
       version: "0.25.0"
       targets:
         - "library/cred/{{ .Component }}"

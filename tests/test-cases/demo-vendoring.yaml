@@ -72,7 +72,7 @@ tests:
       - "--logs-level=Debug"
       - "--dry-run"
     env:
-      ATMOS_GITHUB_TOKEN: "supersecret"
+      ATMOS_GITHUB_TOKEN: supersecret
     expect:
       diff: []
       exit_code: 0
