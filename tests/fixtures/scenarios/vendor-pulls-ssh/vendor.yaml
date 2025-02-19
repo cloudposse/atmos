@@ -25,9 +25,9 @@ spec:
       tags:
         - demo
 
-    # HTTPS with pre-existing credentials (token injection skipped)
+    # SSH implicit
     - component: "terraform-null-label-cred"
-      source: "https://git@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
+      source: "github.com:cloudposse/terraform-null-label.git?ref={{ .Version }}"
       version: "0.25.0"
       targets:
         - "library/cred/{{ .Component }}"

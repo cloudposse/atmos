@@ -41,10 +41,10 @@ tests:
       exit_code: 0
 
   - name: atmos vendor pull ssh
-    enabled: false
+    enabled: true
     snapshot: true
     tty: false
-    description: "Dry-run vendoring with SSH style URL; no SSH key provided, so tokens are not used"
+    description: "Dry-run vendoring with SSH style URL (that's being verified and prepended with ssh prefix by atmos)"
     workdir: "fixtures/scenarios/vendor-pulls-ssh"
     command: "atmos"
     args:
@@ -52,12 +52,31 @@ tests:
       - "pull"
       - "--logs-level=Debug"
       - "--dry-run"
+    env:
+      ATMOS_GITHUB_TOKEN: "supersecret"
     expect:
       diff: []
-      stderr:
-        - "No SSH authentication method found"  
       exit_code: 0
-      
+
+  - name: atmos vendor pull ssh component
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Dry-run for component vendoring"
+    workdir: "fixtures/scenarios/vendoring-dry-run"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--component=ipinfo"
+      - "--logs-level=Debug"
+      - "--dry-run"
+    env:
+      ATMOS_GITHUB_TOKEN: "supersecret"
+    expect:
+      diff: []
+      exit_code: 0
+
   - name: atmos vendor pull custom detector credentials leakage
     enabled: true
     snapshot: true
