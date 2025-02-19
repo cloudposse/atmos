@@ -18,15 +18,6 @@ var listValuesCmd = &cobra.Command{
 	Use:   "values [component]",
 	Short: "List component values across stacks",
 	Long:  "List values for a component across all stacks where it is used",
-	Example: "atmos list values vpc\n" +
-		"atmos list values vpc --query .vars\n" +
-		"atmos list values vpc --abstract\n" +
-		"atmos list values vpc --max-columns 5\n" +
-		"atmos list values vpc --format json\n" +
-		"atmos list values vpc --format yaml\n" +
-		"atmos list values vpc --format csv\n" +
-		"atmos list values vpc --stack '*-dev-*'\n" +
-		"atmos list values vpc --stack 'prod-*'",
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
