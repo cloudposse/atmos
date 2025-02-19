@@ -15,8 +15,9 @@ script.
 
 Currently, the following stores are supported:
 
-- [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
 - [Artifactory](https://jfrog.com/artifactory/)
+- [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
+- [Google Secret Manager](https://cloud.google.com/secret-manager)
 - [Redis](https://redis.io/)
 </Intro>
 
@@ -71,7 +72,7 @@ stores:
   <dt>`stores.[store_name].options.url (required)`</dt>
   <dd>The URL of the Artifactory instance.</dd>
 
-  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
   <dd>
     The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
     key path for the store.
@@ -117,7 +118,7 @@ stores:
   <dt>`stores.[store_name].options.region (required)`</dt>
   <dd>The AWS region to use for the SSM Parameter Store.</dd>
 
-  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
   <dd>
     The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
     key path for the store.
@@ -128,6 +129,71 @@ stores:
 
 The AWS SSM Parameter Store supports the standard AWS methods for authentication and the `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables.
+
+### Google Secret Manager
+
+```yaml
+stores:
+  dev/gsm:
+    type: google-secret-manager
+    options:
+      project_id: my-project-id
+      prefix: atmos/dev
+      credentials: !env GOOGLE_CREDENTIALS_JSON  # Optional: JSON credentials string
+
+  prod/gsm:
+    type: gsm  # Alias for google-secret-manager
+    options:
+      project_id: my-prod-project
+      prefix: atmos/prod
+      # Uses Application Default Credentials
+```
+
+<dl>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to either `google-secret-manager` or its alias `gsm`</dd>
+
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For Google Secret Manager, the following options are supported:</dd>
+
+  <dt>`stores.[store_name].options.project_id (required)`</dt>
+  <dd>The Google Cloud project ID where the secrets are stored.</dd>
+
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix path that will be added to all keys stored or retrieved from Secret Manager. For example if the prefix
+  is `atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
+
+  <dt>`stores.[store_name].options.credentials (optional)`</dt>
+  <dd>A JSON string containing Google service account credentials. If not provided, Application Default Credentials will be used.</dd>
+
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
+</dl>
+
+#### Authentication
+
+Google Secret Manager supports multiple authentication methods:
+
+1. **Application Default Credentials (ADC)**: If no credentials are specified, the store will use ADC which can be set up by:
+   - Running `gcloud auth application-default login` for local development
+   - Using service account attached to GCP resources (like GCE instances)
+   - Setting the `GOOGLE_APPLICATION_CREDENTIALS` environment variable pointing to a service account key file
+
+2. **Direct Credentials**: You can provide service account credentials directly in the configuration using the `credentials` option.
+   This is not recommended for production use. Instead, use the `!env` function to read credentials from an environment variable:
+   ```yaml
+   credentials: !env GOOGLE_CREDENTIALS_JSON
+   ```
+
+3. **Workload Identity**: When running in GCP, you can use Workload Identity which automatically handles authentication
+   between GCP services.
 
 ### Redis
 
@@ -169,7 +235,7 @@ stores:
     URL is specified in the options.
   </dd>
 
-  <dt>`stores.[store_name].options.stacks_delimiter (optional)`</dt>
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
   <dd>
     The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
     key path for the store.
