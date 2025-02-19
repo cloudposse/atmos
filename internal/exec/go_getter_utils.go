@@ -203,7 +203,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 		}
 		parsedURL.User = url.UserPassword(defaultUsername, token)
 		maskedURL, _ := u.MaskBasicAuth(parsedURL.String())
-		l.Debug("Injected token", "env", tokenSource, "url", maskedURL)
+		l.Debug("Injected token in vendor URL", "env", tokenSource, "url", maskedURL)
 	} else {
 		l.Debug("No token found for injection")
 	}
