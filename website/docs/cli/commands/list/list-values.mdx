@@ -1,0 +1,113 @@
+---
+title: "atmos list values"
+id: "list-values"
+---
+
+# atmos list values
+
+The `atmos list values` command displays component values across all stacks where the component is used.
+
+## Usage
+
+```shell
+atmos list values [component] [flags]
+```
+
+## Description
+
+The `atmos list values` command helps you inspect component values across different stacks. It provides a tabular view where:
+
+- Each column represents a stack (e.g., dev-ue1, staging-ue1, prod-ue1)
+- Each row represents a key in the component's configuration
+- Cells contain the values for each key in each stack
+
+The command is particularly useful for:
+- Comparing component configurations across different environments
+- Verifying values are set correctly in each stack
+- Understanding how a component is configured across your infrastructure
+
+## Flags
+
+<dl>
+  <dt>`--query string`</dt>
+  <dd>JMESPath query to filter values (e.g., `.vars` to show only variables)</dd>
+  <dt>`--abstract`</dt>
+  <dd>Include abstract components in the output</dd>
+  <dt>`--max-columns int`</dt>
+  <dd>Maximum number of columns to display (default: `10`)</dd>
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `csv`, `tsv` (default: `table`)</dd>
+  <dt>`--delimiter string`</dt>
+  <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
+</dl>
+
+## Examples
+
+List all values for a component:
+```shell
+atmos list values vpc
+```
+
+List only variables for a component (using the alias):
+```shell
+atmos list vars vpc
+```
+
+List values with a custom JMESPath query:
+```shell
+# Query specific variables
+atmos list values vpc --query .vars.enabled
+
+# Query environment settings
+atmos list values vpc --query .vars.environment
+
+# Query network configuration
+atmos list values vpc --query .vars.ipv4_primary_cidr_block
+```
+
+Include abstract components:
+```shell
+atmos list values vpc --abstract
+```
+
+Limit the number of columns:
+```shell
+atmos list values vpc --max-columns 5
+```
+
+Output in different formats:
+```shell
+# JSON format for machine processing
+atmos list values vpc --format json
+
+# CSV format for spreadsheet compatibility
+atmos list values vpc --format csv
+
+# TSV format with tab delimiters
+atmos list values vpc --format tsv
+
+# Note: Use JSON or CSV formats when dealing with wide datasets
+# The table format will show a width error if the data is too wide for your terminal
+```
+
+## Example Output
+
+```shell
+> atmos list vars vpc
+┌──────────────┬──────────────┬──────────────┬──────────────┐
+│              │   dev-ue1    │  staging-ue1 │   prod-ue1   │
+├──────────────┼──────────────┼──────────────┼──────────────┤
+│ enabled      │ true         │ true         │ true         │
+│ name         │ dev-vpc      │ staging-vpc  │ prod-vpc     │
+│ cidr_block   │ 10.0.0.0/16  │ 10.1.0.0/16  │ 10.2.0.0/16  │
+│ environment  │ dev          │ staging      │ prod         │
+│ namespace    │ example      │ example      │ example      │
+│ stage        │ dev          │ staging      │ prod         │
+│ region       │ us-east-1    │ us-east-1    │ us-east-1    │
+└──────────────┴──────────────┴──────────────┴──────────────┘
+```
+
+## Related Commands
+
+- [atmos list components](/cli/commands/list/component) - List available components
+- [atmos describe component](/cli/commands/describe/component) - Show detailed information about a component
