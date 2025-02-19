@@ -16,13 +16,13 @@ func processHelp(
 	if len(command) == 0 {
 		u.PrintMessage(fmt.Sprintf("Atmos supports all native '%s' commands.\n", componentType))
 		u.PrintMessage("In addition, the 'component' argument and 'stack' flag are required to generate the variables and backend config for the component in the stack.\n")
-		u.PrintMessage(fmt.Sprintf("atmos %s &lt;command&gt; <component> -s <stack> [options]", componentType))
-		u.PrintMessage(fmt.Sprintf("atmos %s &lt;command&gt; <component> --stack <stack> [options]", componentType))
+		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> -s <stack> [options]", componentType))
+		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> --stack <stack> [options]", componentType))
 		if componentType == "helmfile" {
 			u.PrintMessage("\nAdditions and differences from native helmfile:")
 			u.PrintMessage(" - 'atmos helmfile generate varfile' command generates a varfile for the component in the stack")
 			u.PrintMessage(" - 'atmos helmfile' commands support '[global options]' using the command-line flag '--global-options'. " +
-				"Usage: atmos helmfile &lt;command&gt; <component> -s <stack> [command options] [arguments] --global-options=\"--no-color --namespace=test\"")
+				"Usage: atmos helmfile <command> <component> -s <stack> [command options] [arguments] --global-options=\"--no-color --namespace=test\"")
 			u.PrintMessage(" - before executing the 'helmfile' commands, 'atmos' runs 'aws eks update-kubeconfig' to read kubeconfig from " +
 				"the EKS cluster and use it to authenticate with the cluster. This can be disabled in 'atmos.yaml' CLI config " +
 				"by setting 'components.helmfile.use_eks' to 'false'")
