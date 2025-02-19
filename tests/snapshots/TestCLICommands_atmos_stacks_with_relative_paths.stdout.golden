@@ -1,4 +1,5 @@
 acme-platform-dev:
+    atmos_stack_file: orgs/acme/platform/dev
     components:
         terraform:
             myapp:
@@ -31,6 +32,7 @@ acme-platform-dev:
                     units: m
                 workspace: acme-platform-dev
 acme-platform-prod:
+    atmos_stack_file: orgs/acme/platform/prod
     components:
         terraform:
             myapp:
@@ -63,6 +65,7 @@ acme-platform-prod:
                     units: m
                 workspace: acme-platform-prod
 acme-platform-staging:
+    atmos_stack_file: orgs/acme/platform/staging
     components:
         terraform:
             myapp:

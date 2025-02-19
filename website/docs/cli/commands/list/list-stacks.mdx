@@ -44,3 +44,96 @@ atmos list stacks -c vpc
 | Flag             | Description                                                                                                                                                                                                                               | Alias | Required |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|----------|
 | `--component`    | Atmos component                                                                                                                                                                                                                         | `-c`  | no       |
+| `--format`      | Output format (table, json, csv, tsv). Default is table format with TTY-aware styling                                                                                                                                                    | `-f`  | no       |
+| `--delimiter`   | Delimiter for table and csv formats. Default is tab for table, comma for csv                                                                                                                                                           | `-d`  | no       |
+
+## Display Format
+
+The command output can be customized using template variables in your `atmos.yaml` configuration. Here's an example of how to configure the display format to adds custom fields called "Stack", "Tenant", "Environment", and "File:
+
+```yaml
+stacks:
+  list:
+    columns:
+      # Direct access to stack properties
+      - name: Stack
+        value: '{{ .atmos_stack }}'
+      - name: Component
+        value: '{{ .atmos_component }}'
+      - name: Stack File
+        value: '{{ .atmos_stack_file }}'
+      
+      # Access to variables using index
+      - name: Tenant
+        value: '{{ index .vars "tenant" }}'
+      - name: Environment
+        value: '{{ index .vars "environment" }}'
+      - name: Stage
+        value: '{{ index .vars "stage" }}'
+      
+      # Access to nested component properties
+      - name: Component Type
+        value: '{{ index .components "terraform" }}'
+      - name: Component Settings
+        value: '{{ index .components "terraform" "settings" }}'
+```
+
+This example assumes that every component defines `vars.tenant` and `vars.environment`. While [Cloud Posse's Reference Architecture](https://docs.cloudposse.com) follows this convention, any well-defined convention will work.
+:::tip Using the `index` Function
+When accessing variables that might not be defined in all stacks, it's recommended to use the Go template `index` function instead of direct access. For example:
+
+- Safe: `{{ index .vars "tenant" }}`
+- Unsafe: `{{ .vars.tenant }}`
+
+The `index` function provides a safer way to access map values as it won't cause a template error if the key doesn't exist. This is particularly useful when dealing with optional variables or when different stacks might have different variable sets.
+:::
+
+## Default Display
+
+By default, the command displays the following columns for each stack:
+- Stack: The name of the stack
+- File: The path to the stack file
+
+You can customize the displayed columns using the `list.stacks.columns` configuration in `atmos.yaml`.
+
+Example of default output:
+```bash
+Stack     File
+dev      examples/quick-start-simple/stacks/deploy/dev.yaml
+prod     examples/quick-start-simple/stacks/deploy/prod.yaml
+staging  examples/quick-start-simple/stacks/deploy/staging.yaml
+```
+
+### Example Output
+
+```shell
+$ atmos list stacks
+STACK                  TENANT
+dev                    acme
+staging                acme
+prod                   acme-corp
+```
+
+## Output Behavior
+
+### Terminal Output
+When running in an interactive terminal session, the command provides formatted tabular output with proper column alignment and optional colors (if configured).
+
+### Redirections and Pipes
+When the output is redirected to a file or piped to another command (e.g., `atmos list stacks > stacks.txt` or `atmos list stacks | grep dev`), the command automatically adjusts its output format:
+
+- Table formatting is simplified to ensure consistent spacing
+- ANSI color codes are automatically disabled
+- Output is optimized for machine readability and further processing
+
+### Non-TTY Environment
+In non-interactive environments (when no TTY is attached), such as in CI/CD pipelines or when running through automation tools, the command:
+
+- Disables interactive features
+- Uses a simplified output format
+- Ensures consistent machine-readable output
+
+:::tip
+When scripting or automating `atmos list stacks`, consider using the `--format json` or `--format yaml` flags for more predictable and parseable output.
+:::
+

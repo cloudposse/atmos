@@ -42,6 +42,11 @@ func TestValidateFormat(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid tsv format",
+			format:  "tsv",
+			wantErr: false,
+		},
+		{
 			name:    "invalid format",
 			format:  "invalid",
 			wantErr: true,
@@ -68,7 +73,7 @@ func TestListWorkflows(t *testing.T) {
 
 	// Create workflow directory structure
 	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
-	err = os.MkdirAll(workflowsDir, 0755)
+	err = os.MkdirAll(workflowsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create atmos.yaml with workflow configuration
@@ -81,7 +86,7 @@ stacks:
 workflows:
   base_path: "stacks/workflows"
 `
-	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
 	require.NoError(t, err)
 
 	// Create an empty workflow file
@@ -92,7 +97,7 @@ workflows:
 	}
 	emptyWorkflowBytes, err := yaml.Marshal(emptyWorkflow)
 	require.NoError(t, err)
-	err = os.WriteFile(emptyWorkflowFile, emptyWorkflowBytes, 0644)
+	err = os.WriteFile(emptyWorkflowFile, emptyWorkflowBytes, 0o644)
 	require.NoError(t, err)
 
 	// Create a networking workflow file
@@ -110,7 +115,7 @@ workflows:
 	}
 	networkingWorkflowBytes, err := yaml.Marshal(networkingWorkflow)
 	require.NoError(t, err)
-	err = os.WriteFile(networkingWorkflowFile, networkingWorkflowBytes, 0644)
+	err = os.WriteFile(networkingWorkflowFile, networkingWorkflowBytes, 0o644)
 	require.NoError(t, err)
 
 	// Create a validation workflow file
@@ -128,7 +133,7 @@ workflows:
 	}
 	validationWorkflowBytes, err := yaml.Marshal(validationWorkflow)
 	require.NoError(t, err)
-	err = os.WriteFile(validationWorkflowFile, validationWorkflowBytes, 0644)
+	err = os.WriteFile(validationWorkflowFile, validationWorkflowBytes, 0o644)
 	require.NoError(t, err)
 
 	// Change to the temporary directory for testing
@@ -302,7 +307,7 @@ func TestListWorkflowsWithFile(t *testing.T) {
 	}
 	testWorkflowBytes, err := yaml.Marshal(testWorkflow)
 	require.NoError(t, err)
-	err = os.WriteFile(testWorkflowFile, testWorkflowBytes, 0644)
+	err = os.WriteFile(testWorkflowFile, testWorkflowBytes, 0o644)
 	require.NoError(t, err)
 
 	listConfig := schema.ListConfig{
