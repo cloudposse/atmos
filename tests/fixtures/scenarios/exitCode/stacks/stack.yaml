@@ -2,12 +2,12 @@ components:
   terraform:
     component1:
       metadata:
-        component: hook-and-store
+        component: exit-code
       vars:
         stage: test
     component2:
       metadata:
-        component: hook-and-store
+        component: exit-code
       vars:
         stage: test
         exit_code: 1
