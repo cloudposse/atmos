@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	l "github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
@@ -66,12 +67,18 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
-			// Simulate the action
-			time.Sleep(100 * time.Millisecond)
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
+			l.Debug("Entering dry-run flow for component vendoring", "component", p.name)
+			return func() tea.Msg {
+				detector := &CustomGitDetector{AtmosConfig: atmosConfig}
+				_, _, err := detector.Detect(p.uri, "")
+				if err != nil {
+					return installedPkgMsg{
+						err:  fmt.Errorf("dry-run: detection failed: %w", err),
+						name: p.name,
+					}
+				}
+				return installedPkgMsg{err: nil, name: p.name}
+			}()
 		}
 		if p.IsComponent {
 			err := installComponent(p, atmosConfig)
