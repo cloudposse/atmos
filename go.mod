@@ -25,6 +25,7 @@ require (
 	github.com/go-git/go-git/v5 v5.13.2
 	github.com/gofrs/flock v0.12.1
 	github.com/google/go-containerregistry v0.20.3
+	github.com/google/go-github/v55 v55.0.0
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
@@ -44,12 +45,15 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/muesli/termenv v0.15.3-0.20240618155329-98d742f6907a
+	github.com/ncruces/go-strftime v0.1.9
 	github.com/open-policy-agent/opa v1.1.0
+	github.com/opencontainers/image-spec v1.1.0
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/samber/lo v1.49.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
+	github.com/sashabaranov/go-openai v1.37.0
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.6
@@ -63,6 +67,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/sh/v3 v3.10.0
+	oras.land/oras-go/v2 v2.3.1
 )
 
 require (
@@ -234,7 +239,6 @@ require (
 	github.com/nwaples/rardecode v1.1.3 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
@@ -309,6 +313,5 @@ require (
 	inet.af/netaddr v0.0.0-20230525184311-b8eac61e914a // indirect
 	k8s.io/client-go v0.26.2 // indirect
 	k8s.io/utils v0.0.0-20230220204549-a5ecb0141aa5 // indirect
-	oras.land/oras-go/v2 v2.3.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
