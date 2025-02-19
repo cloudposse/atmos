@@ -1,0 +1,249 @@
+name: Demo
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, opened, synchronize]
+    paths:
+      - ".github/workflows/demo.yml"
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+
+env:
+  TERM: "xterm-256color"
+  COLORTERM: "truecolor"
+  LANG: "en_US.UTF-8"
+  ATMOS_LOGS_LEVEL: "Info"
+  TERRAFORM_VERSION: "1.9.7"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get Atmos version
+        id: get-version
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+
+  screengrabs:
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aha util-linux make jq bat
+          sudo ln -s /usr/bin/batcat /usr/bin/bat
+
+      - name: Set Git Preferences for windows
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Atmos
+        uses: jaxxstorm/action-install-gh-release@v1.11.0
+        with:
+          repo: cloudposse/atmos
+          tag: ${{ needs.prepare.outputs.version }}
+          chmod: 0755
+          extension-matching: disable
+          rename-to: atmos
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Run make build-all install
+        run: |
+          make -C demo/screengrabs build-all install
+          git add -A
+          git status
+
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
+          title: "Update screengrabs for ${{ needs.prepare.outputs.version }}"
+          delete-branch: true
+          sign-commits: true
+          commit-message: |
+            chore: update screengrabs for ${{ needs.prepare.outputs.version }}
+          body: |
+            This PR updates the screengrabs for Atmos version ${{ needs.prepare.outputs.version }}.
+          base: main
+          labels: "no-release"
+
+  vhs:
+    needs: [prepare]
+    runs-on: ubuntu-24.04
+    #runs-on:
+    #  - runs-on=${{ github.run_id }}
+    #  - runner=large
+
+    # Longer timeouts typically indicate VHS has hung
+    timeout-minutes: 20
+    environment: demo
+    env:
+      AWS_REGION: us-east-2
+    steps:
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+          limit-access-to-actor: true
+      # Determine environment-specific settings
+      - name: Set Environment Variables
+        id: set-env
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "IAM_ROLE_ARN=arn:aws:iam::557075604627:role/cplive-plat-ue2-prod-atmos-docs-gha" >> $GITHUB_ENV
+            echo "IAM_ROLE_SESSION_NAME=cloudposse-atmos-ci-deploy-release" >> $GITHUB_ENV
+            echo "S3_BUCKET_NAME=cplive-plat-ue2-prod-atmos-docs-origin" >> $GITHUB_ENV
+            echo "S3_PATH=assets" >> $GITHUB_ENV
+            echo "BASE_URL=https://atmos.tools/assets" >> $GITHUB_ENV
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "IAM_ROLE_ARN=arn:aws:iam::068007702576:role/cplive-plat-ue2-dev-atmos-docs-gha" >> $GITHUB_ENV
+            echo "IAM_ROLE_SESSION_NAME=cloudposse-atmos-ci-deploy-${{ github.run_id }}" >> $GITHUB_ENV
+            echo "S3_BUCKET_NAME=cplive-plat-ue2-dev-atmos-docs-origin" >> $GITHUB_ENV
+            echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+            echo "S3_PATH=pr-${{ github.event.pull_request.number }}/assets" >> $GITHUB_ENV
+            echo "BASE_URL=https://pr-${{ github.event.pull_request.number }}.atmos-docs.ue2.dev.plat.cloudposse.org/assets" >> $GITHUB_ENV
+          fi
+
+      # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
+
+      - name: Test AWS
+        run: |
+          aws sts get-caller-identity
+
+      - uses: actions/create-github-app-token@v1
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          owner: cloudposse-corp
+          repositories: assets
+
+      - uses: actions/checkout@v4
+      - name: Checkout cloudposse-corp/assets
+        uses: actions/checkout@v4
+        with:
+          repository: cloudposse-corp/assets
+          token: ${{ steps.github-app.outputs.token }}
+          path: assets
+
+      - name: Install audio track
+        run: |
+          cp assets/artlist/background-1.mp3 demo/recordings/background.mp3
+
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@0404882bc4666c0ff2f6fd8b3d32af69a730183c
+        with:
+          swap-size-gb: 15
+
+      - name: Install Atmos
+        uses: jaxxstorm/action-install-gh-release@v1.11.0
+        with:
+          repo: cloudposse/atmos
+          tag: ${{ needs.prepare.outputs.version }}
+          chmod: 0755
+          extension-matching: disable
+          rename-to: atmos
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Test Atmos
+        run: |
+          which atmos
+          atmos version
+          atmos --help
+
+      - name: Prepare variables
+        id: vars
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "job_name=${JOB_NAME}" >> $GITHUB_OUTPUT
+          echo "branch_name=chore/update-${JOB_NAME}-for-${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Setup VHS
+        uses: charmbracelet/vhs-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          install-fonts: true
+
+      - name: Set up FFmpeg (Latest release)
+        uses: FedericoCarboni/setup-ffmpeg@v3.1
+        with:
+          ffmpeg-version: "7.1"
+          github-token: ${{ secrets.GITHUB_TOKEN }} # Optional: helps prevent rate limit errors
+
+      - name: Record screencast
+        working-directory: demo/recordings
+        run: |
+          echo "PATH=$PATH" > /tmp/path.sh
+          ffmpeg -version
+          go run studio.go build
+          cp demo/recordings/gif/atmos.gif docs/demo.gif
+          git add docs/demo.gif
+
+      - name: Upload Assets to S3 (atmos.tools)
+        run: |
+          cd demo/recordings
+          aws s3 ls s3://${{ env.S3_BUCKET_NAME }}
+          for ext in mp4 gif; do
+            aws s3 sync $ext/ s3://${{ env.S3_BUCKET_NAME }}/${{ env.S3_PATH }}/${ext}/
+            aws s3 ls s3://${{ env.S3_BUCKET_NAME }}/${{ env.S3_PATH }}/${ext}/ --recursive --human-readable --summarize
+          done
+
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@v7
+        id: auto-commit
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.vars.outputs.branch_name }}
+          sign-commits: true
+          commit-message: |
+            chore: update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
+          title: Update ${{ steps.vars.outputs.job_name }} for ${{ steps.vars.outputs.version }}
+          body: |
+            This PR updates the demo gif for ${{ steps.vars.outputs.job_name }} with Atmos version ${{ steps.vars.outputs.version }}.
+          base: main
+          labels: no-release
+
+      - name: Add Image to Job Summary
+        if: steps.auto-commit.outputs.pull-request-operation == 'created' || steps.auto-commit.outputs.pull-request-operation == 'updated'
+        run: |
+          echo "## Demo GIF" >> $GITHUB_STEP_SUMMARY
+          echo "![Demo GIF](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.pull-request-head-sha }}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Demo Video" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.BASE_URL }}/mp4/atmos-with-audio.mp4" >> $GITHUB_STEP_SUMMARY
+
+      - name: No changes
+        if: steps.auto-commit.outputs.pull-request-operation == 'none' || steps.auto-commit.outputs.pull-request-operation == 'closed'
+        run: |
+          echo "No changes to demo" >> $GITHUB_STEP_SUMMARY
