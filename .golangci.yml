@@ -20,6 +20,8 @@ linters:
 linters-settings:
   funlen:
     max-func-lines: 50 # Maximum number of lines per function
+    statements: 50 # Maximum number of statements per function
+    functions: 10 # Maximum number of functions per file
 
   # https://go-critic.com/overview.html
   gocritic:
