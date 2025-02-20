@@ -478,7 +478,7 @@ jobs:
             }
 
   lint-golangci:
-    name: runner / golangci-lint
+    name: "[lint] golangci"
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
@@ -488,6 +488,9 @@ jobs:
 
       - name: Lint with golangci-lint
         uses: reviewdog/action-golangci-lint@v2
+        with:
+          filter_mode: "added"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     needs: [test, lint, mock, k3s, localstack, docker, validate]
