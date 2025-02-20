@@ -63,7 +63,6 @@ test:
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-
 			mockClient := NewMockDownloadClient(ctrl)
 			mockFactory := NewMockClientFactory(ctrl)
 			tempFile := "/tmp/testfile.json"
