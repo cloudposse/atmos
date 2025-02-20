@@ -73,11 +73,54 @@ type CustomGitDetector struct {
 // Detect implements the getter.Detector interface for go-getter v1.
 func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	l.Debug("CustomGitDetector.Detect called")
-
 	if len(src) == 0 {
 		return "", false, nil
 	}
 
+	// Rewrite SCP-style URLs or default to https scheme.
+	var err error
+	src, err = rewriteURL(src)
+	if err != nil {
+		return "", false, err
+	}
+
+	// Parse the URL and normalize its path.
+	parsedURL, err := parseAndNormalizeURL(src)
+	if err != nil {
+		return "", false, err
+	}
+
+	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
+	host := strings.ToLower(parsedURL.Host)
+	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
+		l.Debug("Skipping token injection for a unsupported host", "host", parsedURL.Host)
+	}
+
+	l.Debug("Reading config param", "InjectGithubToken", d.AtmosConfig.Settings.InjectGithubToken)
+
+	// Inject token if available.
+	injectToken(parsedURL, host, d.AtmosConfig.Settings.InjectGithubToken)
+
+	// Normalize d.source for Windows path separators and append subdir if needed.
+	appendSubdirIfNeeded(parsedURL, d.source)
+
+	// Set "depth=1" for a shallow clone if not specified.
+	setShallowCloneDepth(parsedURL)
+
+	finalURL := "git::" + parsedURL.String()
+	urlForMasking := strings.TrimPrefix(finalURL, "git::")
+	maskedFinal, err := u.MaskBasicAuth(urlForMasking)
+	if err != nil {
+		l.Debug("Masking failed", "error", err)
+	} else {
+		l.Debug("Final URL", "final_url", "git::"+maskedFinal)
+	}
+
+	return finalURL, true, nil
+}
+
+// rewriteURL rewrites SCP-style URLs into proper SSH URLs or prepends "https://" if no scheme is found.
+func rewriteURL(src string) (string, error) {
 	// We need this block because many SCP-style URLs aren’t valid according to Go’s URL parser.
 	// SCP-style URLs omit an explicit scheme (like "ssh://" or "https://") and use a colon
 	// to separate the host from the path. Go’s URL parser expects a scheme, so without one,
@@ -87,12 +130,9 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	// If the URL matches this pattern, we rewrite it to a proper SSH URL.
 	// Otherwise, we default to prepending "https://".
 	if !strings.Contains(src, "://") {
-		// Check for SCP-style SSH URL (e.g. "git@github.com:cloudposse/terraform-null-label.git?ref=...")
-		// This regex supports any host with a dot (e.g. github.com, bitbucket.org, gitlab.com)
 		scpPattern := regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
 		if scpPattern.MatchString(src) {
 			matches := scpPattern.FindStringSubmatch(src)
-			// Build proper SSH URL: "ssh://[username@]host/repoPath[.git][additional]"
 			newSrc := "ssh://"
 			if matches[1] != "" {
 				newSrc += matches[1] // includes username and '@'
@@ -107,46 +147,38 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 			maskedOld, _ := u.MaskBasicAuth(src)
 			maskedNew, _ := u.MaskBasicAuth(newSrc)
 			l.Debug("Rewriting SCP-style SSH URL", "old_url", maskedOld, "new_url", maskedNew)
-
-			src = newSrc
-		} else {
-			src = "https://" + src
-			maskedSrc, _ := u.MaskBasicAuth(src)
-			l.Debug("Defaulting to https scheme", "url", maskedSrc)
-
+			return newSrc, nil
 		}
+		src = "https://" + src
+		maskedSrc, _ := u.MaskBasicAuth(src)
+		l.Debug("Defaulting to https scheme", "url", maskedSrc)
 	}
+	return src, nil
+}
 
-	// Parse the URL to extract the host and path.
+// parseAndNormalizeURL parses the URL and normalizes Windows path separators and URL-encoded backslashes.
+func parseAndNormalizeURL(src string) (*url.URL, error) {
 	parsedURL, err := url.Parse(src)
 	if err != nil {
 		maskedSrc, _ := u.MaskBasicAuth(src)
 		l.Debug("Failed to parse URL", "url", maskedSrc, "error", err)
-		return "", false, fmt.Errorf("failed to parse URL %q: %w", maskedSrc, err)
+		return nil, fmt.Errorf("failed to parse URL %q: %w", maskedSrc, err)
 	}
-
-	// Normalize Windows path separators and URL-encoded backslashes to forward slashes.
 	unescapedPath, err := url.PathUnescape(parsedURL.Path)
 	if err == nil {
 		parsedURL.Path = filepath.ToSlash(unescapedPath)
 	} else {
 		parsedURL.Path = filepath.ToSlash(parsedURL.Path)
 	}
+	return parsedURL, nil
+}
 
-	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
-	host := strings.ToLower(parsedURL.Host)
-	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
-		l.Debug("Skipping token injection for a unsupported host", "host", parsedURL.Host)
-	}
-
-	l.Debug("Reading config param", "InjectGithubToken", d.AtmosConfig.Settings.InjectGithubToken)
-
-	// 3 types of tokens are supported for now: Github, Bitbucket and GitLab
+// injectToken injects authentication token into the URL if available.
+func injectToken(parsedURL *url.URL, host string, injectGithub bool) {
 	var token, tokenSource string
 	switch host {
 	case "github.com":
-		// Prioritize ATMOS_GITHUB_TOKEN if InjectGithubToken is enabled; otherwise, fallback to GITHUB_TOKEN.
-		if d.AtmosConfig.Settings.InjectGithubToken {
+		if injectGithub {
 			tokenSource = "ATMOS_GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)
 			if token == "" {
@@ -172,8 +204,6 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 			token = os.Getenv(tokenSource)
 		}
 	}
-
-	// Always inject token if available, regardless of existing credentials.
 	if token != "" {
 		var defaultUsername string
 		switch host {
@@ -199,41 +229,28 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	} else {
 		l.Debug("No token found for injection")
 	}
+}
 
-	// Normalize d.source for Windows path separators.
-	normalizedSource := filepath.ToSlash(d.source)
-	// If d.source is provided (non‑empty), use it for subdir checking;
-	// otherwise, skip appending '//.' (so the user-defined subdir isn’t mistakenly processed).
+// appendSubdirIfNeeded appends '//.' to the URL path if d.source is provided and indicates no subdirectory.
+func appendSubdirIfNeeded(parsedURL *url.URL, source string) {
+	normalizedSource := filepath.ToSlash(source)
 	if normalizedSource != "" && !strings.Contains(normalizedSource, "//") {
 		parts := strings.SplitN(parsedURL.Path, "/", 4)
 		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
-			maskedSrc, _ := u.MaskBasicAuth(src)
+			maskedSrc, _ := u.MaskBasicAuth(parsedURL.String())
 			l.Debug("Detected top-level repo with no subdir: appending '//.'", "url", maskedSrc)
-			parsedURL.Path = parsedURL.Path + "//."
+			parsedURL.Path += "//."
 		}
 	}
+}
 
-	// Set "depth=1" for a shallow clone if not specified.
-	// In Go-Getter, "depth" controls how many revisions are cloned:
-	// - depth=1 fetches only the latest commit (faster, less bandwidth).
-	// - depth= (empty) performs a full clone (default Git behavior).
-	// - depth=N clones the last N revisions.
+// setShallowCloneDepth sets "depth=1" in the URL query if not already specified.
+func setShallowCloneDepth(parsedURL *url.URL) {
 	q := parsedURL.Query()
 	if _, exists := q["depth"]; !exists {
 		q.Set("depth", "1")
 	}
 	parsedURL.RawQuery = q.Encode()
-
-	finalURL := "git::" + parsedURL.String()
-	urlForMasking := strings.TrimPrefix(finalURL, "git::")
-	maskedFinal, err := u.MaskBasicAuth(urlForMasking)
-	if err != nil {
-		l.Debug("Masking failed", "error", err)
-	} else {
-		l.Debug("Final URL", "final_url", "git::"+maskedFinal)
-	}
-
-	return finalURL, true, nil
 }
 
 // RegisterCustomDetectors prepends the custom detector so it runs before
