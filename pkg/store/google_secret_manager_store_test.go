@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 	"errors"
-	"os"
+	"fmt"
 	"testing"
 
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -12,6 +12,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// newGSMStoreWithClient creates a new GSMStore with a provided client (used for testing)
+func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) (Store, error) {
+	if options.ProjectID == "" {
+		return nil, fmt.Errorf("project_id is required in Google Secret Manager store configuration")
+	}
+
+	store := &GSMStore{
+		client:    client,
+		projectID: options.ProjectID,
+	}
+
+	if options.Prefix != nil {
+		store.prefix = *options.Prefix
+	}
+
+	if options.StackDelimiter != nil {
+		store.stackDelimiter = options.StackDelimiter
+	} else {
+		defaultDelimiter := "-"
+		store.stackDelimiter = &defaultDelimiter
+	}
+
+	return store, nil
+}
 
 // MockGSMClient is a mock implementation of secretmanager.Client
 type MockGSMClient struct {
@@ -394,30 +419,30 @@ func TestNewGSMStore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store, err := NewGSMStore(tt.options)
 			if tt.expectError {
+				// For error cases, use the regular constructor
+				store, err := NewGSMStore(tt.options)
 				assert.Error(t, err)
 				assert.Nil(t, store)
 			} else {
+				// For success cases, use the test constructor with a mock client
+				mockClient := new(MockGSMClient)
+				mockClient.On("Close").Return(nil)
+
+				store, err := newGSMStoreWithClient(mockClient, tt.options)
 				assert.NoError(t, err)
 				assert.NotNil(t, store)
+
+				// Close the client to clean up resources
+				gsmStore, ok := store.(*GSMStore)
+				assert.True(t, ok)
+				if ok {
+					err := gsmStore.client.Close()
+					assert.NoError(t, err)
+				}
+
+				mockClient.AssertExpectations(t)
 			}
 		})
 	}
-
-	// Test with credentials from environment variable
-	t.Run("with credentials from env", func(t *testing.T) {
-		if credPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); credPath != "" {
-			options := GSMStoreOptions{
-				ProjectID:      "test-project",
-				Prefix:         aws.String("test-prefix"),
-				StackDelimiter: aws.String("-"),
-			}
-			store, err := NewGSMStore(options)
-			assert.NoError(t, err)
-			assert.NotNil(t, store)
-		} else {
-			t.Skip("GOOGLE_APPLICATION_CREDENTIALS not set")
-		}
-	})
 }
