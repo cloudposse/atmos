@@ -19,12 +19,15 @@ var terraformCmd = &cobra.Command{
 	Short:              "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
 	Long:               `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	Example:            terraformUsage,
 }
 
 func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform <terraform_command> <component> -s <stack>")
+	terraformCmd.PersistentFlags().Bool("", false, doubleDashHint)
+	AddStackCompletion(terraformCmd)
 	attachTerraformCommands(terraformCmd)
 	RootCmd.AddCommand(terraformCmd)
 }
@@ -62,6 +65,6 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 	}
 	err := e.ExecuteTerraform(info)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 }

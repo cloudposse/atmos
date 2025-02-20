@@ -134,9 +134,12 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	v.SetDefault("components.terraform.append_user_agent", fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	v.SetDefault("settings.inject_github_token", true)
 
+	v.SetDefault("logs.file", "/dev/stderr")
+	v.SetDefault("logs.level", "Info")
+
 	// Process config in system folder
 	configFilePath1 := ""
-
+	atmosConfigFilePath := ""
 	// https://pureinfotech.com/list-environment-variables-windows-10/
 	// https://docs.microsoft.com/en-us/windows/deployment/usmt/usmt-recognized-environment-variables
 	// https://softwareengineering.stackexchange.com/questions/299869/where-is-the-appropriate-place-to-put-application-configuration-files-for-each-p
@@ -158,6 +161,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 		if found {
 			configFound = true
+			atmosConfigFilePath = configFile1
 		}
 	}
 
@@ -173,6 +177,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 	if found {
 		configFound = true
+		atmosConfigFilePath = configFile2
 	}
 
 	// Process config in the current dir
@@ -187,6 +192,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 	if found {
 		configFound = true
+		atmosConfigFilePath = configFile3
 	}
 
 	// Process config from the path in ENV var `ATMOS_CLI_CONFIG_PATH`
@@ -200,6 +206,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 		if found {
 			configFound = true
+			atmosConfigFilePath = configFile4
 		}
 	}
 
@@ -214,6 +221,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			}
 			if found {
 				configFound = true
+				atmosConfigFilePath = configFile5
 			}
 		}
 	}
@@ -253,7 +261,16 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if err != nil {
 		return atmosConfig, err
 	}
-
+	// Set the CLI config path in the atmosConfig struct
+	if filepath.IsAbs(atmosConfigFilePath) {
+		atmosConfig.CliConfigPath = atmosConfigFilePath
+	} else {
+		absPath, err := filepath.Abs(atmosConfigFilePath)
+		if err != nil {
+			return atmosConfig, err
+		}
+		atmosConfig.CliConfigPath = absPath
+	}
 	// Process ENV vars
 	err = processEnvVars(&atmosConfig)
 	if err != nil {
@@ -284,7 +301,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Check config
-	err = checkConfig(atmosConfig)
+	err = checkConfig(atmosConfig, processStacks)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -382,6 +399,7 @@ func processConfigFile(
 	if !fileExists {
 		return false, nil
 	}
+
 	reader, err := os.Open(configPath)
 	if err != nil {
 		return false, err

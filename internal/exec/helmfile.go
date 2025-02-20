@@ -77,7 +77,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		// Allow read-only commands, block modification commands
 		switch info.SubCommand {
 		case "sync", "apply", "deploy", "delete", "destroy":
-			return fmt.Errorf("component '%s' is locked and cannot be modified (metadata.locked = true)",
+			return fmt.Errorf("component `%s` is locked and cannot be modified (metadata.locked = true)",
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
 	}
@@ -240,7 +240,8 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if atmosConfig.Components.Helmfile.UseEKS {
 		envVars = append(envVars, envVarsEKS...)
 	}
-
+	envVars = append(envVars, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
+	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", atmosConfig.BasePath))
 	u.LogTrace("Using ENV vars:")
 	for _, v := range envVars {
 		u.LogTrace(v)

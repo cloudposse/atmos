@@ -8,6 +8,7 @@ import (
 	"github.com/alecthomas/chroma/quick"
 	"github.com/arsham/figurine/figurine"
 	"github.com/charmbracelet/glamour"
+	"github.com/cloudposse/atmos/pkg/schema"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/jwalton/go-supportscolor"
 	xterm "golang.org/x/term"
@@ -39,7 +40,7 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	}
 
 	// Get the custom style from atmos config
-	customStyle, err := mdstyle.GetDefaultStyle()
+	customStyle, err := mdstyle.GetDefaultStyle(schema.AtmosConfiguration{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get markdown style: %w", err)
 	}
