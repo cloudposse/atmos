@@ -477,6 +477,18 @@ jobs:
               ]
             }
 
+  lint-golangci:
+    name: runner / golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Lint with golangci-lint
+        uses: reviewdog/action-golangci-lint@v2
+
   release:
     needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'

@@ -1,0 +1,46 @@
+# Configuration for golangci-lint
+# Documentation: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m # Set a time limit for the linter run
+  tests: true # Include test files in the analysis
+
+linters:
+  enable:
+    - funlen # Enforce function length limits
+    - forbidigo # Forbid specific function calls
+    - gocritic # Enable additional checks for code issues
+    - errcheck # Check that errors are handled
+    - gofumpt # Enforce consistent formatting
+    - govet # Report likely mistakes in code
+    - staticcheck # Perform static analysis
+    - revive # Fast, configurable linter
+    - misspell # Detect spelling mistakes
+
+linters-settings:
+  funlen:
+    max-func-lines: 50 # Maximum number of lines per function
+
+  # https://go-critic.com/overview.html
+  gocritic:
+    # Enable specific checks by their exact names
+    enabled-checks:
+      - rangeValCopy # detects copies of large objects in range loops
+      - hugeParam # detects large parameters that could be passed by pointer
+      - commentedOutCode # Detects commented-out code
+      - emptyDecl # Detects empty declarations
+      - filepathJoin # Detects problems in filepath.Join() function calls
+      - commentedOutImport # Detects commented-out imports
+      - initClause # Detects non-assignment statements inside if/switch init clause
+      - nestingReduce # Finds where nesting level could be reduced
+      - preferFilepathJoin # Detects concatenation with os.PathSeparator which can be replaced with filepath.Join
+
+issues:
+  exclude-rules:
+    - path: _test\.go$ # Ignore test files for specific linters
+      linters:
+        - funlen
+
+output:
+  formats:
+    - format: colored-line-number
