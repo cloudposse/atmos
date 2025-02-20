@@ -17,13 +17,17 @@ import (
 // fileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
 type fileDownloader struct {
-	clientFactory ClientFactory
+	clientFactory     ClientFactory
+	tempPathGenerator func() string
+	fileReader        func(string) ([]byte, error)
 }
 
 // NewFileDownloader initializes a FileDownloader with dependency injection
 func NewFileDownloader(factory ClientFactory) FileDownloader {
 	return &fileDownloader{
-		clientFactory: factory,
+		clientFactory:     factory,
+		tempPathGenerator: func() string { return filepath.Join(os.TempDir(), uuid.New().String()) },
+		fileReader:        os.ReadFile,
 	}
 }
 
@@ -41,8 +45,7 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 
 // FetchAutoParse downloads a remote file, detects its format, and parses it
 func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
-	tempDir := os.TempDir()
-	filePath := filepath.Join(tempDir, uuid.New().String())
+	filePath := fd.tempPathGenerator()
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
 		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
@@ -55,7 +58,7 @@ func (fd *fileDownloader) detectFormatAndParse(filename string) (any, error) {
 	var v any
 	var err error
 
-	d, err := os.ReadFile(filename)
+	d, err := fd.fileReader(filename)
 	if err != nil {
 		return nil, err
 	}
