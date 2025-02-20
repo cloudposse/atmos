@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -12,31 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
-
-// newGSMStoreWithClient creates a new GSMStore with a provided client (used for testing)
-func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) (Store, error) {
-	if options.ProjectID == "" {
-		return nil, fmt.Errorf("project_id is required in Google Secret Manager store configuration")
-	}
-
-	store := &GSMStore{
-		client:    client,
-		projectID: options.ProjectID,
-	}
-
-	if options.Prefix != nil {
-		store.prefix = *options.Prefix
-	}
-
-	if options.StackDelimiter != nil {
-		store.stackDelimiter = options.StackDelimiter
-	} else {
-		defaultDelimiter := "-"
-		store.stackDelimiter = &defaultDelimiter
-	}
-
-	return store, nil
-}
 
 // MockGSMClient is a mock implementation of secretmanager.Client
 type MockGSMClient struct {
@@ -95,7 +69,7 @@ func TestGSMStore_Set(t *testing.T) {
 				m.On("CreateSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.CreateSecretRequest) bool {
 					expectedReq := &secretmanagerpb.CreateSecretRequest{
 						Parent:   "projects/test-project",
-						SecretId: "test-prefix_dev-usw2_app_service_config-key",
+						SecretId: "test-prefix_dev_usw2_app_service_config-key",
 						Secret: &secretmanagerpb.Secret{
 							Replication: &secretmanagerpb.Replication{
 								Replication: &secretmanagerpb.Replication_Automatic_{
@@ -105,7 +79,7 @@ func TestGSMStore_Set(t *testing.T) {
 						},
 					}
 					return req.Parent == expectedReq.Parent &&
-						req.SecretId == "test-prefix_dev_usw2_app_service_config-key" &&
+						req.SecretId == expectedReq.SecretId &&
 						req.Secret.GetReplication().GetAutomatic() != nil
 				})).Return(&secretmanagerpb.Secret{
 					Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key",
@@ -144,7 +118,7 @@ func TestGSMStore_Set(t *testing.T) {
 						},
 					}
 					return req.Parent == expectedReq.Parent &&
-						req.SecretId == "test-prefix_dev_usw2_app_service_config-key" &&
+						req.SecretId == expectedReq.SecretId &&
 						req.Secret.GetReplication().GetAutomatic() != nil
 				})).Return(nil, errors.New("secret already exists"))
 
@@ -181,7 +155,7 @@ func TestGSMStore_Set(t *testing.T) {
 						},
 					}
 					return req.Parent == expectedReq.Parent &&
-						req.SecretId == "test-prefix_dev_usw2_app_service_config-key" &&
+						req.SecretId == expectedReq.SecretId &&
 						req.Secret.GetReplication().GetAutomatic() != nil
 				})).Return(nil, errors.New("internal error"))
 			},
@@ -207,7 +181,7 @@ func TestGSMStore_Set(t *testing.T) {
 						},
 					}
 					return req.Parent == expectedReq.Parent &&
-						req.SecretId == "test-prefix_dev_usw2_app_service_config-key" &&
+						req.SecretId == expectedReq.SecretId &&
 						req.Secret.GetReplication().GetAutomatic() != nil
 				})).Return(&secretmanagerpb.Secret{
 					Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key",
@@ -419,30 +393,95 @@ func TestNewGSMStore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			store, err := NewGSMStore(tt.options)
 			if tt.expectError {
-				// For error cases, use the regular constructor
-				store, err := NewGSMStore(tt.options)
 				assert.Error(t, err)
 				assert.Nil(t, store)
 			} else {
-				// For success cases, use the test constructor with a mock client
-				mockClient := new(MockGSMClient)
-				mockClient.On("Close").Return(nil)
-
-				store, err := newGSMStoreWithClient(mockClient, tt.options)
 				assert.NoError(t, err)
 				assert.NotNil(t, store)
-
-				// Close the client to clean up resources
-				gsmStore, ok := store.(*GSMStore)
-				assert.True(t, ok)
-				if ok {
-					err := gsmStore.client.Close()
-					assert.NoError(t, err)
-				}
-
-				mockClient.AssertExpectations(t)
 			}
+		})
+	}
+}
+
+func TestGSMStore_GetKey(t *testing.T) {
+	tests := []struct {
+		name           string
+		prefix         string
+		stackDelimiter *string
+		stack          string
+		component      string
+		key            string
+		expected       string
+		wantErr        bool
+	}{
+		{
+			name:           "basic path",
+			prefix:         "test-prefix",
+			stackDelimiter: aws.String("-"),
+			stack:          "dev-usw2",
+			component:      "app",
+			key:            "config",
+			expected:       "test-prefix_dev_usw2_app_config",
+			wantErr:        false,
+		},
+		{
+			name:           "path with slashes",
+			prefix:         "test-prefix",
+			stackDelimiter: aws.String("-"),
+			stack:          "dev-usw2",
+			component:      "app/service",
+			key:            "config/key",
+			expected:       "test-prefix_dev_usw2_app_service_config_key",
+			wantErr:        false,
+		},
+		{
+			name:           "path with multiple delimiters",
+			prefix:         "test/prefix",
+			stackDelimiter: aws.String("-"),
+			stack:          "dev-usw2-prod",
+			component:      "app/service/db",
+			key:            "config-key-name",
+			expected:       "test_prefix_dev_usw2_prod_app_service_db_config-key-name",
+			wantErr:        false,
+		},
+		{
+			name:           "empty stack delimiter",
+			prefix:         "prefix",
+			stackDelimiter: nil,
+			stack:          "dev",
+			component:      "app",
+			key:            "key",
+			wantErr:        true,
+		},
+		{
+			name:           "overridden stack delimiter",
+			prefix:         "test-prefix",
+			stackDelimiter: aws.String("_"),
+			stack:          "dev_usw2_prod",
+			component:      "app/service",
+			key:            "config-key",
+			expected:       "test-prefix_dev_usw2_prod_app_service_config-key",
+			wantErr:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &GSMStore{
+				prefix:         tt.prefix,
+				stackDelimiter: tt.stackDelimiter,
+			}
+
+			got, err := store.getKey(tt.stack, tt.component, tt.key)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
