@@ -7,7 +7,7 @@ import (
 	"github.com/samber/lo"
 )
 
-// getStackComponents extracts Terraform components from the final map of stacks
+// getStackComponents extracts Terraform components from the final map of stacks.
 func getStackComponents(stackData any) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
@@ -27,7 +27,7 @@ func getStackComponents(stackData any) ([]string, error) {
 	return lo.Keys(terraformComponents), nil
 }
 
-// FilterAndListComponents filters and lists components based on the given stack
+// FilterAndListComponents filters and lists components based on the given stack.
 func FilterAndListComponents(stackFlag string, stacksMap map[string]any) ([]string, error) {
 	components := []string{}
 
@@ -38,6 +38,7 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any) ([]stri
 			if err != nil {
 				return nil, fmt.Errorf("error processing stack '%s': %w", stackFlag, err)
 			}
+
 			components = append(components, stackComponents...)
 		} else {
 			return nil, fmt.Errorf("stack '%s' not found", stackFlag)
@@ -49,6 +50,7 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any) ([]stri
 			if err != nil {
 				continue // Skip invalid stacks
 			}
+
 			components = append(components, stackComponents...)
 		}
 	}
@@ -60,5 +62,6 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any) ([]stri
 	if len(components) == 0 {
 		return []string{}, nil
 	}
+
 	return components, nil
 }

@@ -14,7 +14,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteValidateComponentCmd executes `validate component` command
+// ExecuteValidateComponentCmd executes `validate component` command.
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
@@ -76,7 +76,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	return componentName, stack, nil
 }
 
-// ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents
+// ExecuteValidateComponent validates a component in a stack using JsonSchema, OPA or CUE schema documents.
 func ExecuteValidateComponent(
 	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
@@ -94,6 +94,7 @@ func ExecuteValidateComponent(
 	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
+
 		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
 			return false, err
@@ -105,7 +106,7 @@ func ExecuteValidateComponent(
 	return ValidateComponent(atmosConfig, componentName, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 }
 
-// ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents
+// ValidateComponent validates the component config using JsonSchema, OPA or CUE schema documents.
 func ValidateComponent(
 	atmosConfig schema.AtmosConfiguration,
 	componentName string,
@@ -116,6 +117,7 @@ func ValidateComponent(
 	timeoutSeconds int,
 ) (bool, error) {
 	ok := true
+
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
@@ -138,8 +140,11 @@ func ValidateComponent(
 
 			// Command line parameters override the validation config in YAML
 			var finalSchemaPath string
+
 			var finalSchemaType string
+
 			var finalModulePaths []string
+
 			var finalTimeoutSeconds int
 
 			if schemaPath != "" {
@@ -176,6 +181,7 @@ func ValidateComponent(
 			if err != nil {
 				return false, err
 			}
+
 			if !ok2 {
 				ok = false
 			}
@@ -225,6 +231,7 @@ func validateComponentInternal(
 	}
 
 	schemaText := string(fileContent)
+
 	var ok bool
 
 	switch schemaType {
@@ -259,7 +266,7 @@ func validateComponentInternal(
 	return ok, nil
 }
 
-// FindValidationSection finds 'validation' section in the component config
+// FindValidationSection finds 'validation' section in the component config.
 func FindValidationSection(componentSection map[string]any) (schema.Validation, error) {
 	validationSection := map[string]any{}
 

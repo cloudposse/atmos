@@ -16,10 +16,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteWorkflowCmd executes an Atmos workflow
+// ExecuteWorkflowCmd executes an Atmos workflow.
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	var workflow string
+
 	var workflowFile string
+
 	var fromStep string
 
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
@@ -40,6 +42,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+
 		if workflowFile == "" || workflow == "" {
 			return nil
 		}
@@ -56,6 +59,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+
 		if workflowFile == "" {
 			return errors.New("'--file' flag is required to specify a workflow manifest")
 		}
@@ -102,7 +106,9 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	var workflowManifest schema.WorkflowManifest
+
 	var workflowConfig schema.WorkflowConfig
+
 	var workflowDefinition schema.WorkflowDefinition
 
 	workflowManifest, err = u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
@@ -118,6 +124,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	if i, ok := workflowConfig[workflow]; !ok {
 		errorMarkdown := fmt.Sprintf("No workflow exists with the name `%s`\n\nAvailable workflows are:", workflow)
+
 		validWorkflows := []string{}
 		for w := range maps.Keys(workflowConfig) {
 			validWorkflows = append(validWorkflows, fmt.Sprintf("\n- %s", w))
@@ -125,7 +132,8 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		// sorting so that the output is deterministic
 		sort.Sort(sort.StringSlice(validWorkflows))
 		errorMarkdown += strings.Join(validWorkflows, "")
-		return fmt.Errorf(errorMarkdown)
+
+		return errors.New(errorMarkdown)
 	} else {
 		workflowDefinition = i
 	}

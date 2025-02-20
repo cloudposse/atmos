@@ -26,7 +26,7 @@ type SSMStoreOptions struct {
 // Ensure SSMStore implements the store.Store interface.
 var _ Store = (*SSMStore)(nil)
 
-// SSMClient interface allows us to mock the AWS SSM client
+// SSMClient interface allows us to mock the AWS SSM client.
 type SSMClient interface {
 	PutParameter(ctx context.Context, params *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
 	GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
@@ -76,13 +76,15 @@ func (s *SSMStore) getKey(stack string, component string, key string) (string, e
 }
 
 // Set stores a key-value pair in AWS SSM Parameter Store.
-func (s *SSMStore) Set(stack string, component string, key string, value interface{}) error {
+func (s *SSMStore) Set(stack string, component string, key string, value any) error {
 	if stack == "" {
 		return fmt.Errorf("stack cannot be empty")
 	}
+
 	if component == "" {
 		return fmt.Errorf("component cannot be empty")
 	}
+
 	if key == "" {
 		return fmt.Errorf("key cannot be empty")
 	}
@@ -116,13 +118,15 @@ func (s *SSMStore) Set(stack string, component string, key string, value interfa
 }
 
 // Get retrieves a value by key from AWS SSM Parameter Store.
-func (s *SSMStore) Get(stack string, component string, key string) (interface{}, error) {
+func (s *SSMStore) Get(stack string, component string, key string) (any, error) {
 	if stack == "" {
 		return nil, fmt.Errorf("stack cannot be empty")
 	}
+
 	if component == "" {
 		return nil, fmt.Errorf("component cannot be empty")
 	}
+
 	if key == "" {
 		return nil, fmt.Errorf("key cannot be empty")
 	}

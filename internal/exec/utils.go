@@ -52,7 +52,7 @@ var commonFlags = []string{
 	cfg.QueryFlag,
 }
 
-// ProcessComponentConfig processes component config sections
+// ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
@@ -61,20 +61,35 @@ func ProcessComponentConfig(
 	component string,
 ) error {
 	var stackSection map[string]any
+
 	var componentsSection map[string]any
+
 	var componentTypeSection map[string]any
+
 	var componentSection map[string]any
+
 	var componentVarsSection map[string]any
+
 	var componentSettingsSection map[string]any
+
 	var componentOverridesSection map[string]any
+
 	var componentProvidersSection map[string]any
+
 	var componentHooksSection map[string]any
+
 	var componentImportsSection []string
+
 	var componentEnvSection map[string]any
+
 	var componentBackendSection map[string]any
+
 	var componentBackendType string
+
 	var command string
+
 	var componentInheritanceChain []string
+
 	var ok bool
 
 	if len(stack) == 0 {
@@ -184,7 +199,7 @@ func ProcessComponentConfig(
 	return nil
 }
 
-// ProcessCommandLineArgs processes command-line args
+// ProcessCommandLineArgs processes command-line args.
 func ProcessCommandLineArgs(
 	componentType string,
 	cmd *cobra.Command,
@@ -252,7 +267,7 @@ func ProcessCommandLineArgs(
 	return configAndStacksInfo, nil
 }
 
-// FindStacksMap processes stack config and returns a map of all stacks
+// FindStacksMap processes stack config and returns a map of all stacks.
 func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
@@ -276,7 +291,7 @@ func FindStacksMap(atmosConfig schema.AtmosConfiguration, ignoreMissingFiles boo
 	return stacksMap, rawStackConfigs, nil
 }
 
-// ProcessStacks processes stack config
+// ProcessStacks processes stack config.
 func ProcessStacks(
 	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
@@ -312,7 +327,9 @@ func ProcessStacks(
 		} else {
 			msg = "\nFound stack manifests:"
 		}
+
 		u.LogTrace(msg)
+
 		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -349,7 +366,9 @@ func ProcessStacks(
 		}
 	} else {
 		foundStackCount := 0
+
 		var foundStacks []string
+
 		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
 
 		for stackName := range stacksMap {
@@ -370,6 +389,7 @@ func ProcessStacks(
 				if err2 != nil {
 					continue
 				}
+
 				configAndStacksInfo.ContextPrefix = tmpl
 			} else if atmosConfig.Stacks.NamePattern != "" {
 				// Process context
@@ -395,6 +415,7 @@ func ProcessStacks(
 				configAndStacksInfo.StackFile = stackName
 				foundConfigAndStacksInfo = configAndStacksInfo
 				foundStackCount++
+
 				foundStacks = append(foundStacks, stackName)
 
 				u.LogDebug(
@@ -480,6 +501,7 @@ func ProcessStacks(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
 	configAndStacksInfo.ComponentSection["deps"] = componentDeps
 	configAndStacksInfo.ComponentSection["deps_all"] = componentDepsAll
 
@@ -528,6 +550,7 @@ func ProcessStacks(
 					err = errors.Join(err, errors.New(errorMessage))
 				}
 			}
+
 			u.LogErrorAndExit(err)
 		}
 
@@ -553,6 +576,7 @@ func ProcessStacks(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
 	if spaceliftStackName != "" {
 		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
 	}
@@ -562,6 +586,7 @@ func ProcessStacks(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
 	if atlantisProjectName != "" {
 		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
@@ -579,6 +604,7 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentFolderPrefix = ""
 	componentPathParts := strings.Split(configAndStacksInfo.ComponentFromArg, "/")
 	componentPathPartsLength := len(componentPathParts)
+
 	if componentPathPartsLength > 1 {
 		componentFromArgPartsWithoutLast := componentPathParts[:componentPathPartsLength-1]
 		configAndStacksInfo.ComponentFolderPrefix = strings.Join(componentFromArgPartsWithoutLast, "/")
@@ -586,12 +612,14 @@ func ProcessStacks(
 	} else {
 		configAndStacksInfo.Component = configAndStacksInfo.ComponentFromArg
 	}
+
 	configAndStacksInfo.ComponentFolderPrefixReplaced = strings.Replace(configAndStacksInfo.ComponentFolderPrefix, "/", "-", -1)
 
 	// Process base component path and name
 	if len(configAndStacksInfo.BaseComponentPath) > 0 {
 		baseComponentPathParts := strings.Split(configAndStacksInfo.BaseComponentPath, "/")
 		baseComponentPathPartsLength := len(baseComponentPathParts)
+
 		if baseComponentPathPartsLength > 1 {
 			baseComponentPartsWithoutLast := baseComponentPathParts[:baseComponentPathPartsLength-1]
 			configAndStacksInfo.ComponentFolderPrefix = strings.Join(baseComponentPartsWithoutLast, "/")
@@ -600,6 +628,7 @@ func ProcessStacks(
 			configAndStacksInfo.ComponentFolderPrefix = ""
 			configAndStacksInfo.BaseComponent = configAndStacksInfo.BaseComponentPath
 		}
+
 		configAndStacksInfo.ComponentFolderPrefixReplaced = strings.Replace(configAndStacksInfo.ComponentFolderPrefix, "/", "-", -1)
 	}
 
@@ -633,20 +662,25 @@ func ProcessStacks(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+
 	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
 
 	return configAndStacksInfo, nil
 }
 
-// processArgsAndFlags processes args and flags from the provided CLI arguments/flags
+// processArgsAndFlags processes args and flags from the provided CLI arguments/flags.
 func processArgsAndFlags(
 	componentType string,
 	inputArgsAndFlags []string,
 ) (schema.ArgsAndFlagsInfo, error) {
 	var info schema.ArgsAndFlagsInfo
+
 	var additionalArgsAndFlags []string
+
 	var globalOptions []string
+
 	var indexesToRemove []int
+
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "clean" {
 		info.SubCommand = inputArgsAndFlags[0]
 	}
@@ -655,6 +689,7 @@ func processArgsAndFlags(
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" && info.SubCommand == "" {
 		info.SubCommand = inputArgsAndFlags[0]
 		info.NeedHelp = true
+
 		return info, nil
 	}
 
@@ -677,12 +712,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.TerraformCommand = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.TerraformCommandFlag) {
 			terraformCommandFlagParts := strings.Split(arg, "=")
 			if len(terraformCommandFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.TerraformCommand = terraformCommandFlagParts[1]
 		}
 
@@ -690,12 +727,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.TerraformDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.TerraformDirFlag) {
 			terraformDirFlagParts := strings.Split(arg, "=")
 			if len(terraformDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.TerraformDir = terraformDirFlagParts[1]
 		}
 
@@ -703,12 +742,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.AppendUserAgent = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AppendUserAgentFlag) {
 			appendUserAgentFlagParts := strings.Split(arg, "=")
 			if len(appendUserAgentFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.AppendUserAgent = appendUserAgentFlagParts[1]
 		}
 
@@ -716,12 +757,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.HelmfileCommand = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.HelmfileCommandFlag) {
 			helmfileCommandFlagParts := strings.Split(arg, "=")
 			if len(helmfileCommandFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.HelmfileCommand = helmfileCommandFlagParts[1]
 		}
 
@@ -729,12 +772,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.HelmfileDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.HelmfileDirFlag) {
 			helmfileDirFlagParts := strings.Split(arg, "=")
 			if len(helmfileDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.HelmfileDir = helmfileDirFlagParts[1]
 		}
 
@@ -742,12 +787,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.ConfigDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.CliConfigDirFlag) {
 			configDirFlagParts := strings.Split(arg, "=")
 			if len(configDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.ConfigDir = configDirFlagParts[1]
 		}
 
@@ -755,12 +802,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.StacksDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.StackDirFlag) {
 			stacksDirFlagParts := strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.StacksDir = stacksDirFlagParts[1]
 		}
 
@@ -768,12 +817,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.BasePath = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.BasePathFlag) {
 			stacksDirFlagParts := strings.Split(arg, "=")
 			if len(stacksDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.BasePath = stacksDirFlagParts[1]
 		}
 
@@ -781,12 +832,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.VendorBasePath = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.VendorBasePathFlag) {
 			vendorBasePathFlagParts := strings.Split(arg, "=")
 			if len(vendorBasePathFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.VendorBasePath = vendorBasePathFlagParts[1]
 		}
 
@@ -794,12 +847,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.DeployRunInit = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.DeployRunInitFlag) {
 			deployRunInitFlagParts := strings.Split(arg, "=")
 			if len(deployRunInitFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.DeployRunInit = deployRunInitFlagParts[1]
 		}
 
@@ -807,12 +862,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.AutoGenerateBackendFile = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AutoGenerateBackendFileFlag) {
 			autoGenerateBackendFileFlagParts := strings.Split(arg, "=")
 			if len(autoGenerateBackendFileFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
 		}
 
@@ -820,12 +877,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.WorkflowsDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.WorkflowDirFlag) {
 			workflowDirFlagParts := strings.Split(arg, "=")
 			if len(workflowDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.WorkflowsDir = workflowDirFlagParts[1]
 		}
 
@@ -833,12 +892,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.InitRunReconfigure = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.InitRunReconfigure) {
 			initRunReconfigureParts := strings.Split(arg, "=")
 			if len(initRunReconfigureParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.InitRunReconfigure = initRunReconfigureParts[1]
 		}
 
@@ -846,12 +907,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.JsonSchemaDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.JsonSchemaDirFlag) {
 			jsonschemaDirFlagParts := strings.Split(arg, "=")
 			if len(jsonschemaDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.JsonSchemaDir = jsonschemaDirFlagParts[1]
 		}
 
@@ -859,12 +922,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.OpaDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.OpaDirFlag) {
 			opaDirFlagParts := strings.Split(arg, "=")
 			if len(opaDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.OpaDir = opaDirFlagParts[1]
 		}
 
@@ -872,12 +937,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.CueDir = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.CueDirFlag) {
 			cueDirFlagParts := strings.Split(arg, "=")
 			if len(cueDirFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.CueDir = cueDirFlagParts[1]
 		}
 
@@ -885,12 +952,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.AtmosManifestJsonSchema = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.AtmosManifestJsonSchemaFlag) {
 			atmosManifestJsonSchemaFlagParts := strings.Split(arg, "=")
 			if len(atmosManifestJsonSchemaFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.AtmosManifestJsonSchema = atmosManifestJsonSchemaFlagParts[1]
 		}
 
@@ -898,12 +967,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.RedirectStdErr = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.RedirectStdErrFlag) {
 			redirectStderrParts := strings.Split(arg, "=")
 			if len(redirectStderrParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.RedirectStdErr = redirectStderrParts[1]
 		}
 
@@ -911,6 +982,7 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.PlanFile = inputArgsAndFlags[i+1]
 			info.UseTerraformPlan = true
 		} else if strings.HasPrefix(arg+"=", cfg.PlanFileFlag) {
@@ -918,6 +990,7 @@ func processArgsAndFlags(
 			if len(planFileFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.PlanFile = planFileFlagParts[1]
 			info.UseTerraformPlan = true
 		}
@@ -926,12 +999,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.LogsLevel = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.LogsLevelFlag) {
 			logsLevelFlagParts := strings.Split(arg, "=")
 			if len(logsLevelFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.LogsLevel = logsLevelFlagParts[1]
 		}
 
@@ -939,12 +1014,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.LogsFile = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.LogsFileFlag) {
 			logsFileFlagParts := strings.Split(arg, "=")
 			if len(logsFileFlagParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.LogsFile = logsFileFlagParts[1]
 		}
 
@@ -952,12 +1029,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.SettingsListMergeStrategy = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.SettingsListMergeStrategyFlag) {
 			settingsListMergeStrategyParts := strings.Split(arg, "=")
 			if len(settingsListMergeStrategyParts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
 		}
 
@@ -965,12 +1044,14 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) <= (i + 1) {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.Query = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.QueryFlag) {
 			parts := strings.Split(arg, "=")
 			if len(parts) != 2 {
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
+
 			info.Query = parts[1]
 		}
 
@@ -1021,6 +1102,7 @@ func processArgsAndFlags(
 		if len(additionalArgsAndFlags) > 0 {
 			info.SubCommand = additionalArgsAndFlags[0]
 		}
+
 		return info, nil
 	}
 
@@ -1069,25 +1151,30 @@ func processArgsAndFlags(
 			} else {
 				return info, fmt.Errorf("command \"%s\" requires an argument", info.SubCommand)
 			}
+
 			if len(additionalArgsAndFlags) > 3 {
 				info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
 			}
 		} else {
 			info.SubCommand = additionalArgsAndFlags[0]
+
 			if len(additionalArgsAndFlags) > 1 {
 				secondArg := additionalArgsAndFlags[1]
 				if len(secondArg) == 0 {
 					return info, fmt.Errorf("invalid empty argument provided")
 				}
+
 				if strings.HasPrefix(secondArg, "--") {
 					if len(secondArg) <= 2 {
 						return info, fmt.Errorf("invalid option format: %s", secondArg)
 					}
+
 					info.AdditionalArgsAndFlags = []string{secondArg}
 				} else {
 					info.ComponentFromArg = secondArg
 				}
 			}
+
 			if len(additionalArgsAndFlags) > 2 {
 				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
 			}
@@ -1097,7 +1184,7 @@ func processArgsAndFlags(
 	return info, nil
 }
 
-// generateComponentBackendConfig generates backend config for components
+// generateComponentBackendConfig generates backend config for components.
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
 	// Generate backend config file for Terraform Cloud
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
@@ -1140,16 +1227,17 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 	}, nil
 }
 
-// generateComponentProviderOverrides generates provider overrides for components
+// generateComponentProviderOverrides generates provider overrides for components.
 func generateComponentProviderOverrides(providerOverrides map[string]any) map[string]any {
 	return map[string]any{
 		"provider": providerOverrides,
 	}
 }
 
-// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defined in
+// FindComponentDependencies finds all imports that the component depends on, and all imports that the component has any sections defined in.
 func FindComponentDependencies(currentStack string, sources schema.ConfigSources) ([]string, []string, error) {
 	var deps []string
+
 	var depsAll []string
 
 	for _, source := range sources {
@@ -1157,6 +1245,7 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 			for i, dep := range v.StackDependencies {
 				if dep.StackFile != "" {
 					depsAll = append(depsAll, dep.StackFile)
+
 					if i == 0 {
 						deps = append(deps, dep.StackFile)
 					}
@@ -1168,28 +1257,34 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 	depsAll = append(depsAll, currentStack)
 	unique := u.UniqueStrings(deps)
 	uniqueAll := u.UniqueStrings(depsAll)
+
 	sort.Strings(unique)
 	sort.Strings(uniqueAll)
+
 	return unique, uniqueAll, nil
 }
 
-// getCliVars returns a map of variables provided on the command-line
-// atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'
+// atmos terraform apply template-functions-test -s tenant1-ue2-prod -var name=test2 -var stage=dev -var 'tags={"a":"value2", "Name":"test"}'.
 func getCliVars(args []string) (map[string]any, error) {
 	variables := make(map[string]any)
+
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-var" && i+1 < len(args) {
 			kv := args[i+1]
+
 			parts := strings.SplitN(kv, "=", 2)
 			if len(parts) == 2 {
 				varName := parts[0]
 				part2 := parts[1]
+
 				var varValue any
+
 				if u.IsJSON(part2) {
 					v, err := u.ConvertFromJSON(part2)
 					if err != nil {
 						return nil, err
 					}
+
 					varValue = v
 				} else {
 					varValue = strings.TrimSpace(part2)
@@ -1197,13 +1292,15 @@ func getCliVars(args []string) (map[string]any, error) {
 
 				variables[varName] = varValue
 			}
+
 			i++
 		}
 	}
+
 	return variables, nil
 }
 
-// postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags
+// postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags.
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 		configAndStacksInfo.ComponentProvidersSection = i

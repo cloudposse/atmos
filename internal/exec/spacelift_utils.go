@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern
+// BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern.
 func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Context, contextPrefix string) (string, string, error) {
 	if spaceliftStackNamePattern, ok := spaceliftSettings["stack_name_pattern"].(string); ok {
 		return cfg.ReplaceContextTokens(context, spaceliftStackNamePattern), spaceliftStackNamePattern, nil
@@ -20,7 +20,7 @@ func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Co
 	}
 }
 
-// BuildSpaceliftStackNames builds Spacelift stack names
+// BuildSpaceliftStackNames builds Spacelift stack names.
 func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([]string, error) {
 	var allStackNames []string
 
@@ -54,6 +54,7 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 					context := cfg.GetContextFromVars(componentVars)
 
 					var contextPrefix string
+
 					var err error
 
 					if stackNamePattern != "" {
@@ -81,15 +82,17 @@ func BuildSpaceliftStackNames(stacks map[string]any, stackNamePattern string) ([
 	return allStackNames, nil
 }
 
-// BuildSpaceliftStackNameFromComponentConfig builds Spacelift stack name from the component config
+// BuildSpaceliftStackNameFromComponentConfig builds Spacelift stack name from the component config.
 func BuildSpaceliftStackNameFromComponentConfig(
 	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
-
 	var spaceliftStackName string
+
 	var spaceliftSettingsSection map[string]any
+
 	var contextPrefix string
+
 	var err error
 
 	if i, ok2 := configAndStacksInfo.ComponentSettingsSection["spacelift"]; ok2 {

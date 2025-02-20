@@ -36,7 +36,7 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
-// processCustomCommands processes and executes custom commands
+// processCustomCommands processes and executes custom commands.
 func processCustomCommands(
 	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
@@ -44,6 +44,7 @@ func processCustomCommands(
 	topLevel bool,
 ) error {
 	var command *cobra.Command
+
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
 	// Build commands and their hierarchy from the alias map
@@ -119,7 +120,7 @@ func processCustomCommands(
 	return nil
 }
 
-// addCommandWithAlias adds a command hierarchy based on the full command
+// addCommandWithAlias adds a command hierarchy based on the full command.
 func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
 	if len(parts) == 0 {
 		return
@@ -127,6 +128,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 
 	// Check if a command with the current part already exists
 	var cmd *cobra.Command
+
 	for _, c := range parentCmd.Commands() {
 		if c.Use == parts[0] {
 			cmd = c
@@ -148,7 +150,7 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 	}
 }
 
-// processCommandAliases processes the command aliases
+// processCommandAliases processes the command aliases.
 func processCommandAliases(
 	atmosConfig schema.AtmosConfiguration,
 	aliases schema.CommandAliases,
@@ -197,7 +199,7 @@ func processCommandAliases(
 	return nil
 }
 
-// preCustomCommand is run before a custom command is executed
+// preCustomCommand is run before a custom command is executed.
 func preCustomCommand(
 	cmd *cobra.Command,
 	args []string,
@@ -213,23 +215,24 @@ func preCustomCommand(
 		} else if len(commandConfig.Commands) > 0 {
 			// show sub-commands
 			sb.WriteString("Available command(s):\n")
+
 			for i, c := range commandConfig.Commands {
 				sb.WriteString(
 					fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name),
 				)
 			}
+
 			u.LogInfo(sb.String())
 			os.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			u.PrintErrorMarkdownAndExit("Invalid command", errors.New(
-				fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()),
-			), "https://atmos.tools/cli/configuration/commands")
+			u.PrintErrorMarkdownAndExit("Invalid command", fmt.Errorf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()), "https://atmos.tools/cli/configuration/commands")
 		}
 	}
 
 	// Check on many arguments required and have no default value
 	requiredNoDefaultCount := 0
+
 	for _, arg := range commandConfig.Arguments {
 		if arg.Required && arg.Default == "" {
 			requiredNoDefaultCount++
@@ -244,15 +247,19 @@ func preCustomCommand(
 
 		// List out which arguments are missing
 		missingIndex := 1
+
 		for _, arg := range commandConfig.Arguments {
 			if arg.Required && arg.Default == "" {
 				sb.WriteString(fmt.Sprintf("  %d. %s\n", missingIndex, arg.Name))
+
 				missingIndex++
 			}
 		}
+
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
+
 		u.LogErrorAndExit(errors.New(sb.String()))
 	}
 
@@ -276,16 +283,18 @@ func preCustomCommand(
 	if cmd.Annotations == nil {
 		cmd.Annotations = make(map[string]string)
 	}
+
 	cmd.Annotations["resolvedArgs"] = strings.Join(finalArgs, ",")
 
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
 		_ = cmd.Help()
+
 		os.Exit(0)
 	}
 }
 
-// getTopLevelCommands returns the top-level commands
+// getTopLevelCommands returns the top-level commands.
 func getTopLevelCommands() map[string]*cobra.Command {
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
@@ -296,7 +305,7 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
-// executeCustomCommand executes a custom command
+// executeCustomCommand executes a custom command.
 func executeCustomCommand(
 	atmosConfig schema.AtmosConfiguration,
 	cmd *cobra.Command,
@@ -305,13 +314,16 @@ func executeCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var err error
+
 	args, trailingArgs := extractTrailingArgs(args, os.Args)
+
 	if commandConfig.Verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
 
 	mergedArgsStr := cmd.Annotations["resolvedArgs"]
 	finalArgs := strings.Split(mergedArgsStr, ",")
+
 	if mergedArgsStr == "" {
 		// If for some reason no annotation was set, just fallback
 		finalArgs = args
@@ -328,18 +340,21 @@ func executeCustomCommand(
 		// Prepare template data for flags
 		flags := cmd.Flags()
 		flagsData := map[string]any{}
+
 		for _, fl := range commandConfig.Flags {
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
+
 				flagsData[fl.Name] = providedFlag
 			} else if fl.Type == "bool" {
 				boolFlag, err := flags.GetBool(fl.Name)
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
+
 				flagsData[fl.Name] = boolFlag
 			}
 		}
@@ -359,6 +374,7 @@ func executeCustomCommand(
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
+
 			if component == "" || component == "<no value>" {
 				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
 					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
@@ -369,6 +385,7 @@ func executeCustomCommand(
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
+
 			if stack == "" || stack == "<no value>" {
 				u.LogErrorAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension))
@@ -379,12 +396,14 @@ func executeCustomCommand(
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
+
 			data["ComponentConfig"] = componentConfig
 		}
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		var envVarsList []string
+
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -400,10 +419,12 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
+
 				res, err := e.ExecuteShellAndReturnOutput(atmosConfig, valCommand, valCommandName, ".", nil, false)
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
+
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
@@ -414,6 +435,7 @@ func executeCustomCommand(
 			}
 
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
+
 			err = os.Setenv(key, value)
 			if err != nil {
 				u.LogErrorAndExit(err)
@@ -422,6 +444,7 @@ func executeCustomCommand(
 
 		if len(envVarsList) > 0 && commandConfig.Verbose {
 			u.LogDebug("\nUsing ENV vars:")
+
 			for _, v := range envVarsList {
 				u.LogDebug(v)
 			}
@@ -436,6 +459,7 @@ func executeCustomCommand(
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+
 		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, ".", envVarsList, false)
 		if err != nil {
 			u.LogErrorAndExit(err)
@@ -450,6 +474,7 @@ func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
 	doubleDashIndex := lo.IndexOf(osArgs, "--")
 	mainArgs := args
 	trailingArgs := ""
+
 	if doubleDashIndex > 0 {
 		mainArgs = lo.Slice(osArgs, 0, doubleDashIndex)
 		trailingArgs = strings.Join(lo.Slice(osArgs, doubleDashIndex+1, len(osArgs)), " ")
@@ -467,12 +492,14 @@ func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
 				result = append(result, val)
 			}
 		}
+
 		mainArgs = result
 	}
+
 	return mainArgs, trailingArgs
 }
 
-// cloneCommand clones a custom command config into a new struct
+// cloneCommand clones a custom command config into a new struct.
 func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	origJSON, err := json.Marshal(orig)
 	if err != nil {
@@ -487,7 +514,7 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// checkAtmosConfig checks Atmos config
+// checkAtmosConfig checks Atmos config.
 func checkAtmosConfig(opts ...AtmosValidateOption) {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
@@ -512,12 +539,13 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 }
 
-// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
+// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	c1 := theme.Colors.Info
 	c2 := theme.Colors.Success
 
 	fmt.Println()
+
 	err := tuiUtils.PrintStyledText("ATMOS")
 	if err != nil {
 		u.LogErrorAndExit(err)
@@ -604,12 +632,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	}
 }
 
-// Check Atmos is version command
+// Check Atmos is version command.
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && os.Args[1] == "version"
 }
 
-// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h"
+// handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
@@ -623,14 +651,17 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
 		showErrorExampleFromMarkdown(cmd, "")
 	}
+
 	if len(args) > 0 {
 		showErrorExampleFromMarkdown(cmd, args[0])
 	}
+
 	os.Exit(1)
 }
 
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	unknownCommand := fmt.Sprintf("%v for command `%s`\n\n", err.Error(), cmd.CommandPath())
+
 	args := strings.Split(err.Error(), ": ")
 	if len(args) == 2 {
 		if strings.Contains(args[0], "flag needs an argument") {
@@ -639,17 +670,20 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 			unknownCommand = fmt.Sprintf("%s `%s` for command `%s`\n\n", args[0], args[1], cmd.CommandPath())
 		}
 	}
+
 	showUsageExample(cmd, unknownCommand)
 	os.Exit(1)
+
 	return nil
 }
 
-// getConfigAndStacksInfo processes the CLI config and stacks
+// getConfigAndStacksInfo processes the CLI config and stacks.
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
 	// Check Atmos configuration
 	checkAtmosConfig()
 
 	var argsAfterDoubleDash []string
+
 	finalArgs := args
 
 	doubleDashIndex := lo.IndexOf(args, "--")
@@ -662,21 +696,25 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	if err != nil {
 		u.LogErrorAndExit(err)
 	}
+
 	return info
 }
 
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	commandPath := cmd.CommandPath()
 	suggestions := []string{}
+
 	details := fmt.Sprintf("The command `%s` is not valid usage\n", commandPath)
 	if len(arg) > 0 {
 		details = fmt.Sprintf("Unknown command `%s` for `%s`\n", arg, commandPath)
 	} else if len(cmd.Commands()) != 0 && arg == "" {
 		details = fmt.Sprintf("The command `%s` requires a subcommand\n", commandPath)
 	}
+
 	if len(arg) > 0 {
 		suggestions = cmd.SuggestionsFor(arg)
 	}
+
 	if len(suggestions) > 0 {
 		details = details + "Did you mean this?\n"
 		for _, suggestion := range suggestions {
@@ -691,16 +729,19 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 			details = details + "* " + subCmd.Name() + "\n"
 		}
 	}
+
 	showUsageExample(cmd, details)
 }
 
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(cmd.CommandPath(), " ", "_")
 	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+
 	if exampleContent, ok := examples[contentName]; ok {
 		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
+
 	u.PrintInvalidUsageErrorAndExit(errors.New(details), suggestion)
 }
 
@@ -709,6 +750,7 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
+
 	return output, cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -722,21 +764,26 @@ func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete strin
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+
 		return output, cobra.ShellCompDirectiveNoFileComp
 	}
+
 	if len(args) > 0 {
 		flagName := args[len(args)-1]
 		if strings.HasPrefix(flagName, "--") {
 			flagName = strings.ReplaceAll(flagName, "--", "")
 		}
+
 		if strings.HasPrefix(toComplete, "--") {
 			flagName = strings.ReplaceAll(toComplete, "--", "")
 		}
+
 		flagName = strings.ReplaceAll(flagName, "=", "")
 		if option, ok := cmd.GetFlagCompletionFunc(flagName); ok {
 			return option(cmd, args, toComplete)
 		}
 	}
+
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -747,5 +794,6 @@ func Contains(slice []string, target string) bool {
 			return true
 		}
 	}
+
 	return false
 }

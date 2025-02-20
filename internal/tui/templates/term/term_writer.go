@@ -41,6 +41,7 @@ func NewResponsiveWriter(w io.Writer) io.Writer {
 
 	// Use optimal width based on terminal size
 	var limit uint
+
 	switch {
 	case width >= maxWidth:
 		limit = maxWidth
@@ -66,6 +67,7 @@ func (w *TerminalWriter) Write(p []byte) (int, error) {
 	// Preserving the original length for correct return value
 	originalLen := len(p)
 	wrapped := wordwrap.WrapString(string(p), w.width)
+
 	n, err := w.writer.Write([]byte(wrapped))
 	if err != nil {
 		return n, err
@@ -82,6 +84,7 @@ func (w *TerminalWriter) GetWidth() uint {
 func IsTTYSupportForStdout() bool {
 	fd := int(os.Stdout.Fd())
 	isTerminal := term.IsTerminal(fd)
+
 	return isTerminal
 }
 
@@ -89,5 +92,6 @@ func IsTTYSupportForStdout() bool {
 func IsTTYSupportForStderr() bool {
 	fd := int(os.Stderr.Fd())
 	isTerminal := term.IsTerminal(fd)
+
 	return isTerminal
 }

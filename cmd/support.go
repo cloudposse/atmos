@@ -10,7 +10,7 @@ import (
 //go:embed markdown/support.md
 var supportMarkdown string
 
-// supportCmd represents the support command
+// supportCmd represents the support command.
 var supportCmd = &cobra.Command{
 	Use:                "support",
 	Short:              "Show Atmos support options",

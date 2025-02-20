@@ -46,5 +46,6 @@ func init() {
 			Args:  cobra.NoArgs,
 		})
 	}
+
 	RootCmd.AddCommand(completionCmd)
 }

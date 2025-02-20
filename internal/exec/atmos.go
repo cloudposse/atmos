@@ -14,7 +14,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtmosCmd executes `atmos` command
+// ExecuteAtmosCmd executes `atmos` command.
 func ExecuteAtmosCmd() error {
 	commands := []string{
 		"terraform plan",
@@ -34,6 +34,7 @@ func ExecuteAtmosCmd() error {
 	}
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return err
@@ -57,6 +58,7 @@ func ExecuteAtmosCmd() error {
 				// This will require checking the list of commands and filtering the stacks and components depending on the selected command.
 			}
 		}
+
 		return k, nil
 	})
 
@@ -65,13 +67,16 @@ func ExecuteAtmosCmd() error {
 
 	// Create a map of components to lists of stacks for each component
 	componentsStacksMap := make(map[string][]string)
+
 	lo.ForEach(componentsSet, func(c string, _ int) {
 		var stacksForComponent []string
+
 		for k, v := range stacksComponentsMap {
 			if u.SliceContainsString(v, c) {
 				stacksForComponent = append(stacksForComponent, k)
 			}
 		}
+
 		componentsStacksMap[c] = stacksForComponent
 	})
 
@@ -81,7 +86,9 @@ func ExecuteAtmosCmd() error {
 
 	// Start the UI
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
+
 	fmt.Println()
+
 	if err != nil {
 		return err
 	}
@@ -108,10 +115,12 @@ func ExecuteAtmosCmd() error {
 		if err != nil {
 			return err
 		}
+
 		err = u.PrintAsYAML(data)
 		if err != nil {
 			return err
 		}
+
 		return nil
 	}
 
@@ -120,10 +129,12 @@ func ExecuteAtmosCmd() error {
 		if err != nil {
 			return err
 		}
+
 		err = u.PrintAsYAML(data)
 		if err != nil {
 			return err
 		}
+
 		return nil
 	}
 
@@ -135,6 +146,7 @@ func ExecuteAtmosCmd() error {
 
 		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", selectedComponent, selectedStack)
 		u.PrintMessageInColor(m, theme.Colors.Success)
+
 		return nil
 	}
 
@@ -147,6 +159,7 @@ func ExecuteAtmosCmd() error {
 		configAndStacksInfo.ComponentFromArg = selectedComponent
 		configAndStacksInfo.Stack = selectedStack
 		configAndStacksInfo.SubCommand = subcommand
+
 		err = ExecuteTerraform(configAndStacksInfo)
 		if err != nil {
 			return err

@@ -5,7 +5,7 @@ import (
 	mouseZone "github.com/lrstanley/bubblezone"
 )
 
-// Execute starts the TUI app and returns the selected items from the views
+// Execute starts the TUI app and returns the selected items from the views.
 func Execute(commands []string, stacksComponentsMap map[string][]string, componentsStacksMap map[string][]string) (*App, error) {
 	mouseZone.NewGlobal()
 	mouseZone.SetEnabled(true)

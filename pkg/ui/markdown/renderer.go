@@ -12,7 +12,7 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// Renderer is a markdown renderer using Glamour
+// Renderer is a markdown renderer using Glamour.
 type Renderer struct {
 	renderer    *glamour.TermRenderer
 	width       uint
@@ -20,7 +20,7 @@ type Renderer struct {
 	atmosConfig *schema.AtmosConfiguration
 }
 
-// NewRenderer creates a new markdown renderer with the given options
+// NewRenderer creates a new markdown renderer with the given options.
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
 		width:   80,                     // default width
@@ -51,12 +51,14 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	}
 
 	r.renderer = renderer
+
 	return r, nil
 }
 
-// Render renders markdown content to ANSI styled text
+// Render renders markdown content to ANSI styled text.
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
+
 	var err error
 	if term.IsTTYSupportForStdout() {
 		rendered, err = r.renderer.Render(content)
@@ -64,11 +66,13 @@ func (r *Renderer) Render(content string) (string, error) {
 		// Fallback to ASCII rendering for non-TTY stdout
 		rendered, err = r.RenderAscii(content)
 	}
+
 	if err != nil {
 		return "", err
 	}
 	// Remove duplicate URLs and trailing newlines
 	lines := strings.Split(rendered, "\n")
+
 	var result []string
 
 	// Create a purple style
@@ -99,10 +103,11 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return renderer.Render(content)
 }
 
-// RenderWithStyle renders markdown content with a specific style
+// RenderWithStyle renders markdown content with a specific style.
 func (r *Renderer) RenderWithStyle(content string, style []byte) (string, error) {
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
@@ -118,14 +123,14 @@ func (r *Renderer) RenderWithStyle(content string, style []byte) (string, error)
 	return renderer.Render(content)
 }
 
-// RenderWorkflow renders workflow documentation with specific styling
+// RenderWorkflow renders workflow documentation with specific styling.
 func (r *Renderer) RenderWorkflow(content string) (string, error) {
 	// Add workflow header
 	content = "# Workflow\n\n" + content
 	return r.Render(content)
 }
 
-// RenderError renders an error message with specific styling
+// RenderError renders an error message with specific styling.
 func (r *Renderer) RenderError(title, details, suggestion string) (string, error) {
 	var content string
 
@@ -134,7 +139,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	}
 
 	if details != "" {
-		content += fmt.Sprintf("%s", details)
+		content += details
 	}
 
 	if suggestion != "" {
@@ -144,11 +149,12 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 			content += suggestion
 		}
 	}
+
 	return r.RenderErrorf(content)
 }
 
-// RenderErrorf renders an error message with specific styling
-func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
+// RenderErrorf renders an error message with specific styling.
+func (r *Renderer) RenderErrorf(content string, args ...any) (string, error) {
 	if term.IsTTYSupportForStderr() {
 		return r.Render(content)
 	}
@@ -156,7 +162,7 @@ func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, er
 	return r.RenderAscii(content)
 }
 
-// RenderSuccess renders a success message with specific styling
+// RenderSuccess renders a success message with specific styling.
 func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	content := fmt.Sprintf("# %s\n\n", title)
 
@@ -167,10 +173,10 @@ func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	return r.Render(content)
 }
 
-// Option is a function that configures the renderer
+// Option is a function that configures the renderer.
 type Option func(*Renderer)
 
-// WithWidth sets the word wrap width for the renderer
+// WithWidth sets the word wrap width for the renderer.
 func WithWidth(width uint) Option {
 	return func(r *Renderer) {
 		r.width = width
@@ -181,18 +187,23 @@ func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Render
 	maxWidth := atmosConfig.Settings.Docs.MaxWidth
 	// Create a terminal writer to get the optimal width
 	termWriter := term.NewResponsiveWriter(os.Stdout)
+
 	var wr *term.TerminalWriter
+
 	var ok bool
+
 	var screenWidth uint = 1000
 	if wr, ok = termWriter.(*term.TerminalWriter); ok {
 		screenWidth = wr.GetWidth()
 	}
+
 	if maxWidth > 0 && ok {
 		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
 	} else if maxWidth > 0 {
 		// Fallback: if type assertion fails, use maxWidth as the screen width.
 		screenWidth = uint(maxWidth)
 	}
+
 	return NewRenderer(
 		atmosConfig,
 		WithWidth(screenWidth),

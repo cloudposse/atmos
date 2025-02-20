@@ -15,7 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ExecuteDescribeDependentsCmd executes `describe dependents` command
+// ExecuteDescribeDependentsCmd executes `describe dependents` command.
 func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
@@ -84,7 +84,7 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
+// ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 func ExecuteDescribeDependents(
 	atmosConfig schema.AtmosConfiguration,
 	component string,
@@ -92,6 +92,7 @@ func ExecuteDescribeDependents(
 	includeSettings bool,
 ) ([]schema.Dependent, error) {
 	dependents := []schema.Dependent{}
+
 	var ok bool
 
 	// Get all stacks with all components
@@ -107,12 +108,14 @@ func ExecuteDescribeDependents(
 
 	// Get the provided component `vars`
 	var providedComponentVarsSection map[string]any
+
 	if providedComponentVarsSection, ok = providedComponentSection["vars"].(map[string]any); !ok {
 		return dependents, nil
 	}
 
 	// Convert the provided component `vars` section to the `Context` structure
 	var providedComponentVars schema.Context
+
 	err = mapstructure.Decode(providedComponentVarsSection, &providedComponentVars)
 	if err != nil {
 		return nil, err
@@ -121,24 +124,28 @@ func ExecuteDescribeDependents(
 	// Iterate over all stacks and all components in the stacks
 	for stackName, stackSection := range stacks {
 		var stackSectionMap map[string]any
+
 		if stackSectionMap, ok = stackSection.(map[string]any); !ok {
 			continue
 		}
 
 		// Get the stack `components` section
 		var stackComponentsSection map[string]any
+
 		if stackComponentsSection, ok = stackSectionMap["components"].(map[string]any); !ok {
 			continue
 		}
 
 		for stackComponentType, stackComponentTypeSection := range stackComponentsSection {
 			var stackComponentTypeSectionMap map[string]any
+
 			if stackComponentTypeSectionMap, ok = stackComponentTypeSection.(map[string]any); !ok {
 				continue
 			}
 
 			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
 				var stackComponentMap map[string]any
+
 				if stackComponentMap, ok = stackComponent.(map[string]any); !ok {
 					continue
 				}
@@ -159,12 +166,14 @@ func ExecuteDescribeDependents(
 
 				// Get the stack component `vars`
 				var stackComponentVarsSection map[string]any
+
 				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[string]any); !ok {
 					return dependents, nil
 				}
 
 				// Convert the stack component `vars` section to the `Context` structure
 				var stackComponentVars schema.Context
+
 				err = mapstructure.Decode(stackComponentVarsSection, &stackComponentVars)
 				if err != nil {
 					return nil, err
@@ -172,12 +181,14 @@ func ExecuteDescribeDependents(
 
 				// Get the stack component `settings`
 				var stackComponentSettingsSection map[string]any
+
 				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[string]any); !ok {
 					continue
 				}
 
 				// Convert the `settings` section to the `Settings` structure
 				var stackComponentSettings schema.Settings
+
 				err = mapstructure.Decode(stackComponentSettingsSection, &stackComponentSettings)
 				if err != nil {
 					return nil, err
@@ -269,6 +280,7 @@ func ExecuteDescribeDependents(
 						if err != nil {
 							return nil, err
 						}
+
 						dependent.SpaceliftStack = spaceliftStackName
 
 						// Atlantis project
@@ -276,6 +288,7 @@ func ExecuteDescribeDependents(
 						if err != nil {
 							return nil, err
 						}
+
 						dependent.AtlantisProject = atlantisProjectName
 					}
 

@@ -8,7 +8,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ValidateStacksCmd validates stacks
+// ValidateStacksCmd validates stacks.
 var ValidateStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "Validate stack manifest configurations",

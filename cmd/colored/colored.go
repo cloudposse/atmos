@@ -51,7 +51,6 @@ type Config struct {
 
 // Init patches Cobra's usage template with configuration provided.
 func Init(cfg *Config) {
-
 	if cfg.RootCmd == nil {
 		panic("coloredcobra: Root command pointer is missing.")
 	}
@@ -120,6 +119,7 @@ func Init(cfg *Config) {
 		cobra.AddTemplateFunc("UseLineStyle", func(s string) string {
 			spl := strings.Split(s, " ")
 			spl[0] = cen.Sprint(spl[0])
+
 			return strings.Join(spl, " ")
 		})
 
@@ -138,21 +138,21 @@ func Init(cfg *Config) {
 	if theme.Styles.Help.Flags != nil {
 		cf = theme.Styles.Help.Flags
 	}
+
 	if theme.Styles.Help.FlagsDescr != nil {
 		cfd = theme.Styles.Help.FlagsDescr
 	}
+
 	if theme.Styles.Help.FlagsDataType != nil {
 		cfdt = theme.Styles.Help.FlagsDataType
 	}
+
 	if cf != nil || cfd != nil || cfdt != nil {
-
 		cobra.AddTemplateFunc("FlagStyle", func(s string) string {
-
 			// Flags info section is multi-line.
 			// Let's split these lines and iterate them.
 			lines := strings.Split(s, "\n")
 			for k := range lines {
-
 				// Styling short and full flags (-f, --flag)
 				if cf != nil {
 					re := regexp.MustCompile(`(--?\S+)`)
@@ -169,6 +169,7 @@ func Init(cfg *Config) {
 				// Split line into two parts: flag data type and description
 				// Tip: Use debugger to understand the logic
 				re := regexp.MustCompile(`\s{2,}`)
+
 				spl := re.Split(lines[k], -1)
 				if len(spl) != 3 {
 					continue
@@ -183,17 +184,17 @@ func Init(cfg *Config) {
 				// Tip: Use debugger to understand the logic
 				if cfdt != nil {
 					re = regexp.MustCompile(`\s+(\w+)$`) // the last word after spaces is the flag data type
+
 					m := re.FindAllStringSubmatch(spl[1], -1)
 					if len(m) == 1 && len(m[0]) == 2 {
 						lines[k] = strings.Replace(lines[k], m[0][1], cfdt.Sprint(m[0][1]), 1)
 					}
 				}
-
 			}
+
 			s = strings.Join(lines, "\n")
 
 			return s
-
 		})
 
 		// Patch usage template

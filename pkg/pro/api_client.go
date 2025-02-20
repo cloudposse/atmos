@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-// AtmosProAPIClient represents the client to interact with the AtmosPro API
+// AtmosProAPIClient represents the client to interact with the AtmosPro API.
 type AtmosProAPIClient struct {
 	APIToken        string
 	BaseAPIEndpoint string
@@ -23,7 +23,7 @@ type AtmosProAPIClient struct {
 	Logger          *logger.Logger
 }
 
-// NewAtmosProAPIClient creates a new instance of AtmosProAPIClient
+// NewAtmosProAPIClient creates a new instance of AtmosProAPIClient.
 func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiToken string) *AtmosProAPIClient {
 	return &AtmosProAPIClient{
 		Logger:          logger,
@@ -34,7 +34,7 @@ func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiTo
 	}
 }
 
-// NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables
+// NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables.
 func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, error) {
 	baseURL := os.Getenv(cfg.AtmosProBaseUrlEnvVarName)
 	if baseURL == "" {
@@ -66,7 +66,7 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 	return req, nil
 }
 
-// UploadAffectedStacks uploads information about affected stacks
+// UploadAffectedStacks uploads information about affected stacks.
 func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
@@ -91,12 +91,13 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf("failed to upload stacks, status: %s", resp.Status)
 	}
+
 	c.Logger.Trace(fmt.Sprintf("\nUploaded the affected components and stacks to %s", url))
 
 	return nil
 }
 
-// LockStack locks a specific stack
+// LockStack locks a specific stack.
 func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
 	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
@@ -143,7 +144,7 @@ func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, 
 	return responseData, nil
 }
 
-// UnlockStack unlocks a specific stack
+// UnlockStack unlocks a specific stack.
 func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
 	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
@@ -174,7 +175,6 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 
 	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
-
 	if err != nil {
 		return UnlockStackResponse{}, fmt.Errorf("error unmarshaling JSON: %s", err)
 	}

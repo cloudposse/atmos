@@ -44,7 +44,7 @@ func TestProcessTagStore(t *testing.T) {
 		name         string
 		input        string
 		currentStack string
-		expected     interface{}
+		expected     any
 	}{
 		{
 			name:         "lookup using current stack",

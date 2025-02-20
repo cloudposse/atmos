@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// helmfileCmd represents the base command for all helmfile sub-commands
+// helmfileCmd represents the base command for all helmfile sub-commands.
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
 	Aliases:            []string{"hf"},
@@ -27,9 +27,11 @@ func init() {
 
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
 	handleHelpRequest(cmd, args)
+
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+
 	err := e.ExecuteHelmfile(info)
 	if err != nil {
 		u.PrintErrorMarkdownAndExit("", err, "")

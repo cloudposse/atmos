@@ -35,6 +35,7 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	}
 
 	var items map[string]Hook
+
 	err = yaml.Unmarshal(yamlData, &items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal to Hooks: %w", err)
@@ -60,12 +61,14 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 				atmosConfig: atmosConfig,
 				info:        info,
 			}
+
 			err := storeCmd.RunE(&hook, event, cmd, args)
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
 		}
 	}
+
 	return nil
 }
 

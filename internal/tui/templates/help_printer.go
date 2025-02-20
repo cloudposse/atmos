@@ -27,6 +27,7 @@ func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) (*H
 	if out == nil {
 		return nil, fmt.Errorf("invalid argument: output writer cannot be nil")
 	}
+
 	if flags == nil {
 		return nil, fmt.Errorf("invalid argument: flag set cannot be nil")
 	}
@@ -44,6 +45,7 @@ func NewHelpFlagPrinter(out io.Writer, wrapLimit uint, flags *pflag.FlagSet) (*H
 
 func calculateMaxFlagLength(flags *pflag.FlagSet) int {
 	maxLen := 0
+
 	flags.VisitAll(func(flag *pflag.Flag) {
 		length := len(flagIndent)
 
@@ -65,6 +67,7 @@ func calculateMaxFlagLength(flags *pflag.FlagSet) int {
 			maxLen = length
 		}
 	})
+
 	return maxLen
 }
 
@@ -72,6 +75,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	nameIndent := nameIndentWidth
 
 	flagName := ""
+
 	if flag.Shorthand != "" {
 		if flag.Value.Type() != "bool" {
 			flagName = fmt.Sprintf("%s-%s, --%s %s", strings.Repeat(" ", nameIndent),
@@ -95,6 +99,7 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 		if _, err := fmt.Fprintf(p.out, "%s\n", flagName); err != nil {
 			return
 		}
+
 		flagName = strings.Repeat(" ", p.maxFlagLen)
 		availWidth = int(p.wrapLimit) - 4
 	}

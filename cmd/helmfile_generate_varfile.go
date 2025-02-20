@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// helmfileGenerateVarfileCmd generates varfile for a helmfile component
+// helmfileGenerateVarfileCmd generates varfile for a helmfile component.
 var helmfileGenerateVarfileCmd = &cobra.Command{
 	Use:                "varfile",
 	Short:              "Generate a values file for a Helmfile component",

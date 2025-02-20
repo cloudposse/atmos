@@ -3,12 +3,12 @@ package store
 import "github.com/mitchellh/mapstructure"
 
 type StoreConfig struct {
-	Type    string                 `yaml:"type"`
-	Options map[string]interface{} `yaml:"options"`
+	Type    string         `yaml:"type"`
+	Options map[string]any `yaml:"options"`
 }
 
 type StoresConfig = map[string]StoreConfig
 
-func parseOptions(options map[string]interface{}, target interface{}) error {
+func parseOptions(options map[string]any, target any) error {
 	return mapstructure.Decode(options, target)
 }

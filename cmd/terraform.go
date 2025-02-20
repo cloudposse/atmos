@@ -12,7 +12,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// terraformCmd represents the base command for all terraform sub-commands
+// terraformCmd represents the base command for all terraform sub-commands.
 var terraformCmd = &cobra.Command{
 	Use:                "terraform",
 	Aliases:            []string{"tf"},
@@ -61,8 +61,10 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
+
 		return
 	}
+
 	err := e.ExecuteTerraform(info)
 	if err != nil {
 		u.PrintErrorMarkdownAndExit("", err, "")

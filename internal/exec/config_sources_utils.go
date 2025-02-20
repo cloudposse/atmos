@@ -7,7 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ProcessConfigSources processes the sources (files) for all sections for a component in a stack
+// ProcessConfigSources processes the sources (files) for all sections for a component in a stack.
 func ProcessConfigSources(
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 	rawStackConfigs map[string]map[string]any,
@@ -76,7 +76,6 @@ func processSectionValueInStacks(
 	subsection string,
 	value string,
 ) schema.ConfigSourcesStackDependencies {
-
 	result := schema.ConfigSourcesStackDependencies{}
 
 	// Process the value for the component in the stack
@@ -231,7 +230,6 @@ func processComponentSectionValueInStack(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -292,6 +290,7 @@ func processComponentSectionValueInStack(
 		if !ok {
 			return result
 		}
+
 		rawStackVarsMap = rawStackVarsMapSubsection
 	}
 
@@ -327,7 +326,6 @@ func processComponentTypeSectionValueInStack(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -368,6 +366,7 @@ func processComponentTypeSectionValueInStack(
 		if !ok {
 			return result
 		}
+
 		rawStackVarsMap = rawStackVarsMapSubsection
 	}
 
@@ -402,7 +401,6 @@ func processGlobalSectionValueInStack(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -433,6 +431,7 @@ func processGlobalSectionValueInStack(
 		if !ok {
 			return result
 		}
+
 		rawStackVarsMap = rawStackVarsMapSubsection
 	}
 
@@ -468,7 +467,6 @@ func processComponentSectionValueInStackImports(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -542,6 +540,7 @@ func processComponentSectionValueInStackImports(
 			if !ok {
 				return result
 			}
+
 			rawStackVarsMap = rawStackVarsMapSubsection
 		}
 
@@ -578,7 +577,6 @@ func processComponentTypeSectionValueInStackImports(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -632,6 +630,7 @@ func processComponentTypeSectionValueInStackImports(
 			if !ok {
 				return result
 			}
+
 			rawStackVarsMap = rawStackVarsMapSubsection
 		}
 
@@ -667,7 +666,6 @@ func processGlobalSectionValueInStackImports(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -711,6 +709,7 @@ func processGlobalSectionValueInStackImports(
 			if !ok {
 				return result
 			}
+
 			rawStackVarsMap = rawStackVarsMapSubsection
 		}
 
@@ -743,5 +742,6 @@ func appendSectionValue(result *schema.ConfigSourcesStackDependencies, value sch
 			return
 		}
 	}
+
 	*result = append(*result, value)
 }

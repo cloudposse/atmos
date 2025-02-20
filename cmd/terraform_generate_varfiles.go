@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// terraformGenerateVarfilesCmd generates varfiles for all terraform components in all stacks
+// terraformGenerateVarfilesCmd generates varfiles for all terraform components in all stacks.
 var terraformGenerateVarfilesCmd = &cobra.Command{
 	Use:                "varfiles",
 	Short:              "Generate varfiles for all Terraform components in all stacks",

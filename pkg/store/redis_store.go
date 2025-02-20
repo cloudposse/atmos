@@ -27,7 +27,7 @@ type RedisStoreOptions struct {
 // RedisStore.
 type RedisClient interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
-	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
 }
 
 // Ensure RedisStore implements the store.Store interface.
@@ -86,7 +86,7 @@ func (s *RedisStore) getKey(stack string, component string, key string) (string,
 	return getKey(prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
-func (s *RedisStore) Get(stack string, component string, key string) (interface{}, error) {
+func (s *RedisStore) Get(stack string, component string, key string) (any, error) {
 	if stack == "" {
 		return nil, fmt.Errorf("stack cannot be empty")
 	}
@@ -105,12 +105,14 @@ func (s *RedisStore) Get(stack string, component string, key string) (interface{
 	}
 
 	ctx := context.Background()
+
 	jsonData, err := s.redisClient.Get(ctx, paramName).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key: %v", err)
 	}
 
-	var result interface{}
+	var result any
+
 	err = json.Unmarshal([]byte(jsonData), &result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal file: %v", err)
@@ -119,7 +121,7 @@ func (s *RedisStore) Get(stack string, component string, key string) (interface{
 	return result, nil
 }
 
-func (s *RedisStore) Set(stack string, component string, key string, value interface{}) error {
+func (s *RedisStore) Set(stack string, component string, key string, value any) error {
 	if stack == "" {
 		return fmt.Errorf("stack cannot be empty")
 	}

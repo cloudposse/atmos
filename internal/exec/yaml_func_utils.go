@@ -24,6 +24,7 @@ func processNodes(
 	skip []string,
 ) map[string]any {
 	newMap := make(map[string]any)
+
 	var recurse func(any) any
 
 	recurse = func(node any) any {
@@ -36,6 +37,7 @@ func processNodes(
 			for k, val := range v {
 				newNestedMap[k] = recurse(val)
 			}
+
 			return newNestedMap
 
 		case []any:
@@ -43,6 +45,7 @@ func processNodes(
 			for i, val := range v {
 				newSlice[i] = recurse(val)
 			}
+
 			return newSlice
 
 		default:
@@ -87,6 +90,7 @@ func processCustomTags(
 func skipFunc(skip []string, f string) bool {
 	t := strings.TrimPrefix(f, "!")
 	c := u.SliceContainsString(skip, t)
+
 	return c
 }
 

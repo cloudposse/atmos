@@ -20,7 +20,7 @@ type Templater struct {
 	UsageTemplate string
 }
 
-// commandStyle defines the styles for command formatting
+// commandStyle defines the styles for command formatting.
 var (
 	commandNameStyle = theme.Styles.CommandName
 	commandDescStyle = theme.Styles.Description
@@ -32,16 +32,19 @@ var (
 					Foreground(lipgloss.Color(theme.ColorGray))
 )
 
-// formatCommand returns a styled string for a command and its description
+// formatCommand returns a styled string for a command and its description.
 func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
 	if IsNotSupported {
 		styledName := commandUnsupportedNameStyle.Render(paddedName)
 		styledDesc := commandUnsupportedDescStyle.Render(desc + " [unsupported]")
+
 		return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 	}
+
 	styledName := commandNameStyle.Render(paddedName)
 	styledDesc := commandDescStyle.Render(desc)
+
 	return fmt.Sprintf("  %-30s %s", styledName, styledDesc)
 }
 
@@ -49,27 +52,32 @@ var customHelpShortMessage = map[string]string{
 	"help": "Display help information for Atmos commands",
 }
 
-// filterCommands returns only commands or aliases based on returnOnlyAliases boolean
+// filterCommands returns only commands or aliases based on returnOnlyAliases boolean.
 func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.Command {
 	if !returnOnlyAliases {
 		return commands
 	}
+
 	filtered := []*cobra.Command{}
+
 	cmdMap := make(map[string]struct{})
 	for _, cmd := range commands {
 		cmdMap[cmd.Use] = struct{}{}
 	}
+
 	for _, cmd := range commands {
 		for _, alias := range cmd.Aliases {
 			if _, ok := cmdMap[alias]; ok {
 				continue
 			}
+
 			copyCmd := *cmd
 			copyCmd.Use = alias
 			copyCmd.Short = fmt.Sprintf("Alias of %q command", cmd.CommandPath())
 			filtered = append(filtered, &copyCmd)
 		}
 	}
+
 	return filtered
 }
 
@@ -78,20 +86,26 @@ func renderHelpMarkdown(cmd *cobra.Command) string {
 	if err != nil {
 		return ""
 	}
+
 	commandPath := cmd.CommandPath()
 	if cmd.HasSubCommands() {
 		commandPath += " [subcommand]"
 	}
+
 	help := fmt.Sprintf("Use `%s --help` for more information about a command.", commandPath)
+
 	var data string
+
 	if term.IsTerminal(int(os.Stdout.Fd())) {
 		data, err = render.Render(help)
 	} else {
 		data, err = render.RenderAscii(help)
 	}
+
 	if err == nil {
 		return data
 	}
+
 	return ""
 }
 
@@ -101,6 +115,7 @@ func isNativeCommandsAvailable(cmds []*cobra.Command) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -118,12 +133,14 @@ func renderMarkdown(example string) string {
 	if err == nil {
 		return data
 	}
+
 	return ""
 }
 
-// formatCommands formats a slice of cobra commands with proper styling
+// formatCommands formats a slice of cobra commands with proper styling.
 func formatCommands(cmds []*cobra.Command, listType string) string {
 	var maxLen int
+
 	availableCmds := make([]*cobra.Command, 0)
 
 	// First pass: collect available commands and find max length
@@ -132,30 +149,35 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 		if v, ok := customHelpShortMessage[cmd.Name()]; ok {
 			cmd.Short = v
 		}
+
 		switch listType {
 		case "additionalHelpTopics":
 			if cmd.IsAdditionalHelpTopicCommand() {
 				availableCmds = append(availableCmds, cmd)
+
 				if len(cmd.Name()) > maxLen {
 					maxLen = len(cmd.Name())
 				}
+
 				continue
 			}
 		case "native":
 			if cmd.Annotations["nativeCommand"] == "true" {
 				availableCmds = append(availableCmds, cmd)
+
 				if len(cmd.Name()) > maxLen {
 					maxLen = len(cmd.Name())
 				}
+
 				continue
 			}
 		case "subcommandAliases":
 			// if cmd.Annotations["nativeCommand"] == "true" {
 			// 	continue
 			// }
-
 			if cmd.IsAvailableCommand() || cmd.Name() == "help" {
 				availableCmds = append(availableCmds, cmd)
+
 				if len(cmd.Name()) > maxLen {
 					maxLen = len(cmd.Name())
 				}
@@ -164,8 +186,10 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 			if cmd.Annotations["nativeCommand"] == "true" {
 				continue
 			}
+
 			if cmd.IsAvailableCommand() || cmd.Name() == "help" {
 				availableCmds = append(availableCmds, cmd)
+
 				if len(cmd.Name()) > maxLen {
 					maxLen = len(cmd.Name())
 				}
@@ -184,12 +208,14 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 		if iHasKey && !jHasKey {
 			return true
 		}
+
 		if !iHasKey && jHasKey {
 			return false
 		}
 		// If both or neither have the key, maintain original order
 		return i < j
 	})
+
 	for _, cmd := range availableCmds {
 		lines = append(lines, formatCommand(cmd.Name(), cmd.Short, maxLen, cmd.Annotations["IsNotSupported"] == "true"))
 	}
@@ -203,6 +229,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	if cmd == nil {
 		return fmt.Errorf("command cannot be nil")
 	}
+
 	t := &Templater{
 		UsageTemplate: GenerateFromBaseTemplate([]HelpTemplateSections{
 			LongDescription,
@@ -225,10 +252,11 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
 	cobra.AddTemplateFunc("renderMarkdown", renderMarkdown)
 	cobra.AddTemplateFunc("renderHelpMarkdown", renderHelpMarkdown)
+
 	return nil
 }
 
-// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
+// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined.
 func GetTerminalWidth() int {
 	defaultWidth := 80
 	screenWidth := defaultWidth
@@ -244,10 +272,12 @@ func GetTerminalWidth() int {
 	return screenWidth
 }
 
-// WrappedFlagUsages formats the flag usage string to fit within the terminal width
+// WrappedFlagUsages formats the flag usage string to fit within the terminal width.
 func WrappedFlagUsages(f *pflag.FlagSet) string {
 	var builder strings.Builder
+
 	width := GetTerminalWidth()
+
 	printer, err := NewHelpFlagPrinter(&builder, uint(width), f)
 	if err != nil {
 		// If we can't create the printer, return empty string

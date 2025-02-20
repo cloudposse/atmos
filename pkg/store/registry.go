@@ -8,6 +8,7 @@ type StoreRegistry map[string]Store
 
 func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 	registry := make(StoreRegistry)
+
 	for key, storeConfig := range *config {
 		switch storeConfig.Type {
 		case "artifactory":
@@ -20,6 +21,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			registry[key] = store
 
 		case "aws-ssm-parameter-store":
@@ -32,6 +34,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			registry[key] = store
 
 		case "redis":
@@ -44,6 +47,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			registry[key] = store
 
 		default:

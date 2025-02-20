@@ -14,7 +14,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command
+// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
 func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -37,6 +37,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
+
 	var stacks []string
 	if stacksCsv != "" {
 		stacks = strings.Split(stacksCsv, ",")
@@ -46,6 +47,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
+
 	var components []string
 	if componentsCsv != "" {
 		components = strings.Split(componentsCsv, ",")
@@ -55,9 +57,11 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
+
 	if format != "" && format != "yaml" && format != "json" && format != "hcl" {
 		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl", format)
 	}
+
 	if format == "" {
 		format = "json"
 	}
@@ -65,7 +69,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 	return ExecuteTerraformGenerateVarfiles(atmosConfig, fileTemplate, format, stacks, components)
 }
 
-// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks
+// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
 func ExecuteTerraformGenerateVarfiles(
 	atmosConfig schema.AtmosConfiguration,
 	fileTemplate string,
@@ -79,16 +83,27 @@ func ExecuteTerraformGenerateVarfiles(
 	}
 
 	var ok bool
+
 	var componentsSection map[string]any
+
 	var terraformSection map[string]any
+
 	var componentSection map[string]any
+
 	var metadataSection map[string]any
+
 	var varsSection map[string]any
+
 	var settingsSection map[string]any
+
 	var envSection map[string]any
+
 	var providersSection map[string]any
+
 	var overridesSection map[string]any
+
 	var backendSection map[string]any
+
 	var backendTypeSection string
 
 	for stackFileName, stackSection := range stacksMap {
@@ -108,7 +123,6 @@ func ExecuteTerraformGenerateVarfiles(
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
-
 				// Component vars
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					continue
@@ -223,6 +237,7 @@ func ExecuteTerraformGenerateVarfiles(
 				if err != nil {
 					return err
 				}
+
 				componentSection["workspace"] = workspace
 				configAndStacksInfo.ComponentSection["workspace"] = workspace
 
@@ -240,6 +255,7 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				var settingsSectionStruct schema.Settings
+
 				err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 				if err != nil {
 					return err
@@ -266,6 +282,7 @@ func ExecuteTerraformGenerateVarfiles(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
+
 					u.LogErrorAndExit(err)
 				}
 
@@ -288,10 +305,10 @@ func ExecuteTerraformGenerateVarfiles(
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, stackName) {
-
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
+
 					fileAbsolutePath, err := filepath.Abs(fileName)
 					if err != nil {
 						return err

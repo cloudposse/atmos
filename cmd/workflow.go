@@ -14,7 +14,7 @@ import (
 //go:embed markdown/workflow.md
 var workflowMarkdown string
 
-// workflowCmd executes a workflow
+// workflowCmd executes a workflow.
 var workflowCmd = &cobra.Command{
 	Use:   "workflow",
 	Short: "Run predefined tasks using workflows",

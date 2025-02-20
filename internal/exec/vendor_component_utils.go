@@ -22,7 +22,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`)
+// findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`).
 func findComponentConfigFile(basePath, fileName string) (string, error) {
 	componentConfigExtensions := []string{"yaml", "yml"}
 
@@ -32,16 +32,18 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 			return configFilePath, nil
 		}
 	}
+
 	return "", fmt.Errorf("component vendoring config file does not exist in the '%s' folder", basePath)
 }
 
-// ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`
+// ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`.
 func ReadAndProcessComponentVendorConfigFile(
 	atmosConfig schema.AtmosConfiguration,
 	component string,
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
 	var componentBasePath string
+
 	var componentConfig schema.VendorComponentConfig
 
 	if componentType == "terraform" {
@@ -96,8 +98,7 @@ func ReadAndProcessComponentVendorConfigFile(
 // https://github.com/google/go-containerregistry
 // https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html
 
-// ExecuteStackVendorInternal executes the command to vendor an Atmos stack
-// TODO: implement this
+// TODO: implement this.
 func ExecuteStackVendorInternal(
 	stack string,
 	dryRun bool,
@@ -182,6 +183,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 	}
 
 	componentPath2 := componentPath
+
 	if sourceIsLocalFile {
 		if filepath.Ext(componentPath) == "" {
 			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
@@ -191,6 +193,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -202,7 +205,9 @@ func ExecuteComponentVendorInternal(
 	dryRun bool,
 ) error {
 	var err error
+
 	var t *template.Template
+
 	var uri string
 
 	if vendorComponentSpec.Source.Uri == "" {
@@ -217,6 +222,7 @@ func ExecuteComponentVendorInternal(
 		}
 
 		var tpl bytes.Buffer
+
 		err = t.Execute(&tpl, vendorComponentSpec.Source)
 		if err != nil {
 			return err
@@ -249,6 +255,7 @@ func ExecuteComponentVendorInternal(
 				sourceIsLocalFile = true
 			}
 		}
+
 		u, err := url.Parse(uri)
 		if err == nil && u.Scheme != "" {
 			if u.Scheme == "file" {
@@ -301,6 +308,7 @@ func ExecuteComponentVendorInternal(
 				}
 
 				var tpl bytes.Buffer
+
 				err = t.Execute(&tpl, mixin)
 				if err != nil {
 					return err
@@ -333,6 +341,7 @@ func ExecuteComponentVendorInternal(
 					continue
 				}
 			}
+
 			if useOciScheme {
 				pType = pkgTypeOci
 			} else {
@@ -361,15 +370,19 @@ func ExecuteComponentVendorInternal(
 		if err != nil {
 			return fmt.Errorf("error initializing model: %v", err)
 		}
+
 		var opts []tea.ProgramOption
 		// Disable TUI if no TTY support is available
 		if !term.IsTTYSupportForStdout() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+
 			u.LogWarning("TTY is not supported. Running in non-interactive mode")
 		}
+
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
 	}
+
 	return nil
 }

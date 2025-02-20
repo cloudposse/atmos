@@ -25,6 +25,7 @@ func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stac
 
 			if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
 				u.LogTrace("'outputs' section:")
+
 				y, err2 := u.ConvertToYAML(outputsSection)
 				if err2 != nil {
 					u.LogError(err2)
@@ -72,6 +73,7 @@ func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stac
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace {
 		u.LogTrace(fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
+
 		y, err2 := u.ConvertToYAML(terraformOutputs)
 		if err2 != nil {
 			u.LogError(err2)

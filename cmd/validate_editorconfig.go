@@ -51,7 +51,7 @@ func initializeConfig(cmd *cobra.Command) {
 
 	configPaths := []string{}
 	if configFilePath == "" {
-		configPaths = append(configPaths, defaultConfigFileNames[:]...)
+		configPaths = append(configPaths, defaultConfigFileNames...)
 	} else {
 		configPaths = append(configPaths, configFilePath)
 	}
@@ -78,31 +78,39 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 	if !cmd.Flags().Changed("config") && atmosConfig.Validate.EditorConfig.ConfigFilePath != "" {
 		configFilePath = atmosConfig.Validate.EditorConfig.ConfigFilePath
 	}
+
 	if !cmd.Flags().Changed("exclude") && len(atmosConfig.Validate.EditorConfig.Exclude) > 0 {
 		tmpExclude = strings.Join(atmosConfig.Validate.EditorConfig.Exclude, ",")
 	}
+
 	if !cmd.Flags().Changed("init") && atmosConfig.Validate.EditorConfig.Init {
 		initEditorConfig = atmosConfig.Validate.EditorConfig.Init
 	}
+
 	if !cmd.Flags().Changed("ignore-defaults") && atmosConfig.Validate.EditorConfig.IgnoreDefaults {
 		cliConfig.IgnoreDefaults = atmosConfig.Validate.EditorConfig.IgnoreDefaults
 	}
+
 	if !cmd.Flags().Changed("dry-run") && atmosConfig.Validate.EditorConfig.DryRun {
 		cliConfig.DryRun = atmosConfig.Validate.EditorConfig.DryRun
 	}
+
 	if !cmd.Flags().Changed("format") && atmosConfig.Validate.EditorConfig.Format != "" {
 		format := outputformat.OutputFormat(atmosConfig.Validate.EditorConfig.Format)
 		if ok := format.IsValid(); !ok {
 			u.LogErrorAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
 		}
+
 		cliConfig.Format = format
 	} else if cmd.Flags().Changed("format") {
 		format := outputformat.OutputFormat(format)
 		if ok := format.IsValid(); !ok {
 			u.LogErrorAndExit(fmt.Errorf("%v is not a valid format choose from the following: %v", atmosConfig.Validate.EditorConfig.Format, outputformat.GetArgumentChoiceText()))
 		}
+
 		cliConfig.Format = format
 	}
+
 	if !cmd.Flags().Changed("logs-level") && atmosConfig.Logs.Level == "trace" {
 		cliConfig.Verbose = true
 	} else if cmd.Flags().Changed("logs-level") {
@@ -110,24 +118,31 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 			cliConfig.Verbose = true
 		}
 	}
+
 	if !cmd.Flags().Changed("no-color") && !atmosConfig.Validate.EditorConfig.Color {
 		cliConfig.NoColor = !atmosConfig.Validate.EditorConfig.Color
 	}
+
 	if !cmd.Flags().Changed("disable-trim-trailing-whitespace") && atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace {
 		cliConfig.Disable.TrimTrailingWhitespace = atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace
 	}
+
 	if !cmd.Flags().Changed("disable-end-of-line") && atmosConfig.Validate.EditorConfig.DisableEndOfLine {
 		cliConfig.Disable.EndOfLine = atmosConfig.Validate.EditorConfig.DisableEndOfLine
 	}
+
 	if !cmd.Flags().Changed("disable-insert-final-newline") && atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline {
 		cliConfig.Disable.InsertFinalNewline = atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline
 	}
+
 	if !cmd.Flags().Changed("disable-indentation") && atmosConfig.Validate.EditorConfig.DisableIndentation {
 		cliConfig.Disable.Indentation = atmosConfig.Validate.EditorConfig.DisableIndentation
 	}
+
 	if !cmd.Flags().Changed("disable-indent-size") && atmosConfig.Validate.EditorConfig.DisableIndentSize {
 		cliConfig.Disable.IndentSize = atmosConfig.Validate.EditorConfig.DisableIndentSize
 	}
+
 	if !cmd.Flags().Changed("disable-max-line-length") && atmosConfig.Validate.EditorConfig.DisableMaxLineLength {
 		cliConfig.Disable.MaxLineLength = atmosConfig.Validate.EditorConfig.DisableMaxLineLength
 	}
@@ -152,16 +167,19 @@ func runMainLogic() {
 		for _, file := range filePaths {
 			u.LogInfo(file)
 		}
+
 		os.Exit(0)
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
 	u.LogDebug(fmt.Sprintf("%d files checked", len(filePaths)))
+
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
 		os.Exit(1)
 	}
+
 	u.PrintMessage("No errors found")
 }
 
@@ -169,6 +187,7 @@ func checkVersion(config config.Config) error {
 	if !utils.FileExists(config.Path) || config.Version == "" {
 		return nil
 	}
+
 	if config.Version != version.Version {
 		return fmt.Errorf("version mismatch: binary=%s, config=%s",
 			version.Version, config.Version)

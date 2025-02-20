@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// atlantisGenerateCmd generates various Atlantis configurations
+// atlantisGenerateCmd generates various Atlantis configurations.
 var atlantisGenerateCmd = &cobra.Command{
 	Use:                "generate",
 	Short:              "Generate Atlantis configuration files",

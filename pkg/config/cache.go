@@ -21,7 +21,9 @@ type CacheConfig struct {
 
 func GetCacheFilePath() (string, error) {
 	xdgCacheHome := os.Getenv("XDG_CACHE_HOME")
+
 	var cacheDir string
+
 	if xdgCacheHome == "" {
 		cacheDir = filepath.Join(".", ".atmos")
 	} else {
@@ -42,6 +44,7 @@ func withCacheFileLock(cacheFile string, fn func() error) error {
 		return errors.Wrap(err, "error acquiring file lock")
 	}
 	defer lock.Unlock()
+
 	return fn()
 }
 
@@ -59,12 +62,15 @@ func LoadCache() (CacheConfig, error) {
 
 	v := viper.New()
 	v.SetConfigFile(cacheFile)
+
 	if err := v.ReadInConfig(); err != nil {
 		return cfg, errors.Wrap(err, "failed to read cache file")
 	}
+
 	if err := v.Unmarshal(&cfg); err != nil {
 		return cfg, errors.Wrap(err, "failed to unmarshal cache file")
 	}
+
 	return cfg, nil
 }
 
@@ -77,9 +83,11 @@ func SaveCache2(cfg CacheConfig) error {
 	return withCacheFileLock(cacheFile, func() error {
 		v := viper.New()
 		v.Set("last_checked", cfg.LastChecked)
+
 		if err := v.WriteConfigAs(cacheFile); err != nil {
 			return errors.Wrap(err, "failed to write cache file")
 		}
+
 		return nil
 	})
 }
@@ -92,9 +100,11 @@ func SaveCache(cfg CacheConfig) error {
 
 	v := viper.New()
 	v.Set("last_checked", cfg.LastChecked)
+
 	if err := v.WriteConfigAs(cacheFile); err != nil {
 		return errors.Wrap(err, "failed to write cache file")
 	}
+
 	return nil
 }
 
@@ -105,8 +115,10 @@ func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	if err != nil {
 		// Log warning and default to daily if we can’t parse
 		u.LogWarning(fmt.Sprintf("Unsupported frequency '%s' encountered. Defaulting to daily.", frequency))
+
 		interval = 86400 // daily
 	}
+
 	return now-lastChecked >= interval
 }
 
@@ -127,6 +139,7 @@ func parseFrequency(frequency string) (int64, error) {
 	if len(freq) > 1 {
 		unit := freq[len(freq)-1]
 		valPart := freq[:len(freq)-1]
+
 		if valInt, err := strconv.ParseInt(valPart, 10, 64); err == nil && valInt > 0 {
 			switch unit {
 			case 's':

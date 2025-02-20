@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// terraformGenerateBackendCmd generates backend config for a terraform component
+// terraformGenerateBackendCmd generates backend config for a terraform component.
 var terraformGenerateBackendCmd = &cobra.Command{
 	Use:                "backend",
 	Short:              "Generate backend configuration for a Terraform component",
@@ -31,6 +31,7 @@ func init() {
 	terraformGenerateBackendCmd.DisableFlagParsing = false
 	terraformGenerateBackendCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform generate backend <component> -s <stack>")
 	AddStackCompletion(terraformGenerateBackendCmd)
+
 	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
 		u.LogErrorAndExit(err)

@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// processHelp processes help commands
+// processHelp processes help commands.
 func processHelp(
 	atmosConfig schema.AtmosConfiguration,
 	componentType string,
@@ -18,6 +18,7 @@ func processHelp(
 		u.PrintMessage("In addition, the 'component' argument and 'stack' flag are required to generate the variables and backend config for the component in the stack.\n")
 		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> -s <stack> [options]", componentType))
 		u.PrintMessage(fmt.Sprintf("atmos %s <command> <component> --stack <stack> [options]", componentType))
+
 		if componentType == "helmfile" {
 			u.PrintMessage("\nAdditions and differences from native helmfile:")
 			u.PrintMessage(" - 'atmos helmfile generate varfile' command generates a varfile for the component in the stack")

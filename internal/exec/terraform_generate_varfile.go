@@ -10,7 +10,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command
+// ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command.
 func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
@@ -45,6 +45,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	}
 
 	var varFileNameFromArg string
+
 	var varFilePath string
 
 	varFileNameFromArg, err = flags.GetString("file")

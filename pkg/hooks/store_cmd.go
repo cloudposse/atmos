@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// assert that Command implements Command interface
+// assert that Command implements Command interface.
 var _ Command = &StoreCommand{}
 
 type StoreCommand struct {
@@ -38,6 +38,7 @@ func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 	}
 
 	log.Debug("executing 'after-terraform-apply' hook", "hook", hook.Name, "command", hook.Command)
+
 	for key, value := range hook.Outputs {
 		outputKey, outputValue := c.getOutputValue(value)
 
@@ -46,12 +47,14 @@ func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
-// getOutputValue gets an output from terraform
+// getOutputValue gets an output from terraform.
 func (c *StoreCommand) getOutputValue(value string) (string, any) {
 	outputKey := strings.TrimPrefix(value, ".")
+
 	var outputValue any
 
 	if strings.Index(value, ".") == 0 {
@@ -59,10 +62,11 @@ func (c *StoreCommand) getOutputValue(value string) (string, any) {
 	} else {
 		outputValue = value
 	}
+
 	return outputKey, outputValue
 }
 
-// storeOutput puts the value of the output in the store
+// storeOutput puts the value of the output in the store.
 func (c *StoreCommand) storeOutput(hook *Hook, key string, outputKey string, outputValue any) error {
 	log.Debug("checking if the store exists", "store", hook.Name)
 	store := c.atmosConfig.Stores[hook.Name]
@@ -76,7 +80,7 @@ func (c *StoreCommand) storeOutput(hook *Hook, key string, outputKey string, out
 	return store.Set(c.info.Stack, c.info.ComponentFromArg, key, outputValue)
 }
 
-// RunE is the entrypoint for the store command
+// RunE is the entrypoint for the store command.
 func (c *StoreCommand) RunE(hook *Hook, event HookEvent, cmd *cobra.Command, args []string) error {
 	return c.processStoreCommand(hook)
 }

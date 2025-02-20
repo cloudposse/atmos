@@ -31,6 +31,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	storePart := strings.TrimSpace(parts[0])
 
 	var defaultValue *string
+
 	if len(parts) > 1 {
 		// Expecting the format: default <value>
 		defaultParts := strings.Fields(strings.TrimSpace(parts[1]))
@@ -38,12 +39,14 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 			log.Error(fmt.Sprintf("invalid default value format in: %s", str))
 			return fmt.Sprintf("invalid default value format in: %s", str)
 		}
+
 		val := strings.Trim(defaultParts[1], `"'`) // Remove surrounding quotes if present
 		defaultValue = &val
 	}
 
 	// Process the main store part
 	storeParts := strings.Fields(storePart)
+
 	partsLength := len(storeParts)
 	if partsLength != 3 && partsLength != 4 {
 		return fmt.Sprintf("invalid Atmos Store YAML function execution:: %s\ninvalid parameters: store_name, {stack}, component, key", input)
@@ -77,6 +80,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
+
 		u.LogErrorAndExit(fmt.Errorf("failed to get key: %s", err))
 	}
 

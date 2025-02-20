@@ -7,11 +7,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// applyStyleSafely applies a color to a style primitive safely handling nil pointers
+// applyStyleSafely applies a color to a style primitive safely handling nil pointers.
 func applyStyleSafely(style *ansi.StylePrimitive, color string) {
 	if style == nil {
 		return
 	}
+
 	if style.Color != nil {
 		*style.Color = color
 	} else {
@@ -19,8 +20,7 @@ func applyStyleSafely(style *ansi.StylePrimitive, color string) {
 	}
 }
 
-// GetDefaultStyle returns the markdown style configuration from atmos.yaml settings
-// or falls back to built-in defaults if not configured
+// or falls back to built-in defaults if not configured.
 func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	// Get the built-in default style
 	defaultBytes, err := getBuiltinDefaultStyle()
@@ -45,9 +45,11 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 
 	if atmosConfig.Settings.Markdown.H1.Color != "" {
 		applyStyleSafely(&style.H1.StylePrimitive, atmosConfig.Settings.Markdown.H1.Color)
+
 		if atmosConfig.Settings.Markdown.H1.BackgroundColor != "" {
 			style.H1.BackgroundColor = &atmosConfig.Settings.Markdown.H1.BackgroundColor
 		}
+
 		style.H1.Bold = &atmosConfig.Settings.Markdown.H1.Bold
 		style.H1.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.H1.Margin))
 	}
@@ -68,6 +70,7 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 		} else {
 			style.CodeBlock.StyleBlock.StylePrimitive.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
+
 		style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 	}
 
@@ -89,7 +92,7 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	return json.Marshal(style)
 }
 
-// this only returns the built-in default style configuration
+// this only returns the built-in default style configuration.
 func getBuiltinDefaultStyle() ([]byte, error) {
 	style := ansi.StyleConfig{
 		Document: ansi.StyleBlock{

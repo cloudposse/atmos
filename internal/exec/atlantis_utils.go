@@ -10,13 +10,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from the component config
+// BuildAtlantisProjectNameFromComponentConfig builds an Atlantis project name from the component config.
 func BuildAtlantisProjectNameFromComponentConfig(
 	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
-
 	var atlantisProjectTemplate schema.AtlantisProjectConfig
+
 	var atlantisProjectName string
 
 	if atlantisSettingsSection, ok := configAndStacksInfo.ComponentSettingsSection["atlantis"].(map[string]any); ok {

@@ -13,7 +13,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeStacksCmd executes `describe stacks` command
+// ExecuteDescribeStacksCmd executes `describe stacks` command.
 func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
@@ -84,6 +84,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	var sections []string
 	if sectionsCsv != "" {
 		sections = strings.Split(sectionsCsv, ",")
@@ -144,7 +145,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
+// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
 func ExecuteDescribeStacks(
 	atmosConfig schema.AtmosConfiguration,
 	filterByStack string,
@@ -164,15 +165,25 @@ func ExecuteDescribeStacks(
 
 	finalStacksMap := make(map[string]any)
 	processedStacks := make(map[string]bool)
+
 	var varsSection map[string]any
+
 	var metadataSection map[string]any
+
 	var settingsSection map[string]any
+
 	var envSection map[string]any
+
 	var providersSection map[string]any
+
 	var hooksSection map[string]any
+
 	var overridesSection map[string]any
+
 	var backendSection map[string]any
+
 	var backendTypeSection string
+
 	var stackName string
 
 	for stackFileName, stackSection := range stacksMap {
@@ -183,11 +194,13 @@ func ExecuteDescribeStacks(
 
 		// Check if components section exists and has explicit components
 		hasExplicitComponents := false
+
 		if componentsSection, ok := stackSection.(map[string]any)["components"]; ok {
 			if componentsSection != nil {
 				if terraformSection, ok := componentsSection.(map[string]any)["terraform"].(map[string]any); ok {
 					hasExplicitComponents = len(terraformSection) > 0
 				}
+
 				if helmfileSection, ok := componentsSection.(map[string]any)["helmfile"].(map[string]any); ok {
 					hasExplicitComponents = hasExplicitComponents || len(helmfileSection) > 0
 				}
@@ -209,6 +222,7 @@ func ExecuteDescribeStacks(
 		if processedStacks[stackName] {
 			continue
 		}
+
 		processedStacks[stackName] = true
 
 		if !u.MapKeyExists(finalStacksMap, stackName) {
@@ -217,7 +231,6 @@ func ExecuteDescribeStacks(
 		}
 
 		if componentsSection, ok := stackSection.(map[string]any)["components"].(map[string]any); ok {
-
 			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, "terraform") {
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
@@ -310,6 +323,7 @@ func ExecuteDescribeStacks(
 						} else {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
+
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
@@ -339,9 +353,11 @@ func ExecuteDescribeStacks(
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
 								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
 							}
+
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any), "terraform") {
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"] = make(map[string]any)
 							}
+
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any), componentName) {
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
 							}
@@ -358,6 +374,7 @@ func ExecuteDescribeStacks(
 							if err != nil {
 								return nil, err
 							}
+
 							componentSection["workspace"] = workspace
 							configAndStacksInfo.ComponentSection["workspace"] = workspace
 
@@ -369,6 +386,7 @@ func ExecuteDescribeStacks(
 								}
 
 								var settingsSectionStruct schema.Settings
+
 								err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 								if err != nil {
 									return nil, err
@@ -395,6 +413,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
+
 									u.LogErrorAndExit(err)
 								}
 
@@ -519,6 +538,7 @@ func ExecuteDescribeStacks(
 						} else {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
+
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
@@ -548,9 +568,11 @@ func ExecuteDescribeStacks(
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any), "components") {
 								finalStacksMap[stackName].(map[string]any)["components"] = make(map[string]any)
 							}
+
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any), "helmfile") {
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"] = make(map[string]any)
 							}
+
 							if !u.MapKeyExists(finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any), componentName) {
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName] = make(map[string]any)
 							}
@@ -570,6 +592,7 @@ func ExecuteDescribeStacks(
 								}
 
 								var settingsSectionStruct schema.Settings
+
 								err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 								if err != nil {
 									return nil, err
@@ -596,6 +619,7 @@ func ExecuteDescribeStacks(
 											err = errors.Join(err, errors.New(errorMessage))
 										}
 									}
+
 									u.LogErrorAndExit(err)
 								}
 
@@ -642,6 +666,7 @@ func ExecuteDescribeStacks(
 			if !ok {
 				return nil, fmt.Errorf("invalid stack entry type for stack %s", stackName)
 			}
+
 			componentsSection, hasComponents := stackEntry["components"].(map[string]any)
 
 			if !hasComponents {
@@ -651,6 +676,7 @@ func ExecuteDescribeStacks(
 
 			// Check if any component type (terraform/helmfile) has components
 			hasNonEmptyComponents := false
+
 			for _, components := range componentsSection {
 				if compTypeMap, ok := components.(map[string]any); ok {
 					for _, comp := range compTypeMap {
@@ -666,6 +692,7 @@ func ExecuteDescribeStacks(
 						}
 					}
 				}
+
 				if hasNonEmptyComponents {
 					break
 				}

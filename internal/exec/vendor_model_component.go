@@ -39,10 +39,13 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 	)
 	s := spinner.New()
 	s.Style = theme.Styles.Link
+
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
 	}
+
 	vendorPks := []pkgVendor{}
+
 	for _, pkg := range pkgs {
 		vendorPkg := pkgVendor{
 			name:             pkg.name,
@@ -50,9 +53,10 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 			componentPackage: &pkg,
 		}
 		vendorPks = append(vendorPks, vendorPkg)
-
 	}
+
 	tty := term.IsTTYSupportForStdout()
+
 	return modelVendor{
 		packages:    vendorPks,
 		spinner:     s,
@@ -68,11 +72,13 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 		if dryRun {
 			// Simulate the action
 			time.Sleep(100 * time.Millisecond)
+
 			return installedPkgMsg{
 				err:  nil,
 				name: p.name,
 			}
 		}
+
 		if p.IsComponent {
 			err := installComponent(p, atmosConfig)
 			if err != nil {
@@ -81,11 +87,13 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 					name: p.name,
 				}
 			}
+
 			return installedPkgMsg{
 				err:  nil,
 				name: p.name,
 			}
 		}
+
 		if p.IsMixins {
 			err := installMixin(p, atmosConfig)
 			if err != nil {
@@ -94,11 +102,13 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 					name: p.name,
 				}
 			}
+
 			return installedPkgMsg{
 				err:  nil,
 				name: p.name,
 			}
 		}
+
 		return installedPkgMsg{
 			err:  fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name),
 			name: p.name,
@@ -159,8 +169,8 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		}
 	default:
 		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
-
 	}
+
 	if err = copyComponentToDestination(atmosConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
 		return fmt.Errorf("failed to copy package %s error %s", p.name, err)
 	}

@@ -53,6 +53,7 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 			if err2 != nil {
 				return false, err2
 			}
+
 			return false, errors.New(string(b))
 		default:
 			return false, err
@@ -72,7 +73,6 @@ func ValidateWithOpa(
 	modulePaths []string,
 	timeoutSeconds int,
 ) (bool, error) {
-
 	// Set timeout for schema validation
 	if timeoutSeconds == 0 {
 		timeoutSeconds = 20
@@ -95,8 +95,10 @@ func ValidateWithOpa(
 	}
 
 	var input any
+
 	dec := json.NewDecoder(bytes.NewBufferString(j))
 	dec.UseNumber()
+
 	if err = dec.Decode(&input); err != nil {
 		return false, err
 	}
@@ -121,6 +123,7 @@ func ValidateWithOpa(
 		if err.Error() == "context deadline exceeded" {
 			err = errors.New(timeoutErrorMessage)
 		}
+
 		return false, err
 	}
 
@@ -137,6 +140,7 @@ func ValidateWithOpa(
 	if !ok {
 		return false, errors.New(invalidRegoPolicyErrorMessage)
 	}
+
 	if len(ers) > 0 {
 		return false, errors.New(strings.Join(u.SliceOfInterfacesToSliceOdStrings(ers), "\n"))
 	}
@@ -211,12 +215,14 @@ func ValidateWithOpaLegacy(
 		if err.Error() == "context deadline exceeded" {
 			err = errors.New(timeoutErrorMessage)
 		}
+
 		return false, err
 	}
 
 	defer opa.Stop(ctx)
 
 	var result *sdk.DecisionResult
+
 	if result, err = opa.Decision(ctx, sdk.DecisionOptions{
 		Path:  "/atmos/errors",
 		Input: dataFromJson,
@@ -224,6 +230,7 @@ func ValidateWithOpaLegacy(
 		if err.Error() == "context deadline exceeded" {
 			err = errors.New(timeoutErrorMessage)
 		}
+
 		return false, err
 	}
 

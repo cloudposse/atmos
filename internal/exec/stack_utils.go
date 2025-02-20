@@ -10,10 +10,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// BuildTerraformWorkspace builds Terraform workspace
+// BuildTerraformWorkspace builds Terraform workspace.
 func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	var contextPrefix string
+
 	var err error
+
 	var tmpl string
 
 	if atmosConfig.Stacks.NameTemplate != "" {
@@ -21,6 +23,7 @@ func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndSta
 		if err != nil {
 			return "", err
 		}
+
 		contextPrefix = tmpl
 	} else if atmosConfig.Stacks.NamePattern != "" {
 		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, atmosConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
@@ -32,6 +35,7 @@ func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndSta
 	}
 
 	var workspace string
+
 	componentMetadata := configAndStacksInfo.ComponentMetadataSection
 
 	// Terraform workspace can be overridden per component using `metadata.terraform_workspace_pattern` or `metadata.terraform_workspace_template` or `metadata.terraform_workspace`
@@ -40,6 +44,7 @@ func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndSta
 		if err != nil {
 			return "", err
 		}
+
 		workspace = tmpl
 	} else if terraformWorkspacePattern, terraformWorkspacePatternExist := componentMetadata["terraform_workspace_pattern"].(string); terraformWorkspacePatternExist {
 		workspace = cfg.ReplaceContextTokens(configAndStacksInfo.Context, terraformWorkspacePattern)
@@ -54,8 +59,7 @@ func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndSta
 	return strings.Replace(workspace, "/", "-", -1), nil
 }
 
-// ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether
-// the component is real or abstract and whether the component is disabled or not and whether the component is locked
+// the component is real or abstract and whether the component is disabled or not and whether the component is locked.
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
@@ -64,6 +68,7 @@ func ProcessComponentMetadata(
 	componentIsAbstract := false
 	componentIsEnabled := true
 	componentIsLocked := false
+
 	var componentMetadata map[string]any
 
 	// Find base component in the `component` attribute
@@ -78,11 +83,13 @@ func ProcessComponentMetadata(
 				componentIsAbstract = true
 			}
 		}
+
 		if enabledValue, exists := componentMetadata["enabled"]; exists {
 			if enabled, ok := enabledValue.(bool); ok && !enabled {
 				componentIsEnabled = false
 			}
 		}
+
 		if lockedValue, exists := componentMetadata["locked"]; exists {
 			if locked, ok := lockedValue.(bool); ok && locked {
 				componentIsLocked = true
@@ -103,7 +110,7 @@ func ProcessComponentMetadata(
 	return componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled, componentIsLocked
 }
 
-// BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config
+// BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config.
 func BuildDependentStackNameFromDependsOnLegacy(
 	dependsOn string,
 	allStackNames []string,
@@ -133,7 +140,7 @@ func BuildDependentStackNameFromDependsOnLegacy(
 	return dependentStackName, nil
 }
 
-// BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config
+// BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config.
 func BuildDependentStackNameFromDependsOn(
 	currentComponentName string,
 	currentStackName string,
@@ -141,7 +148,6 @@ func BuildDependentStackNameFromDependsOn(
 	dependsOnStackName string,
 	allStackNames []string,
 ) (string, error) {
-
 	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
 
 	if u.SliceContainsString(allStackNames, dep) {
@@ -159,13 +165,12 @@ func BuildDependentStackNameFromDependsOn(
 	return "", errorMessage
 }
 
-// BuildComponentPath builds component path (path to the component's physical location on disk)
+// BuildComponentPath builds component path (path to the component's physical location on disk).
 func BuildComponentPath(
 	atmosConfig schema.AtmosConfiguration,
 	componentSectionMap map[string]any,
 	componentType string,
 ) string {
-
 	var componentPath string
 
 	if stackComponentSection, ok := componentSectionMap[cfg.ComponentSectionName].(string); ok {
@@ -179,38 +184,41 @@ func BuildComponentPath(
 	return componentPath
 }
 
-// GetStackNamePattern returns stack name pattern
+// GetStackNamePattern returns stack name pattern.
 func GetStackNamePattern(atmosConfig schema.AtmosConfiguration) string {
 	return atmosConfig.Stacks.NamePattern
 }
 
-// IsComponentAbstract returns 'true' if the component is abstract
+// IsComponentAbstract returns 'true' if the component is abstract.
 func IsComponentAbstract(metadataSection map[string]any) bool {
 	if metadataType, ok := metadataSection["type"].(string); ok {
 		if metadataType == "abstract" {
 			return true
 		}
 	}
+
 	return false
 }
 
-// IsComponentEnabled returns 'true' if the component is enabled
+// IsComponentEnabled returns 'true' if the component is enabled.
 func IsComponentEnabled(varsSection map[string]any) bool {
 	if enabled, ok := varsSection["enabled"].(bool); ok {
-		if enabled == false {
+		if !enabled {
 			return false
 		}
 	}
+
 	return true
 }
 
-// GetComponentRemoteStateBackendStaticType returns the `remote_state_backend` section for a component in a stack
-// if the `remote_state_backend_type` is `static`
+// if the `remote_state_backend_type` is `static`.
 func GetComponentRemoteStateBackendStaticType(
 	sections map[string]any,
 ) (map[string]any, error) {
 	var remoteStateBackend map[string]any
+
 	var remoteStateBackendType string
+
 	var ok bool
 
 	if remoteStateBackendType, ok = sections[cfg.RemoteStateBackendTypeSectionName].(string); !ok {

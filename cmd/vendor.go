@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// vendorCmd executes 'atmos vendor' CLI commands
+// vendorCmd executes 'atmos vendor' CLI commands.
 var vendorCmd = &cobra.Command{
 	Use:                "vendor",
 	Short:              "Manage external dependencies for components or stacks",

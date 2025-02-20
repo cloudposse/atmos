@@ -26,7 +26,7 @@ func newGitHubClient(ctx context.Context) *github.Client {
 	return github.NewClient(tc)
 }
 
-// GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository
+// GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository.
 func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
 	opt := &github.ListOptions{Page: 1, PerPage: 1}
 
@@ -43,6 +43,7 @@ func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
 	if len(releases) > 0 {
 		latestRelease := releases[0]
 		latestReleaseTag := *latestRelease.TagName
+
 		return latestReleaseTag, nil
 	}
 

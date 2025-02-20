@@ -15,7 +15,7 @@ import (
 	"github.com/hairyhenderson/gomplate/v3/data"
 )
 
-// FuncMap creates and returns a map of template functions
+// FuncMap creates and returns a map of template functions.
 func FuncMap(atmosConfig schema.AtmosConfiguration, ctx context.Context, gomplateData *data.Data) template.FuncMap {
 	atmosFuncs := &AtmosFuncs{atmosConfig, ctx, gomplateData}
 

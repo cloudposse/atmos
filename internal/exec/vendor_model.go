@@ -31,9 +31,11 @@ const (
 
 func (p pkgType) String() string {
 	names := [...]string{"remote", "oci", "local"}
+
 	if p < pkgTypeRemote || p > pkgTypeLocal {
 		return "unknown"
 	}
+
 	return names[p]
 }
 
@@ -84,11 +86,15 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig
 	)
 	s := spinner.New()
 	s.Style = theme.Styles.Link
+
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
 	}
+
 	isTTY := term.IsTTYSupportForStdout()
+
 	var vendorPks []pkgVendor
+
 	for _, pkg := range pkgs {
 		p := pkgVendor{
 			name:         pkg.name,
@@ -97,6 +103,7 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig
 		}
 		vendorPks = append(vendorPks, p)
 	}
+
 	return modelVendor{
 		packages:    vendorPks,
 		spinner:     s,
@@ -112,6 +119,7 @@ func (m *modelVendor) Init() tea.Cmd {
 		m.done = true
 		return nil
 	}
+
 	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.atmosConfig), m.spinner.Tick)
 }
 
@@ -134,49 +142,62 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.index >= len(m.packages) {
 			return m, nil
 		}
+
 		pkg := m.packages[m.index]
 
 		mark := checkMark
+
 		errMsg := ""
 		if msg.err != nil {
 			errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
 			if !m.isTTY {
 				u.LogError(errors.New(errMsg))
 			}
+
 			mark = xMark
 			m.failedPkg++
 		}
+
 		version := ""
 		if pkg.version != "" {
 			version = fmt.Sprintf("(%s)", pkg.version)
 		}
+
 		if m.index >= len(m.packages)-1 {
 			// Everything's been installed. We're done!
 			m.done = true
 			if !m.isTTY {
 				u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+
 				if m.dryRun {
 					u.LogInfo("Done! Dry run completed. No components vendored.\n")
 				}
+
 				if m.failedPkg > 0 {
 					u.LogInfo(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
 				}
+
 				u.LogInfo(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
 			}
+
 			version := grayColor.Render(version)
+
 			return m, tea.Sequence(
 				tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
 				tea.Quit,
 			)
 		}
+
 		if !m.isTTY {
 			u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 		}
+
 		m.index++
 		// Update progress bar
 		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
 
 		version = grayColor.Render(version)
+
 		return m, tea.Batch(
 			progressCmd,
 			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),   // print message above our program
@@ -185,27 +206,33 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
+
 		return m, cmd
 	case progress.FrameMsg:
 		newModel, cmd := m.progress.Update(msg)
 		if newModel, ok := newModel.(progress.Model); ok {
 			m.progress = newModel
 		}
+
 		return m, cmd
 	}
+
 	return m, nil
 }
 
 func (m modelVendor) View() string {
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
+
 	if m.done {
 		if m.dryRun {
 			return doneStyle.Render("Done! Dry run completed. No components vendored.\n")
 		}
+
 		if m.failedPkg > 0 {
 			return doneStyle.Render(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", n-m.failedPkg, m.failedPkg))
 		}
+
 		return doneStyle.Render(fmt.Sprintf("Vendored %d components.\n", n))
 	}
 
@@ -213,9 +240,11 @@ func (m modelVendor) View() string {
 	spin := m.spinner.View() + " "
 	prog := m.progress.View()
 	cellsAvail := max(0, m.width-lipgloss.Width(spin+prog+pkgCount))
+
 	if m.index >= len(m.packages) {
 		return ""
 	}
+
 	pkgName := currentPkgNameStyle.Render(m.packages[m.index].name)
 
 	info := lipgloss.NewStyle().MaxWidth(cellsAvail).Render("Pulling " + pkgName)
@@ -235,6 +264,7 @@ func max(a, b int) int {
 	if a > b {
 		return a
 	}
+
 	return b
 }
 
@@ -243,6 +273,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		if dryRun {
 			// Simulate the action
 			time.Sleep(500 * time.Millisecond)
+
 			return installedPkgMsg{
 				err:  nil,
 				name: p.name,
@@ -292,9 +323,11 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				PreserveOwner: false,
 				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 			}
+
 			if p.sourceIsLocalFile {
 				tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 			}
+
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to copy package: %w", err),
@@ -306,14 +339,15 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				err:  fmt.Errorf("unknown package type %s for package %s", p.pkgType.String(), p.name),
 				name: p.name,
 			}
-
 		}
+
 		if err := copyToTarget(atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to copy package: %w", err),
 				name: p.name,
 			}
 		}
+
 		return installedPkgMsg{
 			err:  nil,
 			name: p.name,
@@ -333,6 +367,7 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig schema.AtmosCo
 	// No valid package provided
 	return func() tea.Msg {
 		err := fmt.Errorf("no valid installer package provided for %s", installer.name)
+
 		return installedPkgMsg{
 			err:  err,
 			name: installer.name,

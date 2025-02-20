@@ -14,7 +14,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command
+// ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -37,6 +37,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
+
 	var stacks []string
 	if stacksCsv != "" {
 		stacks = strings.Split(stacksCsv, ",")
@@ -46,6 +47,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
+
 	var components []string
 	if componentsCsv != "" {
 		components = strings.Split(componentsCsv, ",")
@@ -55,9 +57,11 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 	if err != nil {
 		return err
 	}
+
 	if format != "" && format != "json" && format != "hcl" && format != "backend-config" {
 		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl', 'json', and 'backend-config'", format)
 	}
+
 	if format == "" {
 		format = "hcl"
 	}
@@ -65,7 +69,7 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 	return ExecuteTerraformGenerateBackends(atmosConfig, fileTemplate, format, stacks, components)
 }
 
-// ExecuteTerraformGenerateBackends generates backend configs for all terraform components
+// ExecuteTerraformGenerateBackends generates backend configs for all terraform components.
 func ExecuteTerraformGenerateBackends(
 	atmosConfig schema.AtmosConfiguration,
 	fileTemplate string,
@@ -79,18 +83,31 @@ func ExecuteTerraformGenerateBackends(
 	}
 
 	var ok bool
+
 	var componentsSection map[string]any
+
 	var terraformSection map[string]any
+
 	var componentSection map[string]any
+
 	var metadataSection map[string]any
+
 	var varsSection map[string]any
+
 	var settingsSection map[string]any
+
 	var envSection map[string]any
+
 	var providersSection map[string]any
+
 	var hooksSection map[string]any
+
 	var overridesSection map[string]any
+
 	var backendSection map[string]any
+
 	var backendTypeSection string
+
 	processedTerraformComponents := map[string]any{}
 	fileTemplateProvided := fileTemplate != ""
 
@@ -111,7 +128,6 @@ func ExecuteTerraformGenerateBackends(
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
-
 				// Component metadata
 				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[string]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
@@ -231,6 +247,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				var settingsSectionStruct schema.Settings
+
 				err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 				if err != nil {
 					return err
@@ -257,6 +274,7 @@ func ExecuteTerraformGenerateBackends(
 							err = errors.Join(err, errors.New(errorMessage))
 						}
 					}
+
 					u.LogErrorAndExit(err)
 				}
 
@@ -276,6 +294,7 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				var backendFilePath string
+
 				var backendFileAbsolutePath string
 
 				// Check if `stacks` filter is provided
@@ -286,7 +305,6 @@ func ExecuteTerraformGenerateBackends(
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, stackName) {
-
 					// If '--file-template' is not specified, don't check if we've already processed the terraform component,
 					// and write the backends to the terraform components folders
 					if !fileTemplateProvided {
@@ -314,6 +332,7 @@ func ExecuteTerraformGenerateBackends(
 						// Replace the tokens in the file template
 						// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 						backendFilePath = cfg.ReplaceContextTokens(context, fileTemplate)
+
 						backendFileAbsolutePath, err = filepath.Abs(backendFilePath)
 						if err != nil {
 							return err

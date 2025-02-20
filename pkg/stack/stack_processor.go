@@ -5,8 +5,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
-// and returns a list of stack configs
+// and returns a list of stack configs.
 func ProcessYAMLConfigFiles(
 	atmosConfig schema.AtmosConfiguration,
 	stacksBasePath string,
@@ -71,8 +70,7 @@ func ProcessYAMLConfigFile(
 	)
 }
 
-// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends,
-// and returns the final stack configuration for all Terraform and helmfile components
+// and returns the final stack configuration for all Terraform and helmfile components.
 func ProcessStackConfig(
 	atmosConfig schema.AtmosConfiguration,
 	stacksBasePath string,

@@ -15,7 +15,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands
+// ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
 func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
 	info, err := ProcessCommandLineArgs("helmfile", cmd, args, additionalArgsAndFlags)
 	if err != nil {
@@ -25,7 +25,7 @@ func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlag
 	return ExecuteHelmfile(info)
 }
 
-// ExecuteHelmfile executes helmfile commands
+// ExecuteHelmfile executes helmfile commands.
 func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -57,6 +57,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	// Check if the component exists as a helmfile component
 	componentPath := filepath.Join(atmosConfig.HelmfileDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
@@ -105,6 +106,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
+
 	if !valid {
 		return fmt.Errorf("\nComponent '%s' did not pass the validation policies.\n", info.ComponentFromArg)
 	}
@@ -203,6 +205,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if info.GlobalOptions != nil && len(info.GlobalOptions) > 0 {
 		allArgsAndFlags = append(allArgsAndFlags, info.GlobalOptions...)
 	}
+
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 
@@ -216,18 +219,22 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if env == "" {
 		envVars = append(envVars, fmt.Sprintf("NAMESPACE=%s", context.Namespace))
 	}
+
 	env = os.Getenv("TENANT")
 	if env == "" {
 		envVars = append(envVars, fmt.Sprintf("TENANT=%s", context.Tenant))
 	}
+
 	env = os.Getenv("ENVIRONMENT")
 	if env == "" {
 		envVars = append(envVars, fmt.Sprintf("ENVIRONMENT=%s", context.Environment))
 	}
+
 	env = os.Getenv("STAGE")
 	if env == "" {
 		envVars = append(envVars, fmt.Sprintf("STAGE=%s", context.Stage))
 	}
+
 	env = os.Getenv("REGION")
 	if env == "" {
 		envVars = append(envVars, fmt.Sprintf("REGION=%s", context.Region))
@@ -240,9 +247,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if atmosConfig.Components.Helmfile.UseEKS {
 		envVars = append(envVars, envVarsEKS...)
 	}
+
 	envVars = append(envVars, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", atmosConfig.BasePath))
+
 	u.LogTrace("Using ENV vars:")
+
 	for _, v := range envVars {
 		u.LogTrace(v)
 	}

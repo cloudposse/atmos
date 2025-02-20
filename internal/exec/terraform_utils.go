@@ -67,8 +67,8 @@ func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
 		if info.ComponentFromArg == "" {
 			shouldProcessStacks = false
 		}
-		shouldCheckStack = info.Stack != ""
 
+		shouldCheckStack = info.Stack != ""
 	}
 
 	return shouldProcessStacks, shouldCheckStack
@@ -107,14 +107,15 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
 			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
+
 			return err
 		}
 	}
+
 	return nil
 }
 
-// needProcessTemplatesAndYamlFunctions checks if a Terraform command
-// requires the `Go` templates and Atmos YAML functions to be processed
+// requires the `Go` templates and Atmos YAML functions to be processed.
 func needProcessTemplatesAndYamlFunctions(command string) bool {
 	commandsThatNeedFuncProcessing := []string{
 		"init",
@@ -142,5 +143,6 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 		"state rm",
 		"state show",
 	}
+
 	return u.SliceContainsString(commandsThatNeedFuncProcessing, command)
 }

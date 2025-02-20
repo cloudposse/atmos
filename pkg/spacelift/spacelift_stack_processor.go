@@ -15,8 +15,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// CreateSpaceliftStacks takes a list of paths to YAML config files, processes and deep-merges all imports,
-// and returns a map of Spacelift stack configs
+// and returns a map of Spacelift stack configs.
 func CreateSpaceliftStacks(
 	stacksBasePath string,
 	terraformComponentsBasePath string,
@@ -84,7 +83,7 @@ func CreateSpaceliftStacks(
 	}
 }
 
-// TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks
+// TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks.
 func TransformStackConfigToSpaceliftStacks(
 	atmosConfig schema.AtmosConfiguration,
 	stacks map[string]any,
@@ -94,6 +93,7 @@ func TransformStackConfigToSpaceliftStacks(
 	rawStackConfigs map[string]map[string]any,
 ) (map[string]any, error) {
 	var err error
+
 	res := map[string]any{}
 
 	allStackNames, err := e.BuildSpaceliftStackNames(stacks, stackNamePattern)
@@ -103,6 +103,7 @@ func TransformStackConfigToSpaceliftStacks(
 
 	for stackName, stackConfig := range stacks {
 		config := stackConfig.(map[string]any)
+
 		var imports []string
 
 		if processImports {
@@ -208,12 +209,14 @@ func TransformStackConfigToSpaceliftStacks(
 					if backendType, backendTypeExist := componentMap["backend_type"]; backendTypeExist {
 						backendTypeName = backendType.(string)
 					}
+
 					spaceliftConfig["backend_type"] = backendTypeName
 
 					componentBackend := map[string]any{}
 					if i, ok2 := componentMap["backend"]; ok2 {
 						componentBackend = i.(map[string]any)
 					}
+
 					spaceliftConfig["backend"] = componentBackend
 
 					configAndStacksInfo := schema.ConfigAndStacksInfo{
@@ -258,6 +261,7 @@ func TransformStackConfigToSpaceliftStacks(
 						u.LogError(err)
 						return nil, err
 					}
+
 					spaceliftConfig["workspace"] = workspace
 
 					// labels
@@ -265,12 +269,15 @@ func TransformStackConfigToSpaceliftStacks(
 					for _, v := range imports {
 						labels = append(labels, fmt.Sprintf("import:"+stackConfigPathTemplate, v))
 					}
+
 					for _, v := range componentStacks {
 						labels = append(labels, fmt.Sprintf("stack:"+stackConfigPathTemplate, v))
 					}
+
 					for _, v := range componentDeps {
 						labels = append(labels, fmt.Sprintf("deps:"+stackConfigPathTemplate, v))
 					}
+
 					for _, v := range spaceliftExplicitLabels {
 						labels = append(labels, v.(string))
 					}
@@ -301,6 +308,7 @@ func TransformStackConfigToSpaceliftStacks(
 							u.LogError(err)
 							return nil, err
 						}
+
 						spaceliftStackNameDependsOnLabels1 = append(spaceliftStackNameDependsOnLabels1, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
 					}
 
@@ -309,6 +317,7 @@ func TransformStackConfigToSpaceliftStacks(
 
 					// Recommended `settings.depends_on`
 					var stackComponentSettingsDependsOn schema.Settings
+
 					err = mapstructure.Decode(componentSettings, &stackComponentSettingsDependsOn)
 					if err != nil {
 						return nil, err
@@ -324,12 +333,15 @@ func TransformStackConfigToSpaceliftStacks(
 						if stackComponentSettingsDependsOnContext.Namespace == "" {
 							stackComponentSettingsDependsOnContext.Namespace = context.Namespace
 						}
+
 						if stackComponentSettingsDependsOnContext.Tenant == "" {
 							stackComponentSettingsDependsOnContext.Tenant = context.Tenant
 						}
+
 						if stackComponentSettingsDependsOnContext.Environment == "" {
 							stackComponentSettingsDependsOnContext.Environment = context.Environment
 						}
+
 						if stackComponentSettingsDependsOnContext.Stage == "" {
 							stackComponentSettingsDependsOnContext.Stage = context.Stage
 						}
@@ -361,6 +373,7 @@ func TransformStackConfigToSpaceliftStacks(
 							u.LogError(err)
 							return nil, err
 						}
+
 						spaceliftStackNameDependsOnLabels2 = append(spaceliftStackNameDependsOnLabels2, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
 					}
 
@@ -396,6 +409,7 @@ func TransformStackConfigToSpaceliftStacks(
 						)
 						er := errors.New(errorMessage)
 						u.LogError(er)
+
 						return nil, er
 					}
 				}

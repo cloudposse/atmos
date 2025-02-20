@@ -10,7 +10,7 @@ import (
 //go:embed markdown/about.md
 var aboutMarkdown string
 
-// aboutCmd represents the about command
+// aboutCmd represents the about command.
 var aboutCmd = &cobra.Command{
 	Use:   "about",
 	Short: "Learn about Atmos",

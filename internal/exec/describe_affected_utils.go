@@ -28,8 +28,7 @@ var (
 	remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 )
 
-// ExecuteDescribeAffectedWithTargetRefClone clones the remote reference,
-// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
+// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
 func ExecuteDescribeAffectedWithTargetRefClone(
 	atmosConfig schema.AtmosConfiguration,
 	ref string,
@@ -178,8 +177,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
 }
 
-// ExecuteDescribeAffectedWithTargetRefCheckout checks out the target reference,
-// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
+// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
 func ExecuteDescribeAffectedWithTargetRefCheckout(
 	atmosConfig schema.AtmosConfiguration,
 	ref string,
@@ -308,6 +306,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 					"\nrefer to https://atmos.tools/cli/commands/describe/affected for more details", ref)
 				err = errors.New(errorMessage)
 			}
+
 			return nil, nil, nil, "", err
 		}
 
@@ -335,8 +334,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
 }
 
-// ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
-// and returns a list of the affected Atmos components and stacks given two Git commits
+// and returns a list of the affected Atmos components and stacks given two Git commits.
 func ExecuteDescribeAffectedWithTargetRepoPath(
 	atmosConfig schema.AtmosConfiguration,
 	targetRefPath string,
@@ -487,39 +485,39 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("\nGetting current working repo commit object..."))
+	u.LogTrace("\nGetting current working repo commit object...")
 
 	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Got current working repo commit object"))
-	u.LogTrace(fmt.Sprintf("Getting current working repo commit tree..."))
+	u.LogTrace("Got current working repo commit object")
+	u.LogTrace("Getting current working repo commit tree...")
 
 	localTree, err := localCommit.Tree()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Got current working repo commit tree"))
-	u.LogTrace(fmt.Sprintf("Getting remote repo commit object..."))
+	u.LogTrace("Got current working repo commit tree")
+	u.LogTrace("Getting remote repo commit object...")
 
 	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Got remote repo commit object"))
-	u.LogTrace(fmt.Sprintf("Getting remote repo commit tree..."))
+	u.LogTrace("Got remote repo commit object")
+	u.LogTrace("Getting remote repo commit tree...")
 
 	remoteTree, err := remoteCommit.Tree()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Got remote repo commit tree"))
-	u.LogTrace(fmt.Sprintf("Finding difference between the current working branch and remote target branch ..."))
+	u.LogTrace("Got remote repo commit tree")
+	u.LogTrace("Finding difference between the current working branch and remote target branch ...")
 
 	// Find a slice of Patch objects with all the changes between the current working and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -530,16 +528,17 @@ func executeDescribeAffected(
 	var changedFiles []string
 
 	if len(patch.Stats()) > 0 {
-		u.LogTrace(fmt.Sprintf("Found difference between the current working branch and remote target branch"))
+		u.LogTrace("Found difference between the current working branch and remote target branch")
 		u.LogTrace("\nChanged files:\n")
 
 		for _, fileStat := range patch.Stats() {
 			u.LogTrace(fileStat.Name)
 			changedFiles = append(changedFiles, fileStat.Name)
 		}
+
 		u.LogTrace("")
 	} else {
-		u.LogTrace(fmt.Sprintf("The current working branch and remote target branch are the same"))
+		u.LogTrace("The current working branch and remote target branch are the same")
 	}
 
 	affected, err := findAffected(
@@ -558,7 +557,7 @@ func executeDescribeAffected(
 	return affected, localRepoHead, remoteRepoHead, nil
 }
 
-// findAffected returns a list of all affected components in all stacks
+// findAffected returns a list of all affected components in all stacks.
 func findAffected(
 	currentStacks map[string]any,
 	remoteStacks map[string]any,
@@ -569,6 +568,7 @@ func findAffected(
 	stackToFilter string,
 ) ([]schema.Affected, error) {
 	res := []schema.Affected{}
+
 	var err error
 
 	for stackName, stackSection := range currentStacks {
@@ -579,7 +579,6 @@ func findAffected(
 
 		if stackSectionMap, ok := stackSection.(map[string]any); ok {
 			if componentsSection, ok := stackSectionMap["components"].(map[string]any); ok {
-
 				// Terraform
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
@@ -603,6 +602,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -617,6 +617,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -636,6 +637,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component.module",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -650,6 +652,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 
@@ -666,6 +669,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -680,6 +684,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -692,6 +697,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -706,6 +712,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -718,6 +725,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -732,6 +740,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -744,6 +753,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -758,12 +768,14 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 
 								// Check `settings.depends_on.file` and `settings.depends_on.folder`
 								// Convert the `settings` section to the `Settings` structure
 								var stackComponentSettings schema.Settings
+
 								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
 								if err != nil {
 									return nil, err
@@ -802,6 +814,7 @@ func findAffected(
 										File:          changedFile,
 										Folder:        changedFolder,
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -816,6 +829,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -846,6 +860,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.metadata",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -860,6 +875,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -879,6 +895,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "component",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -893,6 +910,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -905,6 +923,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.vars",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -919,6 +938,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -931,6 +951,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.env",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -945,6 +966,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -957,6 +979,7 @@ func findAffected(
 										Stack:         stackName,
 										Affected:      "stack.settings",
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -971,12 +994,14 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 
 								// Check `settings.depends_on.file` and `settings.depends_on.folder`
 								// Convert the `settings` section to the `Settings` structure
 								var stackComponentSettings schema.Settings
+
 								err = mapstructure.Decode(settingsSection, &stackComponentSettings)
 								if err != nil {
 									return nil, err
@@ -1015,6 +1040,7 @@ func findAffected(
 										File:          changedFile,
 										Folder:        changedFolder,
 									}
+
 									res, err = appendToAffected(
 										atmosConfig,
 										componentName,
@@ -1029,6 +1055,7 @@ func findAffected(
 									if err != nil {
 										return nil, err
 									}
+
 									continue
 								}
 							}
@@ -1042,7 +1069,7 @@ func findAffected(
 	return res, nil
 }
 
-// appendToAffected adds an item to the affected list, and adds the Spacelift stack and Atlantis project (if configured)
+// appendToAffected adds an item to the affected list, and adds the Spacelift stack and Atlantis project (if configured).
 func appendToAffected(
 	atmosConfig schema.AtmosConfiguration,
 	componentName string,
@@ -1094,6 +1121,7 @@ func appendToAffected(
 		if err != nil {
 			return nil, err
 		}
+
 		affected.SpaceliftStack = spaceliftStackName
 
 		// Affected Atlantis project
@@ -1101,6 +1129,7 @@ func appendToAffected(
 		if err != nil {
 			return nil, err
 		}
+
 		affected.AtlantisProject = atlantisProjectName
 
 		if includeSpaceliftAdminStacks {
@@ -1127,7 +1156,7 @@ func appendToAffected(
 	return append(affectedList, affected), nil
 }
 
-// isEqual compares a section of a component from the remote stacks with a section of a local component
+// isEqual compares a section of a component from the remote stacks with a section of a local component.
 func isEqual(
 	remoteStacks map[string]any,
 	localStackName string,
@@ -1149,10 +1178,11 @@ func isEqual(
 			}
 		}
 	}
+
 	return false
 }
 
-// isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed
+// isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed.
 func isComponentDependentFolderOrFileChanged(
 	changedFiles []string,
 	deps schema.DependsOn,
@@ -1210,7 +1240,7 @@ func isComponentDependentFolderOrFileChanged(
 	return isChanged, changedType, changedFileOrFolder, nil
 }
 
-// isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders)
+// isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders).
 func isComponentFolderChanged(
 	component string,
 	componentType string,
@@ -1252,7 +1282,7 @@ func isComponentFolderChanged(
 	return false, nil
 }
 
-// areTerraformComponentModulesChanged checks if any of the external Terraform modules (but on the local filesystem) that the component uses have changed
+// areTerraformComponentModulesChanged checks if any of the external Terraform modules (but on the local filesystem) that the component uses have changed.
 func areTerraformComponentModulesChanged(
 	component string,
 	atmosConfig schema.AtmosConfiguration,
@@ -1302,7 +1332,7 @@ func areTerraformComponentModulesChanged(
 	return false, nil
 }
 
-// addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack
+// addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack.
 func addAffectedSpaceliftAdminStack(
 	atmosConfig schema.AtmosConfiguration,
 	affectedList []schema.Affected,
@@ -1315,6 +1345,7 @@ func addAffectedSpaceliftAdminStack(
 ) ([]schema.Affected, error) {
 	// Convert the `settings` section to the `Settings` structure
 	var componentSettings schema.Settings
+
 	err := mapstructure.Decode(settingsSection, &componentSettings)
 	if err != nil {
 		return nil, err
@@ -1328,7 +1359,9 @@ func addAffectedSpaceliftAdminStack(
 
 	// Find and process `settings.spacelift.admin_stack_config` section
 	var adminStackContextSection any
+
 	var adminStackContext schema.Context
+
 	var ok bool
 
 	if adminStackContextSection, ok = componentSettings.Spacelift["admin_stack_selector"]; !ok {
@@ -1360,7 +1393,9 @@ func addAffectedSpaceliftAdminStack(
 	}
 
 	var componentVarsSection map[string]any
+
 	var componentSettingsSection map[string]any
+
 	var componentSettingsSpaceliftSection map[string]any
 
 	// Find the Spacelift admin stack that manages the current stack
@@ -1370,12 +1405,12 @@ func addAffectedSpaceliftAdminStack(
 				if terraformSection, ok := componentsSection["terraform"].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-
 							if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {
 								return affectedList, nil
 							}
 
 							var context schema.Context
+
 							err = mapstructure.Decode(componentVarsSection, &context)
 							if err != nil {
 								return nil, err
@@ -1405,17 +1440,15 @@ func addAffectedSpaceliftAdminStack(
 								}
 
 								if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
-									return nil, errors.New(fmt.Sprintf(
-										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
-											"to point to the Spacelift admin component '%s' in the stack '%s', "+
-											"but that component has Spacelift workspace disabled "+
-											"in the 'settings.spacelift.workspace_enabled' section "+
-											"and can't be added to the affected stacks",
+									return nil, fmt.Errorf("component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
+										"to point to the Spacelift admin component '%s' in the stack '%s', "+
+										"but that component has Spacelift workspace disabled "+
+										"in the 'settings.spacelift.workspace_enabled' section "+
+										"and can't be added to the affected stacks",
 										currentComponentName,
 										currentStackName,
 										componentName,
-										stackName,
-									))
+										stackName)
 								}
 
 								affectedSpaceliftAdminStack := schema.Affected{
@@ -1450,7 +1483,7 @@ func addAffectedSpaceliftAdminStack(
 	return affectedList, nil
 }
 
-// addDependentsToAffected adds dependent components and stacks to each affected component
+// addDependentsToAffected adds dependent components and stacks to each affected component.
 func addDependentsToAffected(
 	atmosConfig schema.AtmosConfiguration,
 	affected *[]schema.Affected,
@@ -1466,6 +1499,7 @@ func addDependentsToAffected(
 
 		if len(deps) > 0 {
 			a.Dependents = deps
+
 			err = addDependentsToDependents(atmosConfig, &deps, includeSettings)
 			if err != nil {
 				return err
@@ -1476,10 +1510,11 @@ func addDependentsToAffected(
 	}
 
 	processIncludedInDependencies(affected)
+
 	return nil
 }
 
-// addDependentsToDependents recursively adds dependent components and stacks to each dependent component
+// addDependentsToDependents recursively adds dependent components and stacks to each dependent component.
 func addDependentsToDependents(
 	atmosConfig schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
@@ -1495,6 +1530,7 @@ func addDependentsToDependents(
 
 		if len(deps) > 0 {
 			d.Dependents = deps
+
 			err = addDependentsToDependents(atmosConfig, &deps, includeSettings)
 			if err != nil {
 				return err
@@ -1512,6 +1548,7 @@ func processIncludedInDependencies(affected *[]schema.Affected) bool {
 		a := &((*affected)[i])
 		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
 	}
+
 	return false
 }
 
@@ -1530,6 +1567,7 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 			}
 		}
 	}
+
 	return false
 }
 
@@ -1548,10 +1586,11 @@ func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, 
 			}
 		}
 	}
+
 	return false
 }
 
-// isComponentEnabled checks if a component is enabled based on its metadata
+// isComponentEnabled checks if a component is enabled based on its metadata.
 func isComponentEnabled(metadataSection map[string]any, componentName string, atmosConfig schema.AtmosConfiguration) bool {
 	if enabled, ok := metadataSection["enabled"].(bool); ok {
 		if !enabled {
@@ -1559,5 +1598,6 @@ func isComponentEnabled(metadataSection map[string]any, componentName string, at
 			return false
 		}
 	}
+
 	return true
 }

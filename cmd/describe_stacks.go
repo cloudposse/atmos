@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeStacksCmd describes configuration for stacks and components in the stacks
+// describeStacksCmd describes configuration for stacks and components in the stacks.
 var describeStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "Display configuration for Atmos stacks and their components",

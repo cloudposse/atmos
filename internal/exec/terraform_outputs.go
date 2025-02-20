@@ -67,6 +67,7 @@ func execTerraformOutput(
 	outputProcessed := map[string]any{}
 	componentAbstract := false
 	componentEnabled := true
+
 	var err error
 
 	metadataSection, ok := sections[cfg.MetadataSectionName]
@@ -150,6 +151,7 @@ func execTerraformOutput(
 			l.Debug("Writing the provider overrides to file:", "file", providerOverrideFileName)
 
 			providerOverrides := generateComponentProviderOverrides(providersSection)
+
 			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
 			if err != nil {
 				return nil, err
@@ -181,6 +183,7 @@ func execTerraformOutput(
 				if err != nil {
 					return nil, err
 				}
+
 				l.Debug("Final environment variables", "environ", environMap)
 			}
 		}
@@ -200,6 +203,7 @@ func execTerraformOutput(
 		if atmosConfig.Components.Terraform.InitRunReconfigure {
 			initOptions = append(initOptions, tfexec.Reconfigure(true))
 		}
+
 		err = tf.Init(ctx, initOptions...)
 		if err != nil {
 			return nil, err
@@ -209,13 +213,16 @@ func execTerraformOutput(
 
 		// Terraform workspace
 		l.Debug(fmt.Sprintf("Executing 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+
 		err = tf.WorkspaceNew(ctx, terraformWorkspace)
 		if err != nil {
 			l.Debug(fmt.Sprintf("Workspace exists. Executing 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
+
 			err = tf.WorkspaceSelect(ctx, terraformWorkspace)
 			if err != nil {
 				return nil, err
 			}
+
 			l.Debug(fmt.Sprintf("Executed 'terraform workspace select %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
 		} else {
 			l.Debug(fmt.Sprintf("Executed 'terraform workspace new %s' for component '%s' in stack '%s'", terraformWorkspace, component, stack))
@@ -223,10 +230,12 @@ func execTerraformOutput(
 
 		// Terraform output
 		l.Debug(fmt.Sprintf("Executing 'terraform output %s -s %s'", component, stack))
+
 		outputMeta, err := tf.Output(ctx)
 		if err != nil {
 			return nil, err
 		}
+
 		l.Debug(fmt.Sprintf("Executed 'terraform output %s -s %s'", component, stack))
 
 		if atmosConfig.Logs.Level == u.LogLevelTrace {
@@ -258,6 +267,7 @@ func execTerraformOutput(
 		if componentAbstract {
 			componentStatus = "abstract"
 		}
+
 		l.Debug(fmt.Sprintf("Not executing 'terraform output %s -s %s' because the component is %s", component, stack, componentStatus))
 	}
 
@@ -299,6 +309,7 @@ func GetTerraformOutput(
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			fmt.Printf("\r✗ %s\n", message)
 		}
+
 		l.Fatal("Failed to describe the component", "component", component, "stack", stack, "error", err)
 	}
 
@@ -309,10 +320,12 @@ func GetTerraformOutput(
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			fmt.Printf("\r✗ %s\n", message)
 		}
+
 		l.Fatal("Failed to get remote state backend static type outputs", "error", err)
 	}
 
 	var result any
+
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformOutputsCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
@@ -324,6 +337,7 @@ func GetTerraformOutput(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				fmt.Printf("\r✗ %s\n", message)
 			}
+
 			l.Fatal("Failed to execute terraform output", "component", component, "stack", stack, "error", err)
 		}
 
@@ -380,18 +394,19 @@ func getStaticRemoteStateOutput(
 	return res
 }
 
-// environToMap converts all the environment variables (excluding the variables prohibited by terraform-exec/tfexec)
-// in the environment into a map of strings
-// TODO: review this (find another way to execute `terraform output` not using `terraform-exec/tfexec`)
+// TODO: review this (find another way to execute `terraform output` not using `terraform-exec/tfexec`).
 func environToMap() map[string]string {
 	envMap := make(map[string]string)
+
 	for _, env := range os.Environ() {
 		pair := u.SplitStringAtFirstOccurrence(env, "=")
 		k := pair[0]
 		v := pair[1]
+
 		if !u.SliceContainsString(prohibitedEnvVars, k) && !u.SliceContainsStringStartsWith(prohibitedEnvVarPrefixes, k) {
 			envMap[k] = v
 		}
 	}
+
 	return envMap
 }

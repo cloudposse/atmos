@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeComponentCmd describes configuration for components
+// describeComponentCmd describes configuration for components.
 var describeConfigCmd = &cobra.Command{
 	Use:                "config",
 	Short:              "Display the final merged CLI configuration",

@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console
+// PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console.
 func PrintAsHcl(data any) error {
 	astree, err := ConvertToHclAst(data)
 	if err != nil {
@@ -29,7 +29,7 @@ func PrintAsHcl(data any) error {
 	return nil
 }
 
-// WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file
+// WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file.
 func WriteToFileAsHcl(
 	atmosConfig schema.AtmosConfiguration,
 	filePath string,
@@ -61,7 +61,7 @@ func WriteToFileAsHcl(
 	return nil
 }
 
-// ConvertToHclAst converts the provided value to an HCL abstract syntax tree
+// ConvertToHclAst converts the provided value to an HCL abstract syntax tree.
 func ConvertToHclAst(data any) (ast.Node, error) {
 	j, err := ConvertToJSONFast(data)
 	if err != nil {
@@ -142,12 +142,13 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	return nil
 }
 
-// IsHCL checks if data is in HCL format
+// IsHCL checks if data is in HCL format.
 func IsHCL(data string) bool {
 	if strings.TrimSpace(data) == "" {
 		return false
 	}
 
 	var hclData any
+
 	return hcl.Unmarshal([]byte(data), &hclData) == nil
 }

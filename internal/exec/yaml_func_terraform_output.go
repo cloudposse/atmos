@@ -22,7 +22,9 @@ func processTagTerraformOutput(
 	}
 
 	var component string
+
 	var stack string
+
 	var output string
 
 	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
@@ -38,6 +40,7 @@ func processTagTerraformOutput(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
+
 		u.LogTrace(fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
 			"Using the current stack '%s' as the 'stack' parameter", input, currentStack))
 	} else {
@@ -46,5 +49,6 @@ func processTagTerraformOutput(
 	}
 
 	value := GetTerraformOutput(&atmosConfig, stack, component, output, false)
+
 	return value
 }

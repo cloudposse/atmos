@@ -117,10 +117,11 @@ func (s *ArtifactoryStore) getKey(stack string, component string, key string) (s
 
 	prefixParts := []string{s.repoName, s.prefix}
 	prefix := strings.Join(prefixParts, "/")
+
 	return getKey(prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
-func (s *ArtifactoryStore) Get(stack string, component string, key string) (interface{}, error) {
+func (s *ArtifactoryStore) Get(stack string, component string, key string) (any, error) {
 	if stack == "" {
 		return nil, fmt.Errorf("stack cannot be empty")
 	}
@@ -168,12 +169,14 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 	}
 
 	downloadedFile := filepath.Join(tempDir, key)
+
 	jsonData, err := os.ReadFile(downloadedFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
 
-	var result interface{}
+	var result any
+
 	err = json.Unmarshal(jsonData, &result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal file: %v", err)
@@ -182,7 +185,7 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 	return result, nil
 }
 
-func (s *ArtifactoryStore) Set(stack string, component string, key string, value interface{}) error {
+func (s *ArtifactoryStore) Set(stack string, component string, key string, value any) error {
 	if stack == "" {
 		return fmt.Errorf("stack cannot be empty")
 	}

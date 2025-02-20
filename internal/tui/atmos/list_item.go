@@ -41,6 +41,6 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 		}
 	}
 
-	str := fmt.Sprintf("%s", i)
+	str := string(i)
 	_, _ = fmt.Fprint(w, fn(str))
 }

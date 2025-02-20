@@ -26,7 +26,7 @@ import (
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
 
-// RootCmd represents the base command when called without any subcommands
+// RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:                "atmos",
 	Short:              "Universal Tool for DevOps and Cloud Automation",
@@ -119,6 +119,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		if err != nil {
 			log.Fatal("Failed to open log file:", err)
 		}
+
 		defer logFile.Close()
 		output = logFile
 	}
@@ -132,9 +133,10 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 // If there's no alternative, this approach may be necessary.
 // However, this TODO serves as a reminder to revisit and verify if a better solution exists.
 
-// Function to manually parse flags with double dash "--" like Cobra
+// Function to manually parse flags with double dash "--" like Cobra.
 func parseFlags(args []string) (map[string]string, error) {
 	flags := make(map[string]string)
+
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
@@ -159,6 +161,7 @@ func parseFlags(args []string) (map[string]string, error) {
 			continue
 		}
 	}
+
 	return flags, nil
 }
 
@@ -175,6 +178,7 @@ func Execute() error {
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	utils.InitializeMarkdown(atmosConfig)
+
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
 			log.Debug("warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
@@ -187,13 +191,16 @@ func Execute() error {
 	if os.Getenv("ATMOS_LOGS_LEVEL") != "" {
 		atmosConfig.Logs.Level = os.Getenv("ATMOS_LOGS_LEVEL")
 	}
+
 	flagKeyValue, _ := parseFlags(os.Args)
 	if v, ok := flagKeyValue["logs-level"]; ok {
 		atmosConfig.Logs.Level = v
 	}
+
 	if os.Getenv("ATMOS_LOGS_FILE") != "" {
 		atmosConfig.Logs.File = os.Getenv("ATMOS_LOGS_FILE")
 	}
+
 	if v, ok := flagKeyValue["logs-file"]; ok {
 		atmosConfig.Logs.File = v
 	}
@@ -217,6 +224,7 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
+
 	err = RootCmd.Execute()
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
@@ -224,6 +232,7 @@ func Execute() error {
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
+
 	return err
 }
 
@@ -239,6 +248,7 @@ func getInvalidCommandName(input string) string {
 		command := match[1] // The first capturing group contains the command
 		return command
 	}
+
 	return ""
 }
 
@@ -263,6 +273,7 @@ func init() {
 
 func initCobraConfig() {
 	RootCmd.SetOut(os.Stdout)
+
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 	oldUsageFunc := RootCmd.UsageFunc()
@@ -273,7 +284,9 @@ func initCobraConfig() {
 		if c.Use == "atmos" {
 			return b.UsageFunc(c)
 		}
+
 		showUsageAndExit(c, c.Flags().Args())
+
 		return nil
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
@@ -282,15 +295,18 @@ func initCobraConfig() {
 			if len(command.Flags().Args()) > 0 {
 				arguments = command.Flags().Args()
 			}
+
 			showUsageAndExit(command, arguments)
 		}
 		// Print a styled Atmos logo to the terminal
 		fmt.Println()
+
 		if command.Use != "atmos" || command.Flags().Changed("help") {
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
+
 			if err := oldUsageFunc(command); err != nil {
 				u.LogErrorAndExit(err)
 			}
@@ -299,11 +315,14 @@ func initCobraConfig() {
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
+
 			b.HelpFunc(command, args)
+
 			if err := command.Usage(); err != nil {
 				u.LogErrorAndExit(err)
 			}
 		}
+
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }

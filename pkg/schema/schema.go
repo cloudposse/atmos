@@ -6,7 +6,7 @@ import (
 
 type AtmosSectionMapType = map[string]any
 
-// AtmosConfiguration structure represents schema for `atmos.yaml` CLI config
+// AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
@@ -586,7 +586,7 @@ type Settings struct {
 	Templates Templates         `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 }
 
-// ConfigSourcesStackDependency defines schema for sources of config sections
+// ConfigSourcesStackDependency defines schema for sources of config sections.
 type ConfigSourcesStackDependency struct {
 	StackFile        string `yaml:"stack_file" json:"stack_file" mapstructure:"stack_file"`
 	StackFileSection string `yaml:"stack_file_section" json:"stack_file_section" mapstructure:"stack_file_section"`

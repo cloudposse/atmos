@@ -17,8 +17,7 @@ const (
 	ListMergeStrategyMerge   = "merge"
 )
 
-// MergeWithOptions takes a list of maps and options as input, deep-merges the items in the order they are defined in the list,
-// and returns a single map with the merged contents
+// and returns a single map with the merged contents.
 func MergeWithOptions(
 	inputs []map[string]any,
 	appendSlice bool,
@@ -73,7 +72,7 @@ func MergeWithOptions(
 	return merged, nil
 }
 
-// Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents
+// Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents.
 func Merge(
 	atmosConfig schema.AtmosConfiguration,
 	inputs []map[string]any,

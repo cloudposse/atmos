@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	// Base colors
+	// Base colors.
 	ColorGray      = "#808080" // Version number
 	ColorGreen     = "#00FF00" // Success, new version
 	ColorCyan      = "#00FFFF" // Links, info
@@ -33,7 +33,7 @@ type HelpStyle struct {
 	Aliases       *color.Color
 }
 
-// Styles provides pre-configured lipgloss styles for common UI elements
+// Styles provides pre-configured lipgloss styles for common UI elements.
 var Styles = struct {
 	VersionNumber lipgloss.Style
 	NewVersion    lipgloss.Style
@@ -68,7 +68,7 @@ var Styles = struct {
 	},
 }
 
-// Colors provides color.Attribute mappings for the old color.New style
+// Colors provides color.Attribute mappings for the old color.New style.
 var Colors = struct {
 	Error   *color.Color
 	Info    *color.Color

@@ -21,7 +21,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteVendorPullCommand executes `atmos vendor` commands
+// ExecuteVendorPullCommand executes `atmos vendor` commands.
 func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -100,9 +100,11 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	if !vendorConfigExists && everything {
 		return fmt.Errorf("the '--everything' flag is set, but the vendor config file '%s' does not exist", cfg.AtmosVendorConfigFileName)
 	}
+
 	if vendorConfigExists {
 		// Process `vendor.yaml`
 		return ExecuteAtmosVendorInternal(atmosConfig, foundVendorConfigFile, vendorConfig.Spec, component, tags, dryRun)
@@ -138,7 +140,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		q)
 }
 
-// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
+// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
@@ -150,6 +152,7 @@ func ReadAndProcessVendorConfigFile(
 	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{}
 
 	var vendorConfigFileExists bool
+
 	var foundVendorConfigFile string
 
 	// Check if vendor config is specified in atmos.yaml
@@ -171,7 +174,9 @@ func ReadAndProcessVendorConfigFile(
 
 			if !fileExists {
 				vendorConfigFileExists = false
+
 				u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+
 				return vendorConfig, vendorConfigFileExists, "", nil
 			}
 		}
@@ -184,6 +189,7 @@ func ReadAndProcessVendorConfigFile(
 			// File does not exist
 			return vendorConfig, false, "", fmt.Errorf("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
 		}
+
 		if os.IsPermission(err) {
 			// Permission error
 			return vendorConfig, false, "", fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions.", foundVendorConfigFile)
@@ -193,16 +199,21 @@ func ReadAndProcessVendorConfigFile(
 	}
 
 	var configFiles []string
+
 	if fileInfo.IsDir() {
 		foundVendorConfigFile = filepath.ToSlash(foundVendorConfigFile)
+
 		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "*.{yaml,yml}")
 		if err != nil {
 			return vendorConfig, false, "", err
 		}
+
 		for _, match := range matches {
 			configFiles = append(configFiles, filepath.Join(foundVendorConfigFile, match))
 		}
+
 		sort.Strings(configFiles)
+
 		if len(configFiles) == 0 {
 			return vendorConfig, false, "", fmt.Errorf("no YAML configuration files found in directory '%s'", foundVendorConfigFile)
 		}
@@ -212,12 +223,15 @@ func ReadAndProcessVendorConfigFile(
 
 	// Process all config files
 	var mergedSources []schema.AtmosVendorSource
+
 	var mergedImports []string
+
 	sourceMap := make(map[string]bool) // Track unique sources by component name
 	importMap := make(map[string]bool) // Track unique imports
 
 	for _, configFile := range configFiles {
 		var currentConfig schema.AtmosVendorConfig
+
 		yamlFile, err := os.ReadFile(configFile)
 		if err != nil {
 			return vendorConfig, false, "", err
@@ -235,8 +249,10 @@ func ReadAndProcessVendorConfigFile(
 					return vendorConfig, false, "", fmt.Errorf("duplicate component '%s' found in config file '%s'",
 						source.Component, configFile)
 				}
+
 				sourceMap[source.Component] = true
 			}
+
 			mergedSources = append(mergedSources, source)
 		}
 
@@ -245,7 +261,9 @@ func ReadAndProcessVendorConfigFile(
 			if importMap[imp] {
 				continue // Skip duplicate imports
 			}
+
 			importMap[imp] = true
+
 			mergedImports = append(mergedImports, imp)
 		}
 	}
@@ -258,7 +276,7 @@ func ReadAndProcessVendorConfigFile(
 	return vendorConfig, vendorConfigFileExists, foundVendorConfigFile, nil
 }
 
-// ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets
+// ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
 func ExecuteAtmosVendorInternal(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFileName string,
@@ -268,6 +286,7 @@ func ExecuteAtmosVendorInternal(
 	dryRun bool,
 ) error {
 	var err error
+
 	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 
 	logInitialMessage(atmosConfig, vendorConfigFileName, tags)
@@ -306,6 +325,7 @@ func ExecuteAtmosVendorInternal(
 		if s.Component != "" {
 			return s.Component, true
 		}
+
 		return "", false
 	})
 
@@ -328,7 +348,7 @@ func ExecuteAtmosVendorInternal(
 	// Allow having duplicate targets in different sources.
 	// This can be used to vendor mixins (from local and remote sources) and write them to the same targets.
 	// TODO: consider adding a flag to `atmos vendor pull` to specify if duplicate targets are allowed or not.
-	//targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
+	// targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
 	//	return s.Targets
 	//})
 	//
@@ -343,6 +363,7 @@ func ExecuteAtmosVendorInternal(
 
 	// Process sources
 	var packages []pkgAtmosVendor
+
 	for indexSource, s := range sources {
 		if shouldSkipSource(&s, component, tags) {
 			continue
@@ -367,12 +388,14 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return err
 		}
+
 		if !useLocalFileSystem {
 			err = ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
 					return fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", s.Component, err)
 				}
+
 				return fmt.Errorf("invalid URI for component %s: %w", s.Component, err)
 			}
 		}
@@ -393,7 +416,9 @@ func ExecuteAtmosVendorInternal(
 			if err != nil {
 				return err
 			}
+
 			targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
+
 			pkgName := s.Component
 			if pkgName == "" {
 				pkgName = uri
@@ -410,7 +435,6 @@ func ExecuteAtmosVendorInternal(
 			}
 
 			packages = append(packages, p)
-
 			// Log the action (handled in downloadAndInstall)
 		}
 	}
@@ -421,6 +445,7 @@ func ExecuteAtmosVendorInternal(
 		if !term.IsTTYSupportForStdout() {
 			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+
 			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 
@@ -428,6 +453,7 @@ func ExecuteAtmosVendorInternal(
 		if err != nil {
 			return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
 		}
+
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("failed to execute vendor operation in TUI mode: %w (check terminal state)", err)
 		}
@@ -436,7 +462,7 @@ func ExecuteAtmosVendorInternal(
 	return nil
 }
 
-// processVendorImports processes all imports recursively and returns a list of sources
+// processVendorImports processes all imports recursively and returns a list of sources.
 func processVendorImports(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
@@ -489,6 +515,7 @@ func logInitialMessage(atmosConfig schema.AtmosConfiguration, vendorConfigFileNa
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
+
 	u.LogInfo(logMessage)
 }
 
@@ -497,12 +524,15 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 	if s.File == "" {
 		s.File = vendorConfigFileName
 	}
+
 	if s.Source == "" {
 		return fmt.Errorf("'source' must be specified in 'sources' in the vendor config file '%s'", s.File)
 	}
+
 	if len(s.Targets) == 0 {
 		return fmt.Errorf("'targets' must be specified for the source '%s' in the vendor config file '%s'", s.Source, s.File)
 	}
+
 	return nil
 }
 
@@ -522,12 +552,14 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 
 	useLocalFileSystem := false
 	sourceIsLocalFile := false
+
 	if !useOciScheme {
 		absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri)
 		// if URI contain path traversal is path should be resolved
 		if err != nil && strings.Contains(*uri, "..") {
 			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
 		}
+
 		if err == nil {
 			uri = &absPath
 			useLocalFileSystem = true
@@ -538,6 +570,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		if err != nil {
 			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, err
 		}
+
 		if err == nil && parsedURL.Scheme != "" {
 			if parsedURL.Scheme == "file" {
 				trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
@@ -545,7 +578,6 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 				useLocalFileSystem = true
 			}
 		}
-
 	}
 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
@@ -569,21 +601,13 @@ func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath str
 	return cp.Copy(tempDir, targetPath, copyOptions)
 }
 
-// generateSkipFunction creates a function that determines whether to skip files during copying
-// based on the vendor source configuration. It uses the provided patterns in ExcludedPaths
-// and IncludedPaths to filter files during the copy operation.
-//
-// Parameters:
-//   - atmosConfig: The CLI configuration for logging
-//   - tempDir: The temporary directory containing the files to copy
-//   - s: The vendor source configuration containing exclusion/inclusion patterns
-//
-// Returns a function that determines if a file should be skipped during copying
+// Returns a function that determines if a file should be skipped during copying.
 func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
+
 		tempDir = filepath.ToSlash(tempDir)
 		src = filepath.ToSlash(src)
 
@@ -603,6 +627,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 					trimmedSrc,
 					excludePath,
 				))
+
 				return true, nil
 			}
 		}
@@ -610,6 +635,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
 		if len(s.IncludedPaths) > 0 {
 			anyMatches := false
+
 			for _, includePath := range s.IncludedPaths {
 				includeMatch, err := u.PathMatch(includePath, src)
 				if err != nil {
@@ -620,7 +646,9 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 						trimmedSrc,
 						includePath,
 					))
+
 					anyMatches = true
+
 					break
 				}
 			}
@@ -635,6 +663,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 
 		// If 'included_paths' is not provided, include all files that were not excluded
 		u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+
 		return false, nil
 	}
 }

@@ -22,7 +22,7 @@ func (m *MockRedisClient) Get(ctx context.Context, key string) *redis.StringCmd 
 	return cmd
 }
 
-func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+func (m *MockRedisClient) Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd {
 	args := m.Called(ctx, key, value, expiration)
 	cmd := redis.NewStatusResult(args.String(0), args.Error(1))
 	return cmd
@@ -52,7 +52,7 @@ func TestRedisStore_Get_Success(t *testing.T) {
 	key := "mykey"
 	fullKey := "testprefix/mystack/mycomponent/mykey"
 
-	expectedValue := map[string]interface{}{
+	expectedValue := map[string]any{
 		"field": "value",
 	}
 
@@ -121,7 +121,7 @@ func TestRedisStore_Set_Success(t *testing.T) {
 	key := "mykey"
 	fullKey := "testprefix/mystack/mycomponent/mykey"
 
-	value := map[string]interface{}{
+	value := map[string]any{
 		"field": "value",
 	}
 

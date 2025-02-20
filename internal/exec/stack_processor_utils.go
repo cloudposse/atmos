@@ -23,12 +23,11 @@ import (
 var (
 	getFileContentSyncMap = sync.Map{}
 
-	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
+	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
 	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
-// ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
-// and returns a list of stack configs
+// and returns a list of stack configs.
 func ProcessYAMLConfigFiles(
 	atmosConfig schema.AtmosConfiguration,
 	stacksBasePath string,
@@ -48,8 +47,11 @@ func ProcessYAMLConfigFiles(
 	listResult := make([]string, count)
 	mapResult := map[string]any{}
 	rawStackConfigs := map[string]map[string]any{}
+
 	var errorResult error
+
 	var wg sync.WaitGroup
+
 	wg.Add(count)
 
 	for i, filePath := range filePaths {
@@ -82,7 +84,6 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				"",
 			)
-
 			if err != nil {
 				errorResult = err
 				return
@@ -145,9 +146,7 @@ func ProcessYAMLConfigFiles(
 	return listResult, mapResult, rawStackConfigs, nil
 }
 
-// ProcessYAMLConfigFile takes a path to a YAML stack manifest,
-// recursively processes and deep-merges all imports,
-// and returns the final stack config
+// and returns the final stack config.
 func ProcessYAMLConfigFile(
 	atmosConfig schema.AtmosConfiguration,
 	basePath string,
@@ -170,6 +169,7 @@ func ProcessYAMLConfigFile(
 	error,
 ) {
 	var stackConfigs []map[string]any
+
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
 	globalTerraformSection := map[string]any{}
@@ -181,7 +181,6 @@ func ProcessYAMLConfigFile(
 	finalHelmfileOverrides := map[string]any{}
 
 	stackYamlConfig, err := GetFileContent(filePath)
-
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
 	//
 	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
@@ -198,6 +197,7 @@ func ProcessYAMLConfigFile(
 			return nil, nil, nil, nil, nil, err
 		}
 	}
+
 	if stackYamlConfig == "" {
 		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
 	}
@@ -213,7 +213,9 @@ func ProcessYAMLConfigFile(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
+
 			e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+
 			return nil, nil, nil, nil, nil, e
 		}
 	}
@@ -223,7 +225,9 @@ func ProcessYAMLConfigFile(
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 		}
+
 		e := fmt.Errorf("invalid stack manifest '%s'\n%v%s", relativeFilePath, err, stackManifestTemplatesErrorMessage)
+
 		return nil, nil, nil, nil, nil, e
 	}
 
@@ -268,6 +272,7 @@ func ProcessYAMLConfigFile(
 				if err2 != nil {
 					return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
 				}
+
 				return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
 			default:
 				return nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
@@ -343,6 +348,7 @@ func ProcessYAMLConfigFile(
 
 		// If the import file is specified without extension, use `.yaml` as default
 		impWithExt := imp
+
 		ext := filepath.Ext(imp)
 		if ext == "" {
 			extensions := []string{
@@ -353,11 +359,13 @@ func ProcessYAMLConfigFile(
 			}
 
 			found := false
+
 			for _, extension := range extensions {
 				testPath := filepath.Join(basePath, imp+extension)
 				if _, err := os.Stat(testPath); err == nil {
 					impWithExt = imp + extension
 					found = true
+
 					break
 				}
 			}
@@ -380,6 +388,7 @@ func ProcessYAMLConfigFile(
 			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
 				relativeFilePath,
 				imp)
+
 			return nil, nil, nil, nil, nil, errors.New(errorMessage)
 		}
 
@@ -388,7 +397,6 @@ func ProcessYAMLConfigFile(
 		if err != nil || len(importMatches) == 0 {
 			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
 			// TODO: review `doublestar` library
-
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
 				// The import was not found -> check if the import is a Go template; if not, return the error
@@ -405,12 +413,14 @@ func ProcessYAMLConfigFile(
 							relativeFilePath,
 							err,
 						)
+
 						return nil, nil, nil, nil, nil, errors.New(errorMessage)
 					} else if importMatches == nil {
 						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
 							imp,
 							relativeFilePath,
 						)
+
 						return nil, nil, nil, nil, nil, errors.New(errorMessage)
 					}
 				}
@@ -422,6 +432,7 @@ func ProcessYAMLConfigFile(
 		// The parent `context` takes precedence over the current (imported) `context` and will override items with the same keys.
 		// TODO: instead of calling the conversion functions, we need to switch to generics and update everything to support it
 		listOfMaps := []map[string]any{importStruct.Context, context}
+
 		mergedContext, err := m.Merge(atmosConfig, listOfMaps)
 		if err != nil {
 			return nil, nil, nil, nil, nil, err
@@ -468,6 +479,7 @@ func ProcessYAMLConfigFile(
 			}
 
 			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
+
 			ext2 := filepath.Ext(importRelativePathWithExt)
 			if ext2 == "" {
 				ext2 = u.DefaultStackConfigFileExtension
@@ -519,8 +531,7 @@ func ProcessYAMLConfigFile(
 	return stackConfigsDeepMerged, importsConfig, stackConfigMap, finalTerraformOverrides, finalHelmfileOverrides, nil
 }
 
-// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends,
-// and returns the final stack configuration for all Terraform and helmfile components
+// and returns the final stack configuration for all Terraform and helmfile components.
 func ProcessStackConfig(
 	atmosConfig schema.AtmosConfiguration,
 	stacksBasePath string,
@@ -535,7 +546,6 @@ func ProcessStackConfig(
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
 ) (map[string]any, error) {
-
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
@@ -750,7 +760,6 @@ func ProcessStackConfig(
 	// Process all Terraform components
 	if componentTypeFilter == "" || componentTypeFilter == "terraform" {
 		if allTerraformComponents, ok := globalComponentsSection["terraform"]; ok {
-
 			allTerraformComponentsMap, ok := allTerraformComponents.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("invalid 'components.terraform' section in the file '%s'", stackName)
@@ -928,8 +937,11 @@ func ProcessStackConfig(
 				baseComponentBackendSection := map[string]any{}
 				baseComponentRemoteStateBackendType := ""
 				baseComponentRemoteStateBackendSection := map[string]any{}
+
 				var baseComponentConfig schema.BaseComponentConfig
+
 				var componentInheritanceChain []string
+
 				var baseComponents []string
 
 				// Inheritance using the top-level `component` attribute
@@ -1004,6 +1016,7 @@ func ProcessStackConfig(
 									stackName,
 									baseComponentFromInheritList,
 								)
+
 								return nil, errors.New(errorMessage)
 							}
 						}
@@ -1105,6 +1118,7 @@ func ProcessStackConfig(
 				if len(baseComponentBackendType) > 0 {
 					finalComponentBackendType = baseComponentBackendType
 				}
+
 				if len(componentBackendType) > 0 {
 					finalComponentBackendType = componentBackendType
 				}
@@ -1138,6 +1152,7 @@ func ProcessStackConfig(
 						if baseComponentName != "" {
 							workspaceKeyPrefix = baseComponentName
 						}
+
 						finalComponentBackend["workspace_key_prefix"] = strings.Replace(workspaceKeyPrefix, "/", "-", -1)
 					}
 				}
@@ -1153,6 +1168,7 @@ func ProcessStackConfig(
 						if baseComponentName != "" {
 							prefix = baseComponentName
 						}
+
 						finalComponentBackend["prefix"] = strings.Replace(prefix, "/", "-", -1)
 					}
 				}
@@ -1165,15 +1181,19 @@ func ProcessStackConfig(
 					if componentAzurerm, componentAzurermExists := componentBackendSection["azurerm"].(map[string]any); !componentAzurermExists {
 						if _, componentAzurermKeyExists := componentAzurerm["key"].(string); !componentAzurermKeyExists {
 							azureKeyPrefixComponent := component
+
 							var keyName []string
+
 							if baseComponentName != "" {
 								azureKeyPrefixComponent = baseComponentName
 							}
+
 							if globalAzurerm, globalAzurermExists := globalBackendSection["azurerm"].(map[string]any); globalAzurermExists {
 								if _, globalAzurermKeyExists := globalAzurerm["key"].(string); globalAzurermKeyExists {
 									keyName = append(keyName, globalAzurerm["key"].(string))
 								}
 							}
+
 							componentKeyName := strings.Replace(azureKeyPrefixComponent, "/", "-", -1)
 							keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
 							finalComponentBackend["key"] = strings.Join(keyName, "/")
@@ -1186,9 +1206,11 @@ func ProcessStackConfig(
 				if len(globalRemoteStateBackendType) > 0 {
 					finalComponentRemoteStateBackendType = globalRemoteStateBackendType
 				}
+
 				if len(baseComponentRemoteStateBackendType) > 0 {
 					finalComponentRemoteStateBackendType = baseComponentRemoteStateBackendType
 				}
+
 				if len(componentRemoteStateBackendType) > 0 {
 					finalComponentRemoteStateBackendType = componentRemoteStateBackendType
 				}
@@ -1235,15 +1257,19 @@ func ProcessStackConfig(
 				if atmosConfig.Components.Terraform.Command != "" {
 					finalComponentTerraformCommand = atmosConfig.Components.Terraform.Command
 				}
+
 				if terraformCommand != "" {
 					finalComponentTerraformCommand = terraformCommand
 				}
+
 				if baseComponentTerraformCommand != "" {
 					finalComponentTerraformCommand = baseComponentTerraformCommand
 				}
+
 				if componentTerraformCommand != "" {
 					finalComponentTerraformCommand = componentTerraformCommand
 				}
+
 				if componentOverridesTerraformCommand != "" {
 					finalComponentTerraformCommand = componentOverridesTerraformCommand
 				}
@@ -1255,17 +1281,20 @@ func ProcessStackConfig(
 				// even if `settings.spacelift.workspace_enabled` was set to `true`.
 				// This is per component, not deep-merged and not inherited from base components and globals.
 				componentIsAbstract := false
+
 				if componentType, componentTypeAttributeExists := componentMetadata["type"].(string); componentTypeAttributeExists {
 					if componentType == "abstract" {
 						componentIsAbstract = true
 					}
 				}
+
 				if componentIsAbstract {
 					if i, ok := finalComponentSettings["spacelift"]; ok {
 						spaceliftSettings, ok := i.(map[string]any)
 						if !ok {
 							return nil, fmt.Errorf("invalid 'components.terraform.%s.settings.spacelift' section in the file '%s'", component, stackName)
 						}
+
 						delete(spaceliftSettings, "workspace_enabled")
 					}
 				}
@@ -1302,7 +1331,6 @@ func ProcessStackConfig(
 	// Process all helmfile components
 	if componentTypeFilter == "" || componentTypeFilter == "helmfile" {
 		if allHelmfileComponents, ok := globalComponentsSection["helmfile"]; ok {
-
 			allHelmfileComponentsMap, ok := allHelmfileComponents.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("invalid 'components.helmfile' section in the file '%s'", stackName)
@@ -1401,8 +1429,11 @@ func ProcessStackConfig(
 				baseComponentEnv := map[string]any{}
 				baseComponentName := ""
 				baseComponentHelmfileCommand := ""
+
 				var baseComponentConfig schema.BaseComponentConfig
+
 				var componentInheritanceChain []string
+
 				var baseComponents []string
 
 				// Inheritance using the top-level `component` attribute
@@ -1471,6 +1502,7 @@ func ProcessStackConfig(
 									stackName,
 									baseComponentFromInheritList,
 								)
+
 								return nil, errors.New(errorMessage)
 							}
 						}
@@ -1551,15 +1583,19 @@ func ProcessStackConfig(
 				if atmosConfig.Components.Helmfile.Command != "" {
 					finalComponentHelmfileCommand = atmosConfig.Components.Helmfile.Command
 				}
+
 				if helmfileCommand != "" {
 					finalComponentHelmfileCommand = helmfileCommand
 				}
+
 				if baseComponentHelmfileCommand != "" {
 					finalComponentHelmfileCommand = baseComponentHelmfileCommand
 				}
+
 				if componentHelmfileCommand != "" {
 					finalComponentHelmfileCommand = componentHelmfileCommand
 				}
+
 				if componentOverridesHelmfileCommand != "" {
 					finalComponentHelmfileCommand = componentOverridesHelmfileCommand
 				}
@@ -1597,8 +1633,7 @@ func ProcessStackConfig(
 	return result, nil
 }
 
-// processSettingsIntegrationsGithub deep-merges the `settings.integrations.github` section from stack manifests with
-// the `integrations.github` section from `atmos.yaml`
+// the `integrations.github` section from `atmos.yaml`.
 func processSettingsIntegrationsGithub(atmosConfig schema.AtmosConfiguration, settings map[string]any) (map[string]any, error) {
 	settingsIntegrationsSection := make(map[string]any)
 	settingsIntegrationsGithubSection := make(map[string]any)
@@ -1607,6 +1642,7 @@ func processSettingsIntegrationsGithub(atmosConfig schema.AtmosConfiguration, se
 	if settingsIntegrations, ok := settings[cfg.IntegrationsSectionName]; ok {
 		if settingsIntegrationsMap, ok := settingsIntegrations.(map[string]any); ok {
 			settingsIntegrationsSection = settingsIntegrationsMap
+
 			if settingsIntegrationsGithub, ok := settingsIntegrationsMap[cfg.GithubSectionName]; ok {
 				if settingsIntegrationsGithubMap, ok := settingsIntegrationsGithub.(map[string]any); ok {
 					settingsIntegrationsGithubSection = settingsIntegrationsGithubMap
@@ -1635,13 +1671,13 @@ func processSettingsIntegrationsGithub(atmosConfig schema.AtmosConfiguration, se
 	return settings, nil
 }
 
-// FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined
+// FindComponentStacks finds all infrastructure stack manifests where the component or the base component is defined.
 func FindComponentStacks(
 	componentType string,
 	component string,
 	baseComponent string,
-	componentStackMap map[string]map[string][]string) ([]string, error) {
-
+	componentStackMap map[string]map[string][]string,
+) ([]string, error) {
 	var stacks []string
 
 	if componentStackConfig, componentStackConfigExists := componentStackMap[componentType]; componentStackConfigExists {
@@ -1658,6 +1694,7 @@ func FindComponentStacks(
 
 	unique := u.UniqueStrings(stacks)
 	sort.Strings(unique)
+
 	return unique, nil
 }
 
@@ -1675,8 +1712,8 @@ func FindComponentDependenciesLegacy(
 	componentType string,
 	component string,
 	baseComponents []string,
-	stackImports map[string]map[string]any) ([]string, error) {
-
+	stackImports map[string]map[string]any,
+) ([]string, error) {
 	var deps []string
 
 	sectionsToCheck := []string{
@@ -1690,7 +1727,6 @@ func FindComponentDependenciesLegacy(
 	}
 
 	for stackImportName, stackImportMap := range stackImports {
-
 		if sectionContainsAnyNotEmptySections(stackImportMap, sectionsToCheck) {
 			deps = append(deps, stackImportName)
 			continue
@@ -1775,14 +1811,11 @@ func FindComponentDependenciesLegacy(
 	deps = append(deps, stack)
 	unique := u.UniqueStrings(deps)
 	sort.Strings(unique)
+
 	return unique, nil
 }
 
-// ProcessImportSection processes the `import` section in stack manifests
-// The `import` section can contain:
-// 1. Project-relative paths (e.g. "mixins/region/us-east-2")
-// 2. Paths relative to the current stack file (e.g. "./_defaults")
-// 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2")
+// 3. StackImport structs containing either of the above path types (e.g. "path: mixins/region/us-east-2").
 func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.StackImport, error) {
 	stackImports, ok := stackMap[cfg.ImportSectionName]
 
@@ -1806,10 +1839,12 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 
 		// 1. Try to decode the import as the `StackImport` struct
 		var importObj schema.StackImport
+
 		err := mapstructure.Decode(imp, &importObj)
 		if err == nil {
 			importObj.Path = u.ResolveRelativePath(importObj.Path, filePath)
 			result = append(result, importObj)
+
 			continue
 		}
 
@@ -1818,6 +1853,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		if !ok {
 			return nil, fmt.Errorf("invalid import '%v' in the file '%s'", imp, filePath)
 		}
+
 		if s == "" {
 			return nil, fmt.Errorf("invalid empty import in the file '%s'", filePath)
 		}
@@ -1829,7 +1865,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 	return result, nil
 }
 
-// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
+// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty.
 func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
 		if len(s) > 0 {
@@ -1837,16 +1873,18 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 				if v2, ok2 := v.(map[string]any); ok2 && len(v2) > 0 {
 					return true
 				}
+
 				if v2, ok2 := v.(string); ok2 && len(v2) > 0 {
 					return true
 				}
 			}
 		}
 	}
+
 	return false
 }
 
-// CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies
+// CreateComponentStackMap accepts a config file and creates a map of component-stack dependencies.
 func CreateComponentStackMap(
 	atmosConfig schema.AtmosConfiguration,
 	stacksBasePath string,
@@ -1854,7 +1892,6 @@ func CreateComponentStackMap(
 	helmfileComponentsBasePath string,
 	filePath string,
 ) (map[string]map[string][]string, error) {
-
 	stackComponentMap := map[string]map[string][]string{}
 	stackComponentMap["terraform"] = map[string][]string{}
 	stackComponentMap["helmfile"] = map[string][]string{}
@@ -1938,7 +1975,6 @@ func CreateComponentStackMap(
 
 			return nil
 		})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1958,8 +1994,7 @@ func CreateComponentStackMap(
 	return componentStackMap, nil
 }
 
-// GetFileContent tries to read and return the file content from the sync map if it exists in the map,
-// otherwise it reads the file, stores its content in the map and returns the content
+// otherwise it reads the file, stores its content in the map and returns the content.
 func GetFileContent(filePath string) (string, error) {
 	existingContent, found := getFileContentSyncMap.Load(filePath)
 	if found && existingContent != nil {
@@ -1970,12 +2005,13 @@ func GetFileContent(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	getFileContentSyncMap.Store(filePath, content)
 
 	return string(content), nil
 }
 
-// ProcessBaseComponentConfig processes base component(s) config
+// ProcessBaseComponentConfig processes base component(s) config.
 func ProcessBaseComponentConfig(
 	atmosConfig schema.AtmosConfiguration,
 	baseComponentConfig *schema.BaseComponentConfig,
@@ -1987,22 +2023,32 @@ func ProcessBaseComponentConfig(
 	checkBaseComponentExists bool,
 	baseComponents *[]string,
 ) error {
-
 	if component == baseComponent {
 		return nil
 	}
 
 	var baseComponentVars map[string]any
+
 	var baseComponentSettings map[string]any
+
 	var baseComponentEnv map[string]any
+
 	var baseComponentProviders map[string]any
+
 	var baseComponentHooks map[string]any
+
 	var baseComponentCommand string
+
 	var baseComponentBackendType string
+
 	var baseComponentBackendSection map[string]any
+
 	var baseComponentRemoteStateBackendType string
+
 	var baseComponentRemoteStateBackendSection map[string]any
+
 	var baseComponentMap map[string]any
+
 	var ok bool
 
 	*baseComponents = append(*baseComponents, baseComponent)
@@ -2017,6 +2063,7 @@ func ProcessBaseComponentConfig(
 				return fmt.Errorf("invalid config for the base component '%s' of the component '%s' in the stack '%s'",
 					baseComponent, component, stack)
 			}
+
 			baseComponentMap = baseComponentMapOfStrings
 		}
 
@@ -2039,7 +2086,6 @@ func ProcessBaseComponentConfig(
 				checkBaseComponentExists,
 				baseComponents,
 			)
-
 			if err != nil {
 				return err
 			}
@@ -2069,6 +2115,7 @@ func ProcessBaseComponentConfig(
 								stack,
 								baseComponentFromInheritList,
 							)
+
 							return errors.New(errorMessage)
 						}
 					}
@@ -2174,6 +2221,7 @@ func ProcessBaseComponentConfig(
 		if err != nil {
 			return err
 		}
+
 		baseComponentConfig.BaseComponentVars = merged
 
 		// Base component `settings`
@@ -2181,6 +2229,7 @@ func ProcessBaseComponentConfig(
 		if err != nil {
 			return err
 		}
+
 		baseComponentConfig.BaseComponentSettings = merged
 
 		// Base component `env`
@@ -2188,6 +2237,7 @@ func ProcessBaseComponentConfig(
 		if err != nil {
 			return err
 		}
+
 		baseComponentConfig.BaseComponentEnv = merged
 
 		// Base component `providers`
@@ -2195,6 +2245,7 @@ func ProcessBaseComponentConfig(
 		if err != nil {
 			return err
 		}
+
 		baseComponentConfig.BaseComponentProviders = merged
 
 		// Base component `hooks`
@@ -2202,6 +2253,7 @@ func ProcessBaseComponentConfig(
 		if err != nil {
 			return err
 		}
+
 		baseComponentConfig.BaseComponentHooks = merged
 
 		// Base component `command`
@@ -2215,6 +2267,7 @@ func ProcessBaseComponentConfig(
 		if err != nil {
 			return err
 		}
+
 		baseComponentConfig.BaseComponentBackendSection = merged
 
 		// Base component `remote_state_backend_type`
@@ -2225,6 +2278,7 @@ func ProcessBaseComponentConfig(
 		if err != nil {
 			return err
 		}
+
 		baseComponentConfig.BaseComponentRemoteStateBackendSection = merged
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
@@ -2233,6 +2287,7 @@ func ProcessBaseComponentConfig(
 			// Check if the base component exists as Terraform/Helmfile component
 			// If it does exist, don't throw errors if it is not defined in YAML config
 			componentPath := filepath.Join(componentBasePath, baseComponent)
+
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
 				return errors.New("The component '" + component + "' inherits from the base component '" +
@@ -2244,13 +2299,12 @@ func ProcessBaseComponentConfig(
 	return nil
 }
 
-// FindComponentsDerivedFromBaseComponents finds all components that derive from the given base components
+// FindComponentsDerivedFromBaseComponents finds all components that derive from the given base components.
 func FindComponentsDerivedFromBaseComponents(
 	stack string,
 	allComponents map[string]any,
 	baseComponents []string,
 ) ([]string, error) {
-
 	res := []string{}
 
 	for component, compSection := range allComponents {

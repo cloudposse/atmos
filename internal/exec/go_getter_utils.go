@@ -18,7 +18,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ValidateURI validates URIs
+// ValidateURI validates URIs.
 func ValidateURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("URI cannot be empty")
@@ -31,6 +31,7 @@ func ValidateURI(uri string) error {
 	if strings.Contains(uri, "..") {
 		return fmt.Errorf("URI cannot contain path traversal sequences")
 	}
+
 	if strings.Contains(uri, " ") {
 		return fmt.Errorf("URI cannot contain spaces")
 	}
@@ -45,10 +46,11 @@ func ValidateURI(uri string) error {
 			return fmt.Errorf("unsupported URI scheme: %s", scheme)
 		}
 	}
+
 	return nil
 }
 
-// IsValidScheme checks if the URL scheme is valid
+// IsValidScheme checks if the URL scheme is valid.
 func IsValidScheme(scheme string) bool {
 	validSchemes := map[string]bool{
 		"http":       true,
@@ -58,11 +60,11 @@ func IsValidScheme(scheme string) bool {
 		"git::https": true,
 		"git::ssh":   true,
 	}
+
 	return validSchemes[scheme]
 }
 
-// CustomGitHubDetector intercepts GitHub URLs and transforms them
-// into something like git::https://<token>@github.com/... so we can
+// into something like git::https://<token>@github.com/... So we can
 // do a git-based clone with a token.
 type CustomGitHubDetector struct {
 	AtmosConfig schema.AtmosConfiguration
@@ -99,18 +101,21 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 	gitHubToken := os.Getenv("GITHUB_TOKEN")
 
 	var usedToken string
+
 	var tokenSource string
 
 	// 1. If ATMOS_GITHUB_TOKEN is set, always use that
 	if atmosGitHubToken != "" {
 		usedToken = atmosGitHubToken
 		tokenSource = "ATMOS_GITHUB_TOKEN"
+
 		u.LogDebug("ATMOS_GITHUB_TOKEN is set\n")
 	} else {
 		// 2. Otherwise, only inject GITHUB_TOKEN if cfg.Settings.InjectGithubToken == true
 		if d.AtmosConfig.Settings.InjectGithubToken && gitHubToken != "" {
 			usedToken = gitHubToken
 			tokenSource = "GITHUB_TOKEN"
+
 			u.LogTrace("InjectGithubToken=true and GITHUB_TOKEN is set, using it\n")
 		} else {
 			u.LogTrace("No ATMOS_GITHUB_TOKEN or GITHUB_TOKEN found\n")
@@ -120,8 +125,10 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 	if usedToken != "" {
 		user := parsedURL.User.Username()
 		pass, _ := parsedURL.User.Password()
+
 		if user == "" && pass == "" {
 			u.LogDebug(fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
+
 			parsedURL.User = url.UserPassword("x-access-token", usedToken)
 		} else {
 			u.LogDebug("Credentials found, skipping token injection\n")
@@ -144,7 +151,7 @@ func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
 	)
 }
 
-// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination
+// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination.
 func GoGetterGet(
 	atmosConfig schema.AtmosConfiguration,
 	src string,
@@ -173,7 +180,7 @@ func GoGetterGet(
 	return nil
 }
 
-// DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
+// DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type.
 func DownloadDetectFormatAndParseFile(atmosConfig schema.AtmosConfiguration, file string) (any, error) {
 	tempDir := os.TempDir()
 	f := filepath.Join(tempDir, uuid.New().String())

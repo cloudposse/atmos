@@ -12,7 +12,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// listWorkflowsCmd lists atmos workflows
+// listWorkflowsCmd lists atmos workflows.
 var listWorkflowsCmd = &cobra.Command{
 	Use:   "workflows",
 	Short: "List all Atmos workflows",

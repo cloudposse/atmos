@@ -7,7 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Execute starts the TUI app and returns the selected items from the views
+// Execute starts the TUI app and returns the selected items from the views.
 func Execute(workflows map[string]schema.WorkflowManifest) (*App, error) {
 	mouseZone.NewGlobal()
 	mouseZone.SetEnabled(true)

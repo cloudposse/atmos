@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// PrintAsJSON prints the provided value as JSON document to the console
+// PrintAsJSON prints the provided value as JSON document to the console.
 func PrintAsJSON(data any) error {
 	j, err := ConvertToJSON(data)
 	if err != nil {
@@ -19,33 +19,39 @@ func PrintAsJSON(data any) error {
 	}
 
 	var prettyJSON bytes.Buffer
+
 	err = json.Indent(&prettyJSON, []byte(j), "", "  ")
 	if err != nil {
 		return err
 	}
 
 	atmosConfig := ExtractAtmosConfig(data)
+
 	highlighted, err := HighlightCodeWithConfig(prettyJSON.String(), atmosConfig)
 	if err != nil {
 		// Fallback to plain text if highlighting fails
 		PrintMessage(prettyJSON.String())
 		return nil
 	}
+
 	PrintMessage(highlighted)
+
 	return nil
 }
 
-// PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
+// PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor.
 func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
 	j, err := ConvertToJSON(data)
 	if err != nil {
 		return err
 	}
+
 	LogInfo(j)
+
 	return nil
 }
 
-// WriteToFileAsJSON converts the provided value to JSON and writes it to the specified file
+// WriteToFileAsJSON converts the provided value to JSON and writes it to the specified file.
 func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 	j, err := ConvertToJSON(data)
 	if err != nil {
@@ -69,10 +75,11 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-// ConvertToJSON converts the provided value to a JSON-encoded string
+// ConvertToJSON converts the provided value to a JSON-encoded string.
 func ConvertToJSON(data any) (string, error) {
 	jc := jsoniter.Config{
 		EscapeHTML:                    true,
@@ -85,10 +92,11 @@ func ConvertToJSON(data any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return string(j), nil
 }
 
-// ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents
+// ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents.
 func ConvertToJSONFast(data any) (string, error) {
 	jc := jsoniter.Config{
 		EscapeHTML:                    false,
@@ -102,10 +110,11 @@ func ConvertToJSONFast(data any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return j, nil
 }
 
-// ConvertFromJSON converts the provided JSON-encoded string to Go data types
+// ConvertFromJSON converts the provided JSON-encoded string to Go data types.
 func ConvertFromJSON(jsonString string) (any, error) {
 	jc := jsoniter.Config{
 		EscapeHTML:                    false,
@@ -116,30 +125,35 @@ func ConvertFromJSON(jsonString string) (any, error) {
 	}
 
 	var data any
+
 	err := jc.Froze().Unmarshal([]byte(jsonString), &data)
 	if err != nil {
 		return "", err
 	}
+
 	return data, nil
 }
 
-// JSONToMapOfInterfaces takes a JSON string as input and returns a map[string]any
+// JSONToMapOfInterfaces takes a JSON string as input and returns a map[string]any.
 func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
 	var data schema.AtmosSectionMapType
+
 	byt := []byte(input)
 
 	if err := json.Unmarshal(byt, &data); err != nil {
 		return nil, err
 	}
+
 	return data, nil
 }
 
-// IsJSON checks if data is in JSON format
+// IsJSON checks if data is in JSON format.
 func IsJSON(data string) bool {
 	if strings.TrimSpace(data) == "" {
 		return false
 	}
 
 	var js json.RawMessage
+
 	return json.Unmarshal([]byte(data), &js) == nil
 }

@@ -10,12 +10,9 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 )
 
-var (
-	getGlobMatchesSyncMap = sync.Map{}
-)
+var getGlobMatchesSyncMap = sync.Map{}
 
-// GetGlobMatches tries to read and return the Glob matches content from the sync map if it exists in the map,
-// otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files
+// otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files.
 func GetGlobMatches(pattern string) ([]string, error) {
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
 	if found && existingMatches != nil {

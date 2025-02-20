@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// vendorPullCmd executes 'vendor pull' CLI commands
+// vendorPullCmd executes 'vendor pull' CLI commands.
 var vendorPullCmd = &cobra.Command{
 	Use:                "pull",
 	Short:              "Pull the latest vendor configurations or dependencies",

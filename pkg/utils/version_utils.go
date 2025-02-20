@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-// PrintMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
+// PrintMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version.
 func PrintMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	// Define content
 	message := lipgloss.NewStyle().
@@ -18,7 +18,8 @@ func PrintMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 			theme.Styles.VersionNumber.Render(version.Version),
 			theme.Styles.NewVersion.Render(latestVersion)))
 
-	links := []string{lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", theme.Styles.Link.Render("https://github.com/cloudposse/atmos/releases"))),
+	links := []string{
+		lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", theme.Styles.Link.Render("https://github.com/cloudposse/atmos/releases"))),
 		lipgloss.NewStyle().Render(fmt.Sprintf("Install Atmos: %s", theme.Styles.Link.Render("https://atmos.tools/install"))),
 	}
 

@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// proLockCmd executes 'pro lock' CLI command
+// proLockCmd executes 'pro lock' CLI command.
 var proLockCmd = &cobra.Command{
 	Use:                "lock",
 	Short:              "Lock a stack",

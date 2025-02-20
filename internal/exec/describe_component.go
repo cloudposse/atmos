@@ -10,7 +10,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeComponentCmd executes `describe component` command
+// ExecuteDescribeComponentCmd executes `describe component` command.
 func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
@@ -95,7 +95,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeComponent describes component config
+// ExecuteDescribeComponent describes component config.
 func ExecuteDescribeComponent(
 	component string,
 	stack string,
@@ -116,6 +116,7 @@ func ExecuteDescribeComponent(
 	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
+
 		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
 		if err != nil {
 			return nil, err
@@ -125,12 +126,14 @@ func ExecuteDescribeComponent(
 	return configAndStacksInfo.ComponentSection, nil
 }
 
-// FilterAbstractComponents This function removes abstract components and returns the list of components
+// FilterAbstractComponents This function removes abstract components and returns the list of components.
 func FilterAbstractComponents(componentsMap map[string]any) []string {
 	if componentsMap == nil {
 		return []string{}
 	}
+
 	components := make([]string, 0)
+
 	for _, k := range lo.Keys(componentsMap) {
 		componentMap, ok := componentsMap[k].(map[string]any)
 		if !ok {
@@ -143,13 +146,17 @@ func FilterAbstractComponents(componentsMap map[string]any) []string {
 			components = append(components, k)
 			continue
 		}
+
 		if componentType, ok := metadata["type"].(string); ok && componentType == "abstract" {
 			continue
 		}
+
 		if componentEnabled, ok := metadata["enabled"].(bool); ok && !componentEnabled {
 			continue
 		}
+
 		components = append(components, k)
 	}
+
 	return components
 }

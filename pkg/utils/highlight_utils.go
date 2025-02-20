@@ -2,11 +2,10 @@ package utils
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"strings"
-
-	"encoding/json"
 
 	"github.com/alecthomas/chroma"
 	"github.com/alecthomas/chroma/formatters"
@@ -18,7 +17,7 @@ import (
 	"golang.org/x/term"
 )
 
-// DefaultHighlightSettings returns the default syntax highlighting settings
+// DefaultHighlightSettings returns the default syntax highlighting settings.
 func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	return &schema.SyntaxHighlighting{
 		Enabled:                true,
@@ -30,53 +29,64 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	}
 }
 
-// GetHighlightSettings returns the syntax highlighting settings from the config or defaults
+// GetHighlightSettings returns the syntax highlighting settings from the config or defaults.
 func GetHighlightSettings(config schema.AtmosConfiguration) *schema.SyntaxHighlighting {
 	defaults := DefaultHighlightSettings()
 	if config.Settings.Terminal.SyntaxHighlighting == (schema.SyntaxHighlighting{}) {
 		return defaults
 	}
+
 	settings := &config.Settings.Terminal.SyntaxHighlighting
 	// Apply defaults for any unset fields
 	if !settings.Enabled {
 		settings.Enabled = defaults.Enabled
 	}
+
 	if settings.Formatter == "" {
 		settings.Formatter = defaults.Formatter
 	}
+
 	if settings.Theme == "" {
 		settings.Theme = defaults.Theme
 	}
+
 	if !settings.HighlightedOutputPager {
 		settings.HighlightedOutputPager = defaults.HighlightedOutputPager
 	}
+
 	if !settings.LineNumbers {
 		settings.LineNumbers = defaults.LineNumbers
 	}
+
 	if !settings.Wrap {
 		settings.Wrap = defaults.Wrap
 	}
+
 	return settings
 }
 
-// HighlightCode highlights the given code using chroma with the specified lexer and theme
+// HighlightCode highlights the given code using chroma with the specified lexer and theme.
 func HighlightCode(code string, lexerName string, theme string) (string, error) {
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
 		return code, nil
 	}
+
 	var buf bytes.Buffer
+
 	err := quick.Highlight(&buf, code, lexerName, "terminal", theme)
 	if err != nil {
 		return code, err
 	}
+
 	return buf.String(), nil
 }
 
-// HighlightCodeWithConfig highlights the given code using the provided configuration
+// HighlightCodeWithConfig highlights the given code using the provided configuration.
 func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration, format ...string) (string, error) {
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
 		return code, nil
 	}
+
 	settings := GetHighlightSettings(config)
 	if !settings.Enabled {
 		return code, nil
@@ -140,26 +150,29 @@ func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration, form
 	if err != nil {
 		return code, err
 	}
+
 	err = formatter.Format(&buf, s, iterator)
 	if err != nil {
 		return code, err
 	}
+
 	return buf.String(), nil
 }
 
-// HighlightWriter returns an io.Writer that highlights code written to it
+// HighlightWriter returns an io.Writer that highlights code written to it.
 type HighlightWriter struct {
 	config schema.AtmosConfiguration
 	writer io.Writer
 	format string
 }
 
-// NewHighlightWriter creates a new HighlightWriter
+// NewHighlightWriter creates a new HighlightWriter.
 func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration, format ...string) *HighlightWriter {
 	var f string
 	if len(format) > 0 {
 		f = format[0]
 	}
+
 	return &HighlightWriter{
 		config: config,
 		writer: w,

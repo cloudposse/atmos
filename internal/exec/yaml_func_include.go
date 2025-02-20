@@ -22,6 +22,7 @@ func processTagInclude(
 	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: !include %s", str))
 
 	var f string
+
 	q := ""
 
 	parts, err := u.SplitStringByDelimiter(str, ' ')

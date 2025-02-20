@@ -19,7 +19,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// processOciImage downloads an Image from an OCI-compatible registry, extracts the layers from the tarball, and writes to the destination directory
+// processOciImage downloads an Image from an OCI-compatible registry, extracts the layers from the tarball, and writes to the destination directory.
 func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, destDir string) error {
 	// Temp directory for the tarball files
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
@@ -63,6 +63,7 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 			u.LogError(err)
 			return nil, err
 		}
+
 		return f, nil
 	})
 	if err != nil {

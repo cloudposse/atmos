@@ -21,6 +21,7 @@ func GenerateFromBaseTemplate(parts []HelpTemplateSections) string {
 	for _, value := range parts {
 		template += getSection(value)
 	}
+
 	return template
 }
 

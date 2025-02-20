@@ -123,7 +123,9 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	shellCommandWorkingDir := ""
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo
+
 	var atmosConfig schema.AtmosConfiguration
+
 	var err error
 
 	if !requiredParamsProvided {
@@ -153,16 +155,19 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		}
 
 		var err error
+
 		configAndStacksInfo.ComponentFromArg = kubeconfigContext.Component
 		configAndStacksInfo.Stack = kubeconfigContext.Stack
 
 		configAndStacksInfo.ComponentType = "terraform"
 		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 		shellCommandWorkingDir = filepath.Join(atmosConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
 			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 			shellCommandWorkingDir = filepath.Join(atmosConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
+
 			if err != nil {
 				return err
 			}
@@ -208,18 +213,23 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	if dryRun {
 		args = append(args, "--dry-run")
 	}
+
 	if verbose {
 		args = append(args, "--verbose")
 	}
+
 	if roleArn != "" {
 		args = append(args, fmt.Sprintf("--role-arn=%s", roleArn))
 	}
+
 	if kubeconfigPath != "" {
 		args = append(args, fmt.Sprintf("--kubeconfig=%s", kubeconfigPath))
 	}
+
 	if alias != "" {
 		args = append(args, fmt.Sprintf("--alias=%s", alias))
 	}
+
 	if region != "" {
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}

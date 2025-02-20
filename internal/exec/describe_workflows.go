@@ -2,13 +2,14 @@ package exec
 
 import (
 	"fmt"
+
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/spf13/cobra"
 )
 
-// ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command
+// ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command.
 func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {

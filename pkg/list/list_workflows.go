@@ -25,26 +25,29 @@ const (
 	FormatCSV   = "csv"
 )
 
-// ValidateFormat checks if the given format is supported
+// ValidateFormat checks if the given format is supported.
 func ValidateFormat(format string) error {
 	if format == "" {
 		return nil
 	}
+
 	validFormats := []string{FormatTable, FormatJSON, FormatCSV}
 	for _, f := range validFormats {
 		if format == f {
 			return nil
 		}
 	}
+
 	return fmt.Errorf("invalid format '%s'. Supported formats are: %s", format, strings.Join(validFormats, ", "))
 }
 
-// Extracts workflows from a workflow manifest
+// Extracts workflows from a workflow manifest.
 func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, error) {
 	var rows [][]string
 	if manifest.Workflows == nil {
 		return rows, nil
 	}
+
 	for workflowName, workflow := range manifest.Workflows {
 		rows = append(rows, []string{
 			manifest.Name,
@@ -52,10 +55,11 @@ func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, err
 			workflow.Description,
 		})
 	}
+
 	return rows, nil
 }
 
-// FilterAndListWorkflows filters and lists workflows based on the given file
+// FilterAndListWorkflows filters and lists workflows based on the given file.
 func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, format string, delimiter string) (string, error) {
 	if err := ValidateFormat(format); err != nil {
 		return "", err
@@ -65,6 +69,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 		if err := ValidateFormat(listConfig.Format); err != nil {
 			return "", err
 		}
+
 		format = listConfig.Format
 	}
 
@@ -81,6 +86,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 		if !utils.IsYaml(cleanPath) {
 			return "", fmt.Errorf("invalid workflow file extension: %s", fileFlag)
 		}
+
 		if _, err := os.Stat(fileFlag); os.IsNotExist(err) {
 			return "", fmt.Errorf("workflow file not found: %s", fileFlag)
 		}
@@ -100,9 +106,11 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 		if err != nil {
 			return "", fmt.Errorf("error processing manifest: %w", err)
 		}
+
 		rows = append(rows, manifestRows...)
 	} else {
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
 			return "", fmt.Errorf("error initializing CLI config: %w", err)
@@ -149,6 +157,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 			if err != nil {
 				return "", fmt.Errorf("error processing manifest: %w", err)
 			}
+
 			rows = append(rows, manifestRows...)
 		}
 	}
@@ -174,6 +183,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 			Name        string `json:"name"`
 			Description string `json:"description"`
 		}
+
 		var workflows []workflow
 		for _, row := range rows {
 			workflows = append(workflows, workflow{
@@ -182,19 +192,24 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 				Description: row[2],
 			})
 		}
+
 		jsonBytes, err := json.MarshalIndent(workflows, "", "  ")
 		if err != nil {
 			return "", fmt.Errorf("error formatting JSON output: %w", err)
 		}
+
 		return string(jsonBytes), nil
 
 	case "csv":
 		// Use the provided delimiter for CSV output
 		var output strings.Builder
+
 		output.WriteString(strings.Join(header, delimiter) + utils.GetLineEnding())
+
 		for _, row := range rows {
 			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
 		}
+
 		return output.String(), nil
 
 	default:
@@ -220,10 +235,13 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 
 		// Default to simple tabular format for non-TTY or when format is explicitly "table"
 		var output strings.Builder
+
 		output.WriteString(strings.Join(header, delimiter) + utils.GetLineEnding())
+
 		for _, row := range rows {
 			output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
 		}
+
 		return output.String(), nil
 	}
 }

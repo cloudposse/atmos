@@ -60,11 +60,13 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 
 	workflowFilesMapKeys := lo.Keys(workflows)
 	sort.Strings(workflowFilesMapKeys)
+
 	var selectedWorkflowContent string
 
 	if len(workflowFilesMapKeys) > 0 {
 		workflowFileItems = lo.Map(workflowFilesMapKeys, func(s string, _ int) list.Item {
 			workflowManifest := workflows[s]
+
 			return listItem{
 				name: workflowManifest.Name,
 				item: s,
@@ -90,6 +92,7 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 				if name == "" {
 					name = s.Command
 				}
+
 				return listItem{
 					name: name,
 					item: s.Name,
@@ -153,11 +156,13 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 				if name == "" {
 					name = s.Command
 				}
+
 				return listItem{
 					name: name,
 					item: s.Name,
 				}
 			})
+
 			app.columnViews[2].list.ResetFilter()
 			app.columnViews[2].list.ResetSelected()
 			app.columnViews[2].list.SetItems(stepItems)
@@ -185,11 +190,13 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 			if name == "" {
 				name = s.Command
 			}
+
 			return listItem{
 				name: name,
 				item: s.Name,
 			}
 		})
+
 		app.columnViews[2].list.ResetFilter()
 		app.columnViews[2].list.ResetSelected()
 		app.columnViews[2].list.SetItems(stepItems)
@@ -202,6 +209,7 @@ func (app *App) flipWorkflowStepsView() {
 	} else {
 		app.columnViews[2].viewType = listViewType2
 	}
+
 	app.workflowStepsViewShowWorkflow = !app.workflowStepsViewShowWorkflow
 }
 
@@ -242,29 +250,39 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := msg.(type) {
 	case tea.WindowSizeMsg:
 		app.loaded = false
+
 		var cmd tea.Cmd
+
 		var cmds []tea.Cmd
+
 		app.help.Width = message.Width
 		for i := 0; i < len(app.columnViews); i++ {
 			var res tea.Model
 			res, cmd = app.columnViews[i].Update(message)
 			app.columnViews[i] = *res.(*columnView)
+
 			cmds = append(cmds, cmd)
 		}
+
 		app.loaded = true
+
 		return app, tea.Batch(cmds...)
 
 	case tea.MouseMsg:
 		if message.Button == tea.MouseButtonWheelUp {
 			app.columnViews[app.columnPointer].CursorUp()
 			app.updateWorkflowFilesAndWorkflowsViews()
+
 			return app, nil
 		}
+
 		if message.Button == tea.MouseButtonWheelDown {
 			app.columnViews[app.columnPointer].CursorDown()
 			app.updateWorkflowFilesAndWorkflowsViews()
+
 			return app, nil
 		}
+
 		if message.Button == tea.MouseButtonLeft {
 			for i := 0; i < len(app.columnViews); i++ {
 				zoneInfo := mouseZone.Get(app.columnViews[i].id)
@@ -272,6 +290,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					app.columnViews[app.columnPointer].Blur()
 					app.columnPointer = i
 					app.columnViews[app.columnPointer].Focus()
+
 					break
 				}
 			}
@@ -286,6 +305,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if app.columnViews[app.columnPointer].viewType == listViewType || app.columnViews[app.columnPointer].viewType == listViewType2 {
 				res, cmd := app.columnViews[app.columnPointer].Update(msg)
 				app.columnViews[app.columnPointer] = *res.(*columnView)
+
 				if cmd == nil {
 					return app, nil
 				} else {
@@ -293,7 +313,9 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return app, tea.Quit
 				}
 			}
+
 			app.quit = true
+
 			return app, tea.Quit
 		case key.Matches(message, keys.Execute):
 			app.execute()
@@ -301,20 +323,24 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(message, keys.Up):
 			app.columnViews[app.columnPointer].CursorUp()
 			app.updateWorkflowFilesAndWorkflowsViews()
+
 			return app, nil
 		case key.Matches(message, keys.Down):
 			app.columnViews[app.columnPointer].CursorDown()
 			app.updateWorkflowFilesAndWorkflowsViews()
+
 			return app, nil
 		case key.Matches(message, keys.Left):
 			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getPrevViewPointer()
 			app.columnViews[app.columnPointer].Focus()
+
 			return app, nil
 		case key.Matches(message, keys.Right):
 			app.columnViews[app.columnPointer].Blur()
 			app.columnPointer = app.getNextViewPointer()
 			app.columnViews[app.columnPointer].Focus()
+
 			return app, nil
 		case key.Matches(message, keys.FlipWorkflowStepsView):
 			app.flipWorkflowStepsView()
@@ -325,6 +351,7 @@ func (app *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Send all other messages to the selected child view
 	res, cmd := app.columnViews[app.columnPointer].Update(msg)
 	app.columnViews[app.columnPointer] = *res.(*columnView)
+
 	return app, cmd
 }
 
@@ -367,6 +394,7 @@ func (app *App) getNextViewPointer() int {
 	if app.columnPointer == 2 {
 		return 0
 	}
+
 	return app.columnPointer + 1
 }
 
@@ -374,5 +402,6 @@ func (app *App) getPrevViewPointer() int {
 	if app.columnPointer == 0 {
 		return 2
 	}
+
 	return app.columnPointer - 1
 }

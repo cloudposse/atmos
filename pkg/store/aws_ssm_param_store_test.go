@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockSSMClient is a mock implementation of SSMClient
+// MockSSMClient is a mock implementation of SSMClient.
 type MockSSMClient struct {
 	mock.Mock
 }
@@ -43,7 +43,7 @@ func TestSSMStore_Set(t *testing.T) {
 		stack     string
 		component string
 		key       string
-		value     interface{}
+		value     any
 		mockFn    func(*MockSSMClient)
 		wantErr   bool
 	}{
@@ -178,7 +178,7 @@ func TestSSMStore_Get(t *testing.T) {
 		component string
 		key       string
 		mockFn    func(*MockSSMClient)
-		want      interface{}
+		want      any
 		wantErr   bool
 	}{
 		{

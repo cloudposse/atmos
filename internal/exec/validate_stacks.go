@@ -25,7 +25,7 @@ var atmosManifestDefault embed.FS
 
 const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
-// ExecuteValidateStacksCmd executes `validate stacks` command
+// ExecuteValidateStacksCmd executes `validate stacks` command.
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	// Initialize spinner
 	message := "Validating Atmos Stacks..."
@@ -48,6 +48,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	flags := cmd.Flags()
+
 	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
 		return err
@@ -58,10 +59,11 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	err = ValidateStacks(atmosConfig)
+
 	return err
 }
 
-// ValidateStacks validates Atmos stack configuration
+// ValidateStacks validates Atmos stack configuration.
 func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	var validationErrorMessages []string
 
@@ -80,6 +82,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	if err != nil {
 		return err
 	}
+
 	validationErrorMessages = append(validationErrorMessages, errorList...)
 
 	helmfileComponentStackMap, err := createComponentStackMap(atmosConfig, stacksMap, cfg.HelmfileSectionName)
@@ -91,6 +94,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	if err != nil {
 		return err
 	}
+
 	validationErrorMessages = append(validationErrorMessages, errorList...)
 
 	// 2. Check all YAML stack manifests defined in the infrastructure
@@ -99,6 +103,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	// Check if the Atmos manifest JSON Schema is configured and the file exists
 	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
 	var atmosManifestJsonSchemaFilePath string
+
 	atmosManifestJsonSchemaFileAbsPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.Atmos.Manifest)
 
 	if atmosConfig.Schemas.Atmos.Manifest == "" {
@@ -107,8 +112,10 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Schemas.Atmos.Manifest = f
-		u.LogTrace(fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
+
+		u.LogTrace("Atmos JSON Schema is not configured. Using the default embedded schema")
 	} else if u.FileExists(atmosConfig.Schemas.Atmos.Manifest) {
 		atmosManifestJsonSchemaFilePath = atmosConfig.Schemas.Atmos.Manifest
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
@@ -203,15 +210,25 @@ func createComponentStackMap(
 	componentType string,
 ) (map[string]map[string][]string, error) {
 	var varsSection map[string]any
+
 	var metadataSection map[string]any
+
 	var settingsSection map[string]any
+
 	var envSection map[string]any
+
 	var providersSection map[string]any
+
 	var overridesSection map[string]any
+
 	var backendSection map[string]any
+
 	var backendTypeSection string
+
 	var stackName string
+
 	var err error
+
 	terraformComponentStackMap := make(map[string]map[string][]string)
 
 	for stackManifest, stackSection := range stacksMap {
@@ -289,6 +306,7 @@ func createComponentStackMap(
 					} else {
 						context := cfg.GetContextFromVars(varsSection)
 						configAndStacksInfo.Context = context
+
 						stackName, err = cfg.GetContextPrefix(stackManifest, context, GetStackNamePattern(atmosConfig), stackManifest)
 						if err != nil {
 							return nil, err
@@ -299,6 +317,7 @@ func createComponentStackMap(
 					if !ok {
 						terraformComponentStackMap[componentName] = make(map[string][]string)
 					}
+
 					terraformComponentStackMap[componentName][stackName] = append(terraformComponentStackMap[componentName][stackName], stackManifest)
 				}
 			}
@@ -318,6 +337,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// Check if the component configs are the same (deep-equal) in those stack manifests.
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
+
 				for _, stackManifestName := range stackManifests {
 					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true, true, nil)
 					if err != nil {
@@ -380,7 +400,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 	return res, nil
 }
 
-// downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
+// downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL.
 func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error) {
 	manifestURL := atmosConfig.Schemas.Atmos.Manifest
 
@@ -394,6 +414,7 @@ func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error
 	}
 
 	tempDir := os.TempDir()
+
 	fileName, err := u.GetFileNameFromURL(manifestURL)
 	if err != nil || fileName == "" {
 		return "", fmt.Errorf("failed to get the file name from the URL '%s': %w", manifestURL, err)

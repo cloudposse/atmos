@@ -23,16 +23,17 @@ const (
 	forceFlag                 = "--force"
 )
 
-// ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
+// ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands.
 func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
+
 	return ExecuteTerraform(info)
 }
 
-// ExecuteTerraform executes terraform commands
+// ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -58,6 +59,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	if shouldProcessStacks {
 		processTemplatesAndYamlFunctions := needProcessTemplatesAndYamlFunctions(info.SubCommand)
+
 		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, processTemplatesAndYamlFunctions, processTemplatesAndYamlFunctions, nil)
 		if err != nil {
 			return err
@@ -80,6 +82,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Check if the component (or base component) exists as Terraform component
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		return fmt.Errorf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
@@ -111,6 +114,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			u.LogDebug(fmt.Errorf("error cleaning the terraform component: %v", err).Error())
 			return err
 		}
+
 		return nil
 	}
 
@@ -121,6 +125,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
 		u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
 			if err != nil {
@@ -170,6 +175,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		*/
 		if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
 			u.LogDebug("\nCLI variables (will override the variables defined in the stack manifests):")
+
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				err = u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars)
 				if err != nil {
@@ -222,6 +228,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
 		}
 	}
+
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_BASE_PATH=%s", atmosConfig.BasePath))
 	// Set `TF_IN_AUTOMATION` ENV var to `true` to suppress verbose instructions after terraform commands
@@ -234,6 +241,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if envUA, exists := os.LookupEnv("TF_APPEND_USER_AGENT"); exists && envUA != "" {
 		appendUserAgent = envUA
 	}
+
 	if appendUserAgent != "" {
 		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_APPEND_USER_AGENT=%s", appendUserAgent))
 	}
@@ -241,6 +249,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
 		u.LogDebug("\nUsing ENV vars:")
+
 		for _, v := range info.ComponentEnvList {
 			u.LogDebug(v)
 		}
@@ -256,6 +265,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	if info.SkipInit {
 		u.LogDebug("Skipping over 'terraform init' due to '--skip-init' flag being passed")
+
 		runTerraformInit = false
 	}
 
@@ -402,11 +412,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			)
 			if err != nil {
 				var osErr *osexec.ExitError
+
 				ok := errors.As(err, &osErr)
 				if !ok || osErr.ExitCode() != 1 {
 					// err is not a non-zero exit code or err is not exit code 1, which we are expecting
 					return err
 				}
+
 				err = ExecuteShellCommand(
 					atmosConfig,
 					info.Command,
@@ -460,6 +472,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if err != nil {
 			return err
 		}
+
 		return nil
 	}
 

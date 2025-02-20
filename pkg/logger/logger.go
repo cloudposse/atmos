@@ -20,7 +20,7 @@ const (
 	LogLevelWarning LogLevel = "Warning"
 )
 
-// logLevelOrder defines the order of log levels from most verbose to least verbose
+// logLevelOrder defines the order of log levels from most verbose to least verbose.
 var logLevelOrder = map[LogLevel]int{
 	LogLevelTrace:   0,
 	LogLevelDebug:   1,
@@ -46,6 +46,7 @@ func NewLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return NewLogger(logLevel, cfg.Logs.File)
 }
 
@@ -120,11 +121,12 @@ func (l *Logger) Error(err error) {
 	}
 }
 
-// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
 func (l *Logger) isLevelEnabled(level LogLevel) bool {
 	if l.LogLevel == LogLevelOff {
 		return false
 	}
+
 	return logLevelOrder[level] >= logLevelOrder[l.LogLevel]
 }
 

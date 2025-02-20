@@ -7,7 +7,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
-// ExecuteDescribeConfigCmd executes `describe config` command
+// ExecuteDescribeConfigCmd executes `describe config` command.
 func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
 

@@ -23,7 +23,9 @@ func processTagEnv(
 	}
 
 	var envVarName string
+
 	envVarDefault := ""
+
 	var envVarExists bool
 
 	parts, err := u.SplitStringByDelimiter(str, ' ')

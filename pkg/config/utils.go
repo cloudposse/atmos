@@ -15,7 +15,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack
+// FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack.
 func FindAllStackConfigsInPathsForStack(
 	atmosConfig schema.AtmosConfiguration,
 	stack string,
@@ -23,7 +23,9 @@ func FindAllStackConfigsInPathsForStack(
 	excludeStackPaths []string,
 ) ([]string, []string, bool, error) {
 	var absolutePaths []string
+
 	var relativePaths []string
+
 	stackIsDir := strings.IndexAny(stack, "/") > 0
 
 	for _, p := range includeStackPaths {
@@ -37,6 +39,7 @@ func FindAllStackConfigsInPathsForStack(
 		}
 
 		var allMatches []string
+
 		for _, pattern := range patterns {
 			// Find all matches in the glob
 			matches, err := u.GetGlobMatches(pattern)
@@ -55,6 +58,7 @@ func FindAllStackConfigsInPathsForStack(
 					y, _ := u.ConvertToYAML(atmosConfig)
 					return nil, nil, false, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
 				}
+
 				return nil, nil, false, err
 			}
 			// If there's no error but still no matches, we continue to the next path
@@ -71,6 +75,7 @@ func FindAllStackConfigsInPathsForStack(
 
 			if stackMatch {
 				allExcluded := true
+
 				for _, excludePath := range excludeStackPaths {
 					excludeMatch, err := u.PathMatch(excludePath, matchedFileAbsolutePath)
 					if err != nil {
@@ -113,13 +118,14 @@ func FindAllStackConfigsInPathsForStack(
 	return absolutePaths, relativePaths, false, nil
 }
 
-// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs
+// FindAllStackConfigsInPaths finds all stack manifests in the paths specified by globs.
 func FindAllStackConfigsInPaths(
 	atmosConfig schema.AtmosConfiguration,
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {
 	var absolutePaths []string
+
 	var relativePaths []string
 
 	for _, p := range includeStackPaths {
@@ -132,6 +138,7 @@ func FindAllStackConfigsInPaths(
 		}
 
 		var allMatches []string
+
 		for _, pattern := range patterns {
 			// Find all matches in the glob
 			matches, err := u.GetGlobMatches(pattern)
@@ -150,6 +157,7 @@ func FindAllStackConfigsInPaths(
 					y, _ := u.ConvertToYAML(atmosConfig)
 					return nil, nil, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
 				}
+
 				return nil, nil, err
 			}
 			// If there's no error but still no matches, we continue to the next path
@@ -241,40 +249,48 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	componentsTerraformApplyAutoApprove := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE")
 	if len(componentsTerraformApplyAutoApprove) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=%s", componentsTerraformApplyAutoApprove))
+
 		applyAutoApproveBool, err := strconv.ParseBool(componentsTerraformApplyAutoApprove)
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Components.Terraform.ApplyAutoApprove = applyAutoApproveBool
 	}
 
 	componentsTerraformDeployRunInit := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT")
 	if len(componentsTerraformDeployRunInit) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=%s", componentsTerraformDeployRunInit))
+
 		deployRunInitBool, err := strconv.ParseBool(componentsTerraformDeployRunInit)
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Components.Terraform.DeployRunInit = deployRunInitBool
 	}
 
 	componentsInitRunReconfigure := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE")
 	if len(componentsInitRunReconfigure) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure))
+
 		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
 	}
 
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile))
+
 		componentsTerraformAutoGenerateBackendFileBool, err := strconv.ParseBool(componentsTerraformAutoGenerateBackendFile)
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Components.Terraform.AutoGenerateBackendFile = componentsTerraformAutoGenerateBackendFileBool
 	}
 
@@ -293,10 +309,12 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	componentsHelmfileUseEKS := os.Getenv("ATMOS_COMPONENTS_HELMFILE_USE_EKS")
 	if len(componentsHelmfileUseEKS) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_USE_EKS=%s", componentsHelmfileUseEKS))
+
 		useEKSBool, err := strconv.ParseBool(componentsHelmfileUseEKS)
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Components.Helmfile.UseEKS = useEKSBool
 	}
 
@@ -380,6 +398,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	versionEnabled := os.Getenv("ATMOS_VERSION_CHECK_ENABLED")
 	if len(versionEnabled) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_VERSION_CHECK_ENABLED=%s", versionEnabled))
+
 		enabled, err := strconv.ParseBool(versionEnabled)
 		if err != nil {
 			u.LogWarning(fmt.Sprintf("Invalid boolean value '%s' for ATMOS_VERSION_CHECK_ENABLED; using default.", versionEnabled))
@@ -414,74 +433,95 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
 	}
+
 	if len(configAndStacksInfo.TerraformCommand) > 0 {
 		atmosConfig.Components.Terraform.Command = configAndStacksInfo.TerraformCommand
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as terraform executable", configAndStacksInfo.TerraformCommand))
 	}
+
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		atmosConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
 	}
+
 	if len(configAndStacksInfo.HelmfileCommand) > 0 {
 		atmosConfig.Components.Helmfile.Command = configAndStacksInfo.HelmfileCommand
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as helmfile executable", configAndStacksInfo.HelmfileCommand))
 	}
+
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		atmosConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
 	}
+
 	if len(configAndStacksInfo.ConfigDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.ConfigDir
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
 	}
+
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
 	}
+
 	if len(configAndStacksInfo.DeployRunInit) > 0 {
 		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Components.Terraform.DeployRunInit = deployRunInitBool
+
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
 	}
+
 	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
 		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
+
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
 	}
+
 	if len(configAndStacksInfo.WorkflowsDir) > 0 {
 		atmosConfig.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
 	}
+
 	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
 		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
 		if err != nil {
 			return err
 		}
+
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
+
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
 	}
+
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
 		atmosConfig.Schemas.JsonSchema.BasePath = configAndStacksInfo.JsonSchemaDir
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
 	}
+
 	if len(configAndStacksInfo.OpaDir) > 0 {
 		atmosConfig.Schemas.Opa.BasePath = configAndStacksInfo.OpaDir
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
 	}
+
 	if len(configAndStacksInfo.CueDir) > 0 {
 		atmosConfig.Schemas.Cue.BasePath = configAndStacksInfo.CueDir
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
 	}
+
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
 		atmosConfig.Schemas.Atmos.Manifest = configAndStacksInfo.AtmosManifestJsonSchema
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
 	}
+
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
 			return err
@@ -490,10 +530,12 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
 	}
+
 	if len(configAndStacksInfo.LogsFile) > 0 {
 		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
 	}
+
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy))
@@ -502,7 +544,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 	return nil
 }
 
-// processStoreConfig creates a store registry from the provided stores config and assigns it to the atmosConfig
+// processStoreConfig creates a store registry from the provided stores config and assigns it to the atmosConfig.
 func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
 
@@ -510,12 +552,13 @@ func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	if err != nil {
 		return err
 	}
+
 	atmosConfig.Stores = storeRegistry
 
 	return nil
 }
 
-// GetContextFromVars creates a context object from the provided variables
+// GetContextFromVars creates a context object from the provided variables.
 func GetContextFromVars(vars map[string]any) schema.Context {
 	var context schema.Context
 
@@ -546,7 +589,7 @@ func GetContextFromVars(vars map[string]any) schema.Context {
 	return context
 }
 
-// GetContextPrefix calculates context prefix from the context
+// GetContextPrefix calculates context prefix from the context.
 func GetContextPrefix(stack string, context schema.Context, stackNamePattern string, stackFile string) (string, error) {
 	if len(stackNamePattern) == 0 {
 		return "",
@@ -566,6 +609,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 						stackFile,
 					)
 			}
+
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Namespace
 			} else {
@@ -580,6 +624,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 						stackFile,
 					)
 			}
+
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Tenant
 			} else {
@@ -594,6 +639,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 						stackFile,
 					)
 			}
+
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Environment
 			} else {
@@ -608,6 +654,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 						stackFile,
 					)
 			}
+
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Stage
 			} else {
@@ -619,7 +666,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 	return contextPrefix, nil
 }
 
-// ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced
+// ReplaceContextTokens replaces context tokens in the provided pattern and returns a string with all the tokens replaced.
 func ReplaceContextTokens(context schema.Context, pattern string) string {
 	r := strings.NewReplacer(
 		"{base-component}", context.BaseComponent,
@@ -634,10 +681,11 @@ func ReplaceContextTokens(context schema.Context, pattern string) string {
 		"{terraform_workspace}", context.TerraformWorkspace,
 		"{attributes}", strings.Join(u.SliceOfInterfacesToSliceOdStrings(context.Attributes), "-"),
 	)
+
 	return r.Replace(pattern)
 }
 
-// GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern
+// GetStackNameFromContextAndStackNamePattern calculates stack name from the provided context using the provided stack name pattern.
 func GetStackNameFromContextAndStackNamePattern(
 	namespace string,
 	tenant string,
@@ -651,6 +699,7 @@ func GetStackNameFromContextAndStackNamePattern(
 	}
 
 	var stack string
+
 	stackNamePatternParts := strings.Split(stackNamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
@@ -658,6 +707,7 @@ func GetStackNameFromContextAndStackNamePattern(
 			if len(namespace) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{namespace}', but namespace is not provided", stackNamePattern)
 			}
+
 			if len(stack) == 0 {
 				stack = namespace
 			} else {
@@ -667,6 +717,7 @@ func GetStackNameFromContextAndStackNamePattern(
 			if len(tenant) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", stackNamePattern)
 			}
+
 			if len(stack) == 0 {
 				stack = tenant
 			} else {
@@ -676,6 +727,7 @@ func GetStackNameFromContextAndStackNamePattern(
 			if len(environment) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{environment}', but environment is not provided", stackNamePattern)
 			}
+
 			if len(stack) == 0 {
 				stack = environment
 			} else {
@@ -685,6 +737,7 @@ func GetStackNameFromContextAndStackNamePattern(
 			if len(stage) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{stage}', but stage is not provided", stackNamePattern)
 			}
+
 			if len(stack) == 0 {
 				stack = stage
 			} else {
@@ -696,7 +749,7 @@ func GetStackNameFromContextAndStackNamePattern(
 	return stack, nil
 }
 
-// getStackFilePatterns returns a slice of possible file patterns for a given base path
+// getStackFilePatterns returns a slice of possible file patterns for a given base path.
 func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	patterns := []string{
 		basePath + u.YamlFileExtension,
@@ -713,7 +766,7 @@ func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	return patterns
 }
 
-// matchesStackFilePattern checks if a file path matches any of the valid stack file patterns
+// matchesStackFilePattern checks if a file path matches any of the valid stack file patterns.
 func matchesStackFilePattern(filePath, stackName string) bool {
 	// Always include template files for normal operations (imports, etc.)
 	patterns := getStackFilePatterns(stackName, true)
@@ -722,6 +775,7 @@ func matchesStackFilePattern(filePath, stackName string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -729,6 +783,7 @@ func getConfigFilePatterns(path string, forGlobMatch bool) []string {
 	if path == "" {
 		return []string{}
 	}
+
 	ext := filepath.Ext(path)
 	if ext != "" {
 		return []string{path}
@@ -750,6 +805,7 @@ func SearchConfigFile(configPath string, atmosConfig schema.AtmosConfiguration) 
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, nil
 		}
+
 		return "", fmt.Errorf("specified config file not found: %s", configPath)
 	}
 
@@ -763,6 +819,7 @@ func SearchConfigFile(configPath string, atmosConfig schema.AtmosConfiguration) 
 
 	// Create a map of existing files for quick lookup
 	fileMap := make(map[string]bool)
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			fileMap[entry.Name()] = true

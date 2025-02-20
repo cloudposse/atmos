@@ -16,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command
+// ExecuteAtlantisGenerateRepoConfigCmd executes 'atlantis generate repo-config' command.
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
@@ -49,6 +49,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 	if err != nil {
 		return err
 	}
+
 	var stacks []string
 	if stacksCsv != "" {
 		stacks = strings.Split(stacksCsv, ",")
@@ -58,6 +59,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 	if err != nil {
 		return err
 	}
+
 	var components []string
 	if componentsCsv != "" {
 		components = strings.Split(componentsCsv, ",")
@@ -131,7 +133,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 	)
 }
 
-// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks
+// ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks.
 func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	atmosConfig schema.AtmosConfiguration,
 	outputPath string,
@@ -151,6 +153,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	}
 
 	var affected []schema.Affected
+
 	var err error
 
 	if repoPath != "" {
@@ -207,6 +210,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		if x.ComponentType == "terraform" {
 			return x.Component, true
 		}
+
 		return "", false
 	})
 
@@ -214,6 +218,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		if x.ComponentType == "terraform" {
 			return x.Stack, true
 		}
+
 		return "", false
 	})
 
@@ -227,7 +232,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 	)
 }
 
-// ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
+// ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis.
 func ExecuteAtlantisGenerateRepoConfig(
 	atmosConfig schema.AtmosConfiguration,
 	outputPath string,
@@ -242,13 +247,21 @@ func ExecuteAtlantisGenerateRepoConfig(
 	}
 
 	var configTemplate schema.AtlantisRepoConfig
+
 	var projectTemplate schema.AtlantisProjectConfig
+
 	var ok bool
+
 	var atlantisProjects []schema.AtlantisProjectConfig
+
 	var componentsSection map[string]any
+
 	var terraformSection map[string]any
+
 	var componentSection map[string]any
+
 	var varsSection map[string]any
+
 	var settingsSection map[string]any
 
 	if projectTemplateNameArg != "" {
@@ -285,7 +298,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 			// Check if 'components' filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
-
 				// Component vars
 				if varsSection, ok = componentSection["vars"].(map[string]any); !ok {
 					continue
@@ -356,6 +368,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
+
 				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, GetStackNamePattern(atmosConfig), stackConfigFileName)
 				if err != nil {
 					return err
@@ -396,7 +409,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 					// 'stacks' filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, contextPrefix) {
-
 					// Generate an atlantis project for the component in the stack
 					// Replace the context tokens
 					var whenModified []string

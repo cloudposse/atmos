@@ -13,7 +13,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// extractTarball extracts the tarball file into the destination directory
+// extractTarball extracts the tarball file into the destination directory.
 func extractTarball(atmosConfig schema.AtmosConfiguration, sourceFile, extractPath string) error {
 	file, err := os.Open(sourceFile)
 	if err != nil {
@@ -38,6 +38,7 @@ func extractTarball(atmosConfig schema.AtmosConfiguration, sourceFile, extractPa
 			if err == io.EOF {
 				break
 			}
+
 			return err
 		}
 
@@ -45,6 +46,7 @@ func extractTarball(atmosConfig schema.AtmosConfiguration, sourceFile, extractPa
 			u.LogTrace(fmt.Sprintf("the header '%s' in the tarball '%s' contains '..', "+
 				"which can lead to directory traversal attacks or overriding arbitrary files and directories.",
 				header.Name, sourceFile))
+
 			continue
 		}
 
@@ -89,5 +91,6 @@ func extractTarball(atmosConfig schema.AtmosConfiguration, sourceFile, extractPa
 				header.Name, sourceFile, header.Typeflag))
 		}
 	}
+
 	return nil
 }

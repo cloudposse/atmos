@@ -7,10 +7,10 @@ import (
 )
 
 type LockStackRequest struct {
-	Key         string                 `json:"key"`
-	TTL         int32                  `json:"ttl"`
-	LockMessage string                 `json:"lockMessage,omitempty"`
-	Properties  map[string]interface{} `json:"properties,omitempty"`
+	Key         string         `json:"key"`
+	TTL         int32          `json:"ttl"`
+	LockMessage string         `json:"lockMessage,omitempty"`
+	Properties  map[string]any `json:"properties,omitempty"`
 }
 
 type UnlockStackRequest struct {
@@ -28,10 +28,10 @@ type Property struct {
 }
 
 type AtmosApiResponse struct {
-	Request      string                 `json:"request"`
-	Success      bool                   `json:"success"`
-	ErrorMessage string                 `json:"errorMessage,omitempty"`
-	Context      map[string]interface{} `json:"context,omitempty"`
+	Request      string         `json:"request"`
+	Success      bool           `json:"success"`
+	ErrorMessage string         `json:"errorMessage,omitempty"`
+	Context      map[string]any `json:"context,omitempty"`
 }
 
 type LockStackResponse struct {

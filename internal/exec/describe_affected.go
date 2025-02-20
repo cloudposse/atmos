@@ -48,6 +48,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
+
 	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
@@ -151,6 +152,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
+
 		err := logger.SetLogLevel(l.LogLevelTrace)
 		if err != nil {
 			return DescribeAffectedCmdArgs{}, err
@@ -203,7 +205,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	return result, nil
 }
 
-// ExecuteDescribeAffectedCmd executes `describe affected` command
+// ExecuteDescribeAffectedCmd executes `describe affected` command.
 func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	a, err := parseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
@@ -211,7 +213,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	var affected []schema.Affected
+
 	var headHead, baseHead *plumbing.Reference
+
 	var repoUrl string
 
 	if a.RepoPath != "" {

@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
+// describeWorkflowsCmd executes 'atmos describe workflows' CLI commands.
 var describeWorkflowsCmd = &cobra.Command{
 	Use:   "workflows",
 	Short: "List Atmos workflows and their associated files",

@@ -27,8 +27,7 @@ func closeFile(fileName string, file io.ReadCloser) {
 	}
 }
 
-// printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
-// and prints the data to the console or to a file (if file is specified)
+// and prints the data to the console or to a file (if file is specified).
 func printOrWriteToFile(
 	format string,
 	file string,

@@ -20,7 +20,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ProcessTmpl parses and executes Go templates
+// ProcessTmpl parses and executes Go templates.
 func ProcessTmpl(
 	tmplName string,
 	tmplValue string,
@@ -52,6 +52,7 @@ func ProcessTmpl(
 	t.Option(option)
 
 	var res bytes.Buffer
+
 	err = t.Execute(&res, tmplData)
 	if err != nil {
 		return "", err
@@ -60,7 +61,7 @@ func ProcessTmpl(
 	return res.String(), nil
 }
 
-// ProcessTmplWithDatasources parses and executes Go templates with datasources
+// ProcessTmplWithDatasources parses and executes Go templates with datasources.
 func ProcessTmplWithDatasources(
 	atmosConfig schema.AtmosConfiguration,
 	settingsSection schema.Settings,
@@ -78,7 +79,9 @@ func ProcessTmplWithDatasources(
 
 	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
 	var cliConfigTemplateSettingsMap map[string]any
+
 	var stackManifestTemplateSettingsMap map[string]any
+
 	var templateSettings schema.TemplatesSettings
 
 	err := mapstructure.Decode(atmosConfig.Templates.Settings, &cliConfigTemplateSettingsMap)
@@ -206,12 +209,14 @@ func ProcessTmplWithDatasources(
 
 		// Execute the template
 		var res bytes.Buffer
+
 		err = t.Execute(&res, tmplData)
 		if err != nil {
 			return "", err
 		}
 
 		result = res.String()
+
 		resultMap, err := u.UnmarshalYAML[schema.AtmosSectionMapType](result)
 		if err != nil {
 			return "", err
@@ -234,7 +239,7 @@ func ProcessTmplWithDatasources(
 	return result, nil
 }
 
-// IsGolangTemplate checks if the provided string is a Go template
+// IsGolangTemplate checks if the provided string is a Go template.
 func IsGolangTemplate(str string) (bool, error) {
 	t, err := template.New(str).Parse(str)
 	if err != nil {

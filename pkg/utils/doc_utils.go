@@ -7,9 +7,7 @@ import (
 	"strings"
 )
 
-// DisplayDocs displays component documentation directly through the terminal or
-// through a pager (like less). The use of a pager is determined by the pagination value
-// set in the CLI Settings for Atmos
+// set in the CLI Settings for Atmos.
 func DisplayDocs(componentDocs string, usePager bool) error {
 	if !usePager {
 		fmt.Println(componentDocs)

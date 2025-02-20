@@ -16,7 +16,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteWorkflow executes an Atmos workflow
+// ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
 	workflow string,
@@ -71,6 +71,7 @@ func ExecuteWorkflow(
 		}
 
 		var err error
+
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = ExecuteShell(atmosConfig, command, commandName, ".", []string{}, dryRun)
@@ -88,9 +89,11 @@ func ExecuteWorkflow(
 			if workflowStack != "" {
 				finalStack = workflowStack
 			}
+
 			if stepStack != "" {
 				finalStack = stepStack
 			}
+
 			if commandLineStack != "" {
 				finalStack = commandLineStack
 			}
@@ -128,7 +131,7 @@ func ExecuteWorkflow(
 	return nil
 }
 
-// ExecuteDescribeWorkflows executes `atmos describe workflows` command
+// ExecuteDescribeWorkflows executes `atmos describe workflows` command.
 func ExecuteDescribeWorkflows(
 	atmosConfig schema.AtmosConfiguration,
 ) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
@@ -238,7 +241,9 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 
 	// Start the UI
 	app, err := w.Execute(allWorkflows)
+
 	fmt.Println()
+
 	if err != nil {
 		return "", "", "", err
 	}

@@ -14,7 +14,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// listComponentsCmd lists atmos components
+// listComponentsCmd lists atmos components.
 var listComponentsCmd = &cobra.Command{
 	Use:   "components",
 	Short: "List all Atmos components or filter by stack",
@@ -50,6 +50,7 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 	}
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
@@ -61,5 +62,6 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 	}
 
 	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+
 	return output, err
 }

@@ -19,7 +19,7 @@ import (
 
 const atmosDocsURL = "https://atmos.tools"
 
-// docsCmd opens the Atmos docs and can display component documentation
+// docsCmd opens the Atmos docs and can display component documentation.
 var docsCmd = &cobra.Command{
 	Use:                "docs",
 	Short:              "Open Atmos documentation or display component-specific docs",
