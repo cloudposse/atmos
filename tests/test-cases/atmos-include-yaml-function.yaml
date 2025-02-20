@@ -2,6 +2,7 @@ tests:
   - name: "terraform !include function test"
     enabled: true
     tty: true
+    clean: true
     description: "Ensure the !include function works."
     workdir: "fixtures/scenarios/atmos-include-yaml-function/"
     command: "atmos"
