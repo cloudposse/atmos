@@ -89,15 +89,15 @@ linters-settings:
           - disallow-newlines: true
       - name: file-length-limit
         arguments:
-          - max: 500 # Max 500 lines per file
+          - max: 500 # Max lines per file
             skipComments: true
             skipBlankLines: true
       - name: function-length
-        arguments: [50, 60] # Max 60 lines per function
+        arguments: [50, 60] # Max lines per function
       - name: cognitive-complexity
-        arguments: [25] # Max cognitive complexity of 10
+        arguments: [25] # Max cognitive complexity
       - name: cyclomatic
-        arguments: [10] # Max cyclomatic complexity of 10
+        arguments: [10] # Max cyclomatic complexity
       - name: add-constant
         arguments:
           - maxLitCount: "3"
@@ -105,7 +105,7 @@ linters-settings:
             allowInts: "0,1,2,3,4"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
       - name: argument-limit
-        arguments: [5] # Max 5 arguments per function
+        arguments: [5] # Max arguments per function
       - name: deep-exit
       - name: early-return
       - name: comment-spacings
@@ -165,6 +165,7 @@ issues:
         - funlen
         - revive
         - wsl
+        - gci
 
 output:
   formats:
