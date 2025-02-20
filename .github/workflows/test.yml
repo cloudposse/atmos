@@ -160,7 +160,7 @@ jobs:
         run: make testacc
 
   docker:
-    name: "Docker Lint"
+    name: "[lint] Dockerfile"
     needs: build
     runs-on: ubuntu-latest
     steps:
