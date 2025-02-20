@@ -54,6 +54,10 @@ linters-settings:
       - default # Third party imports
       - prefix(your/company/module) # Your module imports
 
+  gosec:
+    excludes:
+      - G101 # Look for hard coded credentials
+
   gofmt:
     # Simplify code: gofmt -s
     simplify: true
