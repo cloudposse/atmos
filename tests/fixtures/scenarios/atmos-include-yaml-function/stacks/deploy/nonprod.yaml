@@ -9,7 +9,8 @@ components:
       metadata:
         component: yaml-functions
       vars:
-        string_var: !include stacks/mixins/vars.json .string_var
-        boolean_var: !include stacks/mixins/vars.yaml .boolean_var
-        list_var: !include stacks/mixins/vars.tfvars .list_var
-        map_var: !include stacks/mixins/vars.tfvars .map_var
+        # The `config` folder is relative to the `base_path` setting in `atmos.yaml`
+        string_var: !include config/vars.json .string_var
+        boolean_var: !include config/vars.yaml .boolean_var
+        list_var: !include config/vars.tfvars .list_var
+        map_var: !include config/vars.tfvars .map_var
