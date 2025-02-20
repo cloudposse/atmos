@@ -74,7 +74,7 @@ test:
 				tempPathGenerator: func() string {
 					return tempFile
 				},
-				fileReader: func(s string) ([]byte, error) {
+				fileReader: func(_ string) ([]byte, error) {
 					return []byte(testCase.fileData), nil
 				},
 			}
