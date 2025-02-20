@@ -3,7 +3,7 @@ tests:
     enabled: true
     tty: false
     clean: true
-    description: "Ensure the !include function works."
+    description: "Ensure the !include function works with scalars, lists and objects."
     workdir: "fixtures/scenarios/atmos-include-yaml-function/"
     command: "atmos"
     args:
