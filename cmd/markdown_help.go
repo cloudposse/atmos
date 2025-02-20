@@ -50,7 +50,6 @@ func init() {
 	}
 
 	for _, file := range files {
-
 		if !file.IsDir() { // Skip directories
 			filename := "markdown/" + file.Name() // Full path inside embed.FS
 			data, err := usageFiles.ReadFile(filename)
