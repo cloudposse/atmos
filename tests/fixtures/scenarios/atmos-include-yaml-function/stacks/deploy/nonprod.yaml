@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    component-1:
+      metadata:
+        component: yaml-functions
+      vars:
+        # The `config` folder is relative to the `base_path` setting in `atmos.yaml`
+        string_var: !include config/vars.json .string_var
+        boolean_var: !include config/vars.yaml .boolean_var
+        list_var: !include config/vars.tfvars .list_var
+        map_var: !include config/vars.tfvars .map_var
