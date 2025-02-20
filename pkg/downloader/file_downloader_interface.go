@@ -7,6 +7,8 @@ import (
 
 // FileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
+//
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type FileDownloader interface {
 	// Fetch fetches content from a given source and saves it to the destination
 	Fetch(src, dest string, mode ClientMode, timeout time.Duration) error
@@ -16,6 +18,8 @@ type FileDownloader interface {
 }
 
 // ClientFactory abstracts the creation of a downloader client for better testability
+//
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type ClientFactory interface {
 	NewClient(ctx context.Context, src, dest string, mode ClientMode) (DownloadClient, error)
 }
@@ -47,8 +51,3 @@ const (
 	// archive or directory (such as in s3).
 	ClientModeDir
 )
-
-// FileParser defines an interface for parsing downloaded files
-type FileParser interface {
-	Parse(filePath string) (any, error)
-}
