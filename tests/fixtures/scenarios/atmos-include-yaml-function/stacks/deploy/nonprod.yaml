@@ -13,7 +13,3 @@ components:
         boolean_var: !include stacks/mixins/vars.yaml .boolean_var
         list_var: !include stacks/mixins/vars.tfvars .list_var
         map_var: !include stacks/mixins/vars.tfvars .map_var
-    component-2:
-      metadata:
-        component: yaml-functions
-      vars: !include stacks/mixins/vars1.yaml
