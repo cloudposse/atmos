@@ -2,7 +2,6 @@ package utils
 
 import (
 	"path/filepath"
-	"strings"
 )
 
 // MatchWildcard checks if a string matches a wildcard pattern.
@@ -18,8 +17,8 @@ func MatchWildcard(pattern, str string) (bool, error) {
 	}
 
 	// Convert pattern to filepath-style pattern
-	pattern = strings.ReplaceAll(pattern, "\\", "/")
-	str = strings.ReplaceAll(str, "\\", "/")
+	pattern = filepath.ToSlash(pattern)
+	str = filepath.ToSlash(str)
 
 	return filepath.Match(pattern, str)
 }
