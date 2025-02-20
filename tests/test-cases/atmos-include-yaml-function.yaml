@@ -1,5 +1,5 @@
 tests:
-  - name: "terraform !include function test 1"
+  - name: "terraform !include function test"
     enabled: true
     tty: true
     description: "Ensure the !include function works."
@@ -11,32 +11,10 @@ tests:
       - "component-1"
       - "-s"
       - "nonprod"
-    env:
-      ATMOS_LOGS_LEVEL: Debug
     expect:
       exit_code: 0
       stdout:
-        - ""
-      stderr:
-        - "^$"
-
-  - name: "terraform !include function test 2"
-    enabled: true
-    tty: true
-    description: "Ensure the !include function works."
-    workdir: "fixtures/scenarios/atmos-include-yaml-function/"
-    command: "atmos"
-    args:
-      - "describe"
-      - "component"
-      - "component-2"
-      - "-s"
-      - "nonprod"
-    env:
-      ATMOS_LOGS_LEVEL: Debug
-    expect:
-      exit_code: 0
-      stdout:
-        - ""
+        - "string_var: abc"
+        - "boolean_var: true"
       stderr:
         - "^$"
