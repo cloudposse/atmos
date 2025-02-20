@@ -1,4 +1,4 @@
-string_var  = abc
+string_var  = "abc"
 boolean_var = true
 list_var    = ["a", "b", "c"]
 map_var = {
