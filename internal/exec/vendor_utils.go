@@ -350,7 +350,7 @@ func ExecuteAtmosVendorInternal(
 	// TODO: consider adding a flag to `atmos vendor pull` to specify if duplicate targets are allowed or not.
 	// targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
 	//	return s.Targets
-	//})
+	// })
 	//
 	//duplicateTargets := lo.FindDuplicates(targets)
 	//
