@@ -10,6 +10,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	tea "github.com/charmbracelet/bubbletea"
+	l "github.com/charmbracelet/log"
 	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -634,7 +635,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+		l.Debug("Including ", "file", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
 }
