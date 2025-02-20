@@ -9,10 +9,10 @@ components:
       metadata:
         component: yaml-functions
       vars:
-        string_var: !include stacks/mixins/vars1.json .string_var
-        boolean_var: !include stacks/mixins/vars1.yaml .boolean_var
-        list_var: !include stacks/mixins/vars1.tfvars .list_var
-        map_var: !include stacks/mixins/vars1.tfvars .map_var
+        string_var: !include stacks/mixins/vars.json .string_var
+        boolean_var: !include stacks/mixins/vars.yaml .boolean_var
+        list_var: !include stacks/mixins/vars.tfvars .list_var
+        map_var: !include stacks/mixins/vars.tfvars .map_var
     component-2:
       metadata:
         component: yaml-functions
