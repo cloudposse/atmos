@@ -23,20 +23,13 @@ Flags:
                                      --components
                                      <component1>,<component2>
 
-        --config-template string     atmos atlantis generate repo-config
-                                     --config-template config-1
-                                     --project-template project-1
+        --config-template string     Atlantis config template name
 
     -h, --help                       help for repo-config (default "false")
 
-        --output-path string         atmos atlantis generate repo-config
-                                     --output-path ./atlantis.yaml
-                                     --config-template config-1
-                                     --project-template project-1
+        --output-path string         Output path to write atlantis.yaml file
 
-        --project-template string    atmos atlantis generate repo-config
-                                     --config-template config-1
-                                     --project-template project-1
+        --project-template string    Atlantis project template name
 
         --ref string                 Git reference with which to compare the
                                      current branch: atmos atlantis generate
@@ -74,28 +67,6 @@ Flags:
         --stacks string              Generate Atlantis projects for the
                                      specified stacks only (comma-separated
                                      values).
-                                     atmos atlantis generate repo-config
-                                     --config-template <config_template>
-                                     --project-template <project_template>
-                                     --stacks <stack1>,<stack2>
-                                     The filter can contain the names of the
-                                     top-level stack manifests and the logical
-                                     stack names (derived from the context vars)
-                                     atmos atlantis generate repo-config
-                                     --config-template <config_template>
-                                     --project-template <project_template>
-                                     --stacks
-                                     orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-                                     atmos atlantis generate repo-config
-                                     --config-template <config_template>
-                                     --project-template <project_template>
-                                     --stacks
-                                     tenant1-ue2-staging,tenant1-ue2-prod
-                                     atmos atlantis generate repo-config
-                                     --config-template <config_template>
-                                     --project-template <project_template>
-                                     --stacks
-                                     orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod
 
         --verbose                    Print more detailed output when cloning and
                                      checking out the Git repository: atmos
@@ -139,6 +110,14 @@ Global Flags:
                                     standard file descriptor (including
                                     /dev/null): atmos <command>
                                     --redirect-stderr /dev/stdout
+
+
+Examples:
+
+ $ atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks <stack1>,<stack2>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+ $ atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+ $ atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks tenant1-ue2-staging,tenant1-ue2-prod                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+ $ atmos atlantis generate repo-config --config-template <config_template> --project-template <project_template> --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
 
 
 Use atmos atlantis generate repo-config --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    

@@ -14,19 +14,17 @@ func getTerraformCommands() []*cobra.Command {
 	// List of Terraform commands
 	return []*cobra.Command{
 		{
-			Use:     "plan",
-			Short:   "Show changes required by the current configuration",
-			Long:    "Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.",
-			Example: terraformPlanUsage,
+			Use:   "plan",
+			Short: "Show changes required by the current configuration",
+			Long:  "Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.",
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
 		},
 		{
-			Use:     "apply",
-			Short:   "Apply changes to infrastructure",
-			Long:    "Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.",
-			Example: terraformApplyUsage,
+			Use:   "apply",
+			Short: "Apply changes to infrastructure",
+			Long:  "Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.",
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},

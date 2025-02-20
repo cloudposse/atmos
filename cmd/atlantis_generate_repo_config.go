@@ -30,18 +30,11 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 func init() {
 	atlantisGenerateRepoConfigCmd.DisableFlagParsing = false
 
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("output-path", "", "atmos atlantis generate repo-config --output-path ./atlantis.yaml --config-template config-1 --project-template project-1")
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("config-template", "", "atmos atlantis generate repo-config --config-template config-1 --project-template project-1")
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("project-template", "", "atmos atlantis generate repo-config --config-template config-1 --project-template project-1")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("output-path", "", "Output path to write `atlantis.yaml` file")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("config-template", "", "Atlantis config template name")
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("project-template", "", "Atlantis project template name")
 
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("stacks", "",
-		"Generate Atlantis projects for the specified stacks only (comma-separated values).\n"+
-			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --stacks &ltstack1&gt,&ltstack2&gt\n"+
-			"The filter can contain the names of the top-level stack manifests and the logical stack names (derived from the context vars)\n"+
-			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
-			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
-			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
-	)
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String("stacks", "", "Generate Atlantis projects for the specified stacks only (comma-separated values).")
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("components", "",
 		"Generate Atlantis projects for the specified components only (comma-separated values).\n"+

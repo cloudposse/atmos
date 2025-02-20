@@ -1,21 +1,16 @@
 package cmd
 
-import _ "embed"
+import (
+	"embed"
+	"io/fs"
+	"path/filepath"
+	"strings"
 
-//go:embed markdown/atmos_terraform_usage.md
-var terraformUsage string
+	"github.com/charmbracelet/log"
+)
 
-//go:embed markdown/atmos_terraform_plan_usage.md
-var terraformPlanUsage string
-
-//go:embed markdown/atmos_terraform_apply_usage.md
-var terraformApplyUsage string
-
-//go:embed markdown/atmos_workflow_usage.md
-var workflowUsage string
-
-//go:embed markdown/atmos_about_usage.md
-var atmosAboutUsage string
+//go:embed markdown/*
+var usageFiles embed.FS
 
 type ExampleContent struct {
 	Content    string
@@ -30,24 +25,52 @@ const (
 
 var examples map[string]ExampleContent = map[string]ExampleContent{
 	"atmos_terraform": {
-		Content:    terraformUsage,
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
 	"atmos_terraform_plan": {
-		Content: terraformPlanUsage,
 		// TODO: We should update this once we have a page for terraform plan
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
 	"atmos_terraform_apply": {
-		Content: terraformApplyUsage,
 		// TODO: We should update this once we have a page for terraform plan
 		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
 	},
 	"atmos_workflow": {
-		Content:    workflowUsage,
 		Suggestion: "https://atmos.tools/cli/commands/workflow/",
 	},
-	"atmos_about": {
-		Content: atmosAboutUsage,
+	"atmos_aws_eks_update_kubeconfig": {
+		Suggestion: "https://atmos.tools/cli/commands/aws/eks-update-kubeconfig",
 	},
+}
+
+func init() {
+	files, err := fs.ReadDir(usageFiles, "markdown")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, file := range files {
+
+		if !file.IsDir() { // Skip directories
+			filename := "markdown/" + file.Name() // Full path inside embed.FS
+			data, err := usageFiles.ReadFile(filename)
+			if err != nil {
+				continue
+			}
+			if val, ok := examples[removeExtension(file.Name())]; ok {
+				examples[removeExtension(file.Name())] = ExampleContent{
+					Content:    string(data),
+					Suggestion: val.Suggestion,
+				}
+			} else {
+				examples[removeExtension(file.Name())] = ExampleContent{
+					Content: string(data),
+				}
+			}
+		}
+	}
+}
+
+func removeExtension(filename string) string {
+	return strings.TrimSuffix(strings.TrimSuffix(filename, filepath.Ext(filename)), "_usage")
 }

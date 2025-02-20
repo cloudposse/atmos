@@ -277,6 +277,11 @@ func initCobraConfig() {
 		return nil
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
+		contentName := strings.ReplaceAll(strings.ReplaceAll(command.CommandPath(), " ", "_"), "-", "_")
+		if exampleContent, ok := examples[contentName]; ok {
+			command.Example = exampleContent.Content
+		}
+
 		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
 			arguments := os.Args[len(strings.Split(command.CommandPath(), " ")):]
 			if len(command.Flags().Args()) > 0 {

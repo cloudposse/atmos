@@ -695,7 +695,7 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 }
 
 func showUsageExample(cmd *cobra.Command, details string) {
-	contentName := strings.ReplaceAll(cmd.CommandPath(), " ", "_")
+	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
 	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
 	if exampleContent, ok := examples[contentName]; ok {
 		suggestion = exampleContent.Suggestion
