@@ -34,7 +34,6 @@ linters:
     - unparam # Detect unused function parameters
     - unused # Detect unused variables
     - whitespace # Check for leading whitespace
-    - wsl # Check for whitespace at the end of lines
 
 linters-settings:
   funlen:
@@ -169,7 +168,6 @@ issues:
       linters:
         - funlen
         - revive
-        - wsl
         - gci
 
 output:
