@@ -1,0 +1,21 @@
+tests:
+  - name: "!include function test"
+    enabled: true
+    tty: false
+    clean: true
+    description: "Ensure the !include function works with scalars, lists and objects."
+    workdir: "fixtures/scenarios/atmos-include-yaml-function/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "component-1"
+      - "-s"
+      - "nonprod"
+    expect:
+      exit_code: 0
+      stdout:
+        - "string_var: abc"
+        - "boolean_var: true"
+      stderr:
+        - "^$"
