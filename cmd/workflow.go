@@ -66,7 +66,6 @@ func init() {
 	workflowCmd.DisableFlagParsing = false
 	workflowCmd.PersistentFlags().StringP("file", "f", "", "atmos workflow &ltname&gt --file &ltfile&gt")
 	workflowCmd.PersistentFlags().Bool("dry-run", false, "atmos workflow &ltname&gt --file &ltfile&gt --dry-run")
-	workflowCmd.PersistentFlags().StringP("stack", "s", "", "atmos workflow &ltname&gt --file &ltfile&gt --stack &ltstack&gt")
 	AddStackCompletion(workflowCmd)
 	workflowCmd.PersistentFlags().String("from-step", "", "atmos workflow &ltname&gt --file &ltfile&gt --from-step &ltstep-name&gt")
 

@@ -44,7 +44,6 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 func init() {
 	awsEksCmdUpdateKubeconfigCmd.DisableFlagParsing = false
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().StringP("stack", "s", "", "atmos aws eks update-kubeconfig &ltcomponent&gt -s &ltstack&gt")
 	AddStackCompletion(awsEksCmdUpdateKubeconfigCmd)
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("profile", "", "atmos aws eks update-kubeconfig --profile &ltprofile&gt")
 	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("name", "", "atmos aws eks update-kubeconfig --name &ltcluster name&gt")

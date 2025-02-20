@@ -38,7 +38,6 @@ var validateComponentCmd = &cobra.Command{
 func init() {
 	validateComponentCmd.DisableFlagParsing = false
 
-	validateComponentCmd.PersistentFlags().StringP("stack", "s", "", "atmos validate component &ltcomponent&gt -s &ltstack&gt --schema-path &ltschema_path&gt --schema-type &ltjsonschema|opa&gt")
 	AddStackCompletion(validateComponentCmd)
 	validateComponentCmd.PersistentFlags().String("schema-path", "", "atmos validate component &ltcomponent&gt -s &ltstack&gt --schema-path &ltschema_path&gt --schema-type &ltjsonschema|opa&gt")
 	validateComponentCmd.PersistentFlags().String("schema-type", "", "atmos validate component &ltcomponent&gt -s &ltstack&gt --schema-path &ltschema_path&gt --schema-type &ltjsonschema|opa&gt")

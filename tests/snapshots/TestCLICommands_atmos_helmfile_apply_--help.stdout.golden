@@ -35,8 +35,9 @@ Global Flags:
                                     /dev/null): atmos <command>
                                     --redirect-stderr /dev/stdout
 
-    -s, --stack string              atmos helmfile <helmfile_command>
-                                    <component> -s <stack>
+    -s, --stack string              The stack flag specifies the environment
+                                    or configuration set for deployment in Atmos
+                                    CLI.
 
 
 Use atmos helmfile apply --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   

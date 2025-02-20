@@ -22,7 +22,11 @@ type ExampleContent struct {
 	Suggestion string
 }
 
-var doubleDashHint string = "Use double dashes to separate Atmos-specific options from native arguments and flags for the command."
+const (
+	doubleDashHint string = "Use double dashes to separate Atmos-specific options from native arguments and flags for the command."
+	stackHint      string = "The `stack` flag specifies the environment or configuration set for deployment in Atmos CLI."
+	componentHint  string = "The `component` flag specifies the name of the component to be managed or deployed in Atmos CLI."
+)
 
 var examples map[string]ExampleContent = map[string]ExampleContent{
 	"atmos_terraform": {

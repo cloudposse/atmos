@@ -49,8 +49,9 @@ Global Flags:
         --skip-init                   Skip running terraform init before
                                       executing the command (default "false")
 
-    -s, --stack string                atmos terraform <terraform_command>
-                                      <component> -s <stack>
+    -s, --stack string                The stack flag specifies the environment
+                                      or configuration set for deployment in
+                                      Atmos CLI.
 
 
 Examples:

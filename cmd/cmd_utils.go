@@ -713,6 +713,9 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 }
 
 func AddStackCompletion(cmd *cobra.Command) {
+	if cmd.Flag("stack") == nil {
+		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
+	}
 	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
 }
 

@@ -26,8 +26,8 @@ Flags:
 
     -h, --help            help for helmfile (default "false")
 
-    -s, --stack string    atmos helmfile <helmfile_command> <component>
-                          -s <stack>
+    -s, --stack string    The stack flag specifies the environment or
+                          configuration set for deployment in Atmos CLI.
 
 
 Global Flags:

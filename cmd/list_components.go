@@ -36,7 +36,6 @@ var listComponentsCmd = &cobra.Command{
 }
 
 func init() {
-	listComponentsCmd.PersistentFlags().StringP("stack", "s", "", "Filter components by stack (e.g., atmos list components -s stack1)")
 	AddStackCompletion(listComponentsCmd)
 	listCmd.AddCommand(listComponentsCmd)
 }

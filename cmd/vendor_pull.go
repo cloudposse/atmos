@@ -29,7 +29,7 @@ var vendorPullCmd = &cobra.Command{
 func init() {
 	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component: atmos vendor pull --component &ltcomponent&gt")
 	vendorPullCmd.RegisterFlagCompletionFunc("component", ComponentsArgCompletion)
-	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack: atmos vendor pull --stack &ltstack&gt")
+	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
 	AddStackCompletion(vendorPullCmd)
 	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "atmos vendor pull --component &ltcomponent&gt --type=terraform|helmfile")
 	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "atmos vendor pull --component &ltcomponent&gt --dry-run")

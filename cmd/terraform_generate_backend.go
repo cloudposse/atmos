@@ -29,7 +29,6 @@ var terraformGenerateBackendCmd = &cobra.Command{
 
 func init() {
 	terraformGenerateBackendCmd.DisableFlagParsing = false
-	terraformGenerateBackendCmd.PersistentFlags().StringP("stack", "s", "", "atmos terraform generate backend &ltcomponent&gt -s &ltstack&gt")
 	AddStackCompletion(terraformGenerateBackendCmd)
 	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
