@@ -114,6 +114,7 @@ linters-settings:
         arguments:
           - mypragma
           - otherpragma
+      - name: var-declaration
 
   # https://go-critic.com/overview.html
   gocritic:
