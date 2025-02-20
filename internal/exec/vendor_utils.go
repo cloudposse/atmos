@@ -634,7 +634,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		// u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+
 		return false, nil
 	}
 }
