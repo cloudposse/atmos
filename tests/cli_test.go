@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -42,6 +43,7 @@ var (
 	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
 	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("160")) // Red
 )
+var logger *log.Logger
 
 type Expectation struct {
 	Stdout       []MatchPattern            `yaml:"stdout"`        // Expected stdout output
@@ -165,6 +167,44 @@ type PathManager struct {
 	Prepended    []string
 }
 
+func init() {
+	// Initialize with default settings.
+	logger = log.NewWithOptions(os.Stdout, log.Options{
+		Level: log.InfoLevel,
+	})
+
+	// Ensure that Lipgloss uses terminal colors for tests
+	lipgloss.SetColorProfile(termenv.TrueColor)
+
+	styles := log.DefaultStyles()
+	styles.Levels[log.ErrorLevel] = lipgloss.NewStyle().
+		SetString("ERROR").
+		Padding(0, 0, 0, 0).
+		Background(lipgloss.Color("204")).
+		Foreground(lipgloss.Color("0"))
+	styles.Levels[log.FatalLevel] = lipgloss.NewStyle().
+		SetString("FATAL").
+		Padding(0, 0, 0, 0).
+		Background(lipgloss.Color("204")).
+		Foreground(lipgloss.Color("0"))
+	// Add a custom style for key `err`
+	styles.Keys["err"] = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))
+	styles.Values["err"] = lipgloss.NewStyle().Bold(true)
+	logger = log.New(os.Stderr)
+	logger.SetStyles(styles)
+	logger.SetColorProfile(termenv.TrueColor)
+	logger.Info("Smoke tests for atmos CLI starting")
+
+	// Initialize PathManager and update PATH
+	pathManager := NewPathManager()
+	pathManager.Prepend("../build", "..")
+	err := pathManager.Apply()
+	if err != nil {
+		logger.Fatal("Failed to apply updated PATH", "error", err)
+	}
+	logger.Info("Path Manager", "PATH", pathManager.GetPath())
+}
+
 // NewPathManager initializes a PathManager with the current PATH.
 func NewPathManager() *PathManager {
 	return &PathManager{
@@ -178,7 +218,7 @@ func (pm *PathManager) Prepend(dirs ...string) {
 	for _, dir := range dirs {
 		absPath, err := filepath.Abs(dir)
 		if err != nil {
-			fmt.Printf("Failed to resolve absolute path for %q: %v\n", dir, err)
+			logger.Fatal("Failed to resolve absolute path", "dir", dir, "error", err)
 			continue
 		}
 		pm.Prepended = append(pm.Prepended, absPath)
@@ -338,7 +378,7 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 
 	err = cmd.Wait()
 	if err != nil {
-		t.Logf("Command execution error: %v", err)
+		logger.Info("Command execution error", "err", err)
 	}
 
 	if readErr := <-done; readErr != nil {
@@ -389,18 +429,41 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
-
-	// Ensure that Lipgloss uses terminal colors for tests
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	var repoRoot string
 
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
 	if err != nil {
-		fmt.Printf("Failed to get the current working directory: %v\n", err)
-		os.Exit(1) // Exit with a non-zero code to indicate failure
+		logger.Fatal("failed to get the current working directory", err)
 	}
 
-	fmt.Printf("Starting directory: %s\n", startingDir)
+	// Find the root of the Git repository
+	repoRoot, err = findGitRepoRoot(startingDir)
+	if err != nil {
+		logger.Fatal("failed to locate git repository", "dir", startingDir)
+	}
+
+	// Check for the atmos binary
+	binaryPath, err := exec.LookPath("atmos")
+	if err != nil {
+		logger.Fatal("Binary not found", "command", "atmos", "PATH", os.Getenv("PATH"))
+	}
+
+	rel, err := filepath.Rel(repoRoot, binaryPath)
+	if err == nil && strings.HasPrefix(rel, "..") {
+		logger.Fatal("Discovered atmos binary outside of repository", "binary", binaryPath)
+	} else {
+		stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
+		if err != nil {
+			logger.Fatal("failed to check if rebuild is needed", "error", err)
+		}
+		if stale {
+			logger.Fatal("Rebuild needed", "binary", binaryPath)
+		}
+	}
+	logger.Info("Atmos binary for tests", "binary", binaryPath)
+
+	logger.Info("Starting directory", "dir", startingDir)
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
@@ -447,7 +510,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
-		t.Logf("skipping empty home dir on macOS in CI: %s", runtime.GOOS)
+		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
 	} else {
 		// Set environment variables for the test case
 		tc.Env["HOME"] = tempDir
@@ -484,7 +547,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 		// Clean the directory if enabled
 		if tc.Clean {
-			t.Logf("Cleaning directory: %q", tc.Workdir)
+			logger.Info("Cleaning directory", "workdir", tc.Workdir)
 			if err := cleanDirectory(t, absoluteWorkdir); err != nil {
 				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
 			}
@@ -607,15 +670,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 }
 
 func TestCLICommands(t *testing.T) {
-	// Initialize PathManager and update PATH
-	pathManager := NewPathManager()
-	pathManager.Prepend("../build", "..")
-	err := pathManager.Apply()
-	if err != nil {
-		t.Fatalf("Failed to apply updated PATH: %v", err)
-	}
-	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
-
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
@@ -624,13 +678,13 @@ func TestCLICommands(t *testing.T) {
 
 	for _, tc := range testSuite.Tests {
 		if !tc.Enabled {
-			t.Logf("Skipping disabled test: %s", tc.Name)
+			logger.Warn("Skipping disabled test", "test", tc.Name)
 			continue
 		}
 
 		// Check OS condition for skipping
 		if !verifyOS(t, []MatchPattern{tc.Skip.OS}) {
-			t.Logf("Skipping test due to OS condition: %s", tc.Name)
+			logger.Info("Skipping test due to OS condition", "test", tc.Name)
 			continue
 		}
 
@@ -649,7 +703,7 @@ func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
 		// Compile the regex pattern
 		re, err := regexp.Compile(pattern.Pattern)
 		if err != nil {
-			t.Logf("Invalid OS regex pattern: %q, error: %v", pattern.Pattern, err)
+			t.Errorf("Invalid OS regex pattern: %q, error: %v", pattern.Pattern, err)
 			success = false
 			continue
 		}
@@ -657,10 +711,10 @@ func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
 		// Check if the current OS matches the pattern
 		match := re.MatchString(currentOS)
 		if pattern.Negate && match {
-			t.Logf("Reason: OS %q matched negated pattern %q.", currentOS, pattern.Pattern)
+			logger.Info("Reason: OS matched negated pattern", "os", currentOS, "pattern", pattern.Pattern)
 			success = false
 		} else if !pattern.Negate && !match {
-			t.Logf("Reason: OS %q did not match pattern %q.", currentOS, pattern.Pattern)
+			logger.Info("Reason: OS did not match pattern", "os", currentOS, "pattern", pattern.Pattern)
 			success = false
 		}
 	}
@@ -944,6 +998,48 @@ func cleanDirectory(t *testing.T, workdir string) error {
 	}
 
 	return nil
+}
+
+// checkIfRebuildNeeded runs `go list` to check if the binary is stale.
+func checkIfRebuildNeeded(binaryPath string, srcDir string) (bool, error) {
+	// Get binary modification time
+	binInfo, err := os.Stat(binaryPath)
+	if os.IsNotExist(err) {
+		return true, fmt.Errorf("binary not found: %s", binaryPath)
+	} else if err != nil {
+		return false, err
+	}
+	binModTime := binInfo.ModTime()
+
+	// Find latest Go source file modification time
+	var latestModTime time.Time
+	err = filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Ignore directories and non-Go files
+		if info.IsDir() || filepath.Ext(path) != ".go" {
+			return nil
+		}
+
+		// Ignore `_test.go` files
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		// Update latest modification time
+		if info.ModTime().After(latestModTime) {
+			latestModTime = info.ModTime()
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// Compare timestamps
+	return latestModTime.After(binModTime), nil
 }
 
 // findGitRepo finds the Git repository root
