@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 //go:embed markdown/*
