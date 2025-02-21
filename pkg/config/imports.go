@@ -14,7 +14,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+)
+
+var (
+	ErrBasePath     = errors.New("base_path required to process imports")
+	ErrTempDir      = errors.New("tempDir required to process imports")
+	ErrResolveLocal = errors.New("failed to resolve local import path")
 )
 
 type importTypes int
@@ -33,7 +40,10 @@ type ResolvedPaths struct {
 
 // processConfigImports It reads the import paths from the source configuration,
 // It processes imports from the source configuration and merges them into the destination configuration.
-func processConfigImports(source schema.AtmosConfiguration, dst *viper.Viper) error {
+func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) error {
+	if source == nil || dst == nil {
+		return fmt.Errorf("source and destination cannot be nil")
+	}
 	if len(source.Import) > 0 {
 		importPaths := source.Import
 		baseBath, err := filepath.Abs(source.BasePath)
@@ -66,10 +76,10 @@ func processConfigImports(source schema.AtmosConfiguration, dst *viper.Viper) er
 
 func processImports(basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
 	if basePath == "" {
-		return nil, fmt.Errorf("base_Path required to process imports")
+		return nil, ErrBasePath
 	}
 	if tempDir == "" {
-		return nil, fmt.Errorf("tempDir required to process imports")
+		return nil, ErrTempDir
 	}
 	if currentDepth > maxDepth {
 		return nil, fmt.Errorf("maximum import depth of %d exceeded", maxDepth)
@@ -177,7 +187,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 	if err != nil {
 		//nolint:revive
 		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
-		return nil, fmt.Errorf("failed to resolve local import path")
+		return nil, ErrResolveLocal
 	}
 
 	resolvedPaths := make([]ResolvedPaths, 0)

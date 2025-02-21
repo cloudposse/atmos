@@ -267,7 +267,7 @@ func mergeImports(dst *viper.Viper) error {
 	if err != nil {
 		return err
 	}
-	if err := processConfigImports(src, dst); err != nil {
+	if err := processConfigImports(&src, dst); err != nil {
 		return err
 	}
 	return nil
