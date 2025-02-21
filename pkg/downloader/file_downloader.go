@@ -66,6 +66,7 @@ func (fd *fileDownloader) detectFormatAndParse(filename string) (any, error) {
 	}
 
 	data := string(d)
+
 	switch {
 	case utils.IsJSON(data):
 		err = json.Unmarshal(d, &v)
