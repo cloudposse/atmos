@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-getter"
 
@@ -70,6 +70,7 @@ type CustomGitDetector struct {
 	source      string
 }
 
+// Detect implements the getter.Detector interface for go-getter v1.
 func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	log.Debug("CustomGitDetector.Detect called")
 
@@ -138,22 +139,7 @@ const (
 // This version no longer returns an error since it never produces one.
 func (d *CustomGitDetector) ensureScheme(src string) string {
 	if !strings.Contains(src, "://") {
-		// Check for SCP-style SSH URL (e.g. "git@github.com:cloudposse/terraform-null-label.git?ref=...")
-		scpPattern := regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
-		if scpPattern.MatchString(src) {
-			matches := scpPattern.FindStringSubmatch(src)
-			// Build proper SSH URL: "ssh://[username@]host/repoPath[.git][additional]"
-			newSrc := "ssh://"
-			if matches[matchIndexUser] != "" {
-				newSrc += matches[matchIndexUser] // includes username and '@'
-			}
-			newSrc += matches[matchIndexHost] + "/" + matches[matchIndexPath]
-			if matches[matchIndexSuffix] != "" {
-				newSrc += matches[matchIndexSuffix]
-			}
-			if matches[matchIndexExtra] != "" {
-				newSrc += matches[matchIndexExtra]
-			}
+		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
 			maskedOld, _ := u.MaskBasicAuth(src)
 			maskedNew, _ := u.MaskBasicAuth(newSrc)
 			log.Debug("Rewriting SCP-style SSH URL", "old_url", maskedOld, "new_url", maskedNew)
@@ -164,6 +150,28 @@ func (d *CustomGitDetector) ensureScheme(src string) string {
 		log.Debug("Defaulting to https scheme", keyURL, maskedSrc)
 	}
 	return src
+}
+
+// rewriteSCPURL rewrites SCP-style URLs to a proper SSH URL if they match the expected pattern.
+// Returns the rewritten URL and a boolean indicating if rewriting occurred.
+func rewriteSCPURL(src string) (string, bool) {
+	scpPattern := regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
+	if scpPattern.MatchString(src) {
+		matches := scpPattern.FindStringSubmatch(src)
+		newSrc := "ssh://"
+		if matches[matchIndexUser] != "" {
+			newSrc += matches[matchIndexUser] // includes username and '@'
+		}
+		newSrc += matches[matchIndexHost] + "/" + matches[matchIndexPath]
+		if matches[matchIndexSuffix] != "" {
+			newSrc += matches[matchIndexSuffix]
+		}
+		if matches[matchIndexExtra] != "" {
+			newSrc += matches[matchIndexExtra]
+		}
+		return newSrc, true
+	}
+	return "", false
 }
 
 // normalizePath converts the URL path to use forward slashes.
@@ -180,24 +188,7 @@ func (d *CustomGitDetector) normalizePath(parsedURL *url.URL) {
 func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 	token, tokenSource := d.resolveToken(host)
 	if token != "" {
-		var defaultUsername string
-		switch host {
-		case "github.com":
-			defaultUsername = "x-access-token"
-		case "gitlab.com":
-			defaultUsername = "oauth2"
-		case "bitbucket.org":
-			defaultUsername = os.Getenv("ATMOS_BITBUCKET_USERNAME")
-			if defaultUsername == "" {
-				defaultUsername = os.Getenv("BITBUCKET_USERNAME")
-				if defaultUsername == "" {
-					defaultUsername = "x-token-auth"
-				}
-			}
-			log.Debug("Using Bitbucket username", "username", defaultUsername)
-		default:
-			defaultUsername = "x-access-token"
-		}
+		defaultUsername := getDefaultUsername(host)
 		parsedURL.User = url.UserPassword(defaultUsername, token)
 		maskedURL, _ := u.MaskBasicAuth(parsedURL.String())
 		log.Debug("Injected token", "env", tokenSource, keyURL, maskedURL)
@@ -211,7 +202,6 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	var token, tokenSource string
 	switch host {
 	case "github.com":
-		// Prioritize ATMOS_GITHUB_TOKEN if InjectGithubToken is enabled; otherwise, fallback to GITHUB_TOKEN.
 		if d.AtmosConfig.Settings.InjectGithubToken {
 			tokenSource = "ATMOS_GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)
@@ -239,6 +229,28 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 		}
 	}
 	return token, tokenSource
+}
+
+// getDefaultUsername returns the default username for token injection based on the host.
+func getDefaultUsername(host string) string {
+	switch host {
+	case "github.com":
+		return "x-access-token"
+	case "gitlab.com":
+		return "oauth2"
+	case "bitbucket.org":
+		defaultUsername := os.Getenv("ATMOS_BITBUCKET_USERNAME")
+		if defaultUsername == "" {
+			defaultUsername = os.Getenv("BITBUCKET_USERNAME")
+			if defaultUsername == "" {
+				return "x-token-auth"
+			}
+		}
+		log.Debug("Using Bitbucket username", "username", defaultUsername)
+		return defaultUsername
+	default:
+		return "x-access-token"
+	}
 }
 
 // adjustSubdir appends "//." to the path if no subdirectory is specified.
