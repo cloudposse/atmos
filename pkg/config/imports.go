@@ -53,10 +53,11 @@ func processConfigImports(source schema.AtmosConfiguration, dst *viper.Viper) er
 		for _, resolvedPath := range resolvedPaths {
 			err := MergeConfigFile(resolvedPath.filePath, dst)
 			if err != nil {
+				//nolint:revive
 				log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
 				continue
 			}
-
+			//nolint:revive
 			log.Debug("atmos merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
 		}
 	}
@@ -87,6 +88,7 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 			// Handle remote imports
 			paths, err := processRemoteImport(basePath, importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
+				//nolint:revive
 				log.Debug("failed to process remote import", "path", importPath, "error", err)
 				continue
 			}
@@ -95,6 +97,7 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 			// Handle local imports
 			paths, err := processLocalImport(basePath, importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
+				//nolint:revive
 				log.Debug("failed to process local import", "path", importPath, "error", err)
 				continue
 			}
@@ -125,6 +128,7 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 	v.SetConfigFile(tempFile)
 	err = v.ReadInConfig()
 	if err != nil {
+		//nolint:revive
 		log.Debug("failed to read remote config", "path", importPath, "error", err)
 		return nil, fmt.Errorf("failed to read remote config")
 	}
@@ -145,6 +149,7 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 	if Imports != nil && len(Imports) > 0 {
 		nestedPaths, err := processImports(importBasePath, Imports, tempDir, currentDepth+1, maxDepth)
 		if err != nil {
+			//nolint:revive
 			log.Debug("failed to process nested imports", "import", importPath, "err", err)
 			return nil, fmt.Errorf("failed to process nested imports")
 		}
@@ -170,6 +175,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 	}
 	paths, err := SearchAtmosConfig(importPath)
 	if err != nil {
+		//nolint:revive
 		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
 		return nil, fmt.Errorf("failed to resolve local import path")
 	}
@@ -182,6 +188,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 		v.SetConfigType("yaml")
 		err := v.ReadInConfig()
 		if err != nil {
+			//nolint:revive
 			log.Debug("failed to load local config", "path", path, "error", err)
 			continue
 		}
@@ -200,6 +207,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 		if Imports != nil {
 			nestedPaths, err := processImports(importBasePath, Imports, tempDir, currentDepth+1, maxDepth)
 			if err != nil {
+				//nolint:revive
 				log.Debug("failed to process nested imports from", "path", path, "error", err)
 				continue
 			}
@@ -210,7 +218,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 	return resolvedPaths, nil
 }
 
-// SearchAtmosConfig searches for a config file in path. path is directory,file or a pattern .
+// SearchAtmosConfig searches for a config file in path. The path is directory, file or a pattern.
 func SearchAtmosConfig(path string) ([]string, error) {
 	if stat, err := os.Stat(path); err == nil {
 		if !stat.IsDir() {
@@ -247,8 +255,8 @@ func generatePatterns(path string) ([]string, error) {
 	if isDir {
 		// Search for all .yaml and .yml
 		patterns := []string{
-			filepath.Join(path, "**/*.yaml"),
-			filepath.Join(path, "**/*.yml"),
+			filepath.Join(path, "**", "*.yaml"),
+			filepath.Join(path, "**", "*.yml"),
 		}
 		return patterns, nil
 	}
@@ -273,6 +281,7 @@ func convertToAbsolutePaths(filePaths []string) ([]string, error) {
 	for _, path := range filePaths {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
+			//nolint:revive
 			log.Debug("Error getting absolute path for file", "path", path, "error", err)
 			continue
 		}
@@ -286,7 +295,7 @@ func convertToAbsolutePaths(filePaths []string) ([]string, error) {
 	return absPaths, nil
 }
 
-// detectPriorityFiles detects which files will have priority .  yaml win over yml if file has same path
+// detectPriorityFiles detects which files will have priority. The longer .yaml extensions win over the shorter .yml extensions, if both files exist in the same path.
 func detectPriorityFiles(files []string) []string {
 	// Map to store the highest priority file for each base name
 	priorityMap := make(map[string]string)
@@ -363,6 +372,7 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 	for _, pattern := range patterns {
 		matches, err := u.GetGlobMatches(pattern)
 		if err != nil {
+			//nolint:revive
 			log.Debug("Error getting glob matches for path", "path", pattern, "error", err)
 			continue
 		}

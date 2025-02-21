@@ -1,12 +1,15 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -98,3 +101,14 @@ var (
 		},
 	}
 )
+
+// mergeDefaultConfig merges the contents of defaultCliConfig into the
+// current Viper instance if no other configuration file was located.
+func mergeDefaultConfig(v *viper.Viper) error {
+	j, err := json.Marshal(defaultCliConfig)
+	if err != nil {
+		return err
+	}
+	reader := bytes.NewReader(j)
+	return v.MergeConfig(reader)
+}

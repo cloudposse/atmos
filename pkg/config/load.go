@@ -1,8 +1,6 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,45 +27,22 @@ func LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosCon
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
 	setDefaultConfiguration(v)
-	err := readSystemConfig(v)
-	if err != nil {
+	// Load configuration from different sources.
+	if err := loadConfigSources(v, configAndStacksInfo.AtmosCliConfigPath); err != nil {
 		return atmosConfig, err
 	}
-
-	err = readHomeConfig(v)
-	if err != nil {
-		return atmosConfig, err
-	}
-
-	err = readWorkDirConfig(v)
-	if err != nil {
-		return atmosConfig, err
-	}
-	err = readEnvAmosConfigPath(v)
-	if err != nil {
-		return atmosConfig, err
-	}
-	err = readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
-	if err != nil {
-		return atmosConfig, err
-	}
-
-	atmosConfig.CliConfigPath = v.ConfigFileUsed()
-
-	if atmosConfig.CliConfigPath == "" {
+	// If no config file is used, fall back to the default CLI config.
+	if v.ConfigFileUsed() == "" {
 		log.Debug("'atmos.yaml' CLI config was not found", "paths", "system dir, home dir, current dir, ENV vars")
 		log.Debug("Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'")
 		log.Debug("Using the default CLI config")
-		j, err := json.Marshal(defaultCliConfig)
-		if err != nil {
-			return atmosConfig, err
-		}
-		reader := bytes.NewReader(j)
-		err = v.MergeConfig(reader)
-		if err != nil {
+
+		if err := mergeDefaultConfig(v); err != nil {
 			return atmosConfig, err
 		}
 	}
+	atmosConfig.CliConfigPath = v.ConfigFileUsed()
+
 	// Set the CLI config path in the atmosConfig struct
 	if atmosConfig.CliConfigPath != "" && !filepath.IsAbs(atmosConfig.CliConfigPath) {
 		absPath, err := filepath.Abs(atmosConfig.CliConfigPath)
@@ -80,7 +55,7 @@ func LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosCon
 	atmosConfig.Validate.EditorConfig.Color = true
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
-	err = v.Unmarshal(&atmosConfig)
+	err := v.Unmarshal(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -95,6 +70,28 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Info")
+}
+
+// loadConfigSources delegates reading configs from each source,
+// returning early if any step in the chain fails.
+func loadConfigSources(v *viper.Viper, cliConfigPath string) error {
+	if err := readSystemConfig(v); err != nil {
+		return err
+	}
+
+	if err := readHomeConfig(v); err != nil {
+		return err
+	}
+
+	if err := readWorkDirConfig(v); err != nil {
+		return err
+	}
+
+	if err := readEnvAmosConfigPath(v); err != nil {
+		return err
+	}
+
+	return readAtmosConfigCli(v, cliConfigPath)
 }
 
 // readSystemConfig load config from system dir
@@ -169,6 +166,7 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
+			//nolint:revive
 			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", configFilePath)
 			return nil
 		default:
@@ -187,6 +185,7 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
 	switch err.(type) {
 	case viper.ConfigFileNotFoundError:
+		//nolint:revive
 		log.Debug("config not found", "file", atmosCliConfigPath)
 	default:
 		return err
@@ -207,9 +206,11 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		return nil
 	}
 	if err := mergeDefaultImports(path, v); err != nil {
+		//nolint:revive
 		log.Debug("error process imports", "path", path, "error", err)
 	}
 	if err := mergeImports(v); err != nil {
+		//nolint:revive
 		log.Debug("error process imports", "file", v.ConfigFileUsed(), "error", err)
 	}
 	return nil
@@ -239,6 +240,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	searchDir = filepath.Join(filepath.FromSlash(dirPath), ".atmos.d/**/*")
 	foundPaths2, err := SearchAtmosConfig(searchDir)
 	if err != nil {
+		//nolint:revive
 		log.Debug("Failed to find atmos config file", "path", searchDir, "error", err)
 	}
 	if len(foundPaths2) > 0 {
@@ -247,9 +249,11 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	for _, filePath := range atmosFoundFilePaths {
 		err := MergeConfigFile(filePath, dst)
 		if err != nil {
+			//nolint:revive
 			log.Debug("error loading config file", "path", filePath, "error", err)
 			continue
 		}
+		//nolint:revive
 		log.Debug("atmos merged config", "path", filePath)
 
 	}
