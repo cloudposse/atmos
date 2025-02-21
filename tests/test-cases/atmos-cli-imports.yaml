@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=schema.json
+tests:
+  - name: atmos_describe_config_imports
+    snapshot: true
+    enabled: true
+    description: "Ensure atmos execute import configuration"
+    workdir: "fixtures/scenarios/atmos-cli-imports"
+    command: "atmos"
+    args:
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
+    expect:
+      exit_code: 0
+  - name: atmos_describe_configuration
+    snapshot: true
+    enabled: true
+    description: "Ensure atmos configuration"
+    workdir: "fixtures/scenarios/atmos-configuration"
+    command: "atmos"
+    args:
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
+    expect:
+      exit_code: 0
