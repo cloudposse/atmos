@@ -1,0 +1,175 @@
+# Configuration for golangci-lint
+# Documentation: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m # Set a time limit for the linter run
+  tests: true # Include test files in the analysis
+
+linters:
+  enable:
+    - bodyclose # Check that HTTP response body is closed
+    - cyclop # Check cyclomatic complexity
+    - err113 # Detects the use of the deprecated context.Done() method
+    - errcheck # Check that errors are handled
+    - forbidigo # Forbid specific function calls
+    - funlen # Enforce function length limits
+    - gocognit # Check cognitive complexity
+    - gocritic # Enable additional checks for code issues
+    - godot # Enforce comment formatting
+    - gofmt # Enforce gofmt style
+    - gofumpt # Enforce consistent formatting
+    - goimports # Enforce import formatting
+    - gosec # Inspect source code for security problems
+    - govet # Report likely mistakes in code
+    - importas # Check for aliasing imports
+    - loggercheck # Enforce structured logging best practices
+    - misspell # Detect spelling mistakes
+    - nestif # Detect deeply nested if statements
+    - nilerr # Finds the code that returns nil even if it checks that the error is not nil.
+    - revive # Fast, configurable linter
+    - rowserrcheck # Check that rows are closed
+    - staticcheck # Perform static analysis
+    - tparallel # Check for parallel test execution
+    - unconvert # Detect redundant type conversions
+    - unparam # Detect unused function parameters
+    - unused # Detect unused variables
+    - whitespace # Check for leading whitespace
+
+linters-settings:
+  funlen:
+    lines: 60 # Maximum number of lines per function
+    statements: 40 # Maximum number of statements per function
+    ignore-comments: true # Ignore comments when counting lines.
+
+  lll:
+    # Max line length
+    line-length: 120
+    # Tab width in spaces when converting tabs
+    tab-width: 4
+
+  gosec:
+    excludes:
+      - G101 # Look for hard coded credentials
+
+  gofmt:
+    # Simplify code: gofmt -s
+    simplify: true
+    # Define indentation
+    rewrite-rules:
+      - pattern: "interface{}"
+        replacement: "any"
+
+  cyclop:
+    # Maximum function complexity
+    max-complexity: 15
+    # Skip tests
+    skip-tests: true
+
+  gocognit:
+    # Maximum cognitive complexity
+    min-complexity: 20
+
+  godot:
+    # Check if comments end in a period
+    period: true
+    # Capital at start of comment
+    capital: true
+
+  importas:
+    no-unaliased: true # Prevents using `github.com/charmbracelet/log` without an alias
+    no-extra-aliases: false # Disallows unnecessary aliasing
+    alias:
+      - pkg: github.com/charmbracelet/log
+        alias: log # Enforce 'log' as the only allowed alias
+
+  revive:
+    rules:
+      - name: banned-characters
+        arguments:
+          - "goto"
+      - name: error-strings
+        arguments:
+          - disallow-newlines: true
+      - name: file-length-limit
+        arguments:
+          - max: 500 # Max lines per file
+            skipComments: true
+            skipBlankLines: true
+      - name: function-length
+        arguments: [50, 60] # Max lines per function
+      - name: cognitive-complexity
+        arguments: [25] # Max cognitive complexity
+      - name: cyclomatic
+        arguments: [10] # Max cyclomatic complexity
+      - name: add-constant
+        arguments:
+          - maxLitCount: "3"
+            allowStrs: '""'
+            allowInts: "0,1,2,3,4"
+            allowFloats: "0.0,0.,1.0,1.,2.0,2."
+      - name: argument-limit
+        arguments: [5] # Max arguments per function
+      - name: deep-exit
+      - name: early-return
+      - name: comment-spacings
+        severity: warning
+        disabled: false
+        exclude: [""]
+        arguments:
+          - mypragma
+          - otherpragma
+      - name: var-declaration
+
+  # https://go-critic.com/overview.html
+  gocritic:
+    # Enable specific checks by their exact names
+    enabled-checks:
+      - rangeValCopy # detects copies of large objects in range loops
+      - hugeParam # detects large parameters that could be passed by pointer
+      - commentedOutCode # Detects commented-out code
+      - emptyDecl # Detects empty declarations
+      - filepathJoin # Detects problems in filepath.Join() function calls
+      - commentedOutImport # Detects commented-out imports
+      - initClause # Detects non-assignment statements inside if/switch init clause
+      - nestingReduce # Finds where nesting level could be reduced
+      - preferFilepathJoin # Detects concatenation with os.PathSeparator which can be replaced with filepath.Join
+
+  loggercheck:
+    # Disable built-in checks for other logging libraries
+    kitlog: false
+    klog: false
+    logr: false
+    slog: false
+    zap: false
+
+    # Enforce structured logging best practices, by requiring all logging keys to be inlined constant strings.
+    require-string-key: true
+
+    # Require printf-like format specifier (%s, %d for example) not present.
+    no-printf-like: true
+
+    # Add custom rules for `charmbracelet/log`
+    rules:
+      - (github.com/charmbracelet/log.Logger).Info
+      - (github.com/charmbracelet/log.Logger).Error
+      - (github.com/charmbracelet/log.Logger).Warn
+      - (github.com/charmbracelet/log.Logger).Debug
+      - (github.com/charmbracelet/log.Logger).Fatal
+
+  nestif:
+    # Minimal complexity of if statements to report.
+    min-complexity: 4
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - path: _test\.go$ # Ignore test files for specific linters
+      linters:
+        - funlen
+        - revive
+        - gci
+
+output:
+  formats:
+    - format: colored-line-number
