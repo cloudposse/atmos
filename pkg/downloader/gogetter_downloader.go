@@ -21,6 +21,7 @@ type goGetterClientFactory struct{}
 // NewClient creates a new `go-getter` client.
 func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string, mode ClientMode) (DownloadClient, error) {
 	clientMode := getter.ClientModeAny
+
 	switch mode {
 	case ClientModeAny:
 		clientMode = getter.ClientModeAny
@@ -36,6 +37,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		Dst:  dest,
 		Mode: clientMode,
 	}
+
 	return &goGetterClient{client: client}, nil
 }
 
@@ -44,7 +46,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 func registerCustomDetectors(atmosConfig *schema.AtmosConfiguration) {
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitHubDetector{AtmosConfig: atmosConfig},
+			NewCustomGitHubDetector(atmosConfig),
 		},
 		getter.Detectors...,
 	)

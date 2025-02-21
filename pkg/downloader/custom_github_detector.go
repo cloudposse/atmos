@@ -1,13 +1,14 @@
 package downloader
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // CustomGitHubDetector intercepts GitHub URLs and transforms them
@@ -17,10 +18,33 @@ type CustomGitHubDetector struct {
 	AtmosConfig *schema.AtmosConfiguration
 }
 
-// Detect implements the getter.Detector interface for go-getter v1.
-func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
-	if len(src) == 0 {
-		return "", false, nil
+// Predefined errors for better reuse and static analysis.
+var (
+	ErrInvalidGitHubURL = errors.New("invalid GitHub URL")
+	ErrURLEmpty         = errors.New("source URL is empty")
+	ErrFailedParseURL   = errors.New("failed to parse URL")
+)
+
+type EnvProvider func(key string) string
+
+// customGitHubDetector detects and modifies GitHub URLs.
+type customGitHubDetector struct {
+	AtmosConfig *schema.AtmosConfiguration
+	GetEnv      EnvProvider
+}
+
+// NewCustomGitHubDetector initializes a new detector with default dependencies.
+func NewCustomGitHubDetector(config *schema.AtmosConfiguration) *customGitHubDetector {
+	return &customGitHubDetector{
+		AtmosConfig: config,
+		GetEnv:      os.Getenv,
+	}
+}
+
+// Detect checks if a URL is a GitHub repo and injects authentication if needed.
+func (d *customGitHubDetector) Detect(src, _ string) (string, bool, error) {
+	if src == "" {
+		return "", false, ErrURLEmpty
 	}
 
 	if !strings.Contains(src, "://") {
@@ -29,55 +53,58 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-		u.LogDebug(fmt.Sprintf("Failed to parse URL %q: %v\n", src, err))
+		log.Debug(fmt.Sprintf("Failed to parse URL %q: %v", src, err))
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
 	}
 
 	if strings.ToLower(parsedURL.Host) != "github.com" {
-		u.LogDebug(fmt.Sprintf("Host is %q, not 'github.com', skipping token injection\n", parsedURL.Host))
+		log.Debug(fmt.Sprintf("Host is %q, not 'github.com', skipping token injection", parsedURL.Host))
 		return "", false, nil
 	}
 
+	// Ensure the URL follows the /owner/repo format
 	parts := strings.SplitN(parsedURL.Path, "/", 4)
 	if len(parts) < 3 {
-		u.LogDebug(fmt.Sprintf("URL path %q doesn't look like /owner/repo\n", parsedURL.Path))
-		return "", false, fmt.Errorf("invalid GitHub URL %q", parsedURL.Path)
+		log.Debug(fmt.Sprintf("URL path %q doesn't look like /owner/repo", parsedURL.Path))
+		return "", false, ErrInvalidGitHubURL
 	}
 
-	atmosGitHubToken := os.Getenv("ATMOS_GITHUB_TOKEN")
-	gitHubToken := os.Getenv("GITHUB_TOKEN")
-
-	var usedToken string
-	var tokenSource string
-
-	// 1. If ATMOS_GITHUB_TOKEN is set, always use that
-	if atmosGitHubToken != "" {
-		usedToken = atmosGitHubToken
-		tokenSource = "ATMOS_GITHUB_TOKEN"
-		u.LogDebug("ATMOS_GITHUB_TOKEN is set\n")
-	} else {
-		// 2. Otherwise, only inject GITHUB_TOKEN if cfg.Settings.InjectGithubToken == true
-		if d.AtmosConfig.Settings.InjectGithubToken && gitHubToken != "" {
-			usedToken = gitHubToken
-			tokenSource = "GITHUB_TOKEN"
-			u.LogTrace("InjectGithubToken=true and GITHUB_TOKEN is set, using it\n")
-		} else {
-			u.LogTrace("No ATMOS_GITHUB_TOKEN or GITHUB_TOKEN found\n")
-		}
-	}
-
+	// Get the authentication token
+	usedToken, tokenSource := d.getGitHubToken()
 	if usedToken != "" {
 		user := parsedURL.User.Username()
 		pass, _ := parsedURL.User.Password()
+
 		if user == "" && pass == "" {
-			u.LogDebug(fmt.Sprintf("Injecting token from %s for %s\n", tokenSource, src))
+			log.Debug(fmt.Sprintf("Injecting token from %s for %s", tokenSource, src))
+
 			parsedURL.User = url.UserPassword("x-access-token", usedToken)
 		} else {
-			u.LogDebug("Credentials found, skipping token injection\n")
+			log.Debug("Credentials found in URL, skipping token injection")
 		}
 	}
 
 	finalURL := "git::" + parsedURL.String()
 
 	return finalURL, true, nil
+}
+
+// getGitHubToken selects the appropriate GitHub token based on the configuration.
+func (d *customGitHubDetector) getGitHubToken() (string, string) {
+	atmosGitHubToken := d.GetEnv("ATMOS_GITHUB_TOKEN")
+	gitHubToken := d.GetEnv("GITHUB_TOKEN")
+
+	if atmosGitHubToken != "" {
+		log.Debug("Using ATMOS_GITHUB_TOKEN")
+		return atmosGitHubToken, "ATMOS_GITHUB_TOKEN"
+	}
+
+	if d.AtmosConfig.Settings.InjectGithubToken && gitHubToken != "" {
+		log.Debug("Using GITHUB_TOKEN (InjectGithubToken=true)")
+		return gitHubToken, "GITHUB_TOKEN"
+	}
+
+	log.Debug("No valid GitHub token found")
+
+	return "", ""
 }
