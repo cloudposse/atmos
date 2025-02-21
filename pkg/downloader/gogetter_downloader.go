@@ -21,6 +21,7 @@ type goGetterClientFactory struct{}
 // NewClient creates a new `go-getter` client.
 func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string, mode ClientMode) (DownloadClient, error) {
 	clientMode := getter.ClientModeAny
+
 	switch mode {
 	case ClientModeAny:
 		clientMode = getter.ClientModeAny
@@ -36,21 +37,22 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		Dst:  dest,
 		Mode: clientMode,
 	}
+
 	return &goGetterClient{client: client}, nil
 }
 
 // registerCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func registerCustomDetectors(atmosConfig schema.AtmosConfiguration) {
+func registerCustomDetectors(atmosConfig *schema.AtmosConfiguration) {
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitHubDetector{AtmosConfig: atmosConfig},
+			NewCustomGitHubDetector(atmosConfig),
 		},
 		getter.Detectors...,
 	)
 }
 
-func NewGoGetterDownloader(atmosConfig schema.AtmosConfiguration) FileDownloader {
+func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration) FileDownloader {
 	registerCustomDetectors(atmosConfig)
 	return NewFileDownloader(&goGetterClientFactory{})
 }

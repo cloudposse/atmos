@@ -48,7 +48,7 @@ func processTagInclude(
 	if fileType == u.AtmosYamlFuncIncludeLocalFile {
 		res, err = u.DetectFormatAndParseFile(f)
 	} else if fileType == u.AtmosYamlFuncIncludeGoGetter {
-		res, err = downloader.NewGoGetterDownloader(atmosConfig).FetchAndAutoParse(f)
+		res, err = downloader.NewGoGetterDownloader(&atmosConfig).FetchAndAutoParse(f)
 	}
 
 	if err != nil {
