@@ -62,6 +62,7 @@ func processConfigImports(source schema.AtmosConfiguration, dst *viper.Viper) er
 	}
 	return nil
 }
+
 func processImports(basePath string, importPaths []string, tempDir string, currentDepth, maxDepth int) (resolvedPaths []ResolvedPaths, err error) {
 	if basePath == "" {
 		return nil, fmt.Errorf("base_Path required to process imports")
@@ -374,6 +375,7 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 
 	return filePaths, nil
 }
+
 func downloadRemoteConfig(url string, tempDir string) (string, error) {
 	// uniq name for the temp file
 	fileName := fmt.Sprintf("atmos-import-%d.yaml", time.Now().UnixNano())

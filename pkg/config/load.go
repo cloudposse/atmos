@@ -179,6 +179,7 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 
 	return nil
 }
+
 func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	if len(atmosCliConfigPath) == 0 {
 		return nil

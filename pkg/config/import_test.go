@@ -89,6 +89,7 @@ func TestProcessImports(t *testing.T) {
 	assert.NotContains(t, resolvedPaths, "http://invalid-url.com", "Invalid URL should not be resolved")
 	assert.NotContains(t, resolvedPaths, "", "Empty import path should not be resolved")
 }
+
 func TestProcessImportNested(t *testing.T) {
 	baseDir, err := os.MkdirTemp("", "config-test")
 	assert.NoError(t, err)
