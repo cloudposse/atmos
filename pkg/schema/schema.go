@@ -38,6 +38,7 @@ type AtmosConfiguration struct {
 	// functions to be able to call stores from within hooks.
 	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
 	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
 }
 
 type Validate struct {

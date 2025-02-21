@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+const MaximumImportLvL = 10
+
 // LoadConfig atmosConfig is loaded from the following locations (from lower to higher priority):
 // system dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows)
 // home dir (~/.atmos)
@@ -31,10 +33,12 @@ func LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosCon
 	if err != nil {
 		return atmosConfig, err
 	}
+
 	err = readHomeConfig(v)
 	if err != nil {
 		return atmosConfig, err
 	}
+
 	err = readWorkDirConfig(v)
 	if err != nil {
 		return atmosConfig, err
@@ -43,17 +47,9 @@ func LoadConfig(configAndStacksInfo schema.ConfigAndStacksInfo) (schema.AtmosCon
 	if err != nil {
 		return atmosConfig, err
 	}
-	if configAndStacksInfo.AtmosCliConfigPath != "" {
-		configFilePath := configAndStacksInfo.AtmosCliConfigPath
-		if len(configFilePath) > 0 {
-			err := mergeConfig(v, configFilePath, CliConfigFileName)
-			switch err.(type) {
-			case viper.ConfigFileNotFoundError:
-				log.Debug("config not found", "file", configFilePath)
-			default:
-				return atmosConfig, err
-			}
-		}
+	err = readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
+	if err != nil {
+		return atmosConfig, err
 	}
 
 	atmosConfig.CliConfigPath = v.ConfigFileUsed()
@@ -114,7 +110,7 @@ func readSystemConfig(v *viper.Viper) error {
 	}
 
 	if len(configFilePath) > 0 {
-		err := mergeConfig(v, configFilePath, CliConfigFileName)
+		err := mergeConfig(v, configFilePath, CliConfigFileName, false)
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
 			return nil
@@ -132,7 +128,7 @@ func readHomeConfig(v *viper.Viper) error {
 		return err
 	}
 	configFilePath := filepath.Join(home, ".atmos")
-	err = mergeConfig(v, configFilePath, CliConfigFileName)
+	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -141,6 +137,7 @@ func readHomeConfig(v *viper.Viper) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -150,7 +147,7 @@ func readWorkDirConfig(v *viper.Viper) error {
 	if err != nil {
 		return err
 	}
-	err = mergeConfig(v, wd, CliConfigFileName)
+	err = mergeConfig(v, wd, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -164,29 +161,108 @@ func readWorkDirConfig(v *viper.Viper) error {
 
 func readEnvAmosConfigPath(v *viper.Viper) error {
 	atmosPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
-	if atmosPath != "" {
-		configFilePath := filepath.Join(atmosPath, CliConfigFileName)
-		err := mergeConfig(v, configFilePath, CliConfigFileName)
-		if err != nil {
-			switch err.(type) {
-			case viper.ConfigFileNotFoundError:
-				log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", configFilePath)
-				return nil
-			default:
-				return err
-			}
-		}
-		log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", configFilePath)
+	if atmosPath == "" {
+		return nil
 	}
+	configFilePath := filepath.Join(atmosPath, CliConfigFileName)
+	err := mergeConfig(v, configFilePath, CliConfigFileName, true)
+	if err != nil {
+		switch err.(type) {
+		case viper.ConfigFileNotFoundError:
+			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", configFilePath)
+			return nil
+		default:
+			return err
+		}
+	}
+	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", configFilePath)
+
+	return nil
+}
+func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
+	if len(atmosCliConfigPath) == 0 {
+		return nil
+	}
+	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
+	switch err.(type) {
+	case viper.ConfigFileNotFoundError:
+		log.Debug("config not found", "file", atmosCliConfigPath)
+	default:
+		return err
+	}
+
 	return nil
 }
 
-// mergeConfig merge config from a specified path and file name.
-func mergeConfig(v *viper.Viper, path string, fileName string) error {
+// mergeConfig merge config from a specified path and process imports.return error if config file not exist
+func mergeConfig(v *viper.Viper, path string, fileName string, processImports bool) error {
 	v.AddConfigPath(path)
 	v.SetConfigName(fileName)
 	err := v.MergeInConfig()
 	if err != nil {
+		return err
+	}
+	if !processImports {
+		return nil
+	}
+	if err := mergeDefaultImports(path, v); err != nil {
+		log.Debug("error process imports", "path", path, "error", err)
+	}
+	if err := mergeImports(v); err != nil {
+		log.Debug("error process imports", "file", v.ConfigFileUsed(), "error", err)
+	}
+	return nil
+}
+
+// mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
+// from a specified directory into the destination configuration.
+func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
+	isDir := false
+	if stat, err := os.Stat(dirPath); err == nil && stat.IsDir() {
+		isDir = true
+	}
+	if !isDir {
+		return fmt.Errorf("atmos config directory not found path %s", dirPath)
+	}
+	var atmosFoundFilePaths []string
+	// Search for `atmos.d/` configurations
+	searchDir := filepath.Join(filepath.FromSlash(dirPath), "atmos.d/**/*")
+	foundPaths1, err := SearchAtmosConfig(searchDir)
+	if err != nil {
+		log.Debug("Failed to find atmos config file", "path", searchDir, "error", err)
+	}
+	if len(foundPaths1) > 0 {
+		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths1...)
+	}
+	// Search for `.atmos.d` configurations
+	searchDir = filepath.Join(filepath.FromSlash(dirPath), ".atmos.d/**/*")
+	foundPaths2, err := SearchAtmosConfig(searchDir)
+	if err != nil {
+		log.Debug("Failed to find atmos config file", "path", searchDir, "error", err)
+	}
+	if len(foundPaths2) > 0 {
+		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths2...)
+	}
+	for _, filePath := range atmosFoundFilePaths {
+		err := MergeConfigFile(filePath, dst)
+		if err != nil {
+			log.Debug("error loading config file", "path", filePath, "error", err)
+			continue
+		}
+		log.Debug("atmos merged config", "path", filePath)
+
+	}
+	return nil
+}
+
+// mergeImports processes imports from the atmos configuration and merges them into the destination configuration.
+func mergeImports(dst *viper.Viper) error {
+	var src schema.AtmosConfiguration
+	err := dst.Unmarshal(&src)
+	if err != nil {
+		return err
+	}
+	if err := processConfigImports(src, dst); err != nil {
 		return err
 	}
 	return nil
