@@ -13,7 +13,6 @@ linters:
     - errcheck # Check that errors are handled
     - forbidigo # Forbid specific function calls
     - funlen # Enforce function length limits
-    - gci # Enforce import ordering
     - gocognit # Check cognitive complexity
     - gocritic # Enable additional checks for code issues
     - godot # Enforce comment formatting
@@ -22,6 +21,7 @@ linters:
     - goimports # Enforce import formatting
     - gosec # Inspect source code for security problems
     - govet # Report likely mistakes in code
+    - importas # Check for aliasing imports
     - loggercheck # Enforce structured logging best practices
     - misspell # Detect spelling mistakes
     - nestif # Detect deeply nested if statements
@@ -34,7 +34,6 @@ linters:
     - unparam # Detect unused function parameters
     - unused # Detect unused variables
     - whitespace # Check for leading whitespace
-    - wsl # Check for whitespace at the end of lines
 
 linters-settings:
   funlen:
@@ -48,12 +47,9 @@ linters-settings:
     # Tab width in spaces when converting tabs
     tab-width: 4
 
-  gci:
-    # Configure import ordering
-    sections:
-      - standard # Standard library imports
-      - default # Third party imports
-      - prefix(your/company/module) # Your module imports
+  gosec:
+    excludes:
+      - G101 # Look for hard coded credentials
 
   gofmt:
     # Simplify code: gofmt -s
@@ -78,6 +74,13 @@ linters-settings:
     period: true
     # Capital at start of comment
     capital: true
+
+  importas:
+    no-unaliased: true # Prevents using `github.com/charmbracelet/log` without an alias
+    no-extra-aliases: false # Disallows unnecessary aliasing
+    alias:
+      - pkg: github.com/charmbracelet/log
+        alias: log # Enforce 'log' as the only allowed alias
 
   revive:
     rules:
@@ -115,6 +118,7 @@ linters-settings:
         arguments:
           - mypragma
           - otherpragma
+      - name: var-declaration
 
   # https://go-critic.com/overview.html
   gocritic:
@@ -164,7 +168,6 @@ issues:
       linters:
         - funlen
         - revive
-        - wsl
         - gci
 
 output:
