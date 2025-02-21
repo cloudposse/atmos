@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	l "github.com/charmbracelet/log"
+	"github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
@@ -241,9 +241,9 @@ func max(a, b int) int {
 
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
-		l.Debug("Downloading and installing package", "package", p.name)
+		log.Debug("Downloading and installing package", "package", p.name)
 		if dryRun {
-			l.Debug("Entering dry-run flow for generic vendoring (not a component or mixin)", "package", p.name)
+			log.Debug("Entering dry-run flow for generic vendoring (not a component or mixin)", "package", p.name)
 			detector := &CustomGitDetector{AtmosConfig: atmosConfig}
 			_, _, err := detector.Detect(p.uri, "")
 			if err != nil {
