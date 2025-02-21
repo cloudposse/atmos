@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -100,8 +100,9 @@ func TestCustomGitHubDetector_Detect(t *testing.T) {
 
 	t.Run("should not modify URL if credentials are already present", func(t *testing.T) {
 		detector := customGitHubDetector{
-			GetEnv: func(_ string) string { return "" },
-			Log:    logger,
+			GetEnv:      func(_ string) string { return "" },
+			Log:         logger,
+			AtmosConfig: &schema.AtmosConfiguration{Settings: schema.AtmosSettings{InjectGithubToken: false}},
 		}
 
 		finalURL, detected, err := detector.Detect("https://user:pass@github.com/owner/repo.git", "")
