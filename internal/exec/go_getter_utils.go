@@ -70,19 +70,15 @@ type CustomGitDetector struct {
 	source      string
 }
 
-// Detect implements the getter.Detector interface for go-getter v1.
 func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	log.Debug("CustomGitDetector.Detect called")
+
 	if len(src) == 0 {
 		return "", false, nil
 	}
 
-	var err error
 	// Ensure the URL has an explicit scheme.
-	src, err = d.ensureScheme(src)
-	if err != nil {
-		return "", false, err
-	}
+	src = d.ensureScheme(src)
 
 	// Parse the URL to extract the host and path.
 	parsedURL, err := url.Parse(src)
@@ -127,24 +123,26 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 }
 
 const (
-	// Named constants for regex match indices
+	// Named constants for regex match indices.
 	matchIndexUser   = 1
 	matchIndexHost   = 3
 	matchIndexPath   = 4
 	matchIndexSuffix = 5
 	matchIndexExtra  = 6
 
-	// Key for logging repeated "url" field
+	// Key for logging repeated "url" field.
 	keyURL = "url"
 )
 
 // ensureScheme checks for an explicit scheme and rewrites SCP-style URLs if needed.
-func (d *CustomGitDetector) ensureScheme(src string) (string, error) {
+// This version no longer returns an error since it never produces one.
+func (d *CustomGitDetector) ensureScheme(src string) string {
 	if !strings.Contains(src, "://") {
 		// Check for SCP-style SSH URL (e.g. "git@github.com:cloudposse/terraform-null-label.git?ref=...")
 		scpPattern := regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
 		if scpPattern.MatchString(src) {
 			matches := scpPattern.FindStringSubmatch(src)
+			// Build proper SSH URL: "ssh://[username@]host/repoPath[.git][additional]"
 			newSrc := "ssh://"
 			if matches[matchIndexUser] != "" {
 				newSrc += matches[matchIndexUser] // includes username and '@'
@@ -159,13 +157,13 @@ func (d *CustomGitDetector) ensureScheme(src string) (string, error) {
 			maskedOld, _ := u.MaskBasicAuth(src)
 			maskedNew, _ := u.MaskBasicAuth(newSrc)
 			log.Debug("Rewriting SCP-style SSH URL", "old_url", maskedOld, "new_url", maskedNew)
-			return newSrc, nil
+			return newSrc
 		}
 		src = "https://" + src
 		maskedSrc, _ := u.MaskBasicAuth(src)
 		log.Debug("Defaulting to https scheme", keyURL, maskedSrc)
 	}
-	return src, nil
+	return src
 }
 
 // normalizePath converts the URL path to use forward slashes.
@@ -213,6 +211,7 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	var token, tokenSource string
 	switch host {
 	case "github.com":
+		// Prioritize ATMOS_GITHUB_TOKEN if InjectGithubToken is enabled; otherwise, fallback to GITHUB_TOKEN.
 		if d.AtmosConfig.Settings.InjectGithubToken {
 			tokenSource = "ATMOS_GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)

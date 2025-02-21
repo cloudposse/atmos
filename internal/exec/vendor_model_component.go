@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
