@@ -6,6 +6,20 @@
     "b",
     "c"
   ],
+  "other_list_var": [
+    "d",
+    "e",
+    "f"
+  ],
+  "list_objects": [
+    {
+      "hyphenated-list-var": [
+        "x",
+        "y",
+        "z"
+      ]
+    }
+  ],
   "map_var": {
     "a": 1,
     "b": 2,
