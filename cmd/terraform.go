@@ -37,6 +37,7 @@ func init() {
 	terraformCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos terraform <sub-command> --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")
 	terraformCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos terraform <sub-command> --affected --ssh-key <path_to_ssh_key>")
 	terraformCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos terraform <sub-command> --affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
+	terraformCmd.PersistentFlags().Bool("include-dependents", false, "Include the dependent components and process them in the dependency order: atmos terraform <sub-command> --affected --include-dependents=true")
 	terraformCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos terraform <sub-command> --affected --clone-target-ref=true\n"+
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")

@@ -154,7 +154,6 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	cmd.PersistentFlags().String("format", "yaml", "")
 	cmd.PersistentFlags().Bool("verbose", false, "")
 	cmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
-	cmd.PersistentFlags().Bool("include-dependents", true, "")
 	cmd.PersistentFlags().Bool("include-settings", false, "")
 	cmd.PersistentFlags().Bool("upload", false, "")
 	cmd.PersistentFlags().Bool("process-templates", true, "")
@@ -167,7 +166,6 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 		return err
 	}
 
-	cliArgs.IncludeDependents = true
 	cliArgs.IncludeSpaceliftAdminStacks = false
 	cliArgs.OutputFile = ""
 	cliArgs.ProcessTemplates = true
