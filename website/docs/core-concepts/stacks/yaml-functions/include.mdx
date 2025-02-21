@@ -170,3 +170,9 @@ On macOS and Linux:
     values: !include './values.yaml "<yq-expression-with-spaces>"'
     description: !include '"component description.md"'
 ```
+
+Sometimes for more complex cases you may need to utilize 3x double quotes, for examples:
+```yaml
+vars:
+  my_array: !include '"https://foo.com/bar.json" """.some_key.array_one + .some_key.hyphenated-field.array_two"""'
+```
