@@ -44,7 +44,7 @@ tests:
     enabled: true
     snapshot: true
     tty: false
-    description: "Dry-run vendoring with SSH style URL (that's being verified and prepended with ssh prefix by atmos)"
+    description: "Dry-run vendoring with SSH style URL (verified and prepended with SSH prefix by Atmos)"
     workdir: "fixtures/scenarios/vendor-pulls-ssh"
     command: "atmos"
     args:
