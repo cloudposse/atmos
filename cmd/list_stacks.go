@@ -37,7 +37,7 @@ var listStacksCmd = &cobra.Command{
 
 func init() {
 	listStacksCmd.DisableFlagParsing = false
-	listStacksCmd.PersistentFlags().StringP("component", "c", "", "atmos list stacks -c &ltcomponent&gt")
+	listStacksCmd.PersistentFlags().StringP("component", "c", "", "List all stacks that contain the specified component.")
 	listCmd.AddCommand(listStacksCmd)
 }
 

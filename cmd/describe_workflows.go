@@ -9,16 +9,9 @@ import (
 
 // describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
 var describeWorkflowsCmd = &cobra.Command{
-	Use:   "workflows",
-	Short: "List Atmos workflows and their associated files",
-	Long:  "List all Atmos workflows, showing their associated files and workflow names for easy reference.",
-	Example: "describe workflows\n" +
-		"describe workflows --format json\n" +
-		"describe workflows -f yaml\n" +
-		"describe workflows --output list\n" +
-		"describe workflows -o map -f json\n" +
-		"describe workflows -o map\n" +
-		"describe workflows -o all",
+	Use:                "workflows",
+	Short:              "List Atmos workflows and their associated files",
+	Long:               "List all Atmos workflows, showing their associated files and workflow names for easy reference.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -30,8 +23,8 @@ var describeWorkflowsCmd = &cobra.Command{
 }
 
 func init() {
-	describeWorkflowsCmd.PersistentFlags().StringP("format", "f", "yaml", "Specify the output format: atmos describe workflows --format=&ltyaml|json&gt (`yaml` is default)")
-	describeWorkflowsCmd.PersistentFlags().StringP("output", "o", "list", "Specify the output type: atmos describe workflows --output=&ltlist|map|all&gt (`list` is default)")
+	describeWorkflowsCmd.PersistentFlags().StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
+	describeWorkflowsCmd.PersistentFlags().StringP("output", "o", "list", "Specify the output type (`list` is default)")
 
 	describeCmd.AddCommand(describeWorkflowsCmd)
 }
