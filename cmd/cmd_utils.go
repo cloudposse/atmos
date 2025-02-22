@@ -80,7 +80,7 @@ func processCustomCommands(
 				},
 			}
 			// TODO: we need to update this post https://github.com/cloudposse/atmos/pull/959 gets merged
-			customCommand.PersistentFlags().Bool("", false, "Use double dashes to separate Atmos-specific options from native arguments and flags for the command.")
+			customCommand.PersistentFlags().Bool("", false, doubleDashHint)
 			// Process and add flags to the command
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
