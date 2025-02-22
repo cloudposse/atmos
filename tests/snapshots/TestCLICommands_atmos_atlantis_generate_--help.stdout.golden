@@ -22,9 +22,9 @@ Flags:
                               will be checked out instead
                               This requires that the target reference is already
                               cloned by Git, and the information about it exists
-                              in the .git directory (default "false")
+                              in the .git directory (default false)
 
-    -h, --help                help for generate (default "false")
+    -h, --help                help for generate (default false)
 
 
 Global Flags:
@@ -37,12 +37,12 @@ Global Flags:
                                     written to any file or any standard file
                                     descriptor, including /dev/stdout,
                                     /dev/stderr and /dev/null (default
-                                    "/dev/stderr")
+                                    /dev/stderr)
 
         --logs-level string         Logs level. Supported log levels are Trace,
                                     Debug, Info, Warning, Off. If the log level
                                     is set to Off, Atmos will not log any
-                                    messages (default "Info")
+                                    messages (default Info)
 
         --redirect-stderr string    File descriptor to redirect stderr to.
                                     Errors can be redirected to any file or any
