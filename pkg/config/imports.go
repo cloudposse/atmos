@@ -63,11 +63,9 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 		for _, resolvedPath := range resolvedPaths {
 			err := MergeConfigFile(resolvedPath.filePath, dst)
 			if err != nil {
-				//nolint:revive
 				log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
 				continue
 			}
-			//nolint:revive
 			log.Debug("atmos merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
 		}
 	}
@@ -98,7 +96,6 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 			// Handle remote imports
 			paths, err := processRemoteImport(basePath, importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				//nolint:revive
 				log.Debug("failed to process remote import", "path", importPath, "error", err)
 				continue
 			}
@@ -107,7 +104,6 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 			// Handle local imports
 			paths, err := processLocalImport(basePath, importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				//nolint:revive
 				log.Debug("failed to process local import", "path", importPath, "error", err)
 				continue
 			}
@@ -138,7 +134,6 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 	v.SetConfigFile(tempFile)
 	err = v.ReadInConfig()
 	if err != nil {
-		//nolint:revive
 		log.Debug("failed to read remote config", "path", importPath, "error", err)
 		return nil, fmt.Errorf("failed to read remote config")
 	}
@@ -159,7 +154,6 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 	if Imports != nil && len(Imports) > 0 {
 		nestedPaths, err := processImports(importBasePath, Imports, tempDir, currentDepth+1, maxDepth)
 		if err != nil {
-			//nolint:revive
 			log.Debug("failed to process nested imports", "import", importPath, "err", err)
 			return nil, fmt.Errorf("failed to process nested imports")
 		}
@@ -185,7 +179,6 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 	}
 	paths, err := SearchAtmosConfig(importPath)
 	if err != nil {
-		//nolint:revive
 		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
 		return nil, ErrResolveLocal
 	}
@@ -198,7 +191,6 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 		v.SetConfigType("yaml")
 		err := v.ReadInConfig()
 		if err != nil {
-			//nolint:revive
 			log.Debug("failed to load local config", "path", path, "error", err)
 			continue
 		}
@@ -217,7 +209,6 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 		if Imports != nil {
 			nestedPaths, err := processImports(importBasePath, Imports, tempDir, currentDepth+1, maxDepth)
 			if err != nil {
-				//nolint:revive
 				log.Debug("failed to process nested imports from", "path", path, "error", err)
 				continue
 			}
@@ -291,7 +282,6 @@ func convertToAbsolutePaths(filePaths []string) ([]string, error) {
 	for _, path := range filePaths {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			//nolint:revive
 			log.Debug("Error getting absolute path for file", "path", path, "error", err)
 			continue
 		}
@@ -382,7 +372,6 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 	for _, pattern := range patterns {
 		matches, err := u.GetGlobMatches(pattern)
 		if err != nil {
-			//nolint:revive
 			log.Debug("Error getting glob matches for path", "path", pattern, "error", err)
 			continue
 		}

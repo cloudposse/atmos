@@ -166,7 +166,6 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
-			//nolint:revive
 			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", configFilePath)
 			return nil
 		default:
@@ -185,7 +184,6 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
 	switch err.(type) {
 	case viper.ConfigFileNotFoundError:
-		//nolint:revive
 		log.Debug("config not found", "file", atmosCliConfigPath)
 	default:
 		return err
@@ -206,11 +204,9 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		return nil
 	}
 	if err := mergeDefaultImports(path, v); err != nil {
-		//nolint:revive
 		log.Debug("error process imports", "path", path, "error", err)
 	}
 	if err := mergeImports(v); err != nil {
-		//nolint:revive
 		log.Debug("error process imports", "file", v.ConfigFileUsed(), "error", err)
 	}
 	return nil
@@ -240,7 +236,6 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	searchDir = filepath.Join(filepath.FromSlash(dirPath), ".atmos.d/**/*")
 	foundPaths2, err := SearchAtmosConfig(searchDir)
 	if err != nil {
-		//nolint:revive
 		log.Debug("Failed to find atmos config file", "path", searchDir, "error", err)
 	}
 	if len(foundPaths2) > 0 {
@@ -249,11 +244,9 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	for _, filePath := range atmosFoundFilePaths {
 		err := MergeConfigFile(filePath, dst)
 		if err != nil {
-			//nolint:revive
 			log.Debug("error loading config file", "path", filePath, "error", err)
 			continue
 		}
-		//nolint:revive
 		log.Debug("atmos merged config", "path", filePath)
 
 	}
