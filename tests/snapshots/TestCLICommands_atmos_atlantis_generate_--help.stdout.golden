@@ -13,16 +13,11 @@ Available Commands:
 
 Flags:
 
-        --clone-target-ref    Clone the target reference with which to compare
-                              the current branch: atmos atlantis generate
-                              repo-config --affected-only=true
-                              --clone-target-ref=true
-                              The flag is only used when --affected-only=true
-                              If set to false (default), the target reference
-                              will be checked out instead
-                              This requires that the target reference is already
-                              cloned by Git, and the information about it exists
-                              in the .git directory (default false)
+        --clone-target-ref    Clone the target reference for comparison with the
+                              current branch. Only used when
+                              --affected-only=true. Defaults to false, which
+                              checks out the target reference instead. (default
+                              false)
 
     -h, --help                help for generate (default false)
 

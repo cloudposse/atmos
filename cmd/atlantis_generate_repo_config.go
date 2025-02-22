@@ -37,13 +37,11 @@ func init() {
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("stacks", "", "Generate Atlantis projects for the specified stacks only (comma-separated values).")
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("components", "",
-		"Generate Atlantis projects for the specified components only (comma-separated values).\n"+
-			"atmos atlantis generate repo-config --config-template &ltconfig_template&gt --project-template &ltproject_template&gt --components &ltcomponent1&gt,&ltcomponent2&gt",
+		"Generate Atlantis projects for the specified components only (comma-separated values).",
 	)
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool("affected-only", false,
-		"Generate Atlantis projects only for the Atmos components changed between two Git commits.\n"+
-			"atmos atlantis generate repo-config --affected-only=true",
+		"Generate Atlantis projects only for the Atmos components changed between two Git commits.",
 	)
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos atlantis generate repo-config --affected-only=true --repo-path &ltpath_to_already_cloned_repo&gt")
@@ -53,11 +51,7 @@ func init() {
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos atlantis generate repo-config --affected-only=true --ssh-key &ltpath_to_ssh_key&gt")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos atlantis generate repo-config --affected-only=true --ssh-key &ltpath_to_ssh_key&gt --ssh-key-password &ltpassword&gt")
 
-	atlantisGenerateCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: "+
-		"atmos atlantis generate repo-config --affected-only=true --clone-target-ref=true\n"+
-		"The flag is only used when `--affected-only=true`\n"+
-		"If set to `false` (default), the target reference will be checked out instead\n"+
-		"This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory")
+	atlantisGenerateCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference for comparison with the current branch. Only used when --affected-only=true. Defaults to false, which checks out the target reference instead.")
 
 	atlantisGenerateCmd.AddCommand(atlantisGenerateRepoConfigCmd)
 }
