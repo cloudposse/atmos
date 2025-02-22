@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"

@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -31,7 +28,7 @@ var listSettingsCmd = &cobra.Command{
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error initializing CLI config: %v\n", err)
+			log.Error("failed to initialize CLI config", "error", err)
 			return
 		}
 
