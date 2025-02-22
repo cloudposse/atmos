@@ -28,28 +28,28 @@ var describeStacksCmd = &cobra.Command{
 func init() {
 	describeStacksCmd.DisableFlagParsing = false
 
-	describeStacksCmd.PersistentFlags().String("file", "", "Write the result to file: atmos describe stacks --file=stacks.yaml")
+	describeStacksCmd.PersistentFlags().String("file", "", "Write the result to file")
 
-	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify the output format: atmos describe stacks --format=yaml|json (`yaml` is default)")
+	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify the output format (`yaml` is default)")
 
 	describeStacksCmd.PersistentFlags().StringP("stack", "s", "",
-		"Filter by a specific stack: atmos describe stacks -s &ltstack&gt\n"+
+		"Filter by a specific stack\n"+
 			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)",
 	)
 	AddStackCompletion(describeStacksCmd)
-	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific `atmos` components: atmos describe stacks --components=&ltcomponent1&gt,&ltcomponent2&gt")
+	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific `atmos` components")
 
-	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types: atmos describe stacks --component-types=terraform|helmfile. Supported component types: terraform, helmfile")
+	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types. Supported component types: terraform, helmfile")
 
-	describeStacksCmd.PersistentFlags().String("sections", "", "Output only the specified component sections: atmos describe stacks --sections=vars,settings. Available component sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
+	describeStacksCmd.PersistentFlags().String("sections", "", "Output only the specified component sections. Available component sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
 
-	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos describe stacks --process-templates=false")
+	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 
-	describeStacksCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command: atmos describe stacks --process-functions=false")
+	describeStacksCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 
-	describeStacksCmd.PersistentFlags().Bool("include-empty-stacks", false, "Include stacks with no components in the output: atmos describe stacks --include-empty-stacks")
+	describeStacksCmd.PersistentFlags().Bool("include-empty-stacks", false, "Include stacks with no components in the output")
 
-	describeStacksCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command: atmos describe stacks --skip=terraform.output")
+	describeStacksCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
 
 	describeCmd.AddCommand(describeStacksCmd)
 }
