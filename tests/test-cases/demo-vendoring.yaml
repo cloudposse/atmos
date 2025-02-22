@@ -58,7 +58,7 @@ tests:
       diff: []
       exit_code: 0
 
-  - name: atmos vendor pull ssh component
+  - name: atmos vendor pull component using SSH
     enabled: true
     snapshot: true
     tty: false
