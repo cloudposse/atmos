@@ -201,7 +201,7 @@ func executeTerraformAffectedComponent(
 ) error {
 	// If the affected component is included as dependent in other components, don't process it now,
 	// it will be processed in the dependency order
-	if args.IncludeDependents && !affected.IncludedInDependents {
+	if !affected.IncludedInDependents {
 		info.Component = affected.Component
 		info.ComponentFromArg = affected.Component
 		info.Stack = affected.Stack
@@ -223,11 +223,11 @@ func executeTerraformAffectedComponent(
 		}
 
 		// Execute the terraform command for the affected component
-		err := ExecuteTerraform(info)
-		if err != nil {
-			return err
-		}
-	} else {
+		//err := ExecuteTerraform(info)
+		//if err != nil {
+		//	return err
+		//}
+	} else if args.IncludeDependents {
 		if parentComponent != "" && parentStack != "" {
 			l.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of component '%s' in stack '%s'",
 				info.SubCommand,
