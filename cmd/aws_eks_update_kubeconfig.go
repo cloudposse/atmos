@@ -45,14 +45,14 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 func init() {
 	awsEksCmdUpdateKubeconfigCmd.DisableFlagParsing = false
 	AddStackCompletion(awsEksCmdUpdateKubeconfigCmd)
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("profile", "", "atmos aws eks update-kubeconfig --profile &ltprofile&gt")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("name", "", "atmos aws eks update-kubeconfig --name &ltcluster name&gt")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("region", "", "atmos aws eks update-kubeconfig --region &ltregion&gt")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "atmos aws eks update-kubeconfig --kubeconfig &ltpath_to_kubeconfig&gt")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("role-arn", "", "atmos aws eks update-kubeconfig --role-arn &ltARN&gt")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "atmos aws eks update-kubeconfig --dry-run=true")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("verbose", false, "atmos aws eks update-kubeconfig --verbose=true")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("alias", "", "atmos aws eks update-kubeconfig --alias &ltalias for the cluster context name&gt")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("profile", "", "Specify the AWS CLI profile to use for authentication")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("name", "", "Specify the name of the EKS cluster to update the kubeconfig for")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("region", "", "Specify the AWS region where the EKS cluster is located")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "Specify the path to the kubeconfig file to be updated or created for accessing the EKS cluster.")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("role-arn", "", "Specify the ARN of the IAM role to assume for authenticating with the EKS cluster.")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "Perform a dry run to simulate updating the kubeconfig without making any changes.")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("verbose", false, "Enable verbose logging to provide detailed output during the kubeconfig update process.")
+	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("alias", "", "Specify an alias to use for the cluster context name in the kubeconfig file.")
 
 	awsEksCmd.AddCommand(awsEksCmdUpdateKubeconfigCmd)
 }
