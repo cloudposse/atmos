@@ -40,7 +40,7 @@ tests:
         - 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
 
-  - name: atmos vendor pull ssh
+  - name: atmos vendor pull using SSH
     enabled: true
     snapshot: true
     tty: false
