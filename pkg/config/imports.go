@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	ErrBasePath     = errors.New("base_path required to process imports")
+	ErrBasePath     = errors.New("basePath required to process imports")
 	ErrTempDir      = errors.New("tempDir required to process imports")
 	ErrResolveLocal = errors.New("failed to resolve local import path")
 )
@@ -237,14 +237,14 @@ func SearchAtmosConfig(path string) ([]string, error) {
 		return nil, fmt.Errorf("failed to find matching files: %w", err)
 	}
 	// Convert paths to absolute paths
-	atmosFilePathsABS, err := convertToAbsolutePaths(atmosFilePaths)
+	atmosFilePathsAbsolute, err := convertToAbsolutePaths(atmosFilePaths)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert paths to absolute paths: %w", err)
 	}
 	// Prioritize and sort files
-	atmosFilePathsABS = detectPriorityFiles(atmosFilePathsABS)
-	atmosFilePathsABS = sortFilesByDepth(atmosFilePathsABS)
-	return atmosFilePathsABS, nil
+	atmosFilePathsAbsolute = detectPriorityFiles(atmosFilePathsAbsolute)
+	atmosFilePathsAbsolute = sortFilesByDepth(atmosFilePathsAbsolute)
+	return atmosFilePathsAbsolute, nil
 }
 
 // Helper function to generate search patterns for extension yaml,yml
