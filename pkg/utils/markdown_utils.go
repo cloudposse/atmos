@@ -3,8 +3,10 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime/debug"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -66,6 +68,13 @@ func PrintfErrorMarkdown(format string, a ...interface{}) {
 
 func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 	PrintErrorMarkdown(title, err, suggestion)
+
+	// Find the executed command's exit code from the error
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) {
+		os.Exit(exitError.ExitCode())
+	}
+
 	os.Exit(1)
 }
 
