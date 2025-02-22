@@ -40,4 +40,5 @@
 
 # Ignore components vendored during tests
 tests/fixtures/scenarios/vendor/components/**
+tests/fixtures/scenarios/vendor-globs/components/**
 examples/demo-vendoring/components/**
