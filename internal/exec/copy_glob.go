@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	l "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	cp "github.com/otiai10/copy" // Using the optimized copy library when no filtering is required.
@@ -58,22 +58,22 @@ func shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool
 		// Check plain relative path.
 		matched, err := u.PathMatch(pattern, relPath)
 		if err != nil {
-			l.Debug("Error matching exclusion pattern", logKeyPath, relPath, logKeyError, err)
+			log.Debug("Error matching exclusion pattern", logKeyPath, relPath, logKeyError, err)
 			continue
 		}
 		if matched {
-			l.Debug("Excluding path due to exclusion pattern (plain match)", logKeyPath, relPath, "pattern", pattern)
+			log.Debug("Excluding path due to exclusion pattern (plain match)", logKeyPath, relPath, "pattern", pattern)
 			return true
 		}
 		// If a directory, also check with a trailing slash.
 		if info.IsDir() {
 			matched, err = u.PathMatch(pattern, relPath+"/")
 			if err != nil {
-				l.Debug("Error matching exclusion pattern with trailing slash", "pattern", pattern, logKeyPath, relPath+"/", logKeyError, err)
+				log.Debug("Error matching exclusion pattern with trailing slash", "pattern", pattern, logKeyPath, relPath+"/", logKeyError, err)
 				continue
 			}
 			if matched {
-				l.Debug("Excluding directory due to exclusion pattern (with trailing slash)", logKeyPath, relPath+"/", "pattern", pattern)
+				log.Debug("Excluding directory due to exclusion pattern (with trailing slash)", logKeyPath, relPath+"/", "pattern", pattern)
 				return true
 			}
 		}
@@ -90,15 +90,15 @@ func shouldIncludePath(info os.FileInfo, relPath string, included []string) bool
 	for _, pattern := range included {
 		matched, err := u.PathMatch(pattern, relPath)
 		if err != nil {
-			l.Debug("Error matching inclusion pattern", "pattern", pattern, logKeyPath, relPath, logKeyError, err)
+			log.Debug("Error matching inclusion pattern", "pattern", pattern, logKeyPath, relPath, logKeyError, err)
 			continue
 		}
 		if matched {
-			l.Debug("Including path due to inclusion pattern", logKeyPath, relPath, "pattern", pattern)
+			log.Debug("Including path due to inclusion pattern", logKeyPath, relPath, "pattern", pattern)
 			return true
 		}
 	}
-	l.Debug("Excluding path because it does not match any inclusion pattern", logKeyPath, relPath)
+	log.Debug("Excluding path because it does not match any inclusion pattern", logKeyPath, relPath)
 	return false
 }
 
@@ -109,7 +109,7 @@ func shouldSkipEntry(info os.FileInfo, srcPath, baseDir string, excluded, includ
 	}
 	relPath, err := filepath.Rel(baseDir, srcPath)
 	if err != nil {
-		l.Debug("Error computing relative path", "srcPath", srcPath, logKeyError, err)
+		log.Debug("Error computing relative path", "srcPath", srcPath, logKeyError, err)
 		return true, nil // treat error as a signal to skip
 	}
 	relPath = filepath.ToSlash(relPath)
@@ -137,13 +137,13 @@ func processDirEntry(entry os.DirEntry, srcDir, dstDir, baseDir string, excluded
 		return err
 	}
 	if skip {
-		l.Debug("Skipping entry", "srcPath", srcPath)
+		log.Debug("Skipping entry", "srcPath", srcPath)
 		return nil
 	}
 
 	// Skip symlinks.
 	if info.Mode()&os.ModeSymlink != 0 {
-		l.Debug("Skipping symlink", logKeyPath, srcPath)
+		log.Debug("Skipping symlink", logKeyPath, srcPath)
 		return nil
 	}
 
@@ -175,21 +175,21 @@ func shouldSkipPrefixEntry(info os.FileInfo, fullRelPath string, excluded []stri
 	for _, pattern := range excluded {
 		matched, err := u.PathMatch(pattern, fullRelPath)
 		if err != nil {
-			l.Debug("Error matching exclusion pattern in prefix function", "pattern", pattern, logKeyPath, fullRelPath, logKeyError, err)
+			log.Debug("Error matching exclusion pattern in prefix function", "pattern", pattern, logKeyPath, fullRelPath, logKeyError, err)
 			continue
 		}
 		if matched {
-			l.Debug("Excluding (prefix) due to exclusion pattern (plain match)", logKeyPath, fullRelPath, "pattern", pattern)
+			log.Debug("Excluding (prefix) due to exclusion pattern (plain match)", logKeyPath, fullRelPath, "pattern", pattern)
 			return true
 		}
 		if info.IsDir() {
 			matched, err = u.PathMatch(pattern, fullRelPath+"/")
 			if err != nil {
-				l.Debug("Error matching exclusion pattern with trailing slash in prefix function", "pattern", pattern, logKeyPath, fullRelPath+"/", logKeyError, err)
+				log.Debug("Error matching exclusion pattern with trailing slash in prefix function", "pattern", pattern, logKeyPath, fullRelPath+"/", logKeyError, err)
 				continue
 			}
 			if matched {
-				l.Debug("Excluding (prefix) due to exclusion pattern (with trailing slash)", logKeyPath, fullRelPath+"/", "pattern", pattern)
+				log.Debug("Excluding (prefix) due to exclusion pattern (with trailing slash)", logKeyPath, fullRelPath+"/", "pattern", pattern)
 				return true
 			}
 		}
@@ -209,7 +209,7 @@ func processPrefixEntry(entry os.DirEntry, srcDir, dstDir, globalBase, prefix st
 	}
 
 	if entry.Name() == ".git" {
-		l.Debug("Skipping .git directory", logKeyPath, fullRelPath)
+		log.Debug("Skipping .git directory", logKeyPath, fullRelPath)
 		return nil
 	}
 
@@ -250,7 +250,7 @@ func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 	if len(matches) == 0 {
 		// If the pattern ends with "/*" (shallow copy indicator) do not fallback.
 		if strings.HasSuffix(pattern, shallowCopySuffix) && !strings.HasSuffix(pattern, "/**") {
-			l.Debug("No matches found for shallow pattern; target directory will be empty", "pattern", fullPattern)
+			log.Debug("No matches found for shallow pattern; target directory will be empty", "pattern", fullPattern)
 			return []string{}, nil
 		}
 		// Fallback for non-shallow patterns.
@@ -262,12 +262,12 @@ func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 				return nil, fmt.Errorf("error getting glob matches for recursive pattern %q: %w", fullRecursivePattern, err)
 			}
 			if len(matches) == 0 {
-				l.Debug("No matches found for recursive pattern; target directory will be empty", "pattern", fullRecursivePattern)
+				log.Debug("No matches found for recursive pattern; target directory will be empty", "pattern", fullRecursivePattern)
 				return []string{}, nil
 			}
 			return matches, nil
 		}
-		l.Debug("No matches found for pattern; target directory will be empty", "pattern", fullPattern)
+		log.Debug("No matches found for pattern; target directory will be empty", "pattern", fullPattern)
 		return []string{}, nil
 	}
 	return matches, nil
@@ -296,7 +296,7 @@ func processMatch(sourceDir, targetPath, file string, shallow bool, excluded []s
 	dstPath := filepath.Join(targetPath, relPath)
 	if info.IsDir() {
 		if shallow {
-			l.Debug("Directory is not copied because it is a shallow copy", "directory", relPath)
+			log.Debug("Directory is not copied because it is a shallow copy", "directory", relPath)
 			return nil
 		}
 		return copyDirRecursiveWithPrefix(file, dstPath, sourceDir, relPath, excluded)
@@ -309,11 +309,11 @@ func processIncludedPattern(sourceDir, targetPath, pattern string, excluded []st
 	shallow := isShallowPattern(pattern)
 	matches, err := getMatchesForPattern(sourceDir, pattern)
 	if err != nil {
-		l.Debug("Warning: error getting matches for pattern", "pattern", pattern, logKeyError, err)
+		log.Debug("Warning: error getting matches for pattern", "pattern", pattern, logKeyError, err)
 		return nil
 	}
 	if len(matches) == 0 {
-		l.Debug("No files matched the inclusion pattern", "pattern", pattern)
+		log.Debug("No files matched the inclusion pattern", "pattern", pattern)
 		return nil
 	}
 	for _, file := range matches {
@@ -335,14 +335,14 @@ func copyToTargetWithPatterns(
 	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
 		targetPath = filepath.Join(targetPath, SanitizeFileName(uri))
 	}
-	l.Debug("Copying files", "source", sourceDir, "target", targetPath)
+	log.Debug("Copying files", "source", sourceDir, "target", targetPath)
 	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
 		return fmt.Errorf("creating target directory %q: %w", targetPath, err)
 	}
 
 	// Optimization: if no inclusion and no exclusion patterns are defined, use the cp library.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
-		l.Debug("No inclusion or exclusion patterns defined; using cp library for fast copy")
+		log.Debug("No inclusion or exclusion patterns defined; using cp library for fast copy")
 		return cp.Copy(sourceDir, targetPath)
 	}
 

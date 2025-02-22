@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-getter"
 
@@ -320,12 +320,12 @@ func GoGetterGet(
 	return nil
 }
 
-// CustomGitGetter is a custom getter for git (git::) that removes symlinks
+// CustomGitGetter is a custom getter for git (git::) that removes symlinks.
 type CustomGitGetter struct {
 	getter.GitGetter
 }
 
-// Implements the custom getter logic removing symlinks
+// Implements the custom getter logic removing symlinks.
 func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
 	// Normal clone
 	if err := c.GitGetter.Get(dst, url); err != nil {
