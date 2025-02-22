@@ -15,7 +15,7 @@ import (
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-	atmosConfig, err := LoadConfig(configAndStacksInfo)
+	atmosConfig, err := LoadConfig(&configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, err
 	}

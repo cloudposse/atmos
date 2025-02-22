@@ -199,15 +199,15 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 			importPaths: importPath,
 			importType:  LOCAL,
 		})
-		Imports := v.GetStringSlice("import")
+		imports := v.GetStringSlice("import")
 		importBasePath := v.GetString("base_path")
 		if importBasePath == "" {
 			importBasePath = basePath
 		}
 
 		// Recursively process imports from the local file
-		if Imports != nil {
-			nestedPaths, err := processImports(importBasePath, Imports, tempDir, currentDepth+1, maxDepth)
+		if imports != nil {
+			nestedPaths, err := processImports(importBasePath, imports, tempDir, currentDepth+1, maxDepth)
 			if err != nil {
 				log.Debug("failed to process nested imports from", "path", path, "error", err)
 				continue
