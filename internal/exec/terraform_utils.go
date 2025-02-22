@@ -156,9 +156,6 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	cmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
 	cmd.PersistentFlags().Bool("include-settings", false, "")
 	cmd.PersistentFlags().Bool("upload", false, "")
-	cmd.PersistentFlags().Bool("process-templates", true, "")
-	cmd.PersistentFlags().Bool("process-functions", true, "")
-	cmd.PersistentFlags().StringSlice("skip", nil, "")
 	cmd.PersistentFlags().StringP("query", "q", "", "")
 
 	cliArgs, err := parseDescribeAffectedCliArgs(cmd, args)
@@ -167,10 +164,9 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	}
 
 	cliArgs.IncludeSpaceliftAdminStacks = false
+	cliArgs.IncludeSettings = false
+	cliArgs.Upload = false
 	cliArgs.OutputFile = ""
-	cliArgs.ProcessTemplates = true
-	cliArgs.ProcessYamlFunctions = true
-	cliArgs.Skip = nil
 	cliArgs.Query = ""
 
 	// https://atmos.tools/cli/commands/describe/affected
@@ -186,7 +182,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	l.Debug("Affected components:\n" + affectedYaml)
 
 	for _, affected := range affectedList {
-		err = executeTerraformAffectedComponent(affected, info, "", "")
+		err = executeTerraformAffectedComponent(affected, info, "", "", cliArgs)
 		if err != nil {
 			return err
 		}
@@ -196,10 +192,16 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 }
 
 // executeTerraformAffectedComponent recursively processes the affected components in the dependency order
-func executeTerraformAffectedComponent(affected schema.Affected, info schema.ConfigAndStacksInfo, parentComponent string, parentStack string) error {
+func executeTerraformAffectedComponent(
+	affected schema.Affected,
+	info schema.ConfigAndStacksInfo,
+	parentComponent string,
+	parentStack string,
+	args DescribeAffectedCmdArgs,
+) error {
 	// If the affected component is included as dependent in other components, don't process it now,
 	// it will be processed in the dependency order
-	if !affected.IncludedInDependents {
+	if args.IncludeDependents && !affected.IncludedInDependents {
 		info.Component = affected.Component
 		info.ComponentFromArg = affected.Component
 		info.Stack = affected.Stack
@@ -243,15 +245,17 @@ func executeTerraformAffectedComponent(affected schema.Affected, info schema.Con
 		}
 	}
 
-	for _, dep := range affected.Dependents {
-		affectedDep := schema.Affected{
-			Component:  dep.Component,
-			Stack:      dep.Stack,
-			Dependents: dep.Dependents,
-		}
-		err := executeTerraformAffectedComponent(affectedDep, info, affected.Component, affected.Stack)
-		if err != nil {
-			return err
+	if args.IncludeDependents {
+		for _, dep := range affected.Dependents {
+			affectedDep := schema.Affected{
+				Component:  dep.Component,
+				Stack:      dep.Stack,
+				Dependents: dep.Dependents,
+			}
+			err := executeTerraformAffectedComponent(affectedDep, info, affected.Component, affected.Stack, args)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

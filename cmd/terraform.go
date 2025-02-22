@@ -41,6 +41,9 @@ func init() {
 	terraformCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos terraform <sub-command> --affected --clone-target-ref=true\n"+
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")
+	terraformCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command: atmos terraform <sub-command> --affected --process-templates=false")
+	terraformCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command: atmos terraform <sub-command> --affected --process-functions=false")
+	terraformCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests: atmos terraform <sub-command> --affected --skip=terraform.output")
 
 	AddStackCompletion(terraformCmd)
 	attachTerraformCommands(terraformCmd)
