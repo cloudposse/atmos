@@ -27,6 +27,7 @@ var docsCmd = &cobra.Command{
 	Example:            "atmos docs vpc",
 	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	ValidArgsFunction:  ComponentsArgCompletion,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 1 {
 			info := schema.ConfigAndStacksInfo{
