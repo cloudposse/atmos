@@ -782,8 +782,8 @@ func SearchConfigFile(configPath string, atmosConfig schema.AtmosConfiguration) 
 	return "", fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", configPath, dir, base)
 }
 
-// MergeConfigFile merges a new configuration file with an existing config into Viper.
-func MergeConfigFile(
+// mergeConfigFile merges a new configuration file with an existing config into Viper.
+func mergeConfigFile(
 	path string,
 	v *viper.Viper,
 ) error {
@@ -792,6 +792,10 @@ func MergeConfigFile(
 		return err
 	}
 	err = v.MergeConfig(bytes.NewReader(content))
+	if err != nil {
+		return err
+	}
+	err = preprocessAtmosYamlFunc(content, v)
 	if err != nil {
 		return err
 	}

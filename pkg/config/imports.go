@@ -61,7 +61,7 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 		}
 
 		for _, resolvedPath := range resolvedPaths {
-			err := MergeConfigFile(resolvedPath.filePath, dst)
+			err := mergeConfigFile(resolvedPath.filePath, dst)
 			if err != nil {
 				clog.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
 				continue
