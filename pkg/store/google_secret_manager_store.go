@@ -15,7 +15,7 @@ import (
 
 const (
 	gsmOperationTimeout = 30 * time.Second
-	gsmKeySeparator    = "_"
+	gsmKeySeparator     = "_"
 )
 
 // GSMClient is the interface that wraps the Google Secret Manager client methods we use
