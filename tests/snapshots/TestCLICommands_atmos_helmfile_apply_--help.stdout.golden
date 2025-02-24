@@ -32,8 +32,7 @@ Global Flags:
         --redirect-stderr string    File descriptor to redirect stderr to.
                                     Errors can be redirected to any file or any
                                     standard file descriptor (including
-                                    /dev/null): atmos <command>
-                                    --redirect-stderr /dev/stdout
+                                    /dev/null)
 
     -s, --stack string              The stack flag specifies the environment
                                     or configuration set for deployment in Atmos
