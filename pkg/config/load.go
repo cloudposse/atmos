@@ -324,7 +324,6 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 	// If it's a scalar node with a directive tag
 	if node.Kind == yaml.ScalarNode && node.Tag != "" {
 		processScalarNode(node, v, currentPath)
-
 	}
 
 	// Process children nodes (for sequences/lists)
@@ -332,6 +331,7 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 		processNode(child, v, currentPath)
 	}
 }
+
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 	if node.Tag == "" {
 		return
