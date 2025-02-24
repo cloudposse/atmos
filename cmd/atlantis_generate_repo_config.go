@@ -51,7 +51,7 @@ func init() {
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH")
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block")
 
-	atlantisGenerateCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference for comparison with the current branch. Only used when --affected-only=true. Defaults to false, which checks out the target reference instead.")
+	atlantisGenerateCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference for comparison with the current branch. Only used when `--affected-only=true`. Defaults to false, which checks out the target reference instead.")
 
 	atlantisGenerateCmd.AddCommand(atlantisGenerateRepoConfigCmd)
 }
