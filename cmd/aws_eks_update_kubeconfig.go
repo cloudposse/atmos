@@ -11,7 +11,7 @@ import (
 var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 	Use:   "update-kubeconfig",
 	Short: "Update `kubeconfig` for an EKS cluster using AWS CLI",
-	Long: `This command executes 'aws eks update-kubeconfig' to download 'kubeconfig' from an EKS cluster and saves it to a file. The command executes 'aws eks update-kubeconfig' in three different ways:
+	Long: `This command executes `aws eks update-kubeconfig` to download `kubeconfig` from an EKS cluster and saves it to a file. The command executes `aws eks update-kubeconfig` in three different ways:
 
 1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line,
 then 'atmos' executes the command without requiring the 'atmos.yaml' CLI config and context.
