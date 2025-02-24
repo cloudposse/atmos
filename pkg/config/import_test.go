@@ -17,7 +17,7 @@ func setupTestFile(content, tempDir string, filename string) (string, error) {
 	return filePath, err
 }
 
-// Test for processImports
+// Test for processImports.
 func TestProcessImports(t *testing.T) {
 	// Step 1: Setup a mock HTTP server for a remote URL
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,11 +112,12 @@ import:
 	nestedRemoteContent := `import: []`
 	// Create an HTTP server to simulate remote imports
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/config.yaml" {
+		switch r.URL.Path {
+		case "/config.yaml":
 			fmt.Fprint(w, remoteContent)
-		} else if r.URL.Path == "/nested-remote.yaml" {
+		case "/nested-remote.yaml":
 			fmt.Fprint(w, nestedRemoteContent)
-		} else {
+		default:
 			http.NotFound(w, r)
 		}
 	}))

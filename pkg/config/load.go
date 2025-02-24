@@ -345,8 +345,7 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 	for _, directive := range allowedDirectives {
 		if node.Tag == directive {
 			arg := node.Value
-			switch directive {
-			case "!env":
+			if directive == AtmosYamlFuncEnv {
 				envValue := os.Getenv(arg)
 				if envValue != "" {
 					node.Value = envValue
