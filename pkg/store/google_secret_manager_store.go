@@ -123,21 +123,12 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 	secret, err := s.client.CreateSecret(ctx, createSecretReq)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {
-			log.Debug("secret already exists",
-				"project", s.projectID,
-				"secret_id", secretID)
 			return &secretmanagerpb.Secret{
 				Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
 			}, nil
 		}
-		log.Debug("failed to create secret",
-			"project", s.projectID,
-			"secret_id", secretID,
-			"error", err)
 		return nil, fmt.Errorf("failed to create secret: %w", err)
 	}
-	log.Debug("successfully created secret",
-		"name", secret.GetName())
 	return secret, nil
 }
 
@@ -149,14 +140,8 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 		},
 	}
 
-	log.Debug("adding new version to secret",
-		"name", secret.GetName())
-
 	_, err := s.client.AddSecretVersion(ctx, addVersionReq)
 	if err != nil {
-		log.Debug("failed to add version to secret",
-			"name", secret.GetName(),
-			"error", err)
 		return fmt.Errorf("failed to add secret version: %w", err)
 	}
 	return nil
@@ -187,13 +172,6 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 		return fmt.Errorf("failed to get key: %w", err)
 	}
 
-	log.Debug("creating/updating Google Secret Manager secret",
-		"project", s.projectID,
-		"secret_id", secretID,
-		"stack", stack,
-		"component", component,
-		"key", key)
-
 	secret, err := s.createSecret(ctx, secretID)
 	if err != nil {
 		return err
@@ -203,8 +181,6 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 		return err
 	}
 
-	log.Debug("successfully added new version to secret",
-		"name", secret.GetName())
 	return nil
 }
 
@@ -232,26 +208,13 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 	// Build the resource name for the latest version
 	name := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretID)
 
-	log.Debug("retrieving Google Secret Manager secret",
-		"name", name,
-		"project", s.projectID,
-		"secret_id", secretID,
-		"stack", stack,
-		"component", component,
-		"key", key)
-
 	// Access the secret version
 	result, err := s.client.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{
 		Name: name,
 	})
 	if err != nil {
-		log.Debug("failed to retrieve secret",
-			"name", name,
-			"error", err)
-		return nil, fmt.Errorf("failed to access secret version: %w", err)
+		return nil, fmt.Errorf("failed to retrieve secret version: %w", err)
 	}
 
-	log.Debug("successfully retrieved secret",
-		"name", name)
 	return string(result.Payload.Data), nil
 }
