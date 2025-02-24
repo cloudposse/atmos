@@ -1,0 +1,34 @@
+{
+  "checksums": [
+    {
+      "id": "github_release/github.com/mvdan/gofumpt/v0.7.0/gofumpt_v0.7.0_darwin_amd64",
+      "checksum": "B7D05E092DA45C5EC96344AB635B1D6547C3E27C840BA39BC76989934EFD7CE3",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/mvdan/gofumpt/v0.7.0/gofumpt_v0.7.0_darwin_arm64",
+      "checksum": "08F23114760A090B090706D92B8C52B9875B9EB352D76C77AA354D6AA20B045A",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/mvdan/gofumpt/v0.7.0/gofumpt_v0.7.0_linux_amd64",
+      "checksum": "6FF459C1DCAE3B0B00844C1A5A4A5B0F547237D8A4F3624AAEA8D424AEEF24C6",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/mvdan/gofumpt/v0.7.0/gofumpt_v0.7.0_linux_arm64",
+      "checksum": "00C18C88EF50437629626BA20D677F4648684CB280952814CDD887677D42CBD3",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "github_release/github.com/mvdan/gofumpt/v0.7.0/gofumpt_v0.7.0_windows_amd64.exe",
+      "checksum": "65F5B9EA7723AA936FA6880E184624747E9E6481802B62D4CB5B774EF2350CEC",
+      "algorithm": "sha256"
+    },
+    {
+      "id": "registries/github_content/github.com/aquaproj/aqua-registry/v4.302.1/registry.yaml",
+      "checksum": "908B44E94A3583AA2D6F0B17F53E49D01ACD57E4ECDFEDB29EB082D335D9445478426E591AB57D37BAA02A2EF9581A71A3AA66C825CC787323D65A1D89B53072",
+      "algorithm": "sha512"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"runtime/debug"
 
-	"github.com/cloudposse/atmos/pkg/schema"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/fatih/color"
 )
@@ -29,118 +29,58 @@ func PrintMessageInColor(message string, messageColor *color.Color) {
 	_, _ = messageColor.Fprint(os.Stdout, message)
 }
 
+// Deprecated: Use `log.Error` instead. This function will be removed in a future release.
 func PrintErrorInColor(message string) {
 	messageColor := theme.Colors.Error
 	_, _ = messageColor.Fprint(os.Stderr, message)
 }
 
+// Deprecated: Use `log.Fatal` instead. This function will be removed in a future release.
 // LogErrorAndExit logs errors to std.Error and exits with an error code
-func LogErrorAndExit(atmosConfig schema.AtmosConfiguration, err error) {
-	if err != nil {
-		LogError(atmosConfig, err)
+func LogErrorAndExit(err error) {
+	log.Error(err)
 
-		// Find the executed command's exit code from the error
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
-			os.Exit(exitError.ExitCode())
-		}
-
-		os.Exit(1)
+	// Find the executed command's exit code from the error
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) {
+		os.Exit(exitError.ExitCode())
 	}
+
+	os.Exit(1)
 }
 
+// Deprecated: Use `log.Error` instead. This function will be removed in a future release.
 // LogError logs errors to std.Error
-func LogError(atmosConfig schema.AtmosConfiguration, err error) {
+func LogError(err error) {
 	if err != nil {
-		_, printErr := theme.Colors.Error.Fprintln(color.Error, err.Error())
-		if printErr != nil {
-			theme.Colors.Error.Println("Error logging the error:")
-			theme.Colors.Error.Printf("%s\n", printErr)
-			theme.Colors.Error.Println("Original error:")
-			theme.Colors.Error.Printf("%s\n", err)
-		}
-
+		log.Error(err)
 		// Print stack trace
-		if atmosConfig.Logs.Level == LogLevelTrace {
+		if log.GetLevel() == log.DebugLevel {
 			debug.PrintStack()
 		}
 	}
 }
 
+// Deprecated: Use `log.Debug` instead. This function will be removed in a future release.
 // LogTrace logs the provided trace message
-func LogTrace(atmosConfig schema.AtmosConfiguration, message string) {
-	if atmosConfig.Logs.Level == LogLevelTrace {
-		log(atmosConfig, theme.Colors.Info, message)
-	}
+func LogTrace(message string) {
+	LogDebug(message)
 }
 
+// Deprecated: Use `log.Debug` instead. This function will be removed in a future release.
 // LogDebug logs the provided debug message
-func LogDebug(atmosConfig schema.AtmosConfiguration, message string) {
-	if atmosConfig.Logs.Level == LogLevelTrace ||
-		atmosConfig.Logs.Level == LogLevelDebug {
-
-		log(atmosConfig, theme.Colors.Info, message)
-	}
+func LogDebug(message string) {
+	log.Debug(message)
 }
 
+// Deprecated: Use `log.Info` instead. This function will be removed in a future release.
 // LogInfo logs the provided info message
-func LogInfo(atmosConfig schema.AtmosConfiguration, message string) {
-	// Info level is default, it's used if not set in `atmos.yaml` in the `logs.level` section
-	if atmosConfig.Logs.Level == "" ||
-		atmosConfig.Logs.Level == LogLevelTrace ||
-		atmosConfig.Logs.Level == LogLevelDebug ||
-		atmosConfig.Logs.Level == LogLevelInfo {
-
-		log(atmosConfig, theme.Colors.Default, message)
-	}
+func LogInfo(message string) {
+	log.Info(message)
 }
 
+// Deprecated: Use `log.Warn` instead. This function will be removed in a future release.
 // LogWarning logs the provided warning message
-func LogWarning(atmosConfig schema.AtmosConfiguration, message string) {
-	if atmosConfig.Logs.Level == LogLevelTrace ||
-		atmosConfig.Logs.Level == LogLevelDebug ||
-		atmosConfig.Logs.Level == LogLevelInfo ||
-		atmosConfig.Logs.Level == LogLevelWarning {
-
-		log(atmosConfig, theme.Colors.Warning, message)
-	}
-}
-
-func log(atmosConfig schema.AtmosConfiguration, logColor *color.Color, message string) {
-	if atmosConfig.Logs.File != "" {
-		if atmosConfig.Logs.File == "/dev/stdout" {
-			_, err := logColor.Fprintln(os.Stdout, message)
-			if err != nil {
-				theme.Colors.Error.Printf("%s\n", err)
-			}
-		} else if atmosConfig.Logs.File == "/dev/stderr" {
-			_, err := logColor.Fprintln(os.Stderr, message)
-			if err != nil {
-				theme.Colors.Error.Printf("%s\n", err)
-			}
-		} else {
-			f, err := os.OpenFile(atmosConfig.Logs.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-			if err != nil {
-				theme.Colors.Error.Printf("%s\n", err)
-				return
-			}
-
-			defer func(f *os.File) {
-				err = f.Close()
-				if err != nil {
-					theme.Colors.Error.Printf("%s\n", err)
-				}
-			}(f)
-
-			_, err = f.Write([]byte(fmt.Sprintf("%s\n", message)))
-			if err != nil {
-				theme.Colors.Error.Printf("%s\n", err)
-			}
-		}
-	} else {
-		_, err := logColor.Fprintln(os.Stdout, message)
-		if err != nil {
-			theme.Colors.Error.Printf("%s\n", err)
-		}
-	}
+func LogWarning(message string) {
+	log.Warn(message)
 }

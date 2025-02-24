@@ -15,8 +15,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
 	cp "github.com/otiai10/copy"
-	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -127,7 +127,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 					return true, err
 				} else if excludeMatch {
 					// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-					u.LogTrace(atmosConfig, fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
+					u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
 						trimmedSrc,
 						excludePath,
 					))
@@ -145,7 +145,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 						return true, err
 					} else if includeMatch {
 						// If the file matches ANY of the 'included_paths' patterns, include the file
-						u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
+						u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
 							trimmedSrc,
 							includePath,
 						))
@@ -157,13 +157,13 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 				if anyMatches {
 					return false, nil
 				} else {
-					u.LogTrace(atmosConfig, fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+					u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
 					return true, nil
 				}
 			}
 
 			// If 'included_paths' is not provided, include all files that were not excluded
-			u.LogTrace(atmosConfig, fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+			u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
 			return false, nil
 		},
 
@@ -363,20 +363,13 @@ func ExecuteComponentVendorInternal(
 		}
 		var opts []tea.ProgramOption
 		// Disable TUI if no TTY support is available
-		if !CheckTTYSupport() {
+		if !term.IsTTYSupportForStdout() {
 			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning(atmosConfig, "TTY is not supported. Running in non-interactive mode")
+			u.LogWarning("TTY is not supported. Running in non-interactive mode")
 		}
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
 	}
 	return nil
-}
-
-// CheckTTYSupport checks if stdout supports TTY for displaying the progress UI.
-func CheckTTYSupport() bool {
-	fd := int(os.Stdout.Fd())
-	isTerminal := term.IsTerminal(fd)
-	return isTerminal
 }

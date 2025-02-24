@@ -34,8 +34,8 @@ command line by executing the command [`atmos validate stacks`](/cli/commands/va
 
 For this to work, configure the following:
 
-- Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
-  in  [`stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
+- Add the _optional_ [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
+  in `stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`. If not specified, Atmos will default to the [schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) corresponding to the currently installed version of Atmos.
 
 - Configure the following section in the `atmos.yaml` [CLI config file](/cli/configuration)
 

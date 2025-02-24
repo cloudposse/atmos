@@ -36,7 +36,8 @@ type AtmosConfiguration struct {
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
-	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 }
 
 type Validate struct {
@@ -157,7 +158,8 @@ type Stacks struct {
 }
 
 type Workflows struct {
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	List     ListConfig `yaml:"list" json:"list" mapstructure:"list"`
 }
 
 type Logs struct {
@@ -690,4 +692,16 @@ type MarkdownStyle struct {
 
 type ChromaStyle struct {
 	Color string `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
+}
+
+type ListConfig struct {
+	// Format specifies the output format (table, json, csv)
+	// If empty, defaults to table format
+	Format  string             `yaml:"format" json:"format" mapstructure:"format" validate:"omitempty,oneof=table json csv"`
+	Columns []ListColumnConfig `yaml:"columns" json:"columns" mapstructure:"columns"`
+}
+
+type ListColumnConfig struct {
+	Name  string `yaml:"name" json:"name" mapstructure:"name"`
+	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }

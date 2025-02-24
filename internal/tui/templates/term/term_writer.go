@@ -30,7 +30,7 @@ func NewResponsiveWriter(w io.Writer) io.Writer {
 		return w
 	}
 
-	if !term.IsTerminal(int(file.Fd())) {
+	if !IsTTYSupportForStdout() {
 		return w
 	}
 
@@ -76,4 +76,18 @@ func (w *TerminalWriter) Write(p []byte) (int, error) {
 
 func (w *TerminalWriter) GetWidth() uint {
 	return w.width
+}
+
+// CheckTTYSupportStdout checks if stdout supports TTY for displaying the progress UI.
+func IsTTYSupportForStdout() bool {
+	fd := int(os.Stdout.Fd())
+	isTerminal := term.IsTerminal(fd)
+	return isTerminal
+}
+
+// CheckTTYSupportStderr checks if stderr supports TTY for displaying the progress UI.
+func IsTTYSupportForStderr() bool {
+	fd := int(os.Stderr.Fd())
+	isTerminal := term.IsTerminal(fd)
+	return isTerminal
 }

@@ -8,14 +8,11 @@ SHELL := /bin/bash
 #GOARCH=amd64
 VERSION=test
 
-# List of targets the `readme` target should call before generating the readme
-export README_DEPS ?= docs/targets.md
+export CGO_ENABLED=0
 
--include $(shell curl -sSL -o .build-harness "https://cloudposse.tools/build-harness"; echo .build-harness)
-
-## Lint terraform code
-lint:
-	$(SELF) terraform/install terraform/get-modules terraform/get-plugins terraform/lint terraform/validate
+readme:
+	@echo "README.md generation temporarily disabled."
+	@exit 0
 
 get:
 	go get
@@ -23,6 +20,11 @@ get:
 build: build-default
 
 version: version-default
+
+# The following will lint only files in git. `golangci-lint run --new-from-rev=HEAD` should do it,
+# but it's still including files not in git.
+lint: get
+	git ls-files '*.go' | xargs -n1 dirname | sort -u | xargs golangci-lint run
 
 build-linux: GOOS=linux
 build-linux: build-default

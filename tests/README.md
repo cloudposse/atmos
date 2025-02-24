@@ -29,16 +29,26 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 
 ```
 
+> ![IMPORTANT]
+> #### GitHub API Rate Limits
+>
+> To avoid API rate limits, make sure you've set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`. Atmos will use these automatically for requests to GitHub. Run the following command to set it. This assumes you've already installed the `gh` CLI and logged in.
+> ```bash
+> export GITHUB_TOKEN=$(gh auth token)
+> ```
+
 ## Test Cases
 
 Our convention is to implement a test-case configuration file per scenario. Then place all smoke tests related to that scenario in the file.
 
-###  Environment Variables
+### Environment Variables
 
 The tests will automatically set some environment variables:
 
 - `GO_TEST=1` is always set, so commands in atmos can disable certain functionality during tests
 - `TERM` is set when `tty: true` to emulate a proper terminal
+- `HOME` is set to an empty temporary directory
+- `XDG_*` is set to an empty temporary directory
 
 ### Flags
 
@@ -85,7 +95,6 @@ tests:
       Ensure atmos breaks the infinite loop when shell depth exceeds maximum (10).
 
     enabled: true                             # Whether or not to enable this check
-
     skip:                                     # Conditions when to skip
       os: !not windows                        # Do not run on Windows (e.g. PTY not supported)
                                               # Use "darwin" for macOS
@@ -93,6 +102,7 @@ tests:
 
     snapshot: true                            # Enable golden snapshot. Use together with `expect.diff`
 
+    clean: true                               # Whether or not to remove untracked files from workdir
     workdir: "fixtures/scenarios/complete/"   # Location to execute command
     env:
       SOME_ENV: true                          # Set an environment variable called "SOME_ENV"
@@ -101,6 +111,7 @@ tests:
       - "help"
 
     expect:                                   # Assertions
+      timeout: 1m                             # Maximum time it should take to run this test
       diff: []                                # List of expected differences
       stdout:                                 # Expected output to stdout or TTY. All TTY output is directed to stdout
       stderr:                                 # Expected output to stderr;
