@@ -6,7 +6,7 @@
         "workflows/**/*.{yml,yaml}"
     ],
     "type": "object",
-    "description": "Atmos workflow manifest",
+    "description": "Schema for Atmos workflows",
     "additionalProperties": false,
     "properties": {
       "description": {
