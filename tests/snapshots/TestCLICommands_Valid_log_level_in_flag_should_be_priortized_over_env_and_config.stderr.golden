@@ -1,8 +1,8 @@
-DEBU Error getting glob matches for path path=/absolute/path/to/repo/atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/atmos.d/**/*.yaml' ('/absolute/path/to/repo/atmos.d' + '**/*.yaml')"
-DEBU Error getting glob matches for path path=/absolute/path/to/repo/atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/atmos.d/**/*.yml' ('/absolute/path/to/repo/atmos.d' + '**/*.yml')"
+DEBU no matches found for glob pattern path=/absolute/path/to/repo/atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/atmos.d/**/*.yaml' ('/absolute/path/to/repo/atmos.d' + '**/*.yaml')"
+DEBU no matches found for glob pattern path=/absolute/path/to/repo/atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/atmos.d/**/*.yml' ('/absolute/path/to/repo/atmos.d' + '**/*.yml')"
 DEBU Failed to find atmos config file path=/absolute/path/to/repo/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
-DEBU Error getting glob matches for path path=/absolute/path/to/repo/.atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/.atmos.d/**/*.yaml' ('/absolute/path/to/repo/.atmos.d' + '**/*.yaml')"
-DEBU Error getting glob matches for path path=/absolute/path/to/repo/.atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/.atmos.d/**/*.yml' ('/absolute/path/to/repo/.atmos.d' + '**/*.yml')"
+DEBU no matches found for glob pattern path=/absolute/path/to/repo/.atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/.atmos.d/**/*.yaml' ('/absolute/path/to/repo/.atmos.d' + '**/*.yaml')"
+DEBU no matches found for glob pattern path=/absolute/path/to/repo/.atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/.atmos.d/**/*.yml' ('/absolute/path/to/repo/.atmos.d' + '**/*.yml')"
 DEBU Failed to find atmos config file path=/absolute/path/to/repo/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU Found ENV var ATMOS_LOGS_LEVEL=Info
 DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
