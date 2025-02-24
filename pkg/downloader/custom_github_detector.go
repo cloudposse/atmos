@@ -53,7 +53,6 @@ func (d *customGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-
 		log.Debug("Failed to parse URL", "source", src, "error", err)
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
 	}
