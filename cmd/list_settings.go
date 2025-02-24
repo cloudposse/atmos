@@ -34,7 +34,7 @@ var listSettingsCmd = &cobra.Command{
 			return
 		}
 
-		log.Info(output)
+		fmt.Println(output)
 	},
 }
 
@@ -70,12 +70,8 @@ func listSettings(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("error describing stacks: %v", err)
 	}
 
-	// Use .settings as the default query if none provided
-	if commonFlags.Query == "" {
-		commonFlags.Query = ".settings"
-	}
-
-	output, err := l.FilterAndListValues(stacksMap, "", commonFlags.Query, false, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)
+	// Use empty query to avoid further processing since handleSpecialComponent will extract the settings
+	output, err := l.FilterAndListValues(stacksMap, "settings", commonFlags.Query, false, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)
 	if err != nil {
 		if u.IsNoValuesFoundError(err) {
 			return "", fmt.Errorf("no settings found in any stacks with query '%s'", commonFlags.Query)

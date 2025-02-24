@@ -16,7 +16,6 @@ linters:
     - gocognit # Check cognitive complexity
     - gocritic # Enable additional checks for code issues
     - godot # Enforce comment formatting
-    - gofmt # Enforce gofmt style
     - gofumpt # Enforce consistent formatting
     - goimports # Enforce import formatting
     - gosec # Inspect source code for security problems
@@ -50,14 +49,6 @@ linters-settings:
   gosec:
     excludes:
       - G101 # Look for hard coded credentials
-
-  gofmt:
-    # Simplify code: gofmt -s
-    simplify: true
-    # Define indentation
-    rewrite-rules:
-      - pattern: "interface{}"
-        replacement: "any"
 
   cyclop:
     # Maximum function complexity

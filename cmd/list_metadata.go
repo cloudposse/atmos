@@ -35,7 +35,7 @@ var listMetadataCmd = &cobra.Command{
 			return
 		}
 
-		log.Info(output)
+		fmt.Println(output)
 	},
 }
 

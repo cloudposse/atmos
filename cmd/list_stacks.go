@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/log"
@@ -29,7 +30,7 @@ var listStacksCmd = &cobra.Command{
 			log.Error("error filtering stacks", "error", err)
 			return
 		}
-		log.Info("stacks list", "output", strings.Join(output, "\n"))
+		fmt.Println(strings.Join(output, "\n"))
 	},
 }
 
