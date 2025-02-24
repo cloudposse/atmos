@@ -306,9 +306,6 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 	if node == nil {
 		return
 	}
-
-	AllowedDirectives := []string{AtmosYamlFuncEnv}
-
 	// If this node is a key-value pair in a mapping
 	if node.Kind == yaml.MappingNode {
 		for i := 0; i < len(node.Content); i += 2 {
@@ -326,25 +323,34 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 
 	// If it's a scalar node with a directive tag
 	if node.Kind == yaml.ScalarNode && node.Tag != "" {
-		for _, directive := range AllowedDirectives {
-			if node.Tag == directive {
-				arg := node.Value
-				switch directive {
-				case "!env":
-					envValue := os.Getenv(arg)
-					if envValue != "" {
-						node.Value = envValue
-					}
-					v.Set(currentPath, node.Value) // Store the value to Viper
-				}
-				node.Tag = ""
-				break
-			}
-		}
+		processScalarNode(node, v, currentPath)
+
 	}
 
 	// Process children nodes (for sequences/lists)
 	for _, child := range node.Content {
 		processNode(child, v, currentPath)
+	}
+}
+func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
+	if node.Tag == "" {
+		return
+	}
+	allowedDirectives := []string{AtmosYamlFuncEnv}
+
+	for _, directive := range allowedDirectives {
+		if node.Tag == directive {
+			arg := node.Value
+			switch directive {
+			case "!env":
+				envValue := os.Getenv(arg)
+				if envValue != "" {
+					node.Value = envValue
+				}
+				v.Set(currentPath, node.Value) // Store the value to Viper
+			}
+			node.Tag = ""
+			break
+		}
 	}
 }
