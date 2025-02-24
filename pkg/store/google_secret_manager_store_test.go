@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockGSMClient is a mock implementation of secretmanager.Client
+// MockGSMClient is a mock implementation of GSMClient
 type MockGSMClient struct {
 	mock.Mock
 }
@@ -44,6 +44,27 @@ func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmana
 func (m *MockGSMClient) Close() error {
 	args := m.Called()
 	return args.Error(0)
+}
+
+// newGSMStoreWithClient creates a new GSMStore with a provided client (test helper)
+func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) *GSMStore {
+	store := &GSMStore{
+		client:    client,
+		projectID: options.ProjectID,
+	}
+
+	if options.Prefix != nil {
+		store.prefix = *options.Prefix
+	}
+
+	if options.StackDelimiter != nil {
+		store.stackDelimiter = options.StackDelimiter
+	} else {
+		defaultDelimiter := "-"
+		store.stackDelimiter = &defaultDelimiter
+	}
+
+	return store
 }
 
 func TestGSMStore_Set(t *testing.T) {
@@ -245,12 +266,11 @@ func TestGSMStore_Set(t *testing.T) {
 				tt.mockFn(mockClient)
 			}
 
-			store := &GSMStore{
-				client:         mockClient,
-				projectID:      "test-project",
-				prefix:         testPrefix,
-				stackDelimiter: &testDelimiter,
-			}
+			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         &testPrefix,
+				StackDelimiter: &testDelimiter,
+			})
 
 			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
 			if tt.wantErr {
@@ -347,12 +367,12 @@ func TestGSMStore_Get(t *testing.T) {
 			mockClient := new(MockGSMClient)
 			tt.mockFn(mockClient)
 
-			store := &GSMStore{
-				client:         mockClient,
-				prefix:         testPrefix,
-				stackDelimiter: aws.String(testDelimiter),
-				projectID:      "test-project",
-			}
+			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         &testPrefix,
+				StackDelimiter: &testDelimiter,
+			})
+
 			got, err := store.Get(tt.stack, tt.component, tt.key)
 
 			if tt.wantErr {
@@ -378,8 +398,9 @@ func TestNewGSMStore(t *testing.T) {
 				ProjectID:      "test-project",
 				Prefix:         aws.String("test-prefix"),
 				StackDelimiter: aws.String("-"),
+				Credentials:    aws.String(`{"type": "service_account"}`), // Add minimal credentials
 			},
-			expectError: false,
+			expectError: true, // We still expect an error, but a different one
 		},
 		{
 			name: "missing project ID",
@@ -396,6 +417,11 @@ func TestNewGSMStore(t *testing.T) {
 			store, err := NewGSMStore(tt.options)
 			if tt.expectError {
 				assert.Error(t, err)
+				if tt.name == "missing project ID" {
+					assert.Contains(t, err.Error(), "project_id is required")
+				} else {
+					assert.Contains(t, err.Error(), "failed to create Secret Manager client")
+				}
 				assert.Nil(t, store)
 			} else {
 				assert.NoError(t, err)

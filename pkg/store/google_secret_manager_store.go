@@ -223,7 +223,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 	// Build the resource name for the latest version
 	name := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretID)
 
-	log.Debug("accessing Google Secret Manager secret",
+	log.Debug("retrieving Google Secret Manager secret",
 		"name", name,
 		"project", s.projectID,
 		"secret_id", secretID,
@@ -236,13 +236,13 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 		Name: name,
 	})
 	if err != nil {
-		log.Debug("failed to access secret",
+		log.Debug("failed to retrieve secret",
 			"name", name,
 			"error", err)
 		return nil, fmt.Errorf("failed to access secret version: %w", err)
 	}
 
-	log.Debug("successfully accessed secret",
+	log.Debug("successfully retrieved secret",
 		"name", name)
 	return string(result.Payload.Data), nil
 }
