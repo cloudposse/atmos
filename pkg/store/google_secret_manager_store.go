@@ -8,7 +8,6 @@ import (
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
-	log "github.com/charmbracelet/log"
 	"github.com/googleapis/gax-go/v2"
 	"google.golang.org/api/option"
 )
