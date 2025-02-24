@@ -15,7 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// listSettingsCmd lists settings across stacks
+// listSettingsCmd lists settings across stacks.
 var listSettingsCmd = &cobra.Command{
 	Use:   "settings",
 	Short: "List settings across stacks",
@@ -34,7 +34,7 @@ var listSettingsCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Println(output)
+		log.Info(output)
 	},
 }
 

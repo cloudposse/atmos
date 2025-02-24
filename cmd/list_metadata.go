@@ -9,13 +9,14 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	u "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// listMetadataCmd lists metadata across stacks
+// listMetadataCmd lists metadata across stacks.
 var listMetadataCmd = &cobra.Command{
 	Use:   "metadata",
 	Short: "List metadata across stacks",
@@ -34,7 +35,7 @@ var listMetadataCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Println(output)
+		log.Info(output)
 	},
 }
 
@@ -49,7 +50,10 @@ func init() {
 func listMetadata(cmd *cobra.Command) (string, error) {
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
-		return "", fmt.Errorf("error getting common flags: %v", err)
+		return "", &errors.QueryError{
+			Query: "common flags",
+			Cause: err,
+		}
 	}
 
 	if f.Format(commonFlags.Format) == f.FormatCSV && commonFlags.Delimiter == f.DefaultTSVDelimiter {

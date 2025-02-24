@@ -14,7 +14,7 @@ const (
 	DefaultTSVDelimiter = "\t"
 )
 
-// Format implements the Formatter interface for DelimitedFormatter
+// Format implements the Formatter interface for DelimitedFormatter.
 func (f *DelimitedFormatter) Format(data map[string]interface{}, options FormatOptions) (string, error) {
 	// Set default delimiter based on format
 	if options.Delimiter == "" {
@@ -79,7 +79,7 @@ func (f *DelimitedFormatter) Format(data map[string]interface{}, options FormatO
 	return output.String(), nil
 }
 
-// FormatValue converts a value to its string representation
+// FormatValue converts a value to its string representation.
 func formatValue(value interface{}) string {
 	switch v := value.(type) {
 	case string:
