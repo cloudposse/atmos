@@ -1,17 +1,14 @@
 package downloader
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestCustomGitHubDetector_Detect(t *testing.T) {
-	logger := log.New(os.Stdout) // Use real logger or a no-op logger
 
 	t.Run("should inject token for GitHub URL when GITHUB_TOKEN is set", func(t *testing.T) {
 		envMock := func(key string) string {
@@ -29,7 +26,6 @@ func TestCustomGitHubDetector_Detect(t *testing.T) {
 				Settings: schema.AtmosSettings{InjectGithubToken: true},
 			},
 			GetEnv: envMock,
-			Log:    logger,
 		}
 
 		finalURL, detected, err := detector.Detect("https://github.com/owner/repo.git", "")
@@ -52,7 +48,6 @@ func TestCustomGitHubDetector_Detect(t *testing.T) {
 				Settings: schema.AtmosSettings{InjectGithubToken: true},
 			},
 			GetEnv: envMock,
-			Log:    logger,
 		}
 
 		finalURL, detected, err := detector.Detect("https://github.com/owner/repo.git", "")
@@ -75,7 +70,6 @@ func TestCustomGitHubDetector_Detect(t *testing.T) {
 				Settings: schema.AtmosSettings{InjectGithubToken: false},
 			},
 			GetEnv: envMock,
-			Log:    logger,
 		}
 
 		finalURL, detected, err := detector.Detect("https://github.com/owner/repo.git", "")
@@ -88,7 +82,6 @@ func TestCustomGitHubDetector_Detect(t *testing.T) {
 	t.Run("should not modify non-GitHub URLs", func(t *testing.T) {
 		detector := customGitHubDetector{
 			GetEnv: func(_ string) string { return "" },
-			Log:    logger,
 		}
 
 		finalURL, detected, err := detector.Detect("https://gitlab.com/owner/repo.git", "")
@@ -101,7 +94,6 @@ func TestCustomGitHubDetector_Detect(t *testing.T) {
 	t.Run("should not modify URL if credentials are already present", func(t *testing.T) {
 		detector := customGitHubDetector{
 			GetEnv:      func(_ string) string { return "" },
-			Log:         logger,
 			AtmosConfig: &schema.AtmosConfiguration{Settings: schema.AtmosSettings{InjectGithubToken: false}},
 		}
 
@@ -115,7 +107,6 @@ func TestCustomGitHubDetector_Detect(t *testing.T) {
 	t.Run("should return an error for invalid URLs", func(t *testing.T) {
 		detector := customGitHubDetector{
 			GetEnv: func(_ string) string { return "" },
-			Log:    logger,
 		}
 
 		finalURL, detected, err := detector.Detect("inva^^$$lid-url", "")
@@ -128,7 +119,6 @@ func TestCustomGitHubDetector_Detect(t *testing.T) {
 	t.Run("should return an error for empty source URL", func(t *testing.T) {
 		detector := customGitHubDetector{
 			GetEnv: func(_ string) string { return "" },
-			Log:    logger,
 		}
 
 		finalURL, detected, err := detector.Detect("", "")

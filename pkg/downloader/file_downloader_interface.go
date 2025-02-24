@@ -41,11 +41,11 @@ const (
 	// it is unpacked directly into dst.
 	ClientModeAny
 
-	// Be a file path (doesn't have to exist). Src must point to a single
+	// Be a file path (doesn't have to exist). The src must point to a single
 	// file. It is saved as dst.
 	ClientModeFile
 
-	// A directory path (doesn't have to exist). Src must point to an
+	// A directory path (doesn't have to exist). The src must point to an
 	// archive or directory (such as in s3).
 	ClientModeDir
 )
