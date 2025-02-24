@@ -42,7 +42,7 @@ type ResolvedPaths struct {
 // It processes imports from the source configuration and merges them into the destination configuration.
 func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) error {
 	if source == nil || dst == nil {
-		return fmt.Errorf("source and destination cannot be nil")
+		return errors.New("source and destination cannot be nil")
 	}
 	if len(source.Import) > 0 {
 		importPaths := source.Import
@@ -80,11 +80,12 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 		return nil, ErrTempDir
 	}
 	if currentDepth > maxDepth {
-		return nil, fmt.Errorf("maximum import depth of %d exceeded", maxDepth)
+		return nil, errors.New("maximum import depth reached")
 	}
 	basePath, err = filepath.Abs(basePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve base path: %v", err)
+		log.Debug("failed to get absolute path for base path", "path", basePath, "error", err)
+		return nil, err
 	}
 
 	for _, importPath := range importPaths {
@@ -123,19 +124,21 @@ func isRemoteImport(importPath string) bool {
 func processRemoteImport(basePath, importPath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
 	parsedURL, err := url.Parse(importPath)
 	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-		return nil, fmt.Errorf("unsupported URL '%s': %v", importPath, err)
+		log.Debug("unsupported URL", "URL", importPath, "error", err)
+		return nil, err
 	}
 
 	tempFile, err := downloadRemoteConfig(parsedURL.String(), tempDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to download remote config: %w", err)
+		log.Debug("failed to download remote config", "path", importPath, "error", err)
+		return nil, err
 	}
 	v := viper.New()
 	v.SetConfigFile(tempFile)
 	err = v.ReadInConfig()
 	if err != nil {
 		log.Debug("failed to read remote config", "path", importPath, "error", err)
-		return nil, fmt.Errorf("failed to read remote config")
+		return nil, err
 	}
 
 	resolvedPaths := make([]ResolvedPaths, 0)
@@ -155,7 +158,7 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 		nestedPaths, err := processImports(importBasePath, imports, tempDir, currentDepth+1, maxDepth)
 		if err != nil {
 			log.Debug("failed to process nested imports", "import", importPath, "err", err)
-			return nil, fmt.Errorf("failed to process nested imports")
+			return nil, err
 		}
 		resolvedPaths = append(resolvedPaths, nestedPaths...)
 	}
