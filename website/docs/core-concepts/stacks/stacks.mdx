@@ -11,14 +11,14 @@ import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 
 <Intro>
-When you design cloud architectures with Atmos, you break them apart into pieces called components that you implement with Terraform "root modules". Stacks are how you connect your components with configuration, so that everything comes together.
+When you design cloud architectures with Atmos, Stacks are how you configure your [components](/core-concepts/components), bringing everything together.
 </Intro>
 
-The power of components comes from their ability to be reused: you can compose stacks with one or more components, even reusing any component multiple times within a stack. But as your stacks grow with more and more components, it often makes sense to start splitting them into different files and that's why you might want to make use of imports. This lets you keep your Stack files easier to scan and reuse their configuration in multiple places.
+The power of stacks comes from their flexibility: you can compose them with one or more components, reusing configurations across different environments. As your stacks grow, adding more components, it often makes sense to split them into separate files. This is where imports come in—helping you keep stack files organized and making configurations easier to reuse across multiple places.
 
 Stacks define the complete configuration of an environment. Think of Stacks like an architectural "Blueprints" composed of one or more [Components](/core-concepts/components) configurations and defined using a [standardized YAML configuration](#schema).
 
-Then by running the `atmos` command, automate the orchestrate the deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. By doing this, it enables scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks) by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., [Terraform components](/core-concepts/components/terraform)).
+Then by running the `atmos` command, you can automate and orchestrate the deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. By doing this, it enables scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks) by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., [Terraform components](/core-concepts/components/terraform)).
 
 By facilitating the infrastructure configurations this way, developers achieve DRY (Don't Repeat Yourself) architectures with minimal
 configuration. Stacks make infrastructure more streamlined and consistent, significantly enhancing productivity. Best of all, Stacks
@@ -51,8 +51,36 @@ various [design patterns](/design-patterns/).
 
 Every stack is uniquely identified by a name. The name is used to reference the stack in the Atmos CLI, or with stack dependencies.
 
-These are computed from either the `name_pattern` (old way) or the more configurable
-`name_template` (new way). These are configured in the `atmos.yaml` configuration file.
+These are computed from `name_template` (new way) or the `name_pattern` (old way). These are configured in the `atmos.yaml` configuration file. The `name_template` is a Go template that can reference any section in the stack configuration of a component.
+
+For example:
+
+```yaml
+# atmos.yaml
+stacks:
+  name_template: "{{ .vars.stage }}-{{ .vars.environment}}-{{ .vars.stage }}"
+```
+
+
+<details>
+<summary>Old way using `name_pattern` (deprecated)</summary>
+The `name_pattern` is the *original* way Atmos would determine the stack name.
+
+It only supports the following optionated interpolations (`{name}`, `{stage}`, `{stage}`, `{namespace}`, `{environment}`) and therefore is not recommended. Use `name_template` instead.
+
+For example:
+
+```yaml
+# atmos.yaml
+stacks:
+  name_pattern: "{tenant}-{environment}-{stage}"
+```
+
+:::important Deprecated
+The `name_pattern` is deprecated and will be removed in a future release. Please use `name_template` instead.
+:::
+
+</details>
 
 For example, using the slug, we can reference a stack like this when applying the `vpc` stack in the `us2-dev` environment:
 
@@ -106,6 +134,10 @@ A Stack file contains a manifest defined in YAML that follows a simple, extensib
 import:
   # each import is a "Stack" file. The `.yaml` extension is optional, and we do not recommend using it.
   - ue2-globals
+
+# Top-level environment variables are inherited by every single component.
+env:
+  AWS_REGION: "us-east-2"
 
 # Top-level variables that are inherited by every single component.
 # Use these wisely. Too many global vars will pollute the variable namespace.

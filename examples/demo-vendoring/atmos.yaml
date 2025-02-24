@@ -14,15 +14,15 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
-vendor:  
+vendor:
   # Single file
   base_path: "./vendor.yaml"
-  
+
   # Directory with multiple files
   #base_path: "./vendor"
-  
+
   # Absolute path
   #base_path: "vendor.d/vendor1.yaml"
 
@@ -34,7 +34,7 @@ logs:
 
 # No arguments or flags are required
 commands:
-- name: "test"
-  description: "Run all tests"
-  steps:
-  - atmos vendor pull --everything
+  - name: "test"
+    description: "Run all tests"
+    steps:
+      - atmos vendor pull --everything

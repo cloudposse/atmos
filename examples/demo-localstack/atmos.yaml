@@ -11,14 +11,14 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
-  
+
 stacks:
   base_path: "stacks"
   included_paths:
     - "**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
 logs:
   file: "/dev/stderr"
@@ -28,70 +28,69 @@ logs:
 
 # No arguments or flags are required
 commands:
-- name: "test"
-  description: "Run all tests"
-  steps:
-  - atmos validate stacks
-  # Test dev stack
-  - atmos terraform plan demo -s dev
-  - atmos terraform apply demo -s dev -auto-approve
-  - atmos terraform destroy demo -s dev -auto-approve
-  # Test staging stack
-  - atmos terraform plan demo -s staging
-  - atmos terraform apply demo -s staging -auto-approve
-  - atmos terraform destroy demo -s staging -auto-approve
-  # Test prod stack
-  - atmos terraform plan demo -s prod
-  - atmos terraform apply demo -s prod -auto-approve
-  - atmos terraform destroy demo -s prod -auto-approve
-
-# Use Nested Custom Commands to provide easier interface for Docker Compose
-- name: "localstack"
-  commands:
-  - name: "up"
-    description: Start lockstack in the background
+  - name: "test"
+    description: "Run all tests"
     steps:
-      - |
-        container_running=$(docker ps -q -f "name=localstack")
-        if [ -n "$container_running" ]; then
-          echo "LocalStack is already running; run \`atmos localstack down\` to stop it"
-        else
-          docker compose up -d --wait
-        fi
+      - atmos validate stacks
+      # Test dev stack
+      - atmos terraform plan demo -s dev
+      - atmos terraform apply demo -s dev -auto-approve
+      - atmos terraform destroy demo -s dev -auto-approve
+      # Test staging stack
+      - atmos terraform plan demo -s staging
+      - atmos terraform apply demo -s staging -auto-approve
+      - atmos terraform destroy demo -s staging -auto-approve
+      # Test prod stack
+      - atmos terraform plan demo -s prod
+      - atmos terraform apply demo -s prod -auto-approve
+      - atmos terraform destroy demo -s prod -auto-approve
 
-  - name: "down"
-    description: Stop localstack
-    steps:
-      - docker compose down
+  # Use Nested Custom Commands to provide easier interface for Docker Compose
+  - name: "localstack"
+    commands:
+      - name: "up"
+        description: Start lockstack in the background
+        steps:
+          - |
+            container_running=$(docker ps -q -f "name=localstack")
+            if [ -n "$container_running" ]; then
+              echo "LocalStack is already running; run \`atmos localstack down\` to stop it"
+            else
+              docker compose up -d --wait
+            fi
 
-  - name: "restart"
-    description: Restart localstack
-    steps:
-      - docker compose restart
+      - name: "down"
+        description: Stop localstack
+        steps:
+          - docker compose down
 
-  - name: "reset"
-    description: Reset localstack (delete all data)
-    steps:
-      - docker compose down
-      - rm -rf volume/
-      - docker compose up -d
+      - name: "restart"
+        description: Restart localstack
+        steps:
+          - docker compose restart
 
-  - name: "status"
-    description: Show the status of LocalStack
-    steps:
-      - |
-        container_running=$(docker ps -q -f "name=localstack")
-        if [ -n "$container_running" ]; then
-          docker compose ps --format "{{`{{.Service}} is {{.State}}`}}"
-        else
-          echo "LocalStack is not running; run \`atmos localstack up\` to start it"
-        fi
+      - name: "reset"
+        description: Reset localstack (delete all data)
+        steps:
+          - docker compose down
+          - rm -rf volume/
+          - docker compose up -d
 
-- name: "terraform"
-  commands:
-    - name: "reset"
-      description: Delete all local state files
-      steps:
-        - find . -type f -name "*.tfstate" -delete
-        - echo "Deleted all state files"
-    
+      - name: "status"
+        description: Show the status of LocalStack
+        steps:
+          - |
+            container_running=$(docker ps -q -f "name=localstack")
+            if [ -n "$container_running" ]; then
+              docker compose ps --format "{{`{{.Service}} is {{.State}}`}}"
+            else
+              echo "LocalStack is not running; run \`atmos localstack up\` to start it"
+            fi
+
+  - name: "terraform"
+    commands:
+      - name: "reset"
+        description: Delete all local state files
+        steps:
+          - find . -type f -name "*.tfstate" -delete
+          - echo "Deleted all state files"

@@ -191,7 +191,7 @@ commands:
       Example usage:
         atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
         atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
-    verbose: false  # Set to `true` to see verbose outputs
+    verbose: false # Set to `true` to see verbose outputs
     arguments:
       - name: component
         description: Name of the component
@@ -291,7 +291,7 @@ commands:
                 color_black="\u001b[30m"
                 color_white="\u001b[37m"
                 color_reset="\u001b[0m"
-                
+
                 # Check the requirements
                 command -v aws >/dev/null 2>&1 || { echo -e >&2 "\n${color_red}'aws' is required but it's not installed.${color_reset}"; exit 1; }
                 command -v kubectl >/dev/null 2>&1 || { echo -e >&2 "\n${color_red}'kubectl' is required but it's not installed.${color_reset}"; exit 1; }
@@ -302,13 +302,13 @@ commands:
                 command -v awk >/dev/null 2>&1 || { echo -e >&2 "\n${color_red}'awk' is required but it's not installed.${color_reset}"; exit 1; }
                 command -v sed >/dev/null 2>&1 || { echo -e >&2 "\n${color_red}'sed' is required but it's not installed.${color_reset}"; exit 1; }
                 command -v tr >/dev/null 2>&1 || { echo -e >&2 "\n${color_red}'tr' is required but it's not installed.${color_reset}"; exit 1; }
-                
+
                 # Set the role to assume to connect to the cluster
                 role={{ .Flags.role }}
                 if [[ -z "$role" ]]; then
                   role=admin
                 fi
-                
+
                 # Download kubeconfig and connect to the cluster
                 echo -e "\nConnecting to EKS cluster ${color_cyan}{{ .Flags.stack }}${color_reset} and downloading kubeconfig..."
                 aws \
@@ -318,7 +318,7 @@ commands:
                     --name={{ .ComponentConfig.vars.namespace }}-{{ .Flags.stack }}-eks-cluster \
                     --kubeconfig="${KUBECONFIG}"
                 chmod 600 ${KUBECONFIG}
-                
+
                 # Check connectivity to the cluster
                 kubectl version -o json 2>&1>/dev/null
                 retVal=$?
@@ -326,20 +326,20 @@ commands:
                   echo -e "${color_red}\nCould not connect to the cluster.\nIf the cluster is provisioned in private subnets or only allows private access, make sure you are connected to the VPN.\n${color_reset}"
                   exit $retVal
                 fi
-                
+
                 # Get the current Kubernetes version from the cluster
                 current_k8s_version_str=$(kubectl version -o json 2>/dev/null | jq '(.serverVersion.major + "." + .serverVersion.minor)' | sed 's/[+\"]//g')
                 current_k8s_version=$(echo ${current_k8s_version_str} | jq 'tonumber')
                 echo -e "\nThe cluster is running Kubernetes version ${current_k8s_version}"
-                
+
                 # Get all the supported Kubernetes versions from AWS EKS
                 supported_eks_k8s_versions=$(aws eks describe-addon-versions | jq -r '[ .addons[].addonVersions[].compatibilities[].clusterVersion ] | unique | sort')
                 supported_eks_k8s_versions_csv=$(echo ${supported_eks_k8s_versions} | jq -r 'join(", ")')
                 echo -e "AWS EKS currently supports Kubernetes versions ${supported_eks_k8s_versions_csv}"
-                
+
                 # Calculate the next Kubernetes version that the cluster can be upgraded to
                 next_k8s_version=$(echo ${supported_eks_k8s_versions} | jq -r --arg current_k8s_version "${current_k8s_version}" 'map(select((. |= tonumber) > ($current_k8s_version | tonumber)))[0]')
-                
+
                 # Check if the cluster can be upgraded
                 upgrade_needed=false
                 if [[ ! -z "$next_k8s_version" ]] && (( $(echo $next_k8s_version $current_k8s_version | awk '{if ($1 > $2) print 1;}') )) ; then
@@ -350,33 +350,33 @@ commands:
                   echo -e "${color_green}\nThe cluster is running the latest supported Kubernetes version ${current_k8s_version}\n${color_reset}"
                   exit 0
                 fi
-                
+
                 # Describe the upgrade process
                 echo -e "${color_green}\nThe cluster can be upgraded to the next Kubernetes version ${next_k8s_version}${color_reset}"
-                
+
                 # Describe what will be checked before the upgrade
                 describe_what_will_be_checked="
                   \nBefore upgrading the cluster to Kubernetes ${next_k8s_version}, we'll check the following:
-                
+
                   - Pods and containers that are not ready or crashing
                       https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle
-                
+
                   - Helm releases with removed Kubernetes API versions
                       https://kubernetes.io/docs/reference/using-api/deprecation-policy
                       https://helm.sh/docs/topics/kubernetes_apis
-                
+
                   - EKS add-ons versions
                       https://docs.aws.amazon.com/eks/latest/userguide/eks-add-ons.html
                 "
                 echo -e "${describe_what_will_be_checked}"
-                
+
                 echo -e "${color_cyan}\nPress Enter to continue ...${color_reset}"
                 read -r
-                
+
                 # Show all Pods that are not in 'Running' state
                 echo -e "\nChecking for Pods that are not in 'Running' state...\n"
                 kubectl get pods -A | grep -Ev '([0-9]+)/\1'
-                
+
                 # Show failed or not ready containers
                 echo -e "\nChecking for failing containers..."
                 failing_containers=$(kubectl get pods -A -o json | jq '[ .items[].status.containerStatuses[].state | select(has("waiting")) | .waiting ]')
@@ -388,10 +388,10 @@ commands:
                 else
                   echo -e "${color_green}\nThere are no failing containers on the cluster\n${color_reset}"
                 fi
-                
+
                 echo -e "${color_cyan}\nPress Enter to continue ...${color_reset}"
                 read -r
-                
+
                 # Show Helm releases with removed Kubernetes API versions
                 echo -e "\nChecking for Helm releases with removed Kubernetes API versions...\n"
                 releases_with_removed_versions=$(pluto detect-helm --output json --only-show-removed --target-versions k8s=v${next_k8s_version} 2>/dev/null | jq 'select(has("items")) | [ .items[] ]')
@@ -403,45 +403,45 @@ commands:
                   pluto detect-helm --output wide --only-show-removed --target-versions k8s=v${next_k8s_version} 2>/dev/null
                   helm_list_filter=$(echo ${releases_with_removed_versions} | jq -r '[ (.[].name | split("/"))[0] ] | join("|")')
                   helm list -A -a -f ${helm_list_filter}
-                
+
                   # Describe how to fix the Helm releases
                   describe_how_to_fix_helm_releases="
                     \nBefore upgrading the cluster to Kubernetes ${next_k8s_version}, the Helm releases need to be fixed.
-                
-                    - For the Helm releases identified, you need to check for the latest version of the Chart (which has supported API versions) 
+
+                    - For the Helm releases identified, you need to check for the latest version of the Chart (which has supported API versions)
                       or update the Chart yourself. Then deploy the updated Chart
-                
-                    - If the cluster was already upgraded to a new Kubernetes version without auditing for the removed API versions, it might be already running 
+
+                    - If the cluster was already upgraded to a new Kubernetes version without auditing for the removed API versions, it might be already running
                       with the removed API versions. When trying to redeploy the Helm Chart, you might encounter an error similar to the following:
-                
+
                           Error: UPGRADE FAILED: current release manifest contains removed kubernetes api(s)
                           for this kubernetes version and it is therefore unable to build the kubernetes
-                          objects for performing the diff. 
+                          objects for performing the diff.
                           Error from Kubernetes: unable to recognize \"\": no matches for kind "Deployment" in version "apps/v1beta1"
-                
-                      Helm fails in this scenario because it attempts to create a diff patch between the current deployed release 
+
+                      Helm fails in this scenario because it attempts to create a diff patch between the current deployed release
                       (which contains the Kubernetes APIs that are removed) against the Chart you are passing with the updated/supported API versions.
-                
+
                       To fix this, you need to edit the release manifests that are stored in the cluster to use the supported API versions.
                       You can use the Helm 'mapkubeapis' plugin to update/patch the Helm releases to supported APIs.
                       Execute the following commands to patch the releases identified above:
-                
+
                           helm plugin install https://github.com/helm/helm-mapkubeapis
                           helm mapkubeapis <NAME> -n <NAMESPACE>
-                
-                    NOTE: The best practice is to upgrade Helm releases that are using deprecated API versions to supported API versions 
+
+                    NOTE: The best practice is to upgrade Helm releases that are using deprecated API versions to supported API versions
                           prior to upgrading to a Kubernetes version that removes those APIs.
-                
+
                     For more information, refer to:
                       - https://helm.sh/docs/topics/kubernetes_apis
                       - https://github.com/helm/helm-mapkubeapis
                   "
                   echo -e "${describe_how_to_fix_helm_releases}"
                 fi
-                
+
                 echo -e "${color_cyan}\nPress Enter to continue ...${color_reset}"
                 read -r
-                
+
                 # Check EKS add-ons versions
                 echo -e "\nChecking EKS add-ons versions..."
                 addons=$(atmos describe component {{ .Arguments.component }} -s {{ .Flags.stack }} --format json | jq -r '.vars.addons')
@@ -456,7 +456,7 @@ commands:
                   echo -e "\nThere are currently ${addons_count} add-on(s) configured for the EKS component ${color_cyan}{{ .Arguments.component }}${color_reset} in the stack ${color_cyan}{{ .Flags.stack }}${color_reset} in the variable ${color_cyan}addons${color_reset}:\n"
                   echo ${addons} | yq --prettyPrint '.'
                   echo -e "\nKubernetes ${next_k8s_version} requires the following versions of the EKS add-ons:\n"
-                
+
                   # Detect the latest supported versions of the EKS add-ons
                   addons_template=$(atmos describe component {{ .Arguments.component }} -s {{ .Flags.stack }} --format json | jq -r '.vars.addons')
                   for ((i=0; i<${addons_count}; i++)); do
@@ -464,11 +464,11 @@ commands:
                     addon_version=$(aws eks describe-addon-versions --kubernetes-version ${next_k8s_version} --addon-name ${addon_name} --query 'addons[].addonVersions[?compatibilities[0].defaultVersion].addonVersion' --output text)
                     addons_template=$(jq --arg addon_name "${addon_name}" --arg addon_version "${addon_version}" '.[$addon_name].addon_version = $addon_version' <<< "${addons_template}")
                   done
-                
+
                   # Print the add-ons configuration for the desired Kubernetes version
                   echo ${addons_template} | yq --prettyPrint '.'
                 fi
-                
+
                 # Describe how to provision the EKS component with the new Kubernetes version
                 echo -e "${color_cyan}\nPress Enter to continue ...${color_reset}"
                 read -r
@@ -481,7 +481,6 @@ commands:
 
 # Integrations
 integrations:
-
   # Atlantis integration
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:

@@ -8,46 +8,44 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
-  
+
 stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
 logs:
   file: "/dev/stderr"
   level: Info
 
 commands:
-- name: "test"
-  description: "Run all tests"
-  steps:
-  - atmos atlantis build-all
-
-- name: "atlantis"
-  commands:
-  - name: "build-all"
-    description: "Build all configurations for Atlantis"
+  - name: "test"
+    description: "Run all tests"
     steps:
-    - echo "Building Atlantis config..."
-    - atmos atlantis generate repo-config --config-template config-1 --project-template project-1
-    - echo "Generating varfiles..."
-    - >-
-        atmos terraform generate varfiles \
-          --file-template={component-path}/varfiles/{namespace}-{environment}-{component}.tfvars.json
-    - echo "Generating varfiles..."
-    - >-
-        atmos terraform generate backends \
-          --format=backend-config \
-          --file-template={component-path}/backends/{namespace}-{environment}-{component}.backend
+      - atmos atlantis build-all
 
+  - name: "atlantis"
+    commands:
+      - name: "build-all"
+        description: "Build all configurations for Atlantis"
+        steps:
+          - echo "Building Atlantis config..."
+          - atmos atlantis generate repo-config --config-template config-1 --project-template project-1
+          - echo "Generating varfiles..."
+          - >-
+            atmos terraform generate varfiles \
+              --file-template={component-path}/varfiles/{namespace}-{environment}-{component}.tfvars.json
+          - echo "Generating varfiles..."
+          - >-
+            atmos terraform generate backends \
+              --format=backend-config \
+              --file-template={component-path}/backends/{namespace}-{environment}-{component}.backend
 
 # Integrations
 integrations:
-
   # Atlantis integration
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:

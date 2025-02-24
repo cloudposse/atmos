@@ -75,7 +75,7 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
 
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
@@ -231,7 +231,6 @@ commands:
 
 # Integrations
 integrations:
-
   # Atlantis integration
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
@@ -357,17 +356,17 @@ settings:
 
   # Terminal settings for displaying content
   terminal:
-    max_width: 120          # Maximum width for terminal output
-    pager: true             # Pager setting for all terminal output
-    colors: true            # Enable colored output
-    unicode: true           # Use unicode characters
+    max_width: 120 # Maximum width for terminal output
+    pager: true # Pager setting for all terminal output
+    colors: true # Enable colored output
+    unicode: true # Use unicode characters
 
     syntax_highlighting:
       enabled: true
-      formatter: terminal   # Output formatter (e.g., terminal, html)
-      theme: dracula        # Highlighting theme
-      line_numbers: true    # Display line numbers
-      wrap: false           # Wrap long lines
+      formatter: terminal # Output formatter (e.g., terminal, html)
+      theme: dracula # Highlighting theme
+      line_numbers: true # Display line numbers
+      wrap: false # Wrap long lines
 
   # Markdown element styling
   markdown:
@@ -394,4 +393,3 @@ version:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
-

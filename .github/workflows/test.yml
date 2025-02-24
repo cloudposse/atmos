@@ -492,6 +492,27 @@ jobs:
           filter_mode: "added"
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+  verify-schema-checksums:
+    name: Check Atmos Schema Checksums Match
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compute checksums of Atmos schema files
+        run: |
+          git ls-files '*/atmos-manifest.json' 'website/static/schemas/atmos/1.0/stack.json' | sort | xargs md5sum > checksums.txt
+          cat checksums.txt
+
+      - name: Verify all schema checksums are identical
+        run: |
+          if [ "$(cut -d ' ' -f1 < checksums.txt | sort -u | wc -l)" -ne 1 ]; then
+            echo "❌ Atmos schema checksum mismatch detected!"
+            cat checksums.txt
+            exit 1
+          fi
+          echo "✅ All Atmos schema files have matching checksums."
+
   release:
     needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'
