@@ -107,7 +107,7 @@ func readSystemConfig(v *viper.Viper) error {
 	}
 
 	if len(configFilePath) > 0 {
-		err := mergeConfig(v, configFilePath, CliConfigFileName, false)
+		err := mergeConfig(v, configFilePath, false)
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
 			return nil
@@ -125,7 +125,7 @@ func readHomeConfig(v *viper.Viper) error {
 		return err
 	}
 	configFilePath := filepath.Join(home, ".atmos")
-	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
+	err = mergeConfig(v, configFilePath, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -144,7 +144,7 @@ func readWorkDirConfig(v *viper.Viper) error {
 	if err != nil {
 		return err
 	}
-	err = mergeConfig(v, wd, CliConfigFileName, true)
+	err = mergeConfig(v, wd, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -162,7 +162,7 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 		return nil
 	}
 	configFilePath := filepath.Join(atmosPath, CliConfigFileName)
-	err := mergeConfig(v, configFilePath, CliConfigFileName, true)
+	err := mergeConfig(v, configFilePath, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -181,7 +181,7 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	if len(atmosCliConfigPath) == 0 {
 		return nil
 	}
-	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
+	err := mergeConfig(v, atmosCliConfigPath, true)
 	switch err.(type) {
 	case viper.ConfigFileNotFoundError:
 		log.Debug("config not found", "file", atmosCliConfigPath)
@@ -192,10 +192,10 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	return nil
 }
 
-// mergeConfig merge config from a specified path and process imports.return error if config file not exist .
-func mergeConfig(v *viper.Viper, path string, fileName string, processImports bool) error {
+// mergeConfig merge config from a specified path directory and process imports.return error if config file not exist .
+func mergeConfig(v *viper.Viper, path string, processImports bool) error {
 	v.AddConfigPath(path)
-	v.SetConfigName(fileName)
+	v.SetConfigName(CliConfigFileName)
 	err := v.MergeInConfig()
 	if err != nil {
 		return err

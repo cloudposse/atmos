@@ -38,7 +38,7 @@ type ResolvedPaths struct {
 	importType  importTypes
 }
 
-// processConfigImports It reads the import paths from the source configuration,
+// processConfigImports It reads the import paths from the source configuration.
 // It processes imports from the source configuration and merges them into the destination configuration.
 func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) error {
 	if source == nil || dst == nil {
@@ -115,12 +115,12 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 	return resolvedPaths, nil
 }
 
-// Helper to determine if the import is a supported remote source
+// Helper to determine if the import is a supported remote source.
 func isRemoteImport(importPath string) bool {
 	return strings.HasPrefix(importPath, "http://") || strings.HasPrefix(importPath, "https://")
 }
 
-// Process remote imports
+// Process remote imports.
 func processRemoteImport(basePath, importPath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
 	parsedURL, err := url.Parse(importPath)
 	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
@@ -166,7 +166,7 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 	return resolvedPaths, nil
 }
 
-// Process local imports
+// Process local imports.
 func processLocalImport(basePath string, importPath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
 	if importPath == "" {
 		return nil, fmt.Errorf("import_path required to process imports")
@@ -248,7 +248,7 @@ func SearchAtmosConfig(path string) ([]string, error) {
 	return atmosFilePathsAbsolute, nil
 }
 
-// Helper function to generate search patterns for extension yaml,yml
+// Helper function to generate search patterns for extension yaml,yml.
 func generatePatterns(path string) []string {
 	isDir := false
 	if stat, err := os.Stat(path); err == nil && stat.IsDir() {
@@ -275,7 +275,7 @@ func generatePatterns(path string) []string {
 	return []string{path}
 }
 
-// Helper function to convert paths to absolute paths
+// Helper function to convert paths to absolute paths.
 func convertToAbsolutePaths(filePaths []string) ([]string, error) {
 	var absPaths []string
 	for _, path := range filePaths {
