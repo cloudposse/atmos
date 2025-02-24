@@ -159,10 +159,10 @@ func (f *TableFormatter) Format(data map[string]interface{}, options FormatOptio
 	// Estimate table width before creating it
 	estimatedWidth := calculateEstimatedTableWidth(data, valueKeys, stackKeys)
 	terminalWidth := templates.GetTerminalWidth()
-	
+
 	// Check if the table would be too wide
 	if estimatedWidth > terminalWidth {
-		return "", fmt.Errorf("the table is too wide to display properly (width: %d > %d).\n\nSuggestions:\n- Use --stack to select specific stacks (examples: --stack 'plat-ue2-dev')\n- Use --query to select specific settings (example: --query '.vpc.validation')\n- Use --format json or --format yaml for complete data viewing", 
+		return "", fmt.Errorf("the table is too wide to display properly (width: %d > %d).\n\nSuggestions:\n- Use --stack to select specific stacks (examples: --stack 'plat-ue2-dev')\n- Use --query to select specific settings (example: --query '.vpc.validation')\n- Use --format json or --format yaml for complete data viewing",
 			estimatedWidth, terminalWidth)
 	}
 
@@ -181,17 +181,17 @@ func calculateEstimatedTableWidth(data map[string]interface{}, valueKeys, stackK
 			maxKeyWidth = len(key)
 		}
 	}
-	
+
 	// Add column padding for the key column
 	totalWidth := maxKeyWidth + TableColumnPadding
-	
+
 	// For each stack column, estimate width and add padding
 	for _, stackName := range stackKeys {
 		columnWidth := len(stackName)
 		if columnWidth > MaxColumnWidth {
 			columnWidth = MaxColumnWidth
 		}
-		
+
 		// Check actual content width for this stack (with capped width)
 		if stackData, ok := data[stackName].(map[string]interface{}); ok {
 			for _, valueKey := range valueKeys {
@@ -206,9 +206,9 @@ func calculateEstimatedTableWidth(data map[string]interface{}, valueKeys, stackK
 				}
 			}
 		}
-		
+
 		totalWidth += columnWidth + TableColumnPadding
 	}
-	
+
 	return totalWidth
 }

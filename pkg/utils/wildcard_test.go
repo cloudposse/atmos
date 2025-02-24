@@ -94,17 +94,17 @@ func TestMatchWildcard(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := MatchWildcard(tt.pattern, tt.str)
-			
+
 			// Check error
 			if (err != nil) != tt.wantErr {
 				t.Errorf("MatchWildcard() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			// Check result
 			if got != tt.want {
 				t.Errorf("MatchWildcard() = %v, want %v", got, tt.want)
 			}
 		})
 	}
-} 
+}

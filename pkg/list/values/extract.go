@@ -19,7 +19,7 @@ func handleSpecialComponent(stack map[string]interface{}, component string) (map
 	// If not found at the top level, look for settings within components
 	if component == "settings" {
 		allSettings := make(map[string]interface{})
-		
+
 		// Try to navigate to the terraform components we cannot do too much here to avoid nesting for now.
 		if components, ok := stack["components"].(map[string]interface{}); ok {
 			if terraform, ok := components["terraform"].(map[string]interface{}); ok {
@@ -31,7 +31,7 @@ func handleSpecialComponent(stack map[string]interface{}, component string) (map
 						}
 					}
 				}
-				
+
 				// Return all settings if we found any
 				if len(allSettings) > 0 {
 					return allSettings, true
@@ -76,29 +76,29 @@ func handleTerraformComponent(stack map[string]interface{}, component string, in
 	if !ok {
 		return nil, false
 	}
-	
+
 	terraform, ok := components["terraform"].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
-	
+
 	componentName := strings.TrimPrefix(component, "terraform/")
 	comp, ok := terraform[componentName].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
-	
+
 	if !includeAbstract {
 		if isAbstract, ok := comp["abstract"].(bool); ok && isAbstract {
 			return nil, false
 		}
 	}
-	
+
 	vars, ok := comp["vars"].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
-	
+
 	return vars, true
 }
 
@@ -225,7 +225,7 @@ func getValueFromPath(data map[string]interface{}, path string) interface{} {
 					continue
 				}
 			}
-			
+
 			// No match found
 			return nil
 		case []interface{}:
