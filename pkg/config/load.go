@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -356,4 +357,25 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 			break
 		}
 	}
+}
+
+// mergeConfigFile merges a new configuration file with an existing config into Viper.
+func mergeConfigFile(
+	path string,
+	v *viper.Viper,
+) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	err = v.MergeConfig(bytes.NewReader(content))
+	if err != nil {
+		return err
+	}
+	err = preprocessAtmosYamlFunc(content, v)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

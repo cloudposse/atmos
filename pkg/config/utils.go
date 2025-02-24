@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -14,7 +13,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/viper"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack
@@ -780,25 +778,4 @@ func SearchConfigFile(configPath string, atmosConfig schema.AtmosConfiguration) 
 	}
 
 	return "", fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", configPath, dir, base)
-}
-
-// mergeConfigFile merges a new configuration file with an existing config into Viper.
-func mergeConfigFile(
-	path string,
-	v *viper.Viper,
-) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	err = v.MergeConfig(bytes.NewReader(content))
-	if err != nil {
-		return err
-	}
-	err = preprocessAtmosYamlFunc(content, v)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
