@@ -19,9 +19,27 @@ func TestFilterAndListValues(t *testing.T) {
 							"environment": "staging",
 							"region":      "us-east-1",
 							"cidr_block":  "10.1.0.0/16",
+							"tags": map[string]interface{}{
+								"Environment": "staging",
+								"Team":        "devops",
+							},
+							"subnets": []interface{}{
+								"10.1.1.0/24",
+								"10.1.2.0/24",
+							},
 						},
 					},
 				},
+			},
+			"settings": map[string]interface{}{
+				"environment": map[string]interface{}{
+					"name":   "staging",
+					"region": "us-east-1",
+				},
+			},
+			"metadata": map[string]interface{}{
+				"team":    "platform",
+				"version": "1.0.0",
 			},
 		},
 		"dev": map[string]interface{}{
@@ -32,9 +50,27 @@ func TestFilterAndListValues(t *testing.T) {
 							"environment": "dev",
 							"region":      "us-east-1",
 							"cidr_block":  "10.0.0.0/16",
+							"tags": map[string]interface{}{
+								"Environment": "dev",
+								"Team":        "devops",
+							},
+							"subnets": []interface{}{
+								"10.0.1.0/24",
+								"10.0.2.0/24",
+							},
 						},
 					},
 				},
+			},
+			"settings": map[string]interface{}{
+				"environment": map[string]interface{}{
+					"name":   "dev",
+					"region": "us-east-1",
+				},
+			},
+			"metadata": map[string]interface{}{
+				"team":    "platform",
+				"version": "1.0.0",
 			},
 		},
 		"prod": map[string]interface{}{
@@ -46,9 +82,27 @@ func TestFilterAndListValues(t *testing.T) {
 							"environment": "prod",
 							"region":      "us-east-1",
 							"cidr_block":  "10.2.0.0/16",
+							"tags": map[string]interface{}{
+								"Environment": "prod",
+								"Team":        "devops",
+							},
+							"subnets": []interface{}{
+								"10.2.1.0/24",
+								"10.2.2.0/24",
+							},
 						},
 					},
 				},
+			},
+			"settings": map[string]interface{}{
+				"environment": map[string]interface{}{
+					"name":   "prod",
+					"region": "us-east-1",
+				},
+			},
+			"metadata": map[string]interface{}{
+				"team":    "platform",
+				"version": "1.0.0",
 			},
 		},
 	}
@@ -83,7 +137,7 @@ func TestFilterAndListValues(t *testing.T) {
 			name:            "include abstract components",
 			component:       "vpc",
 			includeAbstract: true,
-			format:          "",
+			format:          "json", // Changed to JSON to avoid terminal width issues
 			checkFunc: func(t *testing.T, output string) {
 				assert.Contains(t, output, "prod")
 			},
@@ -101,6 +155,19 @@ func TestFilterAndListValues(t *testing.T) {
 			},
 		},
 		{
+			name:      "yaml format",
+			component: "vpc",
+			format:    "yaml",
+			checkFunc: func(t *testing.T, output string) {
+				// YAML format should contain the environment values
+				assert.Contains(t, output, "dev:")
+				assert.Contains(t, output, "staging:")
+				assert.Contains(t, output, "environment: dev")
+				assert.Contains(t, output, "environment: staging")
+				assert.Contains(t, output, "cidr_block:")
+			},
+		},
+		{
 			name:      "csv format",
 			component: "vpc",
 			format:    "csv",
@@ -110,7 +177,16 @@ func TestFilterAndListValues(t *testing.T) {
 				assert.Contains(t, output, "environment,dev,staging")
 			},
 		},
-
+		{
+			name:      "tsv format",
+			component: "vpc",
+			format:    "tsv",
+			delimiter: "\t",
+			checkFunc: func(t *testing.T, output string) {
+				assert.Contains(t, output, "Key\tdev\tstaging")
+				assert.Contains(t, output, "environment\tdev\tstaging")
+			},
+		},
 		{
 			name:       "max columns",
 			component:  "vpc",
@@ -132,6 +208,121 @@ func TestFilterAndListValues(t *testing.T) {
 			component:     "nonexistent",
 			expectError:   true,
 			expectedError: "no values found for component 'nonexistent'",
+		},
+		{
+			name:         "stack pattern matching",
+			component:    "vpc",
+			stackPattern: "dev*",
+			format:       "json",
+			checkFunc: func(t *testing.T, output string) {
+				var result map[string]interface{}
+				err := json.Unmarshal([]byte(output), &result)
+				assert.NoError(t, err)
+				assert.Contains(t, result, "dev")
+				assert.NotContains(t, result, "staging")
+				assert.NotContains(t, result, "prod")
+			},
+		},
+		{
+			name:      "settings component",
+			component: "settings",
+			format:    "json",
+			checkFunc: func(t *testing.T, output string) {
+				var result map[string]interface{}
+				err := json.Unmarshal([]byte(output), &result)
+				assert.NoError(t, err)
+				for _, env := range []string{"dev", "staging", "prod"} {
+					envData, ok := result[env].(map[string]interface{})
+					assert.True(t, ok)
+					envSettings, ok := envData["environment"].(map[string]interface{})
+					assert.True(t, ok)
+					assert.Contains(t, envSettings, "name")
+					assert.Contains(t, envSettings, "region")
+				}
+			},
+		},
+		{
+			name:      "metadata component",
+			component: "metadata",
+			format:    "json",
+			checkFunc: func(t *testing.T, output string) {
+				var result map[string]interface{}
+				err := json.Unmarshal([]byte(output), &result)
+				assert.NoError(t, err)
+				for _, env := range []string{"dev", "staging", "prod"} {
+					envData, ok := result[env].(map[string]interface{})
+					assert.True(t, ok)
+					assert.Equal(t, "platform", envData["team"])
+					assert.Equal(t, "1.0.0", envData["version"])
+				}
+			},
+		},
+		{
+			name:      "query filtering - nested map",
+			component: "vpc",
+			query:     ".tags",
+			format:    "json",
+			checkFunc: func(t *testing.T, output string) {
+				var result map[string]interface{}
+				err := json.Unmarshal([]byte(output), &result)
+				assert.NoError(t, err)
+				for _, env := range []string{"dev", "staging"} {
+					envData, ok := result[env].(map[string]interface{})
+					assert.True(t, ok)
+					value, ok := envData["value"].(map[string]interface{})
+					assert.True(t, ok)
+					assert.Equal(t, "devops", value["Team"])
+				}
+			},
+		},
+		{
+			name:      "query filtering - array",
+			component: "vpc",
+			query:     ".subnets",
+			format:    "json",
+			checkFunc: func(t *testing.T, output string) {
+				var result map[string]interface{}
+				err := json.Unmarshal([]byte(output), &result)
+				assert.NoError(t, err)
+				devData, ok := result["dev"].(map[string]interface{})
+				assert.True(t, ok)
+				value, ok := devData["value"].(string)
+				assert.True(t, ok)
+				assert.Contains(t, value, "10.0.1.0/24")
+				assert.Contains(t, value, "10.0.2.0/24")
+			},
+		},
+		{
+			name:      "settings with query",
+			component: "settings",
+			query:     ".environment.name",
+			format:    "json",
+			checkFunc: func(t *testing.T, output string) {
+				var result map[string]interface{}
+				err := json.Unmarshal([]byte(output), &result)
+				assert.NoError(t, err)
+				for env, expected := range map[string]string{"dev": "dev", "staging": "staging", "prod": "prod"} {
+					envData, ok := result[env].(map[string]interface{})
+					assert.True(t, ok)
+					assert.Equal(t, expected, envData["value"])
+				}
+			},
+		},
+		{
+			name:      "metadata with query",
+			component: "metadata",
+			query:     ".team",
+			format:    "json",
+			checkFunc: func(t *testing.T, output string) {
+				var result map[string]interface{}
+				err := json.Unmarshal([]byte(output), &result)
+				assert.NoError(t, err)
+				for _, env := range []string{"dev", "staging", "prod"} {
+					envData, ok := result[env].(map[string]interface{})
+					assert.True(t, ok)
+					assert.Equal(t, "platform", envData["value"])
+				}
+			},
 		},
 	}
 

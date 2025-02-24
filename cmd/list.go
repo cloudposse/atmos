@@ -4,11 +4,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// listCmd commands list stacks and components
+// listCmd represents the base list command that provides subcommands for listing
+// various Atmos resources like stacks, components, settings, metadata, etc.
 var listCmd = &cobra.Command{
-	Use:                "list",
-	Short:              "List available stacks and components",
-	Long:               `Display a list of all available stacks and components defined in your project.`,
+	Use:                "list [command]",
+	Short:              "List Atmos resources and configurations",
+	Long:               "List and display Atmos resources and configurations",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 }

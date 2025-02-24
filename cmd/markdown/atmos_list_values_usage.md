@@ -13,6 +13,16 @@
  $ atmos list values <component> --query .settings --stack 'plat-ue2-*'
 ```
 
+– Include abstract components
+```
+ $ atmos list values <component> --abstract
+```
+
+– Limit number of columns
+```
+ $ atmos list values <component> --max-columns 5
+```
+
 – Output in different formats
 ```
  $ atmos list values <component> --format json

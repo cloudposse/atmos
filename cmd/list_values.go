@@ -1,12 +1,16 @@
 package cmd
 
 import (
-	"github.com/charmbracelet/log"
+	"fmt"
+
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
-	list "github.com/cloudposse/atmos/pkg/list"
+	l "github.com/cloudposse/atmos/pkg/list"
+	fl "github.com/cloudposse/atmos/pkg/list/flags"
+	f "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -15,84 +19,23 @@ var listValuesCmd = &cobra.Command{
 	Use:   "values [component]",
 	Short: "List component values across stacks",
 	Long:  "List values for a component across all stacks where it is used",
-	Args:  cobra.ExactArgs(1),
+	Example: "atmos list values vpc\n" +
+		"atmos list values vpc --abstract\n" +
+		"atmos list values vpc --query .vars\n" +
+		"atmos list values vpc --format json\n" +
+		"atmos list values vpc --format yaml\n" +
+		"atmos list values vpc --format csv",
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-
-		// Initialize logger from CLI config
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+		output, err := listValues(cmd, args)
 		if err != nil {
-			log.Error("failed to initialize CLI config", "error", err)
+			log.Error(err.Error())
 			return
 		}
 
-		flags := cmd.Flags()
-
-		queryFlag, err := flags.GetString("query")
-		if err != nil {
-			log.Error("failed to get query flag", "error", err)
-			return
-		}
-
-		abstractFlag, err := flags.GetBool("abstract")
-		if err != nil {
-			log.Error("failed to get abstract flag", "error", err)
-			return
-		}
-
-		maxColumnsFlag, err := flags.GetInt("max-columns")
-		if err != nil {
-			log.Error("failed to get max-columns flag", "error", err)
-			return
-		}
-
-		formatFlag, err := flags.GetString("format")
-		if err != nil {
-			log.Error("failed to get format flag", "error", err)
-			return
-		}
-
-		delimiterFlag, err := flags.GetString("delimiter")
-		if err != nil {
-			log.Error("failed to get delimiter flag", "error", err)
-			return
-		}
-
-		// Set appropriate default delimiter based on format
-		if formatFlag == list.FormatCSV && delimiterFlag == list.DefaultTSVDelimiter {
-			delimiterFlag = list.DefaultCSVDelimiter
-		}
-
-		component := args[0]
-
-		// Get stack pattern
-		stackPattern, err := flags.GetString("stack")
-		if err != nil {
-			log.Error("failed to get stack pattern flag", "error", err)
-			return
-		}
-
-		// Get all stacks
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
-		if err != nil {
-			log.Error("failed to describe stacks", "error", err)
-			return
-		}
-
-		output, err := list.FilterAndListValues(stacksMap, component, queryFlag, abstractFlag, maxColumnsFlag, formatFlag, delimiterFlag, stackPattern)
-		if err != nil {
-			// Check if this is a 'no values found' error
-			if list.IsNoValuesFoundError(err) {
-				log.Error("no values found", "error", err)
-			} else {
-				log.Warn("failed to filter and list values", "error", err)
-			}
-			return
-		}
-
-		log.Info(output)
+		fmt.Println(output)
 	},
 }
 
@@ -111,7 +54,7 @@ var listVarsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Set the query flag to .vars
 		if err := cmd.Flags().Set("query", ".vars"); err != nil {
-			log.Error("failed to set query flag", "error", err)
+			log.Error("failed to set query flag", "error", err, "component", args[0])
 			return
 		}
 		// Run the values command
@@ -120,21 +63,68 @@ var listVarsCmd = &cobra.Command{
 }
 
 func init() {
-	// Flags for both commands
-	commonFlags := func(cmd *cobra.Command) {
-		cmd.PersistentFlags().String("query", "", "JMESPath query to filter values")
-		cmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
-		cmd.PersistentFlags().Int("max-columns", 10, "Maximum number of columns to display")
-		cmd.PersistentFlags().String("format", "", "Output format (table, json, yaml, csv, tsv)")
-		cmd.PersistentFlags().String("delimiter", "\t", "Delimiter for csv/tsv output (default: tab for tsv, comma for csv)")
-		cmd.PersistentFlags().String("stack", "", "Stack pattern to filter (supports glob patterns, e.g., '*-dev-*', 'prod-*')")
-		// Add stack pattern completion
-		AddStackCompletion(cmd)
-	}
+	// Add common flags
+	fl.AddCommonListFlags(listValuesCmd)
 
-	commonFlags(listValuesCmd)
-	commonFlags(listVarsCmd)
+	// Add additional flags
+	listValuesCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
+	listValuesCmd.PersistentFlags().Bool("vars", false, "Show only vars (equivalent to --query .vars)")
 
+	// Add stack pattern completion
+	AddStackCompletion(listValuesCmd)
+
+	// Add commands to list command
 	listCmd.AddCommand(listValuesCmd)
 	listCmd.AddCommand(listVarsCmd)
+}
+
+func listValues(cmd *cobra.Command, args []string) (string, error) {
+	// Get common flags
+	commonFlags, err := fl.GetCommonListFlags(cmd)
+	if err != nil {
+		return "", fmt.Errorf("error getting common flags: %v", err)
+	}
+
+	// Get additional flags
+	abstractFlag, err := cmd.Flags().GetBool("abstract")
+	if err != nil {
+		return "", fmt.Errorf("error getting abstract flag: %v", err)
+	}
+
+	varsFlag, err := cmd.Flags().GetBool("vars")
+	if err != nil {
+		return "", fmt.Errorf("error getting vars flag: %v", err)
+	}
+
+	// Set appropriate default delimiter based on format
+	if f.Format(commonFlags.Format) == f.FormatCSV && commonFlags.Delimiter == f.DefaultTSVDelimiter {
+		commonFlags.Delimiter = f.DefaultCSVDelimiter
+	}
+
+	// If vars flag is set, override query
+	if varsFlag {
+		commonFlags.Query = ".vars"
+	}
+
+	component := args[0]
+
+	// Initialize CLI config
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return "", fmt.Errorf("error initializing CLI config: %v", err)
+	}
+
+	// Get all stacks
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	if err != nil {
+		return "", fmt.Errorf("error describing stacks: %v", err)
+	}
+
+	output, err := l.FilterAndListValues(stacksMap, component, commonFlags.Query, abstractFlag, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)
+	if err != nil {
+		return "", err // Return error directly without wrapping
+	}
+
+	return output, nil
 }
