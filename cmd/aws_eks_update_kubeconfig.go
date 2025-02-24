@@ -15,7 +15,6 @@ var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 
 1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line,
 then 'atmos' executes the command without requiring the 'atmos.yaml' CLI config and context.
-For example: atmos aws eks update-kubeconfig --profile=&ltprofile&gt --name=&ltcluster_name&gt
 
 2. If 'component' and 'stack' are provided on the command-line,
    then 'atmos' executes the command using the 'atmos.yaml' CLI config and stack's context by searching for the following settings:
@@ -24,10 +23,8 @@ For example: atmos aws eks update-kubeconfig --profile=&ltprofile&gt --name=&ltc
   - 'components.helmfile.kubeconfig_path' in the 'atmos.yaml' CLI config
   - the variables for the component in the provided stack
   - 'region' from the variables for the component in the stack
-For example: atmos aws eks update-kubeconfig &ltcomponent&gt -s &ltstack&gt
 
 3. Combination of the above. Provide a component and a stack, and override other parameters on the command line.
-For example: atmos aws eks update-kubeconfig &ltcomponent&gt -s &ltstack&gt --kubeconfig=&ltpath_to_kubeconfig&gt --region=&ltregion&gt
 
 See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information.`,
 

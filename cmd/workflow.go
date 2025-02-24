@@ -19,13 +19,7 @@ var workflowCmd = &cobra.Command{
 	Use:   "workflow",
 	Short: "Run predefined tasks using workflows",
 	Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
-	Example: "atmos workflow\n" +
-		"atmos workflow &ltname&gt --file &ltfile&gt\n" +
-		"atmos workflow &ltname&gt --file &ltfile&gt --stack &ltstack&gt\n" +
-		"atmos workflow &ltname&gt --file &ltfile&gt --from-step &ltstep-name&gt\n\n" +
-		"To resume the workflow from this step, run:\n" +
-		"atmos workflow deploy-infra --file workflow1 --from-step deploy-vpc\n\n" +
-		"For more details refer to https://atmos.tools/cli/commands/workflow/",
+
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args)
@@ -64,10 +58,10 @@ var workflowCmd = &cobra.Command{
 
 func init() {
 	workflowCmd.DisableFlagParsing = false
-	workflowCmd.PersistentFlags().StringP("file", "f", "", "atmos workflow &ltname&gt --file &ltfile&gt")
-	workflowCmd.PersistentFlags().Bool("dry-run", false, "atmos workflow &ltname&gt --file &ltfile&gt --dry-run")
+	workflowCmd.PersistentFlags().StringP("file", "f", "", "Specify the workflow file to run")
+	workflowCmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
 	AddStackCompletion(workflowCmd)
-	workflowCmd.PersistentFlags().String("from-step", "", "atmos workflow &ltname&gt --file &ltfile&gt --from-step &ltstep-name&gt")
+	workflowCmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
 
 	RootCmd.AddCommand(workflowCmd)
 }

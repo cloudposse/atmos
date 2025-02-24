@@ -12,12 +12,9 @@ import (
 
 // validateComponentCmd validates atmos components
 var validateComponentCmd = &cobra.Command{
-	Use:   "component",
-	Short: "Validate an Atmos component in a stack using JSON Schema or OPA policies",
-	Long:  "This command validates an Atmos component within a stack using JSON Schema or OPA policies.",
-	Example: "$ atmos validate component &ltcomponent&gt -s &ltstack&gt\n\n" +
-		"$ atmos validate component &ltcomponent&gt -s &ltstack&gt --schema-path &ltschema_path&gt --schema-type &ltjsonschema|opa&gt\n\n" +
-		"$ atmos validate component &ltcomponent&gt -s &ltstack&gt --schema-path &ltschema_path&gt --schema-type opa --module-paths catalog",
+	Use:                "component",
+	Short:              "Validate an Atmos component in a stack using JSON Schema or OPA policies",
+	Long:               "This command validates an Atmos component within a stack using JSON Schema or OPA policies.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	Run: func(cmd *cobra.Command, args []string) {

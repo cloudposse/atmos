@@ -14,6 +14,6 @@ var describeCmd = &cobra.Command{
 }
 
 func init() {
-	describeCmd.PersistentFlags().StringP("query", "q", "", "Query the results of an `atmos describe` command using `yq` expressions: atmos describe &ltsubcommand&gt --query &ltyq-expression&gt")
+	describeCmd.PersistentFlags().StringP("query", "q", "", "Query the results of an `atmos describe` command using `yq` expressions")
 	RootCmd.AddCommand(describeCmd)
 }
