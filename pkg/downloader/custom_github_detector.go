@@ -53,19 +53,20 @@ func (d *customGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-		log.Debug(fmt.Sprintf("Failed to parse URL %q: %v", src, err))
+
+		log.Debug("Failed to parse URL", "source", src, "error", err)
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
 	}
 
 	if strings.ToLower(parsedURL.Host) != "github.com" {
-		log.Debug(fmt.Sprintf("Host is %q, not 'github.com', skipping token injection", parsedURL.Host))
+		log.Debug("Host is not 'github.com', skipping token injection", "host", parsedURL.Host)
 		return "", false, nil
 	}
 
 	// Ensure the URL follows the /owner/repo format
 	parts := strings.SplitN(parsedURL.Path, "/", 4)
 	if len(parts) < 3 {
-		log.Debug(fmt.Sprintf("URL path %q doesn't look like /owner/repo", parsedURL.Path))
+		log.Debug("URL path doesn't look like /owner/repo", "url path", parsedURL.Path)
 		return "", false, ErrInvalidGitHubURL
 	}
 
@@ -76,7 +77,7 @@ func (d *customGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		pass, _ := parsedURL.User.Password()
 
 		if user == "" && pass == "" {
-			log.Debug(fmt.Sprintf("Injecting token from %s for %s", tokenSource, src))
+			log.Debug("Injecting token", "from", tokenSource, "to", src)
 
 			parsedURL.User = url.UserPassword("x-access-token", usedToken)
 		} else {
