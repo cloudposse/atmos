@@ -1,22 +1,22 @@
 - List workflows
 
 ```
-$ atmos list workflows
+ $ atmos list workflows
 ```
 
 - Filter workflows by file
 
 ```
-$ atmos list workflows -f <file>
+ $ atmos list workflows -f <file>
 ```
 
 - Output format (table, json, csv)
 
 ```
-$ atmos list workflows --format json
+ $ atmos list workflows --format json
 ```
 
 - Delimiter for csv output
 ```
-$ atmos list workflows --format csv --delimiter `,`"
+ $ atmos list workflows --format csv --delimiter ','
 ```

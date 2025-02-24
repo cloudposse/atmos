@@ -1,17 +1,17 @@
 - Describe Workflows
 
 ```
-$ atmos describe workflows
+ $ atmos describe workflows
 ```
 
 - Describe workflow in specified format
 
 ```
-$ atmos describe workflows --format=<yaml|json>
+ $ atmos describe workflows --format=<yaml|json>
 ```
 
 - Set the output of describe workflow
 
 ```
-$ atmos describe workflows --output=<list|map|all>
+ $ atmos describe workflows --output=<list|map|all>
 ```
