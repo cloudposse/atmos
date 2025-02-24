@@ -12,6 +12,3 @@ components:
     helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
     cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
-
-
-

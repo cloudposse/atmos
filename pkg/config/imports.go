@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	clog "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/hashicorp/go-getter"
@@ -19,8 +19,8 @@ import (
 )
 
 var (
-	ErrBasePath     = errors.New("basePath required to process imports")
-	ErrTempDir      = errors.New("tempDir required to process imports")
+	ErrBasePath     = errors.New("base path required to process imports")
+	ErrTempDir      = errors.New("temporary directory required to process imports")
 	ErrResolveLocal = errors.New("failed to resolve local import path")
 )
 
@@ -63,10 +63,10 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 		for _, resolvedPath := range resolvedPaths {
 			err := mergeConfigFile(resolvedPath.filePath, dst)
 			if err != nil {
-				clog.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
+				log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
 				continue
 			}
-			clog.Debug("atmos merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
+			log.Debug("merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
 		}
 	}
 	return nil
@@ -96,7 +96,7 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 			// Handle remote imports
 			paths, err := processRemoteImport(basePath, importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				clog.Debug("failed to process remote import", "path", importPath, "error", err)
+				log.Debug("failed to process remote import", "path", importPath, "error", err)
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, paths...)
@@ -104,7 +104,7 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 			// Handle local imports
 			paths, err := processLocalImport(basePath, importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				clog.Debug("failed to process local import", "path", importPath, "error", err)
+				log.Debug("failed to process local import", "path", importPath, "error", err)
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, paths...)
@@ -134,7 +134,7 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 	v.SetConfigFile(tempFile)
 	err = v.ReadInConfig()
 	if err != nil {
-		clog.Debug("failed to read remote config", "path", importPath, "error", err)
+		log.Debug("failed to read remote config", "path", importPath, "error", err)
 		return nil, fmt.Errorf("failed to read remote config")
 	}
 
@@ -154,7 +154,7 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 	if len(imports) > 0 {
 		nestedPaths, err := processImports(importBasePath, imports, tempDir, currentDepth+1, maxDepth)
 		if err != nil {
-			clog.Debug("failed to process nested imports", "import", importPath, "err", err)
+			log.Debug("failed to process nested imports", "import", importPath, "err", err)
 			return nil, fmt.Errorf("failed to process nested imports")
 		}
 		resolvedPaths = append(resolvedPaths, nestedPaths...)
@@ -172,14 +172,14 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 		importPath = filepath.Join(basePath, importPath)
 	}
 	if !strings.HasPrefix(filepath.Clean(importPath), filepath.Clean(basePath)) {
-		clog.Warn("Import path is outside of base directory",
+		log.Warn("Import path is outside of base directory",
 			"importPath", importPath,
 			"basePath", basePath,
 		)
 	}
 	paths, err := SearchAtmosConfig(importPath)
 	if err != nil {
-		clog.Debug("failed to resolve local import path", "path", importPath, "err", err)
+		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
 		return nil, ErrResolveLocal
 	}
 
@@ -191,7 +191,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 		v.SetConfigType("yaml")
 		err := v.ReadInConfig()
 		if err != nil {
-			clog.Debug("failed to load local config", "path", path, "error", err)
+			log.Debug("failed to load local config", "path", path, "error", err)
 			continue
 		}
 		resolvedPaths = append(resolvedPaths, ResolvedPaths{
@@ -209,7 +209,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 		if len(imports) > 0 {
 			nestedPaths, err := processImports(importBasePath, imports, tempDir, currentDepth+1, maxDepth)
 			if err != nil {
-				clog.Debug("failed to process nested imports from", "path", path, "error", err)
+				log.Debug("failed to process nested imports from", "path", path, "error", err)
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, nestedPaths...)
@@ -278,7 +278,7 @@ func convertToAbsolutePaths(filePaths []string) ([]string, error) {
 	for _, path := range filePaths {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			clog.Debug("Error getting absolute path for file", "path", path, "error", err)
+			log.Debug("Error getting absolute path for file", "path", path, "error", err)
 			continue
 		}
 		absPaths = append(absPaths, absPath)
@@ -368,7 +368,7 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 	for _, pattern := range patterns {
 		matches, err := u.GetGlobMatches(pattern)
 		if err != nil {
-			clog.Debug("Error getting glob matches for path", "path", pattern, "error", err)
+			log.Debug("no matches found for glob pattern", "path", pattern, "error", err)
 			continue
 		}
 		filePaths = append(filePaths, matches...)

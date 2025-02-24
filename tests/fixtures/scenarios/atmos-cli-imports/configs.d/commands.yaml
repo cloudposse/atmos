@@ -3,5 +3,4 @@ commands:
   - name: "test"
     description: "Run all tests"
     steps:
-      - atmos describe config  
-
+      - atmos describe config
