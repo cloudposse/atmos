@@ -154,7 +154,7 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
 With this configuration, it would be possible to run the following commands:
 <Terminal>
 ```shell
-# atmos vendor pull 
+# atmos vendor pull
 # atmos vendor pull --everything
 # atmos vendor pull --component vpc-mixin-1
 # atmos vendor pull -c vpc-mixin-2
@@ -169,6 +169,10 @@ With this configuration, it would be possible to run the following commands:
 
 The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to describe vendoring configuration for components, stacks,
   and other artifacts. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo).
+
+:::tip
+View the full Vendor configuration schema in the [Vendor Schema](/schemas/vendor) reference section.
+:::
 
 <dl>
   <dt>`version`</dt>
@@ -236,6 +240,30 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
       # Vendor a component into a major-minor versioned folder like 1.2
       - "components/terraform/infra/vpc-flow-logs-bucket/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
     ```
+
+    <File title="vendor.yaml">
+    ```yaml title="vendor.yaml"
+    spec:
+      sources:
+      - component: "vpc-flow-logs-bucket"
+        source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+        version: "1.323.0"
+        targets:
+          - "components/terraform/vpc-flow-logs-bucket"
+        included_paths:
+          - "**/**"
+          # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+          - "**/modules/**"
+    ```
+    </File>
+
+    :::warning
+
+    The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+    If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+
+    :::
+
   </dd>
 
   <dt>`tags`</dt>
@@ -251,28 +279,18 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   The imported file extensions are optional. Imports that do not include file extensions will default to the `.yaml` extension.
   :::
 
+ This imports configurations from `vendor/backend.yaml` and `vendor/frontend.yaml`, along with any vendoring configurations in `vendor/apps/`, recursively merging them into the main `vendor.yaml` manifest:
+
   <File title="vendor.yaml">
   ```yaml title="vendor.yaml"
   spec:
-    sources:
-      - component: "vpc-flow-logs-bucket"
-        source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
-        version: "1.323.0"
-        targets:
-          - "components/terraform/vpc-flow-logs-bucket"
-        included_paths:
-          - "**/**"
-          # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
-          - "**/modules/**"
+    imports:
+      - "vendor/backend"
+      - "vendor/frontend"
+      - "vendor/apps/**/*"
   ```
   </File>
 
-  :::warning
-
-  The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
-  If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
-
-  :::
   </dd>
 </dl>
 
