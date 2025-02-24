@@ -19,9 +19,12 @@ import (
 )
 
 var (
-	ErrBasePath     = errors.New("base path required to process imports")
-	ErrTempDir      = errors.New("temporary directory required to process imports")
-	ErrResolveLocal = errors.New("failed to resolve local import path")
+	ErrBasePath           = errors.New("base path required to process imports")
+	ErrTempDir            = errors.New("temporary directory required to process imports")
+	ErrResolveLocal       = errors.New("failed to resolve local import path")
+	ErrSourceDestination  = errors.New("source and destination cannot be nil")
+	ErrImportPathRequired = errors.New("import path required to process imports")
+	ErrNOFileMatchPattern = errors.New("no files matching patterns found")
 )
 
 type importTypes int
@@ -31,7 +34,7 @@ const (
 	REMOTE importTypes = 1
 )
 
-// import Resolved Paths
+// import Resolved Paths.
 type ResolvedPaths struct {
 	filePath    string
 	importPaths string // import path from atmos config
@@ -42,33 +45,35 @@ type ResolvedPaths struct {
 // It processes imports from the source configuration and merges them into the destination configuration.
 func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) error {
 	if source == nil || dst == nil {
-		return errors.New("source and destination cannot be nil")
+		return ErrSourceDestination
 	}
-	if len(source.Import) > 0 {
-		importPaths := source.Import
-		baseBath, err := filepath.Abs(source.BasePath)
-		if err != nil {
-			return err
-		}
-		tempDir, err := os.MkdirTemp("", "atmos-import-*")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(tempDir)
-		resolvedPaths, err := processImports(baseBath, importPaths, tempDir, 1, MaximumImportLvL)
-		if err != nil {
-			return err
-		}
+	if len(source.Import) == 0 {
+		return nil
+	}
+	importPaths := source.Import
+	baseBath, err := filepath.Abs(source.BasePath)
+	if err != nil {
+		return err
+	}
+	tempDir, err := os.MkdirTemp("", "atmos-import-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+	resolvedPaths, err := processImports(baseBath, importPaths, tempDir, 1, MaximumImportLvL)
+	if err != nil {
+		return err
+	}
 
-		for _, resolvedPath := range resolvedPaths {
-			err := mergeConfigFile(resolvedPath.filePath, dst)
-			if err != nil {
-				log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
-				continue
-			}
-			log.Debug("merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
+	for _, resolvedPath := range resolvedPaths {
+		err := mergeConfigFile(resolvedPath.filePath, dst)
+		if err != nil {
+			log.Debug("error loading config file", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath, "error", err)
+			continue
 		}
+		log.Debug("merged config from import", "import", resolvedPath.importPaths, "file_path", resolvedPath.filePath)
 	}
+
 	return nil
 }
 
@@ -169,7 +174,7 @@ func processRemoteImport(basePath, importPath, tempDir string, currentDepth, max
 // Process local imports.
 func processLocalImport(basePath string, importPath, tempDir string, currentDepth, maxDepth int) ([]ResolvedPaths, error) {
 	if importPath == "" {
-		return nil, fmt.Errorf("import_path required to process imports")
+		return nil, ErrImportPathRequired
 	}
 	if !filepath.IsAbs(importPath) {
 		importPath = filepath.Join(basePath, importPath)
@@ -288,7 +293,7 @@ func convertToAbsolutePaths(filePaths []string) ([]string, error) {
 	}
 
 	if len(absPaths) == 0 {
-		return nil, fmt.Errorf("no valid absolute paths found")
+		return nil, errors.New("no valid absolute paths found")
 	}
 
 	return absPaths, nil
@@ -365,7 +370,7 @@ func sortFilesByDepth(files []string) []string {
 	return sortedFiles
 }
 
-// Helper function to find files matching the patterns
+// Helper function to find files matching the patterns.
 func findMatchingFiles(patterns []string) ([]string, error) {
 	var filePaths []string
 	for _, pattern := range patterns {
@@ -378,7 +383,7 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 	}
 
 	if len(filePaths) == 0 {
-		return nil, fmt.Errorf("no files matching patterns found")
+		return nil, ErrNOFileMatchPattern
 	}
 
 	return filePaths, nil

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,8 @@ import (
 )
 
 const MaximumImportLvL = 10
+
+var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
 
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
 // * Home directory (~/.atmos).
@@ -229,7 +232,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		isDir = true
 	}
 	if !isDir {
-		return fmt.Errorf("atmos config directory not found path %s", dirPath)
+		return ErrAtmosDIrConfigNotFound
 	}
 	var atmosFoundFilePaths []string
 	// Search for `atmos.d/` configurations
@@ -288,7 +291,8 @@ func mergeImports(dst *viper.Viper) error {
 func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
 	var rootNode yaml.Node
 	if err := yaml.Unmarshal(yamlContent, &rootNode); err != nil {
-		return fmt.Errorf("failed to parse YAML: %v", err)
+		log.Debug("failed to parse YAML", "content", yamlContent, "error", err)
+		return err
 	}
 	processNode(&rootNode, v, "")
 	return nil
