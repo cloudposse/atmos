@@ -336,7 +336,6 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 					if envValue != "" {
 						node.Value = envValue
 					}
-					fmt.Println("Setting Viper key:", currentPath, "with value:", node.Value)
 					v.Set(currentPath, node.Value) // Store the value to Viper
 				}
 				node.Tag = ""
