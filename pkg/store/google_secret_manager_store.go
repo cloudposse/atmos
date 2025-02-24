@@ -8,13 +8,14 @@ import (
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/googleapis/gax-go/v2"
 	"google.golang.org/api/option"
 )
 
 const (
 	gsmOperationTimeout = 30 * time.Second
+	gsmKeySeparator    = "_"
 )
 
 // GSMClient is the interface that wraps the Google Secret Manager client methods we use
@@ -90,19 +91,75 @@ func (s *GSMStore) getKey(stack string, component string, key string) (string, e
 	}
 
 	// Get the base key using the common getKey function
-	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, "_")
+	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, gsmKeySeparator)
 	if err != nil {
 		return "", err
 	}
 
 	// Replace any remaining slashes with underscores as Secret Manager doesn't allow slashes
-	baseKey = strings.ReplaceAll(baseKey, "/", "_")
+	baseKey = strings.ReplaceAll(baseKey, "/", gsmKeySeparator)
 	// Remove any double underscores that might have been created
-	baseKey = strings.ReplaceAll(baseKey, "__", "_")
+	baseKey = strings.ReplaceAll(baseKey, gsmKeySeparator+gsmKeySeparator, gsmKeySeparator)
 	// Trim any leading or trailing underscores
-	baseKey = strings.Trim(baseKey, "_")
+	baseKey = strings.Trim(baseKey, gsmKeySeparator)
 
 	return baseKey, nil
+}
+
+func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretmanagerpb.Secret, error) {
+	parent := fmt.Sprintf("projects/%s", s.projectID)
+	createSecretReq := &secretmanagerpb.CreateSecretRequest{
+		Parent:   parent,
+		SecretId: secretID,
+		Secret: &secretmanagerpb.Secret{
+			Replication: &secretmanagerpb.Replication{
+				Replication: &secretmanagerpb.Replication_Automatic_{
+					Automatic: &secretmanagerpb.Replication_Automatic{},
+				},
+			},
+		},
+	}
+
+	secret, err := s.client.CreateSecret(ctx, createSecretReq)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			log.Debug("secret already exists",
+				"project", s.projectID,
+				"secret_id", secretID)
+			return &secretmanagerpb.Secret{
+				Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
+			}, nil
+		}
+		log.Debug("failed to create secret",
+			"project", s.projectID,
+			"secret_id", secretID,
+			"error", err)
+		return nil, fmt.Errorf("failed to create secret: %w", err)
+	}
+	log.Debug("successfully created secret",
+		"name", secret.GetName())
+	return secret, nil
+}
+
+func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb.Secret, value string) error {
+	addVersionReq := &secretmanagerpb.AddSecretVersionRequest{
+		Parent: secret.GetName(),
+		Payload: &secretmanagerpb.SecretPayload{
+			Data: []byte(value),
+		},
+	}
+
+	log.Debug("adding new version to secret",
+		"name", secret.GetName())
+
+	_, err := s.client.AddSecretVersion(ctx, addVersionReq)
+	if err != nil {
+		log.Debug("failed to add version to secret",
+			"name", secret.GetName(),
+			"error", err)
+		return fmt.Errorf("failed to add secret version: %w", err)
+	}
+	return nil
 }
 
 // Set stores a key-value pair in Google Secret Manager.
@@ -120,30 +177,14 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 		return fmt.Errorf("key cannot be empty")
 	}
 
-	// Convert value to string
 	strValue, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("value must be a string")
 	}
 
-	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
 	if err != nil {
 		return fmt.Errorf("failed to get key: %w", err)
-	}
-
-	// Create the secret if it doesn't exist
-	parent := fmt.Sprintf("projects/%s", s.projectID)
-	createSecretReq := &secretmanagerpb.CreateSecretRequest{
-		Parent:   parent,
-		SecretId: secretID,
-		Secret: &secretmanagerpb.Secret{
-			Replication: &secretmanagerpb.Replication{
-				Replication: &secretmanagerpb.Replication_Automatic_{
-					Automatic: &secretmanagerpb.Replication_Automatic{},
-				},
-			},
-		},
 	}
 
 	log.Debug("creating/updating Google Secret Manager secret",
@@ -153,45 +194,13 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 		"component", component,
 		"key", key)
 
-	secret, err := s.client.CreateSecret(ctx, createSecretReq)
+	secret, err := s.createSecret(ctx, secretID)
 	if err != nil {
-		// Ignore error if secret already exists
-		if !strings.Contains(err.Error(), "already exists") {
-			log.Debug("failed to create secret",
-				"project", s.projectID,
-				"secret_id", secretID,
-				"error", err)
-			return fmt.Errorf("failed to create secret: %w", err)
-		}
-		log.Debug("secret already exists",
-			"project", s.projectID,
-			"secret_id", secretID)
-		// If the secret already exists, construct the name manually
-		secret = &secretmanagerpb.Secret{
-			Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
-		}
-	} else {
-		log.Debug("successfully created secret",
-			"name", secret.GetName())
+		return err
 	}
 
-	// Add new version with the secret value
-	addVersionReq := &secretmanagerpb.AddSecretVersionRequest{
-		Parent: secret.GetName(),
-		Payload: &secretmanagerpb.SecretPayload{
-			Data: []byte(strValue),
-		},
-	}
-
-	log.Debug("adding new version to secret",
-		"name", secret.GetName())
-
-	_, err = s.client.AddSecretVersion(ctx, addVersionReq)
-	if err != nil {
-		log.Debug("failed to add version to secret",
-			"name", secret.GetName(),
-			"error", err)
-		return fmt.Errorf("failed to add secret version: %w", err)
+	if err := s.addSecretVersion(ctx, secret, strValue); err != nil {
+		return err
 	}
 
 	log.Debug("successfully added new version to secret",
