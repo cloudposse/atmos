@@ -308,7 +308,7 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 		return
 	}
 
-	var AllowedDirectives = []string{AtmosYamlFuncEnv}
+	AllowedDirectives := []string{AtmosYamlFuncEnv}
 
 	// If this node is a key-value pair in a mapping
 	if node.Kind == yaml.MappingNode {
