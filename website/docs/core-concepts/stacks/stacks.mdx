@@ -58,12 +58,14 @@ For example:
 ```yaml
 # atmos.yaml
 stacks:
-  name_template: "{{ .vars.stage }}-{{ .vars.environment}}-{{ .vars.stage }}"
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment}}-{{ .vars.stage }}"
 ```
 
+This will use the `tenant`, `environment`, and `stage` variables from the component's configuration in the stack to compute the stack name.
 
 <details>
 <summary>Old way using `name_pattern` (deprecated)</summary>
+
 The `name_pattern` is the *original* way Atmos would determine the stack name.
 
 It only supports the following optionated interpolations (`{name}`, `{stage}`, `{stage}`, `{namespace}`, `{environment}`) and therefore is not recommended. Use `name_template` instead.
@@ -128,6 +130,11 @@ Note, the logical representation is never influenced by file paths or directorie
 
 A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and use [inheritance](/core-concepts/stacks/inheritance) to achieve DRY configuration.
 
+:::tip
+Find the complete schema for the Stack configuration in the [Stack Schema](/schemas/stack) reference section.
+:::
+
+
 <File title="stack.yaml">
 ```yaml
 # Configurations that should get deep-merged into this one
@@ -189,8 +196,8 @@ components:
 
   ```yaml
   components:
-    sometool: # "sometool" can be any tool
-      somecomponent: # "somecomponent" can be the name of any "sometool" component
+    sometool: # "sometool" can be any tool (typically "terraform" or "helmfile")
+      somecomponent: # "somecomponent" is the name of any component managed by that tool
         vars: # etc...
   ```
   </dd>
@@ -208,6 +215,8 @@ components:
   </dd>
 </dl>
 
+
+
 ## Stack Files
 
 Stack files can be very numerous in large cloud environments (think many dozens to hundreds of stack files). To enable the proper organization of stack files, SweetOps has established some conventions that are good to follow. However, these are just conventions, and there are no limits enforced by the tool.
@@ -216,17 +225,16 @@ By convention, we recommend storing all Stacks in a `stacks/` folder at the root
 
 The filename of individual environment stacks can follow any convention, and the best one will depend on how you model environments at your organization.
 
-### Basic Layout
+### Basic Filesystem Layout
 
-A basic form of organization is to follow the naming pattern where each `$environment-$stage.yaml` is a file. This works well until you have so
-many environments and stages.
+A basic form of organization is to follow the naming pattern where each `$environment-$stage.yaml` is a file. This works well until you have so many environments and stages.
 
 For example, `$environment` might be `ue2` (for `us-east-2`) and `$stage` might be `prod` which would result in `stacks/ue2-prod.yaml`
 
 Some resources, however, are global in scope. For example, Route53 and IAM might not make sense to tie to a region. These are what we call "global
 resources". You might want to put these into a file like `stacks/global-region.yaml` to connote that they are not tied to any particular region.
 
-### Hierarchical Layout
+### Hierarchical Filesystem Layout
 
 We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens or
 hundreds of accounts and regions that you operate in. Use [Catalogs](/core-concepts/stacks/catalogs) to organize your Stack configurations.
