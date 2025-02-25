@@ -67,7 +67,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
-			log.Debug("Entering dry-run flow for component vendoring", "component", p.name)
+			log.Debug("vendoring component (dry-run)", "component", p.name)
 			return func() tea.Msg {
 				detector := &CustomGitDetector{AtmosConfig: atmosConfig}
 				_, _, err := detector.Detect(p.uri, "")
