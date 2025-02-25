@@ -89,6 +89,63 @@ func TestMatchWildcard(t *testing.T) {
 			want:    false,
 			wantErr: false,
 		},
+		// Stack name pattern tests
+		{
+			name:    "stack environment pattern match",
+			pattern: "*-dev-*",
+			str:     "tenant1-dev-us-east-1",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "stack environment pattern no match",
+			pattern: "*-dev-*",
+			str:     "tenant1-prod-us-east-1",
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "stack environment brace expansion match dev",
+			pattern: "*-{dev,staging}-*",
+			str:     "tenant1-dev-us-east-1",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "stack environment brace expansion match staging",
+			pattern: "*-{dev,staging}-*",
+			str:     "tenant1-staging-us-east-1",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "stack environment brace expansion no match",
+			pattern: "*-{dev,staging}-*",
+			str:     "tenant1-prod-us-east-1",
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "stack with region pattern match",
+			pattern: "*-us-east-*",
+			str:     "tenant1-prod-us-east-1",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "stack with region and environment pattern match",
+			pattern: "*-dev-*-east-*",
+			str:     "tenant1-dev-us-east-1",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "stack with tenant pattern match",
+			pattern: "tenant1-*",
+			str:     "tenant1-dev-us-east-1",
+			want:    true,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
