@@ -328,7 +328,7 @@ func TestFilterAndListValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := FilterAndListValues(stacksMap, FilterOptions{
+			output, err := FilterAndListValues(stacksMap, &FilterOptions{
 				Component:       tt.component,
 				Query:           tt.query,
 				IncludeAbstract: tt.includeAbstract,

@@ -71,7 +71,7 @@ func listSettings(cmd *cobra.Command) (string, error) {
 	}
 
 	// Use empty query to avoid further processing since handleSpecialComponent will extract the settings
-	output, err := l.FilterAndListValues(stacksMap, l.FilterOptions{
+	output, err := l.FilterAndListValues(stacksMap, &l.FilterOptions{
 		Component:       "settings",
 		Query:           commonFlags.Query,
 		IncludeAbstract: false,

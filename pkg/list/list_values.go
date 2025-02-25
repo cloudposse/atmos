@@ -28,7 +28,7 @@ type FilterOptions struct {
 }
 
 // FilterAndListValues filters and lists component values across stacks.
-func FilterAndListValues(stacksMap map[string]interface{}, options FilterOptions) (string, error) {
+func FilterAndListValues(stacksMap map[string]interface{}, options *FilterOptions) (string, error) {
 	// Set default format if not specified
 	if options.FormatStr == "" {
 		options.FormatStr = string(format.FormatTable)

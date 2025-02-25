@@ -24,7 +24,7 @@ var (
 	ErrDescribingStacks      = errors.New("error describing stacks")
 )
 
-// Error format strings
+// Error format strings.
 const (
 	ErrFmtWrapErr = "%w: %v" // Format for wrapping errors.
 )
@@ -142,7 +142,7 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	// Filter and list component values across stacks
-	output, err := l.FilterAndListValues(stacksMap, l.FilterOptions{
+	output, err := l.FilterAndListValues(stacksMap, &l.FilterOptions{
 		Component:       component,
 		Query:           commonFlags.Query,
 		IncludeAbstract: abstractFlag,
