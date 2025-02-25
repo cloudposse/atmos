@@ -37,9 +37,13 @@ spec:
       tags:
         - git
         - demo
-      targets:
-        - "components/terraform/{{ .Component }}/{{.Version}}"
-    - component: "myapp2"
+    # We have some issue with oci. So, we are commenting this out.
+    # - component: "my-vpc1"
+    #   source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+    #   version: "latest"
+    #   targets:
+    #     - "components/terraform/infra/my-vpc1"
+    - component: "vpc-src"
       source: "../../../fixtures/components/terraform/myapp" # required for test URI contain path traversal
       tags:
         - dir
