@@ -22,9 +22,7 @@ var embeddedConfigData []byte
 
 const MaximumImportLvL = 10
 
-var (
-	ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
-)
+var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
