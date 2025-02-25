@@ -77,7 +77,7 @@ tests:
       diff: []
       exit_code: 0
 
-  - name: atmos vendor pull custom detector credentials leakage
+  - name: atmos vendor pull with custom detector and handling credentials leakage
     enabled: false
     snapshot: true
     tty: false
