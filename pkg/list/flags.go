@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CommonListFlags represents the common flags used across list commands
+// CommonListFlags represents the common flags used across list commands.
 type CommonListFlags struct {
 	Query      string
 	MaxColumns int
@@ -14,10 +14,10 @@ type CommonListFlags struct {
 	Stack      string
 }
 
-// DefaultMaxColumns is the default maximum number of columns to display
+// DefaultMaxColumns is the default maximum number of columns to display.
 const DefaultMaxColumns = 10
 
-// AddCommonListFlags adds the common flags to a command
+// AddCommonListFlags adds the common flags to a command.
 func AddCommonListFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("query", "", "JMESPath query to filter values")
 	cmd.PersistentFlags().Int("max-columns", DefaultMaxColumns, "Maximum number of columns to display")
@@ -26,7 +26,7 @@ func AddCommonListFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("stack", "", "Stack pattern to filter (supports glob patterns, e.g., '*-dev-*', 'prod-*')")
 }
 
-// GetCommonListFlags extracts the common flags from a command
+// GetCommonListFlags extracts the common flags from a command.
 func GetCommonListFlags(cmd *cobra.Command) (*CommonListFlags, error) {
 	flags := cmd.Flags()
 

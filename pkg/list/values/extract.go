@@ -24,7 +24,7 @@ func handleSpecialComponent(stack map[string]interface{}, component string) (map
 	return nil, false
 }
 
-// extractSettingsFromComponents extracts settings from terraform components
+// extractSettingsFromComponents extracts settings from terraform components.
 func extractSettingsFromComponents(stack map[string]interface{}) (map[string]interface{}, bool) {
 	allSettings := make(map[string]interface{})
 
@@ -54,7 +54,7 @@ func extractSettingsFromComponents(stack map[string]interface{}) (map[string]int
 	return nil, false
 }
 
-// extractComponentSettings extracts settings from a component
+// extractComponentSettings extracts settings from a component.
 func extractComponentSettings(componentData interface{}) interface{} {
 	comp, ok := componentData.(map[string]interface{})
 	if !ok {
@@ -213,7 +213,7 @@ func getValueFromPath(data map[string]interface{}, path string) interface{} {
 	return navigatePath(data, parts)
 }
 
-// navigatePath follows a path of parts through nested data structures
+// navigatePath follows a path of parts through nested data structures.
 func navigatePath(data interface{}, parts []string) interface{} {
 	current := data
 
@@ -243,7 +243,7 @@ func navigatePath(data interface{}, parts []string) interface{} {
 	return current
 }
 
-// processMapPart handles traversing a map with the given part key
+// processMapPart handles traversing a map with the given part key.
 func processMapPart(mapData map[string]interface{}, part string) (interface{}, bool) {
 	// Check for direct key match first
 	if val, exists := mapData[part]; exists {
@@ -259,7 +259,7 @@ func processMapPart(mapData map[string]interface{}, part string) (interface{}, b
 	return nil, false
 }
 
-// processWildcardPattern handles wildcard matching in map keys
+// processWildcardPattern handles wildcard matching in map keys.
 func processWildcardPattern(mapData map[string]interface{}, pattern string) (interface{}, bool) {
 	matchFound := false
 	result := make(map[string]interface{})
@@ -287,7 +287,7 @@ func processWildcardPattern(mapData map[string]interface{}, pattern string) (int
 	return result, true
 }
 
-// processArrayPart handles traversing an array with the given part
+// processArrayPart handles traversing an array with the given part.
 func processArrayPart(arrayData []interface{}, part string) (interface{}, bool) {
 	// If part is a number, get that specific index
 	if idx, err := strconv.Atoi(part); err == nil && idx >= 0 && idx < len(arrayData) {

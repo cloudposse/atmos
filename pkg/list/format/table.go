@@ -14,14 +14,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Constants for table formatting
 const (
-	// TableColumnPadding is the padding between table columns
-	TableColumnPadding = 3
-	// MaxColumnWidth is the maximum width for any column in the table
-	MaxColumnWidth = 30
+	MaxColumnWidth    = 60 // Maximum width for a column.
+	TableColumnPadding = 3 // Padding for table columns.
+	DefaultKeyWidth   = 15 // Default base width for keys.
 )
 
-// Error variables for table formatting
+// Error variables for table formatting.
 var (
 	ErrTableTooWide = errors.New("the table is too wide to display properly")
 )
@@ -86,8 +86,8 @@ func createRows(data map[string]interface{}, valueKeys, stackKeys []string) [][]
 	return rows
 }
 
-// formatTableCellValue formats a value specifically for table cell display
-// This is different from formatValue as it prioritizes compact display over completeness
+// formatTableCellValue formats a value for display in a table cell.
+// This is different from formatValue as it prioritizes compact display over completeness.
 func formatTableCellValue(val interface{}) string {
 	if val == nil {
 		return ""
@@ -95,39 +95,52 @@ func formatTableCellValue(val interface{}) string {
 
 	// Handle string values directly
 	if str, ok := val.(string); ok {
-		if len(str) > MaxColumnWidth {
-			return str[:MaxColumnWidth-3] + "..."
-		}
-		return str
+		return truncateString(str)
 	}
 
 	// Handle different types with summary information
 	v := reflect.ValueOf(val)
 	switch v.Kind() {
-	case reflect.Map:
-		count := v.Len()
-		return fmt.Sprintf("{...} (%d keys)", count)
-	case reflect.Array, reflect.Slice:
-		count := v.Len()
-		return fmt.Sprintf("[...] (%d items)", count)
-	case reflect.Bool:
-		return fmt.Sprintf("%v", val)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+	case reflect.Map, reflect.Array, reflect.Slice:
+		return formatCollectionValue(v)
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return fmt.Sprintf("%v", val)
 	case reflect.Float32, reflect.Float64:
 		return fmt.Sprintf("%.2f", val)
 	default:
-		jsonBytes, err := json.Marshal(val)
-		if err != nil {
-			return "{complex value}"
-		}
-		summary := string(jsonBytes)
-		if len(summary) > MaxColumnWidth {
-			return summary[:MaxColumnWidth-3] + "..."
-		}
-		return summary
+		return formatComplexValue(val)
 	}
+}
+
+// truncateString truncates a string if it's longer than MaxColumnWidth.
+func truncateString(str string) string {
+	if len(str) > MaxColumnWidth {
+		return str[:MaxColumnWidth-3] + "..."
+	}
+	return str
+}
+
+// formatCollectionValue formats maps, arrays and slices for display.
+func formatCollectionValue(v reflect.Value) string {
+	count := v.Len()
+	switch v.Kind() {
+	case reflect.Map:
+		return fmt.Sprintf("{...} (%d keys)", count)
+	case reflect.Array, reflect.Slice:
+		return fmt.Sprintf("[...] (%d items)", count)
+	default:
+		return "{unknown collection}"
+	}
+}
+
+// formatComplexValue formats complex values using JSON.
+func formatComplexValue(val interface{}) string {
+	jsonBytes, err := json.Marshal(val)
+	if err != nil {
+		return "{complex value}"
+	}
+	return truncateString(string(jsonBytes))
 }
 
 // createStyledTable creates a styled table with headers and rows.
@@ -179,9 +192,9 @@ func (f *TableFormatter) Format(data map[string]interface{}, options FormatOptio
 	return createStyledTable(header, rows), nil
 }
 
-// calculateMaxKeyWidth determines the maximum width needed for the key column
+// calculateMaxKeyWidth determines the maximum width needed for the key column.
 func calculateMaxKeyWidth(valueKeys []string) int {
-	maxKeyWidth := 15 // Base width assumption
+	maxKeyWidth := DefaultKeyWidth // Base width assumption
 	for _, key := range valueKeys {
 		if len(key) > maxKeyWidth {
 			maxKeyWidth = len(key)
@@ -190,7 +203,7 @@ func calculateMaxKeyWidth(valueKeys []string) int {
 	return maxKeyWidth
 }
 
-// limitWidth ensures a width doesn't exceed MaxColumnWidth
+// limitWidth ensures a width doesn't exceed MaxColumnWidth.
 func limitWidth(width int) int {
 	if width > MaxColumnWidth {
 		return MaxColumnWidth
@@ -198,7 +211,7 @@ func limitWidth(width int) int {
 	return width
 }
 
-// getMaxValueWidth returns the maximum formatted value width in a column
+// getMaxValueWidth returns the maximum formatted value width in a column.
 func getMaxValueWidth(stackData map[string]interface{}, valueKeys []string) int {
 	maxWidth := 0
 
@@ -216,7 +229,7 @@ func getMaxValueWidth(stackData map[string]interface{}, valueKeys []string) int 
 	return limitWidth(maxWidth)
 }
 
-// calculateStackColumnWidth calculates the width for a single stack column
+// calculateStackColumnWidth calculates the width for a single stack column.
 func calculateStackColumnWidth(stackName string, stackData map[string]interface{}, valueKeys []string) int {
 	// Start with the width based on stack name
 	columnWidth := limitWidth(len(stackName))
@@ -230,7 +243,7 @@ func calculateStackColumnWidth(stackName string, stackData map[string]interface{
 	return columnWidth
 }
 
-// calculateEstimatedTableWidth estimates the width of the table based on content
+// calculateEstimatedTableWidth estimates the width of the table based on content.
 func calculateEstimatedTableWidth(data map[string]interface{}, valueKeys, stackKeys []string) int {
 	// Calculate key column width
 	maxKeyWidth := calculateMaxKeyWidth(valueKeys)

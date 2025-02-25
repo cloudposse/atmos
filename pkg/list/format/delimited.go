@@ -17,7 +17,17 @@ const (
 
 // Format implements the Formatter interface for DelimitedFormatter.
 func (f *DelimitedFormatter) Format(data map[string]interface{}, options FormatOptions) (string, error) {
-	// Set default delimiter based on format
+	f.setDefaultDelimiter(&options)
+
+	keys := extractSortedKeys(data)
+	valueKeys := getValueKeysFromStacks(data, keys)
+	header, rows := f.generateHeaderAndRows(keys, valueKeys, data)
+
+	return f.buildOutput(header, rows, options.Delimiter), nil
+}
+
+// setDefaultDelimiter sets the default delimiter if not specified.
+func (f *DelimitedFormatter) setDefaultDelimiter(options *FormatOptions) {
 	if options.Delimiter == "" {
 		if f.format == FormatCSV {
 			options.Delimiter = DefaultCSVDelimiter
@@ -25,16 +35,22 @@ func (f *DelimitedFormatter) Format(data map[string]interface{}, options FormatO
 			options.Delimiter = DefaultTSVDelimiter
 		}
 	}
+}
 
-	// Extract and sort keys
+// extractSortedKeys extracts and sorts the keys from data.
+func extractSortedKeys(data map[string]interface{}) []string {
 	var keys []string
 	for k := range data {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	return keys
+}
 
-	// Get all possible value keys from the first stack
+// getValueKeysFromStacks extracts all possible value keys from the first stack.
+func getValueKeysFromStacks(data map[string]interface{}, keys []string) []string {
 	var valueKeys []string
+	
 	for _, stackName := range keys {
 		if stackData, ok := data[stackName].(map[string]interface{}); ok {
 			if _, hasValue := stackData[ValueKey]; hasValue {
@@ -49,52 +65,75 @@ func (f *DelimitedFormatter) Format(data map[string]interface{}, options FormatO
 		}
 	}
 	sort.Strings(valueKeys)
+	return valueKeys
+}
 
-	// Create header and rows we may need to change this in the future to be more flexible
+// generateHeaderAndRows creates the header and rows for the delimited output.
+func (f *DelimitedFormatter) generateHeaderAndRows(keys []string, valueKeys []string, data map[string]interface{}) ([]string, [][]string) {
+	// Create header
 	header := []string{"Key"}
 	for _, k := range keys {
 		header = append(header, k)
 	}
 
 	var rows [][]string
-	// Check if we have the special case with a "value" key
+	
+	// Determine if we have the special case with a "value" key
 	if len(valueKeys) == 1 && valueKeys[0] == ValueKey {
-		// In this special case, we create rows using stack names as the first column
+		rows = f.generateValueKeyRows(keys, data)
+	} else {
+		rows = f.generateStandardRows(keys, valueKeys, data)
+	}
+	
+	return header, rows
+}
+
+// generateValueKeyRows creates rows for the special case with a "value" key.
+func (f *DelimitedFormatter) generateValueKeyRows(keys []string, data map[string]interface{}) [][]string {
+	var rows [][]string
+	// In this special case, we create rows using stack names as the first column
+	for _, stackName := range keys {
+		row := []string{stackName}
+		value := ""
+		if stackData, ok := data[stackName].(map[string]interface{}); ok {
+			if val, ok := stackData[ValueKey]; ok {
+				value = formatValue(val)
+			}
+		}
+		row = append(row, value)
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// generateStandardRows creates rows for the standard case.
+func (f *DelimitedFormatter) generateStandardRows(keys []string, valueKeys []string, data map[string]interface{}) [][]string {
+	var rows [][]string
+	// Standard case: for each value key, create a row
+	for _, valueKey := range valueKeys {
+		row := []string{valueKey}
 		for _, stackName := range keys {
-			row := []string{stackName}
 			value := ""
 			if stackData, ok := data[stackName].(map[string]interface{}); ok {
-				if val, ok := stackData[ValueKey]; ok {
+				if val, ok := stackData[valueKey]; ok {
 					value = formatValue(val)
 				}
 			}
 			row = append(row, value)
-			rows = append(rows, row)
 		}
-	} else {
-		// Standard case: for each value key, create a row
-		for _, valueKey := range valueKeys {
-			row := []string{valueKey}
-			for _, stackName := range keys {
-				value := ""
-				if stackData, ok := data[stackName].(map[string]interface{}); ok {
-					if val, ok := stackData[valueKey]; ok {
-						value = formatValue(val)
-					}
-				}
-				row = append(row, value)
-			}
-			rows = append(rows, row)
-		}
+		rows = append(rows, row)
 	}
+	return rows
+}
 
-	// Build output
+// buildOutput builds the final delimited output string.
+func (f *DelimitedFormatter) buildOutput(header []string, rows [][]string, delimiter string) string {
 	var output strings.Builder
-	output.WriteString(strings.Join(header, options.Delimiter) + utils.GetLineEnding())
+	output.WriteString(strings.Join(header, delimiter) + utils.GetLineEnding())
 	for _, row := range rows {
-		output.WriteString(strings.Join(row, options.Delimiter) + utils.GetLineEnding())
+		output.WriteString(strings.Join(row, delimiter) + utils.GetLineEnding())
 	}
-	return output.String(), nil
+	return output.String()
 }
 
 // FormatValue converts a value to its string representation.

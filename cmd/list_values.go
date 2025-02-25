@@ -16,7 +16,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// Error variables for list_values command
 var (
 	ErrGettingCommonFlags    = errors.New("error getting common flags")
 	ErrGettingAbstractFlag   = errors.New("error getting abstract flag")
@@ -25,7 +24,12 @@ var (
 	ErrDescribingStacks      = errors.New("error describing stacks")
 )
 
-// listValuesCmd lists component values across stacks
+// Error format strings
+const (
+	ErrFmtWrapErr = "%w: %v" // Format for wrapping errors.
+)
+
+// listValuesCmd lists component values across stacks.
 var listValuesCmd = &cobra.Command{
 	Use:   "values [component]",
 	Short: "List component values across stacks",
@@ -55,7 +59,7 @@ var listValuesCmd = &cobra.Command{
 	},
 }
 
-// listVarsCmd is an alias for 'list values --query .vars'
+// listVarsCmd is an alias for 'list values --query .vars'.
 var listVarsCmd = &cobra.Command{
 	Use:   "vars [component]",
 	Short: "List component vars across stacks (alias for 'list values --query .vars')",
@@ -98,18 +102,18 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	// Get common flags
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrGettingCommonFlags, err)
+		return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingCommonFlags, err)
 	}
 
 	// Get additional flags
 	abstractFlag, err := cmd.Flags().GetBool("abstract")
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrGettingAbstractFlag, err)
+		return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingAbstractFlag, err)
 	}
 
 	varsFlag, err := cmd.Flags().GetBool("vars")
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrGettingVarsFlag, err)
+		return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingVarsFlag, err)
 	}
 
 	// Set appropriate default delimiter based on format
@@ -128,13 +132,13 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInitializingCLIConfig, err)
+		return "", fmt.Errorf(ErrFmtWrapErr, ErrInitializingCLIConfig, err)
 	}
 
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrDescribingStacks, err)
+		return "", fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
 	}
 
 	output, err := l.FilterAndListValues(stacksMap, component, commonFlags.Query, abstractFlag, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)

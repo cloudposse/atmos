@@ -11,12 +11,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Error variables for list_values package
+// Error variables for list_values package.
 var (
 	ErrInvalidStackPattern = errors.New("invalid stack pattern")
 )
 
-// FilterAndListValues filters and lists component values across stacks
+// FilterAndListValues filters and lists component values across stacks.
 func FilterAndListValues(stacksMap map[string]interface{}, component, query string, includeAbstract bool, maxColumns int, formatStr, delimiter string, stackPattern string) (string, error) {
 	// Set default format if not specified
 	if formatStr == "" {
@@ -27,58 +27,102 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		return "", err
 	}
 
-	extractor := values.NewDefaultExtractor()
-
-	extractedValues, err := extractor.ExtractStackValues(stacksMap, component, includeAbstract)
+	// Extract stack values
+	extractedValues, err := extractComponentValues(stacksMap, component, includeAbstract)
 	if err != nil {
 		return "", err
 	}
 
-	// Filter by stack pattern if provided
-	if stackPattern != "" {
-		filteredValues := make(map[string]interface{})
-		for stackName, value := range extractedValues {
-			matched, err := filepath.Match(stackPattern, stackName)
-			if err != nil {
-				return "", errors.Errorf("invalid stack pattern '%s'", stackPattern)
-			}
-			if matched {
-				filteredValues[stackName] = value
-			}
-		}
-		extractedValues = filteredValues
-	}
-
-	// Apply max columns limit to filtered values
-	if maxColumns > 0 {
-		limitedValues := make(map[string]interface{})
-		var sortedKeys []string
-		for stackName := range extractedValues {
-			sortedKeys = append(sortedKeys, stackName)
-		}
-		sort.Strings(sortedKeys)
-		for i, stackName := range sortedKeys {
-			if i >= maxColumns {
-				break
-			}
-			limitedValues[stackName] = extractedValues[stackName]
-		}
-		extractedValues = limitedValues
+	// Apply filters
+	filteredValues, err := applyFilters(extractedValues, stackPattern, maxColumns)
+	if err != nil {
+		return "", err
 	}
 
 	// Apply query to values
-	queriedValues, err := extractor.ApplyValueQuery(extractedValues, query)
+	queriedValues, err := applyQuery(filteredValues, query)
 	if err != nil {
 		return "", err
 	}
 
-	// Create formatter
+	// Format the output
+	return formatOutput(queriedValues, formatStr, delimiter, maxColumns)
+}
+
+// extractComponentValues extracts the component values from all stacks.
+func extractComponentValues(stacksMap map[string]interface{}, component string, includeAbstract bool) (map[string]interface{}, error) {
+	extractor := values.NewDefaultExtractor()
+	return extractor.ExtractStackValues(stacksMap, component, includeAbstract)
+}
+
+// applyFilters applies stack pattern and column limits to the values.
+func applyFilters(extractedValues map[string]interface{}, stackPattern string, maxColumns int) (map[string]interface{}, error) {
+	// Apply stack pattern filter
+	filteredByPattern, err := filterByStackPattern(extractedValues, stackPattern)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply column limit
+	return limitColumns(filteredByPattern, maxColumns), nil
+}
+
+// filterByStackPattern filters values by a glob pattern.
+func filterByStackPattern(values map[string]interface{}, pattern string) (map[string]interface{}, error) {
+	if pattern == "" {
+		return values, nil
+	}
+
+	filteredValues := make(map[string]interface{})
+	for stackName, value := range values {
+		matched, err := filepath.Match(pattern, stackName)
+		if err != nil {
+			return nil, errors.Errorf("invalid stack pattern '%s'", pattern)
+		}
+		if matched {
+			filteredValues[stackName] = value
+		}
+	}
+	return filteredValues, nil
+}
+
+// limitColumns limits the number of columns in the output.
+func limitColumns(values map[string]interface{}, maxColumns int) map[string]interface{} {
+	if maxColumns <= 0 {
+		return values
+	}
+
+	limitedValues := make(map[string]interface{})
+	var sortedKeys []string
+	for stackName := range values {
+		sortedKeys = append(sortedKeys, stackName)
+	}
+	sort.Strings(sortedKeys)
+
+	count := len(sortedKeys)
+	if count > maxColumns {
+		count = maxColumns
+	}
+
+	for i := 0; i < count; i++ {
+		limitedValues[sortedKeys[i]] = values[sortedKeys[i]]
+	}
+	return limitedValues
+}
+
+// applyQuery applies a query to the filtered values.
+func applyQuery(filteredValues map[string]interface{}, query string) (map[string]interface{}, error) {
+	extractor := values.NewDefaultExtractor()
+	return extractor.ApplyValueQuery(filteredValues, query)
+}
+
+// formatOutput formats the output based on the specified format.
+func formatOutput(values map[string]interface{}, formatStr, delimiter string, maxColumns int) (string, error) {
 	formatter, err := format.NewFormatter(format.Format(formatStr))
 	if err != nil {
 		return "", err
 	}
 
-	// Format output
 	options := format.FormatOptions{
 		MaxColumns: maxColumns,
 		Delimiter:  delimiter,
@@ -86,21 +130,16 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		Format:     format.Format(formatStr),
 	}
 
-	output, err := formatter.Format(queriedValues, options)
-	if err != nil {
-		return "", err
-	}
-
-	return output, nil
+	return formatter.Format(values, options)
 }
 
-// IsNoValuesFoundError checks if an error is a NoValuesFoundError
+// IsNoValuesFoundError checks if an error is a NoValuesFoundError.
 func IsNoValuesFoundError(err error) bool {
 	_, ok := err.(*listerrors.NoValuesFoundError)
 	return ok
 }
 
-// ValidateFormat validates the output format
+// ValidateFormat validates the output format.
 func ValidateValuesFormat(formatStr string) error {
 	return format.ValidateFormat(formatStr)
 }
