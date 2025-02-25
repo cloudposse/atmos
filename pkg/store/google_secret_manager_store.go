@@ -10,6 +10,8 @@ import (
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/googleapis/gax-go/v2"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -212,6 +214,10 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 		Name: name,
 	})
 	if err != nil {
+		// Check if this is a NOT_FOUND error
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return nil, fmt.Errorf("secret not found: %s", secretID)
+		}
 		return nil, fmt.Errorf("failed to retrieve secret version: %w", err)
 	}
 
