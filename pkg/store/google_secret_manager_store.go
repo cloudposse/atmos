@@ -123,10 +123,17 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 
 	secret, err := s.client.CreateSecret(ctx, createSecretReq)
 	if err != nil {
-		if strings.Contains(err.Error(), "already exists") {
-			return &secretmanagerpb.Secret{
-				Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
-			}, nil
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.AlreadyExists:
+				return &secretmanagerpb.Secret{
+					Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
+				}, nil
+			case codes.NotFound:
+				return nil, fmt.Errorf("projects/%s/secrets/%s not found", s.projectID, secretID)
+			case codes.PermissionDenied:
+				return nil, fmt.Errorf("permission denied for project %s - please check if the project exists and you have the required permissions", s.projectID)
+			}
 		}
 		return nil, fmt.Errorf("failed to create secret: %w", err)
 	}
@@ -143,6 +150,14 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 
 	_, err := s.client.AddSecretVersion(ctx, addVersionReq)
 	if err != nil {
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.NotFound:
+				return fmt.Errorf("resource not found: %s", secret.GetName())
+			case codes.PermissionDenied:
+				return fmt.Errorf("permission denied for %s - please check if you have the required permissions", secret.GetName())
+			}
+		}
 		return fmt.Errorf("failed to add secret version: %w", err)
 	}
 	return nil
@@ -214,9 +229,13 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 		Name: name,
 	})
 	if err != nil {
-		// Check if this is a NOT_FOUND error
-		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			return nil, fmt.Errorf("secret not found: %s", secretID)
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.NotFound:
+				return nil, fmt.Errorf("resource not found: %s", secretID)
+			case codes.PermissionDenied:
+				return nil, fmt.Errorf("permission denied for %s - please check if you have the required permissions", name)
+			}
 		}
 		return nil, fmt.Errorf("failed to retrieve secret version: %w", err)
 	}
