@@ -12,6 +12,7 @@ import (
 const (
 	DefaultCSVDelimiter = ","
 	DefaultTSVDelimiter = "\t"
+	ValueKey           = "value"
 )
 
 // Format implements the Formatter interface for DelimitedFormatter.
@@ -36,8 +37,8 @@ func (f *DelimitedFormatter) Format(data map[string]interface{}, options FormatO
 	var valueKeys []string
 	for _, stackName := range keys {
 		if stackData, ok := data[stackName].(map[string]interface{}); ok {
-			if _, hasValue := stackData["value"]; hasValue {
-				valueKeys = []string{"value"}
+			if _, hasValue := stackData[ValueKey]; hasValue {
+				valueKeys = []string{ValueKey}
 				break
 			}
 			// collect all keys from the map
@@ -57,13 +58,13 @@ func (f *DelimitedFormatter) Format(data map[string]interface{}, options FormatO
 
 	var rows [][]string
 	// Check if we have the special case with a "value" key
-	if len(valueKeys) == 1 && valueKeys[0] == "value" {
+	if len(valueKeys) == 1 && valueKeys[0] == ValueKey {
 		// In this special case, we create rows using stack names as the first column
 		for _, stackName := range keys {
 			row := []string{stackName}
 			value := ""
 			if stackData, ok := data[stackName].(map[string]interface{}); ok {
-				if val, ok := stackData["value"]; ok {
+				if val, ok := stackData[ValueKey]; ok {
 					value = formatValue(val)
 				}
 			}

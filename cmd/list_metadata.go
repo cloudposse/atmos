@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
@@ -14,6 +12,7 @@ import (
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	u "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
+	utils "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // listMetadataCmd lists metadata across stacks.
@@ -35,7 +34,7 @@ var listMetadataCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Println(output)
+		utils.PrintMessage(output)
 	},
 }
 

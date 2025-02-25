@@ -14,10 +14,13 @@ type CommonListFlags struct {
 	Stack      string
 }
 
+// DefaultMaxColumns is the default maximum number of columns to display
+const DefaultMaxColumns = 10
+
 // AddCommonListFlags adds the common flags to a command
 func AddCommonListFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("query", "", "JMESPath query to filter values")
-	cmd.PersistentFlags().Int("max-columns", 10, "Maximum number of columns to display")
+	cmd.PersistentFlags().Int("max-columns", DefaultMaxColumns, "Maximum number of columns to display")
 	cmd.PersistentFlags().String("format", "", "Output format (table, json, yaml, csv, tsv)")
 	cmd.PersistentFlags().String("delimiter", "\t", "Delimiter for csv/tsv output (default: tab for tsv, comma for csv)")
 	cmd.PersistentFlags().String("stack", "", "Stack pattern to filter (supports glob patterns, e.g., '*-dev-*', 'prod-*')")

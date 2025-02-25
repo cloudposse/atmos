@@ -12,5 +12,5 @@ func (f *YAMLFormatter) Format(data map[string]interface{}, options FormatOption
 	if err != nil {
 		return "", fmt.Errorf("error formatting YAML output: %w", err)
 	}
-	return string(yamlBytes), nil
+	return yamlBytes, nil
 }

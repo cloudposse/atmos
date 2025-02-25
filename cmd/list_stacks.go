@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/log"
@@ -11,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // listStacksCmd lists atmos stacks
@@ -30,7 +30,7 @@ var listStacksCmd = &cobra.Command{
 			log.Error("error filtering stacks", "error", err)
 			return
 		}
-		fmt.Println(strings.Join(output, "\n"))
+		utils.PrintMessage(strings.Join(output, "\n"))
 	},
 }
 

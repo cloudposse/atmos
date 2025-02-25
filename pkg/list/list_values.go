@@ -1,14 +1,19 @@
 package list
 
 import (
-	"fmt"
 	"path/filepath"
 	"sort"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	"github.com/cloudposse/atmos/pkg/list/errors"
+	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/values"
+	"github.com/pkg/errors"
+)
+
+// Error variables for list_values package
+var (
+	ErrInvalidStackPattern = errors.New("invalid stack pattern")
 )
 
 // FilterAndListValues filters and lists component values across stacks
@@ -35,7 +40,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 		for stackName, value := range extractedValues {
 			matched, err := filepath.Match(stackPattern, stackName)
 			if err != nil {
-				return "", fmt.Errorf("invalid stack pattern '%s'", stackPattern)
+				return "", errors.Errorf("invalid stack pattern '%s'", stackPattern)
 			}
 			if matched {
 				filteredValues[stackName] = value
@@ -91,7 +96,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, component, query stri
 
 // IsNoValuesFoundError checks if an error is a NoValuesFoundError
 func IsNoValuesFoundError(err error) bool {
-	_, ok := err.(*errors.NoValuesFoundError)
+	_, ok := err.(*listerrors.NoValuesFoundError)
 	return ok
 }
 

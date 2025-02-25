@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	log "github.com/charmbracelet/log"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -12,6 +13,16 @@ import (
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+// Error variables for list_values command
+var (
+	ErrGettingCommonFlags    = errors.New("error getting common flags")
+	ErrGettingAbstractFlag   = errors.New("error getting abstract flag")
+	ErrGettingVarsFlag       = errors.New("error getting vars flag")
+	ErrInitializingCLIConfig = errors.New("error initializing CLI config")
+	ErrDescribingStacks      = errors.New("error describing stacks")
 )
 
 // listValuesCmd lists component values across stacks
@@ -27,6 +38,11 @@ var listValuesCmd = &cobra.Command{
 		"atmos list values vpc --format csv",
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) != 1 {
+			log.Error("invalid arguments. The command requires one argument 'component'")
+			return
+		}
+
 		// Check Atmos configuration
 		checkAtmosConfig()
 		output, err := listValues(cmd, args)
@@ -35,7 +51,7 @@ var listValuesCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Println(output)
+		u.PrintMessage(output)
 	},
 }
 
@@ -82,18 +98,18 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	// Get common flags
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
-		return "", fmt.Errorf("error getting common flags: %v", err)
+		return "", fmt.Errorf("%w: %v", ErrGettingCommonFlags, err)
 	}
 
 	// Get additional flags
 	abstractFlag, err := cmd.Flags().GetBool("abstract")
 	if err != nil {
-		return "", fmt.Errorf("error getting abstract flag: %v", err)
+		return "", fmt.Errorf("%w: %v", ErrGettingAbstractFlag, err)
 	}
 
 	varsFlag, err := cmd.Flags().GetBool("vars")
 	if err != nil {
-		return "", fmt.Errorf("error getting vars flag: %v", err)
+		return "", fmt.Errorf("%w: %v", ErrGettingVarsFlag, err)
 	}
 
 	// Set appropriate default delimiter based on format
@@ -112,13 +128,13 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return "", fmt.Errorf("error initializing CLI config: %v", err)
+		return "", fmt.Errorf("%w: %v", ErrInitializingCLIConfig, err)
 	}
 
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return "", fmt.Errorf("error describing stacks: %v", err)
+		return "", fmt.Errorf("%w: %v", ErrDescribingStacks, err)
 	}
 
 	output, err := l.FilterAndListValues(stacksMap, component, commonFlags.Query, abstractFlag, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)
