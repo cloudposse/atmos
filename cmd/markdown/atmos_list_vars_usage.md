@@ -30,5 +30,5 @@
 ```
  $ atmos list vars <component> --stack '*-ue2-*' --query .vars.region
 ```
-- Stack patterns support glob matching (e.g., '*-dev-*', 'prod-*')
+- Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
 
