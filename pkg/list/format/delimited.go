@@ -80,7 +80,7 @@ func (f *DelimitedFormatter) generateHeaderAndRows(keys []string, valueKeys []st
 	if len(valueKeys) == 1 && valueKeys[0] == ValueKey {
 		rows = f.generateValueKeyRows(keys, data)
 	} else {
-		rows = f.generateStandardRows(keys, valueKeys, data)
+		rows = f.generatePropertyKeyRows(keys, valueKeys, data)
 	}
 
 	return header, rows
@@ -104,10 +104,12 @@ func (f *DelimitedFormatter) generateValueKeyRows(keys []string, data map[string
 	return rows
 }
 
-// generateStandardRows creates rows for the standard case.
-func (f *DelimitedFormatter) generateStandardRows(keys []string, valueKeys []string, data map[string]interface{}) [][]string {
+// generatePropertyKeyRows creates rows where each row represents a property key with values
+// from different stacks as columns. This is different from generateValueKeyRows which handles 
+// the special case where stacks have a single "value" key.
+func (f *DelimitedFormatter) generatePropertyKeyRows(keys []string, valueKeys []string, data map[string]interface{}) [][]string {
 	var rows [][]string
-	// Standard case: for each value key, create a row
+	// Property key case: for each value key, create a row
 	for _, valueKey := range valueKeys {
 		row := []string{valueKey}
 		for _, stackName := range keys {
