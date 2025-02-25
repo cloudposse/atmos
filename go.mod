@@ -8,12 +8,13 @@ require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/arsham/figurine v1.3.0
+	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-sdk-go-v2 v1.36.2
 	github.com/aws/aws-sdk-go-v2/config v1.29.7
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.56.13
 	github.com/bmatcuk/doublestar/v4 v4.8.1
 	github.com/charmbracelet/bubbles v0.20.0
-	github.com/charmbracelet/bubbletea v1.3.3
+	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/charmbracelet/huh v0.6.0
 	github.com/charmbracelet/lipgloss v1.0.0
@@ -38,16 +39,16 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
-	github.com/lrstanley/bubblezone v0.0.0-20250219025839-4a28266a24d6
+	github.com/lrstanley/bubblezone v0.0.0-20250222012949-f7fb4dcbadeb
 	github.com/mikefarah/yq/v4 v4.45.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/muesli/termenv v0.15.3-0.20240618155329-98d742f6907a
+	github.com/muesli/termenv v0.16.0
 	github.com/open-policy-agent/opa v1.1.0
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
-	github.com/redis/go-redis/v9 v9.7.0
+	github.com/redis/go-redis/v9 v9.7.1
 	github.com/samber/lo v1.49.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3
@@ -56,7 +57,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
 	github.com/zclconf/go-cty v1.16.2
-	golang.org/x/oauth2 v0.26.0
+	golang.org/x/oauth2 v0.27.0
 	golang.org/x/term v0.29.0
 	golang.org/x/text v0.22.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
