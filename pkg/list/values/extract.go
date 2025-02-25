@@ -16,31 +16,57 @@ func handleSpecialComponent(stack map[string]interface{}, component string) (map
 		return section, true
 	}
 
-	// If not found at the top level, look for settings within components
+	// If not found at the top level and component is "settings", look for it in components
 	if component == "settings" {
-		allSettings := make(map[string]interface{})
-
-		// Try to navigate to the terraform components we cannot do too much here to avoid nesting for now.
-		if components, ok := stack["components"].(map[string]interface{}); ok {
-			if terraform, ok := components["terraform"].(map[string]interface{}); ok {
-				// Collect settings from all terraform components
-				for componentName, componentData := range terraform {
-					if comp, ok := componentData.(map[string]interface{}); ok {
-						if settings, ok := comp["settings"].(map[string]interface{}); ok {
-							allSettings[componentName] = deepCopyToStringMap(settings)
-						}
-					}
-				}
-
-				// Return all settings if we found any
-				if len(allSettings) > 0 {
-					return allSettings, true
-				}
-			}
-		}
+		return extractSettingsFromComponents(stack)
 	}
 
 	return nil, false
+}
+
+// extractSettingsFromComponents extracts settings from terraform components
+func extractSettingsFromComponents(stack map[string]interface{}) (map[string]interface{}, bool) {
+	allSettings := make(map[string]interface{})
+	
+	// Try to navigate to terraform components
+	components, ok := stack["components"].(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+	
+	terraform, ok := components["terraform"].(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+	
+	// Collect settings from all terraform components
+	for componentName, componentData := range terraform {
+		if settings := extractComponentSettings(componentData); settings != nil {
+			allSettings[componentName] = settings
+		}
+	}
+	
+	// Return all settings if we found any
+	if len(allSettings) > 0 {
+		return allSettings, true
+	}
+	
+	return nil, false
+}
+
+// extractComponentSettings extracts settings from a component
+func extractComponentSettings(componentData interface{}) interface{} {
+	comp, ok := componentData.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	
+	settings, ok := comp["settings"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	
+	return deepCopyToStringMap(settings)
 }
 
 // deepCopyToStringMap creates a deep copy of a map, ensuring all keys are strings.
@@ -184,7 +210,12 @@ func getValueFromPath(data map[string]interface{}, path string) interface{} {
 	}
 
 	parts := strings.Split(strings.TrimPrefix(path, "."), ".")
-	current := interface{}(data)
+	return navigatePath(data, parts)
+}
+
+// navigatePath follows a path of parts through nested data structures
+func navigatePath(data interface{}, parts []string) interface{} {
+	current := data
 
 	for _, part := range parts {
 		if part == "" {
@@ -193,52 +224,16 @@ func getValueFromPath(data map[string]interface{}, path string) interface{} {
 
 		switch v := current.(type) {
 		case map[string]interface{}:
-			// Check for direct key match first
-			if val, exists := v[part]; exists {
-				current = val
-				continue
+			var found bool
+			current, found = processMapPart(v, part)
+			if !found {
+				return nil
 			}
-
-			// If the part contains a wildcard pattern, check all keys
-			if strings.Contains(part, "*") {
-				matchFound := false
-				result := make(map[string]interface{})
-
-				for key, val := range v {
-					matched, err := utils.MatchWildcard(part, key)
-					if err == nil && matched {
-						matchFound = true
-						result[key] = val
-					}
-				}
-
-				if matchFound {
-					// If only one match, continue with that value
-					if len(result) == 1 {
-						for _, val := range result {
-							current = val
-						}
-					} else {
-						// Otherwise return the map of all matches
-						current = result
-					}
-					continue
-				}
-			}
-
-			// No match found
-			return nil
 		case []interface{}:
-			// If part is a number, get that specific index.
-			if idx, err := strconv.Atoi(part); err == nil && idx >= 0 && idx < len(v) {
-				current = v[idx]
-			} else {
-				// If part is not a number and we have an array, return the entire array.
-				if val, exists := v[0].(map[string]interface{})[part]; exists {
-					current = val
-				} else {
-					return current // Return the entire array if we're trying to access it directly.
-				}
+			var found bool
+			current, found = processArrayPart(v, part)
+			if !found {
+				return current // Return array if we can't process part
 			}
 		default:
 			return nil
@@ -246,4 +241,68 @@ func getValueFromPath(data map[string]interface{}, path string) interface{} {
 	}
 
 	return current
+}
+
+// processMapPart handles traversing a map with the given part key
+func processMapPart(mapData map[string]interface{}, part string) (interface{}, bool) {
+	// Check for direct key match first
+	if val, exists := mapData[part]; exists {
+		return val, true
+	}
+
+	// If the part contains a wildcard pattern, check all keys
+	if strings.Contains(part, "*") {
+		return processWildcardPattern(mapData, part)
+	}
+
+	// No match found
+	return nil, false
+}
+
+// processWildcardPattern handles wildcard matching in map keys
+func processWildcardPattern(mapData map[string]interface{}, pattern string) (interface{}, bool) {
+	matchFound := false
+	result := make(map[string]interface{})
+
+	for key, val := range mapData {
+		matched, err := utils.MatchWildcard(pattern, key)
+		if err == nil && matched {
+			matchFound = true
+			result[key] = val
+		}
+	}
+
+	if !matchFound {
+		return nil, false
+	}
+
+	// If only one match, continue with that value
+	if len(result) == 1 {
+		for _, val := range result {
+			return val, true
+		}
+	}
+	
+	// Otherwise return the map of all matches
+	return result, true
+}
+
+// processArrayPart handles traversing an array with the given part
+func processArrayPart(arrayData []interface{}, part string) (interface{}, bool) {
+	// If part is a number, get that specific index
+	if idx, err := strconv.Atoi(part); err == nil && idx >= 0 && idx < len(arrayData) {
+		return arrayData[idx], true
+	}
+	
+	// If array has map elements, try to access by key
+	if len(arrayData) > 0 {
+		if mapElement, ok := arrayData[0].(map[string]interface{}); ok {
+			if val, exists := mapElement[part]; exists {
+				return val, true
+			}
+		}
+	}
+	
+	// Return false to indicate we should return the array itself
+	return nil, false
 }

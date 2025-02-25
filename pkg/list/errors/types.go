@@ -55,3 +55,86 @@ func (e *StackPatternError) Error() string {
 func (e *StackPatternError) Unwrap() error {
 	return e.Cause
 }
+
+// NoMetadataFoundError represents an error when no metadata is found with a given query.
+type NoMetadataFoundError struct {
+	Query string
+}
+
+func (e *NoMetadataFoundError) Error() string {
+	return fmt.Sprintf("no metadata found in any stacks with query '%s'", e.Query)
+}
+
+// MetadataFilteringError represents an error when filtering and listing metadata.
+type MetadataFilteringError struct {
+	Cause error
+}
+
+func (e *MetadataFilteringError) Error() string {
+	return fmt.Sprintf("error filtering and listing metadata: %v", e.Cause)
+}
+
+func (e *MetadataFilteringError) Unwrap() error {
+	return e.Cause
+}
+
+// CommonFlagsError represents an error getting common flags.
+type CommonFlagsError struct {
+	Cause error
+}
+
+func (e *CommonFlagsError) Error() string {
+	return fmt.Sprintf("error getting common flags: %v", e.Cause)
+}
+
+func (e *CommonFlagsError) Unwrap() error {
+	return e.Cause
+}
+
+// InitConfigError represents an error initializing CLI config.
+type InitConfigError struct {
+	Cause error
+}
+
+func (e *InitConfigError) Error() string {
+	return fmt.Sprintf("error initializing CLI config: %v", e.Cause)
+}
+
+func (e *InitConfigError) Unwrap() error {
+	return e.Cause
+}
+
+// DescribeStacksError represents an error describing stacks.
+type DescribeStacksError struct {
+	Cause error
+}
+
+func (e *DescribeStacksError) Error() string {
+	return fmt.Sprintf("error describing stacks: %v", e.Cause)
+}
+
+func (e *DescribeStacksError) Unwrap() error {
+	return e.Cause
+}
+
+// NoSettingsFoundError represents an error when no settings are found with a given query.
+type NoSettingsFoundError struct {
+	Query string
+}
+
+func (e *NoSettingsFoundError) Error() string {
+	return fmt.Sprintf("no settings found in any stacks with query '%s'", e.Query)
+}
+
+// SettingsFilteringError represents an error when filtering and listing settings.
+type SettingsFilteringError struct {
+	Cause error
+}
+
+func (e *SettingsFilteringError) Error() string {
+	return fmt.Sprintf("error filtering and listing settings: %v", e.Cause)
+}
+
+func (e *SettingsFilteringError) Unwrap() error {
+	return e.Cause
+}

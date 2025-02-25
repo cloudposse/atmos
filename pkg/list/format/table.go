@@ -173,39 +173,72 @@ func (f *TableFormatter) Format(data map[string]interface{}, options FormatOptio
 	return createStyledTable(header, rows), nil
 }
 
-// calculateEstimatedTableWidth estimates the width of the table based on content
-func calculateEstimatedTableWidth(data map[string]interface{}, valueKeys, stackKeys []string) int {
-	// Start with the width for the "Key" column, assuming 15 chars as a base width
-	maxKeyWidth := 15
+// calculateMaxKeyWidth determines the maximum width needed for the key column
+func calculateMaxKeyWidth(valueKeys []string) int {
+	maxKeyWidth := 15 // Base width assumption
 	for _, key := range valueKeys {
 		if len(key) > maxKeyWidth {
 			maxKeyWidth = len(key)
 		}
 	}
+	return maxKeyWidth
+}
 
-	// Add column padding for the key column
+// limitWidth ensures a width doesn't exceed MaxColumnWidth
+func limitWidth(width int) int {
+	if width > MaxColumnWidth {
+		return MaxColumnWidth
+	}
+	return width
+}
+
+// getMaxValueWidth returns the maximum formatted value width in a column
+func getMaxValueWidth(stackData map[string]interface{}, valueKeys []string) int {
+	maxWidth := 0
+	
+	for _, valueKey := range valueKeys {
+		if val, ok := stackData[valueKey]; ok {
+			formattedValue := formatTableCellValue(val)
+			valueWidth := len(formattedValue)
+			
+			if valueWidth > maxWidth {
+				maxWidth = valueWidth
+			}
+		}
+	}
+	
+	return limitWidth(maxWidth)
+}
+
+// calculateStackColumnWidth calculates the width for a single stack column
+func calculateStackColumnWidth(stackName string, stackData map[string]interface{}, valueKeys []string) int {
+	// Start with the width based on stack name
+	columnWidth := limitWidth(len(stackName))
+	
+	// Check value widths
+	valueWidth := getMaxValueWidth(stackData, valueKeys)
+	if valueWidth > columnWidth {
+		columnWidth = valueWidth
+	}
+	
+	return columnWidth
+}
+
+// calculateEstimatedTableWidth estimates the width of the table based on content
+func calculateEstimatedTableWidth(data map[string]interface{}, valueKeys, stackKeys []string) int {
+	// Calculate key column width
+	maxKeyWidth := calculateMaxKeyWidth(valueKeys)
 	totalWidth := maxKeyWidth + TableColumnPadding
 
-	// For each stack column, estimate width and add padding
+	// Calculate width for each stack column
 	for _, stackName := range stackKeys {
-		columnWidth := len(stackName)
-		if columnWidth > MaxColumnWidth {
-			columnWidth = MaxColumnWidth
-		}
-
-		// Check actual content width for this stack (with capped width)
+		var columnWidth int
+		
 		if stackData, ok := data[stackName].(map[string]interface{}); ok {
-			for _, valueKey := range valueKeys {
-				if val, ok := stackData[valueKey]; ok {
-					formattedValue := formatTableCellValue(val)
-					valueLength := len(formattedValue)
-					if valueLength > columnWidth && valueLength <= MaxColumnWidth {
-						columnWidth = valueLength
-					} else if valueLength > MaxColumnWidth {
-						columnWidth = MaxColumnWidth
-					}
-				}
-			}
+			columnWidth = calculateStackColumnWidth(stackName, stackData, valueKeys)
+		} else {
+			// If no stack data, just use the stack name width
+			columnWidth = limitWidth(len(stackName))
 		}
 
 		totalWidth += columnWidth + TableColumnPadding

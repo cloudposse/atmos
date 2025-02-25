@@ -64,13 +64,13 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return "", fmt.Errorf("error initializing CLI config: %v", err)
+		return "", &errors.InitConfigError{Cause: err}
 	}
 
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return "", fmt.Errorf("error describing stacks: %v", err)
+		return "", &errors.DescribeStacksError{Cause: err}
 	}
 
 	// Use .metadata as the default query if none provided
@@ -81,9 +81,9 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 	output, err := l.FilterAndListValues(stacksMap, "", commonFlags.Query, false, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)
 	if err != nil {
 		if u.IsNoValuesFoundError(err) {
-			return "", fmt.Errorf("no metadata found in any stacks with query '%s'", commonFlags.Query)
+			return "", &errors.NoMetadataFoundError{Query: commonFlags.Query}
 		}
-		return "", fmt.Errorf("error filtering and listing metadata: %v", err)
+		return "", &errors.MetadataFilteringError{Cause: err}
 	}
 
 	return output, nil
