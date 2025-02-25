@@ -17,7 +17,7 @@ Available Commands:
   docs                           Open Atmos documentation or display component-specific docs
   helmfile                       Manage Helmfile-based Kubernetes deployments
   help                           Display help information for Atmos commands
-  list                           List available stacks and components
+  list                           List Atmos resources and configurations
   pro                            Access premium features integrated with app.cloudposse.com
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
