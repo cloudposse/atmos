@@ -56,18 +56,35 @@ func (f *DelimitedFormatter) Format(data map[string]interface{}, options FormatO
 	}
 
 	var rows [][]string
-	for _, valueKey := range valueKeys {
-		row := []string{valueKey}
+	// Check if we have the special case with a "value" key
+	if len(valueKeys) == 1 && valueKeys[0] == "value" {
+		// In this special case, we create rows using stack names as the first column
 		for _, stackName := range keys {
+			row := []string{stackName}
 			value := ""
 			if stackData, ok := data[stackName].(map[string]interface{}); ok {
-				if val, ok := stackData[valueKey]; ok {
+				if val, ok := stackData["value"]; ok {
 					value = formatValue(val)
 				}
 			}
 			row = append(row, value)
+			rows = append(rows, row)
 		}
-		rows = append(rows, row)
+	} else {
+		// Standard case: for each value key, create a row
+		for _, valueKey := range valueKeys {
+			row := []string{valueKey}
+			for _, stackName := range keys {
+				value := ""
+				if stackData, ok := data[stackName].(map[string]interface{}); ok {
+					if val, ok := stackData[valueKey]; ok {
+						value = formatValue(val)
+					}
+				}
+				row = append(row, value)
+			}
+			rows = append(rows, row)
+		}
 	}
 
 	// Build output

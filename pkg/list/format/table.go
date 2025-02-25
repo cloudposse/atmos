@@ -148,6 +148,7 @@ func createStyledTable(header []string, rows [][]string) string {
 // Format implements the Formatter interface for TableFormatter.
 func (f *TableFormatter) Format(data map[string]interface{}, options FormatOptions) (string, error) {
 	if !options.TTY {
+		// to ensure consistency
 		csvFormatter := &DelimitedFormatter{format: FormatCSV}
 		return csvFormatter.Format(data, options)
 	}
