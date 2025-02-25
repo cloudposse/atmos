@@ -105,7 +105,7 @@ func (f *DelimitedFormatter) generateValueKeyRows(keys []string, data map[string
 }
 
 // generatePropertyKeyRows creates rows where each row represents a property key with values
-// from different stacks as columns. This is different from generateValueKeyRows which handles 
+// from different stacks as columns. This is different from generateValueKeyRows which handles
 // the special case where stacks have a single "value" key.
 func (f *DelimitedFormatter) generatePropertyKeyRows(keys []string, valueKeys []string, data map[string]interface{}) [][]string {
 	var rows [][]string
