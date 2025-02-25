@@ -50,7 +50,7 @@ func extractSortedKeys(data map[string]interface{}) []string {
 // getValueKeysFromStacks extracts all possible value keys from the first stack.
 func getValueKeysFromStacks(data map[string]interface{}, keys []string) []string {
 	var valueKeys []string
-	
+
 	for _, stackName := range keys {
 		if stackData, ok := data[stackName].(map[string]interface{}); ok {
 			if _, hasValue := stackData[ValueKey]; hasValue {
@@ -77,14 +77,14 @@ func (f *DelimitedFormatter) generateHeaderAndRows(keys []string, valueKeys []st
 	}
 
 	var rows [][]string
-	
+
 	// Determine if we have the special case with a "value" key
 	if len(valueKeys) == 1 && valueKeys[0] == ValueKey {
 		rows = f.generateValueKeyRows(keys, data)
 	} else {
 		rows = f.generateStandardRows(keys, valueKeys, data)
 	}
-	
+
 	return header, rows
 }
 
