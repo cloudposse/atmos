@@ -221,10 +221,11 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 			token = os.Getenv(tokenSource)
 		}
 	case "gitlab.com":
-		tokenSource = "GITLAB_TOKEN"
+		// For GitLab, we now prioritize ATMOS_GITLAB_TOKEN over GITLAB_TOKEN.
+		tokenSource = "ATMOS_GITLAB_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
-			tokenSource = "ATMOS_GITLAB_TOKEN"
+			tokenSource = "GITLAB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	}

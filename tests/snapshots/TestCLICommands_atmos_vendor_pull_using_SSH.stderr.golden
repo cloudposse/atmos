@@ -1,0 +1,33 @@
+DEBU Using command line argument '--logs-level=Debug'
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+INFO Vendoring from 'vendor.yaml'
+WARN No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
+DEBU Downloading and installing package package=terraform-null-label-basic
+DEBU Entering dry-run flow for generic vendoring (not a component or mixin) package=terraform-null-label-basic
+DEBU CustomGitDetector.Detect called
+DEBU Defaulting to https scheme url="https://github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+DEBU Reading config param InjectGithubToken=true
+DEBU Injected token env=ATMOS_GITHUB_TOKEN url="https://xxx:xxx@github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+DEBU Final URL final_url="git::https://xxx:xxx@github.com/cloudposse/terraform-null-label.git?depth=1&ref=0.25.0"
+INFO ✓ terraform-null-label-basic (0.25.0)
+DEBU Downloading and installing package package=terraform-null-label-direct
+DEBU Entering dry-run flow for generic vendoring (not a component or mixin) package=terraform-null-label-direct
+DEBU CustomGitDetector.Detect called
+DEBU Reading config param InjectGithubToken=true
+DEBU Injected token env=ATMOS_GITHUB_TOKEN url="https://xxx:xxx@github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+DEBU Final URL final_url="git::https://xxx:xxx@github.com/cloudposse/terraform-null-label.git?depth=1&ref=0.25.0"
+INFO ✓ terraform-null-label-direct (0.25.0)
+DEBU Downloading and installing package package=terraform-null-label-cred
+DEBU Entering dry-run flow for generic vendoring (not a component or mixin) package=terraform-null-label-cred
+DEBU CustomGitDetector.Detect called
+DEBU Defaulting to https scheme url="https://github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+DEBU Reading config param InjectGithubToken=true
+DEBU Injected token env=ATMOS_GITHUB_TOKEN url="https://xxx:xxx@github.com/cloudposse/terraform-null-label.git?ref=0.25.0"
+DEBU Final URL final_url="git::https://xxx:xxx@github.com/cloudposse/terraform-null-label.git?depth=1&ref=0.25.0"
+INFO ✓ terraform-null-label-cred (0.25.0)
+INFO Done! Dry run completed. No components vendored.
+
+INFO Vendored 3 components.
+
