@@ -9,7 +9,6 @@ import (
 )
 
 func TestCustomGitHubDetector_Detect(t *testing.T) {
-
 	t.Run("should inject token for GitHub URL when GITHUB_TOKEN is set", func(t *testing.T) {
 		envMock := func(key string) string {
 			if key == "ATMOS_GITHUB_TOKEN" {
