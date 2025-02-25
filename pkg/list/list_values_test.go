@@ -328,7 +328,15 @@ func TestFilterAndListValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := FilterAndListValues(stacksMap, tt.component, tt.query, tt.includeAbstract, tt.maxColumns, tt.format, tt.delimiter, tt.stackPattern)
+			output, err := FilterAndListValues(stacksMap, FilterOptions{
+				Component:       tt.component,
+				Query:           tt.query,
+				IncludeAbstract: tt.includeAbstract,
+				MaxColumns:      tt.maxColumns,
+				FormatStr:       tt.format,
+				Delimiter:       tt.delimiter,
+				StackPattern:    tt.stackPattern,
+			})
 
 			if tt.expectError {
 				assert.Error(t, err)

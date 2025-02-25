@@ -71,7 +71,15 @@ func listSettings(cmd *cobra.Command) (string, error) {
 	}
 
 	// Use empty query to avoid further processing since handleSpecialComponent will extract the settings
-	output, err := l.FilterAndListValues(stacksMap, "settings", commonFlags.Query, false, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)
+	output, err := l.FilterAndListValues(stacksMap, l.FilterOptions{
+		Component:       "settings",
+		Query:           commonFlags.Query,
+		IncludeAbstract: false,
+		MaxColumns:      commonFlags.MaxColumns,
+		FormatStr:       commonFlags.Format,
+		Delimiter:       commonFlags.Delimiter,
+		StackPattern:    commonFlags.Stack,
+	})
 	if err != nil {
 		if u.IsNoValuesFoundError(err) {
 			return "", &errors.NoSettingsFoundError{Query: commonFlags.Query}

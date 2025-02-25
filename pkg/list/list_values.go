@@ -16,37 +16,48 @@ var (
 	ErrInvalidStackPattern = errors.New("invalid stack pattern")
 )
 
+// FilterOptions contains the options for filtering and listing component values.
+type FilterOptions struct {
+	Component       string
+	Query           string
+	IncludeAbstract bool
+	MaxColumns      int
+	FormatStr       string
+	Delimiter       string
+	StackPattern    string
+}
+
 // FilterAndListValues filters and lists component values across stacks.
-func FilterAndListValues(stacksMap map[string]interface{}, component, query string, includeAbstract bool, maxColumns int, formatStr, delimiter string, stackPattern string) (string, error) {
+func FilterAndListValues(stacksMap map[string]interface{}, options FilterOptions) (string, error) {
 	// Set default format if not specified
-	if formatStr == "" {
-		formatStr = string(format.FormatTable)
+	if options.FormatStr == "" {
+		options.FormatStr = string(format.FormatTable)
 	}
 
-	if err := format.ValidateFormat(formatStr); err != nil {
+	if err := format.ValidateFormat(options.FormatStr); err != nil {
 		return "", err
 	}
 
 	// Extract stack values
-	extractedValues, err := extractComponentValues(stacksMap, component, includeAbstract)
+	extractedValues, err := extractComponentValues(stacksMap, options.Component, options.IncludeAbstract)
 	if err != nil {
 		return "", err
 	}
 
 	// Apply filters
-	filteredValues, err := applyFilters(extractedValues, stackPattern, maxColumns)
+	filteredValues, err := applyFilters(extractedValues, options.StackPattern, options.MaxColumns)
 	if err != nil {
 		return "", err
 	}
 
 	// Apply query to values
-	queriedValues, err := applyQuery(filteredValues, query)
+	queriedValues, err := applyQuery(filteredValues, options.Query)
 	if err != nil {
 		return "", err
 	}
 
 	// Format the output
-	return formatOutput(queriedValues, formatStr, delimiter, maxColumns)
+	return formatOutput(queriedValues, options.FormatStr, options.Delimiter, options.MaxColumns)
 }
 
 // extractComponentValues extracts the component values from all stacks.

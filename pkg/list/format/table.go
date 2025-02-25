@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Constants for table formatting
+// Constants for table formatting.
 const (
 	MaxColumnWidth     = 60 // Maximum width for a column.
 	TableColumnPadding = 3  // Padding for table columns.

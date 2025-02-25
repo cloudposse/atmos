@@ -77,7 +77,15 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 		commonFlags.Query = ".metadata"
 	}
 
-	output, err := l.FilterAndListValues(stacksMap, "", commonFlags.Query, false, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)
+	output, err := l.FilterAndListValues(stacksMap, l.FilterOptions{
+		Component:       "",
+		Query:           commonFlags.Query,
+		IncludeAbstract: false,
+		MaxColumns:      commonFlags.MaxColumns,
+		FormatStr:       commonFlags.Format,
+		Delimiter:       commonFlags.Delimiter,
+		StackPattern:    commonFlags.Stack,
+	})
 	if err != nil {
 		if u.IsNoValuesFoundError(err) {
 			return "", &errors.NoMetadataFoundError{Query: commonFlags.Query}

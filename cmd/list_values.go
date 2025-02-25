@@ -141,7 +141,16 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		return "", fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
 	}
 
-	output, err := l.FilterAndListValues(stacksMap, component, commonFlags.Query, abstractFlag, commonFlags.MaxColumns, commonFlags.Format, commonFlags.Delimiter, commonFlags.Stack)
+	// Filter and list component values across stacks
+	output, err := l.FilterAndListValues(stacksMap, l.FilterOptions{
+		Component:       component,
+		Query:           commonFlags.Query,
+		IncludeAbstract: abstractFlag,
+		MaxColumns:      commonFlags.MaxColumns,
+		FormatStr:       commonFlags.Format,
+		Delimiter:       commonFlags.Delimiter,
+		StackPattern:    commonFlags.Stack,
+	})
 	if err != nil {
 		return "", err // Return error directly without wrapping
 	}

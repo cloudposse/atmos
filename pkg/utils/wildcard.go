@@ -11,7 +11,7 @@ import (
 // - '*' matches any sequence of non-separator characters
 // - '?' matches any single non-separator character
 // - '[abc]' matches any character within the brackets
-// - '[a-z]' matches any character in the range
+// - '[a-z]' matches any character in the range.
 // - '**' matches any number of directories or files recursively
 func MatchWildcard(pattern, str string) (bool, error) {
 	// Handle empty pattern as match all

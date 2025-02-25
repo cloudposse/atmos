@@ -72,9 +72,7 @@ func getValueKeysFromStacks(data map[string]interface{}, keys []string) []string
 func (f *DelimitedFormatter) generateHeaderAndRows(keys []string, valueKeys []string, data map[string]interface{}) ([]string, [][]string) {
 	// Create header
 	header := []string{"Key"}
-	for _, k := range keys {
-		header = append(header, k)
-	}
+	header = append(header, keys...)
 
 	var rows [][]string
 
