@@ -46,12 +46,6 @@ func processCustomCommands(
 	var command *cobra.Command
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
-	// Build commands and their hierarchy from the alias map
-	for alias, fullCmd := range atmosConfig.CommandAliases {
-		parts := strings.Fields(fullCmd)
-		addCommandWithAlias(RootCmd, alias, parts)
-	}
-
 	if topLevel {
 		existingTopLevelCommands = getTopLevelCommands()
 	}
