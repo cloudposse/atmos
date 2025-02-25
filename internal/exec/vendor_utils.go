@@ -431,6 +431,10 @@ func ExecuteAtmosVendorInternal(
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("failed to execute vendor operation in TUI mode: %w (check terminal state)", err)
 		}
+		if model.failedPkg > 0 {
+			return fmt.Errorf("failed to vendor %d components", model.failedPkg)
+
+		}
 	}
 
 	return nil

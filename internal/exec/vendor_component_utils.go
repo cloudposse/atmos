@@ -370,6 +370,9 @@ func ExecuteComponentVendorInternal(
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("running download error: %w", err)
 		}
+		if model.failedPkg > 0 {
+			return fmt.Errorf("failed to vendor  %d components", model.failedPkg)
+		}
 	}
 	return nil
 }
