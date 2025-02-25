@@ -40,5 +40,5 @@
 ```
  $ atmos list values <component> --query .vars.tags --stack '*-ue2-*'
 ```
-- Stack patterns support glob matching (e.g., '*-dev-*', 'prod-*')
+- Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
 
