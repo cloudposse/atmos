@@ -19,18 +19,20 @@ var (
 // loadConfigFromCLIArgs handles the loading of configurations provided via --config-path.
 func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) error {
 	log.Debug("loading config from command line arguments")
+
 	configFilesArgs := configAndStacksInfo.AtmosConfigFilesFromArg
 	configDirsArgs := configAndStacksInfo.AtmosConfigDirsFromArg
 	var configPaths []string
-	//merge all config from --config files
+
+	// Merge all config from --config files
 	if len(configFilesArgs) > 0 {
-		err := mergeFiles(v, configFilesArgs)
-		if err != nil {
+		if err := mergeFiles(v, configFilesArgs); err != nil {
 			return err
 		}
 		configPaths = append(configPaths, configFilesArgs...)
 	}
-	// merge config from -config-path directors
+
+	// Merge config from --config-path directories
 	if len(configDirsArgs) > 0 {
 		paths, err := mergeConfigFromDirectories(v, configDirsArgs)
 		if err != nil {
@@ -39,15 +41,16 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 		configPaths = append(configPaths, paths...)
 	}
 
-	// check if any config files were found from command line arguments
+	// Check if any config files were found from command line arguments
 	if len(configPaths) == 0 {
 		log.Debug("no config files found from command line arguments")
 		return ErrAtmosArgConfigNotFound
 	}
-	err := v.Unmarshal(atmosConfig)
-	if err != nil {
+
+	if err := v.Unmarshal(atmosConfig); err != nil {
 		return err
 	}
+
 	atmosConfig.CliConfigPath = connectPaths(configPaths)
 	return nil
 }
