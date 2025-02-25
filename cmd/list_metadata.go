@@ -23,7 +23,7 @@ var listMetadataCmd = &cobra.Command{
 	Example: "atmos list metadata\n" +
 		"atmos list metadata --query .component\n" +
 		"atmos list metadata --format json\n" +
-		"atmos list metadata --stack '*-dev-*'\n" +
+		"atmos list metadata --stack '*-{dev,staging}-*'\n" +
 		"atmos list metadata --stack 'prod-*'",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
