@@ -30,7 +30,7 @@ The command is particularly useful for:
 
 <dl>
   <dt>`--query string`</dt>
-  <dd>JMESPath query to filter settings (default: `.settings`)</dd>
+  <dd>Dot-notation path query to filter settings (e.g., `.settings.templates`). Uses a simplified path syntax, not full JMESPath.</dd>
   <dt>`--max-columns int`</dt>
   <dd>Maximum number of columns to display (default: `50`)</dd>
   <dt>`--format string`</dt>
@@ -57,7 +57,7 @@ atmos list settings --stack '*-dev-*'
 atmos list settings --stack 'prod-*'
 ```
 
-List specific settings using JMESPath queries:
+List specific settings using path queries:
 ```shell
 # Query template settings
 atmos list settings --query '.settings.templates'

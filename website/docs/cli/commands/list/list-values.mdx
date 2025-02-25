@@ -30,7 +30,7 @@ The command is particularly useful for:
 
 <dl>
   <dt>`--query string`</dt>
-  <dd>JMESPath query to filter values (e.g., `.vars` to show only variables)</dd>
+  <dd>Dot-notation path query to filter values (e.g., `.vars.enabled`). Uses a simplified path syntax, not full JMESPath.</dd>
   <dt>`--abstract`</dt>
   <dd>Include abstract components in the output</dd>
   <dt>`--max-columns int`</dt>
@@ -53,7 +53,7 @@ List only variables for a component (using the alias):
 atmos list vars vpc
 ```
 
-List values with a custom JMESPath query:
+List values with a custom path query:
 ```shell
 # Query specific variables
 atmos list values vpc --query .vars.enabled
@@ -105,6 +105,31 @@ atmos list values vpc --format tsv
 │ stage        │ dev          │ staging      │ prod         │
 │ region       │ us-east-1    │ us-east-1    │ us-east-1    │
 └──────────────┴──────────────┴──────────────┴──────────────┘
+```
+
+### Nested Object Display
+
+When listing values that contain nested objects:
+
+1. In table format, nested objects appear as `{...}` placeholders
+2. Use `--format json` or `--format yaml` to see the complete nested structure
+3. You can query specific nested paths using the dot notation: `--query .vars.tags.Environment`
+
+Example JSON output with nested objects:
+```json
+{
+  "dev-ue1": {
+    "cidr_block": "10.0.0.0/16",
+    "tags": {
+      "Environment": "dev",
+      "Team": "devops"
+    },
+    "subnets": [
+      "10.0.1.0/24",
+      "10.0.2.0/24"
+    ]
+  }
+}
 ```
 
 ## Related Commands
