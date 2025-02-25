@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -92,7 +93,7 @@ func TestDelimitedFormatter(t *testing.T) {
 			output, err := formatter.Format(test.data, test.options)
 			assert.NoError(t, err)
 
-			lines := strings.Split(strings.TrimSpace(output), "\n")
+			lines := strings.Split(strings.TrimSpace(output), utils.GetLineEnding())
 			assert.Equal(t, test.expected, lines)
 		})
 	}
