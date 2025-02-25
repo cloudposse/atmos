@@ -107,11 +107,10 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 		}
 		log.Debug(".atmos config file merged", "path", v.ConfigFileUsed())
 		configPaths = append(configPaths, confDirPath)
-
 	}
-
 	return configPaths, nil
 }
+
 func validatedIsDirs(dirPaths []string) error {
 	for _, dirPath := range dirPaths {
 		stat, err := os.Stat(dirPath)
@@ -126,6 +125,7 @@ func validatedIsDirs(dirPaths []string) error {
 	}
 	return nil
 }
+
 func validatedIsFiles(files []string) error {
 	for _, filePath := range files {
 		stat, err := os.Stat(filePath)
@@ -140,6 +140,7 @@ func validatedIsFiles(files []string) error {
 	}
 	return nil
 }
+
 func connectPaths(paths []string) string {
 	if len(paths) == 1 {
 		return paths[0]
@@ -149,5 +150,4 @@ func connectPaths(paths []string) string {
 		result += path + ";"
 	}
 	return result
-
 }
