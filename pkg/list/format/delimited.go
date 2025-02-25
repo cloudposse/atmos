@@ -12,7 +12,7 @@ import (
 const (
 	DefaultCSVDelimiter = ","
 	DefaultTSVDelimiter = "\t"
-	ValueKey           = "value"
+	ValueKey            = "value"
 )
 
 // Format implements the Formatter interface for DelimitedFormatter.

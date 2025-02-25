@@ -201,18 +201,18 @@ func limitWidth(width int) int {
 // getMaxValueWidth returns the maximum formatted value width in a column
 func getMaxValueWidth(stackData map[string]interface{}, valueKeys []string) int {
 	maxWidth := 0
-	
+
 	for _, valueKey := range valueKeys {
 		if val, ok := stackData[valueKey]; ok {
 			formattedValue := formatTableCellValue(val)
 			valueWidth := len(formattedValue)
-			
+
 			if valueWidth > maxWidth {
 				maxWidth = valueWidth
 			}
 		}
 	}
-	
+
 	return limitWidth(maxWidth)
 }
 
@@ -220,13 +220,13 @@ func getMaxValueWidth(stackData map[string]interface{}, valueKeys []string) int 
 func calculateStackColumnWidth(stackName string, stackData map[string]interface{}, valueKeys []string) int {
 	// Start with the width based on stack name
 	columnWidth := limitWidth(len(stackName))
-	
+
 	// Check value widths
 	valueWidth := getMaxValueWidth(stackData, valueKeys)
 	if valueWidth > columnWidth {
 		columnWidth = valueWidth
 	}
-	
+
 	return columnWidth
 }
 
@@ -239,7 +239,7 @@ func calculateEstimatedTableWidth(data map[string]interface{}, valueKeys, stackK
 	// Calculate width for each stack column
 	for _, stackName := range stackKeys {
 		var columnWidth int
-		
+
 		if stackData, ok := data[stackName].(map[string]interface{}); ok {
 			columnWidth = calculateStackColumnWidth(stackName, stackData, valueKeys)
 		} else {

@@ -27,30 +27,30 @@ func handleSpecialComponent(stack map[string]interface{}, component string) (map
 // extractSettingsFromComponents extracts settings from terraform components
 func extractSettingsFromComponents(stack map[string]interface{}) (map[string]interface{}, bool) {
 	allSettings := make(map[string]interface{})
-	
+
 	// Try to navigate to terraform components
 	components, ok := stack["components"].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
-	
+
 	terraform, ok := components["terraform"].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
-	
+
 	// Collect settings from all terraform components
 	for componentName, componentData := range terraform {
 		if settings := extractComponentSettings(componentData); settings != nil {
 			allSettings[componentName] = settings
 		}
 	}
-	
+
 	// Return all settings if we found any
 	if len(allSettings) > 0 {
 		return allSettings, true
 	}
-	
+
 	return nil, false
 }
 
@@ -60,12 +60,12 @@ func extractComponentSettings(componentData interface{}) interface{} {
 	if !ok {
 		return nil
 	}
-	
+
 	settings, ok := comp["settings"].(map[string]interface{})
 	if !ok {
 		return nil
 	}
-	
+
 	return deepCopyToStringMap(settings)
 }
 
@@ -282,7 +282,7 @@ func processWildcardPattern(mapData map[string]interface{}, pattern string) (int
 			return val, true
 		}
 	}
-	
+
 	// Otherwise return the map of all matches
 	return result, true
 }
@@ -293,7 +293,7 @@ func processArrayPart(arrayData []interface{}, part string) (interface{}, bool) 
 	if idx, err := strconv.Atoi(part); err == nil && idx >= 0 && idx < len(arrayData) {
 		return arrayData[idx], true
 	}
-	
+
 	// If array has map elements, try to access by key
 	if len(arrayData) > 0 {
 		if mapElement, ok := arrayData[0].(map[string]interface{}); ok {
@@ -302,7 +302,7 @@ func processArrayPart(arrayData []interface{}, part string) (interface{}, bool) 
 			}
 		}
 	}
-	
+
 	// Return false to indicate we should return the array itself
 	return nil, false
 }
