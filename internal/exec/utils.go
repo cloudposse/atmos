@@ -205,6 +205,18 @@ func ProcessCommandLineArgs(
 		return configAndStacksInfo, err
 	}
 
+	configAndStacksInfo.BasePath, err = cmd.Flags().GetString("base-path")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.AtmosConfigFilesFromArg, err = cmd.Flags().GetStringSlice("config")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.AtmosConfigDirsFromArg, err = cmd.Flags().GetStringSlice("config-path")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
 		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
@@ -216,7 +228,6 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.ComponentType = componentType
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
-	configAndStacksInfo.BasePath = argsAndFlagsInfo.BasePath
 	configAndStacksInfo.TerraformCommand = argsAndFlagsInfo.TerraformCommand
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand

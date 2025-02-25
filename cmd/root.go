@@ -251,7 +251,9 @@ func init() {
 
 	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
-
+	RootCmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
+	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
+	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

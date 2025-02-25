@@ -293,6 +293,8 @@ type ConfigAndStacksInfo struct {
 	LogsFile                      string
 	SettingsListMergeStrategy     string
 	Query                         string
+	AtmosConfigFilesFromArg       []string
+	AtmosConfigDirsFromArg        []string
 }
 
 // Workflows
