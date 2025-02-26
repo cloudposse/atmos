@@ -36,7 +36,7 @@ spec:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       tags:
         - demo
-    # We have some issue with oci. So, we are commenting this out.
+    # TODO: Fix OCI test repository then re-enable this vendoring configuration
     # - component: "my-vpc1"
     #   source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
     #   version: "latest"
