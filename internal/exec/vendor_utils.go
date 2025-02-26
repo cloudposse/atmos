@@ -433,7 +433,6 @@ func ExecuteAtmosVendorInternal(
 		}
 		if model.failedPkg > 0 {
 			return fmt.Errorf("failed to vendor %d components", model.failedPkg)
-
 		}
 	}
 

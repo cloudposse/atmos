@@ -43,7 +43,6 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 
 	// Get the image descriptor (includes MediaType)
 	descriptor, err := remote.Get(ref, auth)
-
 	if err != nil {
 		log.Error("Failed to get OCI image", "image", imageName, "error", err)
 		return fmt.Errorf("cannot get image '%s': %v", imageName, err)
