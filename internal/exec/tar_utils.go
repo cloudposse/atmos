@@ -12,14 +12,12 @@ import (
 
 // extractTarball extracts the tarball file from an io.Reader into the destination directory
 func extractTarball(reader io.Reader, extractPath string) error {
-
 	// Call untar function to handle tar extraction
 	return untar(reader, extractPath)
 }
 
 // untar extracts a tar archive into the destination directory
 func untar(reader io.Reader, destDir string) error {
-
 	tarBallReader := tar.NewReader(reader)
 
 	for {
