@@ -8,11 +8,12 @@ spec:
     - "vendor/vendor4"
 
   sources:
-    - component: "my-vpc1"
-      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
-      version: "latest"
-      targets:
-        - "components/terraform/infra/my-vpc1"
+    # TODO: Fix OCI test repository then re-enable this vendoring configuration
+    # - component: "my-vpc1"
+    #   source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+    #   version: "latest"
+    #   targets:
+    #     - "components/terraform/infra/my-vpc1"
     - component: "my-vpc2"
       source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
       version: "1.372.0"
