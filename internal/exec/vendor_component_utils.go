@@ -357,7 +357,7 @@ func ExecuteComponentVendorInternal(
 
 	// Run TUI to process packages
 	if len(packages) > 0 {
-		model, err := newModelComponentVendorInternal(packages, dryRun, atmosConfig)
+		model, err := newModelComponentVendorInternal(packages, dryRun, &atmosConfig)
 		if err != nil {
 			return fmt.Errorf("error initializing model: %v", err)
 		}

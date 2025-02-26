@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+// pkgComponentVendor defines a vendor package.
 type pkgComponentVendor struct {
 	uri                 string
 	name                string
@@ -31,7 +32,8 @@ type pkgComponentVendor struct {
 	mixinFilename       string
 }
 
-func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) (modelVendor, error) {
+// newModelComponentVendorInternal creates a new vendor model.
+func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) (modelVendor, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(30),
@@ -40,7 +42,14 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 	s := spinner.New()
 	s.Style = theme.Styles.Link
 	if len(pkgs) == 0 {
-		return modelVendor{done: true}, nil
+		return modelVendor{
+			packages:    nil,
+			spinner:     s,
+			progress:    p,
+			dryRun:      dryRun,
+			atmosConfig: *atmosConfig,
+			isTTY:       term.IsTTYSupportForStdout(),
+		}, nil
 	}
 	vendorPks := []pkgVendor{}
 	for _, pkg := range pkgs {
@@ -50,7 +59,6 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 			componentPackage: &pkg,
 		}
 		vendorPks = append(vendorPks, vendorPkg)
-
 	}
 	tty := term.IsTTYSupportForStdout()
 	return modelVendor{
@@ -58,12 +66,13 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 		spinner:     s,
 		progress:    p,
 		dryRun:      dryRun,
-		atmosConfig: atmosConfig,
+		atmosConfig: *atmosConfig,
 		isTTY:       tty,
 	}, nil
 }
 
-func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+// downloadComponentAndInstall returns a command to download and install a component.
+func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			// Simulate the action
@@ -106,7 +115,8 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 	}
 }
 
-func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
+// installComponent downloads and installs a component.
+func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
 	// Create temp folder
 	// We are using a temp folder for the following reasons:
 	// 1. 'git' does not clone into an existing folder (and we have the existing component folder with `component.yaml` in it)
@@ -121,7 +131,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		return fmt.Errorf("failed to set temp directory permissions: %w", err)
 	}
 
-	defer removeTempDir(atmosConfig, tempDir)
+	defer removeTempDir(*atmosConfig, tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
@@ -133,7 +143,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(atmosConfig, p.uri, tempDir)
+		err = processOciImage(*atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
 		}
@@ -159,22 +169,22 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		}
 	default:
 		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
-
 	}
-	if err = copyComponentToDestination(atmosConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
+	if err = copyComponentToDestination(*atmosConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
 		return fmt.Errorf("failed to copy package %s error %s", p.name, err)
 	}
 
 	return nil
 }
 
-func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
+// installMixin downloads and installs a mixin.
+func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
 		return fmt.Errorf("Failed to create temp directory %s", err)
 	}
 
-	defer removeTempDir(atmosConfig, tempDir)
+	defer removeTempDir(*atmosConfig, tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
@@ -184,7 +194,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(atmosConfig, p.uri, tempDir)
+		err = processOciImage(*atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("failed to process OCI image %s error %s", p.name, err)
 		}
