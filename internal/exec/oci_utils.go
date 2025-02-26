@@ -68,9 +68,14 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 	if err != nil {
 		return err
 	}
-
+	// Parse the image name to get a name.Tag
+	tag, err := name.NewTag(imageName, name.WeakValidation)
+	if err != nil {
+		log.Error("Failed to parse image name", "image", imageName, "error", err)
+		return fmt.Errorf("failed to parse image name: %v", err)
+	}
 	// Load tarball image
-	img, err := tarball.ImageFromPath(tempTarFileName, nil)
+	img, err := tarball.ImageFromPath(tempTarFileName, &tag)
 	if err != nil {
 		log.Error("Failed to load OCI image from tarball", "image", imageName, "error", err)
 		return fmt.Errorf("failed to load image from tarball: %v", err)
