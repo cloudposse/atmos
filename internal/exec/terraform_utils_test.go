@@ -7,6 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Helper function to create bool pointer for testing.
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 func TestIsWorkspacesEnabled(t *testing.T) {
 	// Test cases for isWorkspacesEnabled function.
 	tests := []struct {
