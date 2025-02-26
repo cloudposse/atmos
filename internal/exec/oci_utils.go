@@ -7,6 +7,7 @@ import (
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
@@ -29,16 +30,20 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 
 	// Temp tarball file name
 	tempTarFileName := filepath.Join(tempDir, uuid.New().String()) + ".tar"
-
 	// Get the image reference from the OCI registry
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
 		return fmt.Errorf("cannot parse reference of the image '%s': %v", imageName, err)
 	}
+	auth := remote.WithAuth(&authn.Basic{
+		Username: "oauth",                   // Can be "oauth", "token", or your GitHub username
+		Password: os.Getenv("GITHUB_TOKEN"), // GitHub token
+	})
 
 	// Get the image descriptor (includes MediaType)
-	descriptor, err := remote.Get(ref)
+	descriptor, err := remote.Get(ref, auth)
+
 	if err != nil {
 		log.Error("Failed to get OCI image", "image", imageName, "error", err)
 		return fmt.Errorf("cannot get image '%s': %v", imageName, err)
