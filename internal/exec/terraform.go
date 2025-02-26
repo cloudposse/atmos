@@ -26,7 +26,7 @@ const (
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
 var ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
 
-// ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands.
+// ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
 func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
 	if err != nil {
@@ -35,7 +35,7 @@ func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFla
 	return ExecuteTerraform(info)
 }
 
-// ExecuteTerraform executes terraform commands.
+// ExecuteTerraform executes terraform commands
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -56,7 +56,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
-	// Skip stack processing when cleaning with --force flag to allow cleaning without requiring stack configuration.
+	// Skip stack processing when cleaning with --force flag to allow cleaning without requiring stack configuration
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
@@ -387,45 +387,46 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Run `terraform workspace` before executing other terraform commands
-	// only if workspaces are enabled and the `TF_WORKSPACE` environment variable is not set by the caller
-	executeWorkspaceCommands := info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") &&
-		isWorkspacesEnabled(&atmosConfig, &info) && os.Getenv("TF_WORKSPACE") == ""
+	// only if the `TF_WORKSPACE` environment variable is not set by the caller
+	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
+		tfWorkspaceEnvVar := os.Getenv("TF_WORKSPACE")
 
-	if executeWorkspaceCommands {
-		workspaceSelectRedirectStdErr := "/dev/stdout"
+		if tfWorkspaceEnvVar == "" {
+			workspaceSelectRedirectStdErr := "/dev/stdout"
 
-		// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
-		if info.RedirectStdErr != "" {
-			workspaceSelectRedirectStdErr = info.RedirectStdErr
-		}
-
-		err = ExecuteShellCommand(
-			atmosConfig,
-			info.Command,
-			[]string{"workspace", "select", info.TerraformWorkspace},
-			componentPath,
-			info.ComponentEnvList,
-			info.DryRun,
-			workspaceSelectRedirectStdErr,
-		)
-		if err != nil {
-			var osErr *osexec.ExitError
-			ok := errors.As(err, &osErr)
-			if !ok || osErr.ExitCode() != 1 {
-				// err is not a non-zero exit code or err is not exit code 1, which we are expecting
-				return err
+			// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
+			if info.RedirectStdErr != "" {
+				workspaceSelectRedirectStdErr = info.RedirectStdErr
 			}
+
 			err = ExecuteShellCommand(
 				atmosConfig,
 				info.Command,
-				[]string{"workspace", "new", info.TerraformWorkspace},
+				[]string{"workspace", "select", info.TerraformWorkspace},
 				componentPath,
 				info.ComponentEnvList,
 				info.DryRun,
-				info.RedirectStdErr,
+				workspaceSelectRedirectStdErr,
 			)
 			if err != nil {
-				return err
+				var osErr *osexec.ExitError
+				ok := errors.As(err, &osErr)
+				if !ok || osErr.ExitCode() != 1 {
+					// err is not a non-zero exit code or err is not exit code 1, which we are expecting
+					return err
+				}
+				err = ExecuteShellCommand(
+					atmosConfig,
+					info.Command,
+					[]string{"workspace", "new", info.TerraformWorkspace},
+					componentPath,
+					info.ComponentEnvList,
+					info.DryRun,
+					info.RedirectStdErr,
+				)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
