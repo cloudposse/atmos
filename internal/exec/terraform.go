@@ -23,10 +23,8 @@ const (
 	forceFlag                 = "--force"
 )
 
-var (
-	// ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
-	ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
-)
+// ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
+var ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands.
 func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
