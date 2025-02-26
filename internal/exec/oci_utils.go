@@ -3,85 +3,61 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/google/uuid"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Target artifact type for Atmos components
-const targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip"
+const targetArtifactType = "application/vnd.oci.image.layer.v1.tar"
 
-// processOciImage downloads an OCI image, extracts its layers, and writes to the destination directory.
 func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, destDir string) error {
-	// Temp directory for the tarball files
+	// Temp directory for operations
 	tempDir, err := os.MkdirTemp("", uuid.New().String())
 	if err != nil {
 		return err
 	}
 	defer removeTempDir(atmosConfig, tempDir)
 
-	// Temp tarball file name
-	tempTarFileName := filepath.Join(tempDir, uuid.New().String()) + ".tar"
-	// Get the image reference from the OCI registry
+	// Parse image reference
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
 		log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
-		return fmt.Errorf("cannot parse reference of the image '%s': %v", imageName, err)
+		return fmt.Errorf("invalid image reference: %v", err)
 	}
-	// Retrieve the token from the environment
+
+	// Authentication setup
 	githubToken := os.Getenv("GITHUB_TOKEN")
 	if githubToken == "" {
-		return fmt.Errorf("GITHUB_TOKEN environment variable is not set")
+		return fmt.Errorf("GITHUB_TOKEN environment variable is required")
 	}
 	auth := remote.WithAuth(&authn.Basic{
-		Username: "oauth2", // GitHub uses "oauth2" as the username for personal access tokens
+		Username: "oauth2",
 		Password: githubToken,
 	})
 
-	// Get the image descriptor (includes MediaType)
+	// Get artifact descriptor
 	descriptor, err := remote.Get(ref, auth)
 	if err != nil {
 		log.Error("Failed to get OCI image", "image", imageName, "error", err)
 		return fmt.Errorf("cannot get image '%s': %v", imageName, err)
 	}
-
 	// Check if we need to filter by MediaType
 	filterByArtifactType := descriptor.MediaType == targetArtifactType
-
-	// Download the image from the OCI registry
-	image, err := descriptor.Image()
+	// Convert to image
+	img, err := descriptor.Image()
 	if err != nil {
 		log.Error("Failed to get image descriptor", "image", imageName, "error", err)
 		return fmt.Errorf("cannot get a descriptor for the OCI image '%s': %v", imageName, err)
 	}
 
-	// Write the image tarball to the temp directory
-	err = tarball.WriteToFile(tempTarFileName, ref, image)
-	if err != nil {
-		return err
-	}
-	// Parse the image name to get a name.Tag
-	tag, err := name.NewTag(imageName, name.WeakValidation)
-	if err != nil {
-		log.Error("Failed to parse image name", "image", imageName, "error", err)
-		return fmt.Errorf("failed to parse image name: %v", err)
-	}
-	// Load tarball image
-	img, err := tarball.ImageFromPath(tempTarFileName, &tag)
-	if err != nil {
-		log.Error("Failed to load OCI image from tarball", "image", imageName, "error", err)
-		return fmt.Errorf("failed to load image from tarball: %v", err)
-	}
-
-	// Get image layers
+	// Process layers
 	layers, err := img.Layers()
 	if err != nil {
 		log.Error("Failed to retrieve layers from OCI image", "image", imageName, "error", err)
@@ -93,40 +69,32 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 		return fmt.Errorf("the OCI image '%s' does not have any layers", imageName)
 	}
 
-	log.Info("Extracting OCI image", "image", imageName, "layers", len(layers))
-
-	// Extract layers
-	for _, layer := range layers {
-		// Get layer metadata
+	// Process each layer
+	for i, layer := range layers {
 		layerDesc, err := layer.Digest()
 		if err != nil {
-			log.Error("Failed to retrieve layer digest", "image", imageName, "error", err)
-			return fmt.Errorf("failed to get layer digest: %v", err)
+			log.Warn("Skipping layer with invalid digest", "index", i, "error", err)
+			continue
 		}
 
-		// Get uncompressed layer reader
-		layerReader, err := layer.Uncompressed()
+		// Extract layer contents
+		uncompressed, err := layer.Uncompressed()
 		if err != nil {
-			log.Error("Failed to get uncompressed layer", "image", imageName, "error", err)
-			return fmt.Errorf("failed to get uncompressed layer: %v", err)
+			log.Error("Layer decompression failed", "index", i, "digest", layerDesc, "error", err)
+			return fmt.Errorf("layer decompression error: %v", err)
 		}
-		defer layerReader.Close()
-
+		defer uncompressed.Close()
 		// Determine if we should extract the layer
 		if filterByArtifactType {
 			log.Warn("Skipping layer due to artifact type mismatch", "layer", layerDesc.String(), "artifact_type", descriptor.MediaType)
 			continue
 		}
 
-		log.Info("Extracting layer", "layer", layerDesc.String())
-
-		// Extract the tarball layer
-		err = extractTarball(layerReader, destDir)
-		if err != nil {
-			return err
+		if err := extractTarball(uncompressed, destDir); err != nil {
+			log.Error("Layer extraction failed", "index", i, "digest", layerDesc, "error", err)
+			return fmt.Errorf("tarball extraction error: %v", err)
 		}
 	}
 
-	log.Info("Successfully extracted OCI image", "image", imageName)
 	return nil
 }

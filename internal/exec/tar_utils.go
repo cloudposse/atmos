@@ -12,7 +12,6 @@ import (
 
 // extractTarball extracts the tarball file from an io.Reader into the destination directory
 func extractTarball(reader io.Reader, extractPath string) error {
-	log.Info("Extracting tarball", "destination", extractPath)
 
 	// Call untar function to handle tar extraction
 	return untar(reader, extractPath)
@@ -20,7 +19,6 @@ func extractTarball(reader io.Reader, extractPath string) error {
 
 // untar extracts a tar archive into the destination directory
 func untar(reader io.Reader, destDir string) error {
-	log.Info("Untarring contents", "destination", destDir)
 
 	tarBallReader := tar.NewReader(reader)
 
@@ -85,6 +83,5 @@ func untar(reader io.Reader, destDir string) error {
 		}
 	}
 
-	log.Info("Successfully extracted tar archive", "destination", destDir)
 	return nil
 }
