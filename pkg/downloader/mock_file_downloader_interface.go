@@ -64,6 +64,21 @@ func (mr *MockFileDownloaderMockRecorder) FetchAndAutoParse(src interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAndAutoParse", reflect.TypeOf((*MockFileDownloader)(nil).FetchAndAutoParse), src)
 }
 
+// FetchData mocks base method.
+func (m *MockFileDownloader) FetchData(src string) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchData", src)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchData indicates an expected call of FetchData.
+func (mr *MockFileDownloaderMockRecorder) FetchData(src interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchData", reflect.TypeOf((*MockFileDownloader)(nil).FetchData), src)
+}
+
 // MockClientFactory is a mock of ClientFactory interface.
 type MockClientFactory struct {
 	ctrl     *gomock.Controller

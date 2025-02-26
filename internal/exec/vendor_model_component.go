@@ -127,11 +127,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-<<<<<<< HEAD
 		if err = downloader.NewGoGetterDownloader(&atmosConfig).Fetch(p.uri, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
-=======
-		if err = gogetter.GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
->>>>>>> temp commit
 			return fmt.Errorf("failed to download package %s error %s", p.name, err)
 		}
 

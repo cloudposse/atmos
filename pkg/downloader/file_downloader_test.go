@@ -38,6 +38,31 @@ func TestFileDownloader_Fetch_Failure(t *testing.T) {
 	assert.Equal(t, expectedErr, errors.Unwrap(err))
 }
 
+func TestFileDownloader_FetchData(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockDownloadClient(ctrl)
+	mockFactory := NewMockClientFactory(ctrl)
+
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", gomock.Any(), ClientModeFile).Return(mockClient, nil)
+	mockClient.EXPECT().Get().Return(nil)
+	fakeData := []byte(`{"some":"json"}`)
+	tempFile := "/tmp/testfile.json"
+	fd := &fileDownloader{
+		clientFactory: mockFactory,
+		tempPathGenerator: func() string {
+			return tempFile
+		},
+		fileReader: func(_ string) ([]byte, error) {
+			return fakeData, nil
+		},
+	}
+	data, err := fd.FetchData("src")
+	assert.NoError(t, err)
+	assert.Equal(t, fakeData, data)
+}
+
 func TestFileDownloader_FetchAndAutoParse(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

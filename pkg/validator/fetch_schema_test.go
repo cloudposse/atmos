@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestURLFetcher(t *testing.T) {
@@ -71,21 +73,14 @@ func TestAtmosFetcher(t *testing.T) {
 
 func TestGetDataFetcher(t *testing.T) {
 	// Test URL fetcher
-	fetcher, err := getDataFetcher("https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	_, err = fetcher.Fetch()
+	dataFetcher := NewDataFetcher()
+	_, err := dataFetcher.GetData(&schema.AtmosConfiguration{}, "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	// Test Atmos fetcher
-	fetcher, err = getDataFetcher("atmos://config")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	_, err = fetcher.Fetch()
+	_, err = dataFetcher.getDataFetcher(&schema.AtmosConfiguration{}, "atmos://config")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -109,11 +104,7 @@ func TestGetDataFetcher(t *testing.T) {
 	}
 
 	// Test File fetcher
-	fetcher, err = getDataFetcher(tmpFile.Name())
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	_, err = fetcher.Fetch()
+	_, err = dataFetcher.GetData(&schema.AtmosConfiguration{}, tmpFile.Name())
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
