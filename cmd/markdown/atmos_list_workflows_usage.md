@@ -17,6 +17,7 @@
 ```
 
 - Delimiter for csv output
+
 ```
  $ atmos list workflows --format csv --delimiter ','
 ```

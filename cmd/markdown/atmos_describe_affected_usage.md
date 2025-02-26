@@ -65,7 +65,7 @@
 
 - Upload the affected components and stacks to a specified HTTP endpoint
 
-```bash
+```
  $ atmos describe affected --upload
 ```
 
