@@ -13,7 +13,7 @@ import (
 // - '[abc]' matches any character within the brackets.
 // - '[a-z]' matches any character in the range.
 // - '**' matches any number of directories or files recursively.
-// - '{abc,xyz}` matches the string "abc" or "xyz"
+// - '{abc,xyz}` matches the string "abc" or "xyz".
 func MatchWildcard(pattern, str string) (bool, error) {
 	// Handle empty pattern as match all
 	if pattern == "" {
