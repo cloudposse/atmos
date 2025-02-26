@@ -13,6 +13,8 @@ import (
 // BuildTerraformWorkspace builds Terraform workspace
 func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	// Return 'default' workspace if workspaces are disabled
+        // Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,  
+        // preventing switching or creating additional workspaces.  
 	if !isWorkspacesEnabled(&atmosConfig, &configAndStacksInfo) {
 		return "default", nil
 	}
