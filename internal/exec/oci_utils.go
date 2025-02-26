@@ -36,8 +36,14 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 		log.Error("Failed to parse OCI image reference", "image", imageName, "error", err)
 		return fmt.Errorf("cannot parse reference of the image '%s': %v", imageName, err)
 	}
-	auth := remote.WithAuth(&authn.Bearer{
-		Token: os.Getenv("GITHUB_TOKEN"),
+	// Retrieve the token from the environment
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	if githubToken == "" {
+		return fmt.Errorf("GITHUB_TOKEN environment variable is not set")
+	}
+	auth := remote.WithAuth(&authn.Basic{
+		Username: "oauth2", // GitHub uses "oauth2" as the username for personal access tokens
+		Password: githubToken,
 	})
 
 	// Get the image descriptor (includes MediaType)
