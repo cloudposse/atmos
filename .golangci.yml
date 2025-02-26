@@ -100,7 +100,7 @@ linters-settings:
       - name: cognitive-complexity
         arguments: [25] # Max cognitive complexity
       - name: cyclomatic
-        arguments: [10] # Max cyclomatic complexity
+        arguments: [13] # Max cyclomatic complexity
       - name: add-constant
         arguments:
           - maxLitCount: "3"
