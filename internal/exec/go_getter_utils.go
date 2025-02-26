@@ -340,6 +340,7 @@ func removeSymlinks(root string) error {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
+			log.Debug("Removing symlink", "path", path)
 			// Symlinks are removed for the entire repo, regardless if there are any subfolders specified
 			return os.Remove(path)
 		}
