@@ -4,25 +4,42 @@ import (
 	"fmt"
 	"os"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
+	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validator"
-	"gopkg.in/yaml.v3"
 )
 
-func ExecuteAtmosValidateSchemaCmd(yamlSource string, customSchema string) error {
+type ExitFunction func(int)
+
+type atmosValidatorExecuter struct {
+	validator      validator.Validator
+	fileDownloader downloader.FileDownloader
+	Exit           ExitFunction
+}
+
+func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosValidatorExecuter {
+	fileDownloader := downloader.NewGoGetterDownloader(atmosConfig)
+	return &atmosValidatorExecuter{
+		validator:      validator.NewYAMLSchemaValidator(atmosConfig),
+		Exit:           os.Exit,
+		fileDownloader: fileDownloader,
+	}
+}
+
+func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource string, customSchema string) error {
 	if yamlSource == "" {
 		yamlSource = "atmos.yaml"
 	}
 	if customSchema == "" {
-		yamlData, err := validator.GetData(yamlSource)
+		yamlData, err := av.fileDownloader.FetchAndAutoParse(yamlSource)
 		if err != nil {
 			return err
 		}
-		yamlGenericData := make(map[string]interface{})
-		yaml.Unmarshal(yamlData, yamlGenericData)
+		yamlGenericData := yamlData.(map[string]interface{})
 		if val, ok := yamlGenericData["schema"]; ok && val != "" {
-			if scheama, ok := val.(string); ok {
-				customSchema = scheama
+			if schema, ok := val.(string); ok {
+				customSchema = schema
 			}
 		}
 		if customSchema == "" && yamlSource == "atmos.yaml" {
@@ -32,18 +49,18 @@ func ExecuteAtmosValidateSchemaCmd(yamlSource string, customSchema string) error
 	if customSchema == "" {
 		return fmt.Errorf("schema not found for %v file", yamlSource)
 	}
-	validationErrors, err := validator.ValidateYAMLSchema(customSchema, yamlSource)
+	validationErrors, err := av.validator.ValidateYAMLSchema(customSchema, yamlSource)
 	if err != nil {
 		return err
 	}
 	if len(validationErrors) == 0 {
-		u.LogInfo(fmt.Sprintf("No Validation Errors found in %v using schema %v", yamlSource, customSchema))
+		log.Info("No Validation Errors", "source", yamlSource, "schema", customSchema)
 	} else {
-		u.LogError(fmt.Errorf("Invalid YAML:"))
+		log.Error(fmt.Errorf("Invalid YAML:"))
 		for _, err := range validationErrors {
-			u.LogError(fmt.Errorf("- %s\n", err))
+			log.Error(fmt.Errorf("- %s\n", err))
 		}
-		os.Exit(1)
+		av.Exit(1)
 	}
 	return nil
 }

@@ -25,7 +25,7 @@ var ValidateSchemaCmd = &cobra.Command{
 		if err != nil {
 			u.PrintErrorMarkdown("", err, "")
 		}
-		if err := exec.ExecuteAtmosValidateSchemaCmd(arg, schema); err != nil {
+		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(arg, schema); err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
