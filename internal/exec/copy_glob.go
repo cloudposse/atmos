@@ -142,7 +142,7 @@ func shouldSkipEntry(info os.FileInfo, srcPath, baseDir string, excluded, includ
 }
 
 // processDirEntry handles a single directory entry for copyDirRecursive.
-func processDirEntry(entry os.DirEntry, ctx CopyContext) error {
+func processDirEntry(entry os.DirEntry, ctx *CopyContext) error {
 	srcPath := filepath.Join(ctx.SrcDir, entry.Name())
 	dstPath := filepath.Join(ctx.DstDir, entry.Name())
 
@@ -167,7 +167,7 @@ func processDirEntry(entry os.DirEntry, ctx CopyContext) error {
 			return fmt.Errorf("creating directory %q: %w", dstPath, err)
 		}
 		// Recurse with the same context but with updated source and destination directories.
-		newCtx := CopyContext{
+		newCtx := &CopyContext{
 			SrcDir:   srcPath,
 			DstDir:   dstPath,
 			BaseDir:  ctx.BaseDir,
@@ -180,7 +180,7 @@ func processDirEntry(entry os.DirEntry, ctx CopyContext) error {
 }
 
 // copyDirRecursive recursively copies srcDir to dstDir using shouldSkipEntry filtering.
-func copyDirRecursive(ctx CopyContext) error {
+func copyDirRecursive(ctx *CopyContext) error {
 	entries, err := os.ReadDir(ctx.SrcDir)
 	if err != nil {
 		return fmt.Errorf("reading directory %q: %w", ctx.SrcDir, err)
@@ -221,7 +221,7 @@ func shouldSkipPrefixEntry(info os.FileInfo, fullRelPath string, excluded []stri
 }
 
 // processPrefixEntry handles a single entry for copyDirRecursiveWithPrefix.
-func processPrefixEntry(entry os.DirEntry, ctx PrefixCopyContext) error {
+func processPrefixEntry(entry os.DirEntry, ctx *PrefixCopyContext) error {
 	fullRelPath := filepath.ToSlash(filepath.Join(ctx.Prefix, entry.Name()))
 	srcPath := filepath.Join(ctx.SrcDir, entry.Name())
 	dstPath := filepath.Join(ctx.DstDir, entry.Name())
@@ -244,7 +244,7 @@ func processPrefixEntry(entry os.DirEntry, ctx PrefixCopyContext) error {
 		if err := os.MkdirAll(dstPath, info.Mode()); err != nil {
 			return fmt.Errorf("creating directory %q: %w", dstPath, err)
 		}
-		newCtx := PrefixCopyContext{
+		newCtx := &PrefixCopyContext{
 			SrcDir:     srcPath,
 			DstDir:     dstPath,
 			GlobalBase: ctx.GlobalBase,
@@ -257,7 +257,7 @@ func processPrefixEntry(entry os.DirEntry, ctx PrefixCopyContext) error {
 }
 
 // copyDirRecursiveWithPrefix recursively copies srcDir to dstDir while preserving the global relative path.
-func copyDirRecursiveWithPrefix(ctx PrefixCopyContext) error {
+func copyDirRecursiveWithPrefix(ctx *PrefixCopyContext) error {
 	entries, err := os.ReadDir(ctx.SrcDir)
 	if err != nil {
 		return fmt.Errorf("reading directory %q: %w", ctx.SrcDir, err)
@@ -330,7 +330,7 @@ func processMatch(sourceDir, targetPath, file string, shallow bool, excluded []s
 			log.Debug("Directory is not copied because it is a shallow copy", "directory", relPath)
 			return nil
 		}
-		return copyDirRecursiveWithPrefix(PrefixCopyContext{
+		return copyDirRecursiveWithPrefix(&PrefixCopyContext{
 			SrcDir:     file,
 			DstDir:     dstPath,
 			GlobalBase: sourceDir,
@@ -392,7 +392,7 @@ func copyToTargetWithPatterns(
 
 	// If no inclusion patterns are defined, copy everything except those matching excluded items.
 	if len(s.IncludedPaths) == 0 {
-		if err := copyDirRecursive(CopyContext{
+		if err := copyDirRecursive(&CopyContext{
 			SrcDir:   sourceDir,
 			DstDir:   targetPath,
 			BaseDir:  sourceDir,
