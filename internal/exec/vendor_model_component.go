@@ -33,7 +33,7 @@ type pkgComponentVendor struct {
 }
 
 // newModelComponentVendorInternal creates a new vendor model.
-func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) (modelVendor, error) {
+func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) modelVendor {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(30),
@@ -49,7 +49,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 			dryRun:      dryRun,
 			atmosConfig: *atmosConfig,
 			isTTY:       term.IsTTYSupportForStdout(),
-		}, nil
+		}
 	}
 	vendorPks := []pkgVendor{}
 	for _, pkg := range pkgs {
@@ -68,7 +68,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 		dryRun:      dryRun,
 		atmosConfig: *atmosConfig,
 		isTTY:       tty,
-	}, nil
+	}
 }
 
 // downloadComponentAndInstall returns a command to download and install a component.

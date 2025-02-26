@@ -63,9 +63,11 @@ func IsValidScheme(scheme string) bool {
 	return validSchemes[scheme]
 }
 
-// CustomGitDetector intercepts GitHub URLs and transforms them
-// into something like git::https://<token>@github.com/... so we can
-// do a git-based clone with a token.
+/*
+CustomGitDetector intercepts GitHub URLs and transforms them
+into something like git::https://<token>@github.com/... so we can
+do a git-based clone with a token.
+*/
 type CustomGitDetector struct {
 	AtmosConfig *schema.AtmosConfiguration
 	source      string

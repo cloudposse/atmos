@@ -357,10 +357,7 @@ func ExecuteComponentVendorInternal(
 
 	// Run TUI to process packages
 	if len(packages) > 0 {
-		model, err := newModelComponentVendorInternal(packages, dryRun, &atmosConfig)
-		if err != nil {
-			return fmt.Errorf("error initializing model: %v", err)
-		}
+		model := newModelComponentVendorInternal(packages, dryRun, &atmosConfig)
 		var opts []tea.ProgramOption
 		// Disable TUI if no TTY support is available
 		if !term.IsTTYSupportForStdout() {
