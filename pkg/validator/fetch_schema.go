@@ -29,6 +29,7 @@ func (d *dataFetcher) getDataFetcher(atmosConfig *schema.AtmosConfiguration, sou
 	}
 }
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DataFetcher interface {
 	GetData(atmosConfig *schema.AtmosConfiguration, source string) ([]byte, error)
 }
