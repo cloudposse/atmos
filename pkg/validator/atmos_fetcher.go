@@ -13,7 +13,7 @@ type AtmosFetcher struct {
 	Key string
 }
 
-// Sentinel error for quick checks
+// Sentinel error for quick checks.
 var ErrAtmosSchemaNotFound = errors.New("atmos schema not found")
 
 var atmosData = map[string][]byte{

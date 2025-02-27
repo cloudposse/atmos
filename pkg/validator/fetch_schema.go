@@ -14,6 +14,8 @@ type Fetcher interface {
 	Fetch() ([]byte, error)
 }
 
+var ErrUnsupportedSource = errors.New("unsupported source type")
+
 // getDataFetcher returns the appropriate Fetcher based on the input source.
 func (d *dataFetcher) getDataFetcher(atmosConfig *schema.AtmosConfiguration, source string) (Fetcher, error) {
 	switch {
@@ -25,7 +27,7 @@ func (d *dataFetcher) getDataFetcher(atmosConfig *schema.AtmosConfiguration, sou
 		if _, err := os.Stat(source); err == nil {
 			return &FileFetcher{FilePath: source}, nil
 		}
-		return nil, errors.New("unsupported source type")
+		return nil, ErrUnsupportedSource
 	}
 }
 
@@ -45,7 +47,7 @@ func NewDataFetcher() *dataFetcher {
 	}
 }
 
-// GetData returns the data based on source
+// GetData returns the data based on source.
 func (d *dataFetcher) GetData(atmosConfig *schema.AtmosConfiguration, source string) ([]byte, error) {
 	fetcher, err := d.getDataFetcher(atmosConfig, source)
 	if err != nil {

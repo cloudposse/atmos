@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestValidateYAMLSchema tests the ValidateYAMLSchema method of the yamlSchemaValidator
+var ErrFailedToFetchSchema = errors.New("failed to fetch schema")
+
+// TestValidateYAMLSchema tests the ValidateYAMLSchema method of the yamlSchemaValidator.
 func TestValidateYAMLSchema(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -66,7 +68,7 @@ key: value
 			name:         "Schema fetch error",
 			schemaSource: "schema.json",
 			yamlSource:   "data.yaml",
-			fetcherErr:   errors.New("failed to fetch schema"),
+			fetcherErr:   ErrFailedToFetchSchema,
 			wantErr:      true,
 		},
 	}

@@ -2,7 +2,6 @@ package validator
 
 import (
 	"errors"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -24,11 +23,13 @@ func TestURLFetcher(t *testing.T) {
 
 func TestFileFetcher(t *testing.T) {
 	// Create a temporary file for the test
-	tmpFile, err := ioutil.TempFile("", "testfile-")
+	tmpFile, err := os.CreateTemp("", "testfile-")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name()) // Ensure the file is deleted after the test
+	// Use file (e.g., file.Name() to get the name, file.Write() to write to it, etc.)
+	defer tmpFile.Close()
 
 	// Write some test data into the temporary file
 	expectedData := []byte("File content")
@@ -86,11 +87,13 @@ func TestGetDataFetcher(t *testing.T) {
 	}
 
 	// Create a temporary file for the test
-	tmpFile, err := ioutil.TempFile("", "testfile-")
+	tmpFile, err := os.CreateTemp("", "testfile-")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name()) // Ensure the file is deleted after the test
+	// Use file (e.g., file.Name() to get the name, file.Write() to write to it, etc.)
+	defer tmpFile.Close()
 
 	// Write some test data into the temporary file
 	expectedData := []byte("File content")
