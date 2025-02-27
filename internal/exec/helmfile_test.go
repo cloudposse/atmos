@@ -9,8 +9,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// test ExecuteHelmfile export env var ATMOS_CLI_CONFIG_PATH  ATMOS_BASE_PATH .
-func TestExecuteHelmfile(t *testing.T) {
+// test TestExecuteTerraform_ExportEnvVar check that when executing the helmfile apply command.
+// It checks that the environment variables are correctly exported and used.
+// Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
+// check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` is refer to directory
+func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -52,7 +55,10 @@ func TestExecuteHelmfile(t *testing.T) {
 
 	// Read the captured output
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
 	output := buf.String()
 	// Check the output ATMOS_CLI_CONFIG_PATH  ATMOS_BASE_PATH exists
 	if !strings.Contains(output, "ATMOS_BASE_PATH") {
@@ -93,7 +99,7 @@ func TestExecuteHelmfile(t *testing.T) {
 	t.Logf("atmos_cli_config_path: %s", configPath)
 }
 
-// Function to extract key-value pairs from a string
+// Helper Function to extract key-value pairs from a string.
 func extractKeyValuePairs(input string) map[string]string {
 	// Split the input into lines
 	lines := strings.Split(input, "\n")
