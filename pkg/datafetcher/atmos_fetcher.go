@@ -9,8 +9,7 @@ import (
 var atmosSchema string
 
 // AtmosFetcher fetches data from the in-memory Atmos storage.
-type AtmosFetcher struct {
-}
+type AtmosFetcher struct{}
 
 // Sentinel error for quick checks.
 var ErrAtmosSchemaNotFound = errors.New("atmos schema not found")
