@@ -117,7 +117,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if err != nil {
 		log.Debug("Masking failed", "error", err)
 	} else {
-		log.Debug("Final URL", "final_url", "git::"+maskedFinal)
+		log.Debug("Final transformation", "url", "git::"+maskedFinal)
 	}
 
 	return finalURL, true, nil
