@@ -1,4 +1,4 @@
-package validator
+package datafetcher
 
 import (
 	"errors"
@@ -11,25 +11,10 @@ import (
 
 // Fetcher is an interface for fetching data from various sources.
 type Fetcher interface {
-	Fetch() ([]byte, error)
+	FetchData(source string) ([]byte, error)
 }
 
 var ErrUnsupportedSource = errors.New("unsupported source type")
-
-// getDataFetcher returns the appropriate Fetcher based on the input source.
-func (d *dataFetcher) getDataFetcher(atmosConfig *schema.AtmosConfiguration, source string) (Fetcher, error) {
-	switch {
-	case strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://"):
-		return &URLFetcher{URL: source, fileDownloader: downloader.NewGoGetterDownloader(atmosConfig)}, nil
-	case strings.HasPrefix(source, "atmos://"):
-		return &AtmosFetcher{Key: source}, nil
-	default:
-		if _, err := os.Stat(source); err == nil {
-			return &FileFetcher{FilePath: source}, nil
-		}
-		return nil, ErrUnsupportedSource
-	}
-}
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DataFetcher interface {
@@ -53,5 +38,20 @@ func (d *dataFetcher) GetData(atmosConfig *schema.AtmosConfiguration, source str
 	if err != nil {
 		return nil, err
 	}
-	return fetcher.Fetch()
+	return fetcher.FetchData(source)
+}
+
+// getDataFetcher returns the appropriate Fetcher based on the input source.
+func (d *dataFetcher) getDataFetcher(atmosConfig *schema.AtmosConfiguration, source string) (Fetcher, error) {
+	switch {
+	case strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://"):
+		return downloader.NewGoGetterDownloader(atmosConfig), nil
+	case strings.HasPrefix(source, "atmos://"):
+		return AtmosFetcher{}, nil
+	default:
+		if _, err := os.Stat(source); err == nil {
+			return FileFetcher{}, nil
+		}
+		return nil, ErrUnsupportedSource
+	}
 }

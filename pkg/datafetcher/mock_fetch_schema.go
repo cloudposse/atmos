@@ -2,7 +2,7 @@
 // Source: fetch_schema.go
 
 // Package validator is a generated GoMock package.
-package validator
+package datafetcher
 
 import (
 	reflect "reflect"

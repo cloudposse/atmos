@@ -3,6 +3,7 @@ package validator
 import (
 	"encoding/json"
 
+	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/xeipuuv/gojsonschema"
 	"gopkg.in/yaml.v3"
@@ -15,13 +16,13 @@ type Validator interface {
 
 type yamlSchemaValidator struct {
 	atmosConfig *schema.AtmosConfiguration
-	dataFetcher DataFetcher
+	dataFetcher datafetcher.DataFetcher
 }
 
 func NewYAMLSchemaValidator(atmosConfig *schema.AtmosConfiguration) Validator {
 	return &yamlSchemaValidator{
 		atmosConfig: atmosConfig,
-		dataFetcher: NewDataFetcher(),
+		dataFetcher: datafetcher.NewDataFetcher(),
 	}
 }
 

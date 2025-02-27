@@ -8,7 +8,7 @@ import (
 
 // ValidateStacksCmd validates schema.
 var ValidateSchemaCmd = &cobra.Command{
-	Use:                "schema [optional-key]",
+	Use:                "schema",
 	Short:              "Validate schema manifest configurations",
 	Long:               "This command validates the configuration of stack manifests in Atmos to ensure proper setup and compliance.",
 	Example:            "validate schema [optional key]",

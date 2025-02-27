@@ -1,4 +1,4 @@
-package validator
+package datafetcher
 
 import (
 	"fmt"
@@ -7,11 +7,10 @@ import (
 
 // FileFetcher fetches data from a file.
 type FileFetcher struct {
-	FilePath string
 }
 
-func (f *FileFetcher) Fetch() ([]byte, error) {
-	data, err := os.ReadFile(f.FilePath)
+func (f FileFetcher) FetchData(source string) ([]byte, error) {
+	data, err := os.ReadFile(source)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
