@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// test base path and atmosConfigFilePath
+// test base path and atmosConfigFilePath.
 func TestInitCliConfig(t *testing.T) {
 	atmosConfigFilePath := "test-config.yaml"
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
