@@ -173,6 +173,7 @@ func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
 }
+
 func TestCLITerraformENV(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -224,5 +225,4 @@ func TestCLITerraformENV(t *testing.T) {
 	if !strings.Contains(stdout.String(), ATMOS_CLI_CONFIG_PATH) {
 		t.Errorf("Expected output not found in stdout: %s", ATMOS_CLI_CONFIG_PATH)
 	}
-
 }

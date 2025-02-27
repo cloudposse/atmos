@@ -63,5 +63,4 @@ func TestInitCliConfig(t *testing.T) {
 	if !infoCliConfig.IsDir() {
 		t.Errorf("Cli config path should be a directory, got %s", atmosConfig.CliConfigPath)
 	}
-
 }
