@@ -105,7 +105,7 @@ func (d *customGitHubDetector) getGitHubToken() (string, string) {
 		return gitHubToken, "GITHUB_TOKEN"
 	}
 
-	log.Debug("No valid GitHub token found")
+	log.Debug("No valid GitHub token found for injection")
 
 	return "", ""
 }
