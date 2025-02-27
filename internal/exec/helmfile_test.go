@@ -9,7 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// test TestExecuteTerraform_ExportEnvVar check that when executing the helmfile apply command.
+// Test TestExecuteTerraform_ExportEnvVar check that when executing the helmfile apply command.
 // It checks that the environment variables are correctly exported and used.
 // Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
 // check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` is refer to directory.
