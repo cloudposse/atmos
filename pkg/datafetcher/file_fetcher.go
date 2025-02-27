@@ -6,8 +6,7 @@ import (
 )
 
 // FileFetcher fetches data from a file.
-type FileFetcher struct {
-}
+type FileFetcher struct{}
 
 func (f FileFetcher) FetchData(source string) ([]byte, error) {
 	data, err := os.ReadFile(source)
