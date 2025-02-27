@@ -15,7 +15,8 @@ spec:
     # In 'uri', Golang templates are supported  https://pkg.go.dev/text/template
     # If 'version' is provided, '{{.Version}}' will be replaced with the 'version' value before pulling the files from 'uri'
     # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html)
-    uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+    # TODO: Fix OCI test repository then re-enable this vendoring configuration
+    # uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
     version: "latest"
     # Only include the files that match the 'included_paths' patterns
     # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'
