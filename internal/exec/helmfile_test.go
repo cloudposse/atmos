@@ -62,8 +62,6 @@ func TestExecuteHelmfile(t *testing.T) {
 		t.Errorf("ATMOS_CLI_CONFIG_PATH not found in the output")
 	}
 	// print values of ATMOS_BASE_PATH ATMOS_CLI_CONFIG_PATH from out
-	// atmos_base_path = "/home/haitham/go_projects/src/atmos/tests/fixtures/scenarios/env"
-	//  atmos_cli_config_path = "/home/haitham/go_projects/src/atmos/tests/fixtures/scenarios/env"
 	m := extractKeyValuePairs(output)
 	// Print the extracted values
 	basePath, ok := m["atmos_base_path"]
