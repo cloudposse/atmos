@@ -188,7 +188,7 @@ func TestCLITerraformENV(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to apply updated PATH: %v", err)
 	}
-	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
+
 	defer func() {
 		// Change back to the original working directory after the test
 		if err := os.Chdir(startingDir); err != nil {
