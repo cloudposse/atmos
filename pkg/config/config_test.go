@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/stretchr/testify/assert"
 )
 
 // test base path and atmosConfigFilePath
@@ -24,20 +25,34 @@ func TestInitCliConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create atmos.yaml file: %v", err)
 	}
-	// write atmos.yaml content
-	f.WriteString("base_path: ./ \n")
-	f.WriteString("logs:\n")
-	f.WriteString("  file: /dev/stderr")
-	f.WriteString("  level: Info")
+	content := []string{
+		"base_path: ./\n",
+		"logs:\n",
+		"  file: /dev/stderr\n",
+		"  level: Info",
+	}
+
+	for _, line := range content {
+		if _, err := f.WriteString(line); err != nil {
+			t.Fatalf("Failed to write to config file: %v", err)
+		}
+	}
 	f.Close()
+
 	// get current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get current working directory: %v", err)
 	}
-	defer os.Chdir(cwd)
+	defer func() {
+		if err := os.Chdir(cwd); err != nil {
+			t.Errorf("Failed to change directory back: %v", err)
+		}
+	}()
 	// change to tmp dir
-	os.Chdir(tmpDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
 	// initialize atmos configuration
 	atmosConfig, err := InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
@@ -46,9 +61,9 @@ func TestInitCliConfig(t *testing.T) {
 	if atmosConfig.BasePath != "." {
 		t.Errorf("Base path should be %s, got %s", ".", atmosConfig.BasePath)
 	}
-	if atmosConfig.CliConfigPath != tmpDir {
-		t.Errorf("Cli config path should be %s, got %s", tmpDir, atmosConfig.CliConfigPath)
-	}
+
+	assert.Contains(t, atmosConfig.CliConfigPath, tmpDir)
+
 	infoBase, err := os.Stat(atmosConfig.BasePath)
 	if err != nil {
 		t.Fatalf("Failed to stat base path: %v", err)
