@@ -36,15 +36,7 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource strin
 		if err != nil {
 			return err
 		}
-		yamlGenericData := yamlData.(map[string]any)
-		if val, ok := yamlGenericData["schema"]; ok && val != "" {
-			if schema, ok := val.(string); ok {
-				customSchema = schema
-			}
-		}
-		if customSchema == "" && yamlSource == "atmos.yaml" {
-			customSchema = "atmos://schema"
-		}
+		av.getSchemaSourceFromYAML(yamlData)
 	}
 	if customSchema == "" {
 		return ErrSchemaNotFound
@@ -57,10 +49,22 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource strin
 		log.Info("No Validation Errors", "source", yamlSource, "schema", customSchema)
 		return nil
 	}
-	log.Error(fmt.Errorf("Invalid YAML:"))
+	log.Error("Invalid YAML:")
 	for _, err := range validationErrors {
-		fmt.Println(err)
-		log.Error(fmt.Errorf("- %s\n", err))
+		log.Error(fmt.Sprintf("- %s\n", err))
 	}
 	return ErrInvalidYAML
+}
+
+func (av *atmosValidatorExecuter) getSchemaSourceFromYAML(yamlData any) string {
+	if yamlData == nil {
+		return ""
+	}
+	yamlGenericData := yamlData.(map[string]any)
+	if val, ok := yamlGenericData["schema"]; ok && val != "" {
+		if schema, ok := val.(string); ok {
+			return schema
+		}
+	}
+	return ""
 }

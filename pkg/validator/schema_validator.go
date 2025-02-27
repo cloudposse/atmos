@@ -27,7 +27,7 @@ func NewYAMLSchemaValidator(atmosConfig *schema.AtmosConfiguration) Validator {
 
 // yamlToJSON converts YAML data to JSON format in an optimized way.
 func yamlToJSON(yamlData []byte) ([]byte, error) {
-	var rawData interface{}
+	var rawData any
 	err := yaml.Unmarshal(yamlData, &rawData)
 	if err != nil {
 		return nil, err

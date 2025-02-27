@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ValidateStacksCmd validates stacks
+// ValidateStacksCmd validates schema.
 var ValidateSchemaCmd = &cobra.Command{
 	Use:                "schema [optional-key]",
 	Short:              "Validate schema manifest configurations",
