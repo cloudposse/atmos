@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"os"
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -10,19 +9,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
-type ExitFunction func(int)
+var ErrSchemaNotFound = fmt.Errorf("schema not found")
+var ErrInvalidYAML = fmt.Errorf("invalid YAML")
 
 type atmosValidatorExecuter struct {
 	validator      validator.Validator
 	fileDownloader downloader.FileDownloader
-	Exit           ExitFunction
 }
 
 func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosValidatorExecuter {
 	fileDownloader := downloader.NewGoGetterDownloader(atmosConfig)
 	return &atmosValidatorExecuter{
 		validator:      validator.NewYAMLSchemaValidator(atmosConfig),
-		Exit:           os.Exit,
 		fileDownloader: fileDownloader,
 	}
 }
@@ -47,7 +45,7 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource strin
 		}
 	}
 	if customSchema == "" {
-		return fmt.Errorf("schema not found for %v file", yamlSource)
+		return ErrSchemaNotFound
 	}
 	validationErrors, err := av.validator.ValidateYAMLSchema(customSchema, yamlSource)
 	if err != nil {
@@ -55,12 +53,12 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource strin
 	}
 	if len(validationErrors) == 0 {
 		log.Info("No Validation Errors", "source", yamlSource, "schema", customSchema)
-	} else {
-		log.Error(fmt.Errorf("Invalid YAML:"))
-		for _, err := range validationErrors {
-			log.Error(fmt.Errorf("- %s\n", err))
-		}
-		av.Exit(1)
+		return nil
 	}
-	return nil
+	log.Error(fmt.Errorf("Invalid YAML:"))
+	for _, err := range validationErrors {
+		fmt.Println(err)
+		log.Error(fmt.Errorf("- %s\n", err))
+	}
+	return ErrInvalidYAML
 }

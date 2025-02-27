@@ -10,6 +10,88 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
+type mockResultError struct {
+	field             string
+	errType           string // Renamed to avoid conflict with Type() method
+	description       string
+	descriptionFormat string
+	value             interface{}
+	context           *gojsonschema.JsonContext
+	details           gojsonschema.ErrorDetails
+}
+
+// Field returns the field name without the root context
+func (m *mockResultError) Field() string {
+	return m.field
+}
+
+// SetType sets the error-type
+func (m *mockResultError) SetType(t string) {
+	m.errType = t
+}
+
+// Type returns the error-type
+func (m *mockResultError) Type() string {
+	return m.errType
+}
+
+// SetContext sets the JSON-context for the error
+func (m *mockResultError) SetContext(ctx *gojsonschema.JsonContext) {
+	m.context = ctx
+}
+
+// Context returns the JSON-context of the error
+func (m *mockResultError) Context() *gojsonschema.JsonContext {
+	return m.context
+}
+
+// SetDescription sets a description for the error
+func (m *mockResultError) SetDescription(desc string) {
+	m.description = desc
+}
+
+// Description returns the description of the error
+func (m *mockResultError) Description() string {
+	return m.description
+}
+
+// SetDescriptionFormat sets the format for the description
+func (m *mockResultError) SetDescriptionFormat(format string) {
+	m.descriptionFormat = format
+}
+
+// DescriptionFormat returns the format for the description
+func (m *mockResultError) DescriptionFormat() string {
+	return m.descriptionFormat
+}
+
+// SetValue sets the value related to the error
+func (m *mockResultError) SetValue(val interface{}) {
+	m.value = val
+}
+
+// Value returns the value related to the error
+func (m *mockResultError) Value() interface{} {
+	return m.value
+}
+
+// SetDetails sets the details specific to the error
+func (m *mockResultError) SetDetails(details gojsonschema.ErrorDetails) {
+	m.details = details
+}
+
+// Details returns details about the error
+func (m *mockResultError) Details() gojsonschema.ErrorDetails {
+	return m.details
+}
+
+// String returns a string representation of the error
+func (m *mockResultError) String() string {
+	return m.field + ": " + m.description
+}
+
+// func (m *mockResultError) Context
+
 func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -19,27 +101,25 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 		yamlSource    string
 		customSchema  string
 		mockSetup     func(*validator.MockValidator, *downloader.MockFileDownloader)
-		expectedError string
+		expectedError error
 	}{
 		{
 			name:         "successful validation",
 			yamlSource:   "atmos.yaml",
 			customSchema: "atmos://schema",
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader) {
-				mfd.EXPECT().FetchAndAutoParse("atmos.yaml").Return(map[string]interface{}{"schema": "atmos://schema"}, nil)
 				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
 			},
-			expectedError: "",
+			expectedError: nil,
 		},
 		{
 			name:         "validation errors",
 			yamlSource:   "atmos.yaml",
 			customSchema: "atmos://schema",
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader) {
-				mfd.EXPECT().FetchAndAutoParse("atmos.yaml").Return(map[string]interface{}{"schema": "atmos://schema"}, nil)
-				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{&gojsonschema.AdditionalPropertyNotAllowedError{}}, nil)
+				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
 			},
-			expectedError: "invalid field",
+			expectedError: ErrInvalidYAML,
 		},
 		{
 			name:         "missing schema",
@@ -48,7 +128,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader) {
 				mfd.EXPECT().FetchAndAutoParse("invalid.yaml").Return(map[string]interface{}{}, nil)
 			},
-			expectedError: "schema not found for invalid.yaml file",
+			expectedError: ErrSchemaNotFound,
 		},
 	}
 
@@ -59,23 +139,15 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 
 			tt.mockSetup(mockValidator, mockFileDownloader)
 
-			// Mock the Exit function
-			mockExit := func(code int) {
-				if code != 0 {
-					assert.Equal(t, 1, code)
-				}
-			}
-
 			av := &atmosValidatorExecuter{
 				validator:      mockValidator,
 				fileDownloader: mockFileDownloader,
-				Exit:           mockExit,
 			}
 
 			err := av.ExecuteAtmosValidateSchemaCmd(tt.yamlSource, tt.customSchema)
-			if tt.expectedError != "" {
-				assert.NoError(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedError)
 			} else {
 				assert.NoError(t, err)
 			}
