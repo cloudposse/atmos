@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/schema"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -78,7 +79,7 @@ key: value
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			// Create mock data fetcher
-			mockFetcher := NewMockDataFetcher(ctrl)
+			mockFetcher := datafetcher.NewMockDataFetcher(ctrl)
 			atmosConfig := &schema.AtmosConfiguration{}
 			// Configure mock behavior
 			if tt.fetcherErr != nil {

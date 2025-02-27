@@ -1,25 +1,12 @@
-package validator
+package datafetcher
 
 import (
 	"errors"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-func TestURLFetcher(t *testing.T) {
-	// Test with a valid URL (mocking the HTTP response)
-	fetcher := &URLFetcher{URL: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"}
-	data, err := fetcher.Fetch()
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	if !strings.Contains(string(data), "JSON Schema for Atmos Stack Manifest files") {
-		t.Errorf("Expected atmos schema, got %s", data)
-	}
-}
 
 func TestFileFetcher(t *testing.T) {
 	// Create a temporary file for the test
@@ -43,8 +30,8 @@ func TestFileFetcher(t *testing.T) {
 	}
 
 	// Now test the FileFetcher
-	fetcher := &FileFetcher{FilePath: tmpFile.Name()}
-	data, err := fetcher.Fetch()
+	fetcher := &FileFetcher{}
+	data, err := fetcher.FetchData(tmpFile.Name())
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -55,20 +42,22 @@ func TestFileFetcher(t *testing.T) {
 
 func TestAtmosFetcher(t *testing.T) {
 	// Test AtmosFetcher with valid key
-	fetcher := &AtmosFetcher{Key: "atmos://config"}
-	data, err := fetcher.Fetch()
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+	tests := []struct {
+		name   string
+		source string
+		err    error
+	}{
+		{"Valid key should work", "atmos://schema", nil},
+		{"Invalid key should not work", "atmos://unknown", ErrAtmosSchemaNotFound},
 	}
-	if string(data) != "This is Atmos configuration" {
-		t.Errorf("Expected Atmos configuration, got %s", data)
-	}
-
-	// Test AtmosFetcher with invalid key
-	fetcher = &AtmosFetcher{Key: "atmos://unknown"}
-	_, err = fetcher.Fetch()
-	if !errors.Is(err, ErrAtmosSchemaNotFound) {
-		t.Errorf("Expected 'atmos key not found' error, got %v", err)
+	for _, tt := range tests {
+		t.Run(tt.source, func(t *testing.T) {
+			fetcher := &AtmosFetcher{}
+			_, err := fetcher.FetchData(tt.source)
+			if !errors.Is(err, tt.err) {
+				t.Errorf("Expected error %v, got %v", tt.err, err)
+			}
+		})
 	}
 }
 

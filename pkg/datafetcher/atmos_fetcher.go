@@ -1,4 +1,4 @@
-package validator
+package datafetcher
 
 import (
 	_ "embed"
@@ -10,7 +10,6 @@ var atmosSchema string
 
 // AtmosFetcher fetches data from the in-memory Atmos storage.
 type AtmosFetcher struct {
-	Key string
 }
 
 // Sentinel error for quick checks.
@@ -20,8 +19,8 @@ var atmosData = map[string][]byte{
 	"atmos://schema": []byte(atmosSchema),
 }
 
-func (a *AtmosFetcher) Fetch() ([]byte, error) {
-	if data, exists := atmosData[a.Key]; exists {
+func (a AtmosFetcher) FetchData(source string) ([]byte, error) {
+	if data, exists := atmosData[source]; exists {
 		return data, nil
 	}
 	return nil, ErrAtmosSchemaNotFound
