@@ -9,10 +9,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Test TestExecuteTerraform_ExportEnvVar check that when executing the helmfile apply command.
+// TestExecuteTerraform_ExportEnvVar check that when executing the helmfile apply command.
 // It checks that the environment variables are correctly exported and used.
 // Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
-// check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` is refer to directory.
+// Check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` is refer to directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
