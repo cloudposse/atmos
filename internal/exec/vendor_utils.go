@@ -634,8 +634,13 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 			}
 		}
 
-		// If 'included_paths' is not provided, include all files that were not excluded
-		log.Debug("Including", "file", u.TrimBasePathFromPath(tempDir+"/", src))
+		// If 'included_paths' is not provided, include all files that were not excluded.
+		// The line below mimics the output we had before Charmbracelet logs introduction, i.e. "DEBU Including 'vendor/vendor1.yaml'".
+		log.Debug(fmt.Sprintf("Including '%s'", u.TrimBasePathFromPath(tempDir+"/", src)))
+		// For charmbracelet structured/symatic (key-value) log outout, please uncomment the line below:
+		// log.Debug("Including", "path", "'"+u.TrimBasePathFromPath(tempDir+"/", src)+"'")
+		// The will output like: "DEBU Including path='vendor/vendor1.yaml'", i.e. there's an extra "path=" added.
+
 		return false, nil
 	}
 }
