@@ -15,77 +15,77 @@ type mockResultError struct {
 	errType           string // Renamed to avoid conflict with Type() method
 	description       string
 	descriptionFormat string
-	value             interface{}
+	value             any
 	context           *gojsonschema.JsonContext
 	details           gojsonschema.ErrorDetails
 }
 
-// Field returns the field name without the root context
+// Field returns the field name without the root context.
 func (m *mockResultError) Field() string {
 	return m.field
 }
 
-// SetType sets the error-type
+// SetType sets the error-type.
 func (m *mockResultError) SetType(t string) {
 	m.errType = t
 }
 
-// Type returns the error-type
+// Type returns the error-type.
 func (m *mockResultError) Type() string {
 	return m.errType
 }
 
-// SetContext sets the JSON-context for the error
+// SetContext sets the JSON-context for the error.
 func (m *mockResultError) SetContext(ctx *gojsonschema.JsonContext) {
 	m.context = ctx
 }
 
-// Context returns the JSON-context of the error
+// Context returns the JSON-context of the error.
 func (m *mockResultError) Context() *gojsonschema.JsonContext {
 	return m.context
 }
 
-// SetDescription sets a description for the error
+// SetDescription sets a description for the error.
 func (m *mockResultError) SetDescription(desc string) {
 	m.description = desc
 }
 
-// Description returns the description of the error
+// Description returns the description of the error.
 func (m *mockResultError) Description() string {
 	return m.description
 }
 
-// SetDescriptionFormat sets the format for the description
+// SetDescriptionFormat sets the format for the description.
 func (m *mockResultError) SetDescriptionFormat(format string) {
 	m.descriptionFormat = format
 }
 
-// DescriptionFormat returns the format for the description
+// DescriptionFormat returns the format for the description.
 func (m *mockResultError) DescriptionFormat() string {
 	return m.descriptionFormat
 }
 
-// SetValue sets the value related to the error
-func (m *mockResultError) SetValue(val interface{}) {
+// SetValue sets the value related to the error.
+func (m *mockResultError) SetValue(val any) {
 	m.value = val
 }
 
-// Value returns the value related to the error
-func (m *mockResultError) Value() interface{} {
+// Value returns the value related to the error.
+func (m *mockResultError) Value() any {
 	return m.value
 }
 
-// SetDetails sets the details specific to the error
+// SetDetails sets the details specific to the error.
 func (m *mockResultError) SetDetails(details gojsonschema.ErrorDetails) {
 	m.details = details
 }
 
-// Details returns details about the error
+// Details returns details about the error.
 func (m *mockResultError) Details() gojsonschema.ErrorDetails {
 	return m.details
 }
 
-// String returns a string representation of the error
+// String returns a string representation of the error.
 func (m *mockResultError) String() string {
 	return m.field + ": " + m.description
 }
@@ -126,7 +126,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			yamlSource:   "invalid.yaml",
 			customSchema: "",
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader) {
-				mfd.EXPECT().FetchAndAutoParse("invalid.yaml").Return(map[string]interface{}{}, nil)
+				mfd.EXPECT().FetchAndAutoParse("invalid.yaml").Return(map[string]any{}, nil)
 			},
 			expectedError: ErrSchemaNotFound,
 		},
