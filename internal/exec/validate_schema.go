@@ -36,7 +36,7 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource strin
 		if err != nil {
 			return err
 		}
-		yamlGenericData := yamlData.(map[string]interface{})
+		yamlGenericData := yamlData.(map[string]any)
 		if val, ok := yamlGenericData["schema"]; ok && val != "" {
 			if schema, ok := val.(string); ok {
 				customSchema = schema
