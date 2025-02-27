@@ -11,7 +11,6 @@ import (
 
 // test ExecuteHelmfile export env var ATMOS_CLI_CONFIG_PATH  ATMOS_BASE_PATH .
 func TestExecuteHelmfile(t *testing.T) {
-
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -30,7 +29,7 @@ func TestExecuteHelmfile(t *testing.T) {
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
-	//set info for test ExecuteHelmfile
+	// set info for test ExecuteHelmfile
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
 		Stack:            "dev",
@@ -63,7 +62,7 @@ func TestExecuteHelmfile(t *testing.T) {
 		t.Errorf("ATMOS_CLI_CONFIG_PATH not found in the output")
 	}
 	// print values of ATMOS_BASE_PATH ATMOS_CLI_CONFIG_PATH from out
-	//atmos_base_path = "/home/haitham/go_projects/src/atmos/tests/fixtures/scenarios/env"
+	// atmos_base_path = "/home/haitham/go_projects/src/atmos/tests/fixtures/scenarios/env"
 	//  atmos_cli_config_path = "/home/haitham/go_projects/src/atmos/tests/fixtures/scenarios/env"
 	m := extractKeyValuePairs(output)
 	// Print the extracted values
