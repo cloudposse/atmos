@@ -9,7 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// test base path and atmosConfigFilePath.
+// TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.
+// It should also check that the base path and atmos Config File Path are correctly set and directory.
 func TestInitCliConfig(t *testing.T) {
 	atmosConfigFilePath := "test-config.yaml"
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -61,13 +62,14 @@ func TestInitCliConfig(t *testing.T) {
 	if atmosConfig.BasePath != "." {
 		t.Errorf("Base path should be %s, got %s", ".", atmosConfig.BasePath)
 	}
-
+	// assert that atmos Config File Path is set correctly
 	assert.Contains(t, atmosConfig.CliConfigPath, tmpDir)
 
 	infoBase, err := os.Stat(atmosConfig.BasePath)
 	if err != nil {
 		t.Fatalf("Failed to stat base path: %v", err)
 	}
+	// Check base path and atmos Config File Path are directories
 	if !infoBase.IsDir() {
 		t.Errorf("Base path should be a directory, got %s", atmosConfig.BasePath)
 	}
