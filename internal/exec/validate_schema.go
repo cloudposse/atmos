@@ -9,8 +9,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
-var ErrSchemaNotFound = fmt.Errorf("schema not found")
-var ErrInvalidYAML = fmt.Errorf("invalid YAML")
+var (
+	ErrSchemaNotFound = fmt.Errorf("schema not found")
+	ErrInvalidYAML    = fmt.Errorf("invalid YAML")
+)
 
 type atmosValidatorExecuter struct {
 	validator      validator.Validator
