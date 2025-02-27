@@ -61,3 +61,31 @@ jobs:
       uses: github/codeql-action/analyze@v3
       with:
         category: "/language:${{matrix.language}}"
+
+  pr-size-labeler:
+    name: PR Size Labeler
+    # Only run on pull requests (not on pushes or scheduled runs)
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR Size Labeler
+        uses: codelytv/pr-size-labeler@v1
+        with:
+          xs_label: 'size/xs'
+          xs_max_size: '10'
+          s_label: 'size/s'
+          s_max_size: '100'
+          m_label: 'size/m'
+          m_max_size: '500'
+          l_label: 'size/l'
+          l_max_size: '1000'
+          xl_label: 'size/xl'
+          fail_if_xl: 'false'
+          message_if_xl: >
+            > [!WARNING]
+            > #### This PR exceeds the recommended limit of 1,000 lines.
+            >
+            > Large PRs are difficult to review and may be rejected due to their size.  
+            >
+            > Please verify that this PR does not address multiple issues.  
+            > Consider refactoring it into smaller, more focused PRs to facilitate a smoother review process.
