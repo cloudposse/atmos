@@ -106,7 +106,6 @@ key: value
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedErrors, len(resultErrors))
 			}
-
 		})
 	}
 }
