@@ -1,0 +1,38 @@
+name: Codecov
+on: 
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
+      - "website/**"
+  
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go
+
+      - name: Get dependencies
+        run: make deps
+
+      - name: Run tests with coverage
+        run: make testacc
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          fail_ci_if_error: true
+          flags: unittests
+          verbose: true 

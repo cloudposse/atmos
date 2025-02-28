@@ -57,6 +57,11 @@ deps:
 
 # Run acceptance tests
 testacc: get
-	go test $(TEST) -v $(TESTARGS) -timeout 10m
+	go test $(TEST) -v $(TESTARGS) -timeout 10m -coverprofile=coverage.out
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc
+# Run acceptance tests with coverage report
+testacc-coverage: get
+	go test $(TEST) -v $(TESTARGS) -timeout 10m -coverprofile=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
+
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-coverage
