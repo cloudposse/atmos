@@ -64,7 +64,6 @@ jobs:
 
   pr-size-labeler:
     name: PR Size Labeler
-    # Only run on pull requests
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -77,9 +76,9 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
-          
+      
       - name: PR Size Labeler
-        uses: codelytv/pr-size-labeler@v1
+        uses: codelytv/pr-size-labeler@v1.10.2
         with:
           xs_label: 'size/xs'
           xs_max_size: '10'
@@ -98,11 +97,3 @@ jobs:
             go.sum
           ignore_line_deletions: 'false'
           ignore_file_deletions: 'false'
-          message_if_xl: |
-            > [!WARNING]
-            > #### This PR exceeds the recommended limit of 1,000 lines.
-            >
-            > Large PRs are difficult to review and may be rejected due to their size.  
-            >
-            > Please verify that this PR does not address multiple issues.  
-            > Consider refactoring it into smaller, more focused PRs to facilitate a smoother review process.
