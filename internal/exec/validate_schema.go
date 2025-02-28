@@ -44,16 +44,3 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource strin
 	}
 	return ErrInvalidYAML
 }
-
-func (av *atmosValidatorExecuter) getSchemaSourceFromYAML(yamlData any) string {
-	if yamlData == nil {
-		return ""
-	}
-	yamlGenericData := yamlData.(map[string]any)
-	if val, ok := yamlGenericData["schema"]; ok && val != "" {
-		if schema, ok := val.(string); ok {
-			return schema
-		}
-	}
-	return ""
-}
