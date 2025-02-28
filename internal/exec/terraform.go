@@ -23,6 +23,9 @@ const (
 	forceFlag                 = "--force"
 )
 
+// ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
+var ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
+
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
 func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
@@ -103,6 +106,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return fmt.Errorf("component '%s' is locked and cannot be modified (metadata.locked = true)",
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Check if trying to use workspace commands with HTTP backend
+	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
+		return ErrHTTPBackendWorkspaces
 	}
 
 	if info.SubCommand == "clean" {
@@ -223,7 +231,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
-	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_BASE_PATH=%s", atmosConfig.BasePath))
+	basePath, err := filepath.Abs(atmosConfig.BasePath)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	// Set `TF_IN_AUTOMATION` ENV var to `true` to suppress verbose instructions after terraform commands
 	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
 	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
