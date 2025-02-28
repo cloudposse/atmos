@@ -135,13 +135,14 @@ const (
 	keyURL = "url"
 )
 
+const GitPrefix = "git::"
+
 // ensureScheme checks for an explicit scheme and rewrites SCP-style URLs if needed.
 // Also removes any existing "git::" prefix (required for the dry-run mode to operate correctly).
 func (d *CustomGitDetector) ensureScheme(src string) string {
 	// Strip any existing "git::" prefix
-	if strings.HasPrefix(src, "git::") {
-		src = strings.TrimPrefix(src, "git::")
-	}
+	src = strings.TrimPrefix(src, GitPrefix)
+
 	if !strings.Contains(src, "://") {
 		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
 			maskedOld, _ := u.MaskBasicAuth(src)
