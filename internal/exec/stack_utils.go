@@ -16,8 +16,9 @@ func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndSta
 	// Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,
 	// preventing switching or creating additional workspaces.
 	if !isWorkspacesEnabled(&atmosConfig, &configAndStacksInfo) {
-		return "default", nil
+		return cfg.TerraformDefaultWorkspace, nil
 	}
+
 	var contextPrefix string
 	var err error
 	var tmpl string
