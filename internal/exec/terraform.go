@@ -23,6 +23,9 @@ const (
 	forceFlag                 = "--force"
 )
 
+// ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
+var ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
+
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
 func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
@@ -103,6 +106,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return fmt.Errorf("component '%s' is locked and cannot be modified (metadata.locked = true)",
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Check if trying to use workspace commands with HTTP backend
+	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
+		return ErrHTTPBackendWorkspaces
 	}
 
 	if info.SubCommand == "clean" {
