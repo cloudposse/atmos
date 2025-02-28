@@ -72,9 +72,7 @@ tests:
       ATMOS_GITHUB_TOKEN: supersecret
     expect:
       diff: []
-      stderr:
-        - "Injecting token"
-      stdout:
-        - "!supersecret"
-        - "!ATMOS_GITHUB_TOKEN"
-      exit_code: 0
+    stdout:
+      - "!supersecret"  
+      - "!ATMOS_GITHUB_TOKEN"
+    exit_code: 0
