@@ -9,9 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
-var (
-	ErrInvalidYAML = fmt.Errorf("invalid YAML")
-)
+var ErrInvalidYAML = fmt.Errorf("invalid YAML")
 
 type atmosValidatorExecuter struct {
 	validator      validator.Validator

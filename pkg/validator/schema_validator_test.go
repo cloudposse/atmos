@@ -136,7 +136,6 @@ key: value
 }
 
 func TestSchemaExtractor_Success(t *testing.T) {
-
 	// Create validator with mock fetcher
 	v := &yamlSchemaValidator{}
 	// Execute the method
@@ -146,7 +145,6 @@ func TestSchemaExtractor_Success(t *testing.T) {
 }
 
 func TestSchemaExtractor_Failure(t *testing.T) {
-
 	// Create validator with mock fetcher
 	v := &yamlSchemaValidator{}
 	// Execute the method
