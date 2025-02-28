@@ -64,6 +64,7 @@ jobs:
 
   pr-size-labeler:
     name: PR Size Labeler
+    # Only run on pull requests
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -75,6 +76,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
           
       - name: PR Size Labeler
         uses: codelytv/pr-size-labeler@v1
@@ -89,11 +91,8 @@ jobs:
           l_max_size: '1000'
           xl_label: 'size/xl'
           fail_if_xl: 'false'
-          github_api_url: 'https://api.github.com'
-          files_to_ignore: |
-            package-lock.json
-            yarn.lock
-            go.sum
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          files_to_ignore: 'package-lock.json yarn.lock go.sum'
           ignore_line_deletions: 'false'
           ignore_file_deletions: 'false'
           message_if_xl: >
