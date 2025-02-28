@@ -196,3 +196,56 @@ refer to [Atmos Component Inheritance](/core-concepts/stacks/inheritance)
 - [Terraform Workspaces](https://developer.hashicorp.com/terraform/language/state/workspaces)
 - [Managing Terraform Workspaces](https://developer.hashicorp.com/terraform/cli/workspaces)
 - [Terraform Environment Variables](https://developer.hashicorp.com/terraform/cli/config/environment-variables)
+
+## Disabling Terraform Workspaces
+
+In some cases, you may want to disable Terraform workspaces entirely, particularly when using backends that don't support workspaces. By default, Atmos automatically manages workspaces for supported backend types, but you can control this behavior using the `components.terraform.workspaces_enabled` configuration in your `atmos.yaml` file.
+
+### HTTP Backend and Workspace Support
+
+The [Terraform HTTP backend](https://developer.hashicorp.com/terraform/language/settings/backends/http) does not support workspaces. When Atmos detects that you're using an HTTP backend, it automatically disables workspaces for the affected components, regardless of other configuration settings. This ensures compatibility with HTTP backends while still allowing you to use the same configuration for other backend types.
+
+For example, when you execute a Terraform command with an HTTP backend:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc -s ue2-dev
+    ```
+</Terminal>
+
+Atmos will execute Terraform without attempting to create or select a workspace, using the default workspace instead.
+
+### Explicitly Disabling Workspaces
+
+If you need to disable workspaces for all components, regardless of backend type, you can set the `workspaces_enabled` configuration option in your `atmos.yaml` file:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    # Disable workspaces for all Terraform components
+    workspaces_enabled: false
+    # Other Terraform configuration...
+```
+</File>
+
+When workspaces are disabled:
+
+- Atmos will not attempt to create or select workspaces before running Terraform commands
+- All Terraform operations will use the default workspace
+- Workspace-related variables will be empty in component configurations
+
+:::note
+Setting `workspaces_enabled: true` for an HTTP backend will be ignored with a warning message since HTTP backends don't support workspaces.
+:::
+
+### When to Disable Workspaces
+
+Consider disabling workspaces in the following scenarios:
+
+- When using backends that don't support workspaces (e.g., HTTP backend)
+- When you need consistent behavior with other tools that don't manage workspaces
+- When you prefer to manage state files without workspace isolation
+- When your workflow already handles environment separation through other means
+  
+By properly configuring workspace support, you can ensure that Atmos works seamlessly with all backend types while maintaining the flexibility to adapt to different deployment strategies.
