@@ -117,7 +117,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if err != nil {
 		log.Debug("Masking failed", "error", err)
 	} else {
-		log.Debug("Final URL", "final_url", "git::"+maskedFinal)
+		log.Debug("Final transformation", "url", "git::"+maskedFinal)
 	}
 
 	return finalURL, true, nil
@@ -136,8 +136,12 @@ const (
 )
 
 // ensureScheme checks for an explicit scheme and rewrites SCP-style URLs if needed.
-// This version no longer returns an error since it never produces one.
+// Also removes any existing "git::" prefix (required for the dry-run mode to operate correctly).
 func (d *CustomGitDetector) ensureScheme(src string) string {
+	// Strip any existing "git::" prefix
+	if strings.HasPrefix(src, "git::") {
+		src = strings.TrimPrefix(src, "git::")
+	}
 	if !strings.Contains(src, "://") {
 		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
 			maskedOld, _ := u.MaskBasicAuth(src)
@@ -221,11 +225,10 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 			token = os.Getenv(tokenSource)
 		}
 	case "gitlab.com":
-		// For GitLab, we now prioritize ATMOS_GITLAB_TOKEN over GITLAB_TOKEN.
-		tokenSource = "ATMOS_GITLAB_TOKEN"
+		tokenSource = "GITLAB_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
-			tokenSource = "GITLAB_TOKEN"
+			tokenSource = "ATMOS_GITLAB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	}

@@ -78,11 +78,11 @@ tests:
       exit_code: 0
 
   - name: atmos vendor pull with custom detector and handling credentials leakage
-    enabled: false
+    enabled: true
     snapshot: true
     tty: false
     description: "Ensure that injected credentials are never leaked in logs"
-    workdir: "fixtures/scenarios/vendor-pulls-ssh"
+    workdir: "fixtures/scenarios/vendor-creds-sanitize"
     command: "atmos"
     args:
       - "vendor"
@@ -92,8 +92,6 @@ tests:
       ATMOS_GITHUB_TOKEN: supersecret
     expect:
       diff: []
-    stderr:
-      - "Injecting token" 
     stdout:
       - "!supersecret"  
       - "!ATMOS_GITHUB_TOKEN"

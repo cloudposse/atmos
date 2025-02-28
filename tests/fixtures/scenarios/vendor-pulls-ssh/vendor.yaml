@@ -7,27 +7,9 @@ spec:
   imports: []
 
   sources:
-    # Basic HTTPS default (token injection expected)
-    - component: "terraform-null-label-basic"
-      source: "github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
-      version: "0.25.0"
-      targets:
-        - "library/basic/{{ .Component }}"
-      tags:
-        - demo
-    
-    # Direct credentials provided in the URL (token injection should be skipped)
-    - component: "terraform-null-label-direct"
-      source: "https://myuser:supersecret@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
-      version: "0.25.0"
-      targets:
-        - "library/direct/{{ .Component }}"
-      tags:
-        - demo
-
-    # SSH implicit
+    # SSH vendoring
     - component: "terraform-null-label-cred"
-      source: "github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
+      source: "git::git@github.com:cloudposse/terraform-null-label.git?ref={{ .Version }}"
       version: "0.25.0"
       targets:
         - "library/cred/{{ .Component }}"
