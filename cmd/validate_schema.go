@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
@@ -17,21 +19,29 @@ var ValidateSchemaCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		arg := ""
+		fileName := ""
+		schema := ""
+		key := ""
 		if len(args) > 0 {
-			arg = args[0] // Use provided argument
+			key = args[0] // Use provided argument
 		}
-		schema, err := cmd.Flags().GetString("schema")
-		if err != nil {
-			u.PrintErrorMarkdown("", err, "")
+		if cmd.Flags().Changed("file") {
+			fileName, _ = cmd.Flags().GetString("file")
 		}
-		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(arg, schema); err != nil {
+		if cmd.Flags().Changed("schema") {
+			schema, _ = cmd.Flags().GetString("schemas-atmos-manifest")
+		}
+		if schema == "" {
+			schema = os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
+		}
+		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(fileName, schema, key); err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }
 
 func init() {
-	ValidateSchemaCmd.PersistentFlags().String("schema", "", "If you want to provide schema from external")
+	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "If you want to provide schema from external")
+	ValidateSchemaCmd.PersistentFlags().String("file", "", "file to be validated")
 	validateCmd.AddCommand(ValidateSchemaCmd)
 }

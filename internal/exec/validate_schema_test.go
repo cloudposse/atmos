@@ -108,7 +108,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			yamlSource:   "atmos.yaml",
 			customSchema: "atmos://schema",
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader) {
-				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
+				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml", "").Return([]gojsonschema.ResultError{}, nil)
 			},
 			expectedError: nil,
 		},
@@ -117,7 +117,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			yamlSource:   "atmos.yaml",
 			customSchema: "atmos://schema",
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader) {
-				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
+				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml", "").Return([]gojsonschema.ResultError{&mockResultError{}}, nil)
 			},
 			expectedError: ErrInvalidYAML,
 		},
@@ -126,9 +126,9 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			yamlSource:   "invalid.yaml",
 			customSchema: "",
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader) {
-				mfd.EXPECT().FetchAndAutoParse("invalid.yaml").Return(map[string]any{}, nil)
+				mv.EXPECT().ValidateYAMLSchema("", "invalid.yaml", "").Return([]gojsonschema.ResultError{}, validator.ErrSchemaNotFound)
 			},
-			expectedError: ErrSchemaNotFound,
+			expectedError: validator.ErrSchemaNotFound,
 		},
 	}
 
@@ -144,7 +144,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 				fileDownloader: mockFileDownloader,
 			}
 
-			err := av.ExecuteAtmosValidateSchemaCmd(tt.yamlSource, tt.customSchema)
+			err := av.ExecuteAtmosValidateSchemaCmd(tt.yamlSource, tt.customSchema, "")
 			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedError)
