@@ -84,4 +84,6 @@ const (
 	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
 	AtmosYamlFuncEnv             = "!env"
+
+	TerraformDefaultWorkspace = "default"
 )
