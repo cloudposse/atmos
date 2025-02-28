@@ -528,7 +528,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	if !useOciScheme {
 		absPath, err := u.JoinAbsolutePathWithPath(filepath.ToSlash(vendorConfigFilePath), *uri)
 		// if URI contain path traversal is path should be resolved
-		if err != nil && strings.Contains(*uri, "..") {
+		if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
 			return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
 		}
 		if err == nil {

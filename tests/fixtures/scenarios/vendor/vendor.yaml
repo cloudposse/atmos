@@ -23,7 +23,7 @@ spec:
         - "**/*.md"
 
     - component: "test-components"
-      source: "file:///./test-components"
+      source: "file:///../../../fixtures/components/terraform/myapp"
       version: "main"
       tags:
         - file
