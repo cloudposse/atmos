@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/goccy/go-yaml"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
@@ -23,6 +24,8 @@ func TestValidateYAMLSchema(t *testing.T) {
 		fetcherErr     error
 		expectedErrors int
 		wantErr        bool
+		key            string
+		setMockExpect  func(*datafetcher.MockDataFetcher)
 	}{
 		{
 			name:         "Valid YAML against schema",
@@ -64,6 +67,10 @@ key: value
 : malformed
 `), // Invalid YAML
 			wantErr: true,
+			setMockExpect: func(mockFetcher *datafetcher.MockDataFetcher) {
+				mockFetcher.EXPECT().GetData(gomock.Any(), "data.yaml").
+					Return(nil, yaml.ErrExceededMaxDepth) // Return nil data to trigger YAML unmarshal error
+			},
 		},
 		{
 			name:         "Schema fetch error",
@@ -71,6 +78,22 @@ key: value
 			yamlSource:   "data.yaml",
 			fetcherErr:   ErrFailedToFetchSchema,
 			wantErr:      true,
+		},
+		{
+			name:         "Valid YAML against schema with key",
+			schemaSource: "schema.json",
+			yamlSource:   "data.yaml",
+			schemaData: []byte(`{
+		        "type": "object",
+		        "properties": {
+		            "name": {"type": "string"}
+		        },
+		        "required": ["name"]
+		    }`),
+			yamlData:       []byte("data:\n  name: test"),
+			expectedErrors: 0,
+			wantErr:        false,
+			key:            "data",
 		},
 	}
 
@@ -82,14 +105,13 @@ key: value
 			mockFetcher := datafetcher.NewMockDataFetcher(ctrl)
 			atmosConfig := &schema.AtmosConfiguration{}
 			// Configure mock behavior
-			if tt.fetcherErr != nil {
-				mockFetcher.EXPECT().GetData(atmosConfig, tt.schemaSource).
-					Return(nil, tt.fetcherErr)
+			if tt.setMockExpect != nil {
+				tt.setMockExpect(mockFetcher)
 			} else {
-				mockFetcher.EXPECT().GetData(atmosConfig, tt.schemaSource).
-					Return(tt.schemaData, nil)
 				mockFetcher.EXPECT().GetData(atmosConfig, tt.yamlSource).
 					Return(tt.yamlData, nil)
+				mockFetcher.EXPECT().GetData(atmosConfig, tt.schemaSource).
+					Return(tt.schemaData, nil)
 			}
 
 			// Create validator with mock fetcher
@@ -99,7 +121,7 @@ key: value
 			}
 
 			// Execute the method
-			resultErrors, err := v.ValidateYAMLSchema(tt.schemaSource, tt.yamlSource)
+			resultErrors, err := v.ValidateYAMLSchema(tt.schemaSource, tt.yamlSource, tt.key)
 
 			// Assertions
 			if tt.wantErr {
@@ -111,4 +133,23 @@ key: value
 			}
 		})
 	}
+}
+
+func TestSchemaExtractor_Success(t *testing.T) {
+
+	// Create validator with mock fetcher
+	v := &yamlSchemaValidator{}
+	// Execute the method
+	schemaSource, err := v.getSchemaSourceFromYAML([]byte(`{"schema": "schema.json"}`))
+	assert.NoError(t, err)
+	assert.Equal(t, "schema.json", schemaSource)
+}
+
+func TestSchemaExtractor_Failure(t *testing.T) {
+
+	// Create validator with mock fetcher
+	v := &yamlSchemaValidator{}
+	// Execute the method
+	_, err := v.getSchemaSourceFromYAML([]byte(`{}`))
+	assert.Error(t, err, ErrSchemaNotFound)
 }

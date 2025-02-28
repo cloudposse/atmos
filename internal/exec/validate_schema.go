@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	ErrSchemaNotFound = fmt.Errorf("schema not found")
-	ErrInvalidYAML    = fmt.Errorf("invalid YAML")
+	ErrInvalidYAML = fmt.Errorf("invalid YAML")
 )
 
 type atmosValidatorExecuter struct {
@@ -27,21 +26,11 @@ func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosVal
 	}
 }
 
-func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource string, customSchema string) error {
+func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource string, customSchema string, sourceKey string) error {
 	if yamlSource == "" {
 		yamlSource = "atmos.yaml"
 	}
-	if customSchema == "" {
-		yamlData, err := av.fileDownloader.FetchAndAutoParse(yamlSource)
-		if err != nil {
-			return err
-		}
-		av.getSchemaSourceFromYAML(yamlData)
-	}
-	if customSchema == "" {
-		return ErrSchemaNotFound
-	}
-	validationErrors, err := av.validator.ValidateYAMLSchema(customSchema, yamlSource)
+	validationErrors, err := av.validator.ValidateYAMLSchema(customSchema, yamlSource, sourceKey)
 	if err != nil {
 		return err
 	}
