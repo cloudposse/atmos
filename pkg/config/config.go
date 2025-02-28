@@ -261,11 +261,14 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if err != nil {
 		return atmosConfig, err
 	}
+
 	// Set the CLI config path in the atmosConfig struct
-	if filepath.IsAbs(atmosConfigFilePath) {
-		atmosConfig.CliConfigPath = atmosConfigFilePath
+	// get dir of atmosConfigFilePath
+	atmosConfigDir := filepath.Dir(atmosConfigFilePath)
+	if filepath.IsAbs(atmosConfigDir) {
+		atmosConfig.CliConfigPath = atmosConfigDir
 	} else {
-		absPath, err := filepath.Abs(atmosConfigFilePath)
+		absPath, err := filepath.Abs(atmosConfigDir)
 		if err != nil {
 			return atmosConfig, err
 		}
