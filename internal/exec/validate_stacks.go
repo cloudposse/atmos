@@ -27,6 +27,16 @@ const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-man
 
 // ExecuteValidateStacksCmd executes `validate stacks` command
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+	// Initialize spinner
+	message := "Validating Atmos Stacks..."
+	p := NewSpinner(message)
+	spinnerDone := make(chan struct{})
+	// Run spinner in a goroutine
+	RunSpinner(p, spinnerDone, message)
+	// Ensure spinner is stopped before returning
+	defer StopSpinner(p, spinnerDone)
+
+	// Process CLI arguments
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -38,7 +48,6 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	flags := cmd.Flags()
-
 	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
 		return err
@@ -48,7 +57,8 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 		atmosConfig.Schemas.Atmos.Manifest = schemasAtmosManifestFlag
 	}
 
-	return ValidateStacks(atmosConfig)
+	err = ValidateStacks(atmosConfig)
+	return err
 }
 
 // ValidateStacks validates Atmos stack configuration
@@ -98,7 +108,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			return err
 		}
 		atmosConfig.Schemas.Atmos.Manifest = f
-		u.LogTrace(atmosConfig, fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
+		u.LogTrace(fmt.Sprintf("Atmos JSON Schema is not configured. Using the default embedded schema"))
 	} else if u.FileExists(atmosConfig.Schemas.Atmos.Manifest) {
 		atmosManifestJsonSchemaFilePath = atmosConfig.Schemas.Atmos.Manifest
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
@@ -138,7 +148,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		return err
 	}
 
-	u.LogDebug(atmosConfig, fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
+	u.LogDebug(fmt.Sprintf("Validating all YAML files in the '%s' folder and all subfolders (excluding template files)\n",
 		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
@@ -309,7 +319,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true)
+					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, true, true, nil)
 					if err != nil {
 						return nil, err
 					}
@@ -412,7 +422,7 @@ func getEmbeddedSchemaPath() (string, error) {
 		return "", err
 	}
 
-	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0644)
+	err = os.WriteFile(atmosManifestJsonSchemaFilePath, embedded, 0o644)
 	if err != nil {
 		return "", err
 	}

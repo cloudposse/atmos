@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
+	h "github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -14,7 +17,7 @@ func getTerraformCommands() []*cobra.Command {
 			Use:     "plan",
 			Short:   "Show changes required by the current configuration",
 			Long:    "Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.",
-			Example: "atmos terraform plan <component> -s <stack>",
+			Example: terraformPlanUsage,
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
@@ -23,16 +26,19 @@ func getTerraformCommands() []*cobra.Command {
 			Use:     "apply",
 			Short:   "Apply changes to infrastructure",
 			Long:    "Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.",
-			Example: "atmos terraform apply <component> -s <stack>",
+			Example: terraformApplyUsage,
 			Annotations: map[string]string{
 				"nativeCommand": "true",
+			},
+			PostRunE: func(cmd *cobra.Command, args []string) error {
+				return runHooks(h.AfterTerraformApply, cmd, args)
 			},
 		},
 		{
 			Use:   "workspace",
 			Short: "Manage Terraform workspaces",
 			Long: `The 'atmos terraform workspace' command initializes Terraform for the current configuration, selects the specified workspace, and creates it if it does not already exist.
-			
+
 It runs the following sequence of Terraform commands:
 1. 'terraform init -reconfigure' to initialize the working directory.
 2. 'terraform workspace select' to switch to the specified workspace.
@@ -57,6 +63,9 @@ Common use cases:
 			Use:   "deploy",
 			Short: "Deploy the specified infrastructure using Terraform",
 			Long:  `Deploys infrastructure by running the Terraform apply command with automatic approval. This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
+			PostRunE: func(cmd *cobra.Command, args []string) error {
+				return runHooks(h.AfterTerraformApply, cmd, args)
+			},
 		},
 		{
 			Use:   "shell",
@@ -151,12 +160,12 @@ Common use cases:
 			Use:   "import",
 			Short: "Import existing infrastructure into Terraform state.",
 			Long: `The 'atmos terraform import' command imports existing infrastructure resources into Terraform's state.
-			
+
 Before executing the command, it searches for the 'region' variable in the specified component and stack configuration.
 If the 'region' variable is found, it sets the 'AWS_REGION' environment variable with the corresponding value before executing the import command.
-	
+
 The import command runs: 'terraform import [ADDRESS] [ID]'
-	
+
 Arguments:
 - ADDRESS: The Terraform address of the resource to import.
 - ID: The ID of the resource to import.`,
@@ -246,7 +255,7 @@ Arguments:
 
 // attachTerraformCommands attaches static Terraform commands to a provided parent command
 func attachTerraformCommands(parentCmd *cobra.Command) {
-	parentCmd.PersistentFlags().String("append-user-agent", "", "Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.")
+	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.", version.Version))
 	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running 'terraform init' before executing the command")
 
 	commands := getTerraformCommands()
@@ -257,6 +266,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		if setFlags, ok := commandMaps[cmd.Use]; ok {
 			setFlags(cmd)
 		}
+		cmd.ValidArgsFunction = ComponentsArgCompletion
 		cmd.Run = func(cmd_ *cobra.Command, args []string) {
 			// Because we disable flag parsing we require manual handle help Request
 			handleHelpRequest(cmd, args)

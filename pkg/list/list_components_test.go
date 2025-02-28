@@ -22,7 +22,7 @@ func TestListComponents(t *testing.T) {
 	assert.Nil(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
-		nil, false, false, false)
+		nil, false, false, false, false, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents("", stacksMap)
@@ -42,15 +42,12 @@ func TestListComponentsWithStack(t *testing.T) {
 	assert.Nil(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, testStack, nil, nil,
-		nil, false, false, false)
+		nil, false, false, false, false, nil)
 	assert.Nil(t, err)
 
-	output, err := FilterAndListStacks(stacksMap, testStack)
+	output, err := FilterAndListComponents(testStack, stacksMap)
 	assert.Nil(t, err)
-	dependentsYaml, err := u.ConvertToYAML(output)
-	assert.Nil(t, err)
-	assert.NotNil(t, dependentsYaml)
-	assert.Greater(t, len(dependentsYaml), 0)
-	assert.Contains(t, dependentsYaml, testStack)
-	t.Log(dependentsYaml)
+	assert.NotNil(t, output)
+	assert.Greater(t, len(output), 0)
+	assert.ObjectsAreEqualValues([]string{"infra/vpc", "mixin/test-1", "mixin/test-2", "test/test-component", "test/test-component-override", "test/test-component-override-2", "test/test-component-override-3", "top-level-component1", "vpc", "vpc/new"}, output)
 }

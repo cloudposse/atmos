@@ -36,7 +36,8 @@ type AtmosConfiguration struct {
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
-	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 }
 
 type Validate struct {
@@ -126,6 +127,7 @@ type Terraform struct {
 	DeployRunInit           bool        `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
 	InitRunReconfigure      bool        `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
 	AutoGenerateBackendFile bool        `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
+	WorkspacesEnabled       *bool       `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled,omitempty"`
 	Command                 string      `yaml:"command" json:"command" mapstructure:"command"`
 	Shell                   ShellConfig `yaml:"shell" json:"shell" mapstructure:"shell"`
 }

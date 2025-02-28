@@ -28,11 +28,26 @@ pull_request_rules:
     actions:
       comment:
         message: |
-          Triggering the workflow dispatch for preview build...
+          Triggering the workflow dispatch for tests & preview build on `{{ head }}`...
       github_actions:
         workflow:
           dispatch:
             - workflow: website-preview-build.yml
-              ref: "{{ pull_request.head.ref }}"
+              ref: "{{ head }}"
             - workflow: test.yml
-              ref: "{{ pull_request.head.ref }}"
+              ref: "{{ head }}"
+  
+  - name: Comment when size/xl label is added
+    conditions:
+      - label=size/xl
+
+    actions:
+      comment:
+        message: |
+          > [!WARNING]
+          > #### This PR exceeds the recommended limit of 1,000 lines.
+          >
+          > Large PRs are difficult to review and may be rejected due to their size.  
+          >
+          > Please verify that this PR does not address multiple issues.  
+          > Consider refactoring it into smaller, more focused PRs to facilitate a smoother review process.

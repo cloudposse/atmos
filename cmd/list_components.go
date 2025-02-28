@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -25,39 +25,41 @@ var listComponentsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-
-		flags := cmd.Flags()
-
-		stackFlag, err := flags.GetString("stack")
+		output, err := listComponents(cmd)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'stack' flag: %v", err), color.New(color.FgRed))
+			u.PrintErrorMarkdownAndExit("", err, "")
 			return
 		}
 
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
-			return
-		}
-
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error describing stacks: %v", err), theme.Colors.Error)
-			return
-		}
-
-		output, err := l.FilterAndListComponents(stackFlag, stacksMap)
-		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), theme.Colors.Warning)
-			return
-		}
-
-		u.PrintMessageInColor(output, theme.Colors.Success)
+		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }
 
 func init() {
 	listComponentsCmd.PersistentFlags().StringP("stack", "s", "", "Filter components by stack (e.g., atmos list components -s stack1)")
+	AddStackCompletion(listComponentsCmd)
 	listCmd.AddCommand(listComponentsCmd)
+}
+
+func listComponents(cmd *cobra.Command) ([]string, error) {
+	flags := cmd.Flags()
+
+	stackFlag, err := flags.GetString("stack")
+	if err != nil {
+		return nil, fmt.Errorf("Error getting the `stack` flag: `%v`", err)
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Error describing stacks: %v", err)
+	}
+
+	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+	return output, err
 }
