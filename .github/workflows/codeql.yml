@@ -92,10 +92,13 @@ jobs:
           xl_label: 'size/xl'
           fail_if_xl: 'false'
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          files_to_ignore: 'package-lock.json yarn.lock go.sum'
+          files_to_ignore: >
+            package-lock.json
+            yarn.lock
+            go.sum
           ignore_line_deletions: 'false'
           ignore_file_deletions: 'false'
-          message_if_xl: >
+          message_if_xl: |
             > [!WARNING]
             > #### This PR exceeds the recommended limit of 1,000 lines.
             >
