@@ -78,7 +78,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       
       - name: PR Size Labeler
-        uses: codelytv/pr-size-labeler@v1
+        uses: codelytv/pr-size-labeler@v1.10.2
         with:
           xs_label: 'size/xs'
           xs_max_size: '10'
