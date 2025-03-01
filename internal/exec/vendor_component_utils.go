@@ -371,7 +371,7 @@ func ExecuteComponentVendorInternal(
 			return fmt.Errorf("running download error: %w", err)
 		}
 		if model.failedPkg > 0 {
-			return fmt.Errorf("failed to vendor %d components", model.failedPkg)
+			return fmt.Errorf("%w: %d", ErrVendorComponents, model.failedPkg)
 		}
 	}
 	return nil
