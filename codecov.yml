@@ -3,14 +3,12 @@ codecov:
 
 coverage:
   status:
-    project: false  # Disable project coverage status
     patch:
       default:
-        # Only report coverage on changed lines
-        target: auto
-        threshold: 0%
+        target: 80% # Require at least 80% test coverage on new/changed lines
+        threshold: 2% # Allow a small drop in coverage
         base: auto
-        informational: true
+        informational: false # Fail the PR check if coverage is too low
 
 comment:
   layout: "condensed_header, condensed_files, condensed_footer"

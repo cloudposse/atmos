@@ -159,21 +159,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc
 
-  patch-coverage:
-    name: PR Diff Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: 'stable'
-      - name: Gather dependencies
-        run: go mod download
-      - name: Run coverage
-        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-
   docker:
     name: "[lint] Dockerfile"
     needs: build
@@ -508,7 +493,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate, patch-coverage]
+    needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
