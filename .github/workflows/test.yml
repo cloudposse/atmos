@@ -204,15 +204,6 @@ jobs:
             done
           fi
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.txt
-          fail_ci_if_error: false
-          verbose: true
-          flags: patch
-          token: ${{ secrets.CODECOV_TOKEN }}
-
   docker:
     name: "[lint] Dockerfile"
     needs: build
