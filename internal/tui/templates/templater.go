@@ -108,6 +108,14 @@ func isAliasesPresent(cmds []*cobra.Command) bool {
 	return len(filterCommands(cmds, true)) > 0
 }
 
+func headingStyle(s string) string {
+	if theme.Styles.Help.Headings != nil {
+		ch := theme.Styles.Help.Headings
+		return ch.Sprint(s)
+	}
+	return s
+}
+
 func renderMarkdown(example string) string {
 	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 	if err != nil {
@@ -225,6 +233,8 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
 	cobra.AddTemplateFunc("renderMarkdown", renderMarkdown)
 	cobra.AddTemplateFunc("renderHelpMarkdown", renderHelpMarkdown)
+	cobra.AddTemplateFunc("HeadingStyle", headingStyle)
+
 	return nil
 }
 
