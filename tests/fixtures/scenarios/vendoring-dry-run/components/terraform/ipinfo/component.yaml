@@ -5,7 +5,7 @@ metadata:
   description: Vendor configuration for the ipinfo component
 spec:
   source:
-    uri: "github.com:cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
+    uri: "git::git@github.com:cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
     version: "main"
     included_paths:
       - "**/*.tf"
