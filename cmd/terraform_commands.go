@@ -14,19 +14,17 @@ func getTerraformCommands() []*cobra.Command {
 	// List of Terraform commands
 	return []*cobra.Command{
 		{
-			Use:     "plan",
-			Short:   "Show changes required by the current configuration",
-			Long:    "Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.",
-			Example: terraformPlanUsage,
+			Use:   "plan",
+			Short: "Show changes required by the current configuration",
+			Long:  "Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.",
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
 		},
 		{
-			Use:     "apply",
-			Short:   "Apply changes to infrastructure",
-			Long:    "Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.",
-			Example: terraformApplyUsage,
+			Use:   "apply",
+			Short: "Apply changes to infrastructure",
+			Long:  "Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.",
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
@@ -255,8 +253,8 @@ Arguments:
 
 // attachTerraformCommands attaches static Terraform commands to a provided parent command
 func attachTerraformCommands(parentCmd *cobra.Command) {
-	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.", version.Version))
-	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running 'terraform init' before executing the command")
+	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: `Atmos/%s (Cloud Posse; +https://atmos.tools)`. This flag works with almost all commands.", version.Version))
+	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running `terraform init` before executing the command")
 
 	commands := getTerraformCommands()
 
