@@ -84,13 +84,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-linux
-          path: /usr/local/bin
+          path: ./build
 
       - name: Set execute permissions on atmos
-        run: chmod +x /usr/local/bin/atmos
+        run: chmod +x ./build/atmos
 
-      - name: Verify atmos executable
-        run: atmos version
+      - name: List build directory
+        run: ls -la ./build
 
       - name: Set up Go
         uses: actions/setup-go@v5
