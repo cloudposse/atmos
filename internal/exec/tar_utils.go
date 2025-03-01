@@ -54,8 +54,7 @@ func processTarHeader(header *tar.Header, tarReader *tar.Reader, extractPath str
 	// Clean the file path inside the archive to prevent directory traversal attacks.
 	targetPath := filepath.Join(cleanExtractPath, cleanHeaderName)
 	// Ensure the target path is within the intended extraction directory.
-	// The trailing `os.PathSeparator` prevents bypasses where an attacker might use a prefix match trick.
-	if !strings.HasPrefix(targetPath, cleanExtractPath+string(os.PathSeparator)) {
+	if !strings.HasPrefix(targetPath, cleanExtractPath) {
 		return fmt.Errorf("%w: %s", ErrInvalidFilePath, targetPath)
 	}
 	switch header.Typeflag {
