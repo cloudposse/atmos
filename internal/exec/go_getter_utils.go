@@ -308,6 +308,16 @@ func GoGetterGet(
 		// Destination where the files will be stored. This will create the directory if it doesn't exist
 		Dst:  dest,
 		Mode: clientMode,
+		Getters: map[string]getter.Getter{
+			// Overriding 'git'
+			"git":   &CustomGitGetter{},
+			"file":  &getter.FileGetter{},
+			"hg":    &getter.HgGetter{},
+			"http":  &getter.HttpGetter{},
+			"https": &getter.HttpGetter{},
+			// "s3": &getter.S3Getter{}, // add as needed
+			// "gcs": &getter.GCSGetter{},
+		},
 	}
 
 	if err := client.Get(); err != nil {
@@ -315,6 +325,37 @@ func GoGetterGet(
 	}
 
 	return nil
+}
+
+// CustomGitGetter is a custom getter for git (git::) that removes symlinks.
+type CustomGitGetter struct {
+	getter.GitGetter
+}
+
+// Get implements the custom getter logic removing symlinks.
+func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
+	// Normal clone
+	if err := c.GitGetter.Get(dst, url); err != nil {
+		return err
+	}
+	// Remove symlinks
+	return removeSymlinks(dst)
+}
+
+// removeSymlinks walks the directory and removes any symlinks
+// it encounters.
+func removeSymlinks(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			log.Debug("Removing symlink", "path", path)
+			// Symlinks are removed for the entire repo, regardless if there are any subfolders specified
+			return os.Remove(path)
+		}
+		return nil
+	})
 }
 
 // DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
