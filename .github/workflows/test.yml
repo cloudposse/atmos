@@ -162,47 +162,17 @@ jobs:
   patch-coverage:
     name: PR Diff Coverage
     runs-on: ubuntu-latest
-    # Only run on pull requests to get diff coverage
-    if: github.event_name == 'pull_request'
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          fetch-depth: 0  # Required for diff coverage
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-        id: go
-
-      - name: Get dependencies
-        run: make deps
-
-      - name: Generate coverage report
-        run: |
-          # Create an empty coverage file
-          echo "mode: atomic" > coverage.txt
-          
-          # Find changed Go files
-          CHANGED_FILES=$(git diff --name-only origin/main... | grep "\.go$" | grep -v "_test\.go$" || echo "")
-          
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "No Go files changed. Skipping coverage report."
-          else
-            echo "Creating coverage report for changed files."
-            # For each changed file, create an entry in the coverage file showing it as covered
-            for file in $CHANGED_FILES; do
-              # Get line count of the file
-              LINES=$(wc -l < "$file")
-              if [ $LINES -gt 0 ]; then
-                # Add an entry for each line in the file as "covered"
-                for i in $(seq 1 $LINES); do
-                  echo "$file:$i.0,$(($i+1)).0 1 1" >> coverage.txt
-                done
-              fi
-            done
-          fi
+          go-version: 'stable'
+      - name: Gather dependencies
+        run: go mod download
+      - name: Run coverage
+        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
 
   docker:
     name: "[lint] Dockerfile"
