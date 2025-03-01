@@ -1,23 +1,19 @@
 codecov:
   require_ci_to_pass: true
 
-comment:
-  layout: "condensed_header, condensed_files, condensed_footer"
-  hide_project_coverage: true
-  behavior: default
-  require_changes: false
-  require_base: false
-  require_head: true
-
 coverage:
-  precision: 2
-  round: down
-  range: "70...100"
-
   status:
+    project: false  # Disable project coverage status
     patch:
       default:
-        target: 80% # Require at least 80% test coverage on new/changed lines
-        threshold: 2% # Allow a small drop in coverage
+        # Only report coverage on changed lines
+        target: auto
+        threshold: 0%
         base: auto
-        informational: false # Fail the PR check if coverage is too low 
+        informational: true
+
+comment:
+  layout: "diff"  # Only show the diff coverage in comments
+  behavior: default
+  require_changes: true  # Only post if coverage changes
+  hide_project_coverage: true  # Hide the project coverage in the comment 

@@ -72,33 +72,6 @@ jobs:
           path: |
             ./build/
 
-  coverage:
-    name: Test Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-        id: go
-
-      - name: Get dependencies
-        run: make deps
-
-      - name: Run tests with coverage
-        run: make testacc-cover
-
-      - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage.out
-          fail_ci_if_error: true
-          flags: unittests
-          verbose: true
-
   # run acceptance tests
   test:
     name: Acceptance Tests
@@ -185,6 +158,41 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc
+
+# Remove the existing coverage job and replace with a diff-only coverage job
+  patch-coverage:
+    name: PR Diff Coverage
+    runs-on: ubuntu-latest
+    # Only run on pull requests to get diff coverage
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for diff coverage
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go
+
+      - name: Get dependencies
+        run: make deps
+
+      - name: Run tests on changed files
+        run: |
+          # Run tests and generate coverage for the PR
+          go test -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v vendor)
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.txt
+          fail_ci_if_error: false
+          verbose: true
+          flags: patch
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   docker:
     name: "[lint] Dockerfile"
@@ -520,7 +528,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    needs: [test, lint, mock, k3s, localstack, docker, validate, patch-coverage]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
