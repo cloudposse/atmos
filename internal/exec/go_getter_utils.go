@@ -157,17 +157,20 @@ func (d *CustomGitDetector) ensureScheme(src string) string {
 	return src
 }
 
-// rewriteSCPURL rewrites SCP-style URLs to a proper SSH URL if they match the expected pattern.
-// Returns the rewritten URL and a boolean indicating if rewriting occurred.
 func rewriteSCPURL(src string) (string, bool) {
 	scpPattern := regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
 	if scpPattern.MatchString(src) {
 		matches := scpPattern.FindStringSubmatch(src)
 		newSrc := "ssh://"
-		if matches[matchIndexUser] != "" {
-			newSrc += matches[matchIndexUser] // includes username and '@'
+		user := matches[matchIndexUser] // This includes the "@" if present.
+		host := matches[matchIndexHost]
+		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git) for known hosts.
+		if user == "" && (strings.EqualFold(host, "github.com") ||
+			strings.EqualFold(host, "gitlab.com") ||
+			strings.EqualFold(host, "bitbucket.org")) {
+			user = "git@"
 		}
-		newSrc += matches[matchIndexHost] + "/" + matches[matchIndexPath]
+		newSrc += user + host + "/" + matches[matchIndexPath]
 		if matches[matchIndexSuffix] != "" {
 			newSrc += matches[matchIndexSuffix]
 		}
