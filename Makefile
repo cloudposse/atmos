@@ -55,13 +55,12 @@ version-windows: build-windows
 deps:
 	go mod download
 
-# Run acceptance tests
 testacc: get
+	@echo "Running acceptance tests"
 	go test $(TEST) -v $(TESTARGS) -timeout 10m -coverprofile=coverage.out
 
-# Run acceptance tests with coverage 
 testacc-cover: get
-	go build -cover -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)'"
+	@echo "Running tests with coverage"
 	go test $(TEST) -v $(TESTARGS) -timeout 10m -coverprofile=coverage.out
 
 # Run acceptance tests with coverage report

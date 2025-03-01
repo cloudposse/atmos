@@ -72,6 +72,46 @@ jobs:
           path: |
             ./build/
 
+  coverage:
+    name: Test Coverage
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-linux
+          path: ${{ github.workspace }}
+
+      - name: Add build artifacts to PATH
+        run: |
+          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          chmod +x "${{ github.workspace }}/atmos"
+          atmos version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+        id: go
+
+      - name: Get dependencies
+        run: make deps
+
+      - name: Run tests with coverage
+        run: make testacc-cover
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          fail_ci_if_error: true
+          flags: unittests
+          verbose: true
+
   # run acceptance tests
   test:
     name: Acceptance Tests
