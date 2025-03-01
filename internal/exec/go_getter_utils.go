@@ -94,7 +94,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
 	host := strings.ToLower(parsedURL.Host)
-	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
+	if host != hostGitHub && host != hostBitbucket && host != hostGitLab {
 		log.Debug("Skipping token injection for a unsupported host", "host", parsedURL.Host)
 	}
 
@@ -131,13 +131,21 @@ const (
 	matchIndexSuffix = 5
 	matchIndexExtra  = 6
 
-	// Key for logging repeated "url" field.
 	keyURL = "url"
+
+	hostGitHub    = "github.com"
+	hostGitLab    = "gitlab.com"
+	hostBitbucket = "bitbucket.org"
 )
 
+const GitPrefix = "git::"
+
 // ensureScheme checks for an explicit scheme and rewrites SCP-style URLs if needed.
-// This version no longer returns an error since it never produces one.
+// Also removes any existing "git::" prefix (required for the dry-run mode to operate correctly).
 func (d *CustomGitDetector) ensureScheme(src string) string {
+	// Strip any existing "git::" prefix
+	src = strings.TrimPrefix(src, GitPrefix)
+
 	if !strings.Contains(src, "://") {
 		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
 			maskedOld, _ := u.MaskBasicAuth(src)
@@ -152,17 +160,20 @@ func (d *CustomGitDetector) ensureScheme(src string) string {
 	return src
 }
 
-// rewriteSCPURL rewrites SCP-style URLs to a proper SSH URL if they match the expected pattern.
-// Returns the rewritten URL and a boolean indicating if rewriting occurred.
 func rewriteSCPURL(src string) (string, bool) {
 	scpPattern := regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
 	if scpPattern.MatchString(src) {
 		matches := scpPattern.FindStringSubmatch(src)
 		newSrc := "ssh://"
-		if matches[matchIndexUser] != "" {
-			newSrc += matches[matchIndexUser] // includes username and '@'
+		user := matches[matchIndexUser] // This includes the "@" if present.
+		host := matches[matchIndexHost]
+		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git) for known hosts.
+		if user == "" && (strings.EqualFold(host, hostGitHub) ||
+			strings.EqualFold(host, hostGitLab) ||
+			strings.EqualFold(host, hostBitbucket)) {
+			user = "git@"
 		}
-		newSrc += matches[matchIndexHost] + "/" + matches[matchIndexPath]
+		newSrc += user + host + "/" + matches[matchIndexPath]
 		if matches[matchIndexSuffix] != "" {
 			newSrc += matches[matchIndexSuffix]
 		}
@@ -201,7 +212,7 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	var token, tokenSource string
 	switch host {
-	case "github.com":
+	case hostGitHub:
 		if d.AtmosConfig.Settings.InjectGithubToken {
 			tokenSource = "ATMOS_GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)
@@ -213,14 +224,14 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 			tokenSource = "GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
-	case "bitbucket.org":
+	case hostBitbucket:
 		tokenSource = "BITBUCKET_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
 			tokenSource = "ATMOS_BITBUCKET_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
-	case "gitlab.com":
+	case hostGitLab:
 		tokenSource = "GITLAB_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
@@ -234,11 +245,11 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 // getDefaultUsername returns the default username for token injection based on the host.
 func getDefaultUsername(host string) string {
 	switch host {
-	case "github.com":
+	case hostGitHub:
 		return "x-access-token"
-	case "gitlab.com":
+	case hostGitLab:
 		return "oauth2"
-	case "bitbucket.org":
+	case hostBitbucket:
 		defaultUsername := os.Getenv("ATMOS_BITBUCKET_USERNAME")
 		if defaultUsername == "" {
 			defaultUsername = os.Getenv("BITBUCKET_USERNAME")
@@ -297,6 +308,16 @@ func GoGetterGet(
 		// Destination where the files will be stored. This will create the directory if it doesn't exist
 		Dst:  dest,
 		Mode: clientMode,
+		Getters: map[string]getter.Getter{
+			// Overriding 'git'
+			"git":   &CustomGitGetter{},
+			"file":  &getter.FileGetter{},
+			"hg":    &getter.HgGetter{},
+			"http":  &getter.HttpGetter{},
+			"https": &getter.HttpGetter{},
+			// "s3": &getter.S3Getter{}, // add as needed
+			// "gcs": &getter.GCSGetter{},
+		},
 	}
 
 	if err := client.Get(); err != nil {
@@ -304,6 +325,37 @@ func GoGetterGet(
 	}
 
 	return nil
+}
+
+// CustomGitGetter is a custom getter for git (git::) that removes symlinks.
+type CustomGitGetter struct {
+	getter.GitGetter
+}
+
+// Get implements the custom getter logic removing symlinks.
+func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
+	// Normal clone
+	if err := c.GitGetter.Get(dst, url); err != nil {
+		return err
+	}
+	// Remove symlinks
+	return removeSymlinks(dst)
+}
+
+// removeSymlinks walks the directory and removes any symlinks
+// it encounters.
+func removeSymlinks(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			log.Debug("Removing symlink", "path", path)
+			// Symlinks are removed for the entire repo, regardless if there are any subfolders specified
+			return os.Remove(path)
+		}
+		return nil
+	})
 }
 
 // DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
