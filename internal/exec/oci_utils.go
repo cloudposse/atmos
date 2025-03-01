@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 
@@ -16,7 +18,7 @@ import (
 )
 
 const (
-	targetArtifactType = "application/vnd.oci.image.layer.v1.tar" // Target artifact type for Atmos components
+	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components
 	githubTokenEnv     = "GITHUB_TOKEN"
 )
 
@@ -34,7 +36,7 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 		return fmt.Errorf("invalid image reference: %w", err)
 	}
 
-	descriptor, err := pullImage(ref)
+	descriptor, err := pullImage(ref, imageName)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
@@ -44,6 +46,8 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 		log.Error("Failed to get image descriptor", "image", imageName, "error", err)
 		return fmt.Errorf("cannot get a descriptor for the OCI image '%s': %w", imageName, err)
 	}
+
+	checkArtifactType(descriptor, imageName)
 
 	layers, err := img.Layers()
 	if err != nil {
@@ -57,18 +61,7 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 	}
 
 	for i, layer := range layers {
-		// Get the layer's media type
-		layerMediaType, err := layer.MediaType()
-		if err != nil {
-			log.Warn("Failed to get media type for layer", "index", i, "error", err)
-			continue
-		}
 
-		// Skip layers that don't match the target artifact type
-		if layerMediaType != targetArtifactType {
-			log.Debug("Skipping layer due to media type mismatch", "index", i, "media_type", layerMediaType)
-			continue
-		}
 		if err := processLayer(layer, i, destDir); err != nil {
 			return fmt.Errorf("failed to process layer %d: %w", i, err)
 		}
@@ -78,19 +71,22 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 }
 
 // pullImage pulls an OCI image from the specified reference and returns its descriptor.
-func pullImage(ref name.Reference) (*remote.Descriptor, error) {
-	githubToken := os.Getenv(githubTokenEnv)
-	if githubToken == "" {
-		log.Debug("Missing GITHUB_TOKEN environment variable")
-	}
-
+func pullImage(ref name.Reference, imageName string) (*remote.Descriptor, error) {
 	var opts []remote.Option
-	if githubToken != "" {
-		opts = append(opts, remote.WithAuth(&authn.Basic{
-			Username: "oauth2",
-			Password: githubToken,
-		}))
-		log.Debug("Using GitHub token for authentication")
+	// Default anonymous authentication  .
+	opts = append(opts, remote.WithAuth(authn.Anonymous))
+	if strings.Contains(imageName, "ghcr.io") {
+		githubToken := os.Getenv(githubTokenEnv)
+		if githubToken == "" {
+			log.Debug("Missing GITHUB_TOKEN environment variable")
+		}
+		if githubToken != "" {
+			opts = append(opts, remote.WithAuth(&authn.Basic{
+				Username: "oauth2",
+				Password: githubToken,
+			}))
+			log.Debug("Using GitHub token for authentication")
+		}
 	}
 
 	descriptor, err := remote.Get(ref, opts...)
@@ -123,4 +119,21 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	}
 
 	return nil
+}
+
+// checkArtifactType to check and log artifact type mismatches
+func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
+	// OCIManifest defines the structure of an OCI artifact manifest.
+	var ociManifest struct {
+		ArtifactType string `json:"artifactType"`
+	}
+	if err := json.Unmarshal(descriptor.Manifest, &ociManifest); err != nil {
+		log.Debug("Failed parse OCI artifact manifest", "image", imageName, "error", err)
+	} else {
+		// log that don't match the target artifact type
+		if ociManifest.ArtifactType != targetArtifactType {
+			log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", ociManifest.ArtifactType)
+		}
+	}
+
 }
