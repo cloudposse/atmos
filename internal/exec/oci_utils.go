@@ -75,7 +75,7 @@ func pullImage(ref name.Reference, imageName string) (*remote.Descriptor, error)
 	var opts []remote.Option
 	// Default anonymous authentication  .
 	opts = append(opts, remote.WithAuth(authn.Anonymous))
-	if strings.Contains(imageName, "ghcr.io") {
+	if strings.HasPrefix(imageName, "ghcr.io") {
 		githubToken := os.Getenv(githubTokenEnv)
 		if githubToken == "" {
 			log.Debug("Missing GITHUB_TOKEN environment variable")
