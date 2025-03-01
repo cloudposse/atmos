@@ -41,7 +41,7 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().String("component-types", "", "Filter by specific component types. Supported component types: terraform, helmfile")
 
-	describeStacksCmd.PersistentFlags().String("sections", "", "Output only the specified component sections. Available component sections: backend, backend_type, deps, env, inheritance, metadata, remote_state_backend, remote_state_backend_type, settings, vars")
+	describeStacksCmd.PersistentFlags().String("sections", "", "Output only the specified component sections. Available component sections: `backend`, `backend_type`, `deps`, `env`, `inheritance`, `metadata`, `remote_state_backend`, `remote_state_backend_type`, `settings`, `vars`")
 
 	describeStacksCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 
