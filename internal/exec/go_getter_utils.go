@@ -94,7 +94,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
 	host := strings.ToLower(parsedURL.Host)
-	if host != "github.com" && host != "bitbucket.org" && host != "gitlab.com" {
+	if host != hostGitHub && host != hostBitbucket && host != hostGitLab {
 		log.Debug("Skipping token injection for a unsupported host", "host", parsedURL.Host)
 	}
 
@@ -131,8 +131,11 @@ const (
 	matchIndexSuffix = 5
 	matchIndexExtra  = 6
 
-	// Key for logging repeated "url" field.
 	keyURL = "url"
+
+	hostGitHub    = "github.com"
+	hostGitLab    = "gitlab.com"
+	hostBitbucket = "bitbucket.org"
 )
 
 const GitPrefix = "git::"
@@ -165,9 +168,9 @@ func rewriteSCPURL(src string) (string, bool) {
 		user := matches[matchIndexUser] // This includes the "@" if present.
 		host := matches[matchIndexHost]
 		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git) for known hosts.
-		if user == "" && (strings.EqualFold(host, "github.com") ||
-			strings.EqualFold(host, "gitlab.com") ||
-			strings.EqualFold(host, "bitbucket.org")) {
+		if user == "" && (strings.EqualFold(host, hostGitHub) ||
+			strings.EqualFold(host, hostGitLab) ||
+			strings.EqualFold(host, hostBitbucket)) {
 			user = "git@"
 		}
 		newSrc += user + host + "/" + matches[matchIndexPath]
@@ -209,7 +212,7 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	var token, tokenSource string
 	switch host {
-	case "github.com":
+	case hostGitHub:
 		if d.AtmosConfig.Settings.InjectGithubToken {
 			tokenSource = "ATMOS_GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)
@@ -221,14 +224,14 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 			tokenSource = "GITHUB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
-	case "bitbucket.org":
+	case hostBitbucket:
 		tokenSource = "BITBUCKET_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
 			tokenSource = "ATMOS_BITBUCKET_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
-	case "gitlab.com":
+	case hostGitLab:
 		tokenSource = "GITLAB_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
@@ -242,11 +245,11 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 // getDefaultUsername returns the default username for token injection based on the host.
 func getDefaultUsername(host string) string {
 	switch host {
-	case "github.com":
+	case hostGitHub:
 		return "x-access-token"
-	case "gitlab.com":
+	case hostGitLab:
 		return "oauth2"
-	case "bitbucket.org":
+	case hostBitbucket:
 		defaultUsername := os.Getenv("ATMOS_BITBUCKET_USERNAME")
 		if defaultUsername == "" {
 			defaultUsername = os.Getenv("BITBUCKET_USERNAME")
