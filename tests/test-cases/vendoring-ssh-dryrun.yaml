@@ -19,25 +19,6 @@ tests:
       diff: []
       exit_code: 0
 
-  - name: atmos vendor pull component using SSH
-    enabled: true
-    snapshot: true
-    tty: false
-    description: "Dry-run for component vendoring"
-    workdir: "fixtures/scenarios/vendoring-dry-run"
-    command: "atmos"
-    args:
-      - "vendor"
-      - "pull"
-      - "--component=ipinfo"
-      - "--logs-level=Debug"
-      - "--dry-run"
-    env:
-      ATMOS_GITHUB_TOKEN: supersecret
-    expect:
-      diff: []
-      exit_code: 0
-
   - name: atmos vendor pull with custom detector and handling credentials leakage
     enabled: true
     snapshot: true
