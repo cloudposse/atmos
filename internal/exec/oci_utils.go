@@ -61,7 +61,6 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 	}
 
 	for i, layer := range layers {
-
 		if err := processLayer(layer, i, destDir); err != nil {
 			return fmt.Errorf("failed to process layer %d: %w", i, err)
 		}
@@ -135,5 +134,4 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 			log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", ociManifest.ArtifactType)
 		}
 	}
-
 }
