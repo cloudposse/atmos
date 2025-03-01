@@ -13,7 +13,6 @@ import (
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/cmd/colored"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -165,10 +164,6 @@ func parseFlags(args []string) (map[string]string, error) {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
-	colored.Init(&colored.Config{
-		RootCmd: RootCmd,
-	})
-
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
