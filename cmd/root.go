@@ -114,6 +114,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	log.SetOutput(output)
+	log.Debug("Log level set to", "level", log.GetLevel(), "file", atmosConfig.Logs.File)
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
