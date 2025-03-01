@@ -10,3 +10,11 @@ coverage:
         threshold: 2% # Allow a small drop in coverage
         base: auto
         informational: false # Fail the PR check if coverage is too low 
+
+comment:
+  layout: "condensed_header, condensed_files, condensed_footer"
+  hide_project_coverage: true
+  behavior: default
+  require_head: true
+  require_base: false
+  require_changes: false 
