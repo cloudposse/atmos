@@ -84,13 +84,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-linux
-          path: ${{ github.workspace }}
+          path: ${{ github.workspace }}/build
 
       - name: Add build artifacts to PATH
         run: |
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
-          chmod +x "${{ github.workspace }}/atmos"
-          atmos version
+          chmod +x "${{ github.workspace }}/build/atmos"
+          echo "${{ github.workspace }}/build" >> $GITHUB_PATH
+          "${{ github.workspace }}/build/atmos" version
 
       - name: Set up Go
         uses: actions/setup-go@v5
