@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
+	"github.com/pkg/errors"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+var ErrNoLayers = errors.New("the OCI image does not have any layers")
 
 const (
 	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components
@@ -57,7 +60,7 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 
 	if len(layers) == 0 {
 		log.Warn("OCI image has no layers", "image", imageName)
-		return fmt.Errorf("the OCI image '%s' does not have any layers", imageName)
+		return ErrNoLayers
 	}
 
 	for i, layer := range layers {
@@ -120,7 +123,7 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	return nil
 }
 
-// checkArtifactType to check and log artifact type mismatches
+// checkArtifactType to check and log artifact type mismatches .
 func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 	// OCIManifest defines the structure of an OCI artifact manifest.
 	var ociManifest struct {
@@ -128,10 +131,8 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 	}
 	if err := json.Unmarshal(descriptor.Manifest, &ociManifest); err != nil {
 		log.Debug("Failed parse OCI artifact manifest", "image", imageName, "error", err)
-	} else {
+	} else if ociManifest.ArtifactType != targetArtifactType {
 		// log that don't match the target artifact type
-		if ociManifest.ArtifactType != targetArtifactType {
-			log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", ociManifest.ArtifactType)
-		}
+		log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", ociManifest.ArtifactType)
 	}
 }
