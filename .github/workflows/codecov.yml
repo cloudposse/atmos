@@ -27,7 +27,7 @@ jobs:
         run: make deps
 
       - name: Run tests with coverage
-        run: make testacc
+        run: make testacc-cover
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v4
