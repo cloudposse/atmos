@@ -11,6 +11,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	tea "github.com/charmbracelet/bubbletea"
 	cp "github.com/otiai10/copy"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -20,6 +21,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+var ErrVendorComponents = errors.New("failed to vendor components")
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands
 func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
@@ -432,7 +435,7 @@ func ExecuteAtmosVendorInternal(
 			return fmt.Errorf("failed to execute vendor operation in TUI mode: %w (check terminal state)", err)
 		}
 		if model.failedPkg > 0 {
-			return fmt.Errorf("failed to vendor %d components", model.failedPkg)
+			return fmt.Errorf("%w: %d", ErrVendorComponents, model.failedPkg)
 		}
 	}
 
