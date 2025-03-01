@@ -14,12 +14,12 @@ var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
 	Long: `This command executes ` + "`" + `aws eks update-kubeconfig` + "`" + ` to download ` + "`" + `kubeconfig` + "`" + ` from an EKS cluster and saves it to a file. The command executes ` + "`" + `aws eks update-kubeconfig` + "`" + ` in three different ways:
 
 1. If all the required parameters (cluster name and AWS profile/role) are provided on the command-line,
-then `atmos` executes the command without requiring the `atmos.yaml` CLI config and context.
+then ` + "`" + `atmos` + "`" + ` executes the command without requiring the ` + "`" + `atmos.yaml` + "`" + ` CLI config and context.
 
 2. If 'component' and 'stack' are provided on the command-line,
-   then `atmos` executes the command using the `atmos.yaml` CLI config and stack's context by searching for the following settings:
+   then ` + "`" + `atmos` + "`" + ` executes the command using the ` + "`" + `atmos.yaml` + "`" + ` CLI config and stack's context by searching for the following settings:
   - 'components.helmfile.cluster_name_pattern' in the 'atmos.yaml' CLI config (and calculates the '--name' parameter using the pattern)
-  - 'components.helmfile.helm_aws_profile_pattern' in the 'atmos.yaml' CLI config (and calculates the '--profile' parameter using the pattern)
+  - 'components.helmfile.helm_aws_profile_pattern' in the 'atmos.yaml' CLI config (and calculates the ` + "`" + `--profile` + "`" + ` parameter using the pattern)
   - 'components.helmfile.kubeconfig_path' in the 'atmos.yaml' CLI config
   - the variables for the component in the provided stack
   - 'region' from the variables for the component in the stack
