@@ -74,23 +74,10 @@ jobs:
 
   coverage:
     name: Test Coverage
-    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts-linux
-          path: ./build
-
-      - name: Set execute permissions on atmos
-        run: chmod +x ./build/atmos
-
-      - name: List build directory
-        run: ls -la ./build
 
       - name: Set up Go
         uses: actions/setup-go@v5
