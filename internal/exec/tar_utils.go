@@ -6,12 +6,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 )
 
 var ErrInvalidFilePath = errors.New("invalid file path")
@@ -99,16 +97,9 @@ func createFileFromTar(filePath string, tarReader *tar.Reader, header *tar.Heade
 	}
 	// Set correct permissions (remove setuid/setgid bits for security) , os.ModeSetuid, os.ModeSetgid standard Cross-platform
 	newMode := header.FileInfo().Mode() &^ (os.ModeSetuid | os.ModeSetgid)
-	if runtime.GOOS == "windows" {
-		// Windows: Use os.Chmod
-		if err := os.Chmod(filePath, newMode); err != nil {
-			log.Printf("Failed to set file permissions: %s, error: %v", filePath, err)
-		}
-	} else {
-		// Unix-like systems: Use unix.Chmod
-		if err := unix.Chmod(filePath, uint32(newMode)); err != nil {
-			log.Printf("Failed to set file permissions: %s, error: %v", filePath, err)
-		}
+	// Set permissions using os.Chmod for all platforms
+	if err := os.Chmod(filePath, newMode); err != nil {
+		log.Error("Failed to set file permissions", "path", filePath, "error", err)
 	}
 	return nil
 }
