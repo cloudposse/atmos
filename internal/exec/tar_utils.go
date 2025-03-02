@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
@@ -98,14 +99,16 @@ func createFileFromTar(filePath string, tarReader *tar.Reader, header *tar.Heade
 	}
 	// Set correct permissions (remove setuid/setgid bits for security) , os.ModeSetuid, os.ModeSetgid standard Cross-platform
 	newMode := header.FileInfo().Mode() &^ (os.ModeSetuid | os.ModeSetgid)
-	if err := os.Chmod(filePath, newMode); err != nil {
-		log.Printf("Failed to set file permissions: %s, error: %v", filePath, err)
+	if runtime.GOOS == "windows" {
+		// Windows: Use os.Chmod
+		if err := os.Chmod(filePath, newMode); err != nil {
+			log.Printf("Failed to set file permissions: %s, error: %v", filePath, err)
+		}
+	} else {
+		// Unix-like systems: Use unix.Chmod
+		if err := unix.Chmod(filePath, uint32(newMode)); err != nil {
+			log.Printf("Failed to set file permissions: %s, error: %v", filePath, err)
+		}
 	}
-
-	// On Unix-based systems, explicitly remove setuid/setgid bits
-	if err := unix.Chmod(filePath, uint32(newMode)); err != nil {
-		log.Warn("Failed to set file permissions", "path", filePath, "error", err)
-	}
-
 	return nil
 }
