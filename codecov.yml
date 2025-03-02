@@ -1,0 +1,20 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  status:
+    patch:
+      default:
+        target: 80% # Require at least 80% test coverage on new/changed lines
+        threshold: 2% # Allow a small drop in coverage
+        base: auto
+
+comment:
+  layout: "reach,diff,flags,tree"  # Display different coverage views
+  behavior: default                # Default PR comment behavior
+  require_changes: true             # Only post if coverage changes
+  require_base: yes                 # Compare against base branch coverage
+
+github_checks:
+  annotations: true    # Enable GitHub Checks Annotations
+  informational: false # Fail the PR check if coverage is too low
