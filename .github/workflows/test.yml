@@ -157,11 +157,11 @@ jobs:
         timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make testacc
+        run: make testacc-cover
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v3
         with:
           files: coverage.out
           fail_ci_if_error: true
