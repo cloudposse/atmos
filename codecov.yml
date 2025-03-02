@@ -16,7 +16,6 @@ comment:
   require_base: yes                 # Compare against base branch coverage
 
 github_checks:
-  annotations: true  # Enable GitHub Checks Annotations
-
-        informational: false # Fail the PR check if coverage is too low
+  annotations: true    # Enable GitHub Checks Annotations
+  informational: false # Fail the PR check if coverage is too low
         
