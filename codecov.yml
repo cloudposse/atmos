@@ -18,4 +18,3 @@ comment:
 github_checks:
   annotations: true    # Enable GitHub Checks Annotations
   informational: false # Fail the PR check if coverage is too low
-        
