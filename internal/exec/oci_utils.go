@@ -137,12 +137,10 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 		// log that don't match the target artifact type
 		log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", manifest.ArtifactType)
 	}
-
 }
 
 // ParseOCIManifest reads and decodes an OCI manifest from a JSON file.
 func parseOCIManifest(manifestBytes io.Reader) (*ocispec.Manifest, error) {
-
 	var manifest ocispec.Manifest
 	if err := json.NewDecoder(manifestBytes).Decode(&manifest); err != nil {
 		return nil, err
