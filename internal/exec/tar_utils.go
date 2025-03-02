@@ -52,16 +52,16 @@ func processTarHeader(header *tar.Header, tarReader *tar.Reader, extractPath str
 	// Clean the file path inside the archive to prevent directory traversal attacks.
 	cleanHeaderName := filepath.Clean(header.Name)
 	// Clean the file path inside the archive to prevent directory traversal attacks.
-	targetPath := filepath.Join(cleanExtractPath, cleanHeaderName)
+	filePath := filepath.Join(cleanExtractPath, cleanHeaderName)
 	// Ensure the target path is within the intended extraction directory.
-	if !strings.HasPrefix(targetPath, cleanExtractPath) {
-		return fmt.Errorf("%w: %s", ErrInvalidFilePath, targetPath)
+	if !strings.HasPrefix(filePath, cleanExtractPath) {
+		return fmt.Errorf("%w: %s", ErrInvalidFilePath, filePath)
 	}
 	switch header.Typeflag {
 	case tar.TypeDir:
-		return createDirectory(targetPath)
+		return createDirectory(filePath)
 	case tar.TypeReg:
-		return writeFile(targetPath, tarReader, header.FileInfo().Mode())
+		return createFileFromTar(filePath, tarReader, header)
 	default:
 		log.Warnf("Unsupported file type: %v in %s", header.Typeflag, header.Name)
 	}
@@ -70,24 +70,41 @@ func processTarHeader(header *tar.Header, tarReader *tar.Reader, extractPath str
 }
 
 // createDirectory creates a directory at the specified path. If the directory already exists, it does nothing.
-func createDirectory(targetPath string) error {
-	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
-		return fmt.Errorf("error creating directory %s: %w", targetPath, err)
+func createDirectory(dirPath string) error {
+	if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
+		return fmt.Errorf("error creating directory %s: %w", dirPath, err)
 	}
 	return nil
 }
 
-// writeFile writes the contents of a tar file to a file at the specified path. It also sets the file mode.
-func writeFile(targetPath string, tarReader *tar.Reader, fileMode os.FileMode) error {
-	file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR, fileMode)
+// createFileFromTar writes the contents of a tar file to a file at the specified path. It also sets the file mode.
+func createFileFromTar(filePath string, tarReader *tar.Reader, header *tar.Header) error {
+	err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("error creating file %s: %w", targetPath, err)
+		log.Error("Failed to create parent directory for file", "path", filePath, "error", err)
+		return err
 	}
-	defer file.Close()
-
-	if _, err := io.Copy(file, tarReader); err != nil {
-		return fmt.Errorf("error writing to file %s: %w", targetPath, err)
+	writer, err := os.Create(filePath)
+	if err != nil {
+		log.Error("Failed to create file", "path", filePath, "error", err)
+		return err
+	}
+	_, err = io.Copy(writer, tarReader)
+	if err != nil {
+		log.Error("Failed to write file contents", "path", filePath, "error", err)
+		writer.Close()
+		return err
 	}
 
+	err = os.Chmod(filePath, header.FileInfo().Mode())
+	if err != nil {
+		log.Warn("Failed to set file permissions", "path", filePath, "error", err)
+	}
+
+	err = writer.Close()
+	if err != nil {
+		log.Error("Failed to close file writer", "path", filePath, "error", err)
+		return err
+	}
 	return nil
 }
