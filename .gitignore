@@ -37,3 +37,11 @@
 # Ignore cache files
 **/.atmos/cache.yaml
 **/cache.*.txt
+
+# Ignore components vendored during tests
+tests/fixtures/scenarios/vendor/components/**
+examples/demo-vendoring/components/**
+
+# Coverage files
+coverage.out
+coverage.html
