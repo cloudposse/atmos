@@ -10,6 +10,7 @@ import (
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 var ErrInvalidFilePath = errors.New("invalid file path")
@@ -89,22 +90,22 @@ func createFileFromTar(filePath string, tarReader *tar.Reader, header *tar.Heade
 		log.Error("Failed to create file", "path", filePath, "error", err)
 		return err
 	}
+	defer writer.Close()
 	_, err = io.Copy(writer, tarReader)
 	if err != nil {
 		log.Error("Failed to write file contents", "path", filePath, "error", err)
-		writer.Close()
 		return err
 	}
+	// Set correct permissions (remove setuid/setgid bits for security) , os.ModeSetuid, os.ModeSetgid standard Cross-platform
+	newMode := header.FileInfo().Mode() &^ (os.ModeSetuid | os.ModeSetgid)
+	if err := os.Chmod(filePath, newMode); err != nil {
+		log.Printf("Failed to set file permissions: %s, error: %v", filePath, err)
+	}
 
-	err = os.Chmod(filePath, header.FileInfo().Mode())
-	if err != nil {
+	// On Unix-based systems, explicitly remove setuid/setgid bits
+	if err := unix.Chmod(filePath, uint32(newMode)); err != nil {
 		log.Warn("Failed to set file permissions", "path", filePath, "error", err)
 	}
 
-	err = writer.Close()
-	if err != nil {
-		log.Error("Failed to close file writer", "path", filePath, "error", err)
-		return err
-	}
 	return nil
 }
