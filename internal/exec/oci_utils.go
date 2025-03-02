@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 	"github.com/pkg/errors"
@@ -42,7 +41,7 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 		return fmt.Errorf("invalid image reference: %w", err)
 	}
 
-	descriptor, err := pullImage(ref, imageName)
+	descriptor, err := pullImage(ref)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
@@ -76,28 +75,27 @@ func processOciImage(atmosConfig schema.AtmosConfiguration, imageName string, de
 }
 
 // pullImage pulls an OCI image from the specified reference and returns its descriptor.
-func pullImage(ref name.Reference, imageName string) (*remote.Descriptor, error) {
+func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 	var opts []remote.Option
-	// Default anonymous authentication  .
 	opts = append(opts, remote.WithAuth(authn.Anonymous))
-	if strings.HasPrefix(imageName, "ghcr.io") {
+
+	// Get registry from parsed reference
+	registry := ref.Context().Registry.Name()
+	if registry == "ghcr.io" {
 		githubToken := os.Getenv(githubTokenEnv)
-		if githubToken == "" {
-			log.Debug("Missing GITHUB_TOKEN environment variable")
-		}
 		if githubToken != "" {
 			opts = append(opts, remote.WithAuth(&authn.Basic{
 				Username: "oauth2",
 				Password: githubToken,
 			}))
-			log.Debug("Using GitHub token for authentication")
+			log.Debug("Using GitHub token for authentication", "registry", registry)
 		}
 	}
 
 	descriptor, err := remote.Get(ref, opts...)
 	if err != nil {
 		log.Error("Failed to pull OCI image", "image", ref.Name(), "error", err)
-		return nil, fmt.Errorf("cannot pull image '%s': %w", ref.Name(), err)
+		return nil, fmt.Errorf("failed to pull image '%s': %w", ref.Name(), err)
 	}
 
 	return descriptor, nil
