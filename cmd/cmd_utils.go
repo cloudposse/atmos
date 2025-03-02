@@ -74,7 +74,7 @@ func processCustomCommands(
 				},
 			}
 			// TODO: we need to update this post https://github.com/cloudposse/atmos/pull/959 gets merged
-			customCommand.PersistentFlags().Bool("", false, "Use double dashes to separate Atmos-specific options from native arguments and flags for the command.")
+			customCommand.PersistentFlags().Bool("", false, doubleDashHint)
 			// Process and add flags to the command
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
@@ -160,7 +160,7 @@ func processCommandAliases(
 
 		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
 			aliasCmd := strings.TrimSpace(v)
-			aliasFor := fmt.Sprintf("alias for '%s'", aliasCmd)
+			aliasFor := fmt.Sprintf("alias for `%s`", aliasCmd)
 
 			aliasCommand := &cobra.Command{
 				Use:                alias,
@@ -689,7 +689,7 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 }
 
 func showUsageExample(cmd *cobra.Command, details string) {
-	contentName := strings.ReplaceAll(cmd.CommandPath(), " ", "_")
+	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
 	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
 	if exampleContent, ok := examples[contentName]; ok {
 		suggestion = exampleContent.Suggestion
@@ -707,6 +707,9 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 }
 
 func AddStackCompletion(cmd *cobra.Command) {
+	if cmd.Flag("stack") == nil {
+		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
+	}
 	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
 }
 
