@@ -108,6 +108,113 @@ The following config can be used to download the `vpc` component from an AWS pub
       version: "latest"
   ```
 
+## Vendoring from SSH
+
+This is the most common way to access non-public Git repositories from automated systems because it allows access to private repositories without interactive prompts.
+Atmos will use any installed SSH keys automatically. There are two primary ways to specify an SSH source:
+
+### Implicit SSH
+
+When no explicit scheme is provided, for example:
+
+```shell
+git::git@github.com:cloudposse/terraform-null-label.git?ref={{.Version}}
+```
+
+Atmos’s rewrites this URL to:
+
+```shell
+git::ssh://git@github.com/cloudposse/terraform-null-label.git?depth=1&ref={{.Version}}
+```
+
+In this case, Atmos injects a default username ("git").
+
+### Explicit SSH
+
+When the SSH scheme is specified explicitly, for example:
+
+```shell
+git::ssh://git@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}
+```
+
+the URL is used as provided. In this scenario, no rewriting occurs because the URL already includes an explicit `ssh://` schema.
+
+### Important Notes
+
+- A URL like:
+  ```shell
+  github.com:cloudposse/terraform-null-label.git?ref={{ .Version }}
+  ```
+  is **not valid** because go-getter misinterprets **github.com:** as a schema and will error out.
+
+- A URL without any scheme, such as:
+  ```shell
+  github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}
+  ```
+  defaults to HTTPS and triggers Atmos to inject credentials if available.  
+
+## HTTPS Vendoring
+
+Atmos supports vendoring components using HTTPS links. When a source repository is specified without an explicit protocol, it is resolved using HTTPS.
+
+For example:
+```
+github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}
+```
+is automatically resolved as:
+```
+git::https://github.com/cloudposse/terraform-null-label.git?depth=1&ref={{ .Version }}
+```
+The **custom detector is invoked** in this case to ensure proper URL transformation.
+
+## Authentication & Token Usage
+
+Atmos prioritizes authentication credentials based on predefined environment variables. The priority order for each provider is:
+
+### GitHub
+| Environment Variable           | Purpose                                                                                                  |
+|--------------------------------|----------------------------------------------------------------------------------------------------------|
+| ATMOS_GITHUB_TOKEN             | Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits. |
+| GITHUB_TOKEN                   | Used as a fallback if ATMOS_GITHUB_TOKEN is not set.                                                    |
+
+**Default Username for HTTPS:** `"x-access-token"`
+
+### Bitbucket
+| Environment Variable            | Purpose                                                                                              |
+|---------------------------------|------------------------------------------------------------------------------------------------------|
+| ATMOS_BITBUCKET_TOKEN           | Bitbucket app password for API requests; used to avoid rate limits. When both ATMOS_BITBUCKET_TOKEN and BITBUCKET_TOKEN are defined, the former prevails. |
+| BITBUCKET_TOKEN                 | Used as a fallback when ATMOS_BITBUCKET_TOKEN is not set.                                           |
+| ATMOS_BITBUCKET_USERNAME        | Bitbucket username for authentication. Takes precedence over BITBUCKET_USERNAME.                    |
+| BITBUCKET_USERNAME              | Used as a fallback when ATMOS_BITBUCKET_USERNAME is not set. Bitbucket requires a valid username and does not accept dummy values like `"x-access-token"`. |
+
+**Default Username for HTTPS:** 
+- If `ATMOS_BITBUCKET_USERNAME` is set, it is used.
+- Otherwise, if `BITBUCKET_USERNAME` is set, it is used.
+- If neither is set, `"x-token-auth"` is used.
+
+### GitLab
+| Environment Variable            | Purpose                                                                                              |
+|---------------------------------|------------------------------------------------------------------------------------------------------|
+| ATMOS_GITLAB_TOKEN              | Personal Access Token (PAT) for GitLab authentication. Takes precedence over GITLAB_TOKEN.           |
+| GITLAB_TOKEN                    | Used as a fallback if ATMOS_GITLAB_TOKEN is not set.                                                 |
+
+**Default Username for HTTPS:** `"oauth2"`
+
+## How HTTPS URLs Are Resolved
+
+When resolving HTTPS-based sources, Atmos follows these rules:
+
+1. If a **full HTTPS URL** is provided (`git::https://github.com/...`), it is used as-is.
+2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`.
+3. If a **username and repo name** are provided in SCP format (`git@github.com:org/repo.git`), it is rewritten to an SSH URL and handled separately.
+
+
+:::note
+For more details on configuration, refer to [Atmos Configuration](../configuration/configuration.mdx).
+ 
+:::
+
+
 :::tip
 Run `atmos vendor pull --help` to see all the available options
 :::
