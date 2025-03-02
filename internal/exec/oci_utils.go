@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -14,6 +16,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/uuid"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -125,14 +128,25 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 
 // checkArtifactType to check and log artifact type mismatches .
 func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
-	// OCIManifest defines the structure of an OCI artifact manifest.
-	var ociManifest struct {
-		ArtifactType string `json:"artifactType"`
+	manifest, err := parseOCIManifest(bytes.NewReader(descriptor.Manifest))
+	if err != nil {
+		log.Error("Failed to parse OCI manifest", "image", imageName, "error", err)
+		return
 	}
-	if err := json.Unmarshal(descriptor.Manifest, &ociManifest); err != nil {
-		log.Debug("Failed parse OCI artifact manifest", "image", imageName, "error", err)
-	} else if ociManifest.ArtifactType != targetArtifactType {
+	if manifest.ArtifactType != targetArtifactType {
 		// log that don't match the target artifact type
-		log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", ociManifest.ArtifactType)
+		log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", manifest.ArtifactType)
 	}
+
+}
+
+// ParseOCIManifest reads and decodes an OCI manifest from a JSON file.
+func parseOCIManifest(manifestBytes io.Reader) (*ocispec.Manifest, error) {
+
+	var manifest ocispec.Manifest
+	if err := json.NewDecoder(manifestBytes).Decode(&manifest); err != nil {
+		return nil, err
+	}
+
+	return &manifest, nil
 }
