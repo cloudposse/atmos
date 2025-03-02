@@ -19,9 +19,4 @@ github_checks:
   annotations: true  # Enable GitHub Checks Annotations
 
         informational: false # Fail the PR check if coverage is too low
-
-comment:
-  layout: "condensed_header, condensed_files, condensed_footer"
-  behavior: default
-  require_changes: true  # Only post if coverage changes
-  hide_project_coverage: true
+        
