@@ -94,7 +94,6 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	if err != nil {
 		t.Errorf("pull tag demo failed: %v", err)
 	}
-
 }
 
 func verifyFileExists(t *testing.T, files []string) (bool, string) {
