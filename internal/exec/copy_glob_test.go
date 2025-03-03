@@ -24,7 +24,7 @@ func TestCopyFile(t *testing.T) {
 
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := "copyFileTest"
-	if err := os.WriteFile(srcFile, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(srcFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to write source file: %v", err)
 	}
 
@@ -92,11 +92,11 @@ func TestShouldSkipEntry(t *testing.T) {
 	defer os.RemoveAll(baseDir)
 
 	subDir := filepath.Join(baseDir, "sub")
-	if err := os.Mkdir(subDir, 0755); err != nil {
+	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 	filePath := filepath.Join(subDir, "sample.txt")
-	if err := os.WriteFile(filePath, []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
 	info, err := os.Stat(filePath)
@@ -126,15 +126,15 @@ func TestCopyDirRecursive(t *testing.T) {
 	defer os.RemoveAll(dstDir)
 
 	subDir := filepath.Join(srcDir, "sub")
-	if err := os.Mkdir(subDir, 0755); err != nil {
+	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 	file1 := filepath.Join(srcDir, "file1.txt")
 	file2 := filepath.Join(subDir, "file2.txt")
-	if err := os.WriteFile(file1, []byte("file1"), 0644); err != nil {
+	if err := os.WriteFile(file1, []byte("file1"), 0o644); err != nil {
 		t.Fatalf("Failed to write file1: %v", err)
 	}
-	if err := os.WriteFile(file2, []byte("file2"), 0644); err != nil {
+	if err := os.WriteFile(file2, []byte("file2"), 0o644); err != nil {
 		t.Fatalf("Failed to write file2: %v", err)
 	}
 
@@ -169,10 +169,10 @@ func TestGetMatchesForPattern(t *testing.T) {
 
 	fileA := filepath.Join(srcDir, "a.txt")
 	fileB := filepath.Join(srcDir, "b.log")
-	if err := os.WriteFile(fileA, []byte("content"), 0644); err != nil {
+	if err := os.WriteFile(fileA, []byte("content"), 0o644); err != nil {
 		t.Fatalf("Failed to write fileA: %v", err)
 	}
-	if err := os.WriteFile(fileB, []byte("content"), 0644); err != nil {
+	if err := os.WriteFile(fileB, []byte("content"), 0o644); err != nil {
 		t.Fatalf("Failed to write fileB: %v", err)
 	}
 
