@@ -26,7 +26,7 @@ func TestGoGetterClient_Get(t *testing.T) {
 	defer os.RemoveAll(srcDir)
 
 	testFile := filepath.Join(srcDir, "test.txt")
-	err := os.WriteFile(testFile, []byte("test content"), 0644)
+	err := os.WriteFile(testFile, []byte("test content"), 0o644)
 	assert.NoError(t, err)
 
 	dstDir := createTempDir(t)
