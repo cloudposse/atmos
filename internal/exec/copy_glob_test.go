@@ -24,7 +24,7 @@ func TestCopyFile(t *testing.T) {
 	defer os.RemoveAll(dstDir)
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := "copyFileTest"
-	if err := os.WriteFile(srcFile, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(srcFile, []byte(content), 0o600); err != nil {
 		t.Fatalf("Failed to write source file: %v", err)
 	}
 	dstFile := filepath.Join(dstDir, "test.txt")
@@ -84,11 +84,11 @@ func TestShouldSkipEntry(t *testing.T) {
 	}
 	defer os.RemoveAll(baseDir)
 	subDir := filepath.Join(baseDir, "sub")
-	if err := os.Mkdir(subDir, 0o755); err != nil {
+	if err := os.Mkdir(subDir, 0755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 	filePath := filepath.Join(subDir, "sample.txt")
-	if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte("test"), 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
 	info, err := os.Stat(filePath)
@@ -115,15 +115,15 @@ func TestCopyDirRecursive(t *testing.T) {
 	}
 	defer os.RemoveAll(dstDir)
 	subDir := filepath.Join(srcDir, "sub")
-	if err := os.Mkdir(subDir, 0o755); err != nil {
+	if err := os.Mkdir(subDir, 0755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 	file1 := filepath.Join(srcDir, "file1.txt")
 	file2 := filepath.Join(subDir, "file2.txt")
-	if err := os.WriteFile(file1, []byte("file1"), 0o644); err != nil {
+	if err := os.WriteFile(file1, []byte("file1"), 0o600); err != nil {
 		t.Fatalf("Failed to write file1: %v", err)
 	}
-	if err := os.WriteFile(file2, []byte("file2"), 0o644); err != nil {
+	if err := os.WriteFile(file2, []byte("file2"), 0o600); err != nil {
 		t.Fatalf("Failed to write file2: %v", err)
 	}
 	ctx := &CopyContext{
@@ -155,10 +155,10 @@ func TestGetMatchesForPattern(t *testing.T) {
 	defer os.RemoveAll(srcDir)
 	fileA := filepath.Join(srcDir, "a.txt")
 	fileB := filepath.Join(srcDir, "b.log")
-	if err := os.WriteFile(fileA, []byte("content"), 0o644); err != nil {
+	if err := os.WriteFile(fileA, []byte("content"), 0o600); err != nil {
 		t.Fatalf("Failed to write fileA: %v", err)
 	}
-	if err := os.WriteFile(fileB, []byte("content"), 0o644); err != nil {
+	if err := os.WriteFile(fileB, []byte("content"), 0o600); err != nil {
 		t.Fatalf("Failed to write fileB: %v", err)
 	}
 	pattern := "*.txt"
@@ -194,7 +194,7 @@ func TestCopyDirRecursiveWithPrefix(t *testing.T) {
 	}
 	defer os.RemoveAll(dstDir)
 	filePath := filepath.Join(srcDir, "test.txt")
-	if err := os.WriteFile(filePath, []byte("content"), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte("content"), 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
 	ctx := &PrefixCopyContext{
@@ -226,11 +226,11 @@ func TestProcessIncludedPattern(t *testing.T) {
 	}
 	defer os.RemoveAll(dstDir)
 	fileMatch := filepath.Join(srcDir, "match.md")
-	if err := os.WriteFile(fileMatch, []byte("mdcontent"), 0644); err != nil {
+	if err := os.WriteFile(fileMatch, []byte("mdcontent"), 0o600); err != nil {
 		t.Fatalf("Failed to write matching file: %v", err)
 	}
 	fileNoMatch := filepath.Join(srcDir, "no_match.txt")
-	if err := os.WriteFile(fileNoMatch, []byte("txtcontent"), 0644); err != nil {
+	if err := os.WriteFile(fileNoMatch, []byte("txtcontent"), 0o600); err != nil {
 		t.Fatalf("Failed to write non-matching file: %v", err)
 	}
 	pattern := "**/*.md"
@@ -264,11 +264,11 @@ func TestCopyToTargetWithPatterns(t *testing.T) {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 	fileKeep := filepath.Join(subDir, "keep.test")
-	if err := os.WriteFile(fileKeep, []byte("keep"), 0644); err != nil {
+	if err := os.WriteFile(fileKeep, []byte("keep"), 0o600); err != nil {
 		t.Fatalf("Failed to write keep file: %v", err)
 	}
 	fileSkip := filepath.Join(subDir, "skip.test")
-	if err := os.WriteFile(fileSkip, []byte("skip"), 0644); err != nil {
+	if err := os.WriteFile(fileSkip, []byte("skip"), 0o600); err != nil {
 		t.Fatalf("Failed to write skip file: %v", err)
 	}
 	dummy := &schema.AtmosVendorSource{
