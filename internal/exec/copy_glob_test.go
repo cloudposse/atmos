@@ -260,7 +260,7 @@ func TestCopyToTargetWithPatterns(t *testing.T) {
 	}
 	defer os.RemoveAll(dstDir)
 	subDir := filepath.Join(srcDir, "sub")
-	if err := os.Mkdir(subDir, 0755); err != nil {
+	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 	fileKeep := filepath.Join(subDir, "keep.test")
