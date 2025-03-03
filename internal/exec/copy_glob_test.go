@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/pkg/errors"
 )
 
 // Use a local variable to override the glob matching function in tests.
@@ -659,5 +660,19 @@ func TestCopyToTargetWithPatterns_LocalFileBranch(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dstDir, "file.txt")); os.IsNotExist(err) {
 		t.Errorf("Expected file.txt to exist in destination")
+	}
+}
+
+func TestProcessDirEntry_InfoError(t *testing.T) {
+	ctx := &CopyContext{
+		SrcDir:   "/dummy",
+		DstDir:   "/dummy",
+		BaseDir:  "/dummy",
+		Excluded: []string{},
+		Included: []string{},
+	}
+	err := processDirEntry(fakeDirEntry{name: "error.txt", err: errors.New("forced info error")}, ctx)
+	if err == nil || !strings.Contains(err.Error(), "getting info") {
+		t.Errorf("Expected error for Info() failure, got %v", err)
 	}
 }
