@@ -11,16 +11,12 @@ Flags:
         --from-plan          If set atmos will use the previously generated plan
                              file (default false)
 
-    -h, --help               help for apply (default false)
+    -h, --help               help for apply
 
         --planfile string    Set the plan file to use
 
 
 Global Flags:
-
-        --                            Use double dashes to separate
-                                      Atmos-specific options from native
-                                      arguments and flags for the command.
 
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent
@@ -51,6 +47,10 @@ Global Flags:
     -s, --stack string                The stack flag specifies the environment
                                       or configuration set for deployment in
                                       Atmos CLI.
+
+        --                            Use double dashes to separate
+                                      Atmos-specific options from native
+                                      arguments and flags for the command.
 
 
 Examples:

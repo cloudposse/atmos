@@ -21,13 +21,13 @@ Available Commands:
 
 Flags:
 
-        --                Use double dashes to separate Atmos-specific options
-                          from native arguments and flags for the command.
-
-    -h, --help            help for helmfile (default false)
+    -h, --help            help for helmfile
 
     -s, --stack string    The stack flag specifies the environment or
                           configuration set for deployment in Atmos CLI.
+
+        --                Use double dashes to separate Atmos-specific options
+                          from native arguments and flags for the command.
 
 
 Global Flags:

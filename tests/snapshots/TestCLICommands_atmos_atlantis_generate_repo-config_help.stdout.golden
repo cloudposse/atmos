@@ -18,7 +18,7 @@ Flags:
 
         --config-template string     Atlantis config template name
 
-    -h, --help                       help for repo-config (default false)
+    -h, --help                       help for repo-config
 
         --output-path string         Output path to write atlantis.yaml file
 
@@ -55,10 +55,6 @@ Flags:
 
 Global Flags:
 
-        --                          Use double dashes to separate Atmos-specific
-                                    options from native arguments and flags for
-                                    the command.
-
         --clone-target-ref          Clone the target reference for comparison
                                     with the current branch. Only used when
                                     --affected-only=true. Defaults to false,
@@ -80,6 +76,10 @@ Global Flags:
                                     Errors can be redirected to any file or any
                                     standard file descriptor (including
                                     /dev/null)
+
+        --                          Use double dashes to separate Atmos-specific
+                                    options from native arguments and flags for
+                                    the command.
 
 
 Examples:
