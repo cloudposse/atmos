@@ -26,7 +26,7 @@ func TestGoGetterClient_Get(t *testing.T) {
 	defer os.RemoveAll(srcDir)
 
 	testFile := filepath.Join(srcDir, "test.txt")
-	err := os.WriteFile(testFile, []byte("test content"), 0600)
+	err := os.WriteFile(testFile, []byte("test content"), 0o600)
 	assert.NoError(t, err)
 
 	dstDir := createTempDir(t)
@@ -115,8 +115,7 @@ func TestRegisterCustomDetectors(t *testing.T) {
 	registerCustomDetectors(config)
 
 	assert.Equal(t, 1, len(getter.Detectors))
-	// Can't assert type precisely without NewCustomGitHubDetector implementation
-	assert.NotNil(t, getter.Detectors[0])
+	assert.IsType(t, &customGitHubDetector{}, getter.Detectors[0])
 }
 
 func TestNewGoGetterDownloader(t *testing.T) {
