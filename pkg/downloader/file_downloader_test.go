@@ -60,6 +60,10 @@ test:
 			name:     "should be able to parse hcl file",
 			fileData: `a = 1`,
 		},
+		{
+			name:     "should be able to return data as is in case of unknown format",
+			fileData: `some random data`,
+		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
