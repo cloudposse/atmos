@@ -22,8 +22,8 @@ var listStacksCmd = &cobra.Command{
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
-		checkAtmosConfig()
-		output, err := listStacks(cmd)
+		checkAtmosConfigFn()
+		output, err := listStacksFn(cmd)
 		if err != nil {
 			log.Error("error filtering stacks", "error", err)
 			return
@@ -37,6 +37,9 @@ func init() {
 	listStacksCmd.PersistentFlags().StringP("component", "c", "", "List all stacks that contain the specified component.")
 	listCmd.AddCommand(listStacksCmd)
 }
+
+var listStacksFn = listStacks
+var checkAtmosConfigFn = checkAtmosConfig
 
 func listStacks(cmd *cobra.Command) ([]string, error) {
 	componentFlag, _ := cmd.Flags().GetString("component")
