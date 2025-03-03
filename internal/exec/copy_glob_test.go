@@ -84,7 +84,7 @@ func TestShouldSkipEntry(t *testing.T) {
 	}
 	defer os.RemoveAll(baseDir)
 	subDir := filepath.Join(baseDir, "sub")
-	if err := os.Mkdir(subDir, 0755); err != nil {
+	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 	filePath := filepath.Join(subDir, "sample.txt")
@@ -115,7 +115,7 @@ func TestCopyDirRecursive(t *testing.T) {
 	}
 	defer os.RemoveAll(dstDir)
 	subDir := filepath.Join(srcDir, "sub")
-	if err := os.Mkdir(subDir, 0755); err != nil {
+	if err := os.Mkdir(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 	file1 := filepath.Join(srcDir, "file1.txt")
