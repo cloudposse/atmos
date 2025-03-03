@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Test helper to create a temporary directory
+// Test helper to create a temporary directory.
 func createTempDir(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "test")
 	if err != nil {
@@ -26,7 +26,7 @@ func TestGoGetterClient_Get(t *testing.T) {
 	defer os.RemoveAll(srcDir)
 
 	testFile := filepath.Join(srcDir, "test.txt")
-	err := os.WriteFile(testFile, []byte("test content"), 0644)
+	err := os.WriteFile(testFile, []byte("test content"), 0600)
 	assert.NoError(t, err)
 
 	dstDir := createTempDir(t)
