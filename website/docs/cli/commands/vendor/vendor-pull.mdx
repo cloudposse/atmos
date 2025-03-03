@@ -155,7 +155,7 @@ the URL is used as provided. In this scenario, no rewriting occurs because the U
 
 ## HTTPS Vendoring
 
-Atmos supports vendoring components using HTTPS links. When a source repository is specified without an explicit protocol, it is resolved using HTTPS.
+Atmos supports vendoring components using HTTPS links. 
 
 For example:
 ```
@@ -165,9 +165,8 @@ is automatically resolved as:
 ```
 git::https://github.com/cloudposse/terraform-null-label.git?depth=1&ref={{ .Version }}
 ```
-The **custom detector is invoked** in this case to ensure proper URL transformation.
 
-## Authentication & Token Usage
+## Authentication & Token Usage for HTTPS
 
 Atmos prioritizes authentication credentials based on predefined environment variables. The priority order for each provider is:
 
@@ -204,9 +203,9 @@ Atmos prioritizes authentication credentials based on predefined environment var
 
 When resolving HTTPS-based sources, Atmos follows these rules:
 
-1. If a **full HTTPS URL** is provided (`git::https://github.com/...`), it is used as-is.
-2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`.
-3. If a **username and repo name** are provided in SCP format (`git@github.com:org/repo.git`), it is rewritten to an SSH URL and handled separately.
+1. If a **full HTTPS URL** is provided (`git::https://github.com/...`), it is used as-is. No token data is added to the link even if it is set in respective environment variables. 
+2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`, in this case if set the token is injected into the URL.  
+3. If a **username and repo name** are provided in SCP format (`git@github.com:org/repo.git`), it is rewritten to an SSH URL.
 
 
 :::note
