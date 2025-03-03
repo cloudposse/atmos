@@ -42,7 +42,6 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	flags.Bool("everything", false, "")
 	err = flags.Set("component", "")
 	require.NoError(t, err)
-	require.NoError(t, err)
 	err = ExecuteVendorPullCommand(&cmd, []string{})
 	require.NoError(t, err)
 	if err != nil {
@@ -82,6 +81,20 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 		t.Errorf("Files do not exist: %v", file)
 	}
 	deleteStateFiles(t, files)
+	// test dry run
+	flags.Set("dry-run", "true")
+	err = ExecuteVendorPullCommand(&cmd, []string{})
+	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("Dry run failed: %v", err)
+	}
+	flags.Set("tags", "demo")
+	err = ExecuteVendorPullCommand(&cmd, []string{})
+	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("pull tag demo failed: %v", err)
+	}
+
 }
 
 func verifyFileExists(t *testing.T, files []string) (bool, string) {

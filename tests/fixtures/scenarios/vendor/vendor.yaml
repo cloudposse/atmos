@@ -5,8 +5,8 @@ metadata:
   description: Atmos vendoring manifest for Atmos demo component library
 spec:
   # Import other vendor manifests, if necessary
-  imports: []
-
+  imports:
+    - "vendor/vendor2.yaml"
   sources:
     - component: "github/stargazers"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
@@ -39,15 +39,6 @@ spec:
         - demo
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
-
-    - component: "myapp1"
-      source: "oci://ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/myapp:{{.Version}}"
-      version: "v0"
-      tags:
-        - oci
-      targets:
-        - "components/terraform/myapp1"
-
     - component: "myapp2"
       source: "../../../fixtures/components/terraform/myapp" # required for test URI contain path traversal
       tags:
