@@ -78,7 +78,7 @@ func TestPrintHelpFlagPrinter_PrintHelpFlag(t *testing.T) {
 	}
 }
 
-// Helper types for flag values (since pflag.Value interface needs to be implemented)
+// Helper types for flag values (since pflag.Value interface needs to be implemented).
 type stringValue struct {
 	value string
 }
