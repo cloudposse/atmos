@@ -55,8 +55,16 @@ version-windows: build-windows
 deps:
 	go mod download
 
-# Run acceptance tests
 testacc: get
+	@echo "Running acceptance tests"
 	go test $(TEST) -v $(TESTARGS) -timeout 10m
 
-.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc
+testacc-cover: get
+	@echo "Running tests with coverage"
+	go test $(TEST) -v $(TESTARGS) -timeout 10m -coverprofile=coverage.out
+
+# Run acceptance tests with coverage report
+testacc-coverage: testacc-cover
+	go tool cover -html=coverage.out -o coverage.html
+
+.PHONY: lint get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage

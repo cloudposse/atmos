@@ -86,7 +86,6 @@ func BuildSpaceliftStackNameFromComponentConfig(
 	atmosConfig schema.AtmosConfiguration,
 	configAndStacksInfo schema.ConfigAndStacksInfo,
 ) (string, error) {
-
 	var spaceliftStackName string
 	var spaceliftSettingsSection map[string]any
 	var contextPrefix string

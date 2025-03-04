@@ -24,7 +24,7 @@ var describeConfigCmd = &cobra.Command{
 
 func init() {
 	describeConfigCmd.DisableFlagParsing = false
-	describeConfigCmd.PersistentFlags().StringP("format", "f", "json", "The output format: atmos describe config -f json|yaml")
+	describeConfigCmd.PersistentFlags().StringP("format", "f", "json", "The output format")
 
 	describeCmd.AddCommand(describeConfigCmd)
 }
