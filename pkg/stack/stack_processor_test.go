@@ -38,7 +38,7 @@ func TestStackProcessor(t *testing.T) {
 		},
 	}
 
-	var listResult, mapResult, _, err = ProcessYAMLConfigFiles(
+	listResult, mapResult, _, err := ProcessYAMLConfigFiles(
 		atmosConfig,
 		stacksBasePath,
 		terraformComponentsBasePath,
