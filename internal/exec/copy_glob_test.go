@@ -809,7 +809,6 @@ func TestProcessPrefixEntry_InfoError(t *testing.T) {
 }
 
 // fakeFileInfo is a minimal implementation of os.FileInfo for testing.
-
 type fakeFileInfo struct {
 	name  string
 	size  int64
@@ -817,29 +816,12 @@ type fakeFileInfo struct {
 	isDir bool
 }
 
-func (fi fakeFileInfo) Name() string {
-	return fi.name
-}
-
-func (fi fakeFileInfo) Size() int64 {
-	return fi.size
-}
-
-func (fi fakeFileInfo) Mode() os.FileMode {
-	return fi.mode
-}
-
-func (fi fakeFileInfo) ModTime() time.Time {
-	return time.Time{}
-}
-
-func (fi fakeFileInfo) IsDir() bool {
-	return fi.isDir
-}
-
-func (fi fakeFileInfo) Sys() interface{} {
-	return nil
-}
+func (fi fakeFileInfo) Name() string       { return fi.name }
+func (fi fakeFileInfo) Size() int64        { return fi.size }
+func (fi fakeFileInfo) Mode() os.FileMode  { return fi.mode }
+func (fi fakeFileInfo) ModTime() time.Time { return time.Time{} }
+func (fi fakeFileInfo) IsDir() bool        { return fi.isDir }
+func (fi fakeFileInfo) Sys() any           { return nil }
 
 // fakeDirEntryWithInfo implements os.DirEntry using fakeFileInfo.
 type fakeDirEntryWithInfo struct {
@@ -847,21 +829,10 @@ type fakeDirEntryWithInfo struct {
 	info os.FileInfo
 }
 
-func (fde fakeDirEntryWithInfo) Name() string {
-	return fde.name
-}
-
-func (fde fakeDirEntryWithInfo) IsDir() bool {
-	return fde.info.IsDir()
-}
-
-func (fde fakeDirEntryWithInfo) Type() os.FileMode {
-	return fde.info.Mode()
-}
-
-func (fde fakeDirEntryWithInfo) Info() (os.FileInfo, error) {
-	return fde.info, nil
-}
+func (fde fakeDirEntryWithInfo) Name() string               { return fde.name }
+func (fde fakeDirEntryWithInfo) IsDir() bool                { return fde.info.IsDir() }
+func (fde fakeDirEntryWithInfo) Type() os.FileMode          { return fde.info.Mode() }
+func (fde fakeDirEntryWithInfo) Info() (os.FileInfo, error) { return fde.info, nil }
 
 // TestProcessPrefixEntry_FailMkdir simulates an error when creating a directory in processPrefixEntry.
 func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
