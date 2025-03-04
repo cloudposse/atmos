@@ -82,13 +82,21 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	}
 	deleteStateFiles(t, files)
 	// test dry run
-	flags.Set("dry-run", "true")
+	err = flags.Set("dry-run", "true")
+	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("set dry-run failed: %v", err)
+	}
 	err = ExecuteVendorPullCommand(&cmd, []string{})
 	require.NoError(t, err)
 	if err != nil {
 		t.Errorf("Dry run failed: %v", err)
 	}
-	flags.Set("tags", "demo")
+	err = flags.Set("tags", "demo")
+	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("set tags failed: %v", err)
+	}
 	err = ExecuteVendorPullCommand(&cmd, []string{})
 	require.NoError(t, err)
 	if err != nil {
