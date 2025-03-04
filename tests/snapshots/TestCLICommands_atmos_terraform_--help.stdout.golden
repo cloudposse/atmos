@@ -50,10 +50,6 @@ Native terraform Commands:
 
 Flags:
 
-        --                            Use double dashes to separate
-                                      Atmos-specific options from native
-                                      arguments and flags for the command.
-
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
                                       variable to customize the User-Agent
                                       string in Terraform provider requests.
@@ -61,7 +57,7 @@ Flags:
                                       +https://atmos.tools). This flag works
                                       with almost all commands.
 
-    -h, --help                        help for terraform (default false)
+    -h, --help                        help for terraform
 
         --skip-init                   Skip running terraform init before
                                       executing the command (default false)
@@ -69,6 +65,10 @@ Flags:
     -s, --stack string                The stack flag specifies the environment
                                       or configuration set for deployment in
                                       Atmos CLI.
+
+        --                            Use double dashes to separate
+                                      Atmos-specific options from native
+                                      arguments and flags for the command.
 
 
 Global Flags:
