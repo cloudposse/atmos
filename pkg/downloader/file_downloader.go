@@ -77,15 +77,14 @@ func (fd *fileDownloader) detectFormatAndParse(filename string) (any, error) {
 	}
 
 	data := string(d)
-
 	switch {
-	case utils.IsHCL(data):
-		err = hcl.Unmarshal(d, &v)
+	case utils.IsJSON(data):
+		err = json.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
-	case utils.IsJSON(data):
-		err = json.Unmarshal(d, &v)
+	case utils.IsHCL(data):
+		err = hcl.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
