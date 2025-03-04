@@ -103,7 +103,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:     "test-value",
 			mockFn: func(m *MockSSMClient) {
 				m.On("PutParameter", mock.Anything, mock.Anything).
-					Return(nil, errors.New("aws error"))
+					Return(nil, errors.New("aws error")) //nolint
 			},
 			wantErr: true,
 		},
@@ -277,7 +277,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "config-key",
 			mockFn: func(m *MockSSMClient) {
 				m.On("GetParameter", mock.Anything, mock.Anything).
-					Return(nil, errors.New("aws error"))
+					Return(nil, errors.New("aws error")) //nolint
 			},
 			want:    nil,
 			wantErr: true,

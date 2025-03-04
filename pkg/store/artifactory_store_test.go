@@ -47,7 +47,7 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 
 	data := []byte(`{"test":"value"}`)
 	fullPath := filepath.Join(targetDir, filename)
-	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+	if err := os.WriteFile(fullPath, data, 0o600); err != nil {
 		return 0, 0, err
 	}
 
