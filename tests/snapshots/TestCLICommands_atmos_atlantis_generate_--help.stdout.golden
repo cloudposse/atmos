@@ -19,14 +19,10 @@ Flags:
                               checks out the target reference instead. (default
                               false)
 
-    -h, --help                help for generate (default false)
+    -h, --help                help for generate
 
 
 Global Flags:
-
-        --                          Use double dashes to separate Atmos-specific
-                                    options from native arguments and flags for
-                                    the command.
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file
@@ -43,6 +39,10 @@ Global Flags:
                                     Errors can be redirected to any file or any
                                     standard file descriptor (including
                                     /dev/null)
+
+        --                          Use double dashes to separate Atmos-specific
+                                    options from native arguments and flags for
+                                    the command.
 
 
 Use atmos atlantis generate [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
