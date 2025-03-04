@@ -55,7 +55,6 @@ func TestListMetadataValidation(t *testing.T) {
 	originalCheckAtmosConfig := checkAtmosConfigFn
 
 	checkAtmosConfigFn = func(opts ...AtmosValidateOption) {
-
 	}
 
 	defer func() {
