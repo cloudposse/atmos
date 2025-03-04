@@ -128,6 +128,7 @@ type Terraform struct {
 	DeployRunInit           bool        `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
 	InitRunReconfigure      bool        `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
 	AutoGenerateBackendFile bool        `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
+	WorkspacesEnabled       *bool       `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled,omitempty"`
 	Command                 string      `yaml:"command" json:"command" mapstructure:"command"`
 	Shell                   ShellConfig `yaml:"shell" json:"shell" mapstructure:"shell"`
 }
