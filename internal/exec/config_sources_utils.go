@@ -76,7 +76,6 @@ func processSectionValueInStacks(
 	subsection string,
 	value string,
 ) schema.ConfigSourcesStackDependencies {
-
 	result := schema.ConfigSourcesStackDependencies{}
 
 	// Process the value for the component in the stack
@@ -231,7 +230,6 @@ func processComponentSectionValueInStack(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -327,7 +325,6 @@ func processComponentTypeSectionValueInStack(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -402,7 +399,6 @@ func processGlobalSectionValueInStack(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -468,7 +464,6 @@ func processComponentSectionValueInStackImports(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -578,7 +573,6 @@ func processComponentTypeSectionValueInStackImports(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result
@@ -667,7 +661,6 @@ func processGlobalSectionValueInStackImports(
 	subsection string,
 	value string,
 ) *schema.ConfigSourcesStackDependencies {
-
 	rawStackConfig, ok := rawStackConfigs[stackFile]
 	if !ok {
 		return result

@@ -8,7 +8,7 @@ Usage:
 
 Flags:
 
-    -h, --help    help for about (default false)
+    -h, --help    help for about
 
 
 Global Flags:
