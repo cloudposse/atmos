@@ -21,14 +21,19 @@ import (
 )
 
 var (
+	// Error constants.
+	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
+
+	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
 
-	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
+	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
 	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
-// and returns a list of stack configs
+// and returns a list of stack configs.
 func ProcessYAMLConfigFiles(
 	atmosConfig schema.AtmosConfiguration,
 	stacksBasePath string,
@@ -575,7 +580,7 @@ func ProcessStackConfig(
 	if i, ok := config["hooks"]; ok {
 		globalHooksSection, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'hooks' section in the file '%s'", stackName)
+			return nil, errors.Wrapf(ErrInvalidHooksSection, " '%s'", stackName)
 		}
 	}
 
@@ -632,7 +637,7 @@ func ProcessStackConfig(
 	if i, ok := globalHooksSection["hooks"]; ok {
 		terraformHooks, ok = i.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("invalid 'terraform.hooks' section in the file '%s'", stackName)
+			return nil, errors.Wrapf(ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
 		}
 	}
 
