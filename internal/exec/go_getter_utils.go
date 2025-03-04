@@ -7,31 +7,42 @@ import (
 	"strings"
 )
 
+var (
+	ErrURIEmpty                      = fmt.Errorf("URI cannot be empty")
+	ErrURIExceedsMaxLength           = fmt.Errorf("URI exceeds maximum length of 2048 characters")
+	ErrURICannotContainPathTraversal = fmt.Errorf("URI cannot contain path traversal sequences")
+	ErrURICannotContainSpaces        = fmt.Errorf("URI cannot contain spaces")
+	ErrUnsupportedURIScheme          = fmt.Errorf("unsupported URI scheme")
+	ErrInvalidOCIURIFormat           = fmt.Errorf("invalid OCI URI format")
+)
+
+const MaxURISize = 2048
+
 // ValidateURI validates URIs.
 func ValidateURI(uri string) error {
 	if uri == "" {
-		return fmt.Errorf("URI cannot be empty")
+		return ErrURIEmpty
 	}
 	// Maximum length check
-	if len(uri) > 2048 {
-		return fmt.Errorf("URI exceeds maximum length of 2048 characters")
+	if len(uri) > MaxURISize {
+		return ErrURIExceedsMaxLength
 	}
 	// Validate URI format
 	if strings.Contains(uri, "..") {
-		return fmt.Errorf("URI cannot contain path traversal sequences")
+		return ErrURICannotContainPathTraversal
 	}
 	if strings.Contains(uri, " ") {
-		return fmt.Errorf("URI cannot contain spaces")
+		return ErrURICannotContainSpaces
 	}
 	// Validate scheme-specific format
 	if strings.HasPrefix(uri, "oci://") {
 		if !strings.Contains(uri[6:], "/") {
-			return fmt.Errorf("invalid OCI URI format")
+			return ErrInvalidOCIURIFormat
 		}
 	} else if strings.Contains(uri, "://") {
 		scheme := strings.Split(uri, "://")[0]
 		if !IsValidScheme(scheme) {
-			return fmt.Errorf("unsupported URI scheme: %s", scheme)
+			return ErrUnsupportedURIScheme
 		}
 	}
 	return nil
