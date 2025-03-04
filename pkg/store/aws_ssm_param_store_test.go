@@ -115,7 +115,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:     123, // Not a string
 			mockFn: func(m *MockSSMClient) {
 				m.On("PutParameter", mock.Anything, mock.Anything).
-					Return(nil, errors.New("invalid value type"))
+					Return(nil, errors.New("invalid value type")) //nolint
 			},
 			wantErr: true,
 		},
