@@ -38,8 +38,10 @@ func init() {
 	listCmd.AddCommand(listStacksCmd)
 }
 
-var listStacksFn = listStacks
-var checkAtmosConfigFn = checkAtmosConfig
+var (
+	listStacksFn       = listStacks
+	checkAtmosConfigFn = checkAtmosConfig
+)
 
 func listStacks(cmd *cobra.Command) ([]string, error) {
 	componentFlag, _ := cmd.Flags().GetString("component")
