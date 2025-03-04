@@ -38,7 +38,6 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
-	github.com/kylelemons/godebug v1.1.0
 	github.com/lrstanley/bubblezone v0.0.0-20250219025839-4a28266a24d6
 	github.com/mikefarah/yq/v4 v4.45.1
 	github.com/mitchellh/go-homedir v1.1.0
@@ -56,7 +55,6 @@ require (
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
-	github.com/tidwall/pretty v1.2.1
 	github.com/zclconf/go-cty v1.16.2
 	golang.org/x/oauth2 v0.26.0
 	golang.org/x/term v0.29.0
