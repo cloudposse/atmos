@@ -82,7 +82,6 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				"",
 			)
-
 			if err != nil {
 				errorResult = err
 				return
@@ -181,7 +180,6 @@ func ProcessYAMLConfigFile(
 	finalHelmfileOverrides := map[string]any{}
 
 	stackYamlConfig, err := GetFileContent(filePath)
-
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
 	//
 	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
@@ -535,7 +533,6 @@ func ProcessStackConfig(
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
 ) (map[string]any, error) {
-
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
@@ -1661,8 +1658,8 @@ func FindComponentStacks(
 	componentType string,
 	component string,
 	baseComponent string,
-	componentStackMap map[string]map[string][]string) ([]string, error) {
-
+	componentStackMap map[string]map[string][]string,
+) ([]string, error) {
 	var stacks []string
 
 	if componentStackConfig, componentStackConfigExists := componentStackMap[componentType]; componentStackConfigExists {
@@ -1696,8 +1693,8 @@ func FindComponentDependenciesLegacy(
 	componentType string,
 	component string,
 	baseComponents []string,
-	stackImports map[string]map[string]any) ([]string, error) {
-
+	stackImports map[string]map[string]any,
+) ([]string, error) {
 	var deps []string
 
 	sectionsToCheck := []string{
@@ -1875,7 +1872,6 @@ func CreateComponentStackMap(
 	helmfileComponentsBasePath string,
 	filePath string,
 ) (map[string]map[string][]string, error) {
-
 	stackComponentMap := map[string]map[string][]string{}
 	stackComponentMap["terraform"] = map[string][]string{}
 	stackComponentMap["helmfile"] = map[string][]string{}
@@ -1959,7 +1955,6 @@ func CreateComponentStackMap(
 
 			return nil
 		})
-
 	if err != nil {
 		return nil, err
 	}
@@ -2008,7 +2003,6 @@ func ProcessBaseComponentConfig(
 	checkBaseComponentExists bool,
 	baseComponents *[]string,
 ) error {
-
 	if component == baseComponent {
 		return nil
 	}
@@ -2060,7 +2054,6 @@ func ProcessBaseComponentConfig(
 				checkBaseComponentExists,
 				baseComponents,
 			)
-
 			if err != nil {
 				return err
 			}
@@ -2271,7 +2264,6 @@ func FindComponentsDerivedFromBaseComponents(
 	allComponents map[string]any,
 	baseComponents []string,
 ) ([]string, error) {
-
 	res := []string{}
 
 	for component, compSection := range allComponents {
