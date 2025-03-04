@@ -28,6 +28,21 @@ func TestJSONFormatter(t *testing.T) {
 	assert.Equal(t, data, result)
 }
 
+// TestJSONFormatterError tests the error handling in the JSON formatter.
+func TestJSONFormatterError(t *testing.T) {
+	formatter := &JSONFormatter{}
+
+	data := map[string]interface{}{
+		"bad_value": make(chan int),
+	}
+	options := FormatOptions{Format: FormatJSON}
+
+	output, err := formatter.Format(data, options)
+	assert.Error(t, err)
+	assert.Empty(t, output)
+	assert.Contains(t, err.Error(), "error formatting JSON output")
+}
+
 func TestYAMLFormatter(t *testing.T) {
 	formatter := &YAMLFormatter{}
 	data := map[string]interface{}{
