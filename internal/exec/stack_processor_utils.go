@@ -634,7 +634,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	if i, ok := globalHooksSection["hooks"]; ok {
+	if i, ok := globalTerraformSection["hooks"]; ok {
 		terraformHooks, ok = i.(map[string]any)
 		if !ok {
 			return nil, errors.Wrapf(ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
@@ -1114,7 +1114,6 @@ func ProcessStackConfig(
 					atmosConfig,
 					[]map[string]any{
 						globalAndTerraformHooks,
-						terraformHooks,
 						baseComponentHooks,
 						componentHooks,
 						componentOverridesHooks,
