@@ -1,14 +1,20 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/agiledragon/gomonkey/v2"
+	cp "github.com/otiai10/copy"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 )
 
@@ -674,5 +680,280 @@ func TestProcessDirEntry_InfoError(t *testing.T) {
 	err := processDirEntry(fakeDirEntry{name: "error.txt", err: errors.New("forced info error")}, ctx)
 	if err == nil || !strings.Contains(err.Error(), "getting info") {
 		t.Errorf("Expected error for Info() failure, got %v", err)
+	}
+}
+
+// TestCopyFile_FailCreateDir simulates failure when creating the destination directory.
+func TestCopyFile_FailCreateDir(t *testing.T) {
+	srcDir, err := os.MkdirTemp("", "copyfile-src")
+	if err != nil {
+		t.Fatalf("Failed to create source dir: %v", err)
+	}
+	defer os.RemoveAll(srcDir)
+	srcFile := filepath.Join(srcDir, "test.txt")
+	content := "copyFileTest"
+	if err := os.WriteFile(srcFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("Failed to write source file: %v", err)
+	}
+	tmpFile, err := os.CreateTemp("", "non-dir")
+	if err != nil {
+		t.Fatalf("Failed to create temporary file: %v", err)
+	}
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+	dstFile := filepath.Join(tmpFile.Name(), "test.txt")
+	err = copyFile(srcFile, dstFile)
+	if err == nil || !strings.Contains(err.Error(), "creating destination directory") {
+		t.Errorf("Expected error creating destination directory, got %v", err)
+	}
+}
+
+// TestCopyFile_FailChmod simulates failure when setting file permissions.
+// If the patch doesn't take effect, the test will be skipped.
+func TestCopyFile_FailChmod(t *testing.T) {
+	patches := gomonkey.ApplyFunc(os.Chmod, func(name string, mode os.FileMode) error {
+		return fmt.Errorf("simulated chmod failure")
+	})
+	defer patches.Reset()
+
+	srcDir, err := os.MkdirTemp("", "copyfile-src")
+	if err != nil {
+		t.Fatalf("Failed to create source dir: %v", err)
+	}
+	defer os.RemoveAll(srcDir)
+	dstDir, err := os.MkdirTemp("", "copyfile-dst")
+	if err != nil {
+		t.Fatalf("Failed to create destination dir: %v", err)
+	}
+	defer os.RemoveAll(dstDir)
+	srcFile := filepath.Join(srcDir, "test.txt")
+	content := "copyFileTest"
+	if err := os.WriteFile(srcFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("Failed to write source file: %v", err)
+	}
+	dstFile := filepath.Join(dstDir, "test.txt")
+	err = copyFile(srcFile, dstFile)
+	if err == nil {
+		t.Skip("os.Chmod patch not effective on this platform")
+	}
+	if !strings.Contains(err.Error(), "setting permissions") {
+		t.Errorf("Expected chmod error, got %v", err)
+	}
+}
+
+// TestGetMatchesForPattern_GlobError forces u.GetGlobMatches to return an error.
+func TestGetMatchesForPattern_GlobError(t *testing.T) {
+	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
+		return nil, fmt.Errorf("simulated glob error")
+	})
+	defer patches.Reset()
+
+	srcDir := "/dummy/src"
+	pattern := "*.txt"
+	_, err := getMatchesForPattern(srcDir, pattern)
+	if err == nil || !strings.Contains(err.Error(), "simulated glob error") {
+		t.Errorf("Expected simulated glob error, got %v", err)
+	}
+}
+
+// TestInclusionExclusion_TrailingSlash tests the trailing-slash branch in shouldExcludePath for directories.
+func TestInclusionExclusion_TrailingSlash(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "testdir")
+	if err != nil {
+		t.Fatalf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	info, err := os.Stat(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to stat temporary directory: %v", err)
+	}
+
+	relPath := filepath.Base(tmpDir)
+
+	// Test that the directory is excluded when the exclusion pattern expects a trailing slash.
+	if !shouldExcludePath(info, relPath, []string{relPath + "/"}) {
+		t.Errorf("Expected directory %q to be excluded by pattern %q", relPath, relPath+"/")
+	}
+
+	// Test that the directory is not excluded when the pattern does not match.
+	if shouldExcludePath(info, relPath, []string{relPath + "x/"}) {
+		t.Errorf("Did not expect directory %q to be excluded by pattern %q", relPath, relPath+"x/")
+	}
+}
+
+// TestProcessPrefixEntry_InfoError simulates an error when calling Info() in processPrefixEntry.
+func TestProcessPrefixEntry_InfoError(t *testing.T) {
+	ctx := &PrefixCopyContext{
+		SrcDir:     "dummySrc",
+		DstDir:     "dummyDst",
+		GlobalBase: "dummyGlobal",
+		Prefix:     "dummyPrefix",
+		Excluded:   []string{},
+	}
+	fakeEntry := fakeDirEntry{
+		name: "error.txt",
+		err:  fmt.Errorf("forced info error"),
+	}
+	err := processPrefixEntry(fakeEntry, ctx)
+	if err == nil || !strings.Contains(err.Error(), "getting info") {
+		t.Errorf("Expected error getting info, got %v", err)
+	}
+}
+
+// fakeFileInfo is a minimal implementation of os.FileInfo for testing.
+type fakeFileInfo struct {
+	name  string
+	size  int64
+	mode  os.FileMode
+	isDir bool
+}
+
+func (fi fakeFileInfo) Name() string       { return fi.name }
+func (fi fakeFileInfo) Size() int64        { return fi.size }
+func (fi fakeFileInfo) Mode() os.FileMode  { return fi.mode }
+func (fi fakeFileInfo) ModTime() time.Time { return time.Time{} }
+func (fi fakeFileInfo) IsDir() bool        { return fi.isDir }
+func (fi fakeFileInfo) Sys() interface{}   { return nil }
+
+// fakeDirEntryWithInfo implements os.DirEntry using fakeFileInfo.
+type fakeDirEntryWithInfo struct {
+	name string
+	info os.FileInfo
+}
+
+func (fde fakeDirEntryWithInfo) Name() string               { return fde.name }
+func (fde fakeDirEntryWithInfo) IsDir() bool                { return fde.info.IsDir() }
+func (fde fakeDirEntryWithInfo) Type() os.FileMode          { return fde.info.Mode() }
+func (fde fakeDirEntryWithInfo) Info() (os.FileInfo, error) { return fde.info, nil }
+
+// TestProcessPrefixEntry_FailMkdir simulates an error when creating a directory in processPrefixEntry.
+func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
+	srcDir, err := os.MkdirTemp("", "prefix-src")
+	if err != nil {
+		t.Fatalf("Failed to create src dir: %v", err)
+	}
+	defer os.RemoveAll(srcDir)
+	dstDir, err := os.MkdirTemp("", "prefix-dst")
+	if err != nil {
+		t.Fatalf("Failed to create dst dir: %v", err)
+	}
+	defer os.RemoveAll(dstDir)
+
+	// Create a fake directory entry.
+	fi := fakeFileInfo{
+		name:  "testDir",
+		mode:  0o755,
+		isDir: true,
+	}
+	fakeEntry := fakeDirEntryWithInfo{
+		name: "testDir",
+		info: fi,
+	}
+
+	ctx := &PrefixCopyContext{
+		SrcDir:     srcDir,
+		DstDir:     dstDir,
+		GlobalBase: srcDir,
+		Prefix:     "prefix",
+		Excluded:   []string{},
+	}
+
+	patches := gomonkey.ApplyFunc(os.MkdirAll, func(path string, perm os.FileMode) error {
+		return fmt.Errorf("simulated MkdirAll error")
+	})
+	defer patches.Reset()
+
+	err = processPrefixEntry(fakeEntry, ctx)
+	if err == nil || !strings.Contains(err.Error(), "creating directory") {
+		t.Errorf("Expected error creating directory, got %v", err)
+	}
+}
+
+// TestCopyToTargetWithPatterns_UseCpCopy ensures that when no inclusion/exclusion patterns are defined, the cp.Copy branch is used.
+func TestCopyToTargetWithPatterns_UseCpCopy(t *testing.T) {
+	srcDir, err := os.MkdirTemp("", "nopattern-src")
+	if err != nil {
+		t.Fatalf("Failed to create src dir: %v", err)
+	}
+	defer os.RemoveAll(srcDir)
+	dstDir, err := os.MkdirTemp("", "nopattern-dst")
+	if err != nil {
+		t.Fatalf("Failed to create dst dir: %v", err)
+	}
+	defer os.RemoveAll(dstDir)
+
+	// Create a test file in the source directory.
+	filePath := filepath.Join(srcDir, "file.txt")
+	if err := os.WriteFile(filePath, []byte("content"), 0o600); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+
+	// Patch the cp.Copy function to verify that it is called.
+	called := false
+	patch := gomonkey.ApplyFunc(cp.Copy, func(src, dst string) error {
+		called = true
+		// For testing purposes, simulate a copy by using our copyFile function.
+		return copyFile(filepath.Join(src, "file.txt"), filepath.Join(dst, "file.txt"))
+	})
+	defer patch.Reset()
+
+	dummy := &schema.AtmosVendorSource{
+		IncludedPaths: []string{},
+		ExcludedPaths: []string{},
+	}
+	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false, "dummy"); err != nil {
+		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
+	}
+	if !called {
+		t.Errorf("Expected cp.Copy to be called, but it was not")
+	}
+	// Verify that the file was "copied" to the destination.
+	if _, err := os.Stat(filepath.Join(dstDir, "file.txt")); os.IsNotExist(err) {
+		t.Errorf("Expected file.txt to exist in destination")
+	}
+}
+
+// TestGetMatchesForPattern_ShallowNoMatches tests a shallow pattern (ending with "/*" but not "/**")
+// when no matches are found, expecting an empty result.
+func TestGetMatchesForPattern_ShallowNoMatches(t *testing.T) {
+	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
+		return []string{}, nil
+	})
+	defer patches.Reset()
+
+	srcDir := "/dummy/src"
+	pattern := "dummy/*" // Shallow pattern without recursive "**"
+	matches, err := getMatchesForPattern(srcDir, pattern)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Errorf("Expected no matches for shallow pattern, got %v", matches)
+	}
+}
+
+// TestProcessMatch_RelPathError simulates an error in computing the relative path in processMatch.
+func TestProcessMatch_RelPathError(t *testing.T) {
+	srcDir := "/dummy/src"
+	dstPath := "/dummy/dst"
+
+	// Create a temporary file to act as the target file.
+	tmpFile, err := os.CreateTemp("", "relerr")
+	if err != nil {
+		t.Fatalf("Failed to create temporary file: %v", err)
+	}
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+	filePath := tmpFile.Name()
+
+	patches := gomonkey.ApplyFunc(filepath.Rel, func(basepath, targpath string) (string, error) {
+		return "", fmt.Errorf("simulated relative path error")
+	})
+	defer patches.Reset()
+
+	err = processMatch(srcDir, dstPath, filePath, false, []string{})
+	if err == nil || !strings.Contains(err.Error(), "computing relative path") {
+		t.Errorf("Expected relative path error, got %v", err)
 	}
 }
