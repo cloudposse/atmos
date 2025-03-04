@@ -500,7 +500,7 @@ jobs:
       - name: Lint with golangci-lint
         uses: reviewdog/action-golangci-lint@v2
         with:
-          filter_mode: "added"
+          filter_mode: "diff_context"
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   release:
