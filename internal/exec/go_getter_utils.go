@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ValidateURI validates URIs
+// ValidateURI validates URIs.
 func ValidateURI(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("URI cannot be empty")
