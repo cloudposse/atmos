@@ -33,7 +33,7 @@ var (
 )
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports,
-// and returns a list of stack configs.
+// and returns a list of stack configs
 func ProcessYAMLConfigFiles(
 	atmosConfig schema.AtmosConfiguration,
 	stacksBasePath string,
