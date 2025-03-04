@@ -22,7 +22,6 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 	totalDownloaded := args.Int(0)
 	totalFailed := args.Int(1)
 	err := args.Error(2)
-
 	// First check: if there's an error, return immediately
 	if err != nil {
 		return totalDownloaded, totalFailed, err
@@ -42,13 +41,13 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 	targetDir := params[0].Target
 	filename := filepath.Base(params[0].Pattern)
 
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return 0, 0, err
 	}
 
 	data := []byte(`{"test":"value"}`)
 	fullPath := filepath.Join(targetDir, filename)
-	if err := os.WriteFile(fullPath, data, 0644); err != nil {
+	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
 		return 0, 0, err
 	}
 
