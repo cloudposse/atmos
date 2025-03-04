@@ -1,7 +1,7 @@
 package exec
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,7 +15,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
+)
+
+var (
+	errSimulatedChmodFailure  = errors.New("simulated chmod failure")
+	errSimulatedGlobError     = errors.New("simulated glob error")
+	errForcedInfoError        = errors.New("forced info error")
+	errSimulatedMkdirAllError = errors.New("simulated MkdirAll error")
+	errSimulatedRelPathError  = errors.New("simulated relative path error")
 )
 
 // Use a local variable to override the glob matching function in tests.
@@ -350,7 +357,6 @@ func TestGetMatchesForPattern_ShallowNoMatch(t *testing.T) {
 	oldFn := getGlobMatchesForTest
 	defer func() { getGlobMatchesForTest = oldFn }()
 	getGlobMatchesForTest = func(pattern string) ([]string, error) {
-		// Normalize pattern to slash.
 		normalized := filepath.ToSlash(pattern)
 		if strings.Contains(normalized, "/*") && !strings.Contains(normalized, "/**") {
 			return []string{}, nil
@@ -669,6 +675,7 @@ func TestCopyToTargetWithPatterns_LocalFileBranch(t *testing.T) {
 	}
 }
 
+// TestProcessDirEntry_InfoError tests error handling in processDirEntry when Info() fails.
 func TestProcessDirEntry_InfoError(t *testing.T) {
 	ctx := &CopyContext{
 		SrcDir:   "/dummy",
@@ -677,7 +684,7 @@ func TestProcessDirEntry_InfoError(t *testing.T) {
 		Excluded: []string{},
 		Included: []string{},
 	}
-	err := processDirEntry(fakeDirEntry{name: "error.txt", err: errors.New("forced info error")}, ctx)
+	err := processDirEntry(fakeDirEntry{name: "error.txt", err: errForcedInfoError}, ctx)
 	if err == nil || !strings.Contains(err.Error(), "getting info") {
 		t.Errorf("Expected error for Info() failure, got %v", err)
 	}
@@ -712,7 +719,7 @@ func TestCopyFile_FailCreateDir(t *testing.T) {
 // If the patch doesn't take effect, the test will be skipped.
 func TestCopyFile_FailChmod(t *testing.T) {
 	patches := gomonkey.ApplyFunc(os.Chmod, func(name string, mode os.FileMode) error {
-		return fmt.Errorf("simulated chmod failure")
+		return errSimulatedChmodFailure
 	})
 	defer patches.Reset()
 
@@ -744,7 +751,7 @@ func TestCopyFile_FailChmod(t *testing.T) {
 // TestGetMatchesForPattern_GlobError forces u.GetGlobMatches to return an error.
 func TestGetMatchesForPattern_GlobError(t *testing.T) {
 	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
-		return nil, fmt.Errorf("simulated glob error")
+		return nil, errSimulatedGlobError
 	})
 	defer patches.Reset()
 
@@ -793,7 +800,7 @@ func TestProcessPrefixEntry_InfoError(t *testing.T) {
 	}
 	fakeEntry := fakeDirEntry{
 		name: "error.txt",
-		err:  fmt.Errorf("forced info error"),
+		err:  errForcedInfoError,
 	}
 	err := processPrefixEntry(fakeEntry, ctx)
 	if err == nil || !strings.Contains(err.Error(), "getting info") {
@@ -860,7 +867,7 @@ func TestProcessPrefixEntry_FailMkdir(t *testing.T) {
 	}
 
 	patches := gomonkey.ApplyFunc(os.MkdirAll, func(path string, perm os.FileMode) error {
-		return fmt.Errorf("simulated MkdirAll error")
+		return errSimulatedMkdirAllError
 	})
 	defer patches.Reset()
 
@@ -948,7 +955,7 @@ func TestProcessMatch_RelPathError(t *testing.T) {
 	filePath := tmpFile.Name()
 
 	patches := gomonkey.ApplyFunc(filepath.Rel, func(basepath, targpath string) (string, error) {
-		return "", fmt.Errorf("simulated relative path error")
+		return "", errSimulatedRelPathError
 	})
 	defer patches.Reset()
 
