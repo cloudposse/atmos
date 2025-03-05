@@ -131,7 +131,7 @@ If no username is supplied and the host is `github.com`, Atmos automatically inj
 
 ### Explicit SSH
 
-When the SSH scheme is specified explicitly, for example:
+When the SSH scheme (`ssh://`) is explicitly specified, the URL is used as provided. In this scenario, no rewriting occurs because the URL already includes the explicit `ssh://` scheme. For example:
 
 ```shell
 git::ssh://git@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}
