@@ -10,13 +10,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestRunListStacksHandlesListStacksError tests that the Run function properly handles errors from listStacks
+var (
+	errMockListStacks = errors.New("mock listStacks error")
+	errInitCliConfig  = errors.New("init cli config error")
+	errDescribeStacks = errors.New("describe stacks error")
+)
+
+// TestRunListStacksHandlesListStacksError tests that the Run function properly handles errors from listStacks.
 func TestRunListStacksHandlesListStacksError(t *testing.T) {
 	originalListStacks := listStacksFn
 	originalCheckAtmosConfig := checkAtmosConfigFn
 
 	listStacksFn = func(cmd *cobra.Command) ([]string, error) {
-		return nil, errors.New("mock listStacks error")
+		return nil, errMockListStacks
 	}
 
 	checkAtmosConfigFn = func(opts ...AtmosValidateOption) {}
@@ -47,7 +53,7 @@ func TestRunListStacksHandlesListStacksError(t *testing.T) {
 	assert.Contains(t, buf.String(), "mock listStacks error")
 }
 
-// TestLogErrorCliConfigInitialize tests the error logging for CLI config initialization errors
+// TestLogErrorCliConfigInitialize tests the error logging for CLI config initialization errors.
 func TestLogErrorCliConfigInitialize(t *testing.T) {
 	var buf bytes.Buffer
 	testLogger := log.New(&buf)
@@ -62,8 +68,8 @@ func TestLogErrorCliConfigInitialize(t *testing.T) {
 	originalListStacks := listStacksFn
 
 	listStacksFn = func(cmd *cobra.Command) ([]string, error) {
-		log.Error("failed to initialize CLI config", "error", errors.New("init cli config error"))
-		return nil, errors.New("init cli config error")
+		log.Error("failed to initialize CLI config", "error", errInitCliConfig)
+		return nil, errInitCliConfig
 	}
 
 	defer func() {
@@ -87,7 +93,7 @@ func TestLogErrorCliConfigInitialize(t *testing.T) {
 	assert.Contains(t, buf.String(), "init cli config error")
 }
 
-// TestLogErrorDescribeStacks tests the error logging for ExecuteDescribeStacks errors
+// TestLogErrorDescribeStacks tests the error logging for ExecuteDescribeStacks errors.
 func TestLogErrorDescribeStacks(t *testing.T) {
 	var buf bytes.Buffer
 	testLogger := log.New(&buf)
@@ -102,8 +108,8 @@ func TestLogErrorDescribeStacks(t *testing.T) {
 	originalListStacks := listStacksFn
 
 	listStacksFn = func(cmd *cobra.Command) ([]string, error) {
-		log.Error("failed to describe stacks", "error", errors.New("describe stacks error"))
-		return nil, errors.New("describe stacks error")
+		log.Error("failed to describe stacks", "error", errDescribeStacks)
+		return nil, errDescribeStacks
 	}
 
 	defer func() {
