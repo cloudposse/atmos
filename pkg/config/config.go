@@ -99,12 +99,12 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 				return atmosConfig, err
 			}
 		}
-
 	}
 
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
 }
+
 func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo, includeStackAbsPaths, excludeStackAbsPaths []string) error {
 	// If the specified stack name is a logical name, find all stack manifests in the provided paths
 	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
