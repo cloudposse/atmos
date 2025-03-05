@@ -46,8 +46,8 @@ func TestListStacksSuccess(t *testing.T) {
 // TestListStacksError tests the error path of the Run function.
 func TestListStacksError(t *testing.T) {
 	// Define a static error for testing
-	var errTest = errors.New("test error")
-	
+	errTest := errors.New("test error")
+
 	cmd := &cobra.Command{
 		Use: "stacks",
 		Run: func(cmd *cobra.Command, args []string) {
