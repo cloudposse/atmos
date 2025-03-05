@@ -190,7 +190,7 @@ func TestRemoveSymlinks(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 	filePath := filepath.Join(tempDir, "file.txt")
-	if err := os.WriteFile(filePath, []byte("data"), 0600); err != nil {
+	if err := os.WriteFile(filePath, []byte("data"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	symlinkPath := filepath.Join(tempDir, "link.txt")
@@ -220,7 +220,7 @@ func TestGoGetterGet_File(t *testing.T) {
 	defer os.RemoveAll(srcDir)
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := []byte("hello world")
-	if err := os.WriteFile(srcFile, content, 0600); err != nil {
+	if err := os.WriteFile(srcFile, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// Create a temporary directory for destination and specify a destination file path.
@@ -253,7 +253,7 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	testFile := filepath.Join(tempDir, "test.json")
 	jsonContent := []byte(`{"key": "value"}`)
-	if err := os.WriteFile(testFile, jsonContent, 0600); err != nil {
+	if err := os.WriteFile(testFile, jsonContent, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	result, err := DownloadDetectFormatAndParseFile(fakeAtmosConfig(false), "file://"+testFile)
