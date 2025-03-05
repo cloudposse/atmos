@@ -13,10 +13,10 @@ Available Commands:
 
 Flags:
 
+    -h, --help    help for atlantis
+
         --        Use double dashes to separate Atmos-specific options from
                   native arguments and flags for the command.
-
-    -h, --help    help for atlantis (default false)
 
 
 Global Flags:
