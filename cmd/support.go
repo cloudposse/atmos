@@ -20,7 +20,7 @@ var supportCmd = &cobra.Command{
 	SilenceUsage:       true,
 	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		utils.PrintfMarkdown(supportMarkdown)
+		utils.PrintfMarkdown("%s", supportMarkdown)
 		return nil
 	},
 }
