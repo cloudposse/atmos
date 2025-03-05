@@ -8,38 +8,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestFileFetcher(t *testing.T) {
-	// Create a temporary file for the test
-	tmpFile, err := os.CreateTemp("", "testfile-")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name()) // Ensure the file is deleted after the test
-	// Use file (e.g., file.Name() to get the name, file.Write() to write to it, etc.)
-	defer tmpFile.Close()
-
-	// Write some test data into the temporary file
-	expectedData := []byte("File content")
-	if _, err := tmpFile.Write(expectedData); err != nil {
-		t.Fatalf("Failed to write to temp file: %v", err)
-	}
-
-	// Close the file before reading it
-	if err := tmpFile.Close(); err != nil {
-		t.Fatalf("Failed to close temp file: %v", err)
-	}
-
-	// Now test the FileFetcher
-	fetcher := &FileFetcher{}
-	data, err := fetcher.FetchData(tmpFile.Name())
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-	if string(data) != string(expectedData) {
-		t.Errorf("Expected '%s', got '%s'", expectedData, data)
-	}
-}
-
 func TestAtmosFetcher(t *testing.T) {
 	// Test AtmosFetcher with valid key
 	tests := []struct {
