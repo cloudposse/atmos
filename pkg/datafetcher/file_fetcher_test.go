@@ -6,7 +6,6 @@ import (
 )
 
 func TestFileFetcher(t *testing.T) {
-
 	t.Run("FetchData", func(t *testing.T) {
 		t.Run("should return data when file is read", func(t *testing.T) {
 			// Create a temporary file for the test
@@ -38,5 +37,4 @@ func TestFileFetcher(t *testing.T) {
 			}
 		})
 	})
-
 }
