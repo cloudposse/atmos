@@ -288,7 +288,7 @@ func RegisterCustomDetectors(atmosConfig *schema.AtmosConfiguration) {
 	)
 }
 
-// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination
+// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination.
 func GoGetterGet(
 	atmosConfig *schema.AtmosConfiguration,
 	src string,
