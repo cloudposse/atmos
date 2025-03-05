@@ -93,43 +93,54 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	if processStacks {
-		// If the specified stack name is a logical name, find all stack manifests in the provided paths
-		stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
-			atmosConfig,
-			configAndStacksInfo.Stack,
-			includeStackAbsPaths,
-			excludeStackAbsPaths,
-		)
-		if err != nil {
-			return atmosConfig, err
-		}
-
-		if len(stackConfigFilesAbsolutePaths) < 1 {
-			j, err := u.ConvertToYAML(includeStackAbsPaths)
+		if processStacks {
+			err = processStackConfigs(&atmosConfig, configAndStacksInfo, includeStackAbsPaths, excludeStackAbsPaths)
 			if err != nil {
 				return atmosConfig, err
 			}
-			errorMessage := fmt.Sprintf("\nno stack manifests found in the provided "+
-				"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
-				"files or ENV vars.", j)
-			return atmosConfig, errors.New(errorMessage)
 		}
 
-		atmosConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
-		atmosConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
-
-		if stackIsPhysicalPath {
-			u.LogTrace(fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
-				configAndStacksInfo.Stack,
-				stackConfigFilesRelativePaths[0]),
-			)
-			atmosConfig.StackType = "Directory"
-		} else {
-			// The stack is a logical name
-			atmosConfig.StackType = "Logical"
-		}
 	}
 
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
+}
+func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo, includeStackAbsPaths, excludeStackAbsPaths []string) error {
+	// If the specified stack name is a logical name, find all stack manifests in the provided paths
+	stackConfigFilesAbsolutePaths, stackConfigFilesRelativePaths, stackIsPhysicalPath, err := FindAllStackConfigsInPathsForStack(
+		*atmosConfig,
+		configAndStacksInfo.Stack,
+		includeStackAbsPaths,
+		excludeStackAbsPaths,
+	)
+	if err != nil {
+		return err
+	}
+
+	if len(stackConfigFilesAbsolutePaths) < 1 {
+		j, err := u.ConvertToYAML(includeStackAbsPaths)
+		if err != nil {
+			return err
+		}
+		errorMessage := fmt.Sprintf("\nno stack manifests found in the provided "+
+			"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
+			"files or ENV vars.", j)
+		return errors.New(errorMessage)
+	}
+
+	atmosConfig.StackConfigFilesAbsolutePaths = stackConfigFilesAbsolutePaths
+	atmosConfig.StackConfigFilesRelativePaths = stackConfigFilesRelativePaths
+
+	if stackIsPhysicalPath {
+		u.LogTrace(fmt.Sprintf("\nThe stack '%s' matches the stack manifest %s\n",
+			configAndStacksInfo.Stack,
+			stackConfigFilesRelativePaths[0]),
+		)
+		atmosConfig.StackType = "Directory"
+	} else {
+		// The stack is a logical name
+		atmosConfig.StackType = "Logical"
+	}
+
+	return nil
 }
