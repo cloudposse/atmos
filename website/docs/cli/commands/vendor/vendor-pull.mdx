@@ -115,7 +115,7 @@ Atmos will use any installed SSH keys automatically. There are two primary ways 
 
 ### SCP-style Sources
 
-When no explicit scheme is provided, for example:
+Atmos supports traditional SCP-style sources, which use a colon to separate the host from the repository, like this:
 
 ```shell
 git::git@github.com:cloudposse/terraform-null-label.git?ref={{.Version}}
