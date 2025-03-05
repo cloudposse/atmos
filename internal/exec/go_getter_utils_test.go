@@ -20,7 +20,7 @@ type fakeGitGetter struct{}
 
 func (f *fakeGitGetter) Get(dst string, url *url.URL) error {
 	filePath := filepath.Join(dst, "dummy.txt")
-	if err := ioutil.WriteFile(filePath, []byte("content"), 0644); err != nil {
+	if err := ioutil.WriteFile(filePath, []byte("content"), 0o644); err != nil {
 		return err
 	}
 	symlinkPath := filepath.Join(dst, "link.txt")
@@ -205,7 +205,7 @@ func TestRemoveSymlinks(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 	filePath := filepath.Join(tempDir, "file.txt")
-	if err := ioutil.WriteFile(filePath, []byte("data"), 0644); err != nil {
+	if err := ioutil.WriteFile(filePath, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	symlinkPath := filepath.Join(tempDir, "link.txt")
@@ -235,7 +235,7 @@ func TestGoGetterGet_File(t *testing.T) {
 	defer os.RemoveAll(srcDir)
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := []byte("hello world")
-	if err := ioutil.WriteFile(srcFile, content, 0644); err != nil {
+	if err := ioutil.WriteFile(srcFile, content, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	destDir, err := ioutil.TempDir("", "dest")
@@ -267,7 +267,7 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	testFile := filepath.Join(tempDir, "test.json")
 	jsonContent := []byte(`{"key": "value"}`)
-	if err := ioutil.WriteFile(testFile, jsonContent, 0644); err != nil {
+	if err := ioutil.WriteFile(testFile, jsonContent, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	result, err := DownloadDetectFormatAndParseFile(fakeAtmosConfig(false), "file://"+testFile)
