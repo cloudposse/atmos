@@ -116,7 +116,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	log.SetOutput(output)
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		//nolint:revive:deep-exit
-		log.Fatal("Error parsing log level", "error", err)
+		log.Fatal("Error parsing log level", "error", err) //nolint:revive:deep-exit
 	}
 	log.Debug("Log level set to", "level", log.GetLevel(), "file", atmosConfig.Logs.File)
 }
