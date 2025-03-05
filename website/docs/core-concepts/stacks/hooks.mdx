@@ -20,9 +20,55 @@ configuring the `hooks` section in your stack manifest for the component that yo
 The `hooks` section schema is as follows:
 
 ```yaml
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+```
+
+This schema can be specified at the `global`, `terraform`, `component` or `overrides` sections of the stack config.
+
+```yaml
+# global
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+
+# terraform
+terraform:
+  hooks:
+    store-outputs:
+      events:
+        - after-terraform-apply
+      command: store
+      name: prod/ssm
+      outputs:
+        vpc_id: .id
+
+# overrides
+overrides:
+  hooks:
+    store-outputs:
+      events:
+        - after-terraform-apply
+      command: store
+      name: prod/ssm
+      outputs:
+        vpc_id: .id
+
+# component
 components:
   terraform:
-    top-level-component1:
+    vpc:
       hooks:
         store-outputs:
           events:

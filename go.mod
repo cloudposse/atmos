@@ -1,6 +1,8 @@
 module github.com/cloudposse/atmos
 
-go 1.23.5
+go 1.24
+
+toolchain go1.24.1
 
 require (
 	dario.cat/mergo v1.0.1

@@ -34,6 +34,8 @@ The `overrides` section schema at the global scope is as follows:
 overrides:
   # Override the ENV variables for the components in the current stack manifest and all its imports
   env: {}
+  # Override the hooks for the components in the current stack manifest and all its imports
+  hooks: {}
   # Override the settings for the components in the current stack manifest and all its imports
   settings: {}
   # Override the variables for the components in the current stack manifest and all its imports
@@ -51,6 +53,7 @@ The `overrides` section schemas at the Terraform and Helmfile levels are as foll
 terraform:
   overrides:
     env: {}
+    hooks: {}
     settings: {}
     vars: {}
     providers: {}
