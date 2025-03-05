@@ -30,7 +30,7 @@ hooks:
       vpc_id: .id
 ```
 
-This schema can be specified at the `global`, `terraform`, `component` or `overrides` sections of the stack config.
+This schema can be specified at the top level of the stack configuration (global), within the `terraform` section, inside individual components, or in the `overrides` section.
 
 ```yaml
 # global
