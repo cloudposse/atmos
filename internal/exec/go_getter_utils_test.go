@@ -2,7 +2,6 @@
 package exec
 
 import (
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -15,20 +14,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-type fakeGitGetter struct{}
-
-func (f *fakeGitGetter) Get(dst string, url *url.URL) error {
-	filePath := filepath.Join(dst, "dummy.txt")
-	if err := ioutil.WriteFile(filePath, []byte("content"), 0o644); err != nil {
-		return err
-	}
-	symlinkPath := filepath.Join(dst, "link.txt")
-	if err := os.Symlink(filePath, symlinkPath); err != nil {
-		return err
-	}
-	return nil
-}
 
 var originalDetectors = getter.Detectors
 
@@ -197,15 +182,15 @@ func TestAdjustSubdir(t *testing.T) {
 // Test removeSymlinks function.
 func TestRemoveSymlinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping symlink tests on Windows")
+		t.Skip("Skipping symlink tests on Windows.")
 	}
-	tempDir, err := ioutil.TempDir("", "symlinktest")
+	tempDir, err := os.MkdirTemp("", "symlinktest")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tempDir)
 	filePath := filepath.Join(tempDir, "file.txt")
-	if err := ioutil.WriteFile(filePath, []byte("data"), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte("data"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	symlinkPath := filepath.Join(tempDir, "link.txt")
@@ -226,32 +211,33 @@ func TestRemoveSymlinks(t *testing.T) {
 // Test GoGetterGet using file scheme.
 func TestGoGetterGet_File(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping file copying test on Windows due to potential file system differences")
+		t.Skip("Skipping file copying test on Windows due to potential file system differences.")
 	}
-	srcDir, err := ioutil.TempDir("", "src")
+	srcDir, err := os.MkdirTemp("", "src")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(srcDir)
 	srcFile := filepath.Join(srcDir, "test.txt")
 	content := []byte("hello world")
-	if err := ioutil.WriteFile(srcFile, content, 0o644); err != nil {
+	if err := os.WriteFile(srcFile, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	destDir, err := ioutil.TempDir("", "dest")
+	// Create a temporary directory for destination and specify a destination file path.
+	destDir, err := os.MkdirTemp("", "dest")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(destDir)
+	destFile := filepath.Join(destDir, "downloaded.txt")
 	srcURL := "file://" + srcFile
-	err = GoGetterGet(fakeAtmosConfig(false), srcURL, destDir, getter.ClientModeFile, 5*time.Second)
+	err = GoGetterGet(fakeAtmosConfig(false), srcURL, destFile, getter.ClientModeFile, 5*time.Second)
 	if err != nil {
 		t.Errorf("GoGetterGet failed: %v", err)
 	}
-	copiedFile := filepath.Join(destDir, filepath.Base(srcFile))
-	data, err := ioutil.ReadFile(copiedFile)
+	data, err := os.ReadFile(destFile)
 	if err != nil {
-		t.Errorf("Error reading copied file: %v", err)
+		t.Errorf("Error reading downloaded file: %v", err)
 	}
 	if string(data) != string(content) {
 		t.Errorf("Expected file content %s, got %s", content, data)
@@ -260,14 +246,14 @@ func TestGoGetterGet_File(t *testing.T) {
 
 // Test DownloadDetectFormatAndParseFile.
 func TestDownloadDetectFormatAndParseFile(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "detectparse")
+	tempDir, err := os.MkdirTemp("", "detectparse")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tempDir)
 	testFile := filepath.Join(tempDir, "test.json")
 	jsonContent := []byte(`{"key": "value"}`)
-	if err := ioutil.WriteFile(testFile, jsonContent, 0o644); err != nil {
+	if err := os.WriteFile(testFile, jsonContent, 0600); err != nil {
 		t.Fatal(err)
 	}
 	result, err := DownloadDetectFormatAndParseFile(fakeAtmosConfig(false), "file://"+testFile)
@@ -290,10 +276,10 @@ func TestRegisterCustomDetectors(t *testing.T) {
 	config := fakeAtmosConfig(false)
 	RegisterCustomDetectors(config)
 	if len(getter.Detectors) == 0 {
-		t.Error("Expected at least one detector after registration")
+		t.Error("Expected at least one detector after registration.")
 	}
 	if _, ok := getter.Detectors[0].(*CustomGitDetector); !ok {
-		t.Error("Expected first detector to be CustomGitDetector")
+		t.Error("Expected first detector to be CustomGitDetector.")
 	}
 }
 
