@@ -74,7 +74,7 @@ tests:
       stdout:
         - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
       stderr:
-        - "DEBU Found ENV var ATMOS_LOGS_LEVEL=Debug"
+        - "Log level set to DEBU"
       exit_code: 0
 
   - name: "Valid Log Level in Command Line Flag"

@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -113,6 +114,9 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	log.SetOutput(output)
+	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+		log.Fatal("Error parsing log level", "error", err)
+	}
 	log.Debug("Log level set to", "level", log.GetLevel(), "file", atmosConfig.Logs.File)
 }
 
