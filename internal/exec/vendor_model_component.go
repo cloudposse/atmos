@@ -135,7 +135,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
+			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err) //nolint:err113
 		}
 
 	case pkgTypeLocal:
@@ -179,7 +179,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 	switch p.pkgType {
 	case pkgTypeRemote:
 		if err = GoGetterGet(&atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s error %s", p.name, err)
+			return fmt.Errorf("failed to download package %s error %s", p.name, err) //nolint:err113
 		}
 
 	case pkgTypeOci:
