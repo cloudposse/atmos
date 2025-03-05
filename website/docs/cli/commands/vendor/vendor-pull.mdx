@@ -201,7 +201,7 @@ Atmos prioritizes authentication credentials based on predefined environment var
 
 ## How HTTPS URLs Are Resolved
 
-When resolving HTTPS-based sources, Atmos follows these rules:
+When resolving Git sources, Atmos follows these rules:
 
 1. If a **full HTTPS URL** is provided (`git::https://github.com/...`), it is used as-is. No token data is injected, even if environment variables are set.
 2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`, and if a token is set, it is injected into the URL.
