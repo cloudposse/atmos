@@ -20,15 +20,51 @@ configuring the `hooks` section in your stack manifest for the component that yo
 The `hooks` section schema is as follows:
 
 ```yaml
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+```
+
+This schema can be specified at the top level of the stack configuration (global), within the `terraform` section,
+inside individual components, or in the `overrides` section. Partial config can also be specified at various levels
+to help keep the configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself).
+
+#### An example demonstrating this concept is below:
+
+At the global level, set that the store command will run after terraform apply:
+
+```yaml
+# stacks/catalog/vpc/_defaults.yaml (global)
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+```
+In the production account, use the `prod/ssm` store (configured in atmos.yaml):
+
+```yaml
+# stacks/orgs/acme/plat/prod/_defaults.yaml (terraform)
+terraform:
+  hooks:
+    store-outputs:
+      name: prod/ssm
+```
+
+At the component level, specify that the `id` output of the component should be stored in the store as the `vpc_id` key:
+
+```yaml
+# stacks/orgs/acme/plat/prod/us-east-2.yaml (component)
 components:
   terraform:
-    top-level-component1:
+    vpc:
       hooks:
         store-outputs:
-          events:
-            - after-terraform-apply
-          command: store
-          name: prod/ssm
           outputs:
             vpc_id: .id
 ```

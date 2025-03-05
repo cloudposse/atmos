@@ -21,9 +21,14 @@ import (
 )
 
 var (
+	// Error constants.
+	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
+
+	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
 
-	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
+	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
 	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
@@ -541,6 +546,7 @@ func ProcessStackConfig(
 	)
 
 	globalVarsSection := map[string]any{}
+	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
 	globalEnvSection := map[string]any{}
 	globalTerraformSection := map[string]any{}
@@ -568,6 +574,13 @@ func ProcessStackConfig(
 		globalVarsSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'vars' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := config["hooks"]; ok {
+		globalHooksSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, errors.Wrapf(ErrInvalidHooksSection, " '%s'", stackName)
 		}
 	}
 
@@ -621,7 +634,19 @@ func ProcessStackConfig(
 		}
 	}
 
+	if i, ok := globalTerraformSection["hooks"]; ok {
+		terraformHooks, ok = i.(map[string]any)
+		if !ok {
+			return nil, errors.Wrapf(ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
+		}
+	}
+
 	globalAndTerraformVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, terraformVars})
+	if err != nil {
+		return nil, err
+	}
+
+	globalAndTerraformHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, terraformHooks})
 	if err != nil {
 		return nil, err
 	}
@@ -1088,7 +1113,7 @@ func ProcessStackConfig(
 				finalComponentHooks, err := m.Merge(
 					atmosConfig,
 					[]map[string]any{
-						terraformHooks,
+						globalAndTerraformHooks,
 						baseComponentHooks,
 						componentHooks,
 						componentOverridesHooks,
