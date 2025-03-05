@@ -127,7 +127,7 @@ Atmos’s rewrites this URL to:
 git::ssh://git@github.com/cloudposse/terraform-null-label.git?depth=1&ref={{.Version}}
 ```
 
-In this case, Atmos injects a default username ("git").
+If no username is supplied and the host is `github.com`, Atmos automatically injects the default username `git`.
 
 ### Explicit SSH
 
