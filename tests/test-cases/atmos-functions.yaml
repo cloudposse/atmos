@@ -41,7 +41,7 @@ tests:
       ATMOS_LOGS_LEVEL: Debug
     expect:
       exit_code: 0
-      stdout:
+      stderr:
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
