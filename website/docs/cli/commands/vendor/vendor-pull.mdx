@@ -121,7 +121,7 @@ Atmos supports traditional SCP-style sources, which use a colon to separate the 
 git::git@github.com:cloudposse/terraform-null-label.git?ref={{.Version}}
 ```
 
-Atmos’s rewrites this URL to:
+Atmos rewrites this URL to the following format:
 
 ```shell
 git::ssh://git@github.com/cloudposse/terraform-null-label.git?depth=1&ref={{.Version}}
