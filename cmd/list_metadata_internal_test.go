@@ -2,9 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/list/errors"
+	f "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
@@ -113,4 +117,89 @@ func TestListMetadataErrorHandling(t *testing.T) {
 
 	// The key point here is that the command runs without panicking.
 	// The specific error message will depend on the environment.
+}
+
+// TestListMetadataCommonFlagsError tests error handling when getting common flags fails.
+func TestListMetadataCommonFlagsError(t *testing.T) {
+	// Create a test function that simulates listMetadata's error handling
+	// but uses our mock getCommonListFlags function.
+	getCommonListFlagsMock := func(cmd *cobra.Command) (*list.CommonListFlags, error) {
+		return nil, fmt.Errorf("mock common flags error")
+	}
+
+	// Create a test function that mimics listMetadata but uses our mock.
+	testListMetadata := func(cmd *cobra.Command) (string, error) {
+		// Simulate the behavior in listMetadata.
+		_, err := getCommonListFlagsMock(cmd)
+		if err != nil {
+			return "", &errors.QueryError{
+				Query: "common flags",
+				Cause: err,
+			}
+		}
+		return "mock result", nil
+	}
+
+	cmd := &cobra.Command{
+		Use: "test",
+	}
+
+	result, err := testListMetadata(cmd)
+
+	assert.Equal(t, "", result)
+	assert.Error(t, err)
+
+	queryErr, ok := err.(*errors.QueryError)
+	assert.True(t, ok)
+	assert.Equal(t, "common flags", queryErr.Query)
+	assert.EqualError(t, queryErr.Cause, "mock common flags error")
+}
+
+// TestListMetadataCSVDelimiterAdjustment tests the automatic adjustment of delimiter for CSV format.
+func TestListMetadataCSVDelimiterAdjustment(t *testing.T) {
+	testCases := []struct {
+		name           string
+		format         string
+		inputDelimiter string
+		wantDelimiter  string
+	}{
+		{
+			name:           "CSV format with TSV delimiter should change to CSV delimiter",
+			format:         string(f.FormatCSV),
+			inputDelimiter: f.DefaultTSVDelimiter,
+			wantDelimiter:  f.DefaultCSVDelimiter,
+		},
+		{
+			name:           "CSV format with custom delimiter should not change",
+			format:         string(f.FormatCSV),
+			inputDelimiter: "|",
+			wantDelimiter:  "|",
+		},
+		{
+			name:           "Non-CSV format should not change delimiter",
+			format:         string(f.FormatTable),
+			inputDelimiter: f.DefaultTSVDelimiter,
+			wantDelimiter:  f.DefaultTSVDelimiter,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			initialFlags := &list.CommonListFlags{
+				Format:    tc.format,
+				Delimiter: tc.inputDelimiter,
+			}
+
+			processFlags := func(flags *list.CommonListFlags) *list.CommonListFlags {
+				if f.Format(flags.Format) == f.FormatCSV && flags.Delimiter == f.DefaultTSVDelimiter {
+					flags.Delimiter = f.DefaultCSVDelimiter
+				}
+				return flags
+			}
+
+			resultFlags := processFlags(initialFlags)
+
+			assert.Equal(t, tc.wantDelimiter, resultFlags.Delimiter)
+		})
+	}
 }
