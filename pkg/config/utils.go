@@ -350,7 +350,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
 	if len(tfAppendUserAgent) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT=%s", tfAppendUserAgent))
+		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT=%s", tfAppendUserAgent))
 		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 
