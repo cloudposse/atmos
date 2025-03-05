@@ -11,6 +11,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -35,7 +36,8 @@ func TestListStacksSuccess(t *testing.T) {
 	os.Stdout = oldStdout
 
 	var stdoutBuf bytes.Buffer
-	io.Copy(&stdoutBuf, r)
+	_, err := io.Copy(&stdoutBuf, r)
+	require.NoError(t, err)
 
 	assert.Contains(t, stdoutBuf.String(), "stack1")
 	assert.Contains(t, stdoutBuf.String(), "stack2")
@@ -66,7 +68,8 @@ func TestListStacksError(t *testing.T) {
 	os.Stderr = oldStderr
 
 	var stderrBuf bytes.Buffer
-	io.Copy(&stderrBuf, errR)
+	_, err := io.Copy(&stderrBuf, errR)
+	require.NoError(t, err)
 
 	assert.Contains(t, stderrBuf.String(), "error filtering stacks")
 	assert.Contains(t, stderrBuf.String(), "test error")
@@ -100,7 +103,8 @@ func TestListStacksOutputFormatting(t *testing.T) {
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, err := io.Copy(&buf, r)
+	require.NoError(t, err)
 
 	assert.Equal(t, expected+"\n", buf.String())
 }
@@ -144,9 +148,12 @@ func TestListStacksInitCliConfigErrorHandling(t *testing.T) {
 	log.SetDefault(originalLogger)
 
 	var stdoutBuf bytes.Buffer
-	io.Copy(&stdoutBuf, r)
+	_, copyErr := io.Copy(&stdoutBuf, r)
+	require.NoError(t, copyErr)
+
 	var stderrBuf bytes.Buffer
-	io.Copy(&stderrBuf, errR)
+	_, copyErr = io.Copy(&stderrBuf, errR)
+	require.NoError(t, copyErr)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
