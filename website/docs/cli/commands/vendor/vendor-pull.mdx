@@ -204,7 +204,7 @@ Atmos prioritizes authentication credentials based on predefined environment var
 When resolving HTTPS-based sources, Atmos follows these rules:
 
 1. If a **full HTTPS URL** is provided (`git::https://github.com/...`), it is used as-is. No token data is added to the link even if it is set in respective environment variables. 
-2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`, in this case if set the token is injected into the URL.  
+2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`, and if a token is set, it is injected into the URL.
 3. If a **username and repository name** are provided in SCP format (`git@github.com:org/repo.git`), it is rewritten as an SSH URL.
 
 
