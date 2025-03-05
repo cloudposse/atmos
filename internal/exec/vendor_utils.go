@@ -13,135 +13,16 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
-	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var ErrVendorComponents = errors.New("failed to vendor components")
 
-// ExecuteVendorPullCommand executes `atmos vendor` commands
-func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	flags := cmd.Flags()
-
-	// Check if the `stack` flag is set
-	// If it's set, process stacks
-	processStacks := flags.Changed("stack")
-
-	// InitCliConfig finds and merges CLI configurations in the following order:
-	// system dir, home dir, current dir, ENV vars, command-line arguments
-	atmosConfig, err := cfg.InitCliConfig(info, processStacks)
-	if err != nil {
-		return fmt.Errorf("failed to initialize CLI config: %w", err)
-	}
-
-	dryRun, err := flags.GetBool("dry-run")
-	if err != nil {
-		return err
-	}
-
-	component, err := flags.GetString("component")
-	if err != nil {
-		return err
-	}
-
-	stack, err := flags.GetString("stack")
-	if err != nil {
-		return err
-	}
-
-	tagsCsv, err := flags.GetString("tags")
-	if err != nil {
-		return err
-	}
-
-	var tags []string
-	if tagsCsv != "" {
-		tags = strings.Split(tagsCsv, ",")
-	}
-
-	if component != "" && stack != "" {
-		return fmt.Errorf("either '--component' or '--stack' flag can be provided, but not both")
-	}
-
-	if component != "" && len(tags) > 0 {
-		return fmt.Errorf("either '--component' or '--tags' flag can be provided, but not both")
-	}
-
-	// Retrieve the 'everything' flag and set default behavior if no other flags are set
-	everything, err := flags.GetBool("everything")
-	if err != nil {
-		return err
-	}
-
-	// If neither `everything`, `component`, `stack`, nor `tags` flags are set, default to `everything = true`
-	if !everything && !flags.Changed("everything") && component == "" && stack == "" && len(tags) == 0 {
-		everything = true
-	}
-
-	// Validate that only one of `--everything`, `--component`, `--stack`, or `--tags` is provided
-	if everything && (component != "" || stack != "" || len(tags) > 0) {
-		return fmt.Errorf("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
-	}
-
-	if stack != "" {
-		// Process stack vendoring
-		return ExecuteStackVendorInternal(stack, dryRun)
-	}
-
-	// Check `vendor.yaml`
-	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(atmosConfig, cfg.AtmosVendorConfigFileName, true)
-	if err != nil {
-		return err
-	}
-	if !vendorConfigExists && everything {
-		return fmt.Errorf("the '--everything' flag is set, but the vendor config file '%s' does not exist", cfg.AtmosVendorConfigFileName)
-	}
-	if vendorConfigExists {
-		// Process `vendor.yaml`
-		return ExecuteAtmosVendorInternal(atmosConfig, foundVendorConfigFile, vendorConfig.Spec, component, tags, dryRun)
-	} else {
-		// Check and process `component.yaml`
-		if component != "" {
-			// Process component vendoring
-			componentType, err := flags.GetString("type")
-			if err != nil {
-				return err
-			}
-
-			if componentType == "" {
-				componentType = "terraform"
-			}
-
-			componentConfig, componentPath, err := ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
-			if err != nil {
-				return err
-			}
-
-			return ExecuteComponentVendorInternal(atmosConfig, componentConfig.Spec, component, componentPath, dryRun)
-		}
-	}
-
-	q := ""
-	if len(args) > 0 {
-		q = fmt.Sprintf("Did you mean 'atmos vendor pull -c %s'?", args[0])
-	}
-
-	return fmt.Errorf("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
-		"Example: atmos vendor pull -c <component>\n" +
-		q)
-}
-
-// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
+// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
@@ -261,7 +142,7 @@ func ReadAndProcessVendorConfigFile(
 	return vendorConfig, vendorConfigFileExists, foundVendorConfigFile, nil
 }
 
-// ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets
+// ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
 func ExecuteAtmosVendorInternal(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFileName string,
@@ -551,9 +432,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 				useLocalFileSystem = true
 			}
 		}
-
 	}
-
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
@@ -575,16 +454,16 @@ func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath str
 	return cp.Copy(tempDir, targetPath, copyOptions)
 }
 
-// generateSkipFunction creates a function that determines whether to skip files during copying
-// based on the vendor source configuration. It uses the provided patterns in ExcludedPaths
+// generateSkipFunction creates a function that determines whether to skip files during copying.
+// based on the vendor source configuration. It uses the provided patterns in ExcludedPaths.
 // and IncludedPaths to filter files during the copy operation.
 //
 // Parameters:
-//   - atmosConfig: The CLI configuration for logging
-//   - tempDir: The temporary directory containing the files to copy
-//   - s: The vendor source configuration containing exclusion/inclusion patterns
+//   - atmosConfig: The CLI configuration for logging.
+//   - tempDir: The temporary directory containing the files to copy.
+//   - s: The vendor source configuration containing exclusion/inclusion patterns.
 //
-// Returns a function that determines if a file should be skipped during copying
+// Returns a function that determines if a file should be skipped during copying.
 func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 		if filepath.Base(src) == ".git" {
