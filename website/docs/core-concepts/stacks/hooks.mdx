@@ -40,8 +40,6 @@ hooks:
       - after-terraform-apply
     command: store
     name: prod/ssm
-    outputs:
-      vpc_id: .id
 
 # terraform
 terraform:
@@ -51,8 +49,6 @@ terraform:
         - after-terraform-apply
       command: store
       name: prod/ssm
-      outputs:
-        vpc_id: .id
 
 # overrides
 overrides:
@@ -62,8 +58,6 @@ overrides:
         - after-terraform-apply
       command: store
       name: prod/ssm
-      outputs:
-        vpc_id: .id
 
 # component
 components:
