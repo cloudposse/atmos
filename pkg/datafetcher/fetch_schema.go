@@ -50,7 +50,7 @@ func (d *dataFetcher) getDataFetcher(atmosConfig *schema.AtmosConfiguration, sou
 		return AtmosFetcher{}, nil
 	default:
 		if _, err := os.Stat(source); err == nil {
-			return FileFetcher{}, nil
+			return fileFetcher{}, nil
 		}
 		return nil, ErrUnsupportedSource
 	}
