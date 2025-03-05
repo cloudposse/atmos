@@ -66,7 +66,8 @@ func TestIsValidScheme(t *testing.T) {
 
 // Test ensureScheme method.
 func TestEnsureScheme(t *testing.T) {
-	detector := &CustomGitDetector{AtmosConfig: fakeAtmosConfig(false)}
+	config := fakeAtmosConfig(false)
+	detector := &CustomGitDetector{AtmosConfig: &config}
 	in := "https://example.com/repo.git"
 	out := detector.ensureScheme(in)
 	if !strings.HasPrefix(out, "https://") {
@@ -118,7 +119,8 @@ func TestNormalizePath(t *testing.T) {
 func TestInjectToken(t *testing.T) {
 	os.Setenv("GITHUB_TOKEN", "testtoken")
 	defer os.Unsetenv("GITHUB_TOKEN")
-	detector := &CustomGitDetector{AtmosConfig: fakeAtmosConfig(true)}
+	config := fakeAtmosConfig(true)
+	detector := &CustomGitDetector{AtmosConfig: &config}
 	uObj, _ := url.Parse("https://github.com/user/repo.git")
 	detector.injectToken(uObj, hostGitHub)
 	if uObj.User == nil {
@@ -135,7 +137,8 @@ func TestInjectToken(t *testing.T) {
 func TestResolveToken(t *testing.T) {
 	os.Setenv("GITHUB_TOKEN", "ghToken")
 	defer os.Unsetenv("GITHUB_TOKEN")
-	detector := &CustomGitDetector{AtmosConfig: fakeAtmosConfig(true)}
+	config := fakeAtmosConfig(true)
+	detector := &CustomGitDetector{AtmosConfig: &config}
 	token, source := detector.resolveToken(hostGitHub)
 	if token != "ghToken" {
 		t.Errorf("Expected token ghToken, got %s", token)
@@ -231,7 +234,8 @@ func TestGoGetterGet_File(t *testing.T) {
 	defer os.RemoveAll(destDir)
 	destFile := filepath.Join(destDir, "downloaded.txt")
 	srcURL := "file://" + srcFile
-	err = GoGetterGet(fakeAtmosConfig(false), srcURL, destFile, getter.ClientModeFile, 5*time.Second)
+	config := fakeAtmosConfig(false)
+	err = GoGetterGet(&config, srcURL, destFile, getter.ClientModeFile, 5*time.Second)
 	if err != nil {
 		t.Errorf("GoGetterGet failed: %v", err)
 	}
@@ -256,11 +260,12 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	if err := os.WriteFile(testFile, jsonContent, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := DownloadDetectFormatAndParseFile(fakeAtmosConfig(false), "file://"+testFile)
+	config := fakeAtmosConfig(false)
+	result, err := DownloadDetectFormatAndParseFile(&config, "file://"+testFile)
 	if err != nil {
 		t.Errorf("DownloadDetectFormatAndParseFile error: %v", err)
 	}
-	resMap, ok := result.(map[string]interface{})
+	resMap, ok := result.(map[string]any)
 	if !ok {
 		t.Errorf("Expected result to be a map, got %T", result)
 	} else if resMap["key"] != "value" {
@@ -274,7 +279,7 @@ func TestRegisterCustomDetectors(t *testing.T) {
 	getter.Detectors = []getter.Detector{}
 	defer func() { getter.Detectors = orig }()
 	config := fakeAtmosConfig(false)
-	RegisterCustomDetectors(config)
+	RegisterCustomDetectors(&config)
 	if len(getter.Detectors) == 0 {
 		t.Error("Expected at least one detector after registration.")
 	}

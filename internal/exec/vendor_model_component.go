@@ -127,7 +127,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		if err = GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+		if err = GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %s", p.name, err)
 		}
 
@@ -178,7 +178,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		if err = GoGetterGet(atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
+		if err = GoGetterGet(&atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %s", p.name, err)
 		}
 
