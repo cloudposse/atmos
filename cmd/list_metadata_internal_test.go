@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestListMetadataCmd tests the command structure and flags
+// TestListMetadataCmd tests the command structure and flags.
 func TestListMetadataCmd(t *testing.T) {
 	assert.Equal(t, "metadata", listMetadataCmd.Use)
 	assert.NotEmpty(t, listMetadataCmd.Short)
@@ -81,7 +81,7 @@ func TestListMetadataValidation(t *testing.T) {
 	assert.NotContains(t, buf.String(), "error")
 }
 
-// TestListMetadataErrorHandling tests error handling in the Run function
+// TestListMetadataErrorHandling tests error handling in the Run function.
 func TestListMetadataErrorHandling(t *testing.T) {
 	t.Skip("Skipping this test as it depends on specific environment configuration")
 

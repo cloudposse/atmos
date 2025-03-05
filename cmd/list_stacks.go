@@ -13,7 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-// listStacksCmd lists atmos stacks
+// listStacksCmd lists atmos stacks.
 var listStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "List all Atmos stacks or stacks for a specific component",
@@ -21,7 +21,7 @@ var listStacksCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
+		// Check Atmos configuration.
 		checkAtmosConfigFn()
 		output, err := listStacksFn(cmd)
 		if err != nil {
