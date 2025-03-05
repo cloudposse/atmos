@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"testing"
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/list"
-	"github.com/cloudposse/atmos/pkg/list/errors"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -123,8 +123,12 @@ func TestListMetadataErrorHandling(t *testing.T) {
 func TestListMetadataCommonFlagsError(t *testing.T) {
 	// Create a test function that simulates listMetadata's error handling
 	// but uses our mock getCommonListFlags function.
+
+	// Define a static error for testing
+	errMockCommonFlags := errors.New("mock common flags error")
+
 	getCommonListFlagsMock := func(cmd *cobra.Command) (*list.CommonListFlags, error) {
-		return nil, fmt.Errorf("mock common flags error")
+		return nil, errMockCommonFlags
 	}
 
 	// Create a test function that mimics listMetadata but uses our mock.
@@ -132,10 +136,7 @@ func TestListMetadataCommonFlagsError(t *testing.T) {
 		// Simulate the behavior in listMetadata.
 		_, err := getCommonListFlagsMock(cmd)
 		if err != nil {
-			return "", &errors.QueryError{
-				Query: "common flags",
-				Cause: err,
-			}
+			return "", fmt.Errorf("common flags: %w", err)
 		}
 		return "mock result", nil
 	}
@@ -149,10 +150,7 @@ func TestListMetadataCommonFlagsError(t *testing.T) {
 	assert.Equal(t, "", result)
 	assert.Error(t, err)
 
-	queryErr, ok := err.(*errors.QueryError)
-	assert.True(t, ok)
-	assert.Equal(t, "common flags", queryErr.Query)
-	assert.EqualError(t, queryErr.Cause, "mock common flags error")
+	assert.ErrorContains(t, err, "common flags: mock common flags error")
 }
 
 // TestListMetadataCSVDelimiterAdjustment tests the automatic adjustment of delimiter for CSV format.

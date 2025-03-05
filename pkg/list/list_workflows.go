@@ -27,7 +27,7 @@ const (
 	FormatTSV   = "tsv"
 )
 
-// ValidateFormat checks if the given format is supported
+// ValidateFormat checks if the given format is supported.
 func ValidateFormat(format string) error {
 	if format == "" {
 		return nil
