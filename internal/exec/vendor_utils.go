@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	log "github.com/charmbracelet/log"
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -32,7 +33,7 @@ type processTargetsParams struct {
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	vendorConfigFile string,
 	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
@@ -45,7 +46,7 @@ func ReadAndProcessVendorConfigFile(
 		return vendorConfig, false, "", err
 	}
 	if foundVendorConfigFile == "" {
-		u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", vendorConfigFile))
+		log.Warn("Vendor config file does not exist. Proceeding without vendor configurations", "path", vendorConfig)
 		return vendorConfig, false, "", nil
 	}
 
@@ -64,8 +65,8 @@ func ReadAndProcessVendorConfigFile(
 	return vendorConfig, true, foundVendorConfigFile, nil
 }
 
-// Helper function to resolve the vendor config file path
-func resolveVendorConfigFilePath(atmosConfig schema.AtmosConfiguration, vendorConfigFile string, checkGlobalConfig bool) (string, error) {
+// Helper function to resolve the vendor config file path.
+func resolveVendorConfigFilePath(atmosConfig *schema.AtmosConfiguration, vendorConfigFile string, checkGlobalConfig bool) (string, error) {
 	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
 		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
 			return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath), nil
@@ -85,7 +86,7 @@ func resolveVendorConfigFilePath(atmosConfig schema.AtmosConfiguration, vendorCo
 	return foundVendorConfigFile, nil
 }
 
-// Helper function to get config files from a path (file or directory)
+// Helper function to get config files from a path (file or directory).
 func getConfigFiles(path string) ([]string, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -166,7 +167,7 @@ func ExecuteAtmosVendorInternal(
 	var err error
 	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 
-	logInitialMessage(atmosConfig, vendorConfigFileName, tags)
+	logInitialMessage(&atmosConfig, vendorConfigFileName, tags)
 
 	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
@@ -174,7 +175,7 @@ func ExecuteAtmosVendorInternal(
 
 	// Process imports and return all sources from all the imports and from `vendor.yaml`.
 	sources, _, err := processVendorImports(
-		atmosConfig,
+		&atmosConfig,
 		vendorConfigFileName,
 		atmosVendorSpec.Imports,
 		atmosVendorSpec.Sources,
@@ -220,22 +221,6 @@ func ExecuteAtmosVendorInternal(
 			vendorConfigFileName,
 		)
 	}
-
-	// Allow having duplicate targets in different sources.
-	// This can be used to vendor mixins (from local and remote sources) and write them to the same targets.
-	// TODO: consider adding a flag to `atmos vendor pull` to specify if duplicate targets are allowed or not.
-	//targets := lo.FlatMap(sources, func(s schema.AtmosVendorSource, index int) []string {
-	//	return s.Targets
-	//})
-	//
-	//duplicateTargets := lo.FindDuplicates(targets)
-	//
-	//if len(duplicateTargets) > 0 {
-	//	return fmt.Errorf("duplicate targets %v in the vendor config file '%s' and the imports",
-	//		duplicateTargets,
-	//		vendorConfigFileName,
-	//	)
-	//}
 	packages, err := processAtmosVendorSource(sources, component, tags, vendorConfigFileName, vendorConfigFilePath)
 	if err != nil {
 		return err
@@ -298,9 +283,7 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 		if err != nil {
 			return nil, err
 		}
-
 		packages = append(packages, pkgs...)
-
 	}
 
 	return packages, nil
@@ -342,9 +325,9 @@ func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	return packages, nil
 }
 
-// processVendorImports processes all imports recursively and returns a list of sources
+// processVendorImports processes all imports recursively and returns a list of sources.
 func processVendorImports(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	vendorConfigFile string,
 	imports []string,
 	sources []schema.AtmosVendorSource,
@@ -390,12 +373,12 @@ func processVendorImports(
 	return append(mergedSources, sources...), allImports, nil
 }
 
-func logInitialMessage(atmosConfig schema.AtmosConfiguration, vendorConfigFileName string, tags []string) {
+func logInitialMessage(atmosConfig *schema.AtmosConfiguration, vendorConfigFileName string, tags []string) {
 	logMessage := fmt.Sprintf("Vendoring from '%s'", vendorConfigFileName)
 	if len(tags) > 0 {
 		logMessage = fmt.Sprintf("%s for tags {%s}", logMessage, strings.Join(tags, ", "))
 	}
-	u.LogInfo(logMessage)
+	log.Info(logMessage)
 }
 
 func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName string) error {
@@ -506,12 +489,12 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		}
 
 		// If no inclusion rules are specified, include the file
-		u.LogTrace(fmt.Sprintf("Including '%s'\n", trimmedSrc))
+		log.Debug("Including", trimmedSrc)
 		return false, nil
 	}
 }
 
-// Helper function to check if a file should be excluded
+// Helper function to check if a file should be excluded.
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
 	for _, excludePath := range excludedPaths {
 		excludeMatch, err := u.PathMatch(excludePath, src)
@@ -519,14 +502,14 @@ func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (b
 			return true, err
 		}
 		if excludeMatch {
-			u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n", trimmedSrc, excludePath))
+			log.Debug("Excluding file since it does not match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "file", trimmedSrc)
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-// Helper function to check if a file should be included
+// Helper function to check if a file should be included.
 func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
 	for _, includePath := range includedPaths {
 		includeMatch, err := u.PathMatch(includePath, src)
@@ -534,10 +517,10 @@ func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (b
 			return false, err
 		}
 		if includeMatch {
-			u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n", trimmedSrc, includePath))
+			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
 			return true, nil
 		}
 	}
-	u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+	log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
 	return false, nil
 }
