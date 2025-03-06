@@ -222,8 +222,16 @@ func ExecuteAtmosVendorInternal(
 	//		vendorConfigFileName,
 	//	)
 	//}
-
-	// Process sources
+	packages, err := processAtmosVendorSource(sources, component, tags, vendorConfigFileName, vendorConfigFilePath)
+	if err != nil {
+		return err
+	}
+	if len(packages) > 0 {
+		return executeVendorModel(packages, dryRun, atmosConfig)
+	}
+	return nil
+}
+func processAtmosVendorSource(sources []schema.AtmosVendorSource, component string, tags []string, vendorConfigFileName, vendorConfigFilePath string) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexSource, s := range sources {
 		if shouldSkipSource(&s, component, tags) {
@@ -231,7 +239,7 @@ func ExecuteAtmosVendorInternal(
 		}
 
 		if err := validateSourceFields(&s, vendorConfigFileName); err != nil {
-			return err
+			return nil, err
 		}
 
 		tmplData := struct {
@@ -242,20 +250,20 @@ func ExecuteAtmosVendorInternal(
 		// Parse 'source' template
 		uri, err := ProcessTmpl(fmt.Sprintf("source-%d", indexSource), s.Source, tmplData, false)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, vendorConfigFilePath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !useLocalFileSystem {
 			err = ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
-					return fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", s.Component, err)
+					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", s.Component, err)
 				}
-				return fmt.Errorf("invalid URI for component %s: %w", s.Component, err)
+				return nil, fmt.Errorf("invalid URI for component %s: %w", s.Component, err)
 			}
 		}
 
@@ -273,7 +281,7 @@ func ExecuteAtmosVendorInternal(
 		for indexTarget, tgt := range s.Targets {
 			target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", indexSource, indexTarget), tgt, tmplData, false)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
 			pkgName := s.Component
@@ -290,16 +298,11 @@ func ExecuteAtmosVendorInternal(
 				version:           s.Version,
 				atmosVendorSource: s,
 			}
-
 			packages = append(packages, p)
-
-			// Log the action (handled in downloadAndInstall)
 		}
 	}
-	if len(packages) > 0 {
-		return executeVendorModel(packages, dryRun, atmosConfig)
-	}
-	return nil
+
+	return packages, nil
 }
 
 // processVendorImports processes all imports recursively and returns a list of sources

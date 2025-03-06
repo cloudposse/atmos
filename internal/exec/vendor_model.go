@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/charmbracelet/log"
+
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -105,7 +107,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	var opts []tea.ProgramOption
 	if !term.IsTTYSupportForStdout() {
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-		u.LogWarning("No TTY detected - using basic output mode")
+		log.Warn("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 	}
 
 	if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
