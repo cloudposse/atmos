@@ -87,14 +87,14 @@ type modelVendor struct {
 	done        bool
 	dryRun      bool
 	failedPkg   int
-	atmosConfig schema.AtmosConfiguration
+	atmosConfig *schema.AtmosConfiguration
 	isTTY       bool
 }
 
 func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	packages []T,
 	dryRun bool,
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 ) error {
 	if len(packages) == 0 {
 		return nil
@@ -124,7 +124,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 	pkgs []T,
 	dryRun bool,
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 ) (modelVendor, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -304,7 +304,7 @@ func max(a, b int) int {
 	return b
 }
 
-func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			// Simulate the action
@@ -330,12 +330,12 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 		}
 
-		defer removeTempDir(atmosConfig, tempDir)
+		defer removeTempDir(*atmosConfig, tempDir)
 
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
-			if err := GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			if err := GoGetterGet(*atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to download package: %w", err),
 					name: p.name,
@@ -344,7 +344,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 
 		case pkgTypeOci:
 			// Process OCI images
-			if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
+			if err := processOciImage(*atmosConfig, p.uri, tempDir); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to process OCI image: %w", err),
 					name: p.name,
@@ -374,7 +374,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 
 		}
-		if err := copyToTarget(atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
+		if err := copyToTarget(*atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{
 				err:  fmt.Errorf("failed to copy package: %w", err),
 				name: p.name,
@@ -387,7 +387,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 	}
 }
 
-func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	if installer.atmosPackage != nil {
 		return downloadAndInstall(installer.atmosPackage, dryRun, atmosConfig)
 	}

@@ -39,7 +39,7 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 
 // ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`
 func ReadAndProcessComponentVendorConfigFile(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
@@ -197,7 +197,7 @@ func copyComponentToDestination(atmosConfig schema.AtmosConfiguration, tempDir, 
 }
 
 func ExecuteComponentVendorInternal(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	vendorComponentSpec schema.VendorComponentSpec,
 	component string,
 	componentPath string,
@@ -362,7 +362,7 @@ func ExecuteComponentVendorInternal(
 	return nil
 }
 
-func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			// Simulate the action
@@ -373,7 +373,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 			}
 		}
 		if p.IsComponent {
-			err := installComponent(p, atmosConfig)
+			err := installComponent(p, *atmosConfig)
 			if err != nil {
 				return installedPkgMsg{
 					err:  err,
@@ -467,23 +467,23 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	return nil
 }
 
-func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) error {
+func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
 	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
 	if err != nil {
 		return fmt.Errorf("Failed to create temp directory %s", err)
 	}
 
-	defer removeTempDir(atmosConfig, tempDir)
+	defer removeTempDir(*atmosConfig, tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		if err = GoGetterGet(atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
+		if err = GoGetterGet(*atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %s", p.name, err)
 		}
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(atmosConfig, p.uri, tempDir)
+		err = processOciImage(*atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("failed to process OCI image %s error %s", p.name, err)
 		}

@@ -89,7 +89,7 @@ spec:
 		assert.Nil(t, err)
 
 		// Test component vendoring
-		componentConfig, compPath, err := e.ReadAndProcessComponentVendorConfigFile(atmosConfig, "myapp", "terraform")
+		componentConfig, compPath, err := e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "myapp", "terraform")
 		assert.Nil(t, err)
 		assert.NotNil(t, componentConfig)
 		assert.Equal(t, componentPath, compPath)
@@ -108,7 +108,7 @@ spec:
 		assert.False(t, exists)
 
 		// Test component vendoring
-		_, _, err = e.ReadAndProcessComponentVendorConfigFile(atmosConfig, "myapp", "terraform")
+		_, _, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "myapp", "terraform")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "does not exist")
 	})

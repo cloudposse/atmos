@@ -157,7 +157,7 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
 func ExecuteAtmosVendorInternal(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	vendorConfigFileName string,
 	atmosVendorSpec schema.AtmosVendorSpec,
 	component string,
@@ -167,7 +167,7 @@ func ExecuteAtmosVendorInternal(
 	var err error
 	vendorConfigFilePath := filepath.Dir(vendorConfigFileName)
 
-	logInitialMessage(&atmosConfig, vendorConfigFileName, tags)
+	logInitialMessage(atmosConfig, vendorConfigFileName, tags)
 
 	if len(atmosVendorSpec.Sources) == 0 && len(atmosVendorSpec.Imports) == 0 {
 		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
@@ -175,7 +175,7 @@ func ExecuteAtmosVendorInternal(
 
 	// Process imports and return all sources from all the imports and from `vendor.yaml`.
 	sources, _, err := processVendorImports(
-		&atmosConfig,
+		atmosConfig,
 		vendorConfigFileName,
 		atmosVendorSpec.Imports,
 		atmosVendorSpec.Sources,
