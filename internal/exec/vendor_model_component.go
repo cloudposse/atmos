@@ -161,7 +161,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name) //nolint:err113
 	}
 	if err = copyComponentToDestination(atmosConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
-		return fmt.Errorf("failed to copy package %s error %s", p.name, err)
+		return fmt.Errorf("failed to copy package %s error %s", p.name, err) //nolint:err113
 	}
 
 	return nil
