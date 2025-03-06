@@ -96,7 +96,6 @@ func handleVendorConfigFileError(err error, filePath string) (schema.AtmosVendor
 		return vendorConfig, false, "", fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions.", filePath)
 	}
 	return vendorConfig, false, "", fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
-
 }
 
 // collectConfigFiles collects all YAML config files to process.
