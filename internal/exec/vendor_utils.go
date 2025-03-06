@@ -27,117 +27,140 @@ func ReadAndProcessVendorConfigFile(
 	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
 	var vendorConfig schema.AtmosVendorConfig
+	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice.
 
-	// Initialize empty sources slice
-	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{}
-
-	var vendorConfigFileExists bool
-	var foundVendorConfigFile string
-
-	// Check if vendor config is specified in atmos.yaml
-	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
-		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
-			foundVendorConfigFile = filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
-		} else {
-			foundVendorConfigFile = atmosConfig.Vendor.BasePath
-		}
-	} else {
-		// Path is not defined in atmos.yaml, proceed with existing logic
-		var fileExists bool
-		foundVendorConfigFile, fileExists = u.SearchConfigFile(vendorConfigFile)
-
-		if !fileExists {
-			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
-			pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
-			foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
-
-			if !fileExists {
-				vendorConfigFileExists = false
-				u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
-				return vendorConfig, vendorConfigFileExists, "", nil
-			}
-		}
+	// Resolve the vendor config file path.
+	foundVendorConfigFile, err := resolveVendorConfigPath(atmosConfig, vendorConfigFile, checkGlobalConfig)
+	if err != nil {
+		return vendorConfig, false, "", err
 	}
 
-	// Check if it's a directory
+	// Check if the resolved path exists and is accessible.
 	fileInfo, err := os.Stat(foundVendorConfigFile)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// File does not exist
-			return vendorConfig, false, "", fmt.Errorf("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
-		}
-		if os.IsPermission(err) {
-			// Permission error
-			return vendorConfig, false, "", fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions.", foundVendorConfigFile)
-		}
-		// Other errors
-		return vendorConfig, false, "", fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
+		return handleVendorConfigFileError(err, foundVendorConfigFile)
 	}
 
-	var configFiles []string
+	// Collect all config files to process (handles directories and single files).
+	configFiles, err := collectConfigFiles(foundVendorConfigFile, fileInfo)
+	if err != nil {
+		return vendorConfig, false, "", err
+	}
+
+	// Process and merge all config files.
+	mergedSources, mergedImports, err := processConfigFiles(configFiles)
+	if err != nil {
+		return vendorConfig, false, "", err
+	}
+
+	// Set the final merged configuration.
+	vendorConfig.Spec.Sources = mergedSources
+	vendorConfig.Spec.Imports = mergedImports
+	return vendorConfig, true, foundVendorConfigFile, nil
+}
+
+// resolveVendorConfigPath resolves the path to the vendor config file.
+func resolveVendorConfigPath(
+	atmosConfig schema.AtmosConfiguration,
+	vendorConfigFile string,
+	checkGlobalConfig bool,
+) (string, error) {
+	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
+		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
+			return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath), nil
+		}
+		return atmosConfig.Vendor.BasePath, nil
+	}
+
+	// Fallback to searching for the vendor config file.
+	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
+	if !fileExists {
+		pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
+		foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
+		if !fileExists {
+			u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+			return "", fmt.Errorf("vendor config file not found")
+		}
+	}
+	return foundVendorConfigFile, nil
+}
+
+// handleVendorConfigFileError handles errors related to vendor config file access.
+func handleVendorConfigFileError(err error, filePath string) (schema.AtmosVendorConfig, bool, string, error) {
+	var vendorConfig schema.AtmosVendorConfig
+	if os.IsNotExist(err) {
+		return vendorConfig, false, "", fmt.Errorf("vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
+	}
+	if os.IsPermission(err) {
+		return vendorConfig, false, "", fmt.Errorf("permission denied when accessing '%s'. Please check the file permissions", filePath)
+	}
+	return vendorConfig, false, "", fmt.Errorf("error accessing vendor config file: %w", err)
+}
+
+// collectConfigFiles collects all YAML config files to process.
+func collectConfigFiles(foundVendorConfigFile string, fileInfo os.FileInfo) ([]string, error) {
 	if fileInfo.IsDir() {
 		foundVendorConfigFile = filepath.ToSlash(foundVendorConfigFile)
 		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "*.{yaml,yml}")
 		if err != nil {
-			return vendorConfig, false, "", err
+			return nil, err
 		}
-		for _, match := range matches {
-			configFiles = append(configFiles, filepath.Join(foundVendorConfigFile, match))
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("no YAML configuration files found in directory '%s'", foundVendorConfigFile)
 		}
-		sort.Strings(configFiles)
-		if len(configFiles) == 0 {
-			return vendorConfig, false, "", fmt.Errorf("no YAML configuration files found in directory '%s'", foundVendorConfigFile)
+		for i, match := range matches {
+			matches[i] = filepath.Join(foundVendorConfigFile, match)
 		}
-	} else {
-		configFiles = []string{foundVendorConfigFile}
+		sort.Strings(matches)
+		return matches, nil
 	}
+	return []string{foundVendorConfigFile}, nil
+}
 
-	// Process all config files
+// processConfigFiles processes and merges all config files.
+func processConfigFiles(configFiles []string) ([]schema.AtmosVendorSource, []string, error) {
 	var mergedSources []schema.AtmosVendorSource
 	var mergedImports []string
 	sourceMap := make(map[string]bool) // Track unique sources by component name
 	importMap := make(map[string]bool) // Track unique imports
 
 	for _, configFile := range configFiles {
-		var currentConfig schema.AtmosVendorConfig
-		yamlFile, err := os.ReadFile(configFile)
+		currentConfig, err := readConfigFile(configFile)
 		if err != nil {
-			return vendorConfig, false, "", err
+			return nil, nil, err
 		}
 
-		err = yaml.Unmarshal(yamlFile, &currentConfig)
-		if err != nil {
-			return vendorConfig, false, "", err
-		}
-
-		// Merge sources, checking for duplicates
+		// Merge sources, checking for duplicates.
 		for _, source := range currentConfig.Spec.Sources {
-			if source.Component != "" {
-				if sourceMap[source.Component] {
-					return vendorConfig, false, "", fmt.Errorf("duplicate component '%s' found in config file '%s'",
-						source.Component, configFile)
-				}
-				sourceMap[source.Component] = true
+			if source.Component != "" && sourceMap[source.Component] {
+				return nil, nil, fmt.Errorf("duplicate component '%s' found in config file '%s'", source.Component, configFile)
 			}
+			sourceMap[source.Component] = true
 			mergedSources = append(mergedSources, source)
 		}
 
-		// Merge imports, checking for duplicates
+		// Merge imports, checking for duplicates.
 		for _, imp := range currentConfig.Spec.Imports {
-			if importMap[imp] {
-				continue // Skip duplicate imports
+			if !importMap[imp] {
+				importMap[imp] = true
+				mergedImports = append(mergedImports, imp)
 			}
-			importMap[imp] = true
-			mergedImports = append(mergedImports, imp)
 		}
 	}
+	return mergedSources, mergedImports, nil
+}
 
-	// Create final merged config
-	vendorConfig.Spec.Sources = mergedSources
-	vendorConfig.Spec.Imports = mergedImports
-	vendorConfigFileExists = true
-
-	return vendorConfig, vendorConfigFileExists, foundVendorConfigFile, nil
+// readConfigFile reads and unmarshals a config.
+func readConfigFile(configFile string) (schema.AtmosVendorConfig, error) {
+	var currentConfig schema.AtmosVendorConfig
+	yamlFile, err := os.ReadFile(configFile)
+	if err != nil {
+		return currentConfig, err
+	}
+	if err := yaml.Unmarshal(yamlFile, &currentConfig); err != nil {
+		return currentConfig, err
+	}
+	return currentConfig, nil
 }
 
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
@@ -158,7 +181,7 @@ func ExecuteAtmosVendorInternal(
 		return fmt.Errorf("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file '%s'", vendorConfigFileName)
 	}
 
-	// Process imports and return all sources from all the imports and from `vendor.yaml`
+	// Process imports and return all sources from all the imports and from `vendor.yaml`.
 	sources, _, err := processVendorImports(
 		atmosConfig,
 		vendorConfigFileName,
