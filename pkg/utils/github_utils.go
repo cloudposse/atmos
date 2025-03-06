@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	log "github.com/charmbracelet/log"
 	"github.com/google/go-github/v59/github"
 	"golang.org/x/oauth2"
 )
@@ -39,7 +40,7 @@ func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	log.Debug("We got the following", "releases", releases, "err", err)
 	if len(releases) > 0 {
 		latestRelease := releases[0]
 		latestReleaseTag := *latestRelease.TagName
