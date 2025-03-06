@@ -53,10 +53,6 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
-      - name: Print Env
-        run: |
-          env
-
       - name: Get dependencies
         run: |
           make deps
@@ -92,6 +88,10 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
+
+      - name: Print Env
+        run: |
+          env
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows'
