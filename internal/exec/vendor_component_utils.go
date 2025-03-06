@@ -361,6 +361,7 @@ func ExecuteComponentVendorInternal(
 	}
 	return nil
 }
+
 func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {

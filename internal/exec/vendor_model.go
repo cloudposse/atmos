@@ -98,7 +98,6 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	}
 	// Initialize model based on package type
 	model, err := newModelVendor(packages, dryRun, atmosConfig)
-
 	if err != nil {
 		return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
 	}
