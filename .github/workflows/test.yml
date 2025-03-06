@@ -31,10 +31,10 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux
-          - os: windows-latest
-            target: windows
-          - os: macos-latest
-            target: macos
+          # - os: windows-latest
+          #   target: windows
+          # - os: macos-latest
+          #   target: macos
     runs-on: ${{ matrix.os }}
     steps:
       - name: Build
@@ -52,6 +52,10 @@ jobs:
         with:
           go-version-file: "go.mod"
         id: go
+
+      - name: Print Env
+        run: |
+          env
 
       - name: Get dependencies
         run: |
