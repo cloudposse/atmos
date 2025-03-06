@@ -337,7 +337,7 @@ func TestGSMStore_Get(t *testing.T) {
 						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest",
 					}
 					return req.Name == expectedReq.Name
-				})).Return(nil, status.Error(codes.NotFound, "secret not found"))
+				})).Return(nil, status.Error(codes.NotFound, "resource not found"))
 			},
 			want:    nil,
 			wantErr: true,
