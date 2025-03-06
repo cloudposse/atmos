@@ -190,6 +190,7 @@ func (m *modelVendor) Init() tea.Cmd {
 	}
 	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.atmosConfig), m.spinner.Tick)
 }
+
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -290,7 +291,6 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) 
 	}
 
 	log.Info(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
-
 }
 
 func (m *modelVendor) View() string {
