@@ -115,23 +115,46 @@ func (s *ArtifactoryStore) getKey(stack string, component string, key string) (s
 		return "", ErrStackDelimiterNotSet
 	}
 
-	prefixParts := []string{s.prefix}
+	prefixParts := []string{s.repoName, s.prefix}
 	prefix := strings.Join(prefixParts, "/")
 
 	return getKey(prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
-func (s *ArtifactoryStore) Get(stack string, component string, key string) (interface{}, error) {
+func (s *ArtifactoryStore) validateGetParams(stack, component, key string) error {
 	if stack == "" {
-		return nil, ErrEmptyStack
+		return ErrEmptyStack
 	}
 
 	if component == "" {
-		return nil, ErrEmptyComponent
+		return ErrEmptyComponent
 	}
 
 	if key == "" {
-		return nil, ErrEmptyKey
+		return ErrEmptyKey
+	}
+
+	return nil
+}
+
+func (s *ArtifactoryStore) processDownloadedFile(tempDir, paramName string) (interface{}, error) {
+	fileData, err := os.ReadFile(filepath.Join(tempDir, filepath.Base(paramName)))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrReadFile, err)
+	}
+
+	// First try to unmarshal as JSON
+	var result interface{}
+	if err := json.Unmarshal(fileData, &result); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnmarshalFile, err)
+	}
+
+	return result, nil
+}
+
+func (s *ArtifactoryStore) Get(stack string, component string, key string) (interface{}, error) {
+	if err := s.validateGetParams(stack, component, key); err != nil {
+		return nil, err
 	}
 
 	paramName, err := s.getKey(stack, component, key)
@@ -151,7 +174,7 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 	}
 
 	downloadParams := services.NewDownloadParams()
-	downloadParams.Pattern = filepath.Join(s.repoName, paramName)
+	downloadParams.Pattern = paramName
 	downloadParams.Target = tempDir
 	downloadParams.Recursive = false
 	downloadParams.IncludeDirs = false
@@ -161,7 +184,8 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 		return nil, fmt.Errorf("%w: %v", ErrDownloadFile, err)
 	}
 
-	if totalDownloaded != totalExpected {
+	// Only check for mismatch if there was an error
+	if err != nil && totalDownloaded != totalExpected {
 		return nil, fmt.Errorf("%w: %v", ErrDownloadFile, err)
 	}
 
@@ -169,18 +193,7 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 		return nil, ErrNoFilesDownloaded
 	}
 
-	fileData, err := os.ReadFile(filepath.Join(tempDir, filepath.Base(paramName)))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrReadFile, err)
-	}
-
-	// First try to unmarshal as JSON
-	var result interface{}
-	if err := json.Unmarshal(fileData, &result); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUnmarshalFile, err)
-	}
-
-	return result, nil
+	return s.processDownloadedFile(tempDir, paramName)
 }
 
 func (s *ArtifactoryStore) Set(stack string, component string, key string, value interface{}) error {
