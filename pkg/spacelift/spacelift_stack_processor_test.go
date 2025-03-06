@@ -14,7 +14,7 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 	processImports := true
 	stackConfigPathTemplate := "stacks/%s.yaml"
 
-	var spaceliftStacks, err = CreateSpaceliftStacks(
+	spaceliftStacks, err := CreateSpaceliftStacks(
 		"",
 		"",
 		"",
@@ -123,7 +123,7 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 	processImports := true
 	stackConfigPathTemplate := "stacks/%s.yaml"
 
-	var spaceliftStacks, err = CreateSpaceliftStacks(
+	spaceliftStacks, err := CreateSpaceliftStacks(
 		stacksBasePath,
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,

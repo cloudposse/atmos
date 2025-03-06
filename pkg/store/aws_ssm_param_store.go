@@ -2,8 +2,8 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -68,14 +68,12 @@ func NewSSMStore(options SSMStoreOptions) (Store, error) {
 	return store, nil
 }
 
-func (s *SSMStore) getKey(stack string, component string, key string) string {
-	stackParts := strings.Split(stack, *s.stackDelimiter)
-	componentParts := strings.Split(component, "/")
+func (s *SSMStore) getKey(stack string, component string, key string) (string, error) {
+	if s.stackDelimiter == nil {
+		return "", fmt.Errorf("stack delimiter is not set")
+	}
 
-	parts := append([]string{s.prefix}, stackParts...)
-	parts = append(parts, componentParts...)
-	parts = append(parts, key)
-	return strings.Join(parts, "/")
+	return getKey(s.prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
 // Set stores a key-value pair in AWS SSM Parameter Store.
@@ -92,23 +90,26 @@ func (s *SSMStore) Set(stack string, component string, key string, value interfa
 
 	ctx := context.TODO()
 
-	// Convert value to string
-	strValue, ok := value.(string)
-	if !ok {
-		return fmt.Errorf("value must be a string")
+	// Convert value to JSON string
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to serialize value to JSON: %w", err)
 	}
+	strValue := string(jsonValue)
 
 	// Construct the full parameter name using getKey
-	paramName := s.getKey(stack, component, key)
+	paramName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return fmt.Errorf("failed to get key: %w", err)
+	}
 
 	// Put the parameter in SSM Parameter Store
-	_, err := s.client.PutParameter(ctx, &ssm.PutParameterInput{
+	_, err = s.client.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:      aws.String(paramName),
 		Value:     aws.String(strValue),
 		Type:      types.ParameterTypeString,
 		Overwrite: aws.Bool(true), // Allow overwriting existing keys
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to set parameter '%s': %w", paramName, err)
 	}
@@ -131,7 +132,10 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 	ctx := context.TODO()
 
 	// Construct the full parameter name using getKey
-	paramName := s.getKey(stack, component, key)
+	paramName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key: %w", err)
+	}
 
 	// Get the parameter from SSM Parameter Store
 	result, err := s.client.GetParameter(ctx, &ssm.GetParameterInput{
@@ -142,5 +146,9 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 		return nil, fmt.Errorf("failed to get parameter '%s': %w", paramName, err)
 	}
 
-	return aws.ToString(result.Parameter.Value), nil
+	var value interface{}
+	if err := json.Unmarshal([]byte(*result.Parameter.Value), &value); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal parameter value: %w", err)
+	}
+	return value, nil
 }

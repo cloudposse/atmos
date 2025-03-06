@@ -1,0 +1,2 @@
+DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]

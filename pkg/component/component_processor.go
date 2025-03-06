@@ -16,7 +16,6 @@ func ProcessComponentInStack(
 	atmosCliConfigPath string,
 	atmosBasePath string,
 ) (map[string]any, error) {
-
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -25,17 +24,17 @@ func ProcessComponentInStack(
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.LogError(atmosConfig, err)
+		u.LogError(err)
 		return nil, err
 	}
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
+	configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
+		configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
-			u.LogError(atmosConfig, err)
+			u.LogError(err)
 			return nil, err
 		}
 	}
@@ -53,7 +52,6 @@ func ProcessComponentFromContext(
 	atmosCliConfigPath string,
 	atmosBasePath string,
 ) (map[string]any, error) {
-
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
@@ -61,19 +59,19 @@ func ProcessComponentFromContext(
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.LogError(atmosConfig, err)
+		u.LogError(err)
 		return nil, err
 	}
 
 	if len(e.GetStackNamePattern(atmosConfig)) < 1 {
 		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-		u.LogError(atmosConfig, er)
+		u.LogError(er)
 		return nil, er
 	}
 
 	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, e.GetStackNamePattern(atmosConfig))
 	if err != nil {
-		u.LogError(atmosConfig, err)
+		u.LogError(err)
 		return nil, err
 	}
 

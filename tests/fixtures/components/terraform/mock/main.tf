@@ -1,15 +1,15 @@
 variable "foo" {
-  type = string
+  type    = string
   default = "foo"
 }
 
 variable "bar" {
-  type = string
+  type    = string
   default = "bar"
 }
 
 variable "baz" {
-  type = string
+  type    = string
   default = "baz"
 }
 

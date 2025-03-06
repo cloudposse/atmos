@@ -17,41 +17,37 @@ var listWorkflowsCmd = &cobra.Command{
 	Use:   "workflows",
 	Short: "List all Atmos workflows",
 	Long:  "List Atmos workflows, with options to filter results by specific files.",
-	Example: "atmos list workflows\n" +
-		"atmos list workflows -f <file>\n" +
-		"atmos list workflows --format json\n" +
-		"atmos list workflows --format csv --delimiter ','",
 	Run: func(cmd *cobra.Command, args []string) {
 		flags := cmd.Flags()
 
 		fileFlag, err := flags.GetString("file")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'file' flag: %v", err), theme.Colors.Error)
+			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `file` flag: %v", err), "")
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'format' flag: %v", err), theme.Colors.Error)
+			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `format` flag: %v", err), "")
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error getting the 'delimiter' flag: %v", err), theme.Colors.Error)
+			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `delimiter` flag: %v", err), "")
 			return
 		}
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error initializing CLI config: %v", err), theme.Colors.Error)
+			u.PrintErrorMarkdownAndExit("Error initializing CLI config", err, "")
 			return
 		}
 
 		output, err := l.FilterAndListWorkflows(fileFlag, atmosConfig.Workflows.List, formatFlag, delimiterFlag)
 		if err != nil {
-			u.PrintMessageInColor(fmt.Sprintf("Error: %v"+"\n", err), theme.Colors.Warning)
+			u.PrintErrorMarkdownAndExit("", err, "")
 			return
 		}
 

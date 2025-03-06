@@ -32,6 +32,15 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 	componentName := args[0]
 
+	// Initialize spinner
+	message := fmt.Sprintf("Validating Atmos Component: %s", componentName)
+	p := NewSpinner(message)
+	spinnerDone := make(chan struct{})
+	// Run spinner in a goroutine
+	RunSpinner(p, spinnerDone, message)
+	// Ensure spinner is stopped before returning
+	defer StopSpinner(p, spinnerDone)
+
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
@@ -82,10 +91,10 @@ func ExecuteValidateComponent(
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = "terraform"
-	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
+	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 	if err != nil {
 		configAndStacksInfo.ComponentType = "helmfile"
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
 			return false, err
 		}
@@ -110,7 +119,7 @@ func ValidateComponent(
 	var err error
 
 	if schemaPath != "" && schemaType != "" {
-		u.LogDebug(atmosConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
+		u.LogDebug(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, schemaType, schemaPath))
 
 		ok, err = validateComponentInternal(atmosConfig, componentSection, schemaPath, schemaType, modulePaths, timeoutSeconds)
 		if err != nil {
@@ -157,10 +166,10 @@ func ValidateComponent(
 				finalTimeoutSeconds = v.Timeout
 			}
 
-			u.LogDebug(atmosConfig, fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
+			u.LogDebug(fmt.Sprintf("\nValidating the component '%s' using '%s' file '%s'", componentName, finalSchemaType, finalSchemaPath))
 
 			if v.Description != "" {
-				u.LogDebug(atmosConfig, v.Description)
+				u.LogDebug(v.Description)
 			}
 
 			ok2, err := validateComponentInternal(atmosConfig, componentSection, finalSchemaPath, finalSchemaType, finalModulePaths, finalTimeoutSeconds)

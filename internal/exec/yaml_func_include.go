@@ -16,10 +16,10 @@ func processTagInclude(
 ) any {
 	str, err := getStringAfterTag(input, fileType)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("Executing Atmos YAML function: !include %s", str))
+	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: !include %s", str))
 
 	var f string
 	q := ""
@@ -27,7 +27,7 @@ func processTagInclude(
 	parts, err := u.SplitStringByDelimiter(str, ' ')
 	if err != nil {
 		e := fmt.Errorf("error executing the YAML function: !include %s\n%v", str, err)
-		u.LogErrorAndExit(atmosConfig, e)
+		u.LogErrorAndExit(e)
 	}
 
 	partsLen := len(parts)
@@ -39,7 +39,7 @@ func processTagInclude(
 		f = strings.TrimSpace(parts[0])
 	} else {
 		err = fmt.Errorf("invalid number of arguments in the Atmos YAML function: !include %s. The function accepts 1 or 2 arguments", str)
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	var res any
@@ -52,13 +52,13 @@ func processTagInclude(
 
 	if err != nil {
 		e := fmt.Errorf("error evaluating the YAML function: !include %s\n%v", str, err)
-		u.LogErrorAndExit(atmosConfig, e)
+		u.LogErrorAndExit(e)
 	}
 
 	if q != "" {
 		res, err = u.EvaluateYqExpression(&atmosConfig, res, q)
 		if err != nil {
-			u.LogErrorAndExit(atmosConfig, err)
+			u.LogErrorAndExit(err)
 		}
 	}
 

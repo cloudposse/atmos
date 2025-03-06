@@ -26,7 +26,7 @@ func ExecuteWorkflow(
 	commandLineStack string,
 	fromStep string,
 ) error {
-	var steps = workflowDefinition.Steps
+	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
 		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
@@ -40,7 +40,7 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
-	logFunc(atmosConfig, fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
+	logFunc(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(atmosConfig, workflowDefinition)
@@ -61,10 +61,10 @@ func ExecuteWorkflow(
 	}
 
 	for stepIdx, step := range steps {
-		var command = strings.TrimSpace(step.Command)
-		var commandType = strings.TrimSpace(step.Type)
+		command := strings.TrimSpace(step.Command)
+		commandType := strings.TrimSpace(step.Type)
 
-		logFunc(atmosConfig, fmt.Sprintf("Executing workflow step: %s", command))
+		logFunc(fmt.Sprintf("Executing workflow step: %s", command))
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -77,9 +77,9 @@ func ExecuteWorkflow(
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
-			var workflowStack = strings.TrimSpace(workflowDefinition.Stack)
-			var stepStack = strings.TrimSpace(step.Stack)
-			var finalStack = ""
+			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
+			stepStack := strings.TrimSpace(step.Stack)
+			finalStack := ""
 
 			// The workflow `stack` attribute overrides the stack in the `command` (if specified)
 			// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute
@@ -97,7 +97,7 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				logFunc(atmosConfig, fmt.Sprintf("Stack: %s", finalStack))
+				logFunc(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
@@ -109,12 +109,12 @@ func ExecuteWorkflow(
 			workflowFileName := filepath.Base(workflowPath)
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
-			failedMsg := theme.Colors.Error.Sprintf("\nStep '%s' failed!", step.Name)
+			failedMsg := fmt.Sprintf("\nStep '%s' failed!", step.Name)
 
-			u.LogDebug(atmosConfig, fmt.Sprintf("\nCommand failed: %s", command))
-			u.LogDebug(atmosConfig, fmt.Sprintf("Error: %v", err))
+			u.LogDebug(fmt.Sprintf("\nCommand failed: %s", command))
+			u.LogDebug(fmt.Sprintf("Error: %v", err))
 
-			resumeMsg := theme.Colors.Success.Sprintf(
+			resumeMsg := fmt.Sprintf(
 				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",
 				workflow,
 				workflowFileName,
@@ -132,7 +132,6 @@ func ExecuteWorkflow(
 func ExecuteDescribeWorkflows(
 	atmosConfig schema.AtmosConfiguration,
 ) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
-
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
 	allResult := make(map[string]schema.WorkflowManifest)
@@ -209,7 +208,7 @@ func ExecuteDescribeWorkflows(
 }
 
 func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
-	var steps = workflowDefinition.Steps
+	steps := workflowDefinition.Steps
 
 	if steps == nil {
 		return

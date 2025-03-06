@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -16,17 +15,16 @@ var describeConfigCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		err := e.ExecuteDescribeConfigCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.PrintErrorMarkdown("", err, "")
 		}
 	},
 }
 
 func init() {
 	describeConfigCmd.DisableFlagParsing = false
-	describeConfigCmd.PersistentFlags().StringP("format", "f", "json", "The output format: atmos describe config -f json|yaml")
+	describeConfigCmd.PersistentFlags().StringP("format", "f", "json", "The output format")
 
 	describeCmd.AddCommand(describeConfigCmd)
 }
