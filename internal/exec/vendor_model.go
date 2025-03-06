@@ -306,7 +306,6 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 				err:  fmt.Errorf("unknown package type %s for package %s", p.pkgType.String(), p.name),
 				name: p.name,
 			}
-
 		}
 		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{

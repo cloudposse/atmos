@@ -276,7 +276,7 @@ func RegisterCustomDetectors(atmosConfig *schema.AtmosConfiguration, source stri
 	)
 }
 
-// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination
+// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination.
 func GoGetterGet(
 	atmosConfig *schema.AtmosConfiguration,
 	src string,
@@ -348,7 +348,7 @@ func removeSymlinks(root string) error {
 	})
 }
 
-// DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
+// DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type.
 func DownloadDetectFormatAndParseFile(atmosConfig *schema.AtmosConfiguration, file string) (any, error) {
 	tempDir := os.TempDir()
 	f := filepath.Join(tempDir, uuid.New().String())
