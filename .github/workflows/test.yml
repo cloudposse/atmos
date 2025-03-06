@@ -501,6 +501,7 @@ jobs:
         uses: reviewdog/action-golangci-lint@v2
         with:
           filter_mode: "diff_context"
+          reporter: github-check
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   release:
