@@ -11,6 +11,9 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// errFormat is the format string used for wrapping errors with additional context
+const errFormat = "%w: %v"
+
 type RedisStore struct {
 	prefix         string
 	redisClient    RedisClient
@@ -37,7 +40,7 @@ func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 	if options.URL != nil {
 		opts, err := redis.ParseURL(*options.URL)
 		if err != nil {
-			return &redis.Options{}, fmt.Errorf("%w: %v", ErrParseRedisURL, err)
+			return &redis.Options{}, fmt.Errorf(errFormat, ErrParseRedisURL, err)
 		}
 
 		return opts, nil
@@ -63,7 +66,7 @@ func NewRedisStore(options RedisStoreOptions) (Store, error) {
 
 	opts, err := getRedisOptions(&options)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrParseRedisURL, err)
+		return nil, fmt.Errorf(errFormat, ErrParseRedisURL, err)
 	}
 
 	redisClient := redis.NewClient(opts)
@@ -101,13 +104,13 @@ func (s *RedisStore) Get(stack string, component string, key string) (interface{
 
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrGetKey, err)
+		return nil, fmt.Errorf(errFormat, ErrGetKey, err)
 	}
 
 	ctx := context.Background()
 	jsonData, err := s.redisClient.Get(ctx, paramName).Result()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrGetRedisKey, err)
+		return nil, fmt.Errorf(errFormat, ErrGetRedisKey, err)
 	}
 
 	// First try to unmarshal as JSON
@@ -136,12 +139,12 @@ func (s *RedisStore) Set(stack string, component string, key string, value inter
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrGetKey, err)
+		return fmt.Errorf(errFormat, ErrGetKey, err)
 	}
 
 	jsonData, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrMarshalValue, err)
+		return fmt.Errorf(errFormat, ErrMarshalValue, err)
 	}
 
 	ctx := context.Background()
