@@ -222,23 +222,31 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
-	jsonData, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrMarshalValue, err)
+	var dataToWrite []byte
+	if byteData, ok := value.([]byte); ok {
+		// If value is already []byte, use it directly
+		dataToWrite = byteData
+	} else {
+		// Otherwise, marshal it to JSON
+		jsonData, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrMarshalValue, err)
+		}
+		dataToWrite = jsonData
 	}
 
-	_, err = tempFile.Write(jsonData)
+	_, err = tempFile.Write(dataToWrite)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrWriteTempFile, err)
 	}
 
 	uploadParams := services.NewUploadParams()
 	uploadParams.Pattern = tempFile.Name()
-	uploadParams.Target = filepath.Join(s.repoName, paramName)
+	uploadParams.Target = paramName
 	uploadParams.Recursive = false
 	uploadParams.Flat = true
 
-	_, _, err = s.rtManager.UploadFiles(artifactory.UploadServiceOptions{}, uploadParams)
+	_, _, err = s.rtManager.UploadFiles(artifactory.UploadServiceOptions{FailFast: true}, uploadParams)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrUploadFile, err)
 	}
