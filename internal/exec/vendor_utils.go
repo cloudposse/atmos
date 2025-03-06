@@ -282,6 +282,7 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 
 	return packages, nil
 }
+
 func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 	if useOciScheme {
 		return pkgTypeOci
@@ -290,6 +291,7 @@ func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 	}
 	return pkgTypeRemote
 }
+
 func processTargets(indexSource int, s *schema.AtmosVendorSource, tmplData struct{ Component, Version string }, vendorConfigFilePath, uri string, pType pkgType, sourceIsLocalFile bool) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexTarget, tgt := range s.Targets {
