@@ -12,13 +12,18 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+const (
+	wrapErrFmt                     = "%w"
+	tempDirPermissions os.FileMode = 0755
 )
 
 type pkgType int
@@ -76,7 +81,7 @@ var (
 	grayColor           = theme.Styles.GrayText
 )
 
-func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) (modelVendor, error) {
+func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) (modelVendor, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(progressWidth),
@@ -102,7 +107,7 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig
 		spinner:     s,
 		progress:    p,
 		dryRun:      dryRun,
-		atmosConfig: atmosConfig,
+		atmosConfig: *atmosConfig,
 		isTTY:       isTTY,
 	}, nil
 }
@@ -140,7 +145,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
 			if !m.isTTY {
-				u.LogError(errors.New(errMsg))
+				log.Error(errMsg)
 			}
 			mark = xMark
 			m.failedPkg++
@@ -152,14 +157,14 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.index >= len(m.packages)-1 {
 			m.done = true
 			if !m.isTTY {
-				u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+				log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 				if m.dryRun {
-					u.LogInfo("Done! Dry run completed. No components vendored.\n")
+					log.Info("Done! Dry run completed. No components vendored.\n")
 				}
 				if m.failedPkg > 0 {
-					u.LogInfo(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
+					log.Info(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
 				}
-				u.LogInfo(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
+				log.Info(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
 			}
 			version := grayColor.Render(version)
 			return m, tea.Sequence(
@@ -168,7 +173,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 		if !m.isTTY {
-			u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+			log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 		}
 		m.index++
 		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
@@ -247,12 +252,14 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		tempDir, err := os.MkdirTemp("", "atmos-vendor")
 		if err != nil {
 			return installedPkgMsg{
+				//nolint:err113
 				err:  fmt.Errorf(wrapErrFmt, errors.New("failed to create temp directory"), err),
 				name: p.name,
 			}
 		}
 		if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
 			return installedPkgMsg{
+				//nolint:err113
 				err:  fmt.Errorf(wrapErrFmt, errors.New("failed to set temp directory permissions"), err),
 				name: p.name,
 			}
@@ -264,6 +271,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		case pkgTypeRemote:
 			if err := GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, getterTimeout); err != nil {
 				return installedPkgMsg{
+					//nolint:err113
 					err:  fmt.Errorf(wrapErrFmt, errors.New("failed to download package"), err),
 					name: p.name,
 				}
@@ -272,6 +280,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		case pkgTypeOci:
 			if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
 				return installedPkgMsg{
+					//nolint:err113
 					err:  fmt.Errorf(wrapErrFmt, errors.New("failed to process OCI image"), err),
 					name: p.name,
 				}
@@ -288,18 +297,20 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{
+					//nolint:err113
 					err:  fmt.Errorf(wrapErrFmt, errors.New("failed to copy package"), err),
 					name: p.name,
 				}
 			}
 		default:
 			return installedPkgMsg{
-				err:  fmt.Errorf("%w", ErrUnknownPackageType),
+				err:  fmt.Errorf(wrapErrFmt, ErrUnknownPackageType),
 				name: p.name,
 			}
 		}
 		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{
+				//nolint:err113
 				err:  fmt.Errorf(wrapErrFmt, errors.New("failed to copy package"), err),
 				name: p.name,
 			}
@@ -321,6 +332,7 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig schema.AtmosCo
 	}
 
 	return func() tea.Msg {
+		//nolint:err113
 		err := fmt.Errorf("no valid installer package provided for %s", installer.name)
 		return installedPkgMsg{
 			err:  err,

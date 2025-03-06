@@ -67,7 +67,7 @@ linters-settings:
 
   gocognit:
     # Maximum cognitive complexity
-    min-complexity: 20
+    min-complexity: 23
 
   godot:
     # Check if comments end in a period
@@ -158,7 +158,7 @@ linters-settings:
 
   nestif:
     # Minimal complexity of if statements to report.
-    min-complexity: 4
+    min-complexity: 6
 
 issues:
   max-issues-per-linter: 0

@@ -424,7 +424,7 @@ func ExecuteAtmosVendorInternal(
 			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 		}
 
-		model, err := newModelAtmosVendorInternal(packages, dryRun, atmosConfig)
+		model, err := newModelAtmosVendorInternal(packages, dryRun, &atmosConfig)
 		if err != nil {
 			return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
 		}
