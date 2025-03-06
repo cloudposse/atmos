@@ -23,7 +23,7 @@ import (
 
 const (
 	wrapErrFmt                     = "%w"
-	tempDirPermissions os.FileMode = 0755
+	tempDirPermissions os.FileMode = 0o755
 )
 
 type pkgType int
