@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	// wrapErrFmt is defined in error.go as wrapErrFmtWithDetails ("%w: %v")
+	// WrapErrFmt is defined in error.go as wrapErrFmtWithDetails ("%w: %v")
 	// Use the detailed formatter to support two arguments
 	tempDirPermissions os.FileMode = 0o755
 )
