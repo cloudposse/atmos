@@ -231,6 +231,7 @@ func ExecuteAtmosVendorInternal(
 	}
 	return nil
 }
+
 func processAtmosVendorSource(sources []schema.AtmosVendorSource, component string, tags []string, vendorConfigFileName, vendorConfigFilePath string) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexSource, s := range sources {
