@@ -71,6 +71,7 @@ func TestVersionExec_Execute(t *testing.T) {
 
 			// Setup mock expectations
 			mockExec.EXPECT().PrintStyledText("ATMOS").Return(tt.printStyledTextErr)
+			//nolint:nestif
 			if tt.printStyledTextErr == nil {
 				mockExec.EXPECT().PrintMessage(gomock.Any()).Times(3)
 

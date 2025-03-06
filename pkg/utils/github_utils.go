@@ -26,7 +26,7 @@ func newGitHubClient(ctx context.Context) *github.Client {
 	return github.NewClient(tc)
 }
 
-// GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository
+// GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository.
 func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
 	log.Debug("Fetching latest release from Github API", "owner", owner, "repo", repo)
 

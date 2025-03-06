@@ -33,6 +33,7 @@ func (v versionExec) Execute(checkFlag bool) {
 	v.printMessage("")
 	err := v.printStyledText("ATMOS")
 	if err != nil {
+		//nolint:revive
 		log.Fatal(err)
 	}
 
@@ -42,20 +43,23 @@ func (v versionExec) Execute(checkFlag bool) {
 	v.printMessage("")
 
 	if checkFlag {
-		// Check for the latest Atmos release on GitHub
-		latestReleaseTag, err := v.getLatestGitHubRepoRelease("cloudposse", "atmos")
-		if err == nil && latestReleaseTag != "" {
-			latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
-			currentRelease := strings.TrimPrefix(version.Version, "v")
+		v.checkRelease()
+	}
+}
 
-			if latestRelease == currentRelease {
-				log.Warn("You are running the latest version of Atmos", "version", latestRelease)
-			} else {
-				v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)
-			}
-		} else {
-			log.Debug("Did not get release tag", "err", err, "latestReleaseTag", latestReleaseTag)
-		}
+func (v versionExec) checkRelease() {
+	// Check for the latest Atmos release on GitHub
+	latestReleaseTag, err := v.getLatestGitHubRepoRelease("cloudposse", "atmos")
+	if err != nil || latestReleaseTag == "" {
+		log.Debug("Did not get release tag", "err", err, "latestReleaseTag", latestReleaseTag)
 		return
+	}
+	latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
+	currentRelease := strings.TrimPrefix(version.Version, "v")
+
+	if latestRelease == currentRelease {
+		log.Warn("You are running the latest version of Atmos", "version", latestRelease)
+	} else {
+		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)
 	}
 }
