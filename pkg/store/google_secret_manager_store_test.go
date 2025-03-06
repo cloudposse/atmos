@@ -343,6 +343,22 @@ func TestGSMStore_Get(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:      "permission denied",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+					expectedReq := &secretmanagerpb.AccessSecretVersionRequest{
+						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest",
+					}
+					return req.Name == expectedReq.Name
+				})).Return(nil, status.Error(codes.PermissionDenied, "permission denied for secret"))
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
 			name:      "empty stack",
 			stack:     "",
 			component: "app/service",
@@ -386,6 +402,11 @@ func TestGSMStore_Get(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Error(t, err)
+				if tt.name == "permission denied" {
+					assert.Contains(t, err.Error(), "permission denied for secret")
+				} else if tt.name == "secret not found" {
+					assert.Contains(t, err.Error(), "resource not found")
+				}
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)
