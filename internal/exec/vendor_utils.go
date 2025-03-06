@@ -20,6 +20,16 @@ import (
 
 var ErrVendorComponents = errors.New("failed to vendor components")
 
+type processTargetsParams struct {
+	IndexSource          int
+	Source               *schema.AtmosVendorSource
+	TemplateData         struct{ Component, Version string }
+	VendorConfigFilePath string
+	URI                  string
+	PkgType              pkgType
+	SourceIsLocalFile    bool
+}
+
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
 	atmosConfig schema.AtmosConfiguration,
@@ -80,12 +90,12 @@ func getConfigFiles(path string) ([]string, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
+			return nil, fmt.Errorf("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
 		}
 		if os.IsPermission(err) {
-			return nil, fmt.Errorf("permission denied when accessing '%s'. Please check the file permissions", path)
+			return nil, fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions", path)
 		}
-		return nil, fmt.Errorf("an error occurred while accessing the vendoring configuration: %w", err)
+		return nil, fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
 	}
 
 	if fileInfo.IsDir() {
@@ -276,10 +286,19 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 		pType := determinePackageType(useOciScheme, useLocalFileSystem)
 
 		// Process each target within the source
-		pkgs, err := processTargets(indexSource, &s, tmplData, vendorConfigFilePath, uri, pType, sourceIsLocalFile)
+		pkgs, err := processTargets(&processTargetsParams{
+			IndexSource:          indexSource,
+			Source:               &s,
+			TemplateData:         tmplData,
+			VendorConfigFilePath: vendorConfigFilePath,
+			URI:                  uri,
+			PkgType:              pType,
+			SourceIsLocalFile:    sourceIsLocalFile,
+		})
 		if err != nil {
 			return nil, err
 		}
+
 		packages = append(packages, pkgs...)
 
 	}
@@ -296,27 +315,27 @@ func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 	return pkgTypeRemote
 }
 
-func processTargets(indexSource int, s *schema.AtmosVendorSource, tmplData struct{ Component, Version string }, vendorConfigFilePath, uri string, pType pkgType, sourceIsLocalFile bool) ([]pkgAtmosVendor, error) {
+func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
-	for indexTarget, tgt := range s.Targets {
-		target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", indexSource, indexTarget), tgt, tmplData, false)
+	for indexTarget, tgt := range params.Source.Targets {
+		target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
 		if err != nil {
 			return nil, err
 		}
-		targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
-		pkgName := s.Component
+		targetPath := filepath.Join(filepath.ToSlash(params.VendorConfigFilePath), filepath.ToSlash(target))
+		pkgName := params.Source.Component
 		if pkgName == "" {
-			pkgName = uri
+			pkgName = params.URI
 		}
 		// Create package struct
 		p := pkgAtmosVendor{
-			uri:               uri,
+			uri:               params.URI,
 			name:              pkgName,
 			targetPath:        targetPath,
-			sourceIsLocalFile: sourceIsLocalFile,
-			pkgType:           pType,
-			version:           s.Version,
-			atmosVendorSource: *s,
+			sourceIsLocalFile: params.SourceIsLocalFile,
+			pkgType:           params.PkgType,
+			version:           params.Source.Version,
+			atmosVendorSource: *params.Source,
 		}
 		packages = append(packages, p)
 	}
