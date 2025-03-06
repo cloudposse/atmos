@@ -73,7 +73,6 @@ require (
 	cloud.google.com/go/storage v1.38.0 // indirect
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
-	github.com/CycloneDX/cyclonedx-go v0.9.0 // indirect
 	github.com/CycloneDX/cyclonedx-go v0.9.2 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
@@ -264,9 +263,8 @@ require (
 	github.com/spf13/cast v1.7.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
-	github.com/terraform-docs/terraform-config-inspect v0.0.0-20210728164355-9c1f178932fa // indirect
 	github.com/tchap/go-patricia/v2 v2.3.2 // indirect
+	github.com/terraform-docs/terraform-config-inspect v0.0.0-20210728164355-9c1f178932fa // indirect
 	github.com/ugorji/go/codec v1.2.7 // indirect
 	github.com/ulikunitz/xz v0.5.12 // indirect
 	github.com/vbatts/tar-split v0.11.6 // indirect
