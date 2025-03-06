@@ -1,0 +1,14 @@
+name: Nightly builds
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 0 * * *"
+
+jobs:
+  release:
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
+    with:
+      publish: true
+      format: binary
+      prerelease: true
+    secrets: inherit
