@@ -133,9 +133,8 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		q = fmt.Sprintf("Did you mean 'atmos vendor pull -c %s'?", args[0])
 	}
 
-	return fmt.Errorf("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
-		"Example: atmos vendor pull -c <component>\n" +
-		q)
+	return fmt.Errorf("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n"+
+		"Example: atmos vendor pull -c <component>\n%s", q)
 }
 
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`

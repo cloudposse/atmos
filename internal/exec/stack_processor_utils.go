@@ -85,6 +85,8 @@ func ProcessYAMLConfigFiles(
 				false,
 				map[string]any{},
 				map[string]any{},
+				map[string]any{},
+				map[string]any{},
 				"",
 			)
 			if err != nil {
@@ -162,8 +164,10 @@ func ProcessYAMLConfigFile(
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
 	skipIfMissing bool,
-	parentTerraformOverrides map[string]any,
-	parentHelmfileOverrides map[string]any,
+	parentTerraformOverridesInline map[string]any,
+	parentTerraformOverridesImports map[string]any,
+	parentHelmfileOverridesInline map[string]any,
+	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
 ) (
 	map[string]any,
@@ -313,19 +317,19 @@ func ProcessYAMLConfigFile(
 		}
 	}
 
-	// Final Terraform `overrides`
-	finalTerraformOverrides, err = m.Merge(
+	// Terraform `overrides`
+	parentTerraformOverridesInline, err = m.Merge(
 		atmosConfig,
-		[]map[string]any{globalOverrides, terraformOverrides, parentTerraformOverrides},
+		[]map[string]any{globalOverrides, terraformOverrides, parentTerraformOverridesInline},
 	)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
 
-	// Final Helmfile `overrides`
-	finalHelmfileOverrides, err = m.Merge(
+	// Helmfile `overrides`
+	parentHelmfileOverridesInline, err = m.Merge(
 		atmosConfig,
-		[]map[string]any{globalOverrides, helmfileOverrides, parentHelmfileOverrides},
+		[]map[string]any{globalOverrides, helmfileOverrides, parentHelmfileOverridesInline},
 	)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
@@ -442,33 +446,34 @@ func ProcessYAMLConfigFile(
 				importStruct.SkipTemplatesProcessing,
 				true, // importStruct.IgnoreMissingTemplateValues,
 				importStruct.SkipIfMissing,
-				finalTerraformOverrides,
-				finalHelmfileOverrides,
+				parentTerraformOverridesInline,
+				parentTerraformOverridesImports,
+				parentHelmfileOverridesInline,
+				parentHelmfileOverridesImports,
 				"",
 			)
 			if err2 != nil {
 				return nil, nil, nil, nil, nil, err2
 			}
 
+			parentTerraformOverridesImports, err = m.Merge(
+				atmosConfig,
+				[]map[string]any{parentTerraformOverridesImports, importTerraformOverrides},
+			)
+			if err != nil {
+				return nil, nil, nil, nil, nil, err
+			}
+
+			// Helmfile `overrides`
+			parentHelmfileOverridesImports, err = m.Merge(
+				atmosConfig,
+				[]map[string]any{parentHelmfileOverridesImports, importHelmfileOverrides},
+			)
+			if err != nil {
+				return nil, nil, nil, nil, nil, err
+			}
+
 			stackConfigs = append(stackConfigs, yamlConfig)
-
-			// Final Terraform `overrides`
-			finalTerraformOverrides, err = m.Merge(
-				atmosConfig,
-				[]map[string]any{importTerraformOverrides, finalTerraformOverrides},
-			)
-			if err != nil {
-				return nil, nil, nil, nil, nil, err
-			}
-
-			// Final Helmfile `overrides`
-			finalHelmfileOverrides, err = m.Merge(
-				atmosConfig,
-				[]map[string]any{importHelmfileOverrides, finalHelmfileOverrides},
-			)
-			if err != nil {
-				return nil, nil, nil, nil, nil, err
-			}
 
 			importRelativePathWithExt := strings.Replace(filepath.ToSlash(importFile), filepath.ToSlash(basePath)+"/", "", 1)
 			ext2 := filepath.Ext(importRelativePathWithExt)
@@ -479,6 +484,24 @@ func ProcessYAMLConfigFile(
 			importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 			importsConfig[importRelativePathWithoutExt] = yamlConfigRaw
 		}
+	}
+
+	// Terraform `overrides`
+	finalTerraformOverrides, err = m.Merge(
+		atmosConfig,
+		[]map[string]any{parentTerraformOverridesImports, parentTerraformOverridesInline},
+	)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	// Helmfile `overrides`
+	finalHelmfileOverrides, err = m.Merge(
+		atmosConfig,
+		[]map[string]any{parentHelmfileOverridesImports, parentHelmfileOverridesInline},
+	)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
 	}
 
 	// Add the `overrides` section to all components in this stack manifest
@@ -1910,6 +1933,8 @@ func CreateComponentStackMap(
 					false,
 					false,
 					false,
+					map[string]any{},
+					map[string]any{},
 					map[string]any{},
 					map[string]any{},
 					"",

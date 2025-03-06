@@ -44,8 +44,10 @@ func ProcessYAMLConfigFile(
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
 	skipIfMissing bool,
-	parentTerraformOverrides map[string]any,
-	parentHelmfileOverrides map[string]any,
+	parentTerraformOverridesInline map[string]any,
+	parentTerraformOverridesImports map[string]any,
+	parentHelmfileOverridesInline map[string]any,
+	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
 ) (
 	map[string]any,
@@ -65,8 +67,10 @@ func ProcessYAMLConfigFile(
 		skipTemplatesProcessingInImports,
 		ignoreMissingTemplateValues,
 		skipIfMissing,
-		parentTerraformOverrides,
-		parentHelmfileOverrides,
+		parentTerraformOverridesInline,
+		parentTerraformOverridesImports,
+		parentHelmfileOverridesInline,
+		parentHelmfileOverridesImports,
 		atmosManifestJsonSchemaFilePath,
 	)
 }

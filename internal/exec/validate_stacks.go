@@ -164,6 +164,8 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			false,
 			map[string]any{},
 			map[string]any{},
+			map[string]any{},
+			map[string]any{},
 			atmosManifestJsonSchemaFilePath,
 		)
 		if err != nil {
