@@ -18,7 +18,6 @@ type versionExec struct {
 }
 
 func NewVersionExec() *versionExec {
-
 	return &versionExec{
 		printStyledText:            tuiUtils.PrintStyledText,
 		getLatestGitHubRepoRelease: u.GetLatestGitHubRepoRelease,
