@@ -26,19 +26,29 @@ import (
 type pkgType int
 
 const (
-	progressBarWidth         = 30
-	pkgTypeRemote    pkgType = iota
+	tempDirPermissions         = 0o700
+	progressBarWidth           = 30
+	maxWidth                   = 120
+	pkgTypeRemote      pkgType = iota
 	pkgTypeOci
 	pkgTypeLocal
 )
 
 var (
-	currentPkgNameStyle = theme.Styles.PackageName
-	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
-	checkMark           = theme.Styles.Checkmark
-	xMark               = theme.Styles.XMark
-	grayColor           = theme.Styles.GrayText
+	ErrValidPackage       = errors.New("no valid installer package provided for")
+	ErrTUIModel           = errors.New("failed to initialize TUI model")
+	ErrUnknownPackageType = errors.New("unknown package type")
+	currentPkgNameStyle   = theme.Styles.PackageName
+	doneStyle             = lipgloss.NewStyle().Margin(1, 2)
+	checkMark             = theme.Styles.Checkmark
+	xMark                 = theme.Styles.XMark
+	grayColor             = theme.Styles.GrayText
 )
+
+type installedPkgMsg struct {
+	err  error
+	name string
+}
 
 func (p pkgType) String() string {
 	names := [...]string{"remote", "oci", "local"}
@@ -102,7 +112,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	// Initialize model based on package type
 	model, err := newModelVendor(packages, dryRun, atmosConfig)
 	if err != nil {
-		return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
+		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", ErrTUIModel, err)
 	}
 
 	var opts []tea.ProgramOption
@@ -180,7 +190,6 @@ func (m *modelVendor) Init() tea.Cmd {
 	}
 	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.atmosConfig), m.spinner.Tick)
 }
-
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -190,9 +199,8 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc", "q":
-			return m, tea.Quit
+		if cmd := m.handleKeyPress(msg); cmd != nil {
+			return m, cmd
 		}
 
 	case installedPkgMsg:
@@ -219,16 +227,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.index >= len(m.packages)-1 {
 			// Everything's been installed. We're done!
 			m.done = true
-			if !m.isTTY {
-				u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
-				if m.dryRun {
-					u.LogInfo("Done! Dry run completed. No components vendored.\n")
-				}
-				if m.failedPkg > 0 {
-					u.LogInfo(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", len(m.packages)-m.failedPkg, m.failedPkg))
-				}
-				u.LogInfo(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
-			}
+			m.logNonNTYFinalStatus(pkg, &mark)
 			version := grayColor.Render(version)
 			return m, tea.Sequence(
 				tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
@@ -236,7 +235,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 		if !m.isTTY {
-			u.LogInfo(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+			log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
 		}
 		m.index++
 		// Update progress bar
@@ -262,7 +261,39 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m modelVendor) View() string {
+func (m *modelVendor) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "ctrl+c", "esc", "q":
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) {
+	if m.isTTY {
+		return
+	}
+
+	version := ""
+	if pkg.version != "" {
+		version = fmt.Sprintf("(%s)", pkg.version)
+	}
+	log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+
+	if m.dryRun {
+		log.Info("Done! Dry run completed. No components vendored.\n")
+	}
+
+	if m.failedPkg > 0 {
+		log.Info(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n",
+			len(m.packages)-m.failedPkg, m.failedPkg))
+	}
+
+	log.Info(fmt.Sprintf("Vendored %d components.\n", len(m.packages)))
+
+}
+
+func (m *modelVendor) View() string {
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
@@ -292,11 +323,6 @@ func (m modelVendor) View() string {
 	return spin + info + gap + prog + pkgCount
 }
 
-type installedPkgMsg struct {
-	err  error
-	name string
-}
-
 func max(a, b int) int {
 	if a > b {
 		return a
@@ -307,83 +333,88 @@ func max(a, b int) int {
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
-			// Simulate the action
-			time.Sleep(500 * time.Millisecond)
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
+			return handleDryRunInstall(p)
 		}
-		// Create temp directory
-		tempDir, err := os.MkdirTemp("", "atmos-vendor")
+		tempDir, err := createTempDir()
 		if err != nil {
-			return installedPkgMsg{
-				err:  fmt.Errorf("failed to create temp directory: %w", err),
-				name: p.name,
-			}
-		}
-		// Ensure directory permissions are restricted
-		if err := os.Chmod(tempDir, 0o700); err != nil {
-			return installedPkgMsg{
-				err:  fmt.Errorf("failed to set temp directory permissions: %w", err),
-				name: p.name,
-			}
+			return newInstallError(err, p.name)
 		}
 
 		defer removeTempDir(*atmosConfig, tempDir)
-
-		switch p.pkgType {
-		case pkgTypeRemote:
-			// Use go-getter to download remote packages
-			if err := GoGetterGet(*atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
-				return installedPkgMsg{
-					err:  fmt.Errorf("failed to download package: %w", err),
-					name: p.name,
-				}
-			}
-
-		case pkgTypeOci:
-			// Process OCI images
-			if err := processOciImage(*atmosConfig, p.uri, tempDir); err != nil {
-				return installedPkgMsg{
-					err:  fmt.Errorf("failed to process OCI image: %w", err),
-					name: p.name,
-				}
-			}
-
-		case pkgTypeLocal:
-			// Copy from local file system
-			copyOptions := cp.Options{
-				PreserveTimes: false,
-				PreserveOwner: false,
-				OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
-			}
-			if p.sourceIsLocalFile {
-				tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
-			}
-			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
-				return installedPkgMsg{
-					err:  fmt.Errorf("failed to copy package: %w", err),
-					name: p.name,
-				}
-			}
-		default:
-			return installedPkgMsg{
-				err:  fmt.Errorf("unknown package type %s for package %s", p.pkgType.String(), p.name),
-				name: p.name,
-			}
-
+		if err := p.installer(tempDir, atmosConfig); err != nil {
+			return newInstallError(err, p.name)
 		}
 		if err := copyToTarget(*atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
-			return installedPkgMsg{
-				err:  fmt.Errorf("failed to copy package: %w", err),
-				name: p.name,
-			}
+			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
 		return installedPkgMsg{
 			err:  nil,
 			name: p.name,
 		}
+	}
+}
+
+func (p *pkgAtmosVendor) installer(tempDir string, atmosConfig *schema.AtmosConfiguration) error {
+	switch p.pkgType {
+	case pkgTypeRemote:
+		// Use go-getter to download remote packages
+		if err := GoGetterGet(*atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package: %w", err)
+		}
+
+	case pkgTypeOci:
+		// Process OCI images
+		if err := processOciImage(*atmosConfig, p.uri, tempDir); err != nil {
+			return fmt.Errorf("failed to process OCI image: %w", err)
+		}
+
+	case pkgTypeLocal:
+		// Copy from local file system
+		copyOptions := cp.Options{
+			PreserveTimes: false,
+			PreserveOwner: false,
+			OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+		}
+		if p.sourceIsLocalFile {
+			tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
+		}
+		if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
+			return fmt.Errorf("failed to copy package: %w", err)
+		}
+	default:
+		return fmt.Errorf("%w %s for package %s", ErrUnknownPackageType, p.pkgType.String(), p.name)
+	}
+	return nil
+}
+
+func handleDryRunInstall(p *pkgAtmosVendor) tea.Msg {
+	// Simulate the action
+	time.Sleep(500 * time.Millisecond)
+	return installedPkgMsg{
+		err:  nil,
+		name: p.name,
+	}
+}
+
+func createTempDir() (string, error) {
+	// Create temp directory
+	tempDir, err := os.MkdirTemp("", "atmos-vendor")
+	if err != nil {
+		return "", err
+	}
+
+	// Ensure directory permissions are restricted
+	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
+		return "", err
+	}
+
+	return tempDir, nil
+}
+
+func newInstallError(err error, name string) installedPkgMsg {
+	return installedPkgMsg{
+		err:  fmt.Errorf("%s: %w", name, err),
+		name: name,
 	}
 }
 
@@ -398,7 +429,7 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosC
 
 	// No valid package provided
 	return func() tea.Msg {
-		err := fmt.Errorf("no valid installer package provided for %s", installer.name)
+		err := fmt.Errorf("%w: %s", ErrValidPackage, installer.name)
 		return installedPkgMsg{
 			err:  err,
 			name: installer.name,
