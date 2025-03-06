@@ -47,7 +47,7 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 
 	data := []byte(`{"test":"value"}`)
 	fullPath := filepath.Join(targetDir, filename)
-	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+	if err := os.WriteFile(fullPath, data, 0o600); err != nil {
 		return 0, 0, err
 	}
 
@@ -55,7 +55,7 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 }
 
 func (m *MockArtifactoryClient) UploadFiles(options artifactory.UploadServiceOptions, params ...services.UploadParams) (int, int, error) {
-	args := m.Called(params[0])
+	args := m.Called(options, params[0])
 	return args.Int(0), args.Int(1), args.Error(2)
 }
 
@@ -145,6 +145,27 @@ func TestArtifactoryStore_GetKey(t *testing.T) {
 			key:       "config.json",
 			expected:  "repo/prefix/dev/us-west-2/app/config.json",
 		},
+		{
+			name:      "slice value",
+			stack:     "dev",
+			component: "app",
+			key:       "[]string{\"a\",\"b\"}",
+			expected:  "repo/prefix/dev/app/[]string{\"a\",\"b\"}",
+		},
+		{
+			name:      "map value",
+			stack:     "dev",
+			component: "app",
+			key:       "map[string]string{\"key\":\"value\"}",
+			expected:  "repo/prefix/dev/app/map[string]string{\"key\":\"value\"}",
+		},
+		{
+			name:      "nested map value",
+			stack:     "dev",
+			component: "app",
+			key:       "map[string]map[string]int{\"outer\":{\"inner\":42}}",
+			expected:  "repo/prefix/dev/app/map[string]map[string]int{\"outer\":{\"inner\":42}}",
+		},
 	}
 
 	for _, tt := range tests {
@@ -152,6 +173,84 @@ func TestArtifactoryStore_GetKey(t *testing.T) {
 			result, err := store.getKey(tt.stack, tt.component, tt.key)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestArtifactoryStore_SetKey(t *testing.T) {
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		expected  string
+	}{
+		{
+			name:      "basic",
+			stack:     "dev",
+			component: "app",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/app/config.json",
+		},
+		{
+			name:      "nested component",
+			stack:     "dev",
+			component: "app/service",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/app/service/config.json",
+		},
+		{
+			name:      "multi-level stack",
+			stack:     "dev/us-west-2",
+			component: "app",
+			key:       "config.json",
+			expected:  "repo/prefix/dev/us-west-2/app/config.json",
+		},
+		{
+			name:      "slice value",
+			stack:     "dev",
+			component: "app",
+			key:       "[]string{\"a\",\"b\"}",
+			expected:  "repo/prefix/dev/app/[]string{\"a\",\"b\"}",
+		},
+		{
+			name:      "map value",
+			stack:     "dev",
+			component: "app",
+			key:       "map[string]string{\"key\":\"value\"}",
+			expected:  "repo/prefix/dev/app/map[string]string{\"key\":\"value\"}",
+		},
+		{
+			name:      "nested map value",
+			stack:     "dev",
+			component: "app",
+			key:       "map[string]map[string]int{\"outer\":{\"inner\":42}}",
+			expected:  "repo/prefix/dev/app/map[string]map[string]int{\"outer\":{\"inner\":42}}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := new(MockArtifactoryClient)
+			delimiter := "/"
+			store := &ArtifactoryStore{
+				prefix:         "prefix",
+				repoName:       "repo",
+				rtManager:      mockClient,
+				stackDelimiter: &delimiter,
+			}
+
+			mockClient.On("UploadFiles",
+				mock.MatchedBy(func(options artifactory.UploadServiceOptions) bool {
+					return options.FailFast == true
+				}),
+				mock.MatchedBy(func(params services.UploadParams) bool {
+					return params.Target == tt.expected && params.Flat == true
+				})).Return(1, 0, nil)
+
+			err := store.Set(tt.stack, tt.component, tt.key, []byte("test data"))
+			assert.NoError(t, err)
+			mockClient.AssertExpectations(t)
 		})
 	}
 }
