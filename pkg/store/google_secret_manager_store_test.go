@@ -424,14 +424,14 @@ func TestNewGSMStore(t *testing.T) {
 		skipMessage string
 	}{
 		{
-			name: "valid configuration",
+			name: "valid_options_invalid_credentials",
 			options: GSMStoreOptions{
 				ProjectID:      "test-project",
 				Prefix:         aws.String("test-prefix"),
 				StackDelimiter: aws.String("-"),
 				Credentials:    aws.String(`{"type": "service_account"}`), // Add minimal credentials
 			},
-			expectError: true, // We still expect an error, but a different one
+			expectError: true, // Error is expected because the minimal credentials are incomplete for authentication
 		},
 		{
 			name: "missing project ID",
@@ -463,6 +463,8 @@ func TestNewGSMStore(t *testing.T) {
 				assert.Error(t, err)
 				if tt.name == "missing project ID" {
 					assert.Contains(t, err.Error(), "project_id is required")
+				} else if tt.name == "valid_options_invalid_credentials" {
+					assert.Contains(t, err.Error(), "failed to create Secret Manager client")
 				} else {
 					assert.Contains(t, err.Error(), "failed to create Secret Manager client")
 				}
