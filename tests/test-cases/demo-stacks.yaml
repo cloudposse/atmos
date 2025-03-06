@@ -53,7 +53,8 @@ tests:
     description: "Verify atmos version --check command functions correctly."
     workdir: "../examples/demo-stacks"
     env:
-      ATMOS_LOGS_LEVEL: "Warning"
+      # TODO: change back to warning post testing
+      ATMOS_LOGS_LEVEL: "Debug"
     command: "atmos"
     args:
       - "version"
