@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	wrapErrFmt                     = "%w"
+	// wrapErrFmt is defined in error.go as wrapErrFmtWithDetails ("%w: %v")
+	// Use the detailed formatter to support two arguments
 	tempDirPermissions os.FileMode = 0o755
 )
 
@@ -251,13 +252,13 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		tempDir, err := os.MkdirTemp("", "atmos-vendor")
 		if err != nil {
 			return installedPkgMsg{
-				err:  fmt.Errorf(wrapErrFmt, ErrCreateTempDir, err),
+				err:  fmt.Errorf(wrapErrFmtWithDetails, ErrCreateTempDir, err),
 				name: p.name,
 			}
 		}
 		if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
 			return installedPkgMsg{
-				err:  fmt.Errorf(wrapErrFmt, ErrSetTempDirPermissions, err),
+				err:  fmt.Errorf(wrapErrFmtWithDetails, ErrSetTempDirPermissions, err),
 				name: p.name,
 			}
 		}
@@ -268,7 +269,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		case pkgTypeRemote:
 			if err := GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, getterTimeout); err != nil {
 				return installedPkgMsg{
-					err:  fmt.Errorf(wrapErrFmt, ErrDownloadPackage, err),
+					err:  fmt.Errorf(wrapErrFmtWithDetails, ErrDownloadPackage, err),
 					name: p.name,
 				}
 			}
@@ -276,7 +277,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		case pkgTypeOci:
 			if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
 				return installedPkgMsg{
-					err:  fmt.Errorf(wrapErrFmt, ErrProcessOCIImage, err),
+					err:  fmt.Errorf(wrapErrFmtWithDetails, ErrProcessOCIImage, err),
 					name: p.name,
 				}
 			}
@@ -292,19 +293,19 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 			if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
 				return installedPkgMsg{
-					err:  fmt.Errorf(wrapErrFmt, ErrCopyPackage, err),
+					err:  fmt.Errorf(wrapErrFmtWithDetails, ErrCopyPackage, err),
 					name: p.name,
 				}
 			}
 		default:
 			return installedPkgMsg{
-				err:  fmt.Errorf(wrapErrFmt, ErrUnknownPackageType),
+				err:  fmt.Errorf(wrapErrFmtWithDetails, ErrUnknownPackageType, nil),
 				name: p.name,
 			}
 		}
 		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
 			return installedPkgMsg{
-				err:  fmt.Errorf(wrapErrFmt, ErrCopyPackageToTarget, err),
+				err:  fmt.Errorf(wrapErrFmtWithDetails, ErrCopyPackageToTarget, err),
 				name: p.name,
 			}
 		}
@@ -325,7 +326,8 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig schema.AtmosCo
 	}
 
 	return func() tea.Msg {
-		err := fmt.Errorf("no valid installer package provided for %s", installer.name)
+		// Use only the static error wrapping without dynamic insertion.
+		err := fmt.Errorf("%w", ErrNoValidInstallerPackage)
 		return installedPkgMsg{
 			err:  err,
 			name: installer.name,

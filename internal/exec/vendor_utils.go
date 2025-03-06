@@ -427,7 +427,7 @@ func ExecuteAtmosVendorInternal(
 
 		model := newModelAtmosVendorInternal(packages, dryRun, &atmosConfig)
 		if err != nil {
-			return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
+			return fmt.Errorf("%w: %v", ErrFailedToInitializeTUIModelWithDetails, err)
 		}
 		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
 			return fmt.Errorf("failed to execute vendor operation in TUI mode: %w (check terminal state)", err)
