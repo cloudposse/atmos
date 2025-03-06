@@ -128,7 +128,7 @@ func validateVendorFlags(flg VendorFlags) error {
 
 func handleVendorConfig(atmosConfig schema.AtmosConfiguration, flg VendorFlags, args []string) error {
 	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(
-		atmosConfig,
+		&atmosConfig,
 		cfg.AtmosVendorConfigFileName,
 		true,
 	)
