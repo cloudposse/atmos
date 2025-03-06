@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	log "github.com/charmbracelet/log" // Charmbracelet structured logger
 	"github.com/pkg/errors"
@@ -81,7 +82,7 @@ func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 
 	// Get registry from parsed reference
 	registry := ref.Context().Registry.Name()
-	if registry == "ghcr.io" {
+	if strings.EqualFold(registry, "ghcr.io") {
 		githubToken := os.Getenv(githubTokenEnv)
 		if githubToken != "" {
 			opts = append(opts, remote.WithAuth(&authn.Basic{

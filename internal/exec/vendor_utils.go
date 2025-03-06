@@ -89,12 +89,14 @@ func resolveVendorConfigPath(
 func handleVendorConfigFileError(err error, filePath string) (schema.AtmosVendorConfig, bool, string, error) {
 	var vendorConfig schema.AtmosVendorConfig
 	if os.IsNotExist(err) {
-		return vendorConfig, false, "", fmt.Errorf("vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
+		// File does not exist
+		return vendorConfig, false, "", fmt.Errorf("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
 	}
 	if os.IsPermission(err) {
-		return vendorConfig, false, "", fmt.Errorf("permission denied when accessing '%s'. Please check the file permissions", filePath)
+		return vendorConfig, false, "", fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions.", filePath)
 	}
-	return vendorConfig, false, "", fmt.Errorf("error accessing vendor config file: %w", err)
+	return vendorConfig, false, "", fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
+
 }
 
 // collectConfigFiles collects all YAML config files to process.
