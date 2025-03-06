@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -10,9 +11,16 @@ import (
 	"github.com/googleapis/gax-go/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// MockGSMClient is a mock implementation of GSMClient
+// Define test error constants.
+var (
+	ErrInternalError = errors.New("internal error")
+)
+
+// MockGSMClient is a mock implementation of GSMClient.
 type MockGSMClient struct {
 	mock.Mock
 }
@@ -46,7 +54,7 @@ func (m *MockGSMClient) Close() error {
 	return args.Error(0)
 }
 
-// newGSMStoreWithClient creates a new GSMStore with a provided client (test helper)
+// newGSMStoreWithClient creates a new GSMStore with a provided client (test helper).
 func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) *GSMStore {
 	store := &GSMStore{
 		client:    client,
@@ -76,7 +84,7 @@ func TestGSMStore_Set(t *testing.T) {
 		stack     string
 		component string
 		key       string
-		value     interface{}
+		value     any
 		mockFn    func(*MockGSMClient)
 		wantErr   bool
 	}{
@@ -141,7 +149,7 @@ func TestGSMStore_Set(t *testing.T) {
 					return req.Parent == expectedReq.Parent &&
 						req.SecretId == expectedReq.SecretId &&
 						req.Secret.GetReplication().GetAutomatic() != nil
-				})).Return(nil, errors.New("secret already exists"))
+				})).Return(nil, status.Error(codes.AlreadyExists, "secret already exists"))
 
 				m.On("AddSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AddSecretVersionRequest) bool {
 					expectedReq := &secretmanagerpb.AddSecretVersionRequest{
@@ -178,7 +186,7 @@ func TestGSMStore_Set(t *testing.T) {
 					return req.Parent == expectedReq.Parent &&
 						req.SecretId == expectedReq.SecretId &&
 						req.Secret.GetReplication().GetAutomatic() != nil
-				})).Return(nil, errors.New("internal error"))
+				})).Return(nil, fmt.Errorf("internal error: %w", ErrInternalError))
 			},
 			wantErr: true,
 		},
@@ -217,7 +225,7 @@ func TestGSMStore_Set(t *testing.T) {
 					}
 					return req.Parent == expectedReq.Parent &&
 						string(req.Payload.Data) == string(expectedReq.Payload.Data)
-				})).Return(nil, errors.New("internal error"))
+				})).Return(nil, fmt.Errorf("internal error: %w", ErrInternalError))
 			},
 			wantErr: true,
 		},
@@ -294,7 +302,7 @@ func TestGSMStore_Get(t *testing.T) {
 		component string
 		key       string
 		mockFn    func(*MockGSMClient)
-		want      interface{}
+		want      any
 		wantErr   bool
 	}{
 		{
@@ -321,14 +329,14 @@ func TestGSMStore_Get(t *testing.T) {
 			name:      "secret not found",
 			stack:     "dev-usw2",
 			component: "app/service",
-			key:       "non-existent-key",
+			key:       "config-key",
 			mockFn: func(m *MockGSMClient) {
 				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
 					expectedReq := &secretmanagerpb.AccessSecretVersionRequest{
-						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_non-existent-key/versions/latest",
+						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest",
 					}
 					return req.Name == expectedReq.Name
-				})).Return(nil, errors.New("secret not found"))
+				})).Return(nil, status.Error(codes.NotFound, "secret not found"))
 			},
 			want:    nil,
 			wantErr: true,

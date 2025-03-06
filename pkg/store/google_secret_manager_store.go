@@ -19,7 +19,17 @@ const (
 	gsmKeySeparator     = "_"
 )
 
-// GSMClient is the interface that wraps the Google Secret Manager client methods we use
+// Define package-level error variables.
+var (
+	ErrProjectIDRequired      = fmt.Errorf("project_id is required in Google Secret Manager store configuration")
+	ErrStackDelimiterNotSet   = fmt.Errorf("stack delimiter is not set")
+	ErrStackCannotBeEmpty     = fmt.Errorf("stack cannot be empty")
+	ErrComponentCannotBeEmpty = fmt.Errorf("component cannot be empty")
+	ErrKeyCannotBeEmpty       = fmt.Errorf("key cannot be empty")
+	ErrValueMustBeString      = fmt.Errorf("value must be a string")
+)
+
+// GSMClient is the interface that wraps the Google Secret Manager client methods we use.
 type GSMClient interface {
 	CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
 	AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
@@ -35,6 +45,7 @@ type GSMStore struct {
 	stackDelimiter *string
 }
 
+// GSMStoreOptions defines the configuration options for Google Secret Manager store.
 type GSMStoreOptions struct {
 	Prefix         *string `mapstructure:"prefix"`
 	ProjectID      string  `mapstructure:"project_id"`
@@ -42,19 +53,19 @@ type GSMStoreOptions struct {
 	Credentials    *string `mapstructure:"credentials"` // Optional JSON credentials
 }
 
-// Ensure GSMStore implements the store.Store interface.
+// Verify that GSMStore implements the Store interface.
 var _ Store = (*GSMStore)(nil)
 
 // NewGSMStore initializes a new Google Secret Manager Store.
 func NewGSMStore(options GSMStoreOptions) (Store, error) {
-	ctx := context.Background()
-
 	if options.ProjectID == "" {
-		return nil, fmt.Errorf("project_id is required in Google Secret Manager store configuration")
+		return nil, ErrProjectIDRequired
 	}
 
+	ctx := context.Background()
+
 	var clientOpts []option.ClientOption
-	if options.Credentials != nil {
+	if options.Credentials != nil && *options.Credentials != "" {
 		clientOpts = append(clientOpts, option.WithCredentialsJSON([]byte(*options.Credentials)))
 	}
 
@@ -86,15 +97,15 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 	return store, nil
 }
 
+// getKey generates a key for the Google Secret Manager.
 func (s *GSMStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", fmt.Errorf("stack delimiter is not set")
+		return "", ErrStackDelimiterNotSet
 	}
 
-	// Get the base key using the common getKey function
 	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, gsmKeySeparator)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error getting key: %w", err)
 	}
 
 	// Replace any remaining slashes with underscores as Secret Manager doesn't allow slashes
@@ -130,9 +141,9 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 					Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
 				}, nil
 			case codes.NotFound:
-				return nil, fmt.Errorf("projects/%s/secrets/%s not found", s.projectID, secretID)
+				return nil, fmt.Errorf("projects/%s/secrets/%s not found: %w", s.projectID, secretID, err)
 			case codes.PermissionDenied:
-				return nil, fmt.Errorf("permission denied for project %s - please check if the project exists and you have the required permissions", s.projectID)
+				return nil, fmt.Errorf("permission denied for project %s - please check if the project exists and you have the required permissions: %w", s.projectID, err)
 			}
 		}
 		return nil, fmt.Errorf("failed to create secret: %w", err)
@@ -153,9 +164,9 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 		if st, ok := status.FromError(err); ok {
 			switch st.Code() {
 			case codes.NotFound:
-				return fmt.Errorf("resource not found: %s", secret.GetName())
+				return fmt.Errorf("resource not found %s: %w", secret.GetName(), err)
 			case codes.PermissionDenied:
-				return fmt.Errorf("permission denied for %s - please check if you have the required permissions", secret.GetName())
+				return fmt.Errorf("permission denied for %s - please check if you have the required permissions: %w", secret.GetName(), err)
 			}
 		}
 		return fmt.Errorf("failed to add secret version: %w", err)
@@ -164,23 +175,23 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 }
 
 // Set stores a key-value pair in Google Secret Manager.
-func (s *GSMStore) Set(stack string, component string, key string, value interface{}) error {
+func (s *GSMStore) Set(stack string, component string, key string, value any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
 	defer cancel()
 
 	if stack == "" {
-		return fmt.Errorf("stack cannot be empty")
+		return ErrStackCannotBeEmpty
 	}
 	if component == "" {
-		return fmt.Errorf("component cannot be empty")
+		return ErrComponentCannotBeEmpty
 	}
 	if key == "" {
-		return fmt.Errorf("key cannot be empty")
+		return ErrKeyCannotBeEmpty
 	}
 
 	strValue, ok := value.(string)
 	if !ok {
-		return fmt.Errorf("value must be a string")
+		return ErrValueMustBeString
 	}
 
 	secretID, err := s.getKey(stack, component, key)
@@ -201,18 +212,18 @@ func (s *GSMStore) Set(stack string, component string, key string, value interfa
 }
 
 // Get retrieves a value by key from Google Secret Manager.
-func (s *GSMStore) Get(stack string, component string, key string) (interface{}, error) {
+func (s *GSMStore) Get(stack string, component string, key string) (any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
 	defer cancel()
 
 	if stack == "" {
-		return nil, fmt.Errorf("stack cannot be empty")
+		return nil, ErrStackCannotBeEmpty
 	}
 	if component == "" {
-		return nil, fmt.Errorf("component cannot be empty")
+		return nil, ErrComponentCannotBeEmpty
 	}
 	if key == "" {
-		return nil, fmt.Errorf("key cannot be empty")
+		return nil, ErrKeyCannotBeEmpty
 	}
 
 	// Get the secret ID using getKey
@@ -232,12 +243,12 @@ func (s *GSMStore) Get(stack string, component string, key string) (interface{},
 		if st, ok := status.FromError(err); ok {
 			switch st.Code() {
 			case codes.NotFound:
-				return nil, fmt.Errorf("resource not found: %s", secretID)
+				return nil, fmt.Errorf("resource not found %s: %w", secretID, err)
 			case codes.PermissionDenied:
-				return nil, fmt.Errorf("permission denied for %s - please check if you have the required permissions", name)
+				return nil, fmt.Errorf("permission denied for %s - please check if you have the required permissions: %w", name, err)
 			}
 		}
-		return nil, fmt.Errorf("failed to retrieve secret version: %w", err)
+		return nil, fmt.Errorf("failed to access secret version: %w", err)
 	}
 
 	return string(result.Payload.Data), nil
