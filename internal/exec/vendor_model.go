@@ -26,7 +26,8 @@ import (
 type pkgType int
 
 const (
-	pkgTypeRemote pkgType = iota
+	progressBarWidth         = 30
+	pkgTypeRemote    pkgType = iota
 	pkgTypeOci
 	pkgTypeLocal
 )
@@ -127,7 +128,7 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 ) (modelVendor, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
-		progress.WithWidth(30),
+		progress.WithWidth(progressBarWidth),
 		progress.WithoutPercentage(),
 	)
 	s := spinner.New()
