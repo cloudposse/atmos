@@ -568,7 +568,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// and improving reproducibility across different systems.
 	var envVars []string
 	for key, value := range tc.Env {
-		// t.Logf("Setting env: %s=%s", key, value)
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars
