@@ -1,7 +1,6 @@
 package store
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -282,7 +281,7 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 			mockSetup: func() {
 				mockClient.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
 					return params.Pattern == "repo/prefix/dev/app/config.json"
-				})).Return(0, 1, fmt.Errorf("download failed"))
+				})).Return(0, 1, ErrTestDownloadFailed)
 			},
 			expectError: true,
 			errorMsg:    "download failed",

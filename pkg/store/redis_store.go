@@ -37,7 +37,7 @@ func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 	if options.URL != nil {
 		opts, err := redis.ParseURL(*options.URL)
 		if err != nil {
-			return &redis.Options{}, fmt.Errorf("failed to parse redis url: %v", err)
+			return &redis.Options{}, fmt.Errorf("%w: %v", ErrParseRedisURL, err)
 		}
 
 		return opts, nil
@@ -47,7 +47,7 @@ func getRedisOptions(options *RedisStoreOptions) (*redis.Options, error) {
 		return redis.ParseURL(os.Getenv("ATMOS_REDIS_URL"))
 	}
 
-	return &redis.Options{}, fmt.Errorf("either url must be set in options or ATMOS_REDIS_URL environment variable must be set")
+	return &redis.Options{}, ErrMissingRedisURL
 }
 
 func NewRedisStore(options RedisStoreOptions) (Store, error) {
@@ -63,7 +63,7 @@ func NewRedisStore(options RedisStoreOptions) (Store, error) {
 
 	opts, err := getRedisOptions(&options)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse redis url: %v", err)
+		return nil, fmt.Errorf("%w: %v", ErrParseRedisURL, err)
 	}
 
 	redisClient := redis.NewClient(opts)
@@ -77,7 +77,7 @@ func NewRedisStore(options RedisStoreOptions) (Store, error) {
 
 func (s *RedisStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", fmt.Errorf("stack delimiter is not set")
+		return "", ErrStackDelimiterNotSet
 	}
 
 	prefixParts := []string{s.prefix}
@@ -88,26 +88,26 @@ func (s *RedisStore) getKey(stack string, component string, key string) (string,
 
 func (s *RedisStore) Get(stack string, component string, key string) (interface{}, error) {
 	if stack == "" {
-		return nil, fmt.Errorf("stack cannot be empty")
+		return nil, ErrEmptyStack
 	}
 
 	if component == "" {
-		return nil, fmt.Errorf("component cannot be empty")
+		return nil, ErrEmptyComponent
 	}
 
 	if key == "" {
-		return nil, fmt.Errorf("key cannot be empty")
+		return nil, ErrEmptyKey
 	}
 
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key: %v", err)
+		return nil, fmt.Errorf("%w: %v", ErrGetKey, err)
 	}
 
 	ctx := context.Background()
 	jsonData, err := s.redisClient.Get(ctx, paramName).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key: %v", err)
+		return nil, fmt.Errorf("%w: %v", ErrGetRedisKey, err)
 	}
 
 	// First try to unmarshal as JSON
@@ -122,26 +122,26 @@ func (s *RedisStore) Get(stack string, component string, key string) (interface{
 
 func (s *RedisStore) Set(stack string, component string, key string, value interface{}) error {
 	if stack == "" {
-		return fmt.Errorf("stack cannot be empty")
+		return ErrEmptyStack
 	}
 
 	if component == "" {
-		return fmt.Errorf("component cannot be empty")
+		return ErrEmptyComponent
 	}
 
 	if key == "" {
-		return fmt.Errorf("key cannot be empty")
+		return ErrEmptyKey
 	}
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf("failed to get key: %v", err)
+		return fmt.Errorf("%w: %v", ErrGetKey, err)
 	}
 
 	jsonData, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("failed to marshal value: %v", err)
+		return fmt.Errorf("%w: %v", ErrMarshalValue, err)
 	}
 
 	ctx := context.Background()
