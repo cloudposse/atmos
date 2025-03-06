@@ -9,13 +9,11 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	tea "github.com/charmbracelet/bubbletea"
 	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -298,28 +296,9 @@ func ExecuteAtmosVendorInternal(
 			// Log the action (handled in downloadAndInstall)
 		}
 	}
-
-	// Run TUI to process packages
 	if len(packages) > 0 {
-		var opts []tea.ProgramOption
-		if !term.IsTTYSupportForStdout() {
-			// set tea.WithInput(nil) workaround tea program not run on not TTY mod issue on non TTY mode https://github.com/charmbracelet/bubbletea/issues/761
-			opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-			u.LogWarning("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		}
-
-		model, err := newModelAtmosVendorInternal(packages, dryRun, atmosConfig)
-		if err != nil {
-			return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
-		}
-		if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
-			return fmt.Errorf("failed to execute vendor operation in TUI mode: %w (check terminal state)", err)
-		}
-		if model.failedPkg > 0 {
-			return fmt.Errorf("%w: %d", ErrVendorComponents, model.failedPkg)
-		}
+		return executeVendorModel(packages, dryRun, atmosConfig)
 	}
-
 	return nil
 }
 

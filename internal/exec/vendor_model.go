@@ -29,6 +29,14 @@ const (
 	pkgTypeLocal
 )
 
+var (
+	currentPkgNameStyle = theme.Styles.PackageName
+	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
+	checkMark           = theme.Styles.Checkmark
+	xMark               = theme.Styles.XMark
+	grayColor           = theme.Styles.GrayText
+)
+
 func (p pkgType) String() string {
 	names := [...]string{"remote", "oci", "local"}
 	if p < pkgTypeRemote || p > pkgTypeLocal {
@@ -53,6 +61,18 @@ type pkgAtmosVendor struct {
 	version           string
 	atmosVendorSource schema.AtmosVendorSource
 }
+type pkgComponentVendor struct {
+	uri                 string
+	name                string
+	sourceIsLocalFile   bool
+	pkgType             pkgType
+	version             string
+	vendorComponentSpec schema.VendorComponentSpec
+	componentPath       string
+	IsComponent         bool
+	IsMixins            bool
+	mixinFilename       string
+}
 
 type modelVendor struct {
 	packages    []pkgVendor
@@ -68,15 +88,42 @@ type modelVendor struct {
 	isTTY       bool
 }
 
-var (
-	currentPkgNameStyle = theme.Styles.PackageName
-	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
-	checkMark           = theme.Styles.Checkmark
-	xMark               = theme.Styles.XMark
-	grayColor           = theme.Styles.GrayText
-)
+func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
+	packages []T,
+	dryRun bool,
+	atmosConfig schema.AtmosConfiguration,
+) error {
+	if len(packages) == 0 {
+		return nil
+	}
+	// Initialize model based on package type
+	model, err := newModelVendor(packages, dryRun, atmosConfig)
 
-func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) (modelVendor, error) {
+	if err != nil {
+		return fmt.Errorf("failed to initialize TUI model: %v (verify terminal capabilities and permissions)", err)
+	}
+
+	var opts []tea.ProgramOption
+	if !term.IsTTYSupportForStdout() {
+		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		u.LogWarning("No TTY detected - using basic output mode")
+	}
+
+	if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
+		return fmt.Errorf("execution failed: %w", err)
+	}
+
+	if model.failedPkg > 0 {
+		return fmt.Errorf("%w: %d", ErrVendorComponents, model.failedPkg)
+	}
+	return nil
+}
+
+func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
+	pkgs []T,
+	dryRun bool,
+	atmosConfig schema.AtmosConfiguration,
+) (modelVendor, error) {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(30),
@@ -84,26 +131,43 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig
 	)
 	s := spinner.New()
 	s.Style = theme.Styles.Link
+
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
 	}
-	isTTY := term.IsTTYSupportForStdout()
-	var vendorPks []pkgVendor
-	for _, pkg := range pkgs {
-		p := pkgVendor{
-			name:         pkg.name,
-			version:      pkg.version,
-			atmosPackage: &pkg,
+
+	vendorPks := make([]pkgVendor, len(pkgs))
+
+	// Determine type once using first element
+	switch any(pkgs[0]).(type) {
+	case pkgComponentVendor:
+		for i := range pkgs {
+			// Get original element from slice
+			cp := any(pkgs[i]).(pkgComponentVendor)
+			vendorPks[i] = pkgVendor{
+				name:             cp.name,
+				version:          cp.version,
+				componentPackage: &cp,
+			}
 		}
-		vendorPks = append(vendorPks, p)
+	case pkgAtmosVendor:
+		for i := range pkgs {
+			ap := any(pkgs[i]).(pkgAtmosVendor)
+			vendorPks[i] = pkgVendor{
+				name:         ap.name,
+				version:      ap.version,
+				atmosPackage: &ap,
+			}
+		}
 	}
+
 	return modelVendor{
 		packages:    vendorPks,
 		spinner:     s,
 		progress:    p,
 		dryRun:      dryRun,
 		atmosConfig: atmosConfig,
-		isTTY:       isTTY,
+		isTTY:       term.IsTTYSupportForStdout(),
 	}, nil
 }
 
