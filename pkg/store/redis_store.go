@@ -110,13 +110,14 @@ func (s *RedisStore) Get(stack string, component string, key string) (interface{
 		return nil, fmt.Errorf("failed to get key: %v", err)
 	}
 
+	// First try to unmarshal as JSON
 	var result interface{}
-	err = json.Unmarshal([]byte(jsonData), &result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal file: %v", err)
+	if err := json.Unmarshal([]byte(jsonData), &result); err == nil {
+		return result, nil
 	}
 
-	return result, nil
+	// If JSON unmarshalling fails, return the raw string value
+	return jsonData, nil
 }
 
 func (s *RedisStore) Set(stack string, component string, key string, value interface{}) error {

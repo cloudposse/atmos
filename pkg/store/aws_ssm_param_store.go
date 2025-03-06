@@ -146,9 +146,12 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 		return nil, fmt.Errorf("failed to get parameter '%s': %w", paramName, err)
 	}
 
+	// First try to unmarshal as JSON
 	var value interface{}
-	if err := json.Unmarshal([]byte(*result.Parameter.Value), &value); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal parameter value: %w", err)
+	if err := json.Unmarshal([]byte(*result.Parameter.Value), &value); err == nil {
+		return value, nil
 	}
-	return value, nil
+
+	// If JSON unmarshalling fails, return the raw string value
+	return *result.Parameter.Value, nil
 }
