@@ -13,13 +13,14 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 
 	tfdocsMarkdown "github.com/terraform-docs/terraform-docs/format"
 	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
 	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
 
 	"github.com/hashicorp/go-getter"
+
+	"github.com/charmbracelet/log"
 )
 
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate' logic.
@@ -62,10 +63,10 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 
 	docsGenerate := rootConfig.Settings.Docs.Generate
 	if len(docsGenerate.Input) == 0 {
-		u.LogDebug(rootConfig, "No 'docs.generate.input' sources defined in atmos.yaml.")
+		log.Debug("No 'docs.generate.input' sources defined in atmos.yaml.")
 	}
 	if len(docsGenerate.Template) == 0 {
-		u.LogDebug(rootConfig, "No 'docs.generate.template' is defined, generating minimal readme.")
+		log.Debug("No 'docs.generate.template' is defined, generating minimal readme.")
 	}
 
 	// If `--all`, walk subdirectories. Otherwise, process just one.
@@ -120,7 +121,7 @@ func generateAllReadmesWithChdir(
 				localConfig, localErr := cfg.InitCliConfig(infoLocal, false)
 				if localErr != nil {
 					// fallback to root config
-					u.LogDebug(rootConfig, fmt.Sprintf("Error loading local atmos.yaml in %s: %v. Using root config instead.", subDir, localErr))
+					log.Debug("Error loading local atmos.yaml", "directory", subDir, "error", localErr)
 					return generateSingleReadme(rootConfig, subDir, rootConfig.Settings.Docs.Generate)
 				}
 
@@ -166,7 +167,7 @@ func generateSingleReadmeWithChdir(
 			// If we got a local config, use it
 			return generateSingleReadme(localConfig, targetDir, localConfig.Settings.Docs.Generate)
 		}
-		u.LogDebug(rootConfig, fmt.Sprintf("Error loading local atmos.yaml in %s: %v. Using root config instead.", targetDir, localErr))
+		log.Debug("Error loading local atmos.yaml", "directory", targetDir, "error", localErr)
 	}
 
 	// fallback to root config if no local atmos or we failed to load it
@@ -185,7 +186,7 @@ func generateSingleReadme(
 	for _, src := range docsGenerate.Input {
 		dataMap, err := fetchAndParseYAML(atmosConfig, src, dir)
 		if err != nil {
-			u.LogTrace(atmosConfig, fmt.Sprintf("Skipping input '%s' due to error: %v", src, err))
+			log.Debug("Skipping input due to error", "input", src, "error", err)
 			continue
 		}
 		allMaps = append(allMaps, dataMap)
@@ -211,14 +212,14 @@ func generateSingleReadme(
 	if docsGenerate.Template != "" {
 		templateFile, tempDir, err := downloadSource(atmosConfig, docsGenerate.Template, dir)
 		if err != nil {
-			u.LogDebug(atmosConfig, fmt.Sprintf("Error fetching template '%s': %v. Using fallback instead.", docsGenerate.Template, err))
+			log.Debug("Error fetching template", "template", docsGenerate.Template, "error", err)
 		} else {
 			defer removeTempDir(atmosConfig, tempDir)
 			body, err := os.ReadFile(templateFile)
 			if err == nil {
 				chosenTemplate = string(body)
 			} else {
-				u.LogDebug(atmosConfig, fmt.Sprintf("Error reading template file: %v. Using fallback.", err))
+				log.Debug("Error reading template file", "error", err)
 			}
 		}
 	}
@@ -250,7 +251,7 @@ func generateSingleReadme(
 		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
 	}
 
-	u.LogInfo(atmosConfig, fmt.Sprintf("Generated docs at %s", outputPath))
+	log.Info("Generated docs", "output", outputPath)
 	return nil
 }
 
