@@ -9,14 +9,10 @@ Usage:
 
 Flags:
 
-    -h, --help    help for apply (default false)
+    -h, --help    help for apply
 
 
 Global Flags:
-
-        --                          Use double dashes to separate Atmos-specific
-                                    options from native arguments and flags for
-                                    the command.
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file
@@ -37,6 +33,10 @@ Global Flags:
     -s, --stack string              The stack flag specifies the environment
                                     or configuration set for deployment in Atmos
                                     CLI.
+
+        --                          Use double dashes to separate Atmos-specific
+                                    options from native arguments and flags for
+                                    the command.
 
 
 Use atmos helmfile apply --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   

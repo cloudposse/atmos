@@ -16,6 +16,9 @@
     "vars": {
       "$ref": "#/definitions/vars"
     },
+    "hooks": {
+      "$ref": "#/definitions/hooks"
+    },
     "env": {
       "$ref": "#/definitions/env"
     },
@@ -35,59 +38,42 @@
   "additionalProperties": true,
   "oneOf": [
     {
-      "required": [
-        "workflows"
-      ]
+      "required": ["workflows"]
     },
     {
       "anyOf": [
         {
           "additionalProperties": true,
           "not": {
-            "required": [
-              "workflows"
-            ]
+            "required": ["workflows"]
           }
         },
         {
-          "required": [
-            "import"
-          ]
+          "required": ["import"]
         },
         {
-          "required": [
-            "terraform"
-          ]
+          "required": ["terraform"]
         },
         {
-          "required": [
-            "helmfile"
-          ]
+          "required": ["helmfile"]
         },
         {
-          "required": [
-            "vars"
-          ]
+          "required": ["vars"]
         },
         {
-          "required": [
-            "env"
-          ]
+          "required": ["hooks"]
         },
         {
-          "required": [
-            "settings"
-          ]
+          "required": ["env"]
         },
         {
-          "required": [
-            "components"
-          ]
+          "required": ["settings"]
         },
         {
-          "required": [
-            "overrides"
-          ]
+          "required": ["components"]
+        },
+        {
+          "required": ["overrides"]
         }
       ]
     }
@@ -122,9 +108,7 @@
                 "additionalProperties": true
               }
             },
-            "required": [
-              "path"
-            ]
+            "required": ["path"]
           }
         ]
       }
@@ -151,6 +135,9 @@
       "properties": {
         "vars": {
           "$ref": "#/definitions/vars"
+        },
+        "hooks": {
+          "$ref": "#/definitions/hooks"
         },
         "env": {
           "$ref": "#/definitions/env"
@@ -187,7 +174,7 @@
       "type": "object",
       "description": "Terraform components section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
+        "^[/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/terraform_component_manifest"
         }
       },
@@ -267,7 +254,7 @@
       "type": "object",
       "description": "Helmfile components section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
+        "^[/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/helmfile_component_manifest"
         }
       },
@@ -318,10 +305,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "abstract",
-            "real"
-          ]
+          "enum": ["abstract", "real"]
         },
         "enabled": {
           "type": "boolean",
@@ -389,7 +373,7 @@
       "type": "object",
       "description": "Validation section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
+        "^[/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/validation_manifest"
         }
       },
@@ -402,10 +386,7 @@
       "properties": {
         "schema_type": {
           "type": "string",
-          "enum": [
-            "jsonschema",
-            "opa"
-          ]
+          "enum": ["jsonschema", "opa"]
         },
         "schema_path": {
           "type": "string"
@@ -430,10 +411,7 @@
         }
       },
       "additionalProperties": false,
-      "required": [
-        "schema_type",
-        "schema_path"
-      ],
+      "required": ["schema_type", "schema_path"],
       "title": "validation_manifest"
     },
     "vars": {
@@ -556,7 +534,7 @@
       "type": "object",
       "description": "Depends_on section",
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
+        "^[/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/depends_on_manifest"
         }
       },
@@ -591,19 +569,13 @@
       },
       "oneOf": [
         {
-          "required": [
-            "component"
-          ]
+          "required": ["component"]
         },
         {
-          "required": [
-            "file"
-          ]
+          "required": ["file"]
         },
         {
-          "required": [
-            "folder"
-          ]
+          "required": ["folder"]
         }
       ],
       "additionalProperties": false,
@@ -679,7 +651,7 @@
         }
       },
       "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
+        "^[/a-zA-Z0-9-_{}. ]+$": {
           "$ref": "#/definitions/workflow_manifest"
         }
       },
@@ -716,15 +688,11 @@
                 "type": "string"
               }
             },
-            "required": [
-              "command"
-            ]
+            "required": ["command"]
           }
         }
       },
-      "required": [
-        "steps"
-      ],
+      "required": ["steps"],
       "title": "workflow_manifest"
     },
     "providers": {

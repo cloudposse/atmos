@@ -34,7 +34,7 @@ Subcommand Aliases:
 
 Flags:
 
-    -h, --help                      help for atmos (default false)
+    -h, --help                      help for atmos
 
         --logs-file string          The file to write Atmos logs to. Logs can be
                                     written to any file or any standard file

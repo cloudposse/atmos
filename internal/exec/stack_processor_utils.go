@@ -21,9 +21,14 @@ import (
 )
 
 var (
+	// Error constants.
+	ErrInvalidHooksSection          = errors.New("invalid 'hooks' section in the file")
+	ErrInvalidTerraformHooksSection = errors.New("invalid 'terraform.hooks' section in the file")
+
+	// File content sync map.
 	getFileContentSyncMap = sync.Map{}
 
-	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function
+	// Mutex to serialize updates of the result map of ProcessYAMLConfigFiles function.
 	processYAMLConfigFilesLock = &sync.Mutex{}
 )
 
@@ -82,7 +87,6 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				"",
 			)
-
 			if err != nil {
 				errorResult = err
 				return
@@ -181,7 +185,6 @@ func ProcessYAMLConfigFile(
 	finalHelmfileOverrides := map[string]any{}
 
 	stackYamlConfig, err := GetFileContent(filePath)
-
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
 	//
 	// `ignoreMissingFiles = true` is used when executing `atmos describe affected` command.
@@ -535,7 +538,6 @@ func ProcessStackConfig(
 	importsConfig map[string]map[string]any,
 	checkBaseComponentExists bool,
 ) (map[string]any, error) {
-
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
@@ -544,6 +546,7 @@ func ProcessStackConfig(
 	)
 
 	globalVarsSection := map[string]any{}
+	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
 	globalEnvSection := map[string]any{}
 	globalTerraformSection := map[string]any{}
@@ -571,6 +574,13 @@ func ProcessStackConfig(
 		globalVarsSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'vars' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := config["hooks"]; ok {
+		globalHooksSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, errors.Wrapf(ErrInvalidHooksSection, " '%s'", stackName)
 		}
 	}
 
@@ -624,7 +634,19 @@ func ProcessStackConfig(
 		}
 	}
 
+	if i, ok := globalTerraformSection["hooks"]; ok {
+		terraformHooks, ok = i.(map[string]any)
+		if !ok {
+			return nil, errors.Wrapf(ErrInvalidTerraformHooksSection, "in file '%s'", stackName)
+		}
+	}
+
 	globalAndTerraformVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, terraformVars})
+	if err != nil {
+		return nil, err
+	}
+
+	globalAndTerraformHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, terraformHooks})
 	if err != nil {
 		return nil, err
 	}
@@ -1091,7 +1113,7 @@ func ProcessStackConfig(
 				finalComponentHooks, err := m.Merge(
 					atmosConfig,
 					[]map[string]any{
-						terraformHooks,
+						globalAndTerraformHooks,
 						baseComponentHooks,
 						componentHooks,
 						componentOverridesHooks,
@@ -1640,8 +1662,8 @@ func FindComponentStacks(
 	componentType string,
 	component string,
 	baseComponent string,
-	componentStackMap map[string]map[string][]string) ([]string, error) {
-
+	componentStackMap map[string]map[string][]string,
+) ([]string, error) {
 	var stacks []string
 
 	if componentStackConfig, componentStackConfigExists := componentStackMap[componentType]; componentStackConfigExists {
@@ -1675,8 +1697,8 @@ func FindComponentDependenciesLegacy(
 	componentType string,
 	component string,
 	baseComponents []string,
-	stackImports map[string]map[string]any) ([]string, error) {
-
+	stackImports map[string]map[string]any,
+) ([]string, error) {
 	var deps []string
 
 	sectionsToCheck := []string{
@@ -1854,7 +1876,6 @@ func CreateComponentStackMap(
 	helmfileComponentsBasePath string,
 	filePath string,
 ) (map[string]map[string][]string, error) {
-
 	stackComponentMap := map[string]map[string][]string{}
 	stackComponentMap["terraform"] = map[string][]string{}
 	stackComponentMap["helmfile"] = map[string][]string{}
@@ -1938,7 +1959,6 @@ func CreateComponentStackMap(
 
 			return nil
 		})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1987,7 +2007,6 @@ func ProcessBaseComponentConfig(
 	checkBaseComponentExists bool,
 	baseComponents *[]string,
 ) error {
-
 	if component == baseComponent {
 		return nil
 	}
@@ -2039,7 +2058,6 @@ func ProcessBaseComponentConfig(
 				checkBaseComponentExists,
 				baseComponents,
 			)
-
 			if err != nil {
 				return err
 			}
@@ -2250,7 +2268,6 @@ func FindComponentsDerivedFromBaseComponents(
 	allComponents map[string]any,
 	baseComponents []string,
 ) ([]string, error) {
-
 	res := []string{}
 
 	for component, compSection := range allComponents {
