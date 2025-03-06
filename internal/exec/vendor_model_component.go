@@ -47,7 +47,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 			spinner:     s,
 			progress:    p,
 			dryRun:      dryRun,
-			atmosConfig: *atmosConfig,
+			atmosConfig: atmosConfig,
 			isTTY:       term.IsTTYSupportForStdout(),
 		}
 	}
@@ -66,7 +66,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 		spinner:     s,
 		progress:    p,
 		dryRun:      dryRun,
-		atmosConfig: *atmosConfig,
+		atmosConfig: atmosConfig,
 		isTTY:       tty,
 	}
 }

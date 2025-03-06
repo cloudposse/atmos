@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	// WrapErrFmt is defined in error.go as wrapErrFmtWithDetails ("%w: %v")
-	// Use the detailed formatter to support two arguments
+	// WrapErrFmt is defined in error.go as wrapErrFmtWithDetails ("%w: %v").
+	// Use the detailed formatter to support two arguments.
 	tempDirPermissions os.FileMode = 0o755
 )
 
@@ -69,7 +69,7 @@ type modelVendor struct {
 	done        bool
 	dryRun      bool
 	failedPkg   int
-	atmosConfig schema.AtmosConfiguration
+	atmosConfig *schema.AtmosConfiguration
 	isTTY       bool
 }
 
@@ -107,7 +107,7 @@ func newModelAtmosVendorInternal(pkgs []pkgAtmosVendor, dryRun bool, atmosConfig
 		spinner:     s,
 		progress:    p,
 		dryRun:      dryRun,
-		atmosConfig: *atmosConfig,
+		atmosConfig: atmosConfig,
 		isTTY:       isTTY,
 	}
 }
@@ -240,7 +240,7 @@ func max(a, b int) int {
 	return b
 }
 
-func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			time.Sleep(500 * time.Millisecond)
@@ -263,11 +263,11 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 		}
 
-		defer removeTempDir(atmosConfig, tempDir)
+		defer removeTempDir(*atmosConfig, tempDir)
 
 		switch p.pkgType {
 		case pkgTypeRemote:
-			if err := GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, getterTimeout); err != nil {
+			if err := GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, getterTimeout); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf(wrapErrFmtWithDetails, ErrDownloadPackage, err),
 					name: p.name,
@@ -275,7 +275,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 			}
 
 		case pkgTypeOci:
-			if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
+			if err := processOciImage(*atmosConfig, p.uri, tempDir); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf(wrapErrFmtWithDetails, ErrProcessOCIImage, err),
 					name: p.name,
@@ -316,13 +316,13 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 	}
 }
 
-func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	if installer.atmosPackage != nil {
 		return downloadAndInstall(installer.atmosPackage, dryRun, atmosConfig)
 	}
 
 	if installer.componentPackage != nil {
-		return downloadComponentAndInstall(installer.componentPackage, dryRun, &atmosConfig)
+		return downloadComponentAndInstall(installer.componentPackage, dryRun, atmosConfig)
 	}
 
 	return func() tea.Msg {
