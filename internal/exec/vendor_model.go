@@ -26,9 +26,10 @@ import (
 type pkgType int
 
 const (
-	progressBarWidth         = 30
-	maxWidth                 = 120
-	pkgTypeRemote    pkgType = iota
+	tempDirPermissions         = 0o700
+	progressBarWidth           = 30
+	maxWidth                   = 120
+	pkgTypeRemote      pkgType = iota
 	pkgTypeOci
 	pkgTypeLocal
 )
@@ -340,7 +341,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 		}
 
 		defer removeTempDir(*atmosConfig, tempDir)
-		if err := p.installer(tempDir, atmosConfig); err != nil {
+		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}
 		if err := copyToTarget(*atmosConfig, tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
@@ -353,17 +354,17 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 	}
 }
 
-func (p *pkgAtmosVendor) installer(tempDir string, atmosConfig *schema.AtmosConfiguration) error {
+func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosConfiguration) error {
 	switch p.pkgType {
 	case pkgTypeRemote:
 		// Use go-getter to download remote packages
-		if err := GoGetterGet(*atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+		if err := GoGetterGet(*atmosConfig, p.uri, *tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package: %w", err)
 		}
 
 	case pkgTypeOci:
 		// Process OCI images
-		if err := processOciImage(*atmosConfig, p.uri, tempDir); err != nil {
+		if err := processOciImage(*atmosConfig, p.uri, *tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image: %w", err)
 		}
 
@@ -375,9 +376,9 @@ func (p *pkgAtmosVendor) installer(tempDir string, atmosConfig *schema.AtmosConf
 			OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 		}
 		if p.sourceIsLocalFile {
-			tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
+			*tempDir = filepath.Join(*tempDir, SanitizeFileName(p.uri))
 		}
-		if err := cp.Copy(p.uri, tempDir, copyOptions); err != nil {
+		if err := cp.Copy(p.uri, *tempDir, copyOptions); err != nil {
 			return fmt.Errorf("failed to copy package: %w", err)
 		}
 	default:
@@ -403,7 +404,7 @@ func createTempDir() (string, error) {
 	}
 
 	// Ensure directory permissions are restricted
-	if err := os.Chmod(tempDir, 0o700); err != nil {
+	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
 		return "", err
 	}
 
