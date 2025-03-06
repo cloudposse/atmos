@@ -2,8 +2,8 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"os"
-	"time"
 
 	log "github.com/charmbracelet/log"
 	"github.com/google/go-github/v59/github"
@@ -29,23 +29,21 @@ func newGitHubClient(ctx context.Context) *github.Client {
 
 // GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository
 func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
-	opt := &github.ListOptions{Page: 1, PerPage: 1}
+	log.Debug(fmt.Sprintf("Fetching latest release for %s/%s from Github API", owner, repo))
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-	defer cancel()
-
+	// Create a new GitHub client with authentication if available
+	ctx := context.Background()
 	client := newGitHubClient(ctx)
 
-	releases, _, err := client.Repositories.ListReleases(ctx, owner, repo, opt)
+	// Get the latest release
+	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
 		return "", err
 	}
-	log.Debug("We got the following", "releases", releases, "err", err, "token", os.Getenv("GITHUB_TOKEN"))
-	if len(releases) > 0 {
-		latestRelease := releases[0]
-		latestReleaseTag := *latestRelease.TagName
-		return latestReleaseTag, nil
+
+	if release == nil || release.TagName == nil {
+		return "", nil
 	}
 
-	return "", nil
+	return *release.TagName, nil
 }
