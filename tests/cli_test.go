@@ -563,8 +563,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
-	// Set environment variables without interfering with the current environment
-	// This ensures that the test environment is isolated from the user's environment
+	// Set environment variables without inheriting from the current environment.
+	// This ensures an isolated test environment, preventing unintended side effects
+	// and improving reproducibility across different systems.
 	var envVars []string
 	for key, value := range tc.Env {
 		// t.Logf("Setting env: %s=%s", key, value)
