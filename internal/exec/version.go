@@ -13,15 +13,18 @@ import (
 )
 
 type versionExec struct {
-	printStyledText            func(string) error
-	getLatestGitHubRepoRelease func(string, string) (string, error)
+	printStyledText                           func(string) error
+	getLatestGitHubRepoRelease                func(string, string) (string, error)
+	printMessage                              func(string)
+	printMessageToUpgradeToAtmosLatestRelease func(string)
 }
 
 func NewVersionExec() *versionExec {
-
 	return &versionExec{
-		printStyledText:            tuiUtils.PrintStyledText,
-		getLatestGitHubRepoRelease: u.GetLatestGitHubRepoRelease,
+		printStyledText:                           tuiUtils.PrintStyledText,
+		getLatestGitHubRepoRelease:                u.GetLatestGitHubRepoRelease,
+		printMessage:                              u.PrintMessage,
+		printMessageToUpgradeToAtmosLatestRelease: u.PrintMessageToUpgradeToAtmosLatestRelease,
 	}
 }
 
@@ -35,7 +38,7 @@ func (v versionExec) Execute(checkFlag bool) {
 
 	atmosIcon := "\U0001F47D"
 
-	u.PrintMessage(fmt.Sprintf("%s Atmos %s on %s/%s", atmosIcon, version.Version, runtime.GOOS, runtime.GOARCH))
+	v.printMessage(fmt.Sprintf("%s Atmos %s on %s/%s", atmosIcon, version.Version, runtime.GOOS, runtime.GOARCH))
 	fmt.Println()
 
 	if checkFlag {
@@ -56,7 +59,7 @@ func (v versionExec) Execute(checkFlag bool) {
 			if latestRelease == currentRelease {
 				log.Warn("You are running the latest version of Atmos", "version", latestRelease)
 			} else {
-				u.PrintMessageToUpgradeToAtmosLatestRelease(latestRelease)
+				v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)
 			}
 		} else {
 			log.Debug("Did not get release tag", "err", err, "latestReleaseTag", latestReleaseTag)
