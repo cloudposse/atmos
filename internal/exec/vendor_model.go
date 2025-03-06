@@ -20,7 +20,6 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type pkgType int
@@ -195,8 +194,8 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		if m.width > 120 {
-			m.width = 120
+		if m.width > maxWidth {
+			m.width = maxWidth
 		}
 
 	case tea.KeyMsg:
@@ -205,49 +204,7 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case installedPkgMsg:
-		// ensure index is within bounds
-		if m.index >= len(m.packages) {
-			return m, nil
-		}
-		pkg := m.packages[m.index]
-
-		mark := checkMark
-		errMsg := ""
-		if msg.err != nil {
-			errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
-			if !m.isTTY {
-				u.LogError(errors.New(errMsg))
-			}
-			mark = xMark
-			m.failedPkg++
-		}
-		version := ""
-		if pkg.version != "" {
-			version = fmt.Sprintf("(%s)", pkg.version)
-		}
-		if m.index >= len(m.packages)-1 {
-			// Everything's been installed. We're done!
-			m.done = true
-			m.logNonNTYFinalStatus(pkg, &mark)
-			version := grayColor.Render(version)
-			return m, tea.Sequence(
-				tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
-				tea.Quit,
-			)
-		}
-		if !m.isTTY {
-			log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
-		}
-		m.index++
-		// Update progress bar
-		progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
-
-		version = grayColor.Render(version)
-		return m, tea.Batch(
-			progressCmd,
-			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),   // print message above our program
-			ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig), // download the next package
-		)
+		return m.handleInstalledPkgMsg(&msg)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -268,6 +225,52 @@ func (m *modelVendor) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit
 	}
 	return nil
+}
+
+func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, tea.Cmd) {
+	// ensure index is within bounds
+	if m.index >= len(m.packages) {
+		return m, nil
+	}
+	pkg := m.packages[m.index]
+
+	mark := checkMark
+	errMsg := ""
+	if msg.err != nil {
+		errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
+		if !m.isTTY {
+			log.Error(errMsg)
+		}
+		mark = xMark
+		m.failedPkg++
+	}
+	version := ""
+	if pkg.version != "" {
+		version = fmt.Sprintf("(%s)", pkg.version)
+	}
+	if m.index >= len(m.packages)-1 {
+		// Everything's been installed. We're done!
+		m.done = true
+		m.logNonNTYFinalStatus(pkg, &mark)
+		version := grayColor.Render(version)
+		return m, tea.Sequence(
+			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
+			tea.Quit,
+		)
+	}
+	if !m.isTTY {
+		log.Info(fmt.Sprintf("%s %s %s", mark, pkg.name, version))
+	}
+	m.index++
+	// Update progress bar
+	progressCmd := m.progress.SetPercent(float64(m.index) / float64(len(m.packages)))
+
+	version = grayColor.Render(version)
+	return m, tea.Batch(
+		progressCmd,
+		tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),   // print message above our program
+		ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig), // download the next package
+	)
 }
 
 func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) {
