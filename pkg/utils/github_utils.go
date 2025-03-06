@@ -40,7 +40,7 @@ func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.Debug("We got the following", "releases", releases, "err", err)
+	log.Debug("We got the following", "releases", releases, "err", err, "token", os.Getenv("GITHUB_TOKEN"))
 	if len(releases) > 0 {
 		latestRelease := releases[0]
 		latestReleaseTag := *latestRelease.TagName
