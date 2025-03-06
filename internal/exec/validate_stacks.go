@@ -152,7 +152,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)))
 
 	for _, filePath := range stackConfigFilesAbsolutePaths {
-		stackConfig, importsConfig, _, _, _, err := ProcessYAMLConfigFile(
+		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
