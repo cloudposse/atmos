@@ -245,7 +245,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 			case codes.NotFound:
 				return nil, fmt.Errorf("resource not found %s: %w", secretID, err)
 			case codes.PermissionDenied:
-				return nil, fmt.Errorf("permission denied for %s - please check if you have the required permissions: %w", name, err)
+				return nil, fmt.Errorf("permission denied for secret %s - please check if you have the required permissions: %w", secretID, err)
 			}
 		}
 		return nil, fmt.Errorf("failed to access secret version: %w", err)

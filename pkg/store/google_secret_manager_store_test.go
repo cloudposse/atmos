@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -399,6 +400,7 @@ func TestNewGSMStore(t *testing.T) {
 		name        string
 		options     GSMStoreOptions
 		expectError bool
+		skipMessage string
 	}{
 		{
 			name: "valid configuration",
@@ -418,10 +420,23 @@ func TestNewGSMStore(t *testing.T) {
 			},
 			expectError: true,
 		},
+		{
+			name: "with credentials from env",
+			options: GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         aws.String("test-prefix"),
+				StackDelimiter: aws.String("-"),
+			},
+			expectError: false,
+			skipMessage: "GOOGLE_APPLICATION_CREDENTIALS environment variable not set",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipMessage != "" && os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
+				t.Skip(tt.skipMessage)
+			}
 			store, err := NewGSMStore(tt.options)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -511,6 +526,9 @@ func TestGSMStore_GetKey(t *testing.T) {
 			got, err := store.getKey(tt.stack, tt.component, tt.key)
 			if tt.wantErr {
 				assert.Error(t, err)
+				if tt.name == "empty stack delimiter" {
+					assert.ErrorIs(t, err, ErrStackDelimiterNotSet)
+				}
 				return
 			}
 
