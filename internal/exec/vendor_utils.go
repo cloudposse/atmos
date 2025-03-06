@@ -20,148 +20,124 @@ import (
 
 var ErrVendorComponents = errors.New("failed to vendor components")
 
-// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
+// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
 func ReadAndProcessVendorConfigFile(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
 	checkGlobalConfig bool,
 ) (schema.AtmosVendorConfig, bool, string, error) {
 	var vendorConfig schema.AtmosVendorConfig
-	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice.
 
-	// Resolve the vendor config file path.
-	foundVendorConfigFile, err := resolveVendorConfigPath(atmosConfig, vendorConfigFile, checkGlobalConfig)
-	if err != nil {
-		return vendorConfig, false, "", err
-	}
+	// Initialize empty sources slice
+	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{}
 
-	// Check if the resolved path exists and is accessible.
-	fileInfo, err := os.Stat(foundVendorConfigFile)
-	if err != nil {
-		return handleVendorConfigFileError(err, foundVendorConfigFile)
-	}
+	var vendorConfigFileExists bool
+	var foundVendorConfigFile string
 
-	// Collect all config files to process (handles directories and single files).
-	configFiles, err := collectConfigFiles(foundVendorConfigFile, fileInfo)
-	if err != nil {
-		return vendorConfig, false, "", err
-	}
-
-	// Process and merge all config files.
-	mergedSources, mergedImports, err := processConfigFiles(configFiles)
-	if err != nil {
-		return vendorConfig, false, "", err
-	}
-
-	// Set the final merged configuration.
-	vendorConfig.Spec.Sources = mergedSources
-	vendorConfig.Spec.Imports = mergedImports
-	return vendorConfig, true, foundVendorConfigFile, nil
-}
-
-// resolveVendorConfigPath resolves the path to the vendor config file.
-func resolveVendorConfigPath(
-	atmosConfig schema.AtmosConfiguration,
-	vendorConfigFile string,
-	checkGlobalConfig bool,
-) (string, error) {
+	// Check if vendor config is specified in atmos.yaml
 	if checkGlobalConfig && atmosConfig.Vendor.BasePath != "" {
 		if !filepath.IsAbs(atmosConfig.Vendor.BasePath) {
-			return filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath), nil
+			foundVendorConfigFile = filepath.Join(atmosConfig.BasePath, atmosConfig.Vendor.BasePath)
+		} else {
+			foundVendorConfigFile = atmosConfig.Vendor.BasePath
 		}
-		return atmosConfig.Vendor.BasePath, nil
-	}
+	} else {
+		// Path is not defined in atmos.yaml, proceed with existing logic
+		var fileExists bool
+		foundVendorConfigFile, fileExists = u.SearchConfigFile(vendorConfigFile)
 
-	// Fallback to searching for the vendor config file.
-	foundVendorConfigFile, fileExists := u.SearchConfigFile(vendorConfigFile)
-	if !fileExists {
-		pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
-		foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
 		if !fileExists {
-			u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
-			return "", fmt.Errorf("vendor config file not found")
+			// Look for the vendoring manifest in the directory pointed to by the `base_path` setting in `atmos.yaml`
+			pathToVendorConfig := filepath.Join(atmosConfig.BasePath, vendorConfigFile)
+			foundVendorConfigFile, fileExists = u.SearchConfigFile(pathToVendorConfig)
+
+			if !fileExists {
+				vendorConfigFileExists = false
+				u.LogWarning(fmt.Sprintf("Vendor config file '%s' does not exist. Proceeding without vendor configurations", pathToVendorConfig))
+				return vendorConfig, vendorConfigFileExists, "", nil
+			}
 		}
 	}
-	return foundVendorConfigFile, nil
-}
 
-// handleVendorConfigFileError handles errors related to vendor config file access.
-func handleVendorConfigFileError(err error, filePath string) (schema.AtmosVendorConfig, bool, string, error) {
-	var vendorConfig schema.AtmosVendorConfig
-	if os.IsNotExist(err) {
-		// File does not exist
-		return vendorConfig, false, "", fmt.Errorf("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
+	// Check if it's a directory
+	fileInfo, err := os.Stat(foundVendorConfigFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File does not exist
+			return vendorConfig, false, "", fmt.Errorf("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
+		}
+		if os.IsPermission(err) {
+			// Permission error
+			return vendorConfig, false, "", fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions.", foundVendorConfigFile)
+		}
+		// Other errors
+		return vendorConfig, false, "", fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
 	}
-	if os.IsPermission(err) {
-		return vendorConfig, false, "", fmt.Errorf("Permission denied when accessing '%s'. Please check the file permissions.", filePath)
-	}
-	return vendorConfig, false, "", fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
-}
 
-// collectConfigFiles collects all YAML config files to process.
-func collectConfigFiles(foundVendorConfigFile string, fileInfo os.FileInfo) ([]string, error) {
+	var configFiles []string
 	if fileInfo.IsDir() {
 		foundVendorConfigFile = filepath.ToSlash(foundVendorConfigFile)
 		matches, err := doublestar.Glob(os.DirFS(foundVendorConfigFile), "*.{yaml,yml}")
 		if err != nil {
-			return nil, err
+			return vendorConfig, false, "", err
 		}
-		if len(matches) == 0 {
-			return nil, fmt.Errorf("no YAML configuration files found in directory '%s'", foundVendorConfigFile)
+		for _, match := range matches {
+			configFiles = append(configFiles, filepath.Join(foundVendorConfigFile, match))
 		}
-		for i, match := range matches {
-			matches[i] = filepath.Join(foundVendorConfigFile, match)
+		sort.Strings(configFiles)
+		if len(configFiles) == 0 {
+			return vendorConfig, false, "", fmt.Errorf("no YAML configuration files found in directory '%s'", foundVendorConfigFile)
 		}
-		sort.Strings(matches)
-		return matches, nil
+	} else {
+		configFiles = []string{foundVendorConfigFile}
 	}
-	return []string{foundVendorConfigFile}, nil
-}
 
-// processConfigFiles processes and merges all config files.
-func processConfigFiles(configFiles []string) ([]schema.AtmosVendorSource, []string, error) {
+	// Process all config files
 	var mergedSources []schema.AtmosVendorSource
 	var mergedImports []string
 	sourceMap := make(map[string]bool) // Track unique sources by component name
 	importMap := make(map[string]bool) // Track unique imports
 
 	for _, configFile := range configFiles {
-		currentConfig, err := readConfigFile(configFile)
+		var currentConfig schema.AtmosVendorConfig
+		yamlFile, err := os.ReadFile(configFile)
 		if err != nil {
-			return nil, nil, err
+			return vendorConfig, false, "", err
 		}
 
-		// Merge sources, checking for duplicates.
+		err = yaml.Unmarshal(yamlFile, &currentConfig)
+		if err != nil {
+			return vendorConfig, false, "", err
+		}
+
+		// Merge sources, checking for duplicates
 		for _, source := range currentConfig.Spec.Sources {
-			if source.Component != "" && sourceMap[source.Component] {
-				return nil, nil, fmt.Errorf("duplicate component '%s' found in config file '%s'", source.Component, configFile)
+			if source.Component != "" {
+				if sourceMap[source.Component] {
+					return vendorConfig, false, "", fmt.Errorf("duplicate component '%s' found in config file '%s'",
+						source.Component, configFile)
+				}
+				sourceMap[source.Component] = true
 			}
-			sourceMap[source.Component] = true
 			mergedSources = append(mergedSources, source)
 		}
 
-		// Merge imports, checking for duplicates.
+		// Merge imports, checking for duplicates
 		for _, imp := range currentConfig.Spec.Imports {
-			if !importMap[imp] {
-				importMap[imp] = true
-				mergedImports = append(mergedImports, imp)
+			if importMap[imp] {
+				continue // Skip duplicate imports
 			}
+			importMap[imp] = true
+			mergedImports = append(mergedImports, imp)
 		}
 	}
-	return mergedSources, mergedImports, nil
-}
 
-// readConfigFile reads and unmarshals a config.
-func readConfigFile(configFile string) (schema.AtmosVendorConfig, error) {
-	var currentConfig schema.AtmosVendorConfig
-	yamlFile, err := os.ReadFile(configFile)
-	if err != nil {
-		return currentConfig, err
-	}
-	if err := yaml.Unmarshal(yamlFile, &currentConfig); err != nil {
-		return currentConfig, err
-	}
-	return currentConfig, nil
+	// Create final merged config
+	vendorConfig.Spec.Sources = mergedSources
+	vendorConfig.Spec.Imports = mergedImports
+	vendorConfigFileExists = true
+
+	return vendorConfig, vendorConfigFileExists, foundVendorConfigFile, nil
 }
 
 // ExecuteAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
@@ -293,40 +269,51 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 		}
 
 		// Determine package type
-		var pType pkgType
-		if useOciScheme {
-			pType = pkgTypeOci
-		} else if useLocalFileSystem {
-			pType = pkgTypeLocal
-		} else {
-			pType = pkgTypeRemote
-		}
+		pType := determinePackageType(useOciScheme, useLocalFileSystem)
 
 		// Process each target within the source
-		for indexTarget, tgt := range s.Targets {
-			target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", indexSource, indexTarget), tgt, tmplData, false)
-			if err != nil {
-				return nil, err
-			}
-			targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
-			pkgName := s.Component
-			if pkgName == "" {
-				pkgName = uri
-			}
-			// Create package struct
-			p := pkgAtmosVendor{
-				uri:               uri,
-				name:              pkgName,
-				targetPath:        targetPath,
-				sourceIsLocalFile: sourceIsLocalFile,
-				pkgType:           pType,
-				version:           s.Version,
-				atmosVendorSource: s,
-			}
-			packages = append(packages, p)
+		pkgs, err := processTargets(indexSource, &s, tmplData, vendorConfigFilePath, uri, pType, sourceIsLocalFile)
+		if err != nil {
+			return nil, err
 		}
+		packages = append(packages, pkgs...)
+
 	}
 
+	return packages, nil
+}
+func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
+	if useOciScheme {
+		return pkgTypeOci
+	} else if useLocalFileSystem {
+		return pkgTypeLocal
+	}
+	return pkgTypeRemote
+}
+func processTargets(indexSource int, s *schema.AtmosVendorSource, tmplData struct{ Component, Version string }, vendorConfigFilePath, uri string, pType pkgType, sourceIsLocalFile bool) ([]pkgAtmosVendor, error) {
+	var packages []pkgAtmosVendor
+	for indexTarget, tgt := range s.Targets {
+		target, err := ProcessTmpl(fmt.Sprintf("target-%d-%d", indexSource, indexTarget), tgt, tmplData, false)
+		if err != nil {
+			return nil, err
+		}
+		targetPath := filepath.Join(filepath.ToSlash(vendorConfigFilePath), filepath.ToSlash(target))
+		pkgName := s.Component
+		if pkgName == "" {
+			pkgName = uri
+		}
+		// Create package struct
+		p := pkgAtmosVendor{
+			uri:               uri,
+			name:              pkgName,
+			targetPath:        targetPath,
+			sourceIsLocalFile: sourceIsLocalFile,
+			pkgType:           pType,
+			version:           s.Version,
+			atmosVendorSource: *s,
+		}
+		packages = append(packages, p)
+	}
 	return packages, nil
 }
 
@@ -473,60 +460,59 @@ func copyToTarget(atmosConfig schema.AtmosConfiguration, tempDir, targetPath str
 // Returns a function that determines if a file should be skipped during copying.
 func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+		// Skip .git directories
 		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
+
+		// Normalize paths
 		tempDir = filepath.ToSlash(tempDir)
 		src = filepath.ToSlash(src)
-
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
-		// Exclude the files that match the 'excluded_paths' patterns
-		// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
-		// https://en.wikipedia.org/wiki/Glob_(programming)
-		// https://github.com/bmatcuk/doublestar#patterns
-		for _, excludePath := range s.ExcludedPaths {
-			excludeMatch, err := u.PathMatch(excludePath, src)
-			if err != nil {
-				return true, err
-			} else if excludeMatch {
-				// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-				u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n",
-					trimmedSrc,
-					excludePath,
-				))
-				return true, nil
-			}
+		// Check if the file should be excluded
+		if shouldExclude, err := shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc); shouldExclude || err != nil {
+			return shouldExclude, err
 		}
 
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-		if len(s.IncludedPaths) > 0 {
-			anyMatches := false
-			for _, includePath := range s.IncludedPaths {
-				includeMatch, err := u.PathMatch(includePath, src)
-				if err != nil {
-					return true, err
-				} else if includeMatch {
-					// If the file matches ANY of the 'included_paths' patterns, include the file
-					u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n",
-						trimmedSrc,
-						includePath,
-					))
-					anyMatches = true
-					break
-				}
-			}
-
-			if anyMatches {
-				return false, nil
-			} else {
-				u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
-				return true, nil
-			}
+		// Check if the file should be included
+		if shouldInclude, err := shouldIncludeFile(src, s.IncludedPaths, trimmedSrc); len(s.IncludedPaths) > 0 && (shouldInclude || err != nil) {
+			return !shouldInclude, err
 		}
 
-		// If 'included_paths' is not provided, include all files that were not excluded
-		u.LogTrace(fmt.Sprintf("Including '%s'\n", u.TrimBasePathFromPath(tempDir+"/", src)))
+		// If no inclusion rules are specified, include the file
+		u.LogTrace(fmt.Sprintf("Including '%s'\n", trimmedSrc))
 		return false, nil
 	}
+}
+
+// Helper function to check if a file should be excluded
+func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
+	for _, excludePath := range excludedPaths {
+		excludeMatch, err := u.PathMatch(excludePath, src)
+		if err != nil {
+			return true, err
+		}
+		if excludeMatch {
+			u.LogTrace(fmt.Sprintf("Excluding the file '%s' since it matches the '%s' pattern from 'excluded_paths'\n", trimmedSrc, excludePath))
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Helper function to check if a file should be included
+func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
+	for _, includePath := range includedPaths {
+		includeMatch, err := u.PathMatch(includePath, src)
+		if err != nil {
+			return false, err
+		}
+		if includeMatch {
+			u.LogTrace(fmt.Sprintf("Including '%s' since it matches the '%s' pattern from 'included_paths'\n", trimmedSrc, includePath))
+			return true, nil
+		}
+	}
+	u.LogTrace(fmt.Sprintf("Excluding '%s' since it does not match any pattern from 'included_paths'\n", trimmedSrc))
+	return false, nil
 }
