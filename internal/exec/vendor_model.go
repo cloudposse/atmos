@@ -26,10 +26,9 @@ import (
 type pkgType int
 
 const (
-	tempDirPermissions         = 0o700
-	progressBarWidth           = 30
-	maxWidth                   = 120
-	pkgTypeRemote      pkgType = iota
+	progressBarWidth         = 30
+	maxWidth                 = 120
+	pkgTypeRemote    pkgType = iota
 	pkgTypeOci
 	pkgTypeLocal
 )
@@ -404,7 +403,7 @@ func createTempDir() (string, error) {
 	}
 
 	// Ensure directory permissions are restricted
-	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
+	if err := os.Chmod(tempDir, 0o700); err != nil {
 		return "", err
 	}
 
