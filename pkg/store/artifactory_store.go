@@ -16,6 +16,10 @@ import (
 	al "github.com/jfrog/jfrog-client-go/utils/log"
 )
 
+const (
+	errFormatWithCause = "%w: %v"
+)
+
 type ArtifactoryStore struct {
 	prefix         string
 	repoName       string
@@ -140,13 +144,13 @@ func (s *ArtifactoryStore) validateGetParams(stack, component, key string) error
 func (s *ArtifactoryStore) processDownloadedFile(tempDir, paramName string) (interface{}, error) {
 	fileData, err := os.ReadFile(filepath.Join(tempDir, filepath.Base(paramName)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrReadFile, err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrReadFile, err)
 	}
 
 	// First try to unmarshal as JSON
 	var result interface{}
 	if err := json.Unmarshal(fileData, &result); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUnmarshalFile, err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrUnmarshalFile, err)
 	}
 
 	return result, nil
@@ -159,12 +163,12 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrGetKey, err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrGetKey, err)
 	}
 
 	tempDir, err := os.MkdirTemp("", "atmos-artifactory")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCreateTempDir, err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrCreateTempDir, err)
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -181,12 +185,12 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 
 	totalDownloaded, totalExpected, err := s.rtManager.DownloadFiles(downloadParams)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrDownloadFile, err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrDownloadFile, err)
 	}
 
 	// Only check for mismatch if there was an error
 	if err != nil && totalDownloaded != totalExpected {
-		return nil, fmt.Errorf("%w: %v", ErrDownloadFile, err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrDownloadFile, err)
 	}
 
 	if totalDownloaded == 0 {
@@ -212,12 +216,12 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrGetKey, err)
+		return fmt.Errorf(errFormatWithCause, ErrGetKey, err)
 	}
 
 	tempFile, err := os.CreateTemp("", "atmos-artifactory")
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrCreateTempFile, err)
+		return fmt.Errorf(errFormatWithCause, ErrCreateTempFile, err)
 	}
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
@@ -230,14 +234,14 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 		// Otherwise, marshal it to JSON
 		jsonData, err := json.Marshal(value)
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrMarshalValue, err)
+			return fmt.Errorf(errFormatWithCause, ErrMarshalValue, err)
 		}
 		dataToWrite = jsonData
 	}
 
 	_, err = tempFile.Write(dataToWrite)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrWriteTempFile, err)
+		return fmt.Errorf(errFormatWithCause, ErrWriteTempFile, err)
 	}
 
 	uploadParams := services.NewUploadParams()
@@ -248,7 +252,7 @@ func (s *ArtifactoryStore) Set(stack string, component string, key string, value
 
 	_, _, err = s.rtManager.UploadFiles(artifactory.UploadServiceOptions{FailFast: true}, uploadParams)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUploadFile, err)
+		return fmt.Errorf(errFormatWithCause, ErrUploadFile, err)
 	}
 
 	return nil

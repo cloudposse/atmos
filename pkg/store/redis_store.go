@@ -11,7 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// errFormat is the format string used for wrapping errors with additional context
+// errFormat is the format string used for wrapping errors with additional context.
 const errFormat = "%w: %v"
 
 type RedisStore struct {
