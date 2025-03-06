@@ -436,7 +436,7 @@ func ProcessYAMLConfigFile(
 
 		// Process the imports in the current manifest
 		for _, importFile := range importMatches {
-			yamlConfig, _, yamlConfigRaw, terraformOverridesInline, terraformOverridesImports, helmfileOverridesInline, helmfileOverridesImports, err2 := ProcessYAMLConfigFile(
+			yamlConfig, _, yamlConfigRaw, _, terraformOverridesImports, _, helmfileOverridesImports, err2 := ProcessYAMLConfigFile(
 				atmosConfig,
 				basePath,
 				importFile,
@@ -454,22 +454,6 @@ func ProcessYAMLConfigFile(
 			)
 			if err2 != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err2
-			}
-
-			parentTerraformOverridesInline, err = m.Merge(
-				atmosConfig,
-				[]map[string]any{terraformOverridesInline, parentTerraformOverridesInline},
-			)
-			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, err
-			}
-
-			parentHelmfileOverridesInline, err = m.Merge(
-				atmosConfig,
-				[]map[string]any{helmfileOverridesInline, parentHelmfileOverridesInline},
-			)
-			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, err
 			}
 
 			parentTerraformOverridesImports, err = m.Merge(
