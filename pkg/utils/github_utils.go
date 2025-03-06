@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	log "github.com/charmbracelet/log"
@@ -29,7 +28,7 @@ func newGitHubClient(ctx context.Context) *github.Client {
 
 // GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository
 func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
-	log.Debug(fmt.Sprintf("Fetching latest release for %s/%s from Github API", owner, repo))
+	log.Debug("Fetching latest release from Github API", "owner", owner, "repo", repo)
 
 	// Create a new GitHub client with authentication if available
 	ctx := context.Background()

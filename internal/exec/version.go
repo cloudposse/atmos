@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
@@ -30,7 +30,7 @@ func NewVersionExec() *versionExec {
 
 func (v versionExec) Execute(checkFlag bool) {
 	// Print a styled Atmos logo to the terminal
-	fmt.Println()
+	v.printMessage("")
 	err := v.printStyledText("ATMOS")
 	if err != nil {
 		log.Fatal(err)
@@ -39,20 +39,12 @@ func (v versionExec) Execute(checkFlag bool) {
 	atmosIcon := "\U0001F47D"
 
 	v.printMessage(fmt.Sprintf("%s Atmos %s on %s/%s", atmosIcon, version.Version, runtime.GOOS, runtime.GOARCH))
-	fmt.Println()
+	v.printMessage("")
 
 	if checkFlag {
 		// Check for the latest Atmos release on GitHub
 		latestReleaseTag, err := v.getLatestGitHubRepoRelease("cloudposse", "atmos")
 		if err == nil && latestReleaseTag != "" {
-			if err != nil {
-				log.Warn("Failed to check for updates", "err", err)
-				return
-			}
-			if latestReleaseTag == "" {
-				log.Warn("No release information available")
-				return
-			}
 			latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
 			currentRelease := strings.TrimPrefix(version.Version, "v")
 
