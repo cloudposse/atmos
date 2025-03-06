@@ -264,7 +264,6 @@ func ProcessTmplWithDatasourcesGomplate(
 	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
-
 	// The check below is to enable ignore missing template values.
 	//   If `ignoreMissingTemplateValues` is true, the missing template keys are ignored, i.e. it doesn't error out
 	if ignoreMissingTemplateValues {
@@ -275,7 +274,6 @@ func ProcessTmplWithDatasourcesGomplate(
 	// This file will contain the combined data that Gomplate uses to fill in the templates.
 	// Gomplate reads this file directly because it's referenced by the "config" option.
 	rawJSON, err := json.Marshal(mergedData)
-
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal merged data to JSON: %w", err)
 	}

@@ -247,7 +247,7 @@ func generateSingleReadme(
 	}
 	outputPath := filepath.Join(dir, outputFile)
 
-	if err = os.WriteFile(outputPath, []byte(rendered), 0644); err != nil {
+	if err = os.WriteFile(outputPath, []byte(rendered), 0o644); err != nil {
 		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
 	}
 
