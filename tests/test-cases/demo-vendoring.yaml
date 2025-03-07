@@ -39,4 +39,3 @@ tests:
       stderr:
         - 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
-

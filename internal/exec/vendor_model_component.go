@@ -69,7 +69,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 		if dryRun {
 			log.Debug("vendoring component (dry-run)", "component", p.name)
 			return func() tea.Msg {
-				detector := &CustomGitDetector{AtmosConfig: atmosConfig}
+				detector := &CustomGitDetector{AtmosConfig: &atmosConfig}
 				_, _, err := detector.Detect(p.uri, "")
 				if err != nil {
 					return installedPkgMsg{
@@ -134,15 +134,15 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		if err = GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s error %s", p.name, err)
+		if err = GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package %s: %w", p.name, err) //nolint:err113
 		}
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
+			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err) //nolint:err113
 		}
 
 	case pkgTypeLocal:
@@ -162,14 +162,13 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		}
 
 		if err = cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
-			return fmt.Errorf("failed to copy package %s error %s", p.name, err)
+			return fmt.Errorf("failed to copy package %s: %w", p.name, err)
 		}
 	default:
-		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
-
+		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name) //nolint:err113
 	}
 	if err = copyComponentToDestination(atmosConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
-		return fmt.Errorf("failed to copy package %s error %s", p.name, err)
+		return fmt.Errorf("failed to copy package %s error %s", p.name, err) //nolint:err113
 	}
 
 	return nil
@@ -185,8 +184,8 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		if err = GoGetterGet(atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s error %s", p.name, err)
+		if err = GoGetterGet(&atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package %s error %s", p.name, err) //nolint:err113
 		}
 
 	case pkgTypeOci:

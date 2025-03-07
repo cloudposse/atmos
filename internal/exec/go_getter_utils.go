@@ -66,7 +66,7 @@ func IsValidScheme(scheme string) bool {
 // CustomGitDetector intercepts Git URLs (for GitHub, Bitbucket, GitLab, etc.)
 // and transforms them into a proper URL for cloning, optionally injecting tokens.
 type CustomGitDetector struct {
-	AtmosConfig schema.AtmosConfiguration
+	AtmosConfig *schema.AtmosConfiguration
 	source      string
 }
 
@@ -279,7 +279,7 @@ func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
 
 // RegisterCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
+func RegisterCustomDetectors(atmosConfig *schema.AtmosConfiguration) {
 	getter.Detectors = append(
 		[]getter.Detector{
 			&CustomGitDetector{AtmosConfig: atmosConfig},
@@ -288,9 +288,9 @@ func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
 	)
 }
 
-// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination
+// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination.
 func GoGetterGet(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	src string,
 	dest string,
 	clientMode getter.ClientMode,
@@ -358,8 +358,8 @@ func removeSymlinks(root string) error {
 	})
 }
 
-// DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
-func DownloadDetectFormatAndParseFile(atmosConfig schema.AtmosConfiguration, file string) (any, error) {
+// DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type.
+func DownloadDetectFormatAndParseFile(atmosConfig *schema.AtmosConfiguration, file string) (any, error) {
 	tempDir := os.TempDir()
 	f := filepath.Join(tempDir, uuid.New().String())
 

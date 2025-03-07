@@ -244,7 +244,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		log.Debug("Downloading and installing package", "package", p.name)
 		if dryRun {
 			log.Debug("Entering dry-run flow for generic vendoring (not a component or mixin)", "package", p.name)
-			detector := &CustomGitDetector{AtmosConfig: atmosConfig}
+			detector := &CustomGitDetector{AtmosConfig: &atmosConfig}
 			_, _, err := detector.Detect(p.uri, "")
 			if err != nil {
 				return installedPkgMsg{
@@ -274,7 +274,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
-			if err := GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			if err := GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to download package: %w", err),
 					name: p.name,
