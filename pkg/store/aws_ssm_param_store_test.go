@@ -321,6 +321,96 @@ func TestSSMStore_Get(t *testing.T) {
 			want:    nil,
 			wantErr: true,
 		},
+		{
+			name:      "non-json value",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "plain-text-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/plain-text-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`plain text value`),
+					},
+				}, nil)
+			},
+			want:    "plain text value",
+			wantErr: false,
+		},
+		{
+			name:      "malformed json value",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "malformed-json-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/malformed-json-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`{"key1":"value1", "key2":}`),
+					},
+				}, nil)
+			},
+			want:    `{"key1":"value1", "key2":}`,
+			wantErr: false,
+		},
+		{
+			name:      "integer value",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "integer-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/integer-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`42`),
+					},
+				}, nil)
+			},
+			want:    float64(42), // JSON unmarshals numbers as float64
+			wantErr: false,
+		},
+		{
+			name:      "float value",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "float-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/float-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`3.14159`),
+					},
+				}, nil)
+			},
+			want:    3.14159,
+			wantErr: false,
+		},
+		{
+			name:      "numeric string",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "numeric-string-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/numeric-string-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`"42"`), // JSON string containing a number
+					},
+				}, nil)
+			},
+			want:    "42", // Should be parsed as a string, not a number
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
