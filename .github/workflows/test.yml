@@ -31,10 +31,10 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux
-          # - os: windows-latest
-          #   target: windows
-          # - os: macos-latest
-          #   target: macos
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
     runs-on: ${{ matrix.os }}
     steps:
       - name: Build
@@ -88,10 +88,6 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
-
-      - name: Print Env
-        run: |
-          env
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows'
