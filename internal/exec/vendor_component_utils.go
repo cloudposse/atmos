@@ -35,6 +35,8 @@ var (
 	ErrStackPullNotSupported       = errors.New("command 'atmos vendor pull --stack <stack>' is not supported yet")
 	ErrComponentConfigFileNotFound = errors.New("component vendoring config file does not exist in the folder")
 	ErrFolderNotFound              = errors.New("folder does not exist")
+	ErrInvalidComponentKind        = errors.New("invalid 'kind' in the component vendoring config file. Supported kinds: 'ComponentVendorConfig'")
+	ErrUriMustSpecified            = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`).
@@ -94,9 +96,7 @@ func ReadAndProcessComponentVendorConfigFile(
 	}
 
 	if componentConfig.Kind != "ComponentVendorConfig" {
-		return componentConfig, "", fmt.Errorf("invalid 'kind: %s' in the component vendoring config file '%s'. Supported kinds: 'ComponentVendorConfig'",
-			componentConfig.Kind,
-			cfg.ComponentVendorConfigFileName)
+		return componentConfig, "", fmt.Errorf("%w: '%s' in file '%s'", ErrInvalidComponentKind, componentConfig.Kind, cfg.ComponentVendorConfigFileName)
 	}
 
 	return componentConfig, componentPath, nil
@@ -215,7 +215,7 @@ func ExecuteComponentVendorInternal(
 	var uri string
 
 	if vendorComponentSpec.Source.Uri == "" {
-		return fmt.Errorf("'uri' must be specified in 'source.uri' in the component vendoring config file '%s'", cfg.ComponentVendorConfigFileName)
+		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
 	}
 
 	// Parse 'uri' template
@@ -329,7 +329,6 @@ func ExecuteComponentVendorInternal(
 			// Check if it's a local file .
 			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
 				if u.FileExists(absPath) {
-					pType = pkgTypeLocal
 					continue
 				}
 			}
