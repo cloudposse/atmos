@@ -182,7 +182,7 @@ func handleComponentVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 
 	return ExecuteComponentVendorInternal(
 		atmosConfig,
-		config.Spec,
+		&config.Spec,
 		flg.Component,
 		path,
 		flg.DryRun,

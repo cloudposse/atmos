@@ -79,7 +79,7 @@ type pkgComponentVendor struct {
 	sourceIsLocalFile   bool
 	pkgType             pkgType
 	version             string
-	vendorComponentSpec schema.VendorComponentSpec
+	vendorComponentSpec *schema.VendorComponentSpec
 	componentPath       string
 	IsComponent         bool
 	IsMixins            bool
