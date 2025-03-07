@@ -239,7 +239,7 @@ func max(a, b int) int {
 	return b
 }
 
-func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd { //nolint:gocritic
 	return func() tea.Msg {
 		log.Debug("Downloading and installing package", "package", p.name)
 		if dryRun {
