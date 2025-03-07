@@ -33,41 +33,75 @@ func ptr(s string) *string {
 }
 
 func TestRedisStore_Get_Success(t *testing.T) {
-	// Arrange
-	mockClient := new(MockRedisClient)
-	store, err := NewRedisStore(RedisStoreOptions{
-		Prefix:         ptr("testprefix"),
-		StackDelimiter: ptr("/"),
-		URL:            ptr("redis://localhost:6379"),
-	})
-	assert.NoError(t, err)
-
-	// Replace the real Redis client with the mock
-	redisStore, ok := store.(*RedisStore)
-	assert.True(t, ok)
-	redisStore.redisClient = mockClient
-
-	stack := "mystack"
-	component := "mycomponent"
-	key := "mykey"
-	fullKey := "testprefix/mystack/mycomponent/mykey"
-
-	expectedValue := map[string]interface{}{
-		"field": "value",
+	tests := []struct {
+		name          string
+		expectedValue interface{}
+	}{
+		{
+			name: "map value",
+			expectedValue: map[string]interface{}{
+				"field": "value",
+				"nested": map[string]interface{}{
+					"inner": 42,
+				},
+			},
+		},
+		{
+			name:          "slice value",
+			expectedValue: []interface{}{"a", "b", "c"},
+		},
+		{
+			name: "complex value",
+			expectedValue: map[string]interface{}{
+				"strings": []interface{}{"a", "b"},
+				"numbers": []interface{}{1, 2, 3},
+				"nested": map[string]interface{}{
+					"array": []interface{}{
+						map[string]interface{}{"x": 1},
+						map[string]interface{}{"y": 2},
+					},
+				},
+			},
+		},
 	}
 
-	jsonData, _ := json.Marshal(expectedValue)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockClient := new(MockRedisClient)
+			store, err := NewRedisStore(RedisStoreOptions{
+				Prefix:         ptr("testprefix"),
+				StackDelimiter: ptr("/"),
+				URL:            ptr("redis://localhost:6379"),
+			})
+			assert.NoError(t, err)
 
-	// Set up the expected calls and return values
-	mockClient.On("Get", context.Background(), fullKey).Return(string(jsonData), nil)
+			redisStore, ok := store.(*RedisStore)
+			assert.True(t, ok)
+			redisStore.redisClient = mockClient
 
-	// Act
-	result, err := redisStore.Get(stack, component, key)
+			stack := "mystack"
+			component := "mycomponent"
+			key := "mykey"
+			fullKey := "testprefix/mystack/mycomponent/mykey"
 
-	// Assert
-	assert.NoError(t, err)
-	assert.Equal(t, expectedValue, result)
-	mockClient.AssertExpectations(t)
+			jsonData, _ := json.Marshal(tt.expectedValue)
+
+			// Set up the expected calls and return values
+			mockClient.On("Get", context.Background(), fullKey).Return(string(jsonData), nil)
+
+			// Act
+			result, err := redisStore.Get(stack, component, key)
+
+			// Assert
+			assert.NoError(t, err)
+			// Use JSONEq to compare the JSON representation instead of direct equality
+			expectedJSON, _ := json.Marshal(tt.expectedValue)
+			actualJSON, _ := json.Marshal(result)
+			assert.JSONEq(t, string(expectedJSON), string(actualJSON))
+			mockClient.AssertExpectations(t)
+		})
+	}
 }
 
 func TestRedisStore_Get_KeyNotFound(t *testing.T) {
@@ -195,10 +229,76 @@ func TestRedisStore_Get_UnmarshalError(t *testing.T) {
 	result, err := redisStore.Get(stack, component, key)
 
 	// Assert
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to unmarshal file")
+	assert.NoError(t, err)
+	assert.Equal(t, invalidJSON, result)
 	mockClient.AssertExpectations(t)
+}
+
+func TestRedisStore_Get_NonJsonValues(t *testing.T) {
+	tests := []struct {
+		name          string
+		rawValue      string
+		expectedValue interface{}
+	}{
+		{
+			name:          "plain text",
+			rawValue:      "plain text value",
+			expectedValue: "plain text value",
+		},
+		{
+			name:          "malformed json",
+			rawValue:      `{"key1":"value1", "key2":}`,
+			expectedValue: `{"key1":"value1", "key2":}`,
+		},
+		{
+			name:          "integer value",
+			rawValue:      `42`,
+			expectedValue: float64(42), // JSON unmarshals numbers as float64
+		},
+		{
+			name:          "float value",
+			rawValue:      `3.14159`,
+			expectedValue: 3.14159,
+		},
+		{
+			name:          "numeric string",
+			rawValue:      `"42"`, // JSON string containing a number
+			expectedValue: "42",   // Should be parsed as a string, not a number
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockClient := new(MockRedisClient)
+			store, err := NewRedisStore(RedisStoreOptions{
+				Prefix:         ptr("testprefix"),
+				StackDelimiter: ptr("/"),
+				URL:            ptr("redis://localhost:6379"),
+			})
+			assert.NoError(t, err)
+
+			redisStore, ok := store.(*RedisStore)
+			assert.True(t, ok)
+			redisStore.redisClient = mockClient
+
+			stack := "mystack"
+			component := "mycomponent"
+			key := "mykey"
+			fullKey := "testprefix/mystack/mycomponent/mykey"
+
+			// Set up the expected calls and return values
+			mockClient.On("Get", context.Background(), fullKey).Return(tt.rawValue, nil)
+
+			// Act
+			result, err := redisStore.Get(stack, component, key)
+
+			// Assert
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedValue, result)
+			mockClient.AssertExpectations(t)
+		})
+	}
 }
 
 func TestRedisStore_Get_GetKeyError(t *testing.T) {
