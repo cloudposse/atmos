@@ -37,8 +37,7 @@ Flags:
         --format string                       Specify the output format:
                                               default, gcc (default default)
 
-    -h, --help                                help for editorconfig (default
-                                              false)
+    -h, --help                                help for editorconfig
 
         --ignore-defaults                     Ignore default excludes (default
                                               false)

@@ -267,9 +267,18 @@ func WrappedFlagUsages(f *pflag.FlagSet) string {
 
 	printer.maxFlagLen = calculateMaxFlagLength(f)
 
+	var doubleDashFlag *pflag.Flag
 	f.VisitAll(func(flag *pflag.Flag) {
+		// We want double dash hint at the last
+		if flag.Name == "" {
+			doubleDashFlag = flag
+			return
+		}
 		printer.PrintHelpFlag(flag)
 	})
+	if doubleDashFlag != nil {
+		printer.PrintHelpFlag(doubleDashFlag)
+	}
 
 	return builder.String()
 }

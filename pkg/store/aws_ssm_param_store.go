@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -89,11 +90,12 @@ func (s *SSMStore) Set(stack string, component string, key string, value interfa
 
 	ctx := context.TODO()
 
-	// Convert value to string
-	strValue, ok := value.(string)
-	if !ok {
-		return fmt.Errorf("value must be a string")
+	// Convert value to JSON string
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to serialize value to JSON: %w", err)
 	}
+	strValue := string(jsonValue)
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
@@ -144,5 +146,9 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 		return nil, fmt.Errorf("failed to get parameter '%s': %w", paramName, err)
 	}
 
-	return aws.ToString(result.Parameter.Value), nil
+	var value interface{}
+	if err := json.Unmarshal([]byte(*result.Parameter.Value), &value); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal parameter value: %w", err)
+	}
+	return value, nil
 }
