@@ -297,7 +297,7 @@ func GetTerraformOutput(
 
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
-		u.PrintfMarkdown("\r✗ %s\n", message)
+		u.PrintMessage(fmt.Sprintf("\r✗ %s\n", message))
 		l.Fatal("Failed to describe the component", "component", component, "stack", stack, errorKey, err)
 	}
 
@@ -305,7 +305,7 @@ func GetTerraformOutput(
 	// `output` from the static remote state instead of executing `terraform output`
 	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 	if err != nil {
-		u.PrintfMarkdown("\r✗ %s\n", message)
+		u.PrintMessage(fmt.Sprintf("\r✗ %s\n", message))
 		l.Fatal("Failed to get remote state backend static type outputs", "error", err)
 	}
 
@@ -318,7 +318,7 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
-			u.PrintfMarkdown("\r✗ %s\n", message)
+			u.PrintMessage(fmt.Sprintf("\r✗ %s\n", message))
 			l.Fatal("Failed to execute terraform output", "component", component, "stack", stack, errorKey, err)
 		}
 
@@ -326,7 +326,7 @@ func GetTerraformOutput(
 		terraformOutputsCache.Store(stackSlug, terraformOutputs)
 		result = getTerraformOutputVariable(atmosConfig, component, stack, terraformOutputs, output)
 	}
-	u.PrintfMarkdown("\r✓ %s\n", message)
+	u.PrintMessage(fmt.Sprintf("\r✓ %s\n", message))
 
 	return result
 }
