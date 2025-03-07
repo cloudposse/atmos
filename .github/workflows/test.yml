@@ -499,9 +499,16 @@ jobs:
 
       - name: Lint with golangci-lint
         uses: reviewdog/action-golangci-lint@v2
+        id: golangci
         with:
           filter_mode: "diff_context"
+          reporter: github-check
           github_token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Fail if Lint Errors Exist
+        if: steps.golangci.outcome == 'failure'
+        run: exit 1
 
   release:
     needs: [test, lint, mock, k3s, localstack, docker, validate]
