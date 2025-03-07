@@ -118,7 +118,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		//nolint:all
 		log.Fatal("Error parsing log level", "error", err)
 	}
-	log.Debug("Log level set to", "level", log.GetLevel(), "file", atmosConfig.Logs.File)
+	log.Debug("set", "log-level", log.GetLevel(), "log-file", atmosConfig.Logs.File)
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
