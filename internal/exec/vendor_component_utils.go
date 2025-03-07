@@ -33,8 +33,8 @@ var (
 	ErrMixinEmpty                  = errors.New("mixin URI cannot be empty")
 	ErrMixinNotImplemented         = errors.New("local mixin installation not implemented")
 	ErrStackPullNotSupported       = errors.New("command 'atmos vendor pull --stack <stack>' is not supported yet")
-	ErrComponentConfigFileNotFound = "component vendoring config file does not exist in the '%s' folder"
-	ErrFolderNotFound              = "folder '%s' does not exist"
+	ErrComponentConfigFileNotFound = errors.New("component vendoring config file does not exist in the folder")
+	ErrFolderNotFound              = errors.New("folder does not exist")
 )
 
 // findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`).
@@ -47,7 +47,7 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 			return configFilePath, nil
 		}
 	}
-	return "", fmt.Errorf(ErrComponentConfigFileNotFound, basePath)
+	return "", fmt.Errorf("%w:%s", ErrComponentConfigFileNotFound, basePath)
 }
 
 // ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`.
@@ -75,7 +75,7 @@ func ReadAndProcessComponentVendorConfigFile(
 	}
 
 	if !dirExists {
-		return componentConfig, "", fmt.Errorf(ErrFolderNotFound, componentPath)
+		return componentConfig, "", fmt.Errorf("%w:%s", ErrFolderNotFound, componentPath)
 	}
 
 	componentConfigFile, err := findComponentConfigFile(componentPath, strings.TrimSuffix(cfg.ComponentVendorConfigFileName, ".yaml"))
