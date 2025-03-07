@@ -1,0 +1,19 @@
+name: Nightly Builds
+on:
+  workflow_dispatch:
+  schedule:
+  # Run at 00:15 UTC (12:15 AM UTC) daily.
+  # • Pacific Time (PT): 4:15 PM (previous day)
+  # • Mountain Time (MT): 5:15 PM (previous day)
+  # • Central Time (CT): 6:15 PM (previous day)
+  # • Eastern Time (ET): 7:15 PM (previous day)
+    - cron: "15 0 * * *"
+
+jobs:
+  release:
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
+    with:
+      publish: true
+      format: binary
+      prerelease: true
+    secrets: inherit
