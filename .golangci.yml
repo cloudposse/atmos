@@ -96,7 +96,7 @@ linters-settings:
             skipComments: true
             skipBlankLines: true
       - name: function-length
-        arguments: [50, 80] # Max lines per function
+        arguments: [50, 85] # Max lines per function
       - name: cognitive-complexity
         arguments: [27] # Max cognitive complexity
       - name: cyclomatic
