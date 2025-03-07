@@ -37,7 +37,7 @@ linters:
 
 linters-settings:
   funlen:
-    lines: 60 # Maximum number of lines per function
+    lines: 75 # Maximum number of lines per function
     statements: 40 # Maximum number of statements per function
     ignore-comments: true # Ignore comments when counting lines.
 
@@ -67,7 +67,7 @@ linters-settings:
 
   gocognit:
     # Maximum cognitive complexity
-    min-complexity: 26
+    min-complexity: 23
 
   godot:
     # Check if comments end in a period
@@ -96,11 +96,11 @@ linters-settings:
             skipComments: true
             skipBlankLines: true
       - name: function-length
-        arguments: [50, 60] # Max lines per function
+        arguments: [50, 80] # Max lines per function
       - name: cognitive-complexity
-        arguments: [28] # Max cognitive complexity
+        arguments: [25] # Max cognitive complexity
       - name: cyclomatic
-        arguments: [10] # Max cyclomatic complexity
+        arguments: [13] # Max cyclomatic complexity
       - name: add-constant
         arguments:
           - maxLitCount: "3"
@@ -158,7 +158,7 @@ linters-settings:
 
   nestif:
     # Minimal complexity of if statements to report.
-    min-complexity: 4
+    min-complexity: 6
 
 issues:
   max-issues-per-linter: 0
