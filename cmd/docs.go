@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	l "github.com/charmbracelet/log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -46,7 +46,7 @@ var docsCmd = &cobra.Command{
 			maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 			if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
 				maxWidth = atmosConfig.Settings.Docs.MaxWidth
-				l.Warn("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
+				log.Warn("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
 			}
 			defaultWidth := 120
 			screenWidth := defaultWidth
@@ -68,7 +68,7 @@ var docsCmd = &cobra.Command{
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
-				l.Debug(err)
+				log.Debug(err)
 				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component not found"), "")
 			}
 			if !componentPathExists {
@@ -103,7 +103,7 @@ var docsCmd = &cobra.Command{
 			pager := atmosConfig.Settings.Terminal.Pager
 			if !pager && atmosConfig.Settings.Docs.Pagination {
 				pager = atmosConfig.Settings.Docs.Pagination
-				l.Warn("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
+				log.Warn("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {
@@ -117,7 +117,7 @@ var docsCmd = &cobra.Command{
 		var err error
 
 		if os.Getenv("GO_TEST") == "1" {
-			l.Debug("Skipping browser launch in test environment")
+			log.Debug("Skipping browser launch in test environment")
 		} else {
 			switch runtime.GOOS {
 			case "linux":
