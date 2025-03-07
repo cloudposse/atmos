@@ -35,7 +35,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = e.ExecuteComponentVendorInternal(&atmosConfig, componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
@@ -55,7 +55,7 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = e.ExecuteComponentVendorInternal(&atmosConfig, componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Additional files to check
