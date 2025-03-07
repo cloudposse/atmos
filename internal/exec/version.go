@@ -58,7 +58,7 @@ func (v versionExec) checkRelease() {
 	currentRelease := strings.TrimPrefix(version.Version, "v")
 
 	if latestRelease == currentRelease {
-		log.Warn("You are running the latest version of Atmos", "version", latestRelease)
+		log.Info("You are running the latest version of Atmos", "version", latestRelease)
 	} else {
 		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)
 	}
