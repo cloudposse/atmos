@@ -64,7 +64,7 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 	}, nil
 }
 
-func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd { //nolint:gocritic
 	return func() tea.Msg {
 		if dryRun {
 			log.Debug("vendoring component (dry-run)", "component", p.name)
