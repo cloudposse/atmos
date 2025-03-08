@@ -6,3 +6,9 @@ vars:
 import:
   - teams/team1
   - teams/team2
+
+terraform:
+  overrides:
+    vars:
+      test:
+        a: a-dev
