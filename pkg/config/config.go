@@ -78,11 +78,11 @@ var (
 			File:  "/dev/stderr",
 			Level: "Info",
 		},
-		Schemas: schema.Schemas{
-			JsonSchema: schema.JsonSchema{
+		Schemas: map[string]interface{}{
+			"jsonschema": schema.ResourcePath{
 				BasePath: "stacks/schemas/jsonschema",
 			},
-			Opa: schema.Opa{
+			"opa": schema.ResourcePath{
 				BasePath: "stacks/schemas/opa",
 			},
 		},

@@ -327,25 +327,33 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
 	if len(jsonschemaBasePath) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH=%s", jsonschemaBasePath))
-		atmosConfig.Schemas.JsonSchema.BasePath = jsonschemaBasePath
+		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
+			BasePath: jsonschemaBasePath,
+		}
 	}
 
 	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
 	if len(opaBasePath) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_OPA_BASE_PATH=%s", opaBasePath))
-		atmosConfig.Schemas.Opa.BasePath = opaBasePath
+		atmosConfig.Schemas["opa"] = schema.ResourcePath{
+			BasePath: opaBasePath,
+		}
 	}
 
 	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
 	if len(cueBasePath) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_CUE_BASE_PATH=%s", cueBasePath))
-		atmosConfig.Schemas.Cue.BasePath = cueBasePath
+		atmosConfig.Schemas["cue"] = schema.ResourcePath{
+			BasePath: cueBasePath,
+		}
 	}
 
 	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 	if len(atmosManifestJsonSchemaPath) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_ATMOS_MANIFEST=%s", atmosManifestJsonSchemaPath))
-		atmosConfig.Schemas.Atmos.Manifest = atmosManifestJsonSchemaPath
+		atmosConfig.Schemas["atmos"] = schema.Schemas{
+			Manifest: atmosManifestJsonSchemaPath,
+		}
 	}
 
 	logsFile := os.Getenv("ATMOS_LOGS_FILE")
@@ -467,19 +475,27 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
 	}
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
-		atmosConfig.Schemas.JsonSchema.BasePath = configAndStacksInfo.JsonSchemaDir
+		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
+			BasePath: configAndStacksInfo.JsonSchemaDir,
+		}
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
-		atmosConfig.Schemas.Opa.BasePath = configAndStacksInfo.OpaDir
+		atmosConfig.Schemas["opa"] = schema.ResourcePath{
+			BasePath: configAndStacksInfo.OpaDir,
+		}
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
-		atmosConfig.Schemas.Cue.BasePath = configAndStacksInfo.CueDir
+		atmosConfig.Schemas["cue"] = schema.ResourcePath{
+			BasePath: configAndStacksInfo.CueDir,
+		}
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
-		atmosConfig.Schemas.Atmos.Manifest = configAndStacksInfo.AtmosManifestJsonSchema
+		atmosConfig.Schemas["atmos"] = schema.Schemas{
+			Manifest: configAndStacksInfo.AtmosManifestJsonSchema,
+		}
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
 	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
