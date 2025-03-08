@@ -63,7 +63,7 @@ var RootCmd = &cobra.Command{
 			if errors.Is(err, config.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
-					u.LogWarning(err.Error())
+					log.Warn("CLI configuration issue", "error", err)
 				}
 			} else {
 				u.LogErrorAndExit(err)
