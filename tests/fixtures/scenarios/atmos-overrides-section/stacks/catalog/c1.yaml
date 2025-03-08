@@ -3,10 +3,9 @@
 components:
   terraform:
     c1:
-      metadata:
-        component: overrides
       vars:
         test:
           a: a
           b: b
           c: c
+          d: d

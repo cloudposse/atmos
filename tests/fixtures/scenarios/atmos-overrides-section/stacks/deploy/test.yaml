@@ -9,4 +9,11 @@ import:
 overrides:
   vars:
     test:
+      a: a-test
       b: b-test
+
+terraform:
+  overrides:
+    vars:
+      test:
+        a: a-test-2
