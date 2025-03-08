@@ -23,7 +23,7 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func TestLockStack(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
+	mockLogger, err := logger.InitializeLogger("test", "/dev/stdout")
 	assert.Nil(t, err)
 
 	mockRoundTripper := new(MockRoundTripper)
@@ -53,7 +53,7 @@ func TestLockStack(t *testing.T) {
 }
 
 func TestLockStack_Error(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
+	mockLogger, err := logger.InitializeLogger("test", "/dev/stdout")
 	assert.Nil(t, err)
 
 	mockRoundTripper := new(MockRoundTripper)
@@ -84,7 +84,7 @@ func TestLockStack_Error(t *testing.T) {
 }
 
 func TestUnlockStack(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
+	mockLogger, err := logger.InitializeLogger("test", "/dev/stdout")
 	assert.Nil(t, err)
 
 	mockRoundTripper := new(MockRoundTripper)
@@ -114,7 +114,7 @@ func TestUnlockStack(t *testing.T) {
 }
 
 func TestUnlockStack_Error(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
+	mockLogger, err := logger.InitializeLogger("test", "/dev/stdout")
 	assert.Nil(t, err)
 
 	mockRoundTripper := new(MockRoundTripper)

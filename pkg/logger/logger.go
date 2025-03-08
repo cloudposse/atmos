@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	log "github.com/charmbracelet/log"
 	"github.com/fatih/color"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -20,7 +21,7 @@ const (
 	LogLevelWarning LogLevel = "Warning"
 )
 
-// logLevelOrder defines the order of log levels from most verbose to least verbose
+// logLevelOrder defines the order of log levels from most verbose to least verbose.
 var logLevelOrder = map[LogLevel]int{
 	LogLevelTrace:   0,
 	LogLevelDebug:   1,
@@ -32,21 +33,50 @@ var logLevelOrder = map[LogLevel]int{
 type Logger struct {
 	LogLevel LogLevel
 	File     string
+	charm    *log.Logger
 }
 
-func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
+func InitializeLogger(logLevel LogLevel, file string) (*Logger, error) {
+	charm := GetCharmLogger()
+
+	// Set log level
+	charmLevel := log.InfoLevel
+	switch logLevel {
+	case LogLevelTrace:
+		charmLevel = log.DebugLevel // Charmbracelet doesn't have Trace, use Debug.
+	case LogLevelDebug:
+		charmLevel = log.DebugLevel
+	case LogLevelInfo:
+		charmLevel = log.InfoLevel
+	case LogLevelWarning:
+		charmLevel = log.WarnLevel
+	case LogLevelOff:
+		charmLevel = log.FatalLevel + 1 // Set to a level higher than any defined level.
+	}
+	charm.SetLevel(charmLevel)
+
+	if shouldUseCustomLogFile(file) {
+		logFile, err := openLogFile(file)
+		if err != nil {
+			return nil, err
+		}
+		charm = GetCharmLoggerWithOutput(logFile)
+		charm.SetLevel(charmLevel)
+	}
+
 	return &Logger{
 		LogLevel: logLevel,
 		File:     file,
+		charm:    charm,
 	}, nil
 }
 
-func NewLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
+func InitializeLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
 	logLevel, err := ParseLogLevel(cfg.Logs.Level)
 	if err != nil {
 		return nil, err
 	}
-	return NewLogger(logLevel, cfg.Logs.File)
+	return InitializeLogger(logLevel, cfg.Logs.File)
 }
 
 func ParseLogLevel(logLevel string) (LogLevel, error) {
@@ -110,6 +140,8 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 
 func (l *Logger) Error(err error) {
 	if err != nil && l.LogLevel != LogLevelOff {
+		l.charm.Error("Error occurred", "error", err)
+
 		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
 		if err2 != nil {
 			color.Red("Error logging the error:")
@@ -120,7 +152,21 @@ func (l *Logger) Error(err error) {
 	}
 }
 
-// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+// shouldUseCustomLogFile returns true if a custom log file should be used instead of standard streams.
+func shouldUseCustomLogFile(file string) bool {
+	return file != "" && file != "/dev/stdout" && file != "/dev/stderr"
+}
+
+// openLogFile opens a log file for writing with appropriate flags.
+func openLogFile(file string) (*os.File, error) {
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file: %w", err)
+	}
+	return f, nil
+}
+
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
 func (l *Logger) isLevelEnabled(level LogLevel) bool {
 	if l.LogLevel == LogLevelOff {
 		return false
@@ -130,24 +176,29 @@ func (l *Logger) isLevelEnabled(level LogLevel) bool {
 
 func (l *Logger) Trace(message string) {
 	if l.isLevelEnabled(LogLevelTrace) {
+		// Charmbracelet doesn't have Trace level, use Debug with 'trace' context.
+		l.charm.Debug(message, "level", "trace")
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
 	if l.isLevelEnabled(LogLevelDebug) {
+		l.charm.Debug(message)
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Info(message string) {
 	if l.isLevelEnabled(LogLevelInfo) {
+		l.charm.Info(message)
 		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
 	if l.isLevelEnabled(LogLevelWarning) {
+		l.charm.Warn(message)
 		l.log(theme.Colors.Warning, message)
 	}
 }
