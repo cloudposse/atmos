@@ -85,56 +85,16 @@ func TestListMetadataValidation(t *testing.T) {
 	assert.NotContains(t, buf.String(), "error")
 }
 
-// TestListMetadataErrorHandling tests error handling in the Run function.
-func TestListMetadataErrorHandling(t *testing.T) {
-	t.Skip("Skipping this test as it depends on specific environment configuration")
-
-	var buf bytes.Buffer
-	testLogger := log.New(&buf)
-	testLogger.SetLevel(log.DebugLevel)
-	testLogger.SetReportTimestamp(false)
-	testLogger.SetReportCaller(false)
-
-	originalLogger := log.Default()
-	log.SetDefault(testLogger)
-	defer log.SetDefault(originalLogger)
-
-	originalCheckAtmosConfig := checkAtmosConfigFn
-	checkAtmosConfigFn = func(opts ...AtmosValidateOption) {}
-	defer func() {
-		checkAtmosConfigFn = originalCheckAtmosConfig
-	}()
-
-	// Command with invalid flags to trigger error.
-	cmd := &cobra.Command{
-		Use: "test",
-		Run: listMetadataCmd.Run,
-	}
-
-	// Run the command, it should fail because flags are missing
-	// and the config file doesn't exist.
-	cmd.Run(cmd, []string{})
-
-	// The key point here is that the command runs without panicking.
-	// The specific error message will depend on the environment.
-}
-
 // TestListMetadataCommonFlagsError tests error handling when getting common flags fails.
 func TestListMetadataCommonFlagsError(t *testing.T) {
-	// Create a test function that simulates listMetadata's error handling
-	// but uses our mock getCommonListFlags function.
+	var errMockCommonFlags = errors.New("mock common flags error")
 
-	// Define a static error for testing
-	errMockCommonFlags := errors.New("mock common flags error")
-
-	getCommonListFlagsMock := func(cmd *cobra.Command) (*list.CommonListFlags, error) {
+	getCommonListFlagsMock := func(_ *cobra.Command) (*list.CommonListFlags, error) {
 		return nil, errMockCommonFlags
 	}
 
-	// Create a test function that mimics listMetadata but uses our mock.
-	testListMetadata := func(cmd *cobra.Command) (string, error) {
-		// Simulate the behavior in listMetadata.
-		_, err := getCommonListFlagsMock(cmd)
+	testListMetadata := func(_ *cobra.Command) (string, error) {
+		_, err := getCommonListFlagsMock(nil)
 		if err != nil {
 			return "", fmt.Errorf("common flags: %w", err)
 		}
