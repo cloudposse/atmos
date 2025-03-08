@@ -448,7 +448,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		if err := processOciImage(*atmosConfig, p.uri, tempDir); err != nil {
+		if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
 			return fmt.Errorf("Failed to process OCI image %s error %w", p.name, err)
 		}
 
@@ -504,7 +504,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(*atmosConfig, p.uri, tempDir)
+		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("failed to process OCI image %s error %w", p.name, err)
 		}

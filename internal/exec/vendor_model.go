@@ -367,7 +367,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 
 	case pkgTypeOci:
 		// Process OCI images
-		if err := processOciImage(*atmosConfig, p.uri, *tempDir); err != nil {
+		if err := processOciImage(atmosConfig, p.uri, *tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image: %w", err)
 		}
 
