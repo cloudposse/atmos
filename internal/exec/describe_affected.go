@@ -48,7 +48,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
-	logger, err := l.InitializeLoggerFromCliConfig(atmosConfig)
+	logger, err := l.InitializeLoggerFromCliConfig(&atmosConfig)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}

@@ -2,7 +2,7 @@ package logger
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -58,7 +58,7 @@ func TestInitializeLoggerFromCliConfig(t *testing.T) {
 		},
 	}
 
-	logger, err := InitializeLoggerFromCliConfig(atmosConfig)
+	logger, err := InitializeLoggerFromCliConfig(&atmosConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 	assert.Equal(t, LogLevelInfo, logger.LogLevel)
@@ -146,13 +146,15 @@ func TestLogger_Warning(t *testing.T) {
 	assert.Contains(t, output, "Warning message")
 }
 
+// ErrTest is a static test error.
+var ErrTest = errors.New("This is an error")
+
 func TestLogger_Error(t *testing.T) {
 	var buf bytes.Buffer
 	color.Error = &buf
 	logger, _ := InitializeLogger(LogLevelWarning, "/dev/stderr")
 
-	err := fmt.Errorf("This is an error")
-	logger.Error(err)
+	logger.Error(ErrTest)
 	assert.Contains(t, buf.String(), "This is an error")
 }
 
@@ -322,7 +324,7 @@ func TestLoggerFromCliConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			logger, err := InitializeLoggerFromCliConfig(test.config)
+			logger, err := InitializeLoggerFromCliConfig(&test.config)
 			if test.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, logger)

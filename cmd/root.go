@@ -90,7 +90,7 @@ var RootCmd = &cobra.Command{
 
 // setupLogger configures the global logger based on application configuration using our logger pkg.
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
-	atmosLogger, err := logger.InitializeLoggerFromCliConfig(*atmosConfig)
+	atmosLogger, err := logger.InitializeLoggerFromCliConfig(atmosConfig)
 	if err != nil {
 		log.Error("Failed to initialize logger from config", "error", err)
 
@@ -335,10 +335,3 @@ func initCobraConfig() {
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }
-
-// https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
-// https://github.com/spf13/cobra/blob/master/user_guide.md
-// https://blog.knoldus.com/create-kubectl-like-cli-with-go-and-cobra/
-// https://pkg.go.dev/github.com/c-bata/go-prompt
-// https://pkg.go.dev/github.com/spf13/cobra
-// https://scene-si.org/2017/04/20/managing-configuration-with-viper/

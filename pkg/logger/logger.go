@@ -71,7 +71,8 @@ func InitializeLogger(logLevel LogLevel, file string) (*Logger, error) {
 	}, nil
 }
 
-func InitializeLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
+// InitializeLoggerFromCliConfig creates a logger based on Atmos CLI configuration.
+func InitializeLoggerFromCliConfig(cfg *schema.AtmosConfiguration) (*Logger, error) {
 	logLevel, err := ParseLogLevel(cfg.Logs.Level)
 	if err != nil {
 		return nil, err
