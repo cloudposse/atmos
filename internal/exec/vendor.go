@@ -148,14 +148,14 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 		return fmt.Errorf("%w: %s", ErrVendorConfigNotExist, cfg.AtmosVendorConfigFileName)
 	}
 	if vendorConfigExists {
-		return ExecuteAtmosVendorInternal(
-			atmosConfig,
-			foundVendorConfigFile,
-			vendorConfig.Spec,
-			flg.Component,
-			flg.Tags,
-			flg.DryRun,
-		)
+		return ExecuteAtmosVendorInternal(&executeVendorOptions{
+			vendorConfigFileName: foundVendorConfigFile,
+			dryRun:               flg.DryRun,
+			atmosConfig:          atmosConfig,
+			atmosVendorSpec:      vendorConfig.Spec,
+			component:            flg.Component,
+			tags:                 flg.Tags,
+		})
 	}
 
 	if flg.Component != "" {
