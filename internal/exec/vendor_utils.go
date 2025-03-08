@@ -479,30 +479,33 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
 		// Check if the file should be excluded
-		if shouldExclude, err := shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc); shouldExclude || err != nil {
-			return shouldExclude, err
+		if len(s.ExcludedPaths) > 0 {
+			return shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
 		}
 
-		// Check if the file should be included
-		if shouldInclude, err := shouldIncludeFile(src, s.IncludedPaths, trimmedSrc); len(s.IncludedPaths) > 0 && (shouldInclude || err != nil) {
-			return !shouldInclude, err
+		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+		if len(s.IncludedPaths) > 0 {
+			return shouldIncludeFile(src, s.IncludedPaths, trimmedSrc)
 		}
 
-		// If no inclusion rules are specified, include the file
-		log.Debug("Including", trimmedSrc)
+		// If 'included_paths' is not provided, include all files that were not excluded
+		log.Debug("Including", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
 }
 
-// Helper function to check if a file should be excluded.
+// Exclude the files that match the 'excluded_paths' patterns.
+// It supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+// https://en.wikipedia.org/wiki/Glob_(programming).
+// https://github.com/bmatcuk/doublestar#pattern.
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
 	for _, excludePath := range excludedPaths {
 		excludeMatch, err := u.PathMatch(excludePath, src)
 		if err != nil {
 			return true, err
-		}
-		if excludeMatch {
-			log.Debug("Excluding file since it does not match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "file", trimmedSrc)
+		} else if excludeMatch {
+			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
 			return true, nil
 		}
 	}
@@ -511,16 +514,24 @@ func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (b
 
 // Helper function to check if a file should be included.
 func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
+	anyMatches := false
 	for _, includePath := range includedPaths {
 		includeMatch, err := u.PathMatch(includePath, src)
 		if err != nil {
-			return false, err
-		}
-		if includeMatch {
+			return true, err
+		} else if includeMatch {
+			// If the file matches ANY of the 'included_paths' patterns, include the file
 			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
-			return true, nil
+
+			anyMatches = true
+			break
 		}
 	}
-	log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
-	return false, nil
+
+	if anyMatches {
+		return false, nil
+	} else {
+		log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
+		return true, nil
+	}
 }
