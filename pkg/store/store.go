@@ -11,11 +11,12 @@ type Store interface {
 // StoreFactory is a function type to initialize a new store.
 type StoreFactory func(options map[string]interface{}) (Store, error)
 
+// nolint
 // getKey generates a key for the store. First it splits the stack by the stack delimiter (from atmos.yaml)
-// then it splits the component if it containts a "/"
+// then it splits the component if it contains a "/"
 // then it appends the key to the parts
 // then it joins the parts with the final delimiter
-func getKey(prefix string, stackDelimiter string, stack string, component string, key string, finalDelimiter string) (string, error) {
+func getKey(prefix string, stackDelimiter string, stack string, component string, key string, finalDelimiter string) (string, error) { //nolint
 	stackParts := strings.Split(stack, stackDelimiter)
 	componentParts := strings.Split(component, "/")
 
