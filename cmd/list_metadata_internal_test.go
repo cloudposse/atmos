@@ -85,16 +85,16 @@ func TestListMetadataValidation(t *testing.T) {
 	assert.NotContains(t, buf.String(), "error")
 }
 
+var ErrMockCommonFlags = errors.New("mock common flags error")
+
 // TestListMetadataCommonFlagsError tests error handling when getting common flags fails.
 func TestListMetadataCommonFlagsError(t *testing.T) {
-	var errMockCommonFlags = errors.New("mock common flags error")
-
-	getCommonListFlagsMock := func(_ *cobra.Command) (*list.CommonListFlags, error) {
-		return nil, errMockCommonFlags
+	getCommonListFlagsMock := func(_ *cobra.Command) error {
+		return ErrMockCommonFlags
 	}
 
 	testListMetadata := func(_ *cobra.Command) (string, error) {
-		_, err := getCommonListFlagsMock(nil)
+		err := getCommonListFlagsMock(nil)
 		if err != nil {
 			return "", fmt.Errorf("common flags: %w", err)
 		}

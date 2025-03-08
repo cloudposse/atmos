@@ -43,15 +43,15 @@ func TestListStacksSuccess(t *testing.T) {
 	assert.Contains(t, stdoutBuf.String(), "stack2")
 }
 
+var ErrTest = errors.New("test error")
+
 // TestListStacksError tests the error path of the Run function.
 func TestListStacksError(t *testing.T) {
-	// Define a static error for testing
-	var errTest = errors.New("test error")
 
 	cmd := &cobra.Command{
 		Use: "stacks",
 		Run: func(cmd *cobra.Command, args []string) {
-			err := errTest
+			err := ErrTest
 			if err != nil {
 				msg := "error filtering stacks: " + err.Error()
 				os.Stderr.WriteString(msg)
