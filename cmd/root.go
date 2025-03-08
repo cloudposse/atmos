@@ -66,7 +66,7 @@ var RootCmd = &cobra.Command{
 					log.Warn("CLI configuration issue", "error", err)
 				}
 			} else {
-				u.LogErrorAndExit(err)
+				log.Fatal("CLI configuration error", "error", err)
 			}
 		}
 	},

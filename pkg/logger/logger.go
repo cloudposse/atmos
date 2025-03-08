@@ -158,9 +158,12 @@ func shouldUseCustomLogFile(file string) bool {
 	return file != "" && file != "/dev/stdout" && file != "/dev/stderr"
 }
 
+// FilePermDefault is the default permission for log files (0644 in octal) TODO: refactor this later
+const FilePermDefault = 0o644
+
 // openLogFile opens a log file for writing with appropriate flags.
 func openLogFile(file string) (*os.File, error) {
-	f, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, FilePermDefault)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}
