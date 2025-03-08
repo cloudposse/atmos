@@ -40,12 +40,14 @@ func captureOutput(f func()) string {
 	return out
 }
 
-func TestNewLogger(t *testing.T) {
-	logger, err := NewLogger(LogLevelDebug, "/dev/stdout")
+func TestInitializeLogger(t *testing.T) {
+	logger, err := InitializeLogger(LogLevelDebug, "/dev/stdout")
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 	assert.Equal(t, LogLevelDebug, logger.LogLevel)
 	assert.Equal(t, "/dev/stdout", logger.File)
+
+	assert.NotNil(t, logger.charm, "Charmbracelet logger should be initialized")
 }
 
 func TestNewLoggerFromCliConfig(t *testing.T) {
@@ -97,7 +99,7 @@ func TestParseLogLevel(t *testing.T) {
 }
 
 func TestLogger_Trace(t *testing.T) {
-	logger, _ := NewLogger(LogLevelTrace, "/dev/stdout")
+	logger, _ := InitializeLogger(LogLevelTrace, "/dev/stdout")
 
 	output := captureOutput(func() {
 		logger.Trace("Trace message")
@@ -107,7 +109,7 @@ func TestLogger_Trace(t *testing.T) {
 }
 
 func TestLogger_Debug(t *testing.T) {
-	logger, _ := NewLogger(LogLevelDebug, "/dev/stdout")
+	logger, _ := InitializeLogger(LogLevelDebug, "/dev/stdout")
 
 	output := captureOutput(func() {
 		logger.Debug("Debug message")
@@ -115,7 +117,7 @@ func TestLogger_Debug(t *testing.T) {
 
 	assert.Contains(t, output, "Debug message")
 
-	logger, _ = NewLogger(LogLevelTrace, "/dev/stdout")
+	logger, _ = InitializeLogger(LogLevelTrace, "/dev/stdout")
 
 	output = captureOutput(func() {
 		logger.Debug("Trace message should appear")
@@ -125,7 +127,7 @@ func TestLogger_Debug(t *testing.T) {
 }
 
 func TestLogger_Info(t *testing.T) {
-	logger, _ := NewLogger(LogLevelInfo, "/dev/stdout")
+	logger, _ := InitializeLogger(LogLevelInfo, "/dev/stdout")
 
 	output := captureOutput(func() {
 		logger.Info("Info message")
@@ -135,7 +137,7 @@ func TestLogger_Info(t *testing.T) {
 }
 
 func TestLogger_Warning(t *testing.T) {
-	logger, _ := NewLogger(LogLevelWarning, "/dev/stdout")
+	logger, _ := InitializeLogger(LogLevelWarning, "/dev/stdout")
 
 	output := captureOutput(func() {
 		logger.Warning("Warning message")
@@ -147,7 +149,7 @@ func TestLogger_Warning(t *testing.T) {
 func TestLogger_Error(t *testing.T) {
 	var buf bytes.Buffer
 	color.Error = &buf
-	logger, _ := NewLogger(LogLevelWarning, "/dev/stderr")
+	logger, _ := InitializeLogger(LogLevelWarning, "/dev/stderr")
 
 	err := fmt.Errorf("This is an error")
 	logger.Error(err)
@@ -160,7 +162,7 @@ func TestLogger_FileLogging(t *testing.T) {
 
 	defer os.Remove(logFile)
 
-	logger, _ := NewLogger(LogLevelInfo, logFile)
+	logger, _ := InitializeLogger(LogLevelInfo, logFile)
 	logger.Info("File logging test")
 
 	data, err := os.ReadFile(logFile)
@@ -169,7 +171,7 @@ func TestLogger_FileLogging(t *testing.T) {
 }
 
 func TestLogger_SetLogLevel(t *testing.T) {
-	logger, _ := NewLogger(LogLevelInfo, "/dev/stdout")
+	logger, _ := InitializeLogger(LogLevelInfo, "/dev/stdout")
 
 	err := logger.SetLogLevel(LogLevelDebug)
 	assert.NoError(t, err)
@@ -251,7 +253,7 @@ func TestLogger_LogMethods(t *testing.T) {
 				outC <- buf.String()
 			}()
 
-			logger, _ := NewLogger(test.loggerLevel, "/dev/stdout")
+			logger, _ := InitializeLogger(test.loggerLevel, "/dev/stdout")
 			test.logFunc(logger, test.message)
 
 			// Close the writer and restore stdout
