@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -88,41 +88,69 @@ var RootCmd = &cobra.Command{
 	},
 }
 
+// setupLogger configures the global logger based on application configuration using our logger pkg.
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
-	switch atmosConfig.Logs.Level {
-	case "Trace":
-		log.SetLevel(log.DebugLevel)
-	case "Debug":
-		log.SetLevel(log.DebugLevel)
-	case "Info":
+	atmosLogger, err := logger.InitializeLoggerFromCliConfig(*atmosConfig)
+	if err != nil {
+		log.Error("Failed to initialize logger from config", "error", err)
+
 		log.SetLevel(log.InfoLevel)
-	case "Warning":
-		log.SetLevel(log.WarnLevel)
-	case "Off":
-		log.SetLevel(math.MaxInt32)
-	default:
-		log.SetLevel(log.InfoLevel)
+		log.SetOutput(os.Stderr)
+		return
 	}
 
-	var output io.Writer
+	globalLogLevel := mapToCharmLevel(atmosLogger.LogLevel)
+	log.SetLevel(globalLogLevel)
 
-	switch atmosConfig.Logs.File {
+	configureLogOutput(atmosConfig.Logs.File)
+}
+
+// mapToCharmLevel converts our internal log level to a Charmbracelet log level.
+func mapToCharmLevel(logLevel logger.LogLevel) log.Level {
+	switch logLevel {
+	case logger.LogLevelTrace:
+		return log.DebugLevel // Charmbracelet doesn't have Trace
+	case logger.LogLevelDebug:
+		return log.DebugLevel
+	case logger.LogLevelInfo:
+		return log.InfoLevel
+	case logger.LogLevelWarning:
+		return log.WarnLevel
+	case logger.LogLevelOff:
+		return log.FatalLevel + 1 // Disable logging
+	default:
+		return log.InfoLevel
+	}
+}
+
+// configureLogOutput sets up the output destination for the global logger.
+func configureLogOutput(logFile string) {
+	// Handle standard output destinations
+	switch logFile {
 	case "/dev/stderr":
-		output = os.Stderr
-	case "/dev/stdout":
-		output = os.Stdout
+		log.SetOutput(os.Stderr)
+		return
+	case "/dev/stdout", "":
+		log.SetOutput(os.Stdout)
+		return
 	case "/dev/null":
-		output = io.Discard // More efficient than opening os.DevNull
-	default:
-		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		if err != nil {
-			log.Fatal("Failed to open log file:", err)
-		}
-		defer logFile.Close()
-		output = logFile
+		log.SetOutput(io.Discard)
+		return
 	}
 
-	log.SetOutput(output)
+	// Handle custom log file (anything not a standard stream)
+	customFile, err := os.OpenFile(logFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		log.Error("Failed to open log file, using stderr", "error", err)
+		log.SetOutput(os.Stderr)
+		return
+	}
+
+	// Important: We need to register this file to be closed at program exit
+	// to prevent file descriptor leaks, since we can't use defer here
+	// The Go runtime will close this file when the program exits, and the OS
+	// would clean it up anyway, but this is cleaner practice.
+	log.SetOutput(customFile)
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
