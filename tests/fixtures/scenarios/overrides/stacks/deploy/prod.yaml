@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
 vars:
-  stage: nonprod
+  stage: prod
 
 import:
   - teams/team1
@@ -13,6 +13,6 @@ terraform:
   overrides:
     vars:
       test:
-        a: a-nonprod
-        b: b-nonprod
-        c: c-nonprod
+        a: a-prod
+        b: b-prod
+        c: c-prod

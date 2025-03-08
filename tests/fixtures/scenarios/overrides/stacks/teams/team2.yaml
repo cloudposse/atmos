@@ -9,4 +9,3 @@ terraform:
       test:
         a: a-team2
         b: b-team2
-        c: c-team2
