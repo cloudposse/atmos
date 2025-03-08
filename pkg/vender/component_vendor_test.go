@@ -30,12 +30,12 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Test 'infra/vpc-flow-logs-bucket' component
 	component := "infra/vpc-flow-logs-bucket"
-	componentConfig, componentPath, err := e.ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
+	componentConfig, componentPath, err := e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, component, componentType)
 	assert.Nil(t, err)
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = e.ExecuteComponentVendorInternal(atmosConfig, componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Check if the correct files were pulled and written to the correct folder
@@ -50,12 +50,12 @@ func TestVendorComponentPullCommand(t *testing.T) {
 
 	// Test 'infra/account-map' component
 	component = "infra/account-map"
-	componentConfig, componentPath, err = e.ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
+	componentConfig, componentPath, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, component, componentType)
 	assert.Nil(t, err)
 
 	componentPath = ensureAbsPath(componentPath)
 
-	err = e.ExecuteComponentVendorInternal(atmosConfig, componentConfig.Spec, component, componentPath, false)
+	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
 	// Additional files to check

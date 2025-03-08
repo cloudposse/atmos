@@ -5,47 +5,46 @@ metadata:
   description: Atmos vendoring manifest for Atmos demo component library
 spec:
   # Import other vendor manifests, if necessary
-  imports: []
-
+  imports:
+    - "vendor/vendor2.yaml"
   sources:
     - component: "github/stargazers"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
       version: "main"
+      tags:
+        - demo
+        - github
+        - https
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       included_paths:
         - "**/*.tf"
         - "**/*.tfvars"
         - "**/*.md"
-      tags:
-        - demo
-        - github
 
     - component: "test-components"
-      source: "file:///./test-components"
+      source: "file:///../../../fixtures/components/terraform/myapp"
       version: "main"
+      tags:
+        - file
+        - demo
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
-      tags:
-        - demo
 
     - component: "weather"
       source: "git::https://github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
       version: "main"
+      tags:
+        - git
+        - demo
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
-      tags:
-        - demo
-    # TODO: Fix OCI test repository then re-enable this vendoring configuration
-    # - component: "my-vpc1"
-    #   source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
-    #   version: "latest"
-    #   targets:
-    #     - "components/terraform/infra/my-vpc1"
-    - component: "vpc-src"
+    - component: "myapp2"
       source: "../../../fixtures/components/terraform/myapp" # required for test URI contain path traversal
+      tags:
+        - dir
       targets:
-        - "components/terraform/vpc-src"
+        - "components/terraform/myapp2"
       included_paths:
         - "**/*.tf"
         - "**/*.md"
