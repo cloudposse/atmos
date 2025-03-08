@@ -15,7 +15,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -58,9 +58,9 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Only validate the config, don't store it yet since commands may need to add more info
-		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		_, err := config.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
-			if errors.Is(err, cfg.NotFound) {
+			if errors.Is(err, config.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
 					u.LogWarning(err.Error())
@@ -139,7 +139,7 @@ func configureLogOutput(logFile string) {
 	}
 
 	// Handle custom log file (anything not a standard stream)
-	customFile, err := os.OpenFile(logFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	customFile, err := os.OpenFile(logFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, config.StandardFilePermissions)
 	if err != nil {
 		log.Error("Failed to open log file, using stderr", "error", err)
 		log.SetOutput(os.Stderr)
@@ -196,9 +196,9 @@ func Execute() error {
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
 	var initErr error
-	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, initErr = config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	utils.InitializeMarkdown(atmosConfig)
-	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
+	if initErr != nil && !errors.Is(initErr, config.NotFound) {
 		if isVersionCommand() {
 			log.Debug("warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {

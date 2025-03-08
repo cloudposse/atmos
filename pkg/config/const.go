@@ -86,4 +86,6 @@ const (
 	AtmosYamlFuncEnv             = "!env"
 
 	TerraformDefaultWorkspace = "default"
+
+	StandardFilePermissions = 0o644
 )
