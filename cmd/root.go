@@ -25,7 +25,10 @@ import (
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
 
-// RootCmd represents the base command when called without any subcommands
+// configInitError stores configuration initialization errors for later handling in Execute.
+var configInitError error
+
+// RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:                "atmos",
 	Short:              "Universal Tool for DevOps and Cloud Automation",
@@ -72,7 +75,8 @@ var RootCmd = &cobra.Command{
 		}
 
 		log.Error("CLI configuration error", "error", err)
-		os.Exit(1)
+		// Store the error in a variable that can be checked later instead of calling os.Exit directly.
+		configInitError = err
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -196,6 +200,10 @@ func parseFlags(args []string) (map[string]string, error) {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
+	if configInitError != nil {
+		return configInitError
+	}
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
