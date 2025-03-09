@@ -1,6 +1,7 @@
 module github.com/cloudposse/atmos
 
-go 1.23.5
+go 1.23.6
+
 toolchain go1.23.7
 
 require (
