@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -15,8 +16,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
-	"github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/logger"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -25,10 +25,7 @@ import (
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
 var atmosConfig schema.AtmosConfiguration
 
-// configInitError stores configuration initialization errors for later handling in Execute.
-var configInitError error
-
-// RootCmd represents the base command when called without any subcommands.
+// RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:                "atmos",
 	Short:              "Universal Tool for DevOps and Cloud Automation",
@@ -61,22 +58,17 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Only validate the config, don't store it yet since commands may need to add more info
-		_, err := config.InitCliConfig(configAndStacksInfo, false)
-		if err == nil {
-			return
-		}
-
-		if errors.Is(err, config.NotFound) {
-			// For help commands or when help flag is set, we don't want to show the error
-			if !isHelpRequested {
-				log.Warn("CLI configuration issue", "error", err)
+		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
+		if err != nil {
+			if errors.Is(err, cfg.NotFound) {
+				// For help commands or when help flag is set, we don't want to show the error
+				if !isHelpRequested {
+					u.LogWarning(err.Error())
+				}
+			} else {
+				u.LogErrorAndExit(err)
 			}
-			return
 		}
-
-		log.Error("CLI configuration error", "error", err)
-		// Store the error in a variable that can be checked later instead of calling os.Exit directly.
-		configInitError = err
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
@@ -96,69 +88,41 @@ var RootCmd = &cobra.Command{
 	},
 }
 
-// setupLogger configures the global logger based on application configuration using our logger pkg.
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
-	atmosLogger, err := logger.InitializeLoggerFromCliConfig(atmosConfig)
-	if err != nil {
-		log.Error("Failed to initialize logger from config", "error", err)
-
+	switch atmosConfig.Logs.Level {
+	case "Trace":
+		log.SetLevel(log.DebugLevel)
+	case "Debug":
+		log.SetLevel(log.DebugLevel)
+	case "Info":
 		log.SetLevel(log.InfoLevel)
-		log.SetOutput(os.Stderr)
-		return
-	}
-
-	globalLogLevel := mapToCharmLevel(atmosLogger.LogLevel)
-	log.SetLevel(globalLogLevel)
-
-	configureLogOutput(atmosConfig.Logs.File)
-}
-
-// mapToCharmLevel converts our internal log level to a Charmbracelet log level.
-func mapToCharmLevel(logLevel logger.LogLevel) log.Level {
-	switch logLevel {
-	case logger.LogLevelTrace:
-		return log.DebugLevel // Charmbracelet doesn't have Trace
-	case logger.LogLevelDebug:
-		return log.DebugLevel
-	case logger.LogLevelInfo:
-		return log.InfoLevel
-	case logger.LogLevelWarning:
-		return log.WarnLevel
-	case logger.LogLevelOff:
-		return log.FatalLevel + 1 // Disable logging
+	case "Warning":
+		log.SetLevel(log.WarnLevel)
+	case "Off":
+		log.SetLevel(math.MaxInt32)
 	default:
-		return log.InfoLevel
+		log.SetLevel(log.InfoLevel)
 	}
-}
 
-// configureLogOutput sets up the output destination for the global logger.
-func configureLogOutput(logFile string) {
-	// Handle standard output destinations
-	switch logFile {
+	var output io.Writer
+
+	switch atmosConfig.Logs.File {
 	case "/dev/stderr":
-		log.SetOutput(os.Stderr)
-		return
-	case "/dev/stdout", "":
-		log.SetOutput(os.Stdout)
-		return
+		output = os.Stderr
+	case "/dev/stdout":
+		output = os.Stdout
 	case "/dev/null":
-		log.SetOutput(io.Discard)
-		return
+		output = io.Discard // More efficient than opening os.DevNull
+	default:
+		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		if err != nil {
+			log.Fatal("Failed to open log file:", err)
+		}
+		defer logFile.Close()
+		output = logFile
 	}
 
-	// Handle custom log file (anything not a standard stream)
-	customFile, err := os.OpenFile(logFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, config.StandardFilePermissions)
-	if err != nil {
-		log.Error("Failed to open log file, using stderr", "error", err)
-		log.SetOutput(os.Stderr)
-		return
-	}
-
-	// Important: We need to register this file to be closed at program exit
-	// to prevent file descriptor leaks, since we can't use defer here
-	// The Go runtime will close this file when the program exits, and the OS
-	// would clean it up anyway, but this is cleaner practice.
-	log.SetOutput(customFile)
+	log.SetOutput(output)
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
@@ -200,17 +164,13 @@ func parseFlags(args []string) (map[string]string, error) {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
-	if configInitError != nil {
-		return configInitError
-	}
-
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
 	var initErr error
-	atmosConfig, initErr = config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	utils.InitializeMarkdown(atmosConfig)
-	if initErr != nil && !errors.Is(initErr, config.NotFound) {
+	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
 			log.Debug("warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
@@ -347,3 +307,10 @@ func initCobraConfig() {
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }
+
+// https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
+// https://github.com/spf13/cobra/blob/master/user_guide.md
+// https://blog.knoldus.com/create-kubectl-like-cli-with-go-and-cobra/
+// https://pkg.go.dev/github.com/c-bata/go-prompt
+// https://pkg.go.dev/github.com/spf13/cobra
+// https://scene-si.org/2017/04/20/managing-configuration-with-viper/
