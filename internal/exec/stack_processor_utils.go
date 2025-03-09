@@ -547,8 +547,7 @@ func ProcessYAMLConfigFile(
 		nil
 }
 
-// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends,
-// and returns the final stack configuration for all Terraform and helmfile components
+// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends, and returns the final stack configuration for all Terraform and helmfile components.
 func ProcessStackConfig(
 	atmosConfig schema.AtmosConfiguration,
 	stacksBasePath string,

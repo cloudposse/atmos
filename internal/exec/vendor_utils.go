@@ -137,7 +137,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		"Example: atmos vendor pull -c <component>\n%s", q)
 }
 
-// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`
+// ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
 	atmosConfig schema.AtmosConfiguration,
 	vendorConfigFile string,
