@@ -55,7 +55,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if schemasAtmosManifestFlag != "" {
-		atmosConfig.Schemas["atmos"] = schema.Schemas{
+		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
 			Manifest: schemasAtmosManifestFlag,
 		}
 	}
@@ -102,7 +102,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	// Check if the Atmos manifest JSON Schema is configured and the file exists
 	// The path to the Atmos manifest JSON Schema can be absolute path or a path relative to the `base_path` setting in `atmos.yaml`
 	var atmosManifestJsonSchemaFilePath string
-	manifestSchema := atmosConfig.GetSchemas("atmos")
+	manifestSchema := atmosConfig.GetSchemaRegistry("atmos")
 	atmosManifestJsonSchemaFileAbsPath := filepath.Join(atmosConfig.BasePath, manifestSchema.Manifest)
 
 	if manifestSchema.Manifest == "" {
@@ -386,7 +386,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
 func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error) {
-	manifestSchema := atmosConfig.GetSchemas("atmos")
+	manifestSchema := atmosConfig.GetSchemaRegistry("atmos")
 	manifestURL := manifestSchema.Manifest
 	parsedURL, err := url.Parse(manifestURL)
 	if err != nil {

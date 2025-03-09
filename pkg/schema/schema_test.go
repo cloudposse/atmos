@@ -32,7 +32,7 @@ schemas:
 	atmosConfig := &AtmosConfiguration{}
 	err := yaml.Unmarshal([]byte(yamlString), atmosConfig)
 	assert.NoError(t, err)
-	schemas := atmosConfig.GetSchemas("atmos")
+	schemas := atmosConfig.GetSchemaRegistry("atmos")
 	assert.Equal(t, "some/random/path", schemas.Manifest)
 	assert.Equal(t, []string{"hello", "world"}, schemas.Matches)
 }

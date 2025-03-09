@@ -258,6 +258,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&atmosConfig)
+	atmosConfig.ProcessSchemas()
 	if err != nil {
 		return atmosConfig, err
 	}

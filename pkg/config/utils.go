@@ -351,7 +351,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 	if len(atmosManifestJsonSchemaPath) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_ATMOS_MANIFEST=%s", atmosManifestJsonSchemaPath))
-		atmosConfig.Schemas["atmos"] = schema.Schemas{
+		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
 			Manifest: atmosManifestJsonSchemaPath,
 		}
 	}
@@ -493,7 +493,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
-		atmosConfig.Schemas["atmos"] = schema.Schemas{
+		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
 			Manifest: configAndStacksInfo.AtmosManifestJsonSchema,
 		}
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))

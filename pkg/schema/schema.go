@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"encoding/json"
+
 	"github.com/cloudposse/atmos/pkg/store"
 	"gopkg.in/yaml.v3"
 )
@@ -41,28 +43,28 @@ type AtmosConfiguration struct {
 	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 }
 
-func (m *AtmosConfiguration) GetSchemas(key string) Schemas {
+func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
 	atmosSchemaInterface, interfaceOk := m.Schemas[key]
-	var manifestSchema Schemas
+	var manifestSchema SchemaRegistry
 	atmosSchemaFound := false
 	if interfaceOk {
-		manifestSchema, atmosSchemaFound = atmosSchemaInterface.(Schemas)
+		manifestSchema, atmosSchemaFound = atmosSchemaInterface.(SchemaRegistry)
 	}
 	if atmosSchemaFound {
 		return manifestSchema
 	}
-	return Schemas{}
+	return SchemaRegistry{}
 }
 
 func (m *AtmosConfiguration) GetResourcePath(key string) ResourcePath {
 	atmosSchemaInterface, interfaceOk := m.Schemas[key]
-	var manifestSchema ResourcePath
+	var resourcePath ResourcePath
 	atmosSchemaFound := false
 	if interfaceOk {
-		manifestSchema, atmosSchemaFound = atmosSchemaInterface.(ResourcePath)
+		resourcePath, atmosSchemaFound = atmosSchemaInterface.(ResourcePath)
 	}
 	if atmosSchemaFound {
-		return manifestSchema
+		return resourcePath
 	}
 	return ResourcePath{}
 }
@@ -101,7 +103,7 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 		}
 
 		// Try decoding as Manifest struct
-		var manifest Schemas
+		var manifest SchemaRegistry
 		if err := node.Decode(&manifest); err == nil {
 			m.Schemas[key] = manifest
 			continue
@@ -112,6 +114,54 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	return nil
+}
+
+func (a *AtmosConfiguration) ProcessSchemas() error {
+	for key := range a.Schemas {
+		if key == "cue" || key == "opa" || key == "jsonschema" {
+			a.processResourceSchema(key)
+			continue
+		}
+		a.processManifestSchemas(key)
+	}
+	return nil
+}
+
+func (a *AtmosConfiguration) processManifestSchemas(key string) {
+	val, exists := a.Schemas[key]
+	if !exists {
+		return
+	}
+	// Marshal the interface{} to JSON
+	data, err := json.Marshal(val)
+	if err != nil {
+		return
+	}
+	// Unmarshal JSON into ResourcePath struct
+	var schemasStruct SchemaRegistry
+	if err := json.Unmarshal(data, &schemasStruct); err != nil {
+		return
+	}
+	a.Schemas[key] = schemasStruct
+}
+
+func (a *AtmosConfiguration) processResourceSchema(key string) {
+	val, exists := a.Schemas[key]
+	if !exists {
+		return
+	}
+	// Marshal the interface{} to JSON
+	data, err := json.Marshal(val)
+	if err != nil {
+		return
+	}
+
+	// Unmarshal JSON into ResourcePath struct
+	var resource ResourcePath
+	if err := json.Unmarshal(data, &resource); err != nil {
+		return
+	}
+	a.Schemas[key] = resource
 }
 
 type Validate struct {
@@ -554,7 +604,7 @@ type ResourcePath struct {
 	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
 }
 
-type Schemas struct {
+type SchemaRegistry struct {
 	Manifest string   `yaml:"manifest,omitempty" json:"manifest,omitempty" mapstructure:"manifest"`
 	Matches  []string `yaml:"matches,omitempty" json:"matches,omitempty" mapstructure:"matches"`
 }
