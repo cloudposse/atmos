@@ -15,6 +15,8 @@ import (
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
+//
+//nolint:gocritic // TODO: Change configAndStacksInfo to pinter . Temporarily suppressing gocritic warnings; refactoring InitCliConfig would require extensive changes.
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 	atmosConfig, err := processAtmosConfigs(&configAndStacksInfo)
 	if err != nil {
