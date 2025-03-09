@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	"github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
