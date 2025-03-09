@@ -3,12 +3,13 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"os"
 	"regexp"
 	"strings"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -87,14 +88,41 @@ var RootCmd = &cobra.Command{
 	},
 }
 
-func setupLogger(atmosConfig *schema.AtmosConfiguration) error {
-	// Initialize the logger using the configuration-driven approach
-	_, err := logger.InitializeLoggerFromCliConfig(atmosConfig)
-	if err != nil {
-		// Just return the error with added context, without logging
-		return fmt.Errorf("failed to initialize logger: %w", err)
+func setupLogger(atmosConfig *schema.AtmosConfiguration) {
+	switch atmosConfig.Logs.Level {
+	case "Trace":
+		log.SetLevel(log.DebugLevel)
+	case "Debug":
+		log.SetLevel(log.DebugLevel)
+	case "Info":
+		log.SetLevel(log.InfoLevel)
+	case "Warning":
+		log.SetLevel(log.WarnLevel)
+	case "Off":
+		log.SetLevel(math.MaxInt32)
+	default:
+		log.SetLevel(log.InfoLevel)
 	}
-	return nil
+
+	var output io.Writer
+
+	switch atmosConfig.Logs.File {
+	case "/dev/stderr":
+		output = os.Stderr
+	case "/dev/stdout":
+		output = os.Stdout
+	case "/dev/null":
+		output = io.Discard // More efficient than opening os.DevNull
+	default:
+		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		if err != nil {
+			log.Fatal("Failed to open log file:", err)
+		}
+		defer logFile.Close()
+		output = logFile
+	}
+
+	log.SetOutput(output)
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
@@ -165,13 +193,10 @@ func Execute() error {
 		atmosConfig.Logs.File = v
 	}
 
-	var err error
 	// Set the log level for the charmbracelet/log package based on the atmosConfig
-	err = setupLogger(&atmosConfig)
-	if err != nil {
-		logger.Fatal("Failed to initialize logger", "error", err)
-	}
+	setupLogger(&atmosConfig)
 
+	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
