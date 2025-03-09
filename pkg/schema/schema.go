@@ -96,6 +96,7 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 			var temp ResourcePath
 			if err := node.Decode(&temp); err == nil {
 				m.Schemas[key] = temp
+				continue
 			}
 		}
 
@@ -555,7 +556,7 @@ type ResourcePath struct {
 
 type Schemas struct {
 	Manifest string   `yaml:"manifest,omitempty" json:"manifest,omitempty" mapstructure:"manifest"`
-	Match    []string `yaml:"match,omitempty" json:"match,omitempty" mapstructure:"match"`
+	Matches  []string `yaml:"matches,omitempty" json:"matches,omitempty" mapstructure:"matches"`
 }
 
 type ValidationItem struct {
