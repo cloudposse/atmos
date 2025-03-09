@@ -59,16 +59,20 @@ var RootCmd = &cobra.Command{
 
 		// Only validate the config, don't store it yet since commands may need to add more info
 		_, err := config.InitCliConfig(configAndStacksInfo, false)
-		if err != nil {
-			if errors.Is(err, config.NotFound) {
-				// For help commands or when help flag is set, we don't want to show the error
-				if !isHelpRequested {
-					log.Warn("CLI configuration issue", "error", err)
-				}
-			} else {
-				log.Fatal("CLI configuration error", "error", err)
-			}
+		if err == nil {
+			return
 		}
+
+		if errors.Is(err, config.NotFound) {
+			// For help commands or when help flag is set, we don't want to show the error
+			if !isHelpRequested {
+				log.Warn("CLI configuration issue", "error", err)
+			}
+			return
+		}
+
+		log.Error("CLI configuration error", "error", err)
+		os.Exit(1)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration

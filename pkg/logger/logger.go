@@ -158,7 +158,7 @@ func shouldUseCustomLogFile(file string) bool {
 	return file != "" && file != "/dev/stdout" && file != "/dev/stderr"
 }
 
-// FilePermDefault is the default permission for log files (0644 in octal) TODO: refactor this later
+// FilePermDefault is the default permission for log files (0644 in octal). TODO: refactor this later.
 const FilePermDefault = 0o644
 
 // openLogFile opens a log file for writing with appropriate flags.
