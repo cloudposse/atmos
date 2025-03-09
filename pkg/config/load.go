@@ -61,8 +61,9 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			return atmosConfig, err
 		}
 	}
-	atmosConfig.CliConfigPath = v.ConfigFileUsed()
-
+	// get dir of atmosConfigFilePath
+	atmosConfigDir := filepath.Dir(v.ConfigFileUsed())
+	atmosConfig.CliConfigPath = atmosConfigDir
 	// Set the CLI config path in the atmosConfig struct
 	if atmosConfig.CliConfigPath != "" && !filepath.IsAbs(atmosConfig.CliConfigPath) {
 		absPath, err := filepath.Abs(atmosConfig.CliConfigPath)

@@ -157,7 +157,18 @@ jobs:
         timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make testacc
+        run: make testacc-cover
+
+      - name: Upload coverage report to Codecov
+        if: matrix.flavor.target == 'linux'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: coverage.out
+          fail_ci_if_error: true
+          flags: unittests
+          verbose: true
 
   docker:
     name: "[lint] Dockerfile"
@@ -489,7 +500,7 @@ jobs:
       - name: Lint with golangci-lint
         uses: reviewdog/action-golangci-lint@v2
         with:
-          filter_mode: "added"
+          filter_mode: "diff_context"
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   release:
