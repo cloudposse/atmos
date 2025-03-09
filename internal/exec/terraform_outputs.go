@@ -36,7 +36,6 @@ const (
 
 	varEnvVarPrefix    = "TF_VAR_"
 	cliArgEnvVarPrefix = "TF_CLI_ARGS_"
-	errorKey           = "error"
 )
 
 var prohibitedEnvVars = []string{
@@ -298,7 +297,7 @@ func GetTerraformOutput(
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		u.PrintMessage(fmt.Sprintf("\r✗ %s\n", message))
-		l.Fatal("Failed to describe the component", "component", component, "stack", stack, errorKey, err)
+		l.Fatal("Failed to describe the component", "component", component, "stack", stack, "error", err)
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
@@ -319,7 +318,7 @@ func GetTerraformOutput(
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
 			u.PrintMessage(fmt.Sprintf("\r✗ %s\n", message))
-			l.Fatal("Failed to execute terraform output", "component", component, "stack", stack, errorKey, err)
+			l.Fatal("Failed to execute terraform output", "component", component, "stack", stack, "error", err)
 		}
 
 		// Cache the result
