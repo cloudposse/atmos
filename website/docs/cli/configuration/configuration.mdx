@@ -683,7 +683,7 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_BITBUCKET_USERNAME                              | N/A                                             | Bitbucket username for authentication. When set, Atmos uses this value for Bitbucket requests.                                                                                                                                |
 | BITBUCKET_USERNAME                                    | N/A                                             | Bitbucket username for authentication. This variable is used as a fallback when `ATMOS_BITBUCKET_USERNAME` is not defined. Bitbucket requires a valid username; dummy values such as `x‑access‑token` are not accepted.         |
 | ATMOS_GITLAB_TOKEN                                    | N/A                                             | Personal Access Token (PAT) for GitLab authentication used by Atmos. Takes precedence over `GITLAB_TOKEN` if defined.                                                                                                           |
-| GITLAB_TOKEN                                          | N/A                                             | PAT for GitLab authentication. Used as a fallback if ATMOS_GITLAB_TOKEN is not set. Unauthenticated users are limited to 6 requests per minute per IP address, while authenticated users have higher thresholds              |
+| GITLAB_TOKEN                                          | N/A                                             | PAT for GitLab authentication. Used as a fallback if `ATMOS_GITLAB_TOKEN` is not set. Unauthenticated users are limited to 6 requests per minute per IP address, while authenticated users have higher thresholds.              |
 
 
 ### Context
