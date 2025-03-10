@@ -110,8 +110,13 @@ The following config can be used to download the `vpc` component from an AWS pub
 
 ## Vendoring from SSH
 
-This is the most common way to access non-public Git repositories from automated systems because it allows access to private repositories without interactive prompts.
-Atmos will use any installed SSH keys automatically. There are two primary ways to specify an SSH source:
+Atmos supports SSH for accessing non-public Git repositories, which is convenient for local development. Atmos will use any installed SSH keys automatically. 
+
+:::tip  
+In automated systems like GitHub Actions, we recommend sticking with the `https://` scheme for vendoring. Atmos will automatically inject the `GITHUB_TOKEN`.  
+:::
+
+There are two primary ways to specify an SSH source.
 
 ### SCP-style Sources
 
