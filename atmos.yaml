@@ -392,21 +392,25 @@ settings:
 
   docs:
     generate:
-      input:
-        - "./README.yaml"
-      # To Do: template can be a remote URL/github, using this local for testing
-      template:  "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl"
-      # The final README
-      output: "README.md"
-      terraform:
-        enabled: true
-        format: "markdown"
-        show_providers: false
-        show_inputs: true
-        show_outputs: true
-        sort_by: "name"
-        hide_empty: false
-        indent_level: 2  
+      # Generate README in current working directory
+      readme:
+        base-dir: .
+        input:
+          - "./README.yaml"
+        # To Do: template can be a remote URL/github, using this local for testing
+        template:  "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl"
+        # The final README
+        output: "README.md"
+        terraform:
+          source: src/
+          enabled: false
+          format: "markdown"
+          show_providers: false
+          show_inputs: true
+          show_outputs: true
+          sort_by: "name"
+          hide_empty: false
+          indent_level: 2   
 
 
 version:

@@ -6,21 +6,26 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
-// docsGenerateCmd generates README.md
+// docsGenerateCmd is the subcommand under docs (with alias "docs") that groups generation operations.
 var docsGenerateCmd = &cobra.Command{
-	Use:     "generate [path]",
+	Use:     "generate",
 	Aliases: []string{"docs"},
-	Short:   "Generate docs (README.md) from README.yaml data and templates",
-	Long: `Generate documentation by merging multiple YAML data sources
-and then using templates to produce documentation files. Also supports native terraform-docs injection.`,
-	Example: `Generate a README.md in the current path:
-atmos docs generate
+	Short:   "Generate documentation artifacts",
+	Long: `Generate documentation by merging YAML data sources and applying templates.
+Supports native terraform-docs injection.`,
+}
 
-Generate a README.md for the VPC component:
-atmos docs generate components/terraform/vpc
+// docsGenerateReadmeCmd is the new subcommand under "docs generate" that specifically generates the README.
+var docsGenerateReadmeCmd = &cobra.Command{
+	Use:   "readme",
+	Short: "Generate README.md from README.yaml and templates",
+	Long: `Generate the README.md file using the README.yaml data and the configured template.
+All file paths are resolved relative to the configured base-dir (default is ".").`,
+	Example: `Generate the README.md in the current directory:
+  atmos docs generate readme
 
-Generate all README.md (recursively searches for README.yaml to rebuild docs):
-atmos docs generate --all`,
+Alternatively, using the top-level generate command:
+  atmos generate docs readme`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return e.ExecuteDocsGenerateCmd(cmd, args)
 	},
@@ -34,8 +39,9 @@ var generateDocsCmd = &cobra.Command{
 }
 
 func init() {
-	docsGenerateCmd.Flags().Bool("all", false, "Recursively rebuild README.md files from any discovered README.yaml")
 	docsCmd.AddCommand(docsGenerateCmd)
+	docsGenerateCmd.AddCommand(docsGenerateReadmeCmd)
+
 	RootCmd.AddCommand(generateDocsCmd)
 	generateDocsCmd.AddCommand(docsGenerateCmd)
 }
