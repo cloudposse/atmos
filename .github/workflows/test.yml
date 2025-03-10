@@ -509,7 +509,11 @@ jobs:
 
       - name: Fail if Lint Errors Exist
         if: steps.golangci.outcome == 'failure'
-        run: exit 1
+        run: |
+          gh issue edit ${{ github.event.pull_request.number }} --add-label "lint-failures"
+          exit 1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     needs: [test, lint, mock, k3s, localstack, docker, validate]
