@@ -136,7 +136,14 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		res = finalStacksMap
 	}
 
-	err = printOrWriteToFile(format, file, res)
+	// Pass the atmosConfig to ensure YAML indentation is properly applied
+	// Create a composite structure that includes both the config and the result
+	compositeData := map[string]interface{}{
+		"result": res,
+		"config": atmosConfig,
+	}
+
+	err = printOrWriteToFile(format, file, compositeData)
 	if err != nil {
 		return err
 	}
