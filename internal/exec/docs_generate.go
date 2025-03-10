@@ -25,7 +25,6 @@ import (
 
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate readme' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
-
 	// Parse CLI flags/args (we ignore any '--all' flag now)
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
