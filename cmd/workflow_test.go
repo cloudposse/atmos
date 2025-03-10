@@ -47,5 +47,5 @@ atmos describe component c1 -s test
 	assert.NoError(t, err, "'atmos workflow' command should execute without error")
 
 	// Check if output contains expected markdown content
-	assert.Contains(t, output.String(), expectedOutput, "'atmos workflow' output should contain information about available workflows")
+	assert.Contains(t, output.String(), expectedOutput, "'atmos workflow' output should contain information about workflows")
 }
