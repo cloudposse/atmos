@@ -187,17 +187,17 @@ Atmos prioritizes authentication credentials based on predefined environment var
 
 ### Bitbucket
 <dl>
- <dt>ATMOS_BITBUCKET_TOKEN</dt>
- <dd>Bitbucket app password for API requests; used to avoid rate limits. When both ATMOS_BITBUCKET_TOKEN and BITBUCKET_TOKEN are defined, the former prevails.</dd>
+ <dt>`ATMOS_BITBUCKET_TOKEN`</dt>
+ <dd>Bitbucket app password for API requests; used to avoid rate limits. When both `ATMOS_BITBUCKET_TOKEN` and `BITBUCKET_TOKEN` are defined, the former prevails.</dd>
 
- <dt>BITBUCKET_TOKEN</dt>
- <dd>Used as a fallback when ATMOS_BITBUCKET_TOKEN is not set.</dd>
+ <dt>`BITBUCKET_TOKEN`</dt>
+ <dd>Used as a fallback when `ATMOS_BITBUCKET_TOKEN` is not set.</dd>
 
- <dt>ATMOS_BITBUCKET_USERNAME</dt>
- <dd>Bitbucket username for authentication. Takes precedence over BITBUCKET_USERNAME.</dd>
+ <dt>`ATMOS_BITBUCKET_USERNAME`</dt>
+ <dd>Bitbucket username for authentication. Takes precedence over `BITBUCKET_USERNAME`.</dd>
 
- <dt>BITBUCKET_USERNAME</dt>
- <dd>Used as a fallback when ATMOS_BITBUCKET_USERNAME is not set. Bitbucket requires a valid username and does not accept dummy values like `"x-access-token"`.</dd>
+ <dt>`BITBUCKET_USERNAME`</dt>
+ <dd>Used as a fallback when `ATMOS_BITBUCKET_USERNAME` is not set. Bitbucket requires a valid username and does not accept dummy values like `x-access-token`.</dd>
 </dl>
 
 ### GitLab
