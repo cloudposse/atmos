@@ -1,10 +1,8 @@
-package main
+package logger
 
 import (
 	"errors"
 	"time"
-
-	"github.com/cloudposse/atmos/pkg/logger"
 )
 
 var ErrTest = errors.New("this is an error")
@@ -30,16 +28,16 @@ func main() {
 }
 
 func testIndividualLogFunctions() {
-	logger.Info("This is an info message")
-	logger.Debug("This is a debug message with context", KeyComponent, "station", KeyDuration, "500ms")
-	logger.Warn("This is a warning message", KeyStack, "prod-ue1")
-	logger.Error("Whoops! Something went wrong", KeyError, "kitchen on fire", KeyComponent, "weather")
+	Info("This is an info message")
+	Debug("This is a debug message with context", KeyComponent, "station", KeyDuration, "500ms")
+	Warn("This is a warning message", KeyStack, "prod-ue1")
+	Error("Whoops! Something went wrong", KeyError, "kitchen on fire", KeyComponent, "weather")
 
 	time.Sleep(500 * time.Millisecond)
 }
 
 func testLoggerStruct() {
-	atmosLogger, err := logger.InitializeLogger(logger.LogLevelTrace, "")
+	atmosLogger, err := InitializeLogger(LogLevelTrace, "")
 	if err != nil {
 		panic(err)
 	}
@@ -54,7 +52,7 @@ func testLoggerStruct() {
 }
 
 func testCharmLogger() {
-	charmLogger := logger.GetCharmLogger()
+	charmLogger := GetCharmLogger()
 
 	charmLogger.SetTimeFormat(time.Kitchen)
 

@@ -43,7 +43,7 @@ func InitializeLogger(logLevel LogLevel, file string) (*Logger, error) {
 	charmLevel := log.InfoLevel
 	switch logLevel {
 	case LogLevelTrace:
-		charmLevel = log.DebugLevel // Charmbracelet doesn't have Trace, use Debug.
+		charmLevel = TraceLevel
 	case LogLevelDebug:
 		charmLevel = log.DebugLevel
 	case LogLevelInfo:
@@ -180,29 +180,24 @@ func (l *Logger) isLevelEnabled(level LogLevel) bool {
 
 func (l *Logger) Trace(message string) {
 	if l.isLevelEnabled(LogLevelTrace) {
-		// Charmbracelet doesn't have Trace level, use Debug with 'trace' context.
-		l.charm.Debug(message, "level", "trace")
-		l.log(theme.Colors.Info, message)
+		l.charm.Log(TraceLevel, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
 	if l.isLevelEnabled(LogLevelDebug) {
 		l.charm.Debug(message)
-		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Info(message string) {
 	if l.isLevelEnabled(LogLevelInfo) {
 		l.charm.Info(message)
-		l.log(theme.Colors.Info, message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
 	if l.isLevelEnabled(LogLevelWarning) {
 		l.charm.Warn(message)
-		l.log(theme.Colors.Warning, message)
 	}
 }

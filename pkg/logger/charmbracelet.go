@@ -8,6 +8,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+const TraceLevel log.Level = log.DebugLevel - 1
+
 var helperLogger *log.Logger
 
 func init() {
@@ -52,34 +54,42 @@ func configureLogLevelStyles(styles *log.Styles, paddingVertical, paddingHorizon
 		warnLevelLabel  = "WARN"
 		infoLevelLabel  = "INFO"
 		debugLevelLabel = "DEBUG"
+		traceLevelLabel = "TRACE"
 	)
 
-	// Error.
+	// Style `Error` log messages.
 	styles.Levels[log.ErrorLevel] = lipgloss.NewStyle().
 		SetString(errorLevelLabel).
 		Padding(paddingVertical, paddingHorizontal, paddingVertical, paddingHorizontal).
 		Background(lipgloss.Color(theme.ColorPink)).
 		Foreground(lipgloss.Color(theme.ColorWhite))
 
-	// Warning.
+	// Style `Warning` log messages.
 	styles.Levels[log.WarnLevel] = lipgloss.NewStyle().
 		SetString(warnLevelLabel).
 		Padding(paddingVertical, paddingHorizontal, paddingVertical, paddingHorizontal).
 		Background(lipgloss.Color(theme.ColorPink)).
 		Foreground(lipgloss.Color(theme.ColorDarkGray))
 
-	// Info.
+	// Style `Info` log messages.
 	styles.Levels[log.InfoLevel] = lipgloss.NewStyle().
 		SetString(infoLevelLabel).
 		Padding(paddingVertical, paddingHorizontal, paddingVertical, paddingHorizontal).
 		Background(lipgloss.Color(theme.ColorCyan)).
 		Foreground(lipgloss.Color(theme.ColorDarkGray))
 
-	// Debug.
+	// Style `Debug` log messages.
 	styles.Levels[log.DebugLevel] = lipgloss.NewStyle().
 		SetString(debugLevelLabel).
 		Padding(paddingVertical, paddingHorizontal, paddingVertical, paddingHorizontal).
 		Background(lipgloss.Color(theme.ColorBlue)).
+		Foreground(lipgloss.Color(theme.ColorWhite))
+
+	// Style `Trace` log messages.
+	styles.Levels[TraceLevel] = lipgloss.NewStyle().
+		SetString(traceLevelLabel).
+		Padding(paddingVertical, paddingHorizontal, paddingVertical, paddingHorizontal).
+		Background(lipgloss.Color(theme.ColorDarkGray)).
 		Foreground(lipgloss.Color(theme.ColorWhite))
 }
 
@@ -124,6 +134,11 @@ func Info(message string, keyvals ...interface{}) {
 // Debug logs a debug message with context.
 func Debug(message string, keyvals ...interface{}) {
 	helperLogger.Debug(message, keyvals...)
+}
+
+// Trace logs a trace message with context.
+func Trace(message string, keyvals ...interface{}) {
+	helperLogger.Log(TraceLevel, message, keyvals...)
 }
 
 // Fatal logs an error message and exits with status code 1.

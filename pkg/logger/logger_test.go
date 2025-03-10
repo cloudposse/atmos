@@ -2,7 +2,6 @@ package logger
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -145,9 +144,6 @@ func TestLogger_Warning(t *testing.T) {
 
 	assert.Contains(t, output, "Warning message")
 }
-
-// ErrTest is a static test error.
-var ErrTest = errors.New("This is an error")
 
 func TestLogger_Error(t *testing.T) {
 	var buf bytes.Buffer
