@@ -16,7 +16,7 @@ func TestSupportCmd(t *testing.T) {
 	os.Stdout = w
 
 	// Execute the command
-	err := supportCmd.RunE(aboutCmd, []string{})
+	err := supportCmd.RunE(supportCmd, []string{})
 	assert.NoError(t, err, "'atmos support' command should execute without error")
 
 	// Close the writer and restore stdout

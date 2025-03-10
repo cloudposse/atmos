@@ -19,3 +19,6 @@ stacks:
 logs:
   file: "/dev/stderr"
   level: Info
+
+workflows:
+  base_path: "stacks/workflows"
