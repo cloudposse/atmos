@@ -175,6 +175,7 @@ severity:
         - cognitive-complexity
         - cyclomatic
         - nolintlint
+        - revive
       severity: warning
 
 issues:
