@@ -326,7 +326,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
 	if len(jsonschemaBasePath) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH=%s", jsonschemaBasePath))
+		log.Debug("Set atmosConfig.Schemas[\"jsonschema\"] using ENV", "ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH", jsonschemaBasePath)
 		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
 			BasePath: jsonschemaBasePath,
 		}
@@ -334,7 +334,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
 	if len(opaBasePath) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_OPA_BASE_PATH=%s", opaBasePath))
+		log.Debug("Set atmosConfig.Schemas[\"opa\"] using ENV", "ATMOS_SCHEMAS_OPA_BASE_PATH", opaBasePath)
 		atmosConfig.Schemas["opa"] = schema.ResourcePath{
 			BasePath: opaBasePath,
 		}
@@ -342,7 +342,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
 	if len(cueBasePath) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_CUE_BASE_PATH=%s", cueBasePath))
+		log.Debug("Set atmosConfig.Schemas[\"cue\"] using ENV", "ATMOS_SCHEMAS_CUE_BASE_PATH", cueBasePath)
 		atmosConfig.Schemas["cue"] = schema.ResourcePath{
 			BasePath: cueBasePath,
 		}
@@ -350,7 +350,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 	if len(atmosManifestJsonSchemaPath) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SCHEMAS_ATMOS_MANIFEST=%s", atmosManifestJsonSchemaPath))
+		log.Debug("Set atmosConfig.Schemas[\"atmos\"] using env", "ATMOS_SCHEMAS_ATMOS_MANIFEST", atmosManifestJsonSchemaPath)
 		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
 			Manifest: atmosManifestJsonSchemaPath,
 		}
@@ -472,7 +472,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 			return err
 		}
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure))
+		log.Debug("Set using command line argument", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure)
 	}
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
 		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
@@ -496,7 +496,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
 			Manifest: configAndStacksInfo.AtmosManifestJsonSchema,
 		}
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema))
+		log.Debug("Set atmosConfig.Schemas[\"atmos\"] command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema)
 	}
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {

@@ -9,7 +9,7 @@ import (
 
 type AtmosSectionMapType = map[string]any
 
-// AtmosConfiguration structure represents schema for `atmos.yaml` CLI config
+// AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string                 `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components                    Components             `yaml:"components" json:"components" mapstructure:"components"`
@@ -69,7 +69,7 @@ func (m *AtmosConfiguration) GetResourcePath(key string) ResourcePath {
 	return ResourcePath{}
 }
 
-// Custom YAML unmarshaler for `Schemas`
+// Custom YAML unmarshaler for `Schemas`.
 func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 	type Alias AtmosConfiguration // Prevent recursion
 	aux := &struct {
@@ -86,7 +86,8 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 
 	// Process Schemas map and pre-cast values
 	m.Schemas = make(map[string]interface{})
-	for key, node := range aux.Schemas {
+	for key := range aux.Schemas {
+		node := aux.Schemas[key]
 		// Try decoding as string
 		var strVal string
 		if err := node.Decode(&strVal); err == nil {
