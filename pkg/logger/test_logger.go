@@ -37,7 +37,7 @@ func testIndividualLogFunctions() {
 }
 
 func testLoggerStruct() {
-	atmosLogger, err := InitializeLogger(LogLevelTrace, "")
+	atmosLogger, err := NewLogger(LogLevelTrace, "")
 	if err != nil {
 		panic(err)
 	}

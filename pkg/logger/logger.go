@@ -36,7 +36,7 @@ type Logger struct {
 	charm    *log.Logger
 }
 
-func InitializeLogger(logLevel LogLevel, file string) (*Logger, error) {
+func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
 	charm := GetCharmLogger()
 
 	// Set log level
@@ -71,13 +71,13 @@ func InitializeLogger(logLevel LogLevel, file string) (*Logger, error) {
 	}, nil
 }
 
-// InitializeLoggerFromCliConfig creates a logger based on Atmos CLI configuration.
-func InitializeLoggerFromCliConfig(cfg *schema.AtmosConfiguration) (*Logger, error) {
+// NewLoggerFromCliConfig creates a logger based on Atmos CLI configuration.
+func NewLoggerFromCliConfig(cfg *schema.AtmosConfiguration) (*Logger, error) {
 	logLevel, err := ParseLogLevel(cfg.Logs.Level)
 	if err != nil {
 		return nil, err
 	}
-	return InitializeLogger(logLevel, cfg.Logs.File)
+	return NewLogger(logLevel, cfg.Logs.File)
 }
 
 func ParseLogLevel(logLevel string) (LogLevel, error) {
