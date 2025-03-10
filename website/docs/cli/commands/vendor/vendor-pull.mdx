@@ -175,31 +175,39 @@ git::https://github.com/cloudposse/terraform-null-label.git?depth=1&ref={{ .Vers
 Atmos prioritizes authentication credentials based on predefined environment variables. The priority order for each provider is:
 
 ### GitHub
-| Environment Variable           | Purpose                                                                                                  |
-|--------------------------------|----------------------------------------------------------------------------------------------------------|
-| ATMOS_GITHUB_TOKEN             | Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits. |
-| GITHUB_TOKEN                   | Used as a fallback if ATMOS_GITHUB_TOKEN is not set.                                                    |
+<dl>
+ <dt>ATMOS_GITHUB_TOKEN</dt>
+ <dd>Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits.</dd>
+
+ <dt>GITHUB_TOKEN</dt>
+ <dd>Used as a fallback if ATMOS_GITHUB_TOKEN is not set.</dd>
+</dl>
 
 **Default Username for HTTPS:** `"x-access-token"`
 
 ### Bitbucket
-| Environment Variable            | Purpose                                                                                              |
-|---------------------------------|------------------------------------------------------------------------------------------------------|
-| ATMOS_BITBUCKET_TOKEN           | Bitbucket app password for API requests; used to avoid rate limits. When both ATMOS_BITBUCKET_TOKEN and BITBUCKET_TOKEN are defined, the former prevails. |
-| BITBUCKET_TOKEN                 | Used as a fallback when ATMOS_BITBUCKET_TOKEN is not set.                                           |
-| ATMOS_BITBUCKET_USERNAME        | Bitbucket username for authentication. Takes precedence over BITBUCKET_USERNAME.                    |
-| BITBUCKET_USERNAME              | Used as a fallback when ATMOS_BITBUCKET_USERNAME is not set. Bitbucket requires a valid username and does not accept dummy values like `"x-access-token"`. |
+<dl>
+ <dt>ATMOS_BITBUCKET_TOKEN</dt>
+ <dd>Bitbucket app password for API requests; used to avoid rate limits. When both ATMOS_BITBUCKET_TOKEN and BITBUCKET_TOKEN are defined, the former prevails.</dd>
 
-**Default Username for HTTPS:** 
-- If `ATMOS_BITBUCKET_USERNAME` is set, it is used.
-- Otherwise, if `BITBUCKET_USERNAME` is set, it is used.
-- If neither is set, `"x-token-auth"` is used.
+ <dt>BITBUCKET_TOKEN</dt>
+ <dd>Used as a fallback when ATMOS_BITBUCKET_TOKEN is not set.</dd>
+
+ <dt>ATMOS_BITBUCKET_USERNAME</dt>
+ <dd>Bitbucket username for authentication. Takes precedence over BITBUCKET_USERNAME.</dd>
+
+ <dt>BITBUCKET_USERNAME</dt>
+ <dd>Used as a fallback when ATMOS_BITBUCKET_USERNAME is not set. Bitbucket requires a valid username and does not accept dummy values like `"x-access-token"`.</dd>
+</dl>
 
 ### GitLab
-| Environment Variable            | Purpose                                                                                              |
-|---------------------------------|------------------------------------------------------------------------------------------------------|
-| ATMOS_GITLAB_TOKEN              | Personal Access Token (PAT) for GitLab authentication. Takes precedence over GITLAB_TOKEN.           |
-| GITLAB_TOKEN                    | Used as a fallback if ATMOS_GITLAB_TOKEN is not set.                                                 |
+<dl>
+ <dt>ATMOS_GITLAB_TOKEN</dt>
+ <dd>Personal Access Token (PAT) for GitLab authentication. Takes precedence over GITLAB_TOKEN.</dd>
+
+ <dt>GITLAB_TOKEN</dt>
+ <dd>Used as a fallback if ATMOS_GITLAB_TOKEN is not set.</dd>
+</dl>
 
 **Default Username for HTTPS:** `"oauth2"`
 
