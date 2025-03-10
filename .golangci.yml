@@ -9,7 +9,7 @@ linters:
   enable:
     - bodyclose # Check that HTTP response body is closed
     - cyclop # Check cyclomatic complexity
-    - err113 # Detects the use of the deprecated context.Done() method
+    - err113 # Enforces best practices for error handling, specifically around comparing errors.
     - errcheck # Check that errors are handled
     - forbidigo # Forbid specific function calls
     - funlen # Enforce function length limits
@@ -25,6 +25,7 @@ linters:
     - misspell # Detect spelling mistakes
     - nestif # Detect deeply nested if statements
     - nilerr # Finds the code that returns nil even if it checks that the error is not nil.
+    - nolintlint # Check for nolint comments
     - revive # Fast, configurable linter
     - rowserrcheck # Check that rows are closed
     - staticcheck # Perform static analysis
@@ -95,7 +96,9 @@ linters-settings:
             skipComments: true
             skipBlankLines: true
       - name: function-length
-        arguments: [50, 80] # Max lines per function
+        arguments: [50, 60] # Max lines per function
+      - name: function-result-limit
+        arguments: [2] # Functions should return at most 2 values; use objects for better readability and maintainability.
       - name: cognitive-complexity
         arguments: [25] # Max cognitive complexity
       - name: cyclomatic
@@ -158,6 +161,21 @@ linters-settings:
   nestif:
     # Minimal complexity of if statements to report.
     min-complexity: 6
+
+severity:
+  default-severity: error
+  case-sensitive: true
+  rules:
+    # Downgrade severity for specific linters until we increase the code quality
+    # to avoid overwhelming PRs with too many required changes.
+    - linters:
+        - function-length
+        - function-result-limit
+        - nestif
+        - cognitive-complexity
+        - cyclomatic
+        - nolintlint
+      severity: warning
 
 issues:
   max-issues-per-linter: 0
