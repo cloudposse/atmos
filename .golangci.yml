@@ -97,7 +97,8 @@ linters-settings:
             skipComments: true
             skipBlankLines: true
       - name: function-length
-        arguments: [50, 85] # Max lines per function
+        arguments: [50, 60] # Max lines per function
+        severity: warning
       - name: function-result-limit
         severity: warning
         arguments: [2] # Functions should return at most 2 values; use objects for better readability and maintainability.
