@@ -19,16 +19,6 @@ const (
 	gsmKeySeparator     = "_"
 )
 
-// Define package-level error variables.
-var (
-	ErrProjectIDRequired      = fmt.Errorf("project_id is required in Google Secret Manager store configuration")
-	ErrStackDelimiterNotSet   = fmt.Errorf("stack delimiter is not set")
-	ErrStackCannotBeEmpty     = fmt.Errorf("stack cannot be empty")
-	ErrComponentCannotBeEmpty = fmt.Errorf("component cannot be empty")
-	ErrKeyCannotBeEmpty       = fmt.Errorf("key cannot be empty")
-	ErrValueMustBeString      = fmt.Errorf("value must be a string")
-)
-
 // GSMClient is the interface that wraps the Google Secret Manager client methods we use.
 type GSMClient interface {
 	CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
@@ -176,18 +166,18 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 
 // Set stores a key-value pair in Google Secret Manager.
 func (s *GSMStore) Set(stack string, component string, key string, value any) error {
-	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
-	defer cancel()
-
 	if stack == "" {
-		return ErrStackCannotBeEmpty
+		return ErrEmptyStack
 	}
 	if component == "" {
-		return ErrComponentCannotBeEmpty
+		return ErrEmptyComponent
 	}
 	if key == "" {
-		return ErrKeyCannotBeEmpty
+		return ErrEmptyKey
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
 
 	strValue, ok := value.(string)
 	if !ok {
@@ -213,18 +203,18 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 
 // Get retrieves a value by key from Google Secret Manager.
 func (s *GSMStore) Get(stack string, component string, key string) (any, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
-	defer cancel()
-
 	if stack == "" {
-		return nil, ErrStackCannotBeEmpty
+		return nil, ErrEmptyStack
 	}
 	if component == "" {
-		return nil, ErrComponentCannotBeEmpty
+		return nil, ErrEmptyComponent
 	}
 	if key == "" {
-		return nil, ErrKeyCannotBeEmpty
+		return nil, ErrEmptyKey
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
