@@ -141,7 +141,7 @@ the URL is used as provided. In this scenario, no rewriting occurs because the U
 
 ### Important Notes
 
-- A URL like:
+- The following URL is **invalid** because `go-getter` misinterprets `github.com:` as a URL scheme (like `http:` or `git:`), causing a parsing error:
   ```shell
   github.com:cloudposse/terraform-null-label.git?ref={{ .Version }}
   ```
