@@ -145,7 +145,6 @@ the URL is used as provided. In this scenario, no rewriting occurs because the U
   ```shell
   github.com:cloudposse/terraform-null-label.git?ref={{ .Version }}
   ```
-  is **not valid** because go-getter misinterprets **github.com:** as a schema and will error out.
 
 - A URL without any scheme, such as:
   ```shell
