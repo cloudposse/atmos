@@ -502,7 +502,7 @@ jobs:
         id: golangci
         with:
           filter_mode: "diff_context"
-          reporter: github-check
+          reporter: github-annotations
           github_token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
