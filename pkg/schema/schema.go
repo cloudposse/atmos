@@ -116,7 +116,7 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (a *AtmosConfiguration) ProcessSchemas() error {
+func (a *AtmosConfiguration) ProcessSchemas() {
 	for key := range a.Schemas {
 		if key == "cue" || key == "opa" || key == "jsonschema" {
 			a.processResourceSchema(key)
@@ -124,7 +124,7 @@ func (a *AtmosConfiguration) ProcessSchemas() error {
 		}
 		a.processManifestSchemas(key)
 	}
-	return nil
+	return
 }
 
 func (a *AtmosConfiguration) processManifestSchemas(key string) {
