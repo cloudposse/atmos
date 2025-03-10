@@ -53,8 +53,8 @@ func configureLogLevelStyles(styles *log.Styles, paddingVertical, paddingHorizon
 		errorLevelLabel = "ERROR"
 		warnLevelLabel  = "WARN"
 		infoLevelLabel  = "INFO"
-		debugLevelLabel = "DEBUG"
-		traceLevelLabel = "TRACE"
+		debugLevelLabel = "DEBU"
+		traceLevelLabel = "TRCE"
 	)
 
 	// Style `Error` log messages.
