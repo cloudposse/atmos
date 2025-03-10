@@ -9,6 +9,7 @@ import (
 	"runtime"
 
 	"github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
@@ -257,7 +258,24 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	atmosConfig.Validate.EditorConfig.Color = true
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
-	err = v.Unmarshal(&atmosConfig)
+
+	// Configure mapstructure decoder to handle the AtmosConfiguration struct properly
+	decoderConfig := &mapstructure.DecoderConfig{
+		Result:           &atmosConfig,
+		WeaklyTypedInput: true,
+		TagName:          "yaml",
+		ZeroFields:       false,
+	}
+
+	decoder, err := mapstructure.NewDecoder(decoderConfig)
+	if err != nil {
+		return atmosConfig, err
+	}
+
+	// Check raw indent value directly from Viper before decoding
+
+	// Decode from Viper's internal state
+	err = decoder.Decode(v.AllSettings())
 	if err != nil {
 		return atmosConfig, err
 	}

@@ -79,11 +79,18 @@ type SyntaxHighlighting struct {
 	Wrap                   bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
 }
 
+// YAMLSettings defines configuration for YAML output formatting
+type YAMLSettings struct {
+	Indent   int  `yaml:"indent,omitempty" json:"indent,omitempty" mapstructure:"indent"`
+	Preserve bool `yaml:"preserve,omitempty" json:"preserve,omitempty" mapstructure:"preserve"`
+}
+
 type AtmosSettings struct {
 	ListMergeStrategy string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
 	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
+	YAML              YAMLSettings     `yaml:"yaml,omitempty" json:"yaml,omitempty" mapstructure:"yaml"`
 	InjectGithubToken bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 }
 
