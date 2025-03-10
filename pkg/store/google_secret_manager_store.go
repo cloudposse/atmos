@@ -65,7 +65,7 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 		if client != nil {
 			client.Close()
 		}
-		return nil, fmt.Errorf("failed to create Secret Manager client: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
 	store := &GSMStore{
@@ -95,7 +95,7 @@ func (s *GSMStore) getKey(stack string, component string, key string) (string, e
 
 	baseKey, err := getKey(s.prefix, *s.stackDelimiter, stack, component, key, gsmKeySeparator)
 	if err != nil {
-		return "", fmt.Errorf("error getting key: %w", err)
+		return "", fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
 	// Replace any remaining slashes with underscores as Secret Manager doesn't allow slashes
@@ -131,12 +131,12 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 					Name: fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID),
 				}, nil
 			case codes.NotFound:
-				return nil, fmt.Errorf("projects/%s/secrets/%s not found: %w", s.projectID, secretID, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID), err)
 			case codes.PermissionDenied:
-				return nil, fmt.Errorf("permission denied for project %s - please check if the project exists and you have the required permissions: %w", s.projectID, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("project %s", s.projectID), err)
 			}
 		}
-		return nil, fmt.Errorf("failed to create secret: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrCreateSecret, err)
 	}
 	return secret, nil
 }
@@ -154,12 +154,12 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 		if st, ok := status.FromError(err); ok {
 			switch st.Code() {
 			case codes.NotFound:
-				return fmt.Errorf("resource not found %s: %w", secret.GetName(), err)
+				return fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secret.GetName(), err)
 			case codes.PermissionDenied:
-				return fmt.Errorf("permission denied for %s - please check if you have the required permissions: %w", secret.GetName(), err)
+				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, secret.GetName(), err)
 			}
 		}
-		return fmt.Errorf("failed to add secret version: %w", err)
+		return fmt.Errorf(errWrapFormat, ErrAddSecretVersion, err)
 	}
 	return nil
 }
@@ -184,9 +184,10 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 		return ErrValueMustBeString
 	}
 
+	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf("failed to get key: %w", err)
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
 	secret, err := s.createSecret(ctx, secretID)
@@ -219,7 +220,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
 	// Build the resource name for the latest version
@@ -230,15 +231,16 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 		Name: name,
 	})
 	if err != nil {
-		if st, ok := status.FromError(err); ok {
+		st, ok := status.FromError(err)
+		if ok {
 			switch st.Code() {
 			case codes.NotFound:
-				return nil, fmt.Errorf("resource not found %s: %w", secretID, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretID, err)
 			case codes.PermissionDenied:
-				return nil, fmt.Errorf("permission denied for secret %s - please check if you have the required permissions: %w", secretID, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
 			}
 		}
-		return nil, fmt.Errorf("failed to access secret version: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
 	}
 
 	return string(result.Payload.Data), nil
