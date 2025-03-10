@@ -24,7 +24,12 @@ func PrintMessage(message string) {
 	fmt.Println(message)
 }
 
-// PrintMessageInColor prints the message to the console using the provided color
+// PrintMessageToStderr prints the message to the stderr.
+func PrintMessageToStderr(message string, args ...any) {
+	fmt.Fprintf(os.Stderr, message, args...)
+}
+
+// PrintMessageInColor prints the message to the console using the provided color.
 func PrintMessageInColor(message string, messageColor *color.Color) {
 	_, _ = messageColor.Fprint(os.Stdout, message)
 }
