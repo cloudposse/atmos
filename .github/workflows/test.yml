@@ -501,10 +501,9 @@ jobs:
         uses: reviewdog/action-golangci-lint@v2
         id: golangci
         with:
-          # github-annotations was not yet released in 0.23.3 (December 4th, 2024)
-          reviewdog_version: 3bb2d1a3cbc75325d74296e7384c810ce5dde5ca
+          reviewdog_version: latest
           filter_mode: "diff_context"
-          reporter: github-annotations
+          reporter: github-check
           github_token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
