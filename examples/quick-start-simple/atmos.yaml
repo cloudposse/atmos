@@ -16,10 +16,6 @@ stacks:
     - "**/_defaults.yaml"
   name_pattern: "{stage}"
 
-settings:
-  yaml:
-    indent: 2
-
 logs:
   level: Info
   file: "/dev/stderr"

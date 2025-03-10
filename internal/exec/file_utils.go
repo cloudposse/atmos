@@ -34,50 +34,15 @@ func printOrWriteToFile(
 	file string,
 	data any,
 ) error {
-	// Extract the real data and config from the composite structure
-	var actualData any = data
-	var atmosConfig *schema.AtmosConfiguration
-
-	// Check if data is our composite structure with both result and config
-	if composite, ok := data.(map[string]interface{}); ok {
-		if result, hasResult := composite["result"]; hasResult {
-			actualData = result
-		}
-
-		if config, hasConfig := composite["config"]; hasConfig {
-			if configObj, isConfig := config.(schema.AtmosConfiguration); isConfig {
-				atmosConfig = &configObj
-			}
-		}
-	}
-
 	switch format {
 	case "yaml":
-		// Create YAML options with the indent setting from atmos.yaml config
-		yamlOpts := u.YAMLOptions{}
-		if atmosConfig != nil && atmosConfig.Settings.YAML.Indent > 0 {
-			yamlOpts.Indent = atmosConfig.Settings.YAML.Indent
-		}
-
 		if file == "" {
-			// PrintAsYAML already extracts config and handles indentation settings
-			// We'll use the raw utils.PrintAsYAML since it correctly applies the atmos config
-			if atmosConfig != nil {
-				// If we have a real config, use it to format the YAML
-				err := u.PrintAsYAMLToFileDescriptor(*atmosConfig, actualData)
-				if err != nil {
-					return err
-				}
-			} else {
-				// Fall back to standard PrintAsYAML which will try to extract config
-				err := u.PrintAsYAML(actualData)
-				if err != nil {
-					return err
-				}
+			err := u.PrintAsYAML(data)
+			if err != nil {
+				return err
 			}
 		} else {
-			// WriteToFileAsYAML already extracts config and handles indentation settings
-			err := u.WriteToFileAsYAML(file, actualData, 0o644)
+			err := u.WriteToFileAsYAML(file, data, 0o644)
 			if err != nil {
 				return err
 			}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -13,7 +12,7 @@ import (
 )
 
 const (
-	// Atmos YAML functions.
+	// Atmos YAML functions
 	AtmosYamlFuncExec            = "!exec"
 	AtmosYamlFuncStore           = "!store"
 	AtmosYamlFuncTemplate        = "!template"
@@ -21,7 +20,7 @@ const (
 	AtmosYamlFuncEnv             = "!env"
 	AtmosYamlFuncInclude         = "!include"
 
-	// For internal use by Atmos when processing the `!include` function.
+	// For internal use by Atmos when processing the `!include` function
 	AtmosYamlFuncIncludeLocalFile = "!include-local-file"
 	AtmosYamlFuncIncludeGoGetter  = "!include-go-getter"
 )
@@ -35,28 +34,15 @@ var AtmosYamlTags = []string{
 	AtmosYamlFuncInclude,
 }
 
-// YAMLOptions provides formatting options for YAML conversion.
-type YAMLOptions struct {
-	Indent int
-}
-
-// PrintAsYAML prints the provided value as YAML document to the console.
+// PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(data any) error {
-	// Extract AtmosConfig from the data if possible, or create empty one.
-	atmosConfig := ExtractAtmosConfig(data)
-
-	// Get YAML indentation from the single source of truth
-	indent := GetYAMLIndent(&atmosConfig)
-
-	// Create options with the detected indent
-	opts := YAMLOptions{Indent: indent}
-	y, err := ConvertToYAMLWithOptions(&atmosConfig, data, opts)
+	y, err := ConvertToYAML(data)
 	if err != nil {
 		return err
 	}
 
-	// Use the existing HighlightCodeWithConfig function from highlight_utils.go
-	highlighted, err := HighlightCodeWithConfig(y, atmosConfig, "yaml")
+	atmosConfig := ExtractAtmosConfig(data)
+	highlighted, err := HighlightCodeWithConfig(y, atmosConfig)
 	if err != nil {
 		// Fallback to plain text if highlighting fails
 		PrintMessage(y)
@@ -66,39 +52,19 @@ func PrintAsYAML(data any) error {
 	return nil
 }
 
-// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor.
+// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
 func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
-	indent := GetYAMLIndent(&atmosConfig)
-
-	opts := YAMLOptions{Indent: indent}
-
-	y, err := ConvertToYAMLWithOptions(&atmosConfig, data, opts)
+	y, err := ConvertToYAML(data)
 	if err != nil {
 		return err
 	}
-
-	// Use the same highlighting as in PrintAsYAML to ensure consistent color output
-	highlighted, err := HighlightCodeWithConfig(y, atmosConfig, "yaml")
-	if err != nil {
-		// Fallback to plain text if highlighting fails
-		PrintMessage(y)
-		return err
-	}
-	PrintMessage(highlighted)
+	LogInfo(y)
 	return nil
 }
 
-// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file.
+// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
-	// Extract AtmosConfig from the data if possible, or create empty one
-	atmosConfig := ExtractAtmosConfig(data)
-
-	// Get YAML indentation from the single source of truth
-	indent := GetYAMLIndent(&atmosConfig)
-
-	// Create options with the detected indent
-	opts := YAMLOptions{Indent: indent}
-	y, err := ConvertToYAMLWithOptions(&atmosConfig, data, opts)
+	y, err := ConvertToYAML(data)
 	if err != nil {
 		return err
 	}
@@ -109,54 +75,13 @@ func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// ConvertToYAML converts the provided data to a YAML string.
+// ConvertToYAML converts the provided data to a YAML string
 func ConvertToYAML(data any) (string, error) {
-	return ConvertToYAMLWithOptions(nil, data, YAMLOptions{})
-}
-
-// ConvertToYAMLWithOptions converts the provided data to a YAML string with custom formatting options.
-func ConvertToYAMLWithOptions(atmosConfig *schema.AtmosConfiguration, data any, opts YAMLOptions) (string, error) {
-	var buf strings.Builder
-
-	// Get indentation from opts if specified, otherwise use the standard method
-	indent := opts.Indent
-	if indent <= 0 {
-		indent = GetYAMLIndent(atmosConfig)
-	}
-
-	// Create a new encoder with our buffer as the writer
-	encoder := yaml.NewEncoder(&buf)
-	// Set the indentation level
-	encoder.SetIndent(indent)
-	// Encode the data
-	err := encoder.Encode(data)
+	y, err := yaml.Marshal(data)
 	if err != nil {
 		return "", err
 	}
-	// Close the encoder to flush any remaining data
-	encoder.Close()
-
-	return buf.String(), nil
-}
-
-// GetYAMLIndent extracts the YAML indentation setting from AtmosConfiguration.
-func GetYAMLIndent(atmosConfig *schema.AtmosConfiguration) int {
-	// Default YAML indentation.
-	defaultIndent := 2
-
-	// Check environment variable first (highest priority).
-	if envIndent := os.Getenv("ATMOS_YAML_INDENT"); envIndent != "" {
-		if i, err := strconv.Atoi(envIndent); err == nil && i > 0 {
-			return i
-		}
-	}
-
-	if atmosConfig != nil && atmosConfig.Settings.YAML.Indent > 0 {
-		// Use the indentation from atmos.yaml config
-		return atmosConfig.Settings.YAML.Indent
-	}
-
-	return defaultIndent
+	return string(y), nil
 }
 
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
