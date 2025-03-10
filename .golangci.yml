@@ -68,7 +68,8 @@ linters-settings:
 
   gocognit:
     # Maximum cognitive complexity
-    min-complexity: 27
+    min-complexity: 20
+    severity: warning
 
   godot:
     # Check if comments end in a period
