@@ -37,7 +37,8 @@ linters:
 
 linters-settings:
   funlen:
-    lines: 86 # Maximum number of lines per function
+    lines: 60 # Maximum number of lines per function
+    severity: warning
     statements: 40 # Maximum number of statements per function
     ignore-comments: true # Ignore comments when counting lines.
 
