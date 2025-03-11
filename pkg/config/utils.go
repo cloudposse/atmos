@@ -419,29 +419,29 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 
 const cmdLineArg = "Set using command line argument"
 
-func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
-	if err := setBasePaths(atmosConfig, &configAndStacksInfo); err != nil {
+func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	if err := setBasePaths(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setTerraformConfig(atmosConfig, &configAndStacksInfo); err != nil {
+	if err := setTerraformConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setHelmfileConfig(atmosConfig, &configAndStacksInfo); err != nil {
+	if err := setHelmfileConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setStacksConfig(atmosConfig, &configAndStacksInfo); err != nil {
+	if err := setStacksConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setFeatureFlags(atmosConfig, &configAndStacksInfo); err != nil {
+	if err := setFeatureFlags(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setSchemaDirs(atmosConfig, &configAndStacksInfo); err != nil {
+	if err := setSchemaDirs(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setLoggingConfig(atmosConfig, &configAndStacksInfo); err != nil {
+	if err := setLoggingConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setSettingsConfig(atmosConfig, &configAndStacksInfo); err != nil {
+	if err := setSettingsConfig(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
 

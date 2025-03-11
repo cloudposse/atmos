@@ -282,7 +282,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Process command-line args
-	err = processCommandLineArgs(&atmosConfig, configAndStacksInfo)
+	err = processCommandLineArgs(&atmosConfig, &configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, err
 	}
