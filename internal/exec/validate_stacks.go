@@ -124,6 +124,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			return err
 		}
 	default:
+		//nolint:err113 we would anyway update this with
 		return fmt.Errorf("Schema file '%s' not found. Configure via:\n"+
 			"1. 'schemas.atmos.manifest' in atmos.yaml\n"+
 			"2. ATMOS_SCHEMAS_ATMOS_MANIFEST env var\n"+
