@@ -33,7 +33,6 @@ func TestPrintErrorMarkdown(t *testing.T) {
 
 	os.Stderr = oldStderr
 
-	// Read captured output
 	var output bytes.Buffer
 	_, err = io.Copy(&output, r)
 	assert.NoError(t, err, "'TestPrintErrorMarkdown' should execute without error")
@@ -74,9 +73,11 @@ func TestPrintErrorMarkdownAndExit(t *testing.T) {
 		PrintErrorMarkdownAndExit("Fatal Error", errors.New("critical failure"), "Check logs.")
 		return
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestPrintErrorMarkdownAndExit")
+	execPath, err := exec.LookPath(os.Args[0])
+	assert.Nil(t, err)
+	cmd := exec.Command(execPath, "-test.run=TestPrintErrorMarkdownAndExit")
 	cmd.Env = append(os.Environ(), "TEST_EXIT=1")
-	err := cmd.Run()
+	err = cmd.Run()
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
 		assert.Equal(t, 1, exitError.ExitCode())
@@ -90,9 +91,11 @@ func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 		PrintInvalidUsageErrorAndExit(errors.New("invalid command"), "Use --help for usage information.")
 		return
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestPrintErrorMarkdownAndExit")
+	execPath, err := exec.LookPath(os.Args[0])
+	assert.Nil(t, err)
+	cmd := exec.Command(execPath, "-test.run=TestPrintErrorMarkdownAndExit")
 	cmd.Env = append(os.Environ(), "TEST_EXIT=1")
-	err := cmd.Run()
+	err = cmd.Run()
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
 		assert.Equal(t, 1, exitError.ExitCode())
@@ -104,14 +107,12 @@ func TestPrintInvalidUsageErrorAndExit(t *testing.T) {
 func TestPrintfMarkdown(t *testing.T) {
 	render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 
-	// Redirect stderr
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
 	PrintfMarkdown("Atmos: %s", "Manage Environments Easily in Terraform")
 
-	// Restore stdout
 	err := w.Close()
 	assert.Nil(t, err)
 
