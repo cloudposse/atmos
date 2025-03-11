@@ -529,7 +529,7 @@ func diffResourceFallbackTest(a, b map[string]interface{}, indent string, output
 }
 
 // testExecuteTerraformPlanDiff is a testable version of executeTerraformPlanDiff that uses the MockExecutor.
-func testExecuteTerraformPlanDiff(executor *MockExecutor, info schema.ConfigAndStacksInfo, componentPath, varFile, planFile string) error {
+func testExecuteTerraformPlanDiff(executor *MockExecutor, info *schema.ConfigAndStacksInfo, componentPath, varFile, planFile string) error {
 	// Step 1: Extract args and validate original plan file
 	origPlanFlag := ""
 	newPlanFlag := ""
@@ -689,9 +689,9 @@ func TestExecuteTerraformPlanDiffBasic(t *testing.T) {
 
 			// If the test includes both orig and new flags, run with both plans
 			if strings.Contains(tt.name, "both plans") {
-				runWithBothPlansTest(t, tt, executor, info, tempDir)
+				runWithBothPlansTest(t, tt, executor, &info, tempDir)
 			} else {
-				runStandardPlanDiffTest(t, tt, executor, info, tempDir)
+				runStandardPlanDiffTest(t, tt, executor, &info, tempDir)
 			}
 		})
 	}
@@ -884,7 +884,7 @@ func createMockExecutor(origPlanJSON, newPlanJSON string) *MockExecutor {
 }
 
 // runWithBothPlansTest runs a test with both original and new plan files specified.
-func runWithBothPlansTest(t *testing.T, tt planDiffTestCase, executor *MockExecutor, info schema.ConfigAndStacksInfo, tempDir string) {
+func runWithBothPlansTest(t *testing.T, tt planDiffTestCase, executor *MockExecutor, info *schema.ConfigAndStacksInfo, tempDir string) {
 	// Redirect stdout to capture output
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -916,7 +916,7 @@ func runWithBothPlansTest(t *testing.T, tt planDiffTestCase, executor *MockExecu
 }
 
 // runStandardPlanDiffTest runs a test with only the original plan specified.
-func runStandardPlanDiffTest(t *testing.T, tt planDiffTestCase, executor *MockExecutor, info schema.ConfigAndStacksInfo, tempDir string) {
+func runStandardPlanDiffTest(t *testing.T, tt planDiffTestCase, executor *MockExecutor, info *schema.ConfigAndStacksInfo, tempDir string) {
 	// Redirect stdout to capture output
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
