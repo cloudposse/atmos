@@ -115,7 +115,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 	log.SetOutput(output)
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		//nolint:all The reason to escape this is because it is expected to fail fast and
+		//nolint:all // The reason to escape this is because it is expected to fail fast and
 		log.Fatal(err)
 	}
 	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
