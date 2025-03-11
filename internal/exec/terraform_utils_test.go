@@ -209,9 +209,9 @@ func (m *MockExecutor) ExecuteCommand(command string, args []string, componentPa
 
 		// Return appropriate mock plan data based on the plan file
 		if strings.Contains(planFile, "orig") {
-			return os.WriteFile(outputFile, []byte(m.outputs["orig"]), 0644)
+			return os.WriteFile(outputFile, []byte(m.outputs["orig"]), 0o644)
 		} else if strings.Contains(planFile, "new") {
-			return os.WriteFile(outputFile, []byte(m.outputs["new"]), 0644)
+			return os.WriteFile(outputFile, []byte(m.outputs["new"]), 0o644)
 		}
 	}
 
@@ -220,7 +220,7 @@ func (m *MockExecutor) ExecuteCommand(command string, args []string, componentPa
 		// Find the output plan file (should be after -out flag)
 		for i, arg := range args {
 			if (arg == "-out" || arg == outFlag) && i+1 < len(args) {
-				return os.WriteFile(args[i+1], []byte("mock plan content"), 0644)
+				return os.WriteFile(args[i+1], []byte("mock plan content"), 0o644)
 			}
 		}
 	}
@@ -394,12 +394,12 @@ func TestExecuteTerraformPlanDiffBasic(t *testing.T) {
 	newPlanFile := filepath.Join(tempDir, "new-plan.tfplan")
 
 	// Write dummy content to plan files so they exist
-	err = os.WriteFile(origPlanFile, []byte("dummy content"), 0644)
+	err = os.WriteFile(origPlanFile, []byte("dummy content"), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write orig plan file: %v", err)
 	}
 
-	err = os.WriteFile(newPlanFile, []byte("dummy content"), 0644)
+	err = os.WriteFile(newPlanFile, []byte("dummy content"), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write new plan file: %v", err)
 	}
@@ -648,7 +648,7 @@ output "example_output" {
   value = var.example_var
 }
 `
-	err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(mainTf), 0644)
+	err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(mainTf), 0o644)
 	if err != nil {
 		return err
 	}
@@ -656,5 +656,5 @@ output "example_output" {
 	// Create an empty terraform.tfvars file
 	tfvars := `# Empty tfvars file for testing
 `
-	return os.WriteFile(filepath.Join(dir, "terraform.tfvars"), []byte(tfvars), 0644)
+	return os.WriteFile(filepath.Join(dir, "terraform.tfvars"), []byte(tfvars), 0o644)
 }

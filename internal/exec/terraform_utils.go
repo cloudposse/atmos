@@ -291,12 +291,12 @@ func executeTerraformPlanDiff(atmosConfig schema.AtmosConfiguration, info schema
 	}
 
 	// Write the output to temporary files
-	err = os.WriteFile(origPlanHumanReadable.Name(), origOut, 0644)
+	err = os.WriteFile(origPlanHumanReadable.Name(), origOut, 0o644)
 	if err != nil {
 		return fmt.Errorf("error writing original plan JSON to file: %w", err)
 	}
 
-	err = os.WriteFile(newPlanHumanReadable.Name(), newOut, 0644)
+	err = os.WriteFile(newPlanHumanReadable.Name(), newOut, 0o644)
 	if err != nil {
 		return fmt.Errorf("error writing new plan JSON to file: %w", err)
 	}
