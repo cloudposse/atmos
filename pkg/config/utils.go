@@ -417,43 +417,85 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 	return nil
 }
 
+const cmdLineArg = "Set using command line argument"
+
 func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
-	setCommandLineArgument := "Set using command line argument"
+	if err := setBasePaths(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+	if err := setTerraformConfig(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+	if err := setHelmfileConfig(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+	if err := setStacksConfig(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+	if err := setFeatureFlags(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+	if err := setSchemaDirs(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+	if err := setLoggingConfig(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+	if err := setSettingsConfig(atmosConfig, configAndStacksInfo); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
+		log.Debug(cmdLineArg, "BasePath", configAndStacksInfo.BasePath)
 	}
+	return nil
+}
+
+func setTerraformConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.TerraformCommand) > 0 {
 		atmosConfig.Components.Terraform.Command = configAndStacksInfo.TerraformCommand
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as terraform executable", configAndStacksInfo.TerraformCommand))
+		log.Debug(cmdLineArg, "TerraformCommand", configAndStacksInfo.TerraformCommand)
 	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		atmosConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as terraform directory", configAndStacksInfo.TerraformDir))
+		log.Debug(cmdLineArg, "TerraformDir", configAndStacksInfo.TerraformDir)
 	}
+	return nil
+}
+
+func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.HelmfileCommand) > 0 {
 		atmosConfig.Components.Helmfile.Command = configAndStacksInfo.HelmfileCommand
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as helmfile executable", configAndStacksInfo.HelmfileCommand))
+		log.Debug(cmdLineArg, "HelmfileCommand", configAndStacksInfo.HelmfileCommand)
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		atmosConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as helmfile directory", configAndStacksInfo.HelmfileDir))
+		log.Debug(cmdLineArg, "HelmfileDir", configAndStacksInfo.HelmfileDir)
 	}
-	if len(configAndStacksInfo.ConfigDir) > 0 {
-		atmosConfig.Stacks.BasePath = configAndStacksInfo.ConfigDir
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.ConfigDir))
-	}
+	return nil
+}
+
+func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as stacks directory", configAndStacksInfo.StacksDir))
+		log.Debug(cmdLineArg, "StacksDir", configAndStacksInfo.StacksDir)
 	}
+	return nil
+}
+
+func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.DeployRunInit) > 0 {
 		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
 		if err != nil {
 			return err
 		}
 		atmosConfig.Components.Terraform.DeployRunInit = deployRunInitBool
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", DeployRunInitFlag, configAndStacksInfo.DeployRunInit))
+		log.Debug(cmdLineArg, "DeployRunInit", configAndStacksInfo.DeployRunInit)
 	}
 	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
 		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
@@ -461,11 +503,11 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 			return err
 		}
 		atmosConfig.Components.Terraform.AutoGenerateBackendFile = autoGenerateBackendFileBool
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile))
+		log.Debug(cmdLineArg, AutoGenerateBackendFileFlag, configAndStacksInfo.AutoGenerateBackendFile)
 	}
 	if len(configAndStacksInfo.WorkflowsDir) > 0 {
 		atmosConfig.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as workflows directory", configAndStacksInfo.WorkflowsDir))
+		log.Debug(cmdLineArg, "WorkflowsBasePath", configAndStacksInfo.WorkflowsDir)
 	}
 	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
 		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
@@ -473,47 +515,53 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 			return err
 		}
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
-		log.Debug(setCommandLineArgument, InitRunReconfigure, configAndStacksInfo.InitRunReconfigure)
+		log.Debug(cmdLineArg, "InitRunReconfigure", configAndStacksInfo.InitRunReconfigure)
 	}
+	return nil
+}
+
+func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
-		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
-			BasePath: configAndStacksInfo.JsonSchemaDir,
-		}
-		log.Debug("Set using command line argument", "JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir)
+		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{BasePath: configAndStacksInfo.JsonSchemaDir}
+		log.Debug(cmdLineArg, "JsonSchemaDir", configAndStacksInfo.JsonSchemaDir)
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
-		atmosConfig.Schemas["opa"] = schema.ResourcePath{
-			BasePath: configAndStacksInfo.OpaDir,
-		}
-		log.Debug(setCommandLineArgument, "OPA schemas directory", configAndStacksInfo.OpaDir)
+		atmosConfig.Schemas["opa"] = schema.ResourcePath{BasePath: configAndStacksInfo.OpaDir}
+		log.Debug(cmdLineArg, "OpaDir", configAndStacksInfo.OpaDir)
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
-		atmosConfig.Schemas["cue"] = schema.ResourcePath{
-			BasePath: configAndStacksInfo.CueDir,
-		}
-		log.Debug(setCommandLineArgument, "CUE schemas directory", configAndStacksInfo.CueDir)
+		atmosConfig.Schemas["cue"] = schema.ResourcePath{BasePath: configAndStacksInfo.CueDir}
+		log.Debug(cmdLineArg, "CueDir", configAndStacksInfo.CueDir)
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
 		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
 			Manifest: configAndStacksInfo.AtmosManifestJsonSchema,
 		}
-		log.Debug("Set atmosConfig.Schemas[\"atmos\"] command line argument '%s' as path to Atmos JSON Schema", configAndStacksInfo.AtmosManifestJsonSchema)
+		log.Debug(cmdLineArg, "atmosManifest", configAndStacksInfo.AtmosManifestJsonSchema)
 	}
+	return nil
+}
+
+func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
 			return err
 		}
 		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", LogsLevelFlag, configAndStacksInfo.LogsLevel))
+		log.Debug(cmdLineArg, "LogsLevel", configAndStacksInfo.LogsLevel)
 	}
 	if len(configAndStacksInfo.LogsFile) > 0 {
 		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", LogsFileFlag, configAndStacksInfo.LogsFile))
+		log.Debug(cmdLineArg, LogsFileFlag, configAndStacksInfo.LogsFile)
 	}
+	return nil
+}
+
+func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s=%s'", SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy))
+		log.Debug(cmdLineArg, "SettingsListMergeStrategy", configAndStacksInfo.SettingsListMergeStrategy)
 	}
 
 	return nil
