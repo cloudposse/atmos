@@ -24,11 +24,6 @@ func PrintMessage(message string) {
 	fmt.Println(message)
 }
 
-// PrintMessageToStderr prints the message to the stderr.
-func PrintMessageToStderr(message string, args ...any) {
-	fmt.Fprintf(os.Stderr, message, args...)
-}
-
 // PrintMessageInColor prints the message to the console using the provided color.
 func PrintMessageInColor(message string, messageColor *color.Color) {
 	_, _ = messageColor.Fprint(os.Stdout, message)
@@ -38,6 +33,11 @@ func PrintMessageInColor(message string, messageColor *color.Color) {
 func PrintErrorInColor(message string) {
 	messageColor := theme.Colors.Error
 	_, _ = messageColor.Fprint(os.Stderr, message)
+}
+
+// PrintfMessageToStderr prints the message to the stderr.
+func PrintfMessageToStderr(message string, args ...any) {
+	fmt.Fprintf(os.Stderr, message, args...)
 }
 
 // Deprecated: Use `log.Fatal` instead. This function will be removed in a future release.
