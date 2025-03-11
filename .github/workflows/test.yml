@@ -491,6 +491,7 @@ jobs:
   lint-golangci:
     name: "[lint] golangci"
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' # Only runs on PRs
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
@@ -503,8 +504,7 @@ jobs:
         with:
           reviewdog_version: latest
           filter_mode: "diff_context"
-          reporter: github-check
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-check
         continue-on-error: true
 
       - name: Fail if Lint Errors Exist
