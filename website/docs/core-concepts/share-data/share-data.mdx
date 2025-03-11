@@ -60,8 +60,39 @@ components:
 ```
 
 <ActionCard>
-For more advanced examples, check out the `!store` yaml function documentation.
+For more advanced examples, check out the `!store` YAML function documentation.
 <PrimaryCTA to="/core-concepts/stacks/yaml-functions/store">Learn More</PrimaryCTA>
+</ActionCard>
+
+###  Function: `!terraform.output`
+
+The `!terraform.output` YAML function allows reading the outputs ([remote state](/core-concepts/share-data/remote-state))
+of components directly in Atmos stack manifests.
+
+For example, we can read the `vpc_id` output of the `vpc` component in the current stack:
+
+```yaml
+components:
+  terraform:
+    cluster:
+      vars:
+        vpc_id: !terraform.output vpc vpc_id
+```
+
+To access the configuration of a component in a different stack, you can specify the stack name as the second argument.
+For example, here we're reading the `vpc_id` output of the `vpc` component in the `prod` stack:
+
+```yaml
+components:
+  terraform:
+    cluster:
+      vars:
+        vpc_id: !terraform.output vpc prod vpc_id
+```
+
+<ActionCard>
+For more advanced examples, check out the `!terraform.output` YAML function documentation.
+<PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.output">Learn More</PrimaryCTA>
 </ActionCard>
 
 ## Using Template Functions
