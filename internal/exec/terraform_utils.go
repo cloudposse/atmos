@@ -93,7 +93,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 				return err
 			}
 
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o600)
 			if err != nil {
 				return err
 			}
@@ -112,7 +112,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
-			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
+			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o600)
 			return err
 		}
 	}
@@ -709,7 +709,7 @@ func getPlanAsJSON(componentPath, planPath, outputPath string, envVars []string)
 	}
 
 	// Write the output to the temporary file
-	err = os.WriteFile(outputPath, planOut, 0o644)
+	err = os.WriteFile(outputPath, planOut, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("error writing plan JSON to file: %w", err)
 	}

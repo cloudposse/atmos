@@ -209,9 +209,9 @@ func (m *MockExecutor) ExecuteCommand(command string, args []string, componentPa
 
 		// Return appropriate mock plan data based on the plan file
 		if strings.Contains(planFile, "orig") {
-			return os.WriteFile(outputFile, []byte(m.outputs["orig"]), 0o644)
+			return os.WriteFile(outputFile, []byte(m.outputs["orig"]), 0o600)
 		} else if strings.Contains(planFile, "new") {
-			return os.WriteFile(outputFile, []byte(m.outputs["new"]), 0o644)
+			return os.WriteFile(outputFile, []byte(m.outputs["new"]), 0o600)
 		}
 	}
 
@@ -220,7 +220,7 @@ func (m *MockExecutor) ExecuteCommand(command string, args []string, componentPa
 		// Find the output plan file (should be after -out flag)
 		for i, arg := range args {
 			if (arg == "-out" || arg == outFlag) && i+1 < len(args) {
-				return os.WriteFile(args[i+1], []byte("mock plan content"), 0o644)
+				return os.WriteFile(args[i+1], []byte("mock plan content"), 0o600)
 			}
 		}
 	}
@@ -602,6 +602,7 @@ func diffResourceFallbackTest(a, b map[string]interface{}, indent string, output
 
 // testExecuteTerraformPlanDiff is a testable version of executeTerraformPlanDiff that uses the MockExecutor
 func testExecuteTerraformPlanDiff(executor *MockExecutor, info schema.ConfigAndStacksInfo, componentPath, varFile, planFile string) error {
+	// Step 1: Extract args and validate original plan file
 	origPlanFlag := ""
 	newPlanFlag := ""
 	var skipNext bool
@@ -631,6 +632,7 @@ func testExecuteTerraformPlanDiff(executor *MockExecutor, info schema.ConfigAndS
 		return errors.New("--orig flag must be provided with the path to the original plan file")
 	}
 
+	// Validate original plan file
 	origPlanPath := origPlanFlag
 	if !filepath.IsAbs(origPlanPath) {
 		origPlanPath = filepath.Join(componentPath, origPlanPath)
@@ -641,8 +643,8 @@ func testExecuteTerraformPlanDiff(executor *MockExecutor, info schema.ConfigAndS
 		return fmt.Errorf("original plan file does not exist at path: %s", origPlanPath)
 	}
 
-	// Generate a new plan if --new flag is not provided
-	newPlanPath := ""
+	// Step 2: Process new plan file
+	var newPlanPath string
 	if newPlanFlag == "" {
 		// Generate a new plan
 		log.Info("Generating new plan...")
@@ -670,6 +672,7 @@ func testExecuteTerraformPlanDiff(executor *MockExecutor, info schema.ConfigAndS
 		}
 	}
 
+	// Step 3: Set up temp files and convert plans to JSON
 	// Create temporary files for the human-readable versions of the plans
 	origPlanHumanReadable, err := os.CreateTemp("", "orig-plan-*.json")
 	if err != nil {
@@ -698,6 +701,7 @@ func testExecuteTerraformPlanDiff(executor *MockExecutor, info schema.ConfigAndS
 		return fmt.Errorf("error showing new plan: %w", err)
 	}
 
+	// Step 4: Parse and compare the plans
 	// Parse JSON
 	var origPlan, newPlan map[string]interface{}
 	if err := json.Unmarshal([]byte(executor.outputs["orig"]), &origPlan); err != nil {
@@ -723,6 +727,7 @@ func testExecuteTerraformPlanDiff(executor *MockExecutor, info schema.ConfigAndS
 	var diffOutput strings.Builder
 	hasDifferences := prettyDiffTest(origPlan, newPlan, "", &diffOutput)
 
+	// Step 5: Display the results
 	if !hasDifferences {
 		fmt.Println("No differences found between the plans.")
 	} else {
@@ -779,12 +784,12 @@ func setupTestPlanDiffEnvironment(t *testing.T) (string, string, string) {
 	newPlanFile := filepath.Join(tempDir, "new-plan.tfplan")
 
 	// Write dummy content to plan files so they exist
-	err = os.WriteFile(origPlanFile, []byte("dummy content"), 0o644)
+	err = os.WriteFile(origPlanFile, []byte("dummy content"), 0o600)
 	if err != nil {
 		t.Fatalf("Failed to write orig plan file: %v", err)
 	}
 
-	err = os.WriteFile(newPlanFile, []byte("dummy content"), 0o644)
+	err = os.WriteFile(newPlanFile, []byte("dummy content"), 0o600)
 	if err != nil {
 		t.Fatalf("Failed to write new plan file: %v", err)
 	}
@@ -1047,15 +1052,15 @@ func TestExecuteTerraformPlanDiffIntegration(t *testing.T) {
 	newPlanFile := filepath.Join(tempDir, "new-plan.tfplan")
 
 	// Generate the original plan (with a specific variable value)
-	cmd = exec.Command("terraform", "plan", "-var", "example_var=original", "-out="+origPlanFile)
+	cmd = exec.Command("terraform", "plan", "-var", "example_var=original", "-out", origPlanFile)
 	cmd.Dir = tempDir
 	err = cmd.Run()
 	if err != nil {
-		t.Fatalf("Failed to create original plan: %v", err)
+		t.Fatalf("Failed to generate original plan: %v", err)
 	}
 
 	// Generate the new plan (with a different variable value)
-	cmd = exec.Command("terraform", "plan", "-var", "example_var=new_value", "-out="+newPlanFile)
+	cmd = exec.Command("terraform", "plan", "-var", "example_var=new_value", "-out", newPlanFile)
 	cmd.Dir = tempDir
 	err = cmd.Run()
 	if err != nil {
@@ -1153,7 +1158,7 @@ output "example_output" {
   value = var.example_var
 }
 `
-	err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(mainTf), 0o644)
+	err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(mainTf), 0o600)
 	if err != nil {
 		return err
 	}
@@ -1161,7 +1166,7 @@ output "example_output" {
 	// Create an empty terraform.tfvars file
 	tfvars := `# Empty tfvars file for testing
 `
-	return os.WriteFile(filepath.Join(dir, "terraform.tfvars"), []byte(tfvars), 0o644)
+	return os.WriteFile(filepath.Join(dir, "terraform.tfvars"), []byte(tfvars), 0o600)
 }
 
 // Custom type that will always fail to marshal to JSON
