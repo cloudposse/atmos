@@ -1,14 +1,19 @@
 package exec
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
 
-	l "github.com/charmbracelet/log"
+	"github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
@@ -45,17 +50,17 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 
 	// Check if the file exists before attempting deletion
 	if _, err := os.Stat(filePath); err == nil {
-		l.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
+		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
 		if err := os.Remove(filePath); err != nil {
-			l.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
+			log.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
 		} else {
-			l.Debug("Successfully deleted Terraform environment file.", "file", filePath)
+			log.Debug("Successfully deleted Terraform environment file.", "file", filePath)
 		}
 	} else if os.IsNotExist(err) {
-		l.Debug("Terraform environment file not found. No action needed.", "file", filePath)
+		log.Debug("Terraform environment file not found. No action needed.", "file", filePath)
 	} else {
-		l.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
+		log.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
 	}
 }
 
@@ -79,7 +84,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
-		l.Debug("Writing the backend config to file.", "file", backendFileName)
+		log.Debug("Writing the backend config to file.", "file", backendFileName)
 
 		if !info.DryRun {
 			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -102,7 +107,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
-		l.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
+		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
@@ -154,7 +159,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	if info.ComponentBackendType == "http" {
 		// If workspaces are explicitly enabled for HTTP backend, log a warning.
 		if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && *atmosConfig.Components.Terraform.WorkspacesEnabled {
-			l.Warn("ignoring the enabled setting for workspaces since HTTP backend doesn't support workspaces",
+			log.Warn("ignoring the enabled setting for workspaces since HTTP backend doesn't support workspaces",
 				"backend", "http",
 				"component", info.Component)
 		}
@@ -167,4 +172,225 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	}
 
 	return true
+}
+
+// executeTerraformPlanDiff generates a diff between two Terraform plan files
+func executeTerraformPlanDiff(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath, varFile, planFile string) error {
+	origPlanFlag := ""
+	newPlanFlag := ""
+	var skipNext bool
+	var additionalPlanArgs []string
+
+	// Extract the orig and new plan file paths from the flags and collect other arguments
+	for i, arg := range info.AdditionalArgsAndFlags {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+
+		if arg == "--orig" && i+1 < len(info.AdditionalArgsAndFlags) {
+			origPlanFlag = info.AdditionalArgsAndFlags[i+1]
+			skipNext = true
+		} else if arg == "--new" && i+1 < len(info.AdditionalArgsAndFlags) {
+			newPlanFlag = info.AdditionalArgsAndFlags[i+1]
+			skipNext = true
+		} else {
+			// Add any other arguments to be passed to the terraform plan command
+			additionalPlanArgs = append(additionalPlanArgs, arg)
+		}
+	}
+
+	// Check if orig flag is provided
+	if origPlanFlag == "" {
+		return errors.New("--orig flag must be provided with the path to the original plan file")
+	}
+
+	origPlanPath := origPlanFlag
+	if !filepath.IsAbs(origPlanPath) {
+		origPlanPath = filepath.Join(componentPath, origPlanPath)
+	}
+
+	// Check if orig plan file exists
+	if _, err := os.Stat(origPlanPath); os.IsNotExist(err) {
+		return fmt.Errorf("original plan file does not exist at path: %s", origPlanPath)
+	}
+
+	// Generate a new plan if --new flag is not provided
+	newPlanPath := ""
+	if newPlanFlag == "" {
+		// Generate a new plan
+		log.Info("Generating new plan...")
+
+		// Create a temporary plan file
+		newPlanPath = filepath.Join(componentPath, "new-"+filepath.Base(planFile))
+
+		// Run terraform plan to generate the new plan with all additional arguments
+		planCmd := []string{"plan", varFileFlag, varFile, outFlag, newPlanPath}
+		planCmd = append(planCmd, additionalPlanArgs...)
+
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"terraform",
+			planCmd,
+			componentPath,
+			info.ComponentEnvList,
+			info.DryRun,
+			info.RedirectStdErr,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		newPlanPath = newPlanFlag
+		if !filepath.IsAbs(newPlanPath) {
+			newPlanPath = filepath.Join(componentPath, newPlanPath)
+		}
+
+		// Check if new plan file exists
+		if _, err := os.Stat(newPlanPath); os.IsNotExist(err) {
+			return fmt.Errorf("new plan file does not exist at path: %s", newPlanPath)
+		}
+	}
+
+	// Create temporary files for the human-readable versions of the plans
+	origPlanHumanReadable, err := os.CreateTemp("", "orig-plan-*.json")
+	if err != nil {
+		return fmt.Errorf("error creating temporary file for original plan: %w", err)
+	}
+	defer os.Remove(origPlanHumanReadable.Name())
+	origPlanHumanReadable.Close()
+
+	newPlanHumanReadable, err := os.CreateTemp("", "new-plan-*.json")
+	if err != nil {
+		return fmt.Errorf("error creating temporary file for new plan: %w", err)
+	}
+	defer os.Remove(newPlanHumanReadable.Name())
+	newPlanHumanReadable.Close()
+
+	// Run terraform show to get human-readable JSON versions of the plans
+	log.Info("Converting plan files to JSON...")
+
+	// Create commands for showing plans in JSON format
+	origShowCmd := exec.Command("terraform", "show", "-json", origPlanPath)
+	origShowCmd.Dir = componentPath
+	origShowCmd.Env = append(os.Environ(), info.ComponentEnvList...)
+
+	newShowCmd := exec.Command("terraform", "show", "-json", newPlanPath)
+	newShowCmd.Dir = componentPath
+	newShowCmd.Env = append(os.Environ(), info.ComponentEnvList...)
+
+	// Capture stdout and stderr
+	origOut, err := origShowCmd.Output()
+	if err != nil {
+		return fmt.Errorf("error showing original plan: %w", err)
+	}
+
+	newOut, err := newShowCmd.Output()
+	if err != nil {
+		return fmt.Errorf("error showing new plan: %w", err)
+	}
+
+	// Write the output to temporary files
+	err = os.WriteFile(origPlanHumanReadable.Name(), origOut, 0644)
+	if err != nil {
+		return fmt.Errorf("error writing original plan JSON to file: %w", err)
+	}
+
+	err = os.WriteFile(newPlanHumanReadable.Name(), newOut, 0644)
+	if err != nil {
+		return fmt.Errorf("error writing new plan JSON to file: %w", err)
+	}
+
+	// Parse and normalize the JSON files to ensure consistent ordering
+	log.Info("Comparing plans...")
+	origPlanData, err := os.ReadFile(origPlanHumanReadable.Name())
+	if err != nil {
+		return fmt.Errorf("error reading original plan JSON: %w", err)
+	}
+
+	newPlanData, err := os.ReadFile(newPlanHumanReadable.Name())
+	if err != nil {
+		return fmt.Errorf("error reading new plan JSON: %w", err)
+	}
+
+	// Parse JSON
+	var origPlan, newPlan map[string]interface{}
+	if err := json.Unmarshal(origPlanData, &origPlan); err != nil {
+		return fmt.Errorf("error parsing original plan JSON: %w", err)
+	}
+	if err := json.Unmarshal(newPlanData, &newPlan); err != nil {
+		return fmt.Errorf("error parsing new plan JSON: %w", err)
+	}
+
+	// Remove or normalize timestamp to avoid showing it in the diff
+	if _, ok := origPlan["timestamp"]; ok {
+		origPlan["timestamp"] = "TIMESTAMP_IGNORED"
+	}
+	if _, ok := newPlan["timestamp"]; ok {
+		newPlan["timestamp"] = "TIMESTAMP_IGNORED"
+	}
+
+	// Convert maps to sorted JSON strings
+	origPlanSorted, err := json.MarshalIndent(sortJSON(origPlan), "", "  ")
+	if err != nil {
+		return fmt.Errorf("error marshaling original plan JSON: %w", err)
+	}
+
+	newPlanSorted, err := json.MarshalIndent(sortJSON(newPlan), "", "  ")
+	if err != nil {
+		return fmt.Errorf("error marshaling new plan JSON: %w", err)
+	}
+
+	// Generate a diff between the two plans
+	diff := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(string(origPlanSorted)),
+		B:        difflib.SplitLines(string(newPlanSorted)),
+		FromFile: "Original Plan",
+		ToFile:   "New Plan",
+		Context:  3,
+		Eol:      "\n",
+	}
+
+	diffText, err := difflib.GetUnifiedDiffString(diff)
+	if err != nil {
+		return fmt.Errorf("error generating diff: %w", err)
+	}
+
+	if diffText == "" {
+		fmt.Println("No differences found between the plans.")
+	} else {
+		fmt.Println(diffText)
+	}
+
+	return nil
+}
+
+// sortJSON recursively sorts all maps in a JSON object to ensure consistent ordering
+func sortJSON(data interface{}) interface{} {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		// Get all keys
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		// Sort keys
+		sort.Strings(keys)
+
+		// Create new map with sorted keys
+		sortedMap := make(map[string]interface{})
+		for _, k := range keys {
+			sortedMap[k] = sortJSON(v[k])
+		}
+		return sortedMap
+	case []interface{}:
+		// Recursively sort each item in the array
+		for i := range v {
+			v[i] = sortJSON(v[i])
+		}
+		return v
+	default:
+		// Return all other types as is
+		return v
+	}
 }

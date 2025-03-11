@@ -350,6 +350,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
+	case "plan-diff":
+		// The plan-diff command is handled separately
+		err = executeTerraformPlanDiff(atmosConfig, info, componentPath, varFile, planFile)
+		if err != nil {
+			return err
+		}
+		return nil
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 	case "import":

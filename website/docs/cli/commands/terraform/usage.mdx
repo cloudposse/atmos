@@ -28,7 +28,7 @@ Atmos supports all `terraform` commands and options described in [Terraform CLI 
 In addition, the `component` argument and `stack` flag are required to generate variables and backend config for the component in the stack.
 
 :::note Disambiguation
-The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
+The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
 HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
 :::
 
@@ -40,6 +40,8 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
 
 - you can skip over atmos calling `terraform init` if you know your project is already in a good working state by using the `--skip-init` flag like
   so `atmos terraform <command> <component> -s <stack> --skip-init`
+
+- `atmos terraform plan-diff` command compares two Terraform plans and shows the differences between them. It requires the `--orig` flag to specify the original plan file and optionally accepts the `--new` flag to specify the new plan file. If the `--new` flag is not provided, it will run `terraform plan` to generate a new plan.
 
 - `atmos terraform deploy` command executes `terraform apply -auto-approve` (sets `-auto-approve` flag when running `terraform apply`)
 
@@ -58,7 +60,7 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
   planfile
 
 - `atmos terraform clean` command deletes the `.terraform` folder, `.terraform.lock.hcl` lock file, and the previously generated `planfile`
-  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file. 
+  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file.
   It deletes all local Terraform state files and directories
   (including [`terraform.tfstate.d`](https://developer.hashicorp.com/terraform/cli/workspaces#workspace-internals)
   used for local state) for a component in a stack.
@@ -122,7 +124,7 @@ atmos terraform clean
 atmos terraform clean vpc
 
 # Clean a specific component in a stack
-atmos terraform clean vpc --stack dev 
+atmos terraform clean vpc --stack dev
 
 # Clean without confirmation prompt
 atmos terraform clean --force

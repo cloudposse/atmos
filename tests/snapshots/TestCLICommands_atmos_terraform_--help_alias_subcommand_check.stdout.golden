@@ -15,6 +15,7 @@ Available Commands:
   clean                          Clean up Terraform state and artifacts.
   deploy                         Deploy the specified infrastructure using Terraform
   generate                       Generate Terraform configuration files for Atmos components and stacks.
+  plan-diff                      Compare two Terraform plans
   shell                          Configure an environment for an Atmos component and start a new shell.
   varfile                        Load variables from a file
   write                          Write variables to a file

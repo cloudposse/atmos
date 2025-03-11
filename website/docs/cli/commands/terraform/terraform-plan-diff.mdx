@@ -1,0 +1,65 @@
+---
+title: atmos terraform plan-diff
+sidebar_label: terraform plan-diff
+sidebar_class_name: command
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# atmos terraform plan-diff
+
+Compare two Terraform plans and show the differences between them.
+
+## Usage
+
+```shell
+atmos terraform plan-diff <component> -s <stack> --orig <original-plan-file> [--new <new-plan-file>]
+```
+
+## Description
+
+The `plan-diff` command compares two Terraform plan files and generates a visual diff between them. This is useful for understanding what changes have been made between different versions of a plan.
+
+The command:
+1. Runs `terraform init` in the component directory
+2. Runs `terraform show -json` on both plan files to get the human-readable JSON version
+3. Sorts the JSON to ensure consistent ordering of keys
+4. Creates a diff view between the two plans
+
+If the `--new` flag is not provided, Atmos will automatically run `terraform plan` to generate a new plan file for comparison.
+
+## Options
+
+- `--orig` - Path to the original Terraform plan file (required)
+- `--new` - Path to the new Terraform plan file (optional)
+
+## Examples
+
+### Compare an existing plan with a new plan
+
+```shell
+# Generate a new plan and compare it with an existing plan
+atmos terraform plan-diff myapp -s dev --orig dev-myapp.planfile
+```
+
+### Compare two existing plan files
+
+```shell
+# Compare two existing plan files
+atmos terraform plan-diff myapp -s dev --orig original-plan.tfplan --new new-plan.tfplan
+```
+
+### Compare plans with different variable values
+
+```shell
+# Generate a plan with a specific variable value and compare it with an existing plan
+atmos terraform plan-diff myapp -s dev --orig dev-myapp.planfile -- -var="location=New Jersey"
+```
+
+## Notes
+
+- The command sorts JSON keys to ensure that differences in key ordering don't show up as changes in the diff.
+- The timestamp field is ignored to prevent showing irrelevant differences between plans generated at different times.
+- The diff output uses a unified diff format, showing additions with `+` and removals with `-`.
+- If no differences are found between the plans, the command will output "No differences found between the plans."

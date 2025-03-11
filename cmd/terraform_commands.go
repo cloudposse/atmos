@@ -22,6 +22,11 @@ func getTerraformCommands() []*cobra.Command {
 			},
 		},
 		{
+			Use:   "plan-diff",
+			Short: "Compare two Terraform plans",
+			Long:  "Generate a visual diff between two Terraform plans. If the new plan is not provided, it will run 'terraform plan' to generate one.",
+		},
+		{
 			Use:   "apply",
 			Short: "Apply changes to infrastructure",
 			Long:  "Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.",
@@ -287,6 +292,10 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 	"apply": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
 		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
+	},
+	"plan-diff": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().String("orig", "", "Original Terraform plan file path")
+		cmd.PersistentFlags().String("new", "", "New Terraform plan file path (optional, if not provided, a new plan will be generated)")
 	},
 	"clean": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("everything", false, "If set atmos will also delete the Terraform state files and directories for the component.")
