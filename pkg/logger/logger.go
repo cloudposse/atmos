@@ -36,9 +36,9 @@ var logLevelOrder = map[LogLevel]int{
 }
 
 type Logger struct {
-	LogLevel     LogLevel
-	File         string
-	StyledLogger *log.Logger
+	LogLevel    LogLevel
+	File        string
+	AtmosLogger *log.Logger
 }
 
 func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
@@ -55,27 +55,27 @@ func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
 		}
 	}
 
-	// Create the styled logger.
-	styledLogger := NewStyledLogger(writer)
+	// Create the Atmos logger.
+	atmosLogger := NewAtmosLogger(writer)
 
 	// Set the appropriate log level.
 	switch logLevel {
 	case LogLevelTrace:
-		styledLogger.SetLevel(AtmosTraceLevel)
+		atmosLogger.SetLevel(AtmosTraceLevel)
 	case LogLevelDebug:
-		styledLogger.SetLevel(log.DebugLevel)
+		atmosLogger.SetLevel(log.DebugLevel)
 	case LogLevelInfo:
-		styledLogger.SetLevel(log.InfoLevel)
+		atmosLogger.SetLevel(log.InfoLevel)
 	case LogLevelWarning:
-		styledLogger.SetLevel(log.WarnLevel)
+		atmosLogger.SetLevel(log.WarnLevel)
 	case LogLevelOff:
-		styledLogger.SetLevel(log.ErrorLevel)
+		atmosLogger.SetLevel(log.ErrorLevel)
 	}
 
 	return &Logger{
-		LogLevel:     logLevel,
-		File:         file,
-		StyledLogger: styledLogger,
+		LogLevel:    logLevel,
+		File:        file,
+		AtmosLogger: atmosLogger,
 	}, nil
 }
 
@@ -144,18 +144,18 @@ func (l *Logger) log(logColor *color.Color, message string) {
 func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 	l.LogLevel = logLevel
 
-	if l.StyledLogger != nil {
+	if l.AtmosLogger != nil {
 		switch logLevel {
 		case LogLevelTrace:
-			l.StyledLogger.SetLevel(AtmosTraceLevel)
+			l.AtmosLogger.SetLevel(AtmosTraceLevel)
 		case LogLevelDebug:
-			l.StyledLogger.SetLevel(log.DebugLevel)
+			l.AtmosLogger.SetLevel(log.DebugLevel)
 		case LogLevelInfo:
-			l.StyledLogger.SetLevel(log.InfoLevel)
+			l.AtmosLogger.SetLevel(log.InfoLevel)
 		case LogLevelWarning:
-			l.StyledLogger.SetLevel(log.WarnLevel)
+			l.AtmosLogger.SetLevel(log.WarnLevel)
 		case LogLevelOff:
-			l.StyledLogger.SetLevel(log.ErrorLevel)
+			l.AtmosLogger.SetLevel(log.ErrorLevel)
 		}
 	}
 
@@ -164,7 +164,7 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 
 func (l *Logger) Error(err error) {
 	if err != nil && l.LogLevel != LogLevelOff {
-		l.StyledLogger.Error("Error occurred", "error", err)
+		l.AtmosLogger.Error("Error occurred", "error", err)
 	}
 }
 
@@ -178,25 +178,25 @@ func (l *Logger) isLevelEnabled(level LogLevel) bool {
 
 func (l *Logger) Trace(message string) {
 	if l.isLevelEnabled(LogLevelTrace) {
-		l.StyledLogger.Log(AtmosTraceLevel, message)
+		l.AtmosLogger.Log(AtmosTraceLevel, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
 	if l.isLevelEnabled(LogLevelDebug) {
-		l.StyledLogger.Debug(message)
+		l.AtmosLogger.Debug(message)
 	}
 }
 
 func (l *Logger) Info(message string) {
 	if l.isLevelEnabled(LogLevelInfo) {
-		l.StyledLogger.Info(message)
+		l.AtmosLogger.Info(message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
 	if l.isLevelEnabled(LogLevelWarning) {
-		l.StyledLogger.Warn(message)
+		l.AtmosLogger.Warn(message)
 	}
 }
 
@@ -220,7 +220,7 @@ func createLevelStyle(label string, bgColor string) lipgloss.Style {
 		Border(lipgloss.NormalBorder(), false, false, false, false) // Add borders for better visibility
 }
 
-// NewStyledLogger creates a new styled Charmbracelet logger using Atmos theme colors.
+// NewAtmosLogger creates a new styled Charmbracelet logger using Atmos theme colors.
 func NewAtmosLogger(writer io.Writer) *log.Logger {
 	// Create styles based on Atmos theme.
 	styles := log.DefaultStyles()

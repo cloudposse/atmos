@@ -76,17 +76,17 @@ func TestLogger_Trace(t *testing.T) {
 	// Create a buffer to capture the styled logger output
 	var buf bytes.Buffer
 
-	// Create a styled logger writing to our buffer
-	styledLogger := log.New(&buf)
+	// Create an Atmos logger writing to our buffer
+	atmosLogger := log.New(&buf)
 
 	// Set the level to AtmosTraceLevel so our custom level messages are shown
-	styledLogger.SetLevel(AtmosTraceLevel)
+	atmosLogger.SetLevel(AtmosTraceLevel)
 
-	// Create a logger using this styled logger
+	// Create a logger using this Atmos logger
 	testLogger := &Logger{
-		LogLevel:     LogLevelTrace,
-		File:         "/dev/stdout",
-		StyledLogger: styledLogger,
+		LogLevel:    LogLevelTrace,
+		File:        "/dev/stdout",
+		AtmosLogger: atmosLogger,
 	}
 
 	// Generate trace output using our custom AtmosTraceLevel
@@ -105,7 +105,7 @@ func TestLogger_Debug(t *testing.T) {
 	logger, err := NewLogger(LogLevelDebug, "/dev/stdout")
 	assert.NoError(t, err)
 	assert.True(t, logger.isLevelEnabled(LogLevelDebug))
-	assert.NotNil(t, logger.StyledLogger)
+	assert.NotNil(t, logger.AtmosLogger)
 	loggerTrace, err := NewLogger(LogLevelTrace, "/dev/stdout")
 	assert.NoError(t, err)
 	assert.True(t, loggerTrace.isLevelEnabled(LogLevelDebug))
@@ -116,9 +116,9 @@ func TestLogger_Debug(t *testing.T) {
 func TestLogger_Info(t *testing.T) {
 	var buf bytes.Buffer
 	logger := &Logger{
-		LogLevel:     LogLevelInfo,
-		File:         "/dev/stdout",
-		StyledLogger: NewStyledLogger(&buf),
+		LogLevel:    LogLevelInfo,
+		File:        "/dev/stdout",
+		AtmosLogger: NewAtmosLogger(&buf),
 	}
 
 	logger.Info("Info message")
@@ -129,9 +129,9 @@ func TestLogger_Info(t *testing.T) {
 func TestLogger_Warning(t *testing.T) {
 	var buf bytes.Buffer
 	logger := &Logger{
-		LogLevel:     LogLevelWarning,
-		File:         "/dev/stdout",
-		StyledLogger: NewStyledLogger(&buf),
+		LogLevel:    LogLevelWarning,
+		File:        "/dev/stdout",
+		AtmosLogger: NewAtmosLogger(&buf),
 	}
 
 	logger.Warning("Warning message")
@@ -143,9 +143,9 @@ func TestLogger_Error(t *testing.T) {
 	// Test styled logger error with stderr writer
 	var buf bytes.Buffer
 	logger := &Logger{
-		LogLevel:     LogLevelWarning,
-		File:         "/dev/stderr",
-		StyledLogger: NewStyledLogger(&buf),
+		LogLevel:    LogLevelWarning,
+		File:        "/dev/stderr",
+		AtmosLogger: NewAtmosLogger(&buf),
 	}
 
 	err := fmt.Errorf("This is an error")
@@ -156,9 +156,9 @@ func TestLogger_Error(t *testing.T) {
 	// Test styled logger with file path
 	var buf2 bytes.Buffer
 	fileLogger := &Logger{
-		LogLevel:     LogLevelWarning,
-		File:         "test.log",
-		StyledLogger: NewStyledLogger(&buf2),
+		LogLevel:    LogLevelWarning,
+		File:        "test.log",
+		AtmosLogger: NewAtmosLogger(&buf2),
 	}
 
 	err2 := fmt.Errorf("This is a file error")
