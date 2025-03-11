@@ -2,11 +2,12 @@ package exec
 
 import (
 	"bytes"
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 	"io"
 	"os"
 	"testing"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/spf13/cobra"
 
 	"github.com/stretchr/testify/assert"
 
@@ -35,7 +36,7 @@ atmos describe component c1 -s sandbox
 atmos describe component c1 -s test
 `
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "workflow",
 		Short: "Run predefined tasks using workflows",
 		Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
