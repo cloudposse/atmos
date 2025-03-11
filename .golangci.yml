@@ -180,6 +180,7 @@ severity:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  new-from-rev: origin/main
   exclude-rules:
     - path: _test\.go$ # Ignore test files for specific linters
       linters:
@@ -191,5 +192,6 @@ issues:
         - revive
 
 output:
+  sort-results: true
   formats:
     - format: colored-line-number
