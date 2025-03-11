@@ -418,6 +418,7 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 }
 
 func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+	setCommandLineArgument := "Set using command line argument"
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
 		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as base path for stacks and components", configAndStacksInfo.BasePath))
@@ -472,7 +473,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 			return err
 		}
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
-		log.Debug("Set using command line argument", InitRunReconfigure, configAndStacksInfo.InitRunReconfigure)
+		log.Debug(setCommandLineArgument, InitRunReconfigure, configAndStacksInfo.InitRunReconfigure)
 	}
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
 		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
@@ -484,13 +485,13 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		atmosConfig.Schemas["opa"] = schema.ResourcePath{
 			BasePath: configAndStacksInfo.OpaDir,
 		}
-		log.Debug("Set using command line argument", "OPA schemas directory", configAndStacksInfo.OpaDir)
+		log.Debug(setCommandLineArgument, "OPA schemas directory", configAndStacksInfo.OpaDir)
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
 		atmosConfig.Schemas["cue"] = schema.ResourcePath{
 			BasePath: configAndStacksInfo.CueDir,
 		}
-		log.Debug("Set using command line argument", "CUE schemas directory", configAndStacksInfo.CueDir)
+		log.Debug(setCommandLineArgument, "CUE schemas directory", configAndStacksInfo.CueDir)
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
 		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
