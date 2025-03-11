@@ -77,6 +77,9 @@ func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 		os.Exit(exitError.ExitCode())
 	}
 
+        // TODO: Refactor so that we only call `os.Exit` in `main()` or `init()` functions. 
+        // Exiting here makes it difficult to test.
+        // revive:disable-next-line:deep-exit
 	os.Exit(1)
 }
 
