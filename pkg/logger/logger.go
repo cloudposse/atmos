@@ -24,7 +24,7 @@ const (
 )
 
 // AtmosTraceLevel is a custom log level one level lower than DebugLevel for more verbose logging.
-const AtmosTraceLevel log.Level = -5 // DebugLevel is -4
+const AtmosTraceLevel log.Level = log.DebugLevel - 1
 
 // logLevelOrder defines the order of log levels from most verbose to least verbose.
 var logLevelOrder = map[LogLevel]int{
