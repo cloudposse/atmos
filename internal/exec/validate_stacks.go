@@ -105,7 +105,8 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	manifestSchema := atmosConfig.GetSchemaRegistry("atmos")
 	atmosManifestJsonSchemaFileAbsPath := filepath.Join(atmosConfig.BasePath, manifestSchema.Manifest)
 
-	if manifestSchema.Manifest == "" {
+	switch {
+	case manifestSchema.Manifest == "":
 		// If the validation schema location is not specified, use the embedded one
 		f, err := getEmbeddedSchemaPath()
 		if err != nil {
@@ -113,23 +114,22 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 		}
 		manifestSchema.Manifest = f
 		log.Debug("Atmos JSON Schema is not configured. Using the default embedded schema")
-	} else if u.FileExists(manifestSchema.Manifest) {
+	case u.FileExists(manifestSchema.Manifest):
 		atmosManifestJsonSchemaFilePath = manifestSchema.Manifest
-	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
+	case u.FileExists(atmosManifestJsonSchemaFileAbsPath):
 		atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
-	} else if u.IsURL(manifestSchema.Manifest) {
+	case u.IsURL(manifestSchema.Manifest):
 		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(&atmosConfig)
 		if err != nil {
 			return err
 		}
-	} else {
+	default:
 		return fmt.Errorf("Schema file '%s' not found. Configure via:\n"+
 			"1. 'schemas.atmos.manifest' in atmos.yaml\n"+
 			"2. ATMOS_SCHEMAS_ATMOS_MANIFEST env var\n"+
 			"3. --schemas-atmos-manifest flag\n\n"+
 			"Accepts: absolute path, path relative to base_path, or URL",
-			manifestSchema.Manifest,
-		)
+			manifestSchema.Manifest)
 	}
 
 	// Include (process and validate) all YAML files in the `stacks` folder in all subfolders
