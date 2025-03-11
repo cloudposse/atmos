@@ -512,9 +512,11 @@ jobs:
         with:
           version: v1.64
           only-new-issues: true # Shows only issues introduced in the PR
-
           # see https://github.com/golangci/golangci-lint/issues/4376#issuecomment-1938874827
-          args: --whole-files
+          args: >
+            --whole-files
+            --out-format github-actions
+
         continue-on-error: true
 
       - name: Warn about lint issues in PR (Optional)
