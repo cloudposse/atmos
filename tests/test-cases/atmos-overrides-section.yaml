@@ -1,0 +1,120 @@
+tests:
+  - name: "Atmos 'overrides' section test for 'prod' stack"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: "Ensure the 'overrides' section works inline and in imports"
+    workdir: "fixtures/scenarios/atmos-overrides-section/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "c1"
+      - "-s"
+      - "prod"
+    expect:
+      exit_code: 0
+      stdout:
+        - "a: a-prod"
+        - "b: b-prod"
+        - "c: c-prod"
+        - "d: d"
+      stderr:
+        - "^$"
+
+  - name: "Atmos 'overrides' section test for 'staging' stack"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: "Ensure the 'overrides' section works inline and in imports"
+    workdir: "fixtures/scenarios/atmos-overrides-section/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "c1"
+      - "-s"
+      - "staging"
+    expect:
+      exit_code: 0
+      stdout:
+        - "a: a-staging"
+        - "b: b-team2"
+        - "c: c-team1"
+        - "d: d"
+      stderr:
+        - "^$"
+
+  - name: "Atmos 'overrides' section test for 'dev' stack"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: "Ensure the 'overrides' section works inline and in imports"
+    workdir: "fixtures/scenarios/atmos-overrides-section/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "c1"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 0
+      stdout:
+        - "a: a-dev"
+        - "b: b-team2"
+        - "c: c-team1"
+        - "d: d"
+      stderr:
+        - "^$"
+
+  - name: "Atmos 'overrides' section test for 'sandbox' stack"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: "Ensure the 'overrides' section works inline and in imports"
+    workdir: "fixtures/scenarios/atmos-overrides-section/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "c1"
+      - "-s"
+      - "sandbox"
+    expect:
+      exit_code: 0
+      stdout:
+        - "a: a-team2"
+        - "b: b-team2"
+        - "c: c-team1"
+        - "d: d"
+      stderr:
+        - "^$"
+
+  - name: "Atmos 'overrides' section test for 'test' stack"
+    enabled: true
+    tty: false
+    snapshot: false
+    clean: true
+    description: "Ensure the 'overrides' section works inline and in imports"
+    workdir: "fixtures/scenarios/atmos-overrides-section/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "c1"
+      - "-s"
+      - "test"
+    expect:
+      exit_code: 0
+      stdout:
+        - "a: a-test-2"
+        - "b: b-test"
+        - "c: c-team1"
+        - "d: d"
+      stderr:
+        - "^$"
