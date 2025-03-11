@@ -64,8 +64,8 @@ stacks:
   # Can also be set using 'ATMOS_STACKS_EXCLUDED_PATHS' ENV var (comma-separated values string)
   excluded_paths:
     - "**/_defaults.yaml"
-  # Can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
-  name_pattern: "{tenant}-{environment}-{stage}"
+  # Can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 
 workflows:
   # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument

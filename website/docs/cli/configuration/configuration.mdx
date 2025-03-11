@@ -10,6 +10,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Admonition from '@theme/Admonition'
 
 # CLI Configuration
 
@@ -182,7 +183,7 @@ The `settings` section configures Atmos global settings.
       <dd>The items in the destination list are deep-merged with the items in the source list. The items in the source list take precedence. The items are processed starting from the first up to the length of the source list (the remaining items are not processed). If the source and destination lists have the same length, all items in the destination lists are deep-merged with all items in the source list.</dd>
     </dl>
   </dd>
-  
+
   <dt>`settings.terminal`</dt>
   <dd>
     Specifies how content is displayed in the terminal.
@@ -204,9 +205,10 @@ The `settings` section configures Atmos global settings.
 
   <dt>`settings.docs` (Deprecated)</dt>
   <dd>
-    :::warning Deprecated
-    The `settings.docs` section is deprecated and will be removed in a future version. Please use `settings.terminal` instead.
-    :::
+
+    <Admonition type="warning" title="Deprecated">
+      The `settings.docs` section is deprecated and will be removed in a future version. Please use `settings.terminal` instead.
+    </Admonition>
 
     <dl>
       <dt>`max-width` (Deprecated)</dt>
@@ -648,7 +650,7 @@ Most YAML settings can also be defined by environment variables. This is helpful
 setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local development folder, will enable you to rapidly iterate.
 
 | Variable                                              | YAML Path                                       | Description                                                                                                                                                                                                                  |
-|:------------------------------------------------------|:------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| :---------------------------------------------------- | :---------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                                                                                                  |
 | ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                                                                                                               |
 | ATMOS_VENDOR_BASE_PATH                                | vendor.base_path                                | Path to vendor configuration file or directory containing vendor files. If a directory is specified, all .yaml files in the directory will be processed in lexicographical order. Supports both absolute and relative paths. |
@@ -683,16 +685,16 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 
 Some commands, like [`atmos terraform shell`](/cli/commands/terraform/shell),
 spawn an interactive shell with certain environment variables set, in order to enable the user to use other tools
-(in the case of `atmos terraform shell`, the Terraform or Tofu CLI) natively, while still being configured for a 
-specific component and stack. To accomplish this, and to provide visibility and context to the user regarding the 
+(in the case of `atmos terraform shell`, the Terraform or Tofu CLI) natively, while still being configured for a
+specific component and stack. To accomplish this, and to provide visibility and context to the user regarding the
 configuration, Atmos may set the following environment variables in the spawned shell:
 
-| Variable                | Description                                                                                            |
-|:------------------------|:-------------------------------------------------------------------------------------------------------|
-| ATMOS_COMPONENT         | The name of the active component                                                                       |
-| ATMOS_SHELL_WORKING_DIR | The directory from which native commands should be run                                                 |
-| ATMOS_SHLVL | The depth of Atmos shell nesting. When present, it indicates that the shell has been spawned by Atmos. |
-| ATMOS_STACK             | The name of the active stack                                                                           |
+| Variable                  | Description                                                                                            |
+| :------------------------ | :----------------------------------------------------------------------------------------------------- |
+| ATMOS_COMPONENT           | The name of the active component                                                                       |
+| ATMOS_SHELL_WORKING_DIR   | The directory from which native commands should be run                                                 |
+| ATMOS_SHLVL               | The depth of Atmos shell nesting. When present, it indicates that the shell has been spawned by Atmos. |
+| ATMOS_STACK               | The name of the active stack                                                                           |
 | ATMOS_TERRAFORM_WORKSPACE | The name of the Terraform workspace in which Terraform comamnds should be run                          |
-| PS1                     | When a custom shell prompt has been configured in Atmos, the prompt will be set via `PS1`              |
-| TF_CLI_ARGS_*           | Terraform CLI arguments to be passed to Terraform commands                                             |
+| PS1                       | When a custom shell prompt has been configured in Atmos, the prompt will be set via `PS1`              |
+| TF_CLI_ARGS_*             | Terraform CLI arguments to be passed to Terraform commands                                             |
