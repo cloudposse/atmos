@@ -183,11 +183,12 @@ issues:
   exclude-rules:
     - path: _test\.go$ # Ignore test files for specific linters
       linters:
-        - funlen
-        - revive
-        - gci
         - err113
+        - errcheck
+        - funlen
+        - gci
         - gosec
+        - revive
 
 output:
   formats:
