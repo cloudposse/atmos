@@ -220,7 +220,7 @@ func createLevelStyle(label string, bgColor string) lipgloss.Style {
 		Border(lipgloss.NormalBorder(), false, false, false, false) // Add borders for better visibility
 }
 
-// NewAtmosLogger creates a new styled Charmbracelet logger using Atmos theme colors.
+// NewAtmosLogger creates a new Charmbracelet logger styled with Atmos theme colors.
 func NewAtmosLogger(writer io.Writer) *log.Logger {
 	// Create styles based on Atmos theme.
 	styles := log.DefaultStyles()
