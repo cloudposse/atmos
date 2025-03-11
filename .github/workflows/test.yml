@@ -504,7 +504,7 @@ jobs:
         with:
           reviewdog_version: latest
           filter_mode: "diff_context"
-          reporter: github-pr-check
+          reporter: github-check
           github_token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
