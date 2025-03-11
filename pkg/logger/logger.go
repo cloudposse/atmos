@@ -168,18 +168,15 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 	return nil
 }
 
-func (l *Logger) Error(err error) {
-	if err != nil && l.LogLevel != LogLevelOff {
-		l.AtmosLogger.Error("Error occurred", "error", err)
-	}
-}
-
 // isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
 func (l *Logger) isLevelEnabled(level LogLevel) bool {
-	if l.LogLevel == LogLevelOff {
-		return false
-	}
 	return logLevelOrder[level] >= logLevelOrder[l.LogLevel]
+}
+
+func (l *Logger) Error(err error) {
+	if l.isLevelEnabled(LogLevelError) {
+		l.AtmosLogger.Error("Error occurred", "error", err)
+	}
 }
 
 func (l *Logger) Trace(message string) {

@@ -124,6 +124,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		styledLog.SetLevel(log.InfoLevel)
 	case "Warning":
 		styledLog.SetLevel(log.WarnLevel)
+	case "Error":
+		styledLog.SetLevel(log.ErrorLevel)
 	case "Off":
 		styledLog.SetLevel(math.MaxInt32)
 	default:
