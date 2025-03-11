@@ -190,12 +190,10 @@ func handleComponentVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 }
 
 func formatVendorError(args []string) error {
-	msg := "to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
-		"Example: atmos vendor pull -c <component>"
-
+	q := ""
 	if len(args) > 0 {
-		msg += fmt.Sprintf("\nDid you mean 'atmos vendor pull -c %s'?", args[0])
+		q = fmt.Sprintf("Did you mean 'atmos vendor pull -c %s'?", args[0])
 	}
-
-	return errors.New(msg)
+	return fmt.Errorf("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n"+
+		"Example: atmos vendor pull -c <component>\n%s", q)
 }

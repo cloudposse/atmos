@@ -44,11 +44,9 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/muesli/termenv v0.15.3-0.20240618155329-98d742f6907a
-	github.com/open-policy-agent/opa v1.1.0
-	github.com/opencontainers/image-spec v1.1.0
 	github.com/muesli/termenv v0.16.0
 	github.com/open-policy-agent/opa v1.2.0
+	github.com/opencontainers/image-spec v1.1.0
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/v9 v9.7.1

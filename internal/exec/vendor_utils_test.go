@@ -57,7 +57,7 @@ func TestReadAndProcessVendorConfigFile(t *testing.T) {
 		BasePath: basePath,
 	}
 
-	_, _, _, err := ReadAndProcessVendorConfigFile(atmosConfig, vendorConfigFile, false)
+	_, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, false)
 	assert.NoError(t, err, "'TestReadAndProcessVendorConfigFile' should execute without error")
 }
 
