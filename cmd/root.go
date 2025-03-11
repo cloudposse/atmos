@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -89,21 +90,7 @@ var RootCmd = &cobra.Command{
 }
 
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
-	switch atmosConfig.Logs.Level {
-	case "Trace":
-		log.SetLevel(log.DebugLevel)
-	case "Debug":
-		log.SetLevel(log.DebugLevel)
-	case "Info":
-		log.SetLevel(log.InfoLevel)
-	case "Warning":
-		log.SetLevel(log.WarnLevel)
-	case "Off":
-		log.SetLevel(math.MaxInt32)
-	default:
-		log.SetLevel(log.InfoLevel)
-	}
-
+	// Determine output writer based on configuration.
 	var output io.Writer
 
 	switch atmosConfig.Logs.File {
@@ -122,7 +109,26 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		output = logFile
 	}
 
-	log.SetOutput(output)
+	styledLog := logger.NewStyledLogger(output)
+
+	// Set the global log instance to our styled logger.
+	log.SetDefault(styledLog)
+
+	// Set the appropriate log level based on configuration.
+	switch atmosConfig.Logs.Level {
+	case "Trace":
+		styledLog.SetLevel(logger.AtmosTraceLevel)
+	case "Debug":
+		styledLog.SetLevel(log.DebugLevel)
+	case "Info":
+		styledLog.SetLevel(log.InfoLevel)
+	case "Warning":
+		styledLog.SetLevel(log.WarnLevel)
+	case "Off":
+		styledLog.SetLevel(math.MaxInt32)
+	default:
+		styledLog.SetLevel(log.InfoLevel)
+	}
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,

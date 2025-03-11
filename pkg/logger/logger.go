@@ -2,8 +2,11 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
 
+	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	"github.com/fatih/color"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -20,7 +23,10 @@ const (
 	LogLevelWarning LogLevel = "Warning"
 )
 
-// logLevelOrder defines the order of log levels from most verbose to least verbose
+// AtmosTraceLevel is a custom log level one level lower than DebugLevel for more verbose logging.
+const AtmosTraceLevel log.Level = -5 // DebugLevel is -4
+
+// logLevelOrder defines the order of log levels from most verbose to least verbose.
 var logLevelOrder = map[LogLevel]int{
 	LogLevelTrace:   0,
 	LogLevelDebug:   1,
@@ -30,14 +36,46 @@ var logLevelOrder = map[LogLevel]int{
 }
 
 type Logger struct {
-	LogLevel LogLevel
-	File     string
+	LogLevel     LogLevel
+	File         string
+	StyledLogger *log.Logger
 }
 
 func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
+	// Determine the output writer based on file path.
+	var writer io.Writer = os.Stdout
+	if file == "/dev/stderr" {
+		writer = os.Stderr
+	} else if file != "" && file != "/dev/stdout" {
+		// For actual files, we'll use a file writer.
+		var err error
+		writer, err = os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open log file: %w", err)
+		}
+	}
+
+	// Create the styled logger.
+	styledLogger := NewStyledLogger(writer)
+
+	// Set the appropriate log level.
+	switch logLevel {
+	case LogLevelTrace:
+		styledLogger.SetLevel(AtmosTraceLevel)
+	case LogLevelDebug:
+		styledLogger.SetLevel(log.DebugLevel)
+	case LogLevelInfo:
+		styledLogger.SetLevel(log.InfoLevel)
+	case LogLevelWarning:
+		styledLogger.SetLevel(log.WarnLevel)
+	case LogLevelOff:
+		styledLogger.SetLevel(log.ErrorLevel)
+	}
+
 	return &Logger{
-		LogLevel: logLevel,
-		File:     file,
+		LogLevel:     logLevel,
+		File:         file,
+		StyledLogger: styledLogger,
 	}, nil
 }
 
@@ -105,22 +143,32 @@ func (l *Logger) log(logColor *color.Color, message string) {
 
 func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 	l.LogLevel = logLevel
+
+	if l.StyledLogger != nil {
+		switch logLevel {
+		case LogLevelTrace:
+			l.StyledLogger.SetLevel(AtmosTraceLevel)
+		case LogLevelDebug:
+			l.StyledLogger.SetLevel(log.DebugLevel)
+		case LogLevelInfo:
+			l.StyledLogger.SetLevel(log.InfoLevel)
+		case LogLevelWarning:
+			l.StyledLogger.SetLevel(log.WarnLevel)
+		case LogLevelOff:
+			l.StyledLogger.SetLevel(log.ErrorLevel)
+		}
+	}
+
 	return nil
 }
 
 func (l *Logger) Error(err error) {
 	if err != nil && l.LogLevel != LogLevelOff {
-		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
-		if err2 != nil {
-			color.Red("Error logging the error:")
-			color.Red("%s\n", err2)
-			color.Red("Original error:")
-			color.Red("%s\n", err)
-		}
+		l.StyledLogger.Error("Error occurred", "error", err)
 	}
 }
 
-// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
 func (l *Logger) isLevelEnabled(level LogLevel) bool {
 	if l.LogLevel == LogLevelOff {
 		return false
@@ -130,24 +178,78 @@ func (l *Logger) isLevelEnabled(level LogLevel) bool {
 
 func (l *Logger) Trace(message string) {
 	if l.isLevelEnabled(LogLevelTrace) {
-		l.log(theme.Colors.Info, message)
+		l.StyledLogger.Log(AtmosTraceLevel, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
 	if l.isLevelEnabled(LogLevelDebug) {
-		l.log(theme.Colors.Info, message)
+		l.StyledLogger.Debug(message)
 	}
 }
 
 func (l *Logger) Info(message string) {
 	if l.isLevelEnabled(LogLevelInfo) {
-		l.log(theme.Colors.Info, message)
+		l.StyledLogger.Info(message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
 	if l.isLevelEnabled(LogLevelWarning) {
-		l.log(theme.Colors.Warning, message)
+		l.StyledLogger.Warn(message)
 	}
+}
+
+// Log level labels.
+const (
+	errorLevelLabel = "ERROR"
+	warnLevelLabel  = "WARN"
+	infoLevelLabel  = "INFO"
+	debugLevelLabel = "DEBU"
+	traceLevelLabel = "TRCE"
+)
+
+// createLevelStyle creates a formatted styled log level with maximum visibility.
+func createLevelStyle(label string, bgColor string) lipgloss.Style {
+	return lipgloss.NewStyle().
+		SetString(label).
+		Padding(0, 1, 0, 1).
+		Background(lipgloss.Color(bgColor)).
+		Foreground(lipgloss.Color(theme.ColorWhite)).
+		Bold(true).                                                 // Make text bold for better visibility
+		Border(lipgloss.NormalBorder(), false, false, false, false) // Add borders for better visibility
+}
+
+// NewStyledLogger creates a new styled Charmbracelet logger using Atmos theme colors.
+func NewStyledLogger(writer io.Writer) *log.Logger {
+	// Create styles based on Atmos theme.
+	styles := log.DefaultStyles()
+
+	// Set level styles.
+	styles.Levels[log.ErrorLevel] = createLevelStyle(errorLevelLabel, theme.ColorRed)
+	styles.Levels[log.WarnLevel] = createLevelStyle(warnLevelLabel, theme.ColorRed)
+	styles.Levels[log.InfoLevel] = createLevelStyle(infoLevelLabel, theme.ColorCyan)
+	styles.Levels[log.DebugLevel] = createLevelStyle(debugLevelLabel, theme.ColorBlue)
+	styles.Levels[AtmosTraceLevel] = createLevelStyle(traceLevelLabel, theme.ColorPink)
+
+	// Style for error values.
+	styles.Keys["error"] = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
+	styles.Values["error"] = lipgloss.NewStyle().Bold(true)
+
+	// Common key styles using a map for concise declaration.
+	keyColors := map[string]string{
+		"component": theme.ColorPink,
+		"stack":     theme.ColorGreen,
+		"duration":  theme.ColorGreen,
+	}
+
+	for key, color := range keyColors {
+		styles.Keys[key] = lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+	}
+
+	// Create the logger with our styles.
+	logger := log.New(writer)
+	logger.SetStyles(styles)
+
+	return logger
 }

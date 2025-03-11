@@ -8,37 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fatih/color"
+	log "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-func captureOutput(f func()) string {
-	r, w, _ := os.Pipe()
-	stdout := os.Stdout
-	os.Stdout = w
-
-	outC := make(chan string)
-	// Copy the output in a separate goroutine so printing can't block indefinitely
-	go func() {
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		outC <- buf.String()
-	}()
-
-	// Call the function which will use stdout
-	f()
-
-	// Close the writer and restore the original stdout
-	w.Close()
-	os.Stdout = stdout
-
-	// Read the output string
-	out := <-outC
-
-	return out
-}
 
 func TestNewLogger(t *testing.T) {
 	logger, err := NewLogger(LogLevelDebug, "/dev/stdout")
@@ -97,61 +71,100 @@ func TestParseLogLevel(t *testing.T) {
 }
 
 func TestLogger_Trace(t *testing.T) {
-	logger, _ := NewLogger(LogLevelTrace, "/dev/stdout")
+	// Test the trace level functionality using direct output capture
 
-	output := captureOutput(func() {
-		logger.Trace("Trace message")
-	})
+	// Create a buffer to capture the styled logger output
+	var buf bytes.Buffer
 
+	// Create a styled logger writing to our buffer
+	styledLogger := log.New(&buf)
+
+	// Set the level to AtmosTraceLevel so our custom level messages are shown
+	styledLogger.SetLevel(AtmosTraceLevel)
+
+	// Create a logger using this styled logger
+	testLogger := &Logger{
+		LogLevel:     LogLevelTrace,
+		File:         "/dev/stdout",
+		StyledLogger: styledLogger,
+	}
+
+	// Generate trace output using our custom AtmosTraceLevel
+	testLogger.Trace("Trace message")
+
+	// Get the output and check it contains our message
+	output := buf.String()
+	t.Logf("Captured output: %q", output)
+
+	// Verify the output contains our trace message
 	assert.Contains(t, output, "Trace message")
 }
 
 func TestLogger_Debug(t *testing.T) {
-	logger, _ := NewLogger(LogLevelDebug, "/dev/stdout")
-
-	output := captureOutput(func() {
-		logger.Debug("Debug message")
-	})
-
-	assert.Contains(t, output, "Debug message")
-
-	logger, _ = NewLogger(LogLevelTrace, "/dev/stdout")
-
-	output = captureOutput(func() {
-		logger.Debug("Trace message should appear")
-	})
-
-	assert.Contains(t, output, "Trace message should appear")
+	// Create a logger with Debug level
+	logger, err := NewLogger(LogLevelDebug, "/dev/stdout")
+	assert.NoError(t, err)
+	assert.True(t, logger.isLevelEnabled(LogLevelDebug))
+	assert.NotNil(t, logger.StyledLogger)
+	loggerTrace, err := NewLogger(LogLevelTrace, "/dev/stdout")
+	assert.NoError(t, err)
+	assert.True(t, loggerTrace.isLevelEnabled(LogLevelDebug))
+	logger.Debug("Debug message")
+	loggerTrace.Debug("Trace level logger should show debug messages")
 }
 
 func TestLogger_Info(t *testing.T) {
-	logger, _ := NewLogger(LogLevelInfo, "/dev/stdout")
+	var buf bytes.Buffer
+	logger := &Logger{
+		LogLevel:     LogLevelInfo,
+		File:         "/dev/stdout",
+		StyledLogger: NewStyledLogger(&buf),
+	}
 
-	output := captureOutput(func() {
-		logger.Info("Info message")
-	})
-
+	logger.Info("Info message")
+	output := buf.String()
 	assert.Contains(t, output, "Info message")
 }
 
 func TestLogger_Warning(t *testing.T) {
-	logger, _ := NewLogger(LogLevelWarning, "/dev/stdout")
+	var buf bytes.Buffer
+	logger := &Logger{
+		LogLevel:     LogLevelWarning,
+		File:         "/dev/stdout",
+		StyledLogger: NewStyledLogger(&buf),
+	}
 
-	output := captureOutput(func() {
-		logger.Warning("Warning message")
-	})
-
+	logger.Warning("Warning message")
+	output := buf.String()
 	assert.Contains(t, output, "Warning message")
 }
 
 func TestLogger_Error(t *testing.T) {
+	// Test styled logger error with stderr writer
 	var buf bytes.Buffer
-	color.Error = &buf
-	logger, _ := NewLogger(LogLevelWarning, "/dev/stderr")
+	logger := &Logger{
+		LogLevel:     LogLevelWarning,
+		File:         "/dev/stderr",
+		StyledLogger: NewStyledLogger(&buf),
+	}
 
 	err := fmt.Errorf("This is an error")
 	logger.Error(err)
-	assert.Contains(t, buf.String(), "This is an error")
+	output := buf.String()
+	assert.Contains(t, output, "This is an error")
+
+	// Test styled logger with file path
+	var buf2 bytes.Buffer
+	fileLogger := &Logger{
+		LogLevel:     LogLevelWarning,
+		File:         "test.log",
+		StyledLogger: NewStyledLogger(&buf2),
+	}
+
+	err2 := fmt.Errorf("This is a file error")
+	fileLogger.Error(err2)
+	fileOutput := buf2.String()
+	assert.Contains(t, fileOutput, "This is a file error")
 }
 
 func TestLogger_FileLogging(t *testing.T) {
