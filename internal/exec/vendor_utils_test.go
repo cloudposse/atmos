@@ -17,7 +17,7 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:                "pull",
 		Short:              "Pull the latest vendor configurations or dependencies",
 		Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
