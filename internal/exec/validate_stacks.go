@@ -384,7 +384,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 	return res, nil
 }
 
-// downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
+// downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL.
 func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	manifestSchema := atmosConfig.GetSchemaRegistry("atmos")
 	manifestURL := manifestSchema.Manifest

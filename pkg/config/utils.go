@@ -478,7 +478,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
 			BasePath: configAndStacksInfo.JsonSchemaDir,
 		}
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
+		log.Debug("Using command line argument", "JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
 		atmosConfig.Schemas["opa"] = schema.ResourcePath{

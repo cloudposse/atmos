@@ -125,7 +125,6 @@ func (a *AtmosConfiguration) ProcessSchemas() {
 		}
 		a.processManifestSchemas(key)
 	}
-	return
 }
 
 func (a *AtmosConfiguration) processManifestSchemas(key string) {
