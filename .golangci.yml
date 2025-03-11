@@ -186,6 +186,7 @@ issues:
         - funlen
         - revive
         - gci
+        - errcheck
 
 output:
   formats:
