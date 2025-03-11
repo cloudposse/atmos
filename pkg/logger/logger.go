@@ -21,6 +21,7 @@ const (
 	LogLevelDebug   LogLevel = "Debug"
 	LogLevelInfo    LogLevel = "Info"
 	LogLevelWarning LogLevel = "Warning"
+	LogLevelError   LogLevel = "Error"
 )
 
 // AtmosTraceLevel is a custom log level one level lower than DebugLevel for more verbose logging.
@@ -32,7 +33,8 @@ var logLevelOrder = map[LogLevel]int{
 	LogLevelDebug:   1,
 	LogLevelInfo:    2,
 	LogLevelWarning: 3,
-	LogLevelOff:     4,
+	LogLevelError:   4,
+	LogLevelOff:     5,
 }
 
 type Logger struct {
@@ -68,8 +70,10 @@ func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
 		atmosLogger.SetLevel(log.InfoLevel)
 	case LogLevelWarning:
 		atmosLogger.SetLevel(log.WarnLevel)
-	case LogLevelOff:
+	case LogLevelError:
 		atmosLogger.SetLevel(log.ErrorLevel)
+	case LogLevelOff:
+		atmosLogger.SetLevel(log.FatalLevel)
 	}
 
 	return &Logger{
@@ -92,7 +96,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		return LogLevelInfo, nil
 	}
 
-	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelOff}
+	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelError, LogLevelOff}
 	for _, level := range validLevels {
 		if LogLevel(logLevel) == level {
 			return level, nil
@@ -154,8 +158,10 @@ func (l *Logger) SetLogLevel(logLevel LogLevel) error {
 			l.AtmosLogger.SetLevel(log.InfoLevel)
 		case LogLevelWarning:
 			l.AtmosLogger.SetLevel(log.WarnLevel)
-		case LogLevelOff:
+		case LogLevelError:
 			l.AtmosLogger.SetLevel(log.ErrorLevel)
+		case LogLevelOff:
+			l.AtmosLogger.SetLevel(log.FatalLevel)
 		}
 	}
 
