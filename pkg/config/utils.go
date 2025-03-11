@@ -478,19 +478,19 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
 			BasePath: configAndStacksInfo.JsonSchemaDir,
 		}
-		log.Debug("Using command line argument", "JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir))
+		log.Debug("Set using command line argument", "JsonSchema schemas directory", configAndStacksInfo.JsonSchemaDir)
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
 		atmosConfig.Schemas["opa"] = schema.ResourcePath{
 			BasePath: configAndStacksInfo.OpaDir,
 		}
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as OPA schemas directory", configAndStacksInfo.OpaDir))
+		log.Debug("Set using command line argument", "OPA schemas directory", configAndStacksInfo.OpaDir)
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
 		atmosConfig.Schemas["cue"] = schema.ResourcePath{
 			BasePath: configAndStacksInfo.CueDir,
 		}
-		u.LogDebug(fmt.Sprintf("Using command line argument '%s' as CUE schemas directory", configAndStacksInfo.CueDir))
+		log.Debug("Set using command line argument", "CUE schemas directory", configAndStacksInfo.CueDir)
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
 		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
