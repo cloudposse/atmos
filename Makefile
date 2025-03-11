@@ -24,7 +24,7 @@ version: version-default
 # The following will lint only files in git. `golangci-lint run --new-from-rev=HEAD` should do it,
 # but it's still including files not in git.
 lint: get
-	golangci-lint run --exclude-dirs 'experiments/.*'
+	golangci-lint run
 
 build-linux: GOOS=linux
 build-linux: build-default
