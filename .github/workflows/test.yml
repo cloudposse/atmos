@@ -507,10 +507,10 @@ jobs:
           fetch-depth: 0
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         id: golangci
         with:
-          version: latest
+          version: v1.64
           only-new-issues: true # Shows only issues introduced in the PR
 
   release:
