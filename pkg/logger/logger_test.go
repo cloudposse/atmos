@@ -15,15 +15,18 @@ import (
 )
 
 func captureOutput(f func()) string {
-	r, w, _ := os.Pipe()
 	stdout := os.Stdout
+	r, w, _ := os.Pipe()
 	os.Stdout = w
 
 	outC := make(chan string)
 	// Copy the output in a separate goroutine so printing can't block indefinitely
 	go func() {
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err := io.Copy(&buf, r)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error capturing output: %v\n", err)
+		}
 		outC <- buf.String()
 	}()
 
@@ -34,10 +37,8 @@ func captureOutput(f func()) string {
 	w.Close()
 	os.Stdout = stdout
 
-	// Read the output string
-	out := <-outC
-
-	return out
+	// Return the captured output
+	return <-outC
 }
 
 func TestNewLogger(t *testing.T) {
@@ -247,7 +248,10 @@ func TestLogger_LogMethods(t *testing.T) {
 			outC := make(chan string)
 			go func() {
 				var buf bytes.Buffer
-				io.Copy(&buf, r)
+				_, err := io.Copy(&buf, r)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error capturing output: %v\n", err)
+				}
 				outC <- buf.String()
 			}()
 

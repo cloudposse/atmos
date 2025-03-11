@@ -804,7 +804,10 @@ func TestExecuteTerraformPlanDiffBasic(t *testing.T) {
 				os.Stdout = oldStdout
 
 				var buf bytes.Buffer
-				io.Copy(&buf, r)
+				_, err = io.Copy(&buf, r)
+				if err != nil {
+					t.Errorf("Failed to read output: %v", err)
+				}
 				output := buf.String()
 
 				// Log the diff output
@@ -859,7 +862,10 @@ func TestExecuteTerraformPlanDiffBasic(t *testing.T) {
 
 			// Read the captured output
 			var buf bytes.Buffer
-			io.Copy(&buf, r)
+			_, err = io.Copy(&buf, r)
+			if err != nil {
+				t.Errorf("Failed to read output: %v", err)
+			}
 			output := buf.String()
 
 			// Verify expected behavior
@@ -955,7 +961,10 @@ func TestExecuteTerraformPlanDiffIntegration(t *testing.T) {
 
 		// Read captured output
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err = io.Copy(&buf, r)
+		if err != nil {
+			t.Errorf("Failed to read output: %v", err)
+		}
 		output := buf.String()
 
 		// Check for success and expected output
@@ -991,7 +1000,10 @@ func TestExecuteTerraformPlanDiffIntegration(t *testing.T) {
 
 		// Read captured output
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err = io.Copy(&buf, r)
+		if err != nil {
+			t.Errorf("Failed to read output: %v", err)
+		}
 
 		// Check for success
 		if err != nil {
@@ -1089,7 +1101,10 @@ func TestPrettyDiffErrorHandling(t *testing.T) {
 
 		// Read the captured output
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err := io.Copy(&buf, r)
+		if err != nil {
+			t.Errorf("Failed to read output: %v", err)
+		}
 		output := buf.String()
 
 		// Check that we got differences
@@ -1147,7 +1162,10 @@ func TestPrettyDiffErrorHandling(t *testing.T) {
 
 		// Read the captured output
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err := io.Copy(&buf, r)
+		if err != nil {
+			t.Errorf("Failed to read output: %v", err)
+		}
 		output := buf.String()
 
 		// Check output contains actual differences
@@ -1278,7 +1296,10 @@ func TestPrettyDiffErrorHandling(t *testing.T) {
 		os.Stdout = oldStdout
 
 		var buf bytes.Buffer
-		io.Copy(&buf, r)
+		_, err := io.Copy(&buf, r)
+		if err != nil {
+			t.Errorf("Failed to read output: %v", err)
+		}
 		emptyOutput := buf.String()
 
 		// Just verify that it worked and found differences
@@ -1323,7 +1344,10 @@ func TestPrettyDiffErrorHandling(t *testing.T) {
 		os.Stdout = oldStdout
 
 		var buf2 bytes.Buffer
-		io.Copy(&buf2, r2)
+		_, err = io.Copy(&buf2, r2)
+		if err != nil {
+			t.Errorf("Failed to read output: %v", err)
+		}
 		nonMatchOutput := buf2.String()
 
 		assert.True(t, hasDiff2, "Should find differences")
@@ -1369,7 +1393,10 @@ func TestPrettyDiffErrorHandling(t *testing.T) {
 		os.Stdout = oldStdout
 
 		var buf3 bytes.Buffer
-		io.Copy(&buf3, r3)
+		_, err = io.Copy(&buf3, r3)
+		if err != nil {
+			t.Errorf("Failed to read output: %v", err)
+		}
 		matchOutput := buf3.String()
 
 		assert.True(t, hasDiff3, "Should find differences")
