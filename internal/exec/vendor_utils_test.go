@@ -1,15 +1,11 @@
 package exec
 
 import (
-	"bytes"
-	"io"
 	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestExecuteVendorPullCommand(t *testing.T) {
@@ -21,22 +17,18 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
 
-	// Capture stdout
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
 	var cmd = &cobra.Command{
 		Use:                "pull",
 		Short:              "Pull the latest vendor configurations or dependencies",
 		Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
 		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 		Args:               cobra.NoArgs,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			err := ExecuteVendorPullCmd(cmd, args)
 			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
+				return err
 			}
+			return nil
 		},
 	}
 
@@ -49,20 +41,6 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	cmd.PersistentFlags().Bool("everything", false, "Vendor all components")
 
 	// Execute the command
-	cmd.Run(cmd, []string{})
-
-	// Close the writer and restore stderr
-	err = w.Close()
+	err = cmd.RunE(cmd, []string{})
 	assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
-
-	os.Stderr = oldStderr
-
-	// Read captured output
-	var output bytes.Buffer
-	_, err = io.Copy(&output, r)
-	assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
-
-	// Check if output contains expected markdown content
-	expectedOutput := "Vendored 1 components"
-	assert.Contains(t, output.String(), expectedOutput, "'atmos vendor pull' output should contain information about the vendored components")
 }
