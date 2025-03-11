@@ -503,7 +503,7 @@ jobs:
         id: golangci
         with:
           reviewdog_version: latest
-          filter_mode: "diff_context"
+          filter_mode: "added"
           reporter: github-check
           github_token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
