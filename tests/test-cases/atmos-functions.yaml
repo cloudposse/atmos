@@ -18,7 +18,8 @@ tests:
       os: !not windows
     expect:
       exit_code: 0
-      stderr:
+      # This will output in stdout because of the way our tty simulator works.
+      stdout:
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
