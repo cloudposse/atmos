@@ -420,35 +420,35 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 const cmdLineArg = "Set using command line argument"
 
 func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
-	if err := setBasePaths(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setBasePaths(atmosConfig, &configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setTerraformConfig(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setTerraformConfig(atmosConfig, &configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setHelmfileConfig(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setHelmfileConfig(atmosConfig, &configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setStacksConfig(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setStacksConfig(atmosConfig, &configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setFeatureFlags(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setFeatureFlags(atmosConfig, &configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setSchemaDirs(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setSchemaDirs(atmosConfig, &configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setLoggingConfig(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setLoggingConfig(atmosConfig, &configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := setSettingsConfig(atmosConfig, configAndStacksInfo); err != nil {
+	if err := setSettingsConfig(atmosConfig, &configAndStacksInfo); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
 		log.Debug(cmdLineArg, "BasePath", configAndStacksInfo.BasePath)
@@ -456,7 +456,7 @@ func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo sc
 	return nil
 }
 
-func setTerraformConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func setTerraformConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.TerraformCommand) > 0 {
 		atmosConfig.Components.Terraform.Command = configAndStacksInfo.TerraformCommand
 		log.Debug(cmdLineArg, "TerraformCommand", configAndStacksInfo.TerraformCommand)
@@ -468,7 +468,7 @@ func setTerraformConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksI
 	return nil
 }
 
-func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.HelmfileCommand) > 0 {
 		atmosConfig.Components.Helmfile.Command = configAndStacksInfo.HelmfileCommand
 		log.Debug(cmdLineArg, "HelmfileCommand", configAndStacksInfo.HelmfileCommand)
@@ -480,7 +480,7 @@ func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	return nil
 }
 
-func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
 		log.Debug(cmdLineArg, "StacksDir", configAndStacksInfo.StacksDir)
@@ -488,7 +488,7 @@ func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 	return nil
 }
 
-func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.DeployRunInit) > 0 {
 		deployRunInitBool, err := strconv.ParseBool(configAndStacksInfo.DeployRunInit)
 		if err != nil {
@@ -520,7 +520,7 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 	return nil
 }
 
-func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
 		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{BasePath: configAndStacksInfo.JsonSchemaDir}
 		log.Debug(cmdLineArg, "JsonSchemaDir", configAndStacksInfo.JsonSchemaDir)
@@ -542,7 +542,7 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo s
 	return nil
 }
 
-func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.LogsLevel) > 0 {
 		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
 			return err
@@ -558,7 +558,7 @@ func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInf
 	return nil
 }
 
-func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
 		log.Debug(cmdLineArg, "SettingsListMergeStrategy", configAndStacksInfo.SettingsListMergeStrategy)
