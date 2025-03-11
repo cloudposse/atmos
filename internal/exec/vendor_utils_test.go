@@ -20,6 +20,11 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 
 	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	// Unset env values after testing
+	defer func() {
+		os.Unsetenv("ATMOS_BASE_PATH")
+		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	}()
 
 	cmd := &cobra.Command{
 		Use:                "pull",
@@ -61,11 +66,23 @@ func TestReadAndProcessVendorConfigFile(t *testing.T) {
 	assert.NoError(t, err, "'TestReadAndProcessVendorConfigFile' should execute without error")
 }
 
-// TestExecuteVendorPullCommand tests the ExecuteVendorPullCommand function.
+// TestExecuteVendorPull tests the ExecuteVendorPullCommand function.
 // It checks that the function executes the `atmos vendor pull`
 // and that the vendor components are correctly pulled.
 // The function also verifies that the state files are existing and deleted after the vendor pull command is executed.
 func TestExecuteVendorPull(t *testing.T) {
+	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+		err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		if err != nil {
+			t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+		}
+	}
+	if os.Getenv("ATMOS_BASE_PATH") != "" {
+		err := os.Unsetenv("ATMOS_BASE_PATH")
+		if err != nil {
+			t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+		}
+	}
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
