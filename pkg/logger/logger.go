@@ -221,7 +221,7 @@ func createLevelStyle(label string, bgColor string) lipgloss.Style {
 }
 
 // NewStyledLogger creates a new styled Charmbracelet logger using Atmos theme colors.
-func NewStyledLogger(writer io.Writer) *log.Logger {
+func NewAtmosLogger(writer io.Writer) *log.Logger {
 	// Create styles based on Atmos theme.
 	styles := log.DefaultStyles()
 
