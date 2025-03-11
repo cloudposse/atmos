@@ -17,6 +17,8 @@ var (
 	ErrValidateComponentFlag      = errors.New("either '--component' or '--tags' flag can be provided, but not both")
 	ErrValidateComponentStackFlag = errors.New("either '--component' or '--stack' flag can be provided, but not both")
 	ErrValidateEverythingFlag     = errors.New("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
+	ErrMissingComponent           = errors.New("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n" +
+		"Example: atmos vendor pull -c <component>")
 )
 
 // ExecuteVendorPullCmd executes `vendor pull` commands.
@@ -162,7 +164,11 @@ func handleVendorConfig(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags
 		return handleComponentVendor(atmosConfig, flg)
 	}
 
-	return formatVendorError(args)
+	if len(args) > 0 {
+		q := fmt.Sprintf("Did you mean 'atmos vendor pull -c %s'?", args[0])
+		return fmt.Errorf("%w\n%s", ErrMissingComponent, q)
+	}
+	return ErrMissingComponent
 }
 
 func handleComponentVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFlags) error {
@@ -187,13 +193,4 @@ func handleComponentVendor(atmosConfig *schema.AtmosConfiguration, flg *VendorFl
 		path,
 		flg.DryRun,
 	)
-}
-
-func formatVendorError(args []string) error {
-	q := ""
-	if len(args) > 0 {
-		q = fmt.Sprintf("Did you mean 'atmos vendor pull -c %s'?", args[0])
-	}
-	return fmt.Errorf("to vendor a component, the '--component' (shorthand '-c') flag needs to be specified.\n"+
-		"Example: atmos vendor pull -c <component>\n%s", q)
 }
