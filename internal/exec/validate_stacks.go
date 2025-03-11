@@ -118,7 +118,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	} else if u.FileExists(atmosManifestJsonSchemaFileAbsPath) {
 		atmosManifestJsonSchemaFilePath = atmosManifestJsonSchemaFileAbsPath
 	} else if u.IsURL(manifestSchema.Manifest) {
-		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(atmosConfig)
+		atmosManifestJsonSchemaFilePath, err = downloadSchemaFromURL(&atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -385,7 +385,7 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 }
 
 // downloadSchemaFromURL downloads the Atmos JSON Schema file from the provided URL
-func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error) {
+func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	manifestSchema := atmosConfig.GetSchemaRegistry("atmos")
 	manifestURL := manifestSchema.Manifest
 	parsedURL, err := url.Parse(manifestURL)
@@ -405,7 +405,7 @@ func downloadSchemaFromURL(atmosConfig schema.AtmosConfiguration) (string, error
 
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 
-	if err = GoGetterGet(atmosConfig, manifestURL, atmosManifestJsonSchemaFilePath, getter.ClientModeFile, time.Second*30); err != nil {
+	if err = GoGetterGet(*atmosConfig, manifestURL, atmosManifestJsonSchemaFilePath, getter.ClientModeFile, time.Second*30); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
 
