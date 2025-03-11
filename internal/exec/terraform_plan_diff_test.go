@@ -8,7 +8,12 @@ import (
 )
 
 // TestPlanDiffCommandRouting tests that the plan-diff command is correctly routed
-// in the ExecuteTerraform function's switch statement
+// in the ExecuteTerraform function's switch statement.
+//
+// NOTE: This test will show a linter error when run separately with golangci-lint,
+// because ExecuteTerraform is defined in terraform.go and not visible when linting
+// this file alone. However, it works correctly when running 'go test' because
+// all files in the package are compiled together.
 func TestPlanDiffCommandRouting(t *testing.T) {
 	// Create minimal info with the plan-diff command
 	info := schema.ConfigAndStacksInfo{
@@ -22,7 +27,7 @@ func TestPlanDiffCommandRouting(t *testing.T) {
 	}
 
 	// Execute the function - we expect it to fail because we haven't set up a proper environment
-	err := ExecuteTerraform(info)
+	err := ExecuteTerraform(info) // This line will show a linter error but works in tests
 
 	// Verify we get an error since we have an incomplete setup
 	if err == nil {
