@@ -35,8 +35,8 @@ func PrintErrorInColor(message string) {
 	_, _ = messageColor.Fprint(os.Stderr, message)
 }
 
-// PrintfMessageToStderr prints the message to the stderr.
-func PrintfMessageToStderr(message string, args ...any) {
+// PrintfMessageToTUI prints the message to the stderr.
+func PrintfMessageToTUI(message string, args ...any) {
 	fmt.Fprintf(os.Stderr, message, args...)
 }
 
