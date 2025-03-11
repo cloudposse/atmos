@@ -7,13 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pmezard/go-difflib/difflib"
 )
 
 func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
@@ -174,6 +175,291 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	return true
 }
 
+// prettyDiff function to recursively compare maps
+func prettyDiff(a, b map[string]interface{}, path string) bool {
+	hasDifferences := false
+
+	for k, v1 := range a {
+		currentPath := path
+		if path != "" {
+			currentPath += "."
+		}
+		currentPath += k
+
+		v2, exists := b[k]
+
+		if !exists {
+			// Format complex objects nicely
+			switch v1.(type) {
+			case map[string]interface{}, []interface{}:
+				jsonBytes, err := json.MarshalIndent(v1, "", "  ")
+				if err != nil {
+					// If marshaling fails, fall back to simple format
+					fmt.Printf("- %s: %v\n", currentPath, v1)
+				} else {
+					fmt.Printf("- %s:\n%s\n", currentPath, string(jsonBytes))
+				}
+			default:
+				fmt.Printf("- %s: %v\n", currentPath, v1)
+			}
+			hasDifferences = true
+			continue
+		}
+
+		if reflect.TypeOf(v1) != reflect.TypeOf(v2) {
+			// Format complex objects nicely
+			fmt.Printf("~ %s:\n", currentPath)
+			fmt.Printf("  - %v\n", v1)
+			fmt.Printf("  + %v\n", v2)
+			hasDifferences = true
+			continue
+		}
+
+		switch val := v1.(type) {
+		case map[string]interface{}:
+			if prettyDiff(val, v2.(map[string]interface{}), currentPath) {
+				hasDifferences = true
+			}
+		case []interface{}:
+			// Handle arrays specially
+			if !reflect.DeepEqual(val, v2) {
+				// For terraform plans, resources arrays are especially important to show clearly
+				if k == "resources" || strings.HasSuffix(currentPath, ".resources") {
+					fmt.Printf("~ %s: (resource changes)\n", currentPath)
+
+					// Create a simple visual diff
+					fmt.Println("  Resources:")
+					// Find common prefix for resources to show targeted diff
+					if len(val) > 0 && len(v2.([]interface{})) > 0 {
+						// Show a focused diff of just the resource changes
+						for _, origRes := range val {
+							origMap, ok1 := origRes.(map[string]interface{})
+							if !ok1 {
+								continue
+							}
+
+							found := false
+							// Try to find matching resource in new plan
+							for _, newRes := range v2.([]interface{}) {
+								newMap, ok2 := newRes.(map[string]interface{})
+								if !ok2 {
+									continue
+								}
+
+								// Match resources by address if possible
+								if address, hasAddr := origMap["address"]; hasAddr {
+									if newAddr, hasNewAddr := newMap["address"]; hasNewAddr && address == newAddr {
+										found = true
+										// Compare the two resources
+										fmt.Printf("  Resource: %s\n", address)
+										resourceDiff(origMap, newMap, "  ")
+										break
+									}
+								}
+							}
+
+							if !found {
+								fmt.Printf("  - Resource removed: %v\n", getResourceName(origMap))
+								resourceBytes, err := json.MarshalIndent(origMap, "    ", "  ")
+								if err != nil {
+									// If marshaling fails, just print the map
+									fmt.Printf("    %v\n", origMap)
+								} else {
+									fmt.Printf("    %s\n", strings.ReplaceAll(string(resourceBytes), "\n", "\n    "))
+								}
+							}
+						}
+
+						// Look for added resources
+						for _, newRes := range v2.([]interface{}) {
+							newMap, ok := newRes.(map[string]interface{})
+							if !ok {
+								continue
+							}
+
+							found := false
+							for _, origRes := range val {
+								origMap, ok := origRes.(map[string]interface{})
+								if !ok {
+									continue
+								}
+
+								// Match resources by address if possible
+								if address, hasAddr := newMap["address"]; hasAddr {
+									if origAddr, hasOrigAddr := origMap["address"]; hasOrigAddr && address == origAddr {
+										found = true
+										break
+									}
+								}
+							}
+
+							if !found {
+								fmt.Printf("  + Resource added: %v\n", getResourceName(newMap))
+								resourceBytes, err := json.MarshalIndent(newMap, "    ", "  ")
+								if err != nil {
+									// If marshaling fails, just print the map
+									fmt.Printf("    %v\n", newMap)
+								} else {
+									fmt.Printf("    %s\n", strings.ReplaceAll(string(resourceBytes), "\n", "\n    "))
+								}
+							}
+						}
+					} else {
+						// Simple fallback for empty arrays or when resources can't be matched
+						if len(val) == 0 {
+							fmt.Println("  - No resources in original plan")
+						}
+						if len(v2.([]interface{})) == 0 {
+							fmt.Println("  + No resources in new plan")
+						}
+					}
+				} else {
+					// For other arrays, show a simpler diff
+					fmt.Printf("~ %s:\n", currentPath)
+					if len(val) > 0 {
+						jsonBytes, err := json.MarshalIndent(val, "  - ", "  ")
+						if err != nil {
+							fmt.Printf("  - [Array marshaling error: %v]\n", err)
+						} else {
+							fmt.Printf("  - %s\n", string(jsonBytes))
+						}
+					} else {
+						fmt.Println("  - []")
+					}
+
+					newArray := v2.([]interface{})
+					if len(newArray) > 0 {
+						jsonBytes, err := json.MarshalIndent(newArray, "  + ", "  ")
+						if err != nil {
+							fmt.Printf("  + [Array marshaling error: %v]\n", err)
+						} else {
+							fmt.Printf("  + %s\n", string(jsonBytes))
+						}
+					} else {
+						fmt.Println("  + []")
+					}
+				}
+				hasDifferences = true
+			}
+		default:
+			if !reflect.DeepEqual(v1, v2) {
+				fmt.Printf("~ %s: %v => %v\n", currentPath, v1, v2)
+				hasDifferences = true
+			}
+		}
+	}
+
+	for k, v2 := range b {
+		currentPath := path
+		if path != "" {
+			currentPath += "."
+		}
+		currentPath += k
+
+		_, exists := a[k]
+		if !exists {
+			// Format complex objects nicely
+			switch v2.(type) {
+			case map[string]interface{}, []interface{}:
+				jsonBytes, err := json.MarshalIndent(v2, "", "  ")
+				if err != nil {
+					// If marshaling fails, fall back to simple format
+					fmt.Printf("+ %s: %v\n", currentPath, v2)
+				} else {
+					fmt.Printf("+ %s:\n%s\n", currentPath, string(jsonBytes))
+				}
+			default:
+				fmt.Printf("+ %s: %v\n", currentPath, v2)
+			}
+			hasDifferences = true
+		}
+	}
+
+	return hasDifferences
+}
+
+// Helper function to get a readable resource name
+func getResourceName(resource map[string]interface{}) string {
+	if address, hasAddr := resource["address"]; hasAddr {
+		return fmt.Sprintf("%v", address)
+	}
+
+	var parts []string
+
+	if t, hasType := resource["type"]; hasType {
+		parts = append(parts, fmt.Sprintf("%v", t))
+	}
+
+	if name, hasName := resource["name"]; hasName {
+		parts = append(parts, fmt.Sprintf("%v", name))
+	}
+
+	if len(parts) > 0 {
+		return strings.Join(parts, ".")
+	}
+
+	return "<unknown resource>"
+}
+
+// Helper function to diff individual resources
+func resourceDiff(a, b map[string]interface{}, indent string) {
+	// Focus on the values part of the resource if present
+	if values1, hasValues1 := a["values"].(map[string]interface{}); hasValues1 {
+		if values2, hasValues2 := b["values"].(map[string]interface{}); hasValues2 {
+			// Compare values
+			for k, v1 := range values1 {
+				v2, exists := values2[k]
+
+				if !exists {
+					fmt.Printf("%s- %s: %v\n", indent, k, v1)
+					continue
+				}
+
+				if !reflect.DeepEqual(v1, v2) {
+					fmt.Printf("%s~ %s: %v => %v\n", indent, k, v1, v2)
+				}
+			}
+
+			for k, v2 := range values2 {
+				_, exists := values1[k]
+				if !exists {
+					fmt.Printf("%s+ %s: %v\n", indent, k, v2)
+				}
+			}
+			return
+		}
+	}
+
+	// Fallback if no values field
+	for k, v1 := range a {
+		if k == "address" || k == "type" || k == "name" || k == "mode" || k == "provider_name" {
+			continue // Skip common metadata fields
+		}
+
+		v2, exists := b[k]
+
+		if !exists {
+			fmt.Printf("%s- %s: %v\n", indent, k, v1)
+			continue
+		}
+
+		if !reflect.DeepEqual(v1, v2) {
+			fmt.Printf("%s~ %s: %v => %v\n", indent, k, v1, v2)
+		}
+	}
+
+	for k, v2 := range b {
+		if k == "address" || k == "type" || k == "name" || k == "mode" || k == "provider_name" {
+			continue // Skip common metadata fields
+		}
+
+		_, exists := a[k]
+		if !exists {
+			fmt.Printf("%s+ %s: %v\n", indent, k, v2)
+		}
+	}
+}
+
 // executeTerraformPlanDiff generates a diff between two Terraform plan files
 func executeTerraformPlanDiff(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath, varFile, planFile string) error {
 	origPlanFlag := ""
@@ -330,36 +616,14 @@ func executeTerraformPlanDiff(atmosConfig schema.AtmosConfiguration, info schema
 		newPlan["timestamp"] = "TIMESTAMP_IGNORED"
 	}
 
-	// Convert maps to sorted JSON strings
-	origPlanSorted, err := json.MarshalIndent(sortJSON(origPlan), "", "  ")
-	if err != nil {
-		return fmt.Errorf("error marshaling original plan JSON: %w", err)
-	}
+	// Generate a hierarchical diff between the two plans
+	fmt.Println("Plan differences:")
+	fmt.Println("----------------")
 
-	newPlanSorted, err := json.MarshalIndent(sortJSON(newPlan), "", "  ")
-	if err != nil {
-		return fmt.Errorf("error marshaling new plan JSON: %w", err)
-	}
+	hasDifferences := prettyDiff(origPlan, newPlan, "")
 
-	// Generate a diff between the two plans
-	diff := difflib.UnifiedDiff{
-		A:        difflib.SplitLines(string(origPlanSorted)),
-		B:        difflib.SplitLines(string(newPlanSorted)),
-		FromFile: "Original Plan",
-		ToFile:   "New Plan",
-		Context:  3,
-		Eol:      "\n",
-	}
-
-	diffText, err := difflib.GetUnifiedDiffString(diff)
-	if err != nil {
-		return fmt.Errorf("error generating diff: %w", err)
-	}
-
-	if diffText == "" {
+	if !hasDifferences {
 		fmt.Println("No differences found between the plans.")
-	} else {
-		fmt.Println(diffText)
 	}
 
 	return nil
