@@ -186,6 +186,8 @@ issues:
         - funlen
         - revive
         - gci
+        - err113
+        - gosec
 
 output:
   formats:
