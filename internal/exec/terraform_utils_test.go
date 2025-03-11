@@ -1023,3 +1023,454 @@ output "example_output" {
 `
 	return os.WriteFile(filepath.Join(dir, "terraform.tfvars"), []byte(tfvars), 0o644)
 }
+
+// Custom type that will always fail to marshal to JSON
+type UnmarshalableType struct{}
+
+// MarshalJSON always returns an error for testing error handling paths
+func (u UnmarshalableType) MarshalJSON() ([]byte, error) {
+	return nil, errors.New("simulated marshal error")
+}
+
+// TestPrettyDiffErrorHandling tests error handling in the prettyDiff functions
+func TestPrettyDiffErrorHandling(t *testing.T) {
+	// Object with a value that can't be marshaled to JSON
+	a := map[string]interface{}{
+		"simple": "value",
+		"complex": map[string]interface{}{
+			"inner": UnmarshalableType{},
+		},
+		"arr": []interface{}{
+			map[string]interface{}{
+				"name": "resource1",
+				"values": map[string]interface{}{
+					"unmarshalable": UnmarshalableType{},
+				},
+			},
+		},
+		"resources": []interface{}{
+			map[string]interface{}{
+				"address": "test_resource.example",
+				"type":    "test_resource",
+				"name":    "example",
+				"values": map[string]interface{}{
+					"unmarshalable": UnmarshalableType{},
+				},
+			},
+		},
+	}
+
+	b := map[string]interface{}{
+		"simple":    "new_value",
+		"new_field": UnmarshalableType{},
+		"resources": []interface{}{
+			map[string]interface{}{
+				"address":       "test_resource.new",
+				"type":          "test_resource",
+				"name":          "new",
+				"unmarshalable": UnmarshalableType{},
+			},
+		},
+	}
+
+	// Test the main prettyDiff function
+	t.Run("test_prettydiff_error_handling", func(t *testing.T) {
+		// Temporarily redirect stdout to capture output
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Run the function - it shouldn't panic despite marshaling errors
+		hasDiff := prettyDiff(a, b, "")
+
+		// Restore stdout
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Read the captured output
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		// Check that we got differences
+		assert.True(t, hasDiff, "prettyDiff should indicate differences")
+
+		// Check output contains fallback for unmarshalable values
+		assert.Contains(t, output, "- complex: map[inner:{}]", "Should include fallback for unmarshalable complex value")
+		assert.Contains(t, output, "+ new_field: {}", "Should include fallback for unmarshalable new field")
+	})
+
+	// Test prettyDiffTest function
+	t.Run("test_prettydifftest_error_handling", func(t *testing.T) {
+		var output strings.Builder
+
+		// Run the test function - it shouldn't panic despite marshaling errors
+		hasDiff := prettyDiffTest(a, b, "", &output)
+
+		// Check that we got differences
+		assert.True(t, hasDiff, "prettyDiffTest should indicate differences")
+
+		// Check output contains fallback for unmarshalable values
+		assert.Contains(t, output.String(), "- complex: map[inner:{}]", "Should include fallback for unmarshalable complex value")
+		assert.Contains(t, output.String(), "+ new_field: {}", "Should include fallback for unmarshalable new field")
+	})
+
+	// Test resourceDiff function
+	t.Run("test_resourcediff_error_handling", func(t *testing.T) {
+		// Temporarily redirect stdout to capture output
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Run the function - it shouldn't panic despite marshaling errors
+		resourceObj1 := map[string]interface{}{
+			"address": "test_resource.resource1",
+			"values": map[string]interface{}{
+				"normal":        "value1",
+				"unmarshalable": UnmarshalableType{},
+			},
+		}
+
+		resourceObj2 := map[string]interface{}{
+			"address": "test_resource.resource1",
+			"values": map[string]interface{}{
+				"normal":            "value2",
+				"new_unmarshalable": UnmarshalableType{},
+			},
+		}
+
+		resourceDiff(resourceObj1, resourceObj2, "  ")
+
+		// Restore stdout
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Read the captured output
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		// Check output contains actual differences
+		assert.Contains(t, output, "~ normal: value1 => value2", "Should show value differences")
+		assert.Contains(t, output, "- unmarshalable:", "Should include removed field")
+		assert.Contains(t, output, "+ new_unmarshalable:", "Should include added field")
+	})
+
+	// Test resourceDiffTest function
+	t.Run("test_resourcedifftest_error_handling", func(t *testing.T) {
+		var output strings.Builder
+
+		resourceObj1 := map[string]interface{}{
+			"address": "test_resource.resource1",
+			"values": map[string]interface{}{
+				"normal":        "value1",
+				"unmarshalable": UnmarshalableType{},
+			},
+		}
+
+		resourceObj2 := map[string]interface{}{
+			"address": "test_resource.resource1",
+			"values": map[string]interface{}{
+				"normal":            "value2",
+				"new_unmarshalable": UnmarshalableType{},
+			},
+		}
+
+		resourceDiffTest(resourceObj1, resourceObj2, "  ", &output)
+
+		// Check output contains actual differences
+		assert.Contains(t, output.String(), "~ normal: value1 => value2", "Should show value differences")
+		assert.Contains(t, output.String(), "- unmarshalable:", "Should include removed field")
+		assert.Contains(t, output.String(), "+ new_unmarshalable:", "Should include added field")
+	})
+
+	// Test getResourceName function
+	t.Run("test_getresourcename", func(t *testing.T) {
+		// Test with address field present
+		resource1 := map[string]interface{}{
+			"address": "aws_instance.test",
+			"type":    "aws_instance",
+			"name":    "test",
+		}
+		assert.Equal(t, "aws_instance.test", getResourceName(resource1), "Should use address field when present")
+
+		// Test with type and name fields but no address
+		resource2 := map[string]interface{}{
+			"type": "aws_instance",
+			"name": "test",
+		}
+		assert.Equal(t, "aws_instance.test", getResourceName(resource2), "Should combine type and name fields")
+
+		// Test with only type field
+		resource3 := map[string]interface{}{
+			"type": "aws_instance",
+		}
+		assert.Equal(t, "aws_instance", getResourceName(resource3), "Should use type field when name is missing")
+
+		// Test with only name field
+		resource4 := map[string]interface{}{
+			"name": "test",
+		}
+		assert.Equal(t, "test", getResourceName(resource4), "Should use name field when type is missing")
+
+		// Test with empty map
+		resource5 := map[string]interface{}{}
+		assert.Equal(t, "<unknown resource>", getResourceName(resource5), "Should return default value for empty map")
+	})
+
+	// Test getResourceNameTest function
+	t.Run("test_getresourcenametest", func(t *testing.T) {
+		// Test with address field present
+		resource1 := map[string]interface{}{
+			"address": "aws_instance.test",
+			"type":    "aws_instance",
+			"name":    "test",
+		}
+		assert.Equal(t, "aws_instance.test", getResourceNameTest(resource1), "Should use address field when present")
+
+		// Test with type and name fields but no address
+		resource2 := map[string]interface{}{
+			"type": "aws_instance",
+			"name": "test",
+		}
+		assert.Equal(t, "aws_instance.test", getResourceNameTest(resource2), "Should combine type and name fields")
+
+		// Test with only type field
+		resource3 := map[string]interface{}{
+			"type": "aws_instance",
+		}
+		assert.Equal(t, "aws_instance", getResourceNameTest(resource3), "Should use type field when name is missing")
+
+		// Test with only name field
+		resource4 := map[string]interface{}{
+			"name": "test",
+		}
+		assert.Equal(t, "test", getResourceNameTest(resource4), "Should use name field when type is missing")
+
+		// Test with empty map
+		resource5 := map[string]interface{}{}
+		assert.Equal(t, "<unknown resource>", getResourceNameTest(resource5), "Should return default value for empty map")
+	})
+
+	// Test array handling in prettyDiff
+	t.Run("test_prettydiff_array_handling", func(t *testing.T) {
+		// Test with various array configurations
+
+		// 1. Test with empty arrays
+		aEmpty := map[string]interface{}{
+			"resources":   []interface{}{},
+			"other_array": []interface{}{},
+		}
+
+		bEmpty := map[string]interface{}{
+			"resources": []interface{}{},
+			"new_array": []interface{}{1, 2, 3},
+		}
+
+		// Capture output
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		hasDiff := prettyDiff(aEmpty, bEmpty, "")
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		emptyOutput := buf.String()
+
+		// Just verify that it worked and found differences
+		assert.True(t, hasDiff, "Should find differences")
+		assert.Contains(t, emptyOutput, "other_array", "Should mention other_array")
+		assert.Contains(t, emptyOutput, "new_array", "Should mention new_array")
+
+		// 2. Test with non-matchable resources
+		aNonMatch := map[string]interface{}{
+			"resources": []interface{}{
+				map[string]interface{}{
+					"address": "aws_instance.test1",
+					"type":    "aws_instance",
+					"name":    "test1",
+					"values": map[string]interface{}{
+						"ami": "ami-123",
+					},
+				},
+			},
+		}
+
+		bNonMatch := map[string]interface{}{
+			"resources": []interface{}{
+				map[string]interface{}{
+					"address": "aws_instance.test2",
+					"type":    "aws_instance",
+					"name":    "test2",
+					"values": map[string]interface{}{
+						"ami": "ami-456",
+					},
+				},
+			},
+		}
+
+		// Capture output
+		r2, w2, _ := os.Pipe()
+		os.Stdout = w2
+
+		hasDiff2 := prettyDiff(aNonMatch, bNonMatch, "")
+
+		w2.Close()
+		os.Stdout = oldStdout
+
+		var buf2 bytes.Buffer
+		io.Copy(&buf2, r2)
+		nonMatchOutput := buf2.String()
+
+		assert.True(t, hasDiff2, "Should find differences")
+		assert.Contains(t, nonMatchOutput, "aws_instance.test1", "Should mention first resource")
+		assert.Contains(t, nonMatchOutput, "aws_instance.test2", "Should mention second resource")
+
+		// 3. Test with matching resources
+		aMatch := map[string]interface{}{
+			"resources": []interface{}{
+				map[string]interface{}{
+					"address": "aws_instance.test",
+					"type":    "aws_instance",
+					"name":    "test",
+					"values": map[string]interface{}{
+						"ami":           "ami-123",
+						"instance_type": "t3.micro",
+					},
+				},
+			},
+		}
+
+		bMatch := map[string]interface{}{
+			"resources": []interface{}{
+				map[string]interface{}{
+					"address": "aws_instance.test",
+					"type":    "aws_instance",
+					"name":    "test",
+					"values": map[string]interface{}{
+						"ami":           "ami-456",
+						"instance_type": "t3.micro",
+					},
+				},
+			},
+		}
+
+		// Capture output
+		r3, w3, _ := os.Pipe()
+		os.Stdout = w3
+
+		hasDiff3 := prettyDiff(aMatch, bMatch, "")
+
+		w3.Close()
+		os.Stdout = oldStdout
+
+		var buf3 bytes.Buffer
+		io.Copy(&buf3, r3)
+		matchOutput := buf3.String()
+
+		assert.True(t, hasDiff3, "Should find differences")
+		assert.Contains(t, matchOutput, "aws_instance.test", "Should identify the resource")
+		assert.Contains(t, matchOutput, "ami", "Should mention the changed field")
+		assert.Contains(t, matchOutput, "ami-123", "Should show old ami value")
+		assert.Contains(t, matchOutput, "ami-456", "Should show new ami value")
+	})
+
+	// Test array handling in prettyDiffTest
+	t.Run("test_prettydifftest_array_handling", func(t *testing.T) {
+		// Test with various array configurations
+
+		// 1. Test with empty arrays
+		aEmpty := map[string]interface{}{
+			"resources":   []interface{}{},
+			"other_array": []interface{}{},
+		}
+
+		bEmpty := map[string]interface{}{
+			"resources": []interface{}{},
+			"new_array": []interface{}{1, 2, 3},
+		}
+
+		var output1 strings.Builder
+		hasDiff1 := prettyDiffTest(aEmpty, bEmpty, "", &output1)
+
+		assert.True(t, hasDiff1, "Should find differences")
+		assert.Contains(t, output1.String(), "other_array", "Should mention other_array")
+		assert.Contains(t, output1.String(), "new_array", "Should mention new_array")
+
+		// 2. Test with non-matchable resources
+		aNonMatch := map[string]interface{}{
+			"resources": []interface{}{
+				map[string]interface{}{
+					"address": "aws_instance.test1",
+					"type":    "aws_instance",
+					"name":    "test1",
+					"values": map[string]interface{}{
+						"ami": "ami-123",
+					},
+				},
+			},
+		}
+
+		bNonMatch := map[string]interface{}{
+			"resources": []interface{}{
+				map[string]interface{}{
+					"address": "aws_instance.test2",
+					"type":    "aws_instance",
+					"name":    "test2",
+					"values": map[string]interface{}{
+						"ami": "ami-456",
+					},
+				},
+			},
+		}
+
+		var output2 strings.Builder
+		hasDiff2 := prettyDiffTest(aNonMatch, bNonMatch, "", &output2)
+
+		assert.True(t, hasDiff2, "Should find differences")
+		assert.Contains(t, output2.String(), "aws_instance.test1", "Should mention first resource")
+		assert.Contains(t, output2.String(), "aws_instance.test2", "Should mention second resource")
+
+		// 3. Test with matching resources
+		aMatch := map[string]interface{}{
+			"resources": []interface{}{
+				map[string]interface{}{
+					"address": "aws_instance.test",
+					"type":    "aws_instance",
+					"name":    "test",
+					"values": map[string]interface{}{
+						"ami":           "ami-123",
+						"instance_type": "t3.micro",
+					},
+				},
+			},
+		}
+
+		bMatch := map[string]interface{}{
+			"resources": []interface{}{
+				map[string]interface{}{
+					"address": "aws_instance.test",
+					"type":    "aws_instance",
+					"name":    "test",
+					"values": map[string]interface{}{
+						"ami":           "ami-456",
+						"instance_type": "t3.micro",
+					},
+				},
+			},
+		}
+
+		var output3 strings.Builder
+		hasDiff3 := prettyDiffTest(aMatch, bMatch, "", &output3)
+
+		assert.True(t, hasDiff3, "Should find differences")
+		assert.Contains(t, output3.String(), "aws_instance.test", "Should identify the resource")
+		assert.Contains(t, output3.String(), "ami", "Should mention the changed field")
+		assert.Contains(t, output3.String(), "ami-123", "Should show old ami value")
+		assert.Contains(t, output3.String(), "ami-456", "Should show new ami value")
+	})
+}
