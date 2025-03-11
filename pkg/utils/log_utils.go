@@ -41,7 +41,7 @@ func PrintfMessageToStderr(message string, args ...any) {
 }
 
 // Deprecated: Use `log.Fatal` instead. This function will be removed in a future release.
-// LogErrorAndExit logs errors to std.Error and exits with an error code
+// LogErrorAndExit logs errors to std.Error and exits with an error code.
 func LogErrorAndExit(err error) {
 	log.Error(err)
 
