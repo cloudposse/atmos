@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: staging
+
+import:
+  - teams/team1
+  - teams/team2
+
+overrides: {}
+
+terraform:
+  overrides:
+    vars:
+      test:
+        a: a-staging
