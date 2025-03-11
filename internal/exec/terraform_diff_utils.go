@@ -200,7 +200,7 @@ func processRemovedOrChangedResources(arr1, arr2 []interface{}) {
 			printRemovedResource(origMap)
 		} else {
 			// Resource exists in both - compare them
-			var a = []any{getResourceName(origMap)}
+			a := []any{getResourceName(origMap)}
 			fmt.Fprintf(os.Stdout, "  Resource: %s\n", a...)
 			resourceDiff(origMap, matchingResource, "  ")
 		}
