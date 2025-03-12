@@ -292,7 +292,7 @@ func mergeImports(dst *viper.Viper) error {
 func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
 	var rootNode yaml.Node
 	if err := yaml.Unmarshal(yamlContent, &rootNode); err != nil {
-		log.Debug("failed to parse YAML", "content", yamlContent, "error", err)
+		log.Debug("failed to parse YAML", "error", err)
 		return err
 	}
 	processNode(&rootNode, v, "")
