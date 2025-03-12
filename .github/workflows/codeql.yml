@@ -69,10 +69,12 @@ jobs:
     permissions:
       # Required: allow read access to the content for analysis.
       contents: read
-      # Optional: allow read access to pull request. Use with `only-new-issues` option.
+      # allow read access to pull request. Use with `only-new-issues` option.
       pull-requests: read
-      # Optional: allow write access to checks to allow the action to annotate code in the PR.
+      # allow write access to checks to allow the action to annotate code in the PR.
       checks: write
+      # allow write access to security events to allow the action to upload SARIF files.
+      security-events: write
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
