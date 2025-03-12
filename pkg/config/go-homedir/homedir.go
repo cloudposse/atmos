@@ -17,8 +17,11 @@ import (
 var DisableCache bool
 
 var (
-	homedirCache string
-	cacheLock    sync.RWMutex
+	homedirCache           string
+	cacheLock              sync.RWMutex
+	ErrCannotExpandHomeDir = errors.New("cannot expand user-specific home dir")
+	ErrBlankOutput         = errors.New("blank output when reading home directory")
+	ErrHomeDrivePathBlank  = errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
 )
 
 // Dir returns the home directory for the executing user.
@@ -67,7 +70,7 @@ func Expand(path string) (string, error) {
 	}
 
 	if len(path) > 1 && path[1] != '/' && path[1] != '\\' {
-		return "", errors.New("cannot expand user-specific home dir")
+		return "", ErrCannotExpandHomeDir
 	}
 
 	dir, err := Dir()
@@ -117,7 +120,7 @@ func dirUnix() (string, error) {
 		cmd.Stdout = &stdout
 		if err := cmd.Run(); err != nil {
 			// If the error is ErrNotFound, we ignore it. Otherwise, return it.
-			if err != exec.ErrNotFound {
+			if !errors.Is(err, exec.ErrNotFound) {
 				return "", err
 			}
 		} else {
@@ -141,7 +144,7 @@ func dirUnix() (string, error) {
 
 	result := strings.TrimSpace(stdout.String())
 	if result == "" {
-		return "", errors.New("blank output when reading home directory")
+		return "", ErrBlankOutput
 	}
 
 	return result, nil
@@ -162,7 +165,7 @@ func dirWindows() (string, error) {
 	path := os.Getenv("HOMEPATH")
 	home := drive + path
 	if drive == "" || path == "" {
-		return "", errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
+		return "", ErrHomeDrivePathBlank
 	}
 
 	return home, nil

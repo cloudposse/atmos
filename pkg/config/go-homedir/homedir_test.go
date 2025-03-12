@@ -118,7 +118,7 @@ func TestExpand(t *testing.T) {
 	DisableCache = true
 	defer func() { DisableCache = false }()
 	defer patchEnv("HOME", "/custom/path/")()
-	expected := filepath.Join("/", "custom", "path", "foo/bar")
+	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", string(filepath.Separator), "bar")
 	actual, err := Expand("~/foo/bar")
 
 	if err != nil {
