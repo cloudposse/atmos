@@ -471,7 +471,7 @@ func setTerraformConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksI
 func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.HelmfileCommand) > 0 {
 		atmosConfig.Components.Helmfile.Command = configAndStacksInfo.HelmfileCommand
-		log.Debug(cmdLineArg, "HelmfileCommand", configAndStacksInfo.HelmfileCommand)
+		log.Debug(cmdLineArg, "helmfile.command", configAndStacksInfo.HelmfileCommand)
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		atmosConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
