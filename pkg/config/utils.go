@@ -475,7 +475,7 @@ func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		atmosConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
-		log.Debug(cmdLineArg, "HelmfileDir", configAndStacksInfo.HelmfileDir)
+		log.Debug(cmdLineArg, "helmfile.base_path", configAndStacksInfo.HelmfileDir)
 	}
 	return nil
 }
