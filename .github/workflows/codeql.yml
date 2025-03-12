@@ -89,24 +89,26 @@ jobs:
         with:
           sarif_file: golangci-lint.sarif
 
-      - name: Ensure PR has required labels
+      - name: Check for lint-ignore label
         uses: mheap/github-action-required-labels@v5
-        id: lint_ignore
+        id: no_lint_ignore
         with:
           exit_type: success
           mode: exactly
-          count: 1
+          count: 0
           labels: "lint-ignore"
 
-      - name: Set exit code based on label and lint results
+      - name: Set exit code based on lint results
         if: always()
         run: |
-          if [[ "${{ steps.lint_ignore.outputs.status }}" == "success" ]]; then
-            echo "::notice::Lint warnings and errors have been ignored for this pull request because the `lint-ignore` label is present."
-            exit 0
-          elif [[ "${{ steps.golangci.outcome }}" == "failure" ]]; then
-            echo "::error::Lint issues found in the code. Please fix them before merging."
-            exit 1
+          if [[ "${{ steps.no_lint_ignore.outputs.status }}" == "success" ]]; then
+           if [[ "${{ steps.golangci.outcome }}" == "failure" ]]; then
+              echo "::error::Lint issues found in the code. Please fix them before merging."
+              exit 1
+            fi
+          else
+            echo "::warning::Lint warnings and errors have been ignored for this pull request due to the
+            'lint-ignore' label."
           fi
 
   pr-semver-labels:
