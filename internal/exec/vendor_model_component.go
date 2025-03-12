@@ -128,14 +128,14 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
 		if err = GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s: %w", p.name, err) //nolint:err113
+			return fmt.Errorf("failed to download package %s: %w", p.name, err)
 		}
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err) //nolint:err113
+			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err) 
 		}
 
 	case pkgTypeLocal:
