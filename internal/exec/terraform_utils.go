@@ -154,7 +154,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	if info.ComponentBackendType == "http" {
 		// If workspaces are explicitly enabled for HTTP backend, log a warning.
 		if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && *atmosConfig.Components.Terraform.WorkspacesEnabled {
-			log.Warn("ignoring the enabled setting for workspaces since HTTP backend doesn't support workspaces",
+			log.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
 				"backend", "http",
 				"component", info.Component)
 		}
