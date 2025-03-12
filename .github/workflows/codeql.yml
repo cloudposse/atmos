@@ -110,7 +110,7 @@ jobs:
           fi
 
   pr-semver-labels:
-    name: PR Semver Label Check
+    name: PR Semver Labels
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
