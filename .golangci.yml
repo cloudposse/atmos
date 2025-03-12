@@ -160,7 +160,7 @@ linters-settings:
 
   nestif:
     # Minimal complexity of if statements to report.
-    min-complexity: 6
+    min-complexity: 4
 
 severity:
   default-severity: error
