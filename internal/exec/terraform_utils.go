@@ -87,7 +87,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 				return err
 			}
 
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o600)
 			if err != nil {
 				return err
 			}
@@ -106,7 +106,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
-			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
+			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o600)
 			return err
 		}
 	}
