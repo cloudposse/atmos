@@ -16,6 +16,10 @@ import (
 	al "github.com/jfrog/jfrog-client-go/utils/log"
 )
 
+const (
+	errFormatWithCause = "%w: %v"
+)
+
 type ArtifactoryStore struct {
 	prefix         string
 	repoName       string
@@ -54,7 +58,7 @@ func getAccessKey(options *ArtifactoryStoreOptions) (string, error) {
 		return os.Getenv("JFROG_ACCESS_TOKEN"), nil
 	}
 
-	return "", fmt.Errorf("either access_token must be set in options or one of JFROG_ACCESS_TOKEN or ARTIFACTORY_ACCESS_TOKEN environment variables must be set")
+	return "", ErrMissingArtifactoryToken
 }
 
 func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
@@ -112,35 +116,59 @@ func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 
 func (s *ArtifactoryStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
-		return "", fmt.Errorf("stack delimiter is not set")
+		return "", ErrStackDelimiterNotSet
 	}
 
 	prefixParts := []string{s.repoName, s.prefix}
 	prefix := strings.Join(prefixParts, "/")
+
 	return getKey(prefix, *s.stackDelimiter, stack, component, key, "/")
 }
 
-func (s *ArtifactoryStore) Get(stack string, component string, key string) (interface{}, error) {
+func (s *ArtifactoryStore) validateGetParams(stack, component, key string) error {
 	if stack == "" {
-		return nil, fmt.Errorf("stack cannot be empty")
+		return ErrEmptyStack
 	}
 
 	if component == "" {
-		return nil, fmt.Errorf("component cannot be empty")
+		return ErrEmptyComponent
 	}
 
 	if key == "" {
-		return nil, fmt.Errorf("key cannot be empty")
+		return ErrEmptyKey
+	}
+
+	return nil
+}
+
+func (s *ArtifactoryStore) processDownloadedFile(tempDir, paramName string) (interface{}, error) {
+	fileData, err := os.ReadFile(filepath.Join(tempDir, filepath.Base(paramName)))
+	if err != nil {
+		return nil, fmt.Errorf(errFormatWithCause, ErrReadFile, err)
+	}
+
+	// First try to unmarshal as JSON
+	var result interface{}
+	if err := json.Unmarshal(fileData, &result); err != nil {
+		return nil, fmt.Errorf(errFormatWithCause, ErrUnmarshalFile, err)
+	}
+
+	return result, nil
+}
+
+func (s *ArtifactoryStore) Get(stack string, component string, key string) (interface{}, error) {
+	if err := s.validateGetParams(stack, component, key); err != nil {
+		return nil, err
 	}
 
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key: %v", err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrGetKey, err)
 	}
 
-	tempDir, err := os.MkdirTemp("", "artifactorystore")
+	tempDir, err := os.MkdirTemp("", "atmos-artifactory")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %v", err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrCreateTempDir, err)
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -149,89 +177,82 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 		tempDir += string(os.PathSeparator)
 	}
 
-	params := services.NewDownloadParams()
-	params.Pattern = paramName
-	params.Target = tempDir
-	params.Flat = true
+	downloadParams := services.NewDownloadParams()
+	downloadParams.Pattern = paramName
+	downloadParams.Target = tempDir
+	downloadParams.Recursive = false
+	downloadParams.IncludeDirs = false
 
-	totalDownloaded, totalFailed, err := s.rtManager.DownloadFiles(params)
+	totalDownloaded, totalExpected, err := s.rtManager.DownloadFiles(downloadParams)
 	if err != nil {
-		return nil, fmt.Errorf("failed to download file: %v", err)
+		return nil, fmt.Errorf(errFormatWithCause, ErrDownloadFile, err)
 	}
 
-	if totalFailed > 0 {
-		return nil, fmt.Errorf("failed to download file: %v", err)
+	// Only check for mismatch if there was an error
+	if err != nil && totalDownloaded != totalExpected {
+		return nil, fmt.Errorf(errFormatWithCause, ErrDownloadFile, err)
 	}
 
 	if totalDownloaded == 0 {
-		return nil, fmt.Errorf("no files downloaded")
+		return nil, ErrNoFilesDownloaded
 	}
 
-	downloadedFile := filepath.Join(tempDir, key)
-	jsonData, err := os.ReadFile(downloadedFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %v", err)
-	}
-
-	var result interface{}
-	err = json.Unmarshal(jsonData, &result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal file: %v", err)
-	}
-
-	return result, nil
+	return s.processDownloadedFile(tempDir, paramName)
 }
 
 func (s *ArtifactoryStore) Set(stack string, component string, key string, value interface{}) error {
 	if stack == "" {
-		return fmt.Errorf("stack cannot be empty")
+		return ErrEmptyStack
 	}
 
 	if component == "" {
-		return fmt.Errorf("component cannot be empty")
+		return ErrEmptyComponent
 	}
 
 	if key == "" {
-		return fmt.Errorf("key cannot be empty")
+		return ErrEmptyKey
 	}
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return fmt.Errorf("failed to get key: %v", err)
+		return fmt.Errorf(errFormatWithCause, ErrGetKey, err)
 	}
 
-	tempFile, err := os.CreateTemp("", "key.json")
+	tempFile, err := os.CreateTemp("", "atmos-artifactory")
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %v", err)
+		return fmt.Errorf(errFormatWithCause, ErrCreateTempFile, err)
 	}
-
-	defer tempFile.Close()
 	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
 
-	jsonData, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("failed to marshal value: %v", err)
+	var dataToWrite []byte
+	if byteData, ok := value.([]byte); ok {
+		// If value is already []byte, use it directly
+		dataToWrite = byteData
+	} else {
+		// Otherwise, marshal it to JSON
+		jsonData, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf(errFormatWithCause, ErrMarshalValue, err)
+		}
+		dataToWrite = jsonData
 	}
 
-	_, err = tempFile.Write(jsonData)
+	_, err = tempFile.Write(dataToWrite)
 	if err != nil {
-		return fmt.Errorf("failed to write to temp file: %v", err)
+		return fmt.Errorf(errFormatWithCause, ErrWriteTempFile, err)
 	}
 
-	params := services.NewUploadParams()
-	params.Pattern = tempFile.Name()
-	params.Target = paramName
+	uploadParams := services.NewUploadParams()
+	uploadParams.Pattern = tempFile.Name()
+	uploadParams.Target = paramName
+	uploadParams.Recursive = false
+	uploadParams.Flat = true
 
-	params.Flat = true
-
-	uploadServiceOptions := &artifactory.UploadServiceOptions{
-		FailFast: true,
-	}
-
-	_, _, err = s.rtManager.UploadFiles(*uploadServiceOptions, params)
+	_, _, err = s.rtManager.UploadFiles(artifactory.UploadServiceOptions{FailFast: true}, uploadParams)
 	if err != nil {
-		return fmt.Errorf("failed to upload file: %v", err)
+		return fmt.Errorf(errFormatWithCause, ErrUploadFile, err)
 	}
 
 	return nil

@@ -1,0 +1,11 @@
+import:
+  - catalog/c1
+
+overrides: {}
+
+terraform:
+  overrides:
+    vars:
+      test:
+        a: a-team2
+        b: b-team2

@@ -56,7 +56,39 @@ func TestSSMStore_Set(t *testing.T) {
 			mockFn: func(m *MockSSMClient) {
 				m.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
-					Value:     aws.String("test-value"),
+					Value:     aws.String(`"test-value"`),
+					Type:      types.ParameterTypeString,
+					Overwrite: &mockFnOverwrite,
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+			wantErr: false,
+		},
+		{
+			name:      "successful set with slice",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "slice-key",
+			value:     []string{"value1", "value2", "value3"},
+			mockFn: func(m *MockSSMClient) {
+				m.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
+					Value:     aws.String(`["value1","value2","value3"]`),
+					Type:      types.ParameterTypeString,
+					Overwrite: &mockFnOverwrite,
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+			wantErr: false,
+		},
+		{
+			name:      "successful set with map",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "map-key",
+			value:     map[string]interface{}{"key1": "value1", "key2": 42, "key3": true},
+			mockFn: func(m *MockSSMClient) {
+				m.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/service/map-key"),
+					Value:     aws.String(`{"key1":"value1","key2":42,"key3":true}`),
 					Type:      types.ParameterTypeString,
 					Overwrite: &mockFnOverwrite,
 				}).Return(&ssm.PutParameterOutput{}, nil)
@@ -71,7 +103,7 @@ func TestSSMStore_Set(t *testing.T) {
 			value:     "test-value",
 			mockFn: func(m *MockSSMClient) {
 				m.On("PutParameter", mock.Anything, mock.Anything).
-					Return(nil, errors.New("aws error"))
+					Return(nil, errors.New("aws error")) //nolint
 			},
 			wantErr: true,
 		},
@@ -81,8 +113,11 @@ func TestSSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "config-key",
 			value:     123, // Not a string
-			mockFn:    func(m *MockSSMClient) {},
-			wantErr:   true,
+			mockFn: func(m *MockSSMClient) {
+				m.On("PutParameter", mock.Anything, mock.Anything).
+					Return(nil, errors.New("invalid value type")) //nolint
+			},
+			wantErr: true,
 		},
 		{
 			name:      "empty stack",
@@ -120,7 +155,7 @@ func TestSSMStore_Set(t *testing.T) {
 			mockFn: func(m *MockSSMClient) {
 				m.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/app/service/config-key"),
-					Value:     aws.String("test-value"),
+					Value:     aws.String(`"test-value"`),
 					Type:      types.ParameterTypeString,
 					Overwrite: &mockFnOverwrite,
 				}).Return(&ssm.PutParameterOutput{}, nil)
@@ -136,7 +171,7 @@ func TestSSMStore_Set(t *testing.T) {
 			mockFn: func(m *MockSSMClient) {
 				m.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
 					Name:      aws.String("/test-prefix/dev/usw2/prod/app/service/config-key"),
-					Value:     aws.String("test-value"),
+					Value:     aws.String(`"test-value"`),
 					Type:      types.ParameterTypeString,
 					Overwrite: &mockFnOverwrite,
 				}).Return(&ssm.PutParameterOutput{}, nil)
@@ -192,11 +227,47 @@ func TestSSMStore_Get(t *testing.T) {
 					WithDecryption: &mockFnWithDecryption,
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
-						Value: aws.String("test-value"),
+						Value: aws.String(`"test-value"`),
 					},
 				}, nil)
 			},
 			want:    "test-value",
+			wantErr: false,
+		},
+		{
+			name:      "successful get slice",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "slice-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`["value1","value2","value3"]`),
+					},
+				}, nil)
+			},
+			want:    []interface{}{"value1", "value2", "value3"},
+			wantErr: false,
+		},
+		{
+			name:      "successful get map",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "map-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/map-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`{"key1":"value1","key2":"value2"}`),
+					},
+				}, nil)
+			},
+			want:    map[string]interface{}{"key1": "value1", "key2": "value2"},
 			wantErr: false,
 		},
 		{
@@ -206,7 +277,7 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "config-key",
 			mockFn: func(m *MockSSMClient) {
 				m.On("GetParameter", mock.Anything, mock.Anything).
-					Return(nil, errors.New("aws error"))
+					Return(nil, errors.New("aws error")) //nolint
 			},
 			want:    nil,
 			wantErr: true,
@@ -249,6 +320,96 @@ func TestSSMStore_Get(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: true,
+		},
+		{
+			name:      "non-json value",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "plain-text-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/plain-text-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`plain text value`),
+					},
+				}, nil)
+			},
+			want:    "plain text value",
+			wantErr: false,
+		},
+		{
+			name:      "malformed json value",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "malformed-json-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/malformed-json-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`{"key1":"value1", "key2":}`),
+					},
+				}, nil)
+			},
+			want:    `{"key1":"value1", "key2":}`,
+			wantErr: false,
+		},
+		{
+			name:      "integer value",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "integer-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/integer-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`42`),
+					},
+				}, nil)
+			},
+			want:    float64(42), // JSON unmarshals numbers as float64
+			wantErr: false,
+		},
+		{
+			name:      "float value",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "float-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/float-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`3.14159`),
+					},
+				}, nil)
+			},
+			want:    3.14159,
+			wantErr: false,
+		},
+		{
+			name:      "numeric string",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "numeric-string-key",
+			mockFn: func(m *MockSSMClient) {
+				m.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/numeric-string-key"),
+					WithDecryption: &mockFnWithDecryption,
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`"42"`), // JSON string containing a number
+					},
+				}, nil)
+			},
+			want:    "42", // Should be parsed as a string, not a number
+			wantErr: false,
 		},
 	}
 
