@@ -97,12 +97,6 @@ jobs:
           mode: exactly
           count: 1
           labels: "lint-ignore"
-          add_comment: true
-          message: |
-            > [!WARNING]
-            >
-            > Lint warnings and errors are ignored on this pull request because the `{{ provided }}` label.
-            >
 
       - name: Set exit code based on label and lint results
         if: always()
