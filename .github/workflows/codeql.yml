@@ -127,8 +127,10 @@ jobs:
           message: |
             > [!WARNING]
             > This PR is blocked from merging because a required semver label is missing.
+            > ```
             > {{ provided }}
-            > You'll need to remove it before this PR can be merged.
+            > ```
+            > You'll need to add one before this PR can be merged.
 
   pr-size-labeler:
     name: PR Size Labeler
