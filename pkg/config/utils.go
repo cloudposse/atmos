@@ -561,7 +561,7 @@ func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInf
 func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
-		log.Debug(cmdLineArg, "SettingsListMergeStrategy", configAndStacksInfo.SettingsListMergeStrategy)
+		log.Debug(cmdLineArg, "settings.list_merge_strategy", configAndStacksInfo.SettingsListMergeStrategy)
 	}
 
 	return nil
