@@ -82,6 +82,7 @@ func Expand(path string) (string, error) {
 }
 
 // Reset clears the cache, forcing the next call to Dir to re-detect
+
 // the home directory. This generally never has to be called, but can be
 // useful in tests if you're modifying the home directory via the HOME
 // env var or something.
@@ -92,62 +93,32 @@ func Reset() {
 }
 
 func dirUnix() (string, error) {
-	homeEnv := "HOME"
-	if runtime.GOOS == "plan9" {
-		// On plan9, env vars are lowercase.
-		homeEnv = "home"
-	}
-
-	// First prefer the HOME environmental variable
-	if home := os.Getenv(homeEnv); home != "" {
+	// Try to get the home directory from the environment variable first
+	if home := getHomeFromEnv(); home != "" {
 		return home, nil
 	}
 
-	var stdout bytes.Buffer
-
-	// If that fails, try OS specific commands
+	// Try OS-specific methods
 	if runtime.GOOS == "darwin" {
-		cmd := exec.Command("sh", "-c", `dscl -q . -read /Users/"$(whoami)" NFSHomeDirectory | sed 's/^[^ ]*: //'`)
-		cmd.Stdout = &stdout
-		if err := cmd.Run(); err == nil {
-			result := strings.TrimSpace(stdout.String())
-			if result != "" {
-				return result, nil
-			}
+		if home, err := getDarwinHomeDir(); err == nil && home != "" {
+			return home, nil
 		}
 	} else {
-		cmd := exec.Command("getent", "passwd", strconv.Itoa(os.Getuid()))
-		cmd.Stdout = &stdout
-		if err := cmd.Run(); err != nil {
-			// If the error is ErrNotFound, we ignore it. Otherwise, return it.
-			if !errors.Is(err, exec.ErrNotFound) {
-				return "", err
-			}
-		} else {
-			if passwd := strings.TrimSpace(stdout.String()); passwd != "" {
-				// username:password:uid:gid:gecos:home:shell
-				passwdParts := strings.SplitN(passwd, ":", 7)
-				if len(passwdParts) > 5 {
-					return passwdParts[5], nil
-				}
-			}
+		if home, err := getUnixHomeDir(); err == nil && home != "" {
+			return home, nil
 		}
 	}
 
-	// If all else fails, try the shell
-	stdout.Reset()
-	cmd := exec.Command("sh", "-c", "cd && pwd")
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		return "", err
-	}
+	// Fallback to shell command
+	return getHomeFromShell()
+}
 
-	result := strings.TrimSpace(stdout.String())
-	if result == "" {
-		return "", ErrBlankOutput
+func getHomeFromEnv() string {
+	homeEnv := "HOME"
+	if runtime.GOOS == "plan9" {
+		homeEnv = "home" // On Plan 9, env vars are lowercase
 	}
-
-	return result, nil
+	return os.Getenv(homeEnv)
 }
 
 func dirWindows() (string, error) {
@@ -169,4 +140,57 @@ func dirWindows() (string, error) {
 	}
 
 	return home, nil
+}
+
+func getDarwinHomeDir() (string, error) {
+	var stdout bytes.Buffer
+	cmd := exec.Command("sh", "-c", `dscl -q . -read /Users/"$(whoami)" NFSHomeDirectory | sed 's/^[^ ]*: //'`)
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	result := strings.TrimSpace(stdout.String())
+	if result == "" {
+		return "", ErrBlankOutput
+	}
+	return result, nil
+}
+
+func getUnixHomeDir() (string, error) {
+	var stdout bytes.Buffer
+	cmd := exec.Command("getent", "passwd", strconv.Itoa(os.Getuid()))
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		if !errors.Is(err, exec.ErrNotFound) {
+			return "", err
+		}
+		return "", nil
+	}
+
+	passwd := strings.TrimSpace(stdout.String())
+	if passwd == "" {
+		return "", nil
+	}
+
+	// username:password:uid:gid:gecos:home:shell
+	passwdParts := strings.SplitN(passwd, ":", 7)
+	if len(passwdParts) > 5 {
+		return passwdParts[5], nil
+	}
+	return "", nil
+}
+
+func getHomeFromShell() (string, error) {
+	var stdout bytes.Buffer
+	cmd := exec.Command("sh", "-c", "cd && pwd")
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	result := strings.TrimSpace(stdout.String())
+	if result == "" {
+		return "", ErrBlankOutput
+	}
+	return result, nil
 }
