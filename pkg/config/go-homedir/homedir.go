@@ -24,6 +24,11 @@ var (
 	ErrHomeDrivePathBlank  = errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
 )
 
+const (
+	passwdFieldCount   = 7
+	passwdHomeDirIndex = 5
+)
+
 // Dir returns the home directory for the executing user.
 //
 // This uses an OS-specific method for discovering the home directory.
@@ -173,9 +178,9 @@ func getUnixHomeDir() (string, error) {
 	}
 
 	// username:password:uid:gid:gecos:home:shell
-	passwdParts := strings.SplitN(passwd, ":", 7)
-	if len(passwdParts) > 5 {
-		return passwdParts[5], nil
+	passwdParts := strings.SplitN(passwd, ":", passwdFieldCount)
+	if len(passwdParts) > passwdHomeDirIndex {
+		return passwdParts[passwdHomeDirIndex], nil
 	}
 	return "", nil
 }
