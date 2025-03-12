@@ -89,7 +89,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 				return err
 			}
 
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
+			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o600)
 			if err != nil {
 				return err
 			}
@@ -108,7 +108,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
-			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
+			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o600)
 			return err
 		}
 	}
@@ -145,6 +145,30 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 		"state show",
 	}
 	return u.SliceContainsString(commandsThatNeedFuncProcessing, command)
+}
+
+// isWorkspacesEnabled checks if Terraform workspaces are enabled for a component.
+// Workspaces are enabled by default except for:
+// 1. When explicitly disabled via workspaces_enabled: false in `atmos.yaml`.
+// 2. When using HTTP backend (which doesn't support workspaces).
+func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	// Check if using HTTP backend first, as it doesn't support workspaces
+	if info.ComponentBackendType == "http" {
+		// If workspaces are explicitly enabled for HTTP backend, log a warning.
+		if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && *atmosConfig.Components.Terraform.WorkspacesEnabled {
+			l.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
+				"backend", "http",
+				"component", info.Component)
+		}
+		return false
+	}
+
+	// Check if workspaces are explicitly disabled.
+	if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && !*atmosConfig.Components.Terraform.WorkspacesEnabled {
+		return false
+	}
+
+	return true
 }
 
 // ExecuteTerraformAffected executes `atmos terraform --affected`

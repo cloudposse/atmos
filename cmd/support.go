@@ -3,8 +3,9 @@ package cmd
 import (
 	_ "embed"
 
-	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 //go:embed markdown/support.md
