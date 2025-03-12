@@ -166,18 +166,17 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	if atmosPath == "" {
 		return nil
 	}
-	configFilePath := filepath.Join(atmosPath, CliConfigFileName)
-	err := mergeConfig(v, configFilePath, true)
+	err := mergeConfig(v, atmosPath, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
-			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", configFilePath)
+			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", atmosPath)
 			return nil
 		default:
 			return err
 		}
 	}
-	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", configFilePath)
+	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", atmosPath)
 
 	return nil
 }
@@ -199,6 +198,7 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 
 // mergeConfig merge config from a specified path directory and process imports.return error if config file not exist .
 func mergeConfig(v *viper.Viper, path string, processImports bool) error {
+
 	v.AddConfigPath(path)
 	v.SetConfigName(CliConfigFileName)
 	err := v.MergeInConfig()
