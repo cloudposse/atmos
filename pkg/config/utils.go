@@ -463,7 +463,7 @@ func setTerraformConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksI
 	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		atmosConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
-		log.Debug(cmdLineArg, "TerraformDir", configAndStacksInfo.TerraformDir)
+		log.Debug(cmdLineArg, "terraform.base_path", configAndStacksInfo.TerraformDir)
 	}
 	return nil
 }
