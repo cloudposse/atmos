@@ -108,7 +108,7 @@ linters-settings:
         arguments:
           - maxLitCount: "3"
             allowStrs: '""'
-            allowInts: "0,1,2,3,4"
+            allowInts: "0,1,2,3,4,5,6,7"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
       - name: argument-limit
         arguments: [5] # Max arguments per function
