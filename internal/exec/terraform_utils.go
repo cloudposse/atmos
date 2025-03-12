@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	l "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -47,17 +47,17 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 
 	// Check if the file exists before attempting deletion
 	if _, err := os.Stat(filePath); err == nil {
-		l.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
+		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
 		if err := os.Remove(filePath); err != nil {
-			l.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
+			log.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
 		} else {
-			l.Debug("Successfully deleted Terraform environment file.", "file", filePath)
+			log.Debug("Successfully deleted Terraform environment file.", "file", filePath)
 		}
 	} else if os.IsNotExist(err) {
-		l.Debug("Terraform environment file not found. No action needed.", "file", filePath)
+		log.Debug("Terraform environment file not found. No action needed.", "file", filePath)
 	} else {
-		l.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
+		log.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
 	}
 }
 
@@ -81,7 +81,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
-		l.Debug("Writing the backend config to file.", "file", backendFileName)
+		log.Debug("Writing the backend config to file.", "file", backendFileName)
 
 		if !info.DryRun {
 			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -104,7 +104,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
-		l.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
+		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
@@ -156,7 +156,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	if info.ComponentBackendType == "http" {
 		// If workspaces are explicitly enabled for HTTP backend, log a warning.
 		if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && *atmosConfig.Components.Terraform.WorkspacesEnabled {
-			l.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
+			log.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
 				"backend", "http",
 				"component", info.Component)
 		}
@@ -203,7 +203,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	if err != nil {
 		return err
 	}
-	l.Debug("Affected components:\n" + affectedYaml)
+	log.Debug("Affected components:\n" + affectedYaml)
 
 	for _, affected := range affectedList {
 		err = executeTerraformAffectedComponent(affected, info, "", "", cliArgs)
@@ -231,7 +231,7 @@ func executeTerraformAffectedComponent(
 		info.Stack = affected.Stack
 
 		if parentComponent != "" && parentStack != "" {
-			l.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s' as dependency of component '%s' in stack '%s'",
+			log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s' as dependency of component '%s' in stack '%s'",
 				info.SubCommand,
 				affected.Component,
 				affected.Stack,
@@ -239,7 +239,7 @@ func executeTerraformAffectedComponent(
 				parentStack,
 			))
 		} else {
-			l.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s'",
+			log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s'",
 				info.SubCommand,
 				affected.Component,
 				affected.Stack,
@@ -253,7 +253,7 @@ func executeTerraformAffectedComponent(
 		//}
 	} else if args.IncludeDependents {
 		if parentComponent != "" && parentStack != "" {
-			l.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of component '%s' in stack '%s'",
+			log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of component '%s' in stack '%s'",
 				info.SubCommand,
 				affected.Component,
 				affected.Stack,
@@ -261,7 +261,7 @@ func executeTerraformAffectedComponent(
 				parentStack,
 			))
 		} else {
-			l.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of another component",
+			log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of another component",
 				info.SubCommand,
 				affected.Component,
 				affected.Stack,
