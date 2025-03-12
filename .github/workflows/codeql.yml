@@ -2,13 +2,13 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: [ "main" ]
+    branches: ["main"]
   schedule:
     # runs on 19:17 every Tuesday
-    - cron: '27 19 * * 2'
+    - cron: "27 19 * * 2"
 
 jobs:
   analyze:
@@ -23,44 +23,69 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'go', 'javascript-typescript' ]
+        language: ["go", "javascript-typescript"]
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    # Initializes the CodeQL tools for scanning.
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: ${{ matrix.language }}
-        # If you wish to specify custom queries, you can do so here or in a config file.
-        # By default, queries listed here will override any specified in a config file.
-        # Prefix the list here with "+" to use these queries and those in the config file.
+      # Initializes the CodeQL tools for scanning.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # If you wish to specify custom queries, you can do so here or in a config file.
+          # By default, queries listed here will override any specified in a config file.
+          # Prefix the list here with "+" to use these queries and those in the config file.
 
-        # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
-        # queries: security-extended,security-and-quality
+          # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
+          # queries: security-extended,security-and-quality
 
+      # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
+      # If this step fails, then you should remove it and run the build manually (see below)
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
 
-    # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
-    # If this step fails, then you should remove it and run the build manually (see below)
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
+      # ℹ️ Command-line programs to run using the OS shell.
+      # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
 
-    # ℹ️ Command-line programs to run using the OS shell.
-    # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
+      #   If the Autobuild fails above, remove it and uncomment the following three lines.
+      #   modify them (or add more) to build your code if your project, please refer to the EXAMPLE below for guidance.
 
-    #   If the Autobuild fails above, remove it and uncomment the following three lines.
-    #   modify them (or add more) to build your code if your project, please refer to the EXAMPLE below for guidance.
+      # - run: |
+      #     echo "Run, Build Application using script"
+      #     ./location_of_script_within_repo/buildscript.sh
 
-    # - run: |
-    #     echo "Run, Build Application using script"
-    #     ./location_of_script_within_repo/buildscript.sh
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
 
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
-      with:
-        category: "/language:${{matrix.language}}"
+  lint-golangci:
+    name: "[lint] golangci"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' # Only runs on PRs
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        id: golangci
+        with:
+          version: v1.64
+          only-new-issues: true # Shows only issues introduced in the PR
+          # see https://github.com/golangci/golangci-lint/issues/4376#issuecomment-1938874827
+          args: >
+            --out-format sarif:golangci-lint.sarif
+            --issues-exit-code=0
+
+      - name: Upload filtered SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: golangci-lint.sarif
 
   pr-size-labeler:
     name: PR Size Labeler
@@ -76,23 +101,23 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
-      
+
       - name: PR Size Labeler
         uses: codelytv/pr-size-labeler@v1.10.2
         with:
-          xs_label: 'size/xs'
-          xs_max_size: '10'
-          s_label: 'size/s'
-          s_max_size: '100'
-          m_label: 'size/m'
-          m_max_size: '500'
-          l_label: 'size/l'
-          l_max_size: '1000'
-          xl_label: 'size/xl'
-          fail_if_xl: 'false'
+          xs_label: "size/xs"
+          xs_max_size: "10"
+          s_label: "size/s"
+          s_max_size: "100"
+          m_label: "size/m"
+          m_max_size: "500"
+          l_label: "size/l"
+          l_max_size: "1000"
+          xl_label: "size/xl"
+          fail_if_xl: "false"
           files_to_ignore: >
             package-lock.json
             yarn.lock
             go.sum
-          ignore_line_deletions: 'false'
-          ignore_file_deletions: 'false'
+          ignore_line_deletions: "false"
+          ignore_file_deletions: "false"
