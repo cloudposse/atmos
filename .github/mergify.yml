@@ -50,14 +50,3 @@ pull_request_rules:
           >
           > Please verify that this PR does not address multiple issues.
           > Consider refactoring it into smaller, more focused PRs to facilitate a smoother review process.
-
-  - name: Comment when lint-ignore label is added
-    conditions:
-      - label=lint-ignore
-    actions:
-      comment:
-        message: |
-          > [!WARNING]
-          >
-          > Lint warnings and errors are ignored on this PR because of the `lint-ignore` label.
-          >

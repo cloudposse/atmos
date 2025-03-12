@@ -84,41 +84,20 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         id: golangci
-        continue-on-error: true
         with:
           version: v1.64
           only-new-issues: true # Shows only issues introduced in the PR
-          # see https://github.com/golangci/golangci-lint/issues/4376#issuecomment-1938874827
+          # Not all line numbers in diff may match the linter's line outputs
+          # See: https://github.com/golangci/golangci-lint/issues/4376#issuecomment-1938874827
+          # Always exit 0 so we upload the sarif file to CodeQL
           args: >
             --out-format sarif:golangci-lint.sarif
-            --issues-exit-code=1
+            --issues-exit-code=0
 
       - name: Upload filtered SARIF results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: golangci-lint.sarif
-
-      - name: Check for lint-ignore label
-        uses: mheap/github-action-required-labels@v5
-        id: no_lint_ignore
-        with:
-          exit_type: success
-          mode: exactly
-          count: 0
-          labels: "lint-ignore"
-
-      - name: Set exit code based on lint results
-        if: always()
-        run: |
-          if [[ "${{ steps.no_lint_ignore.outputs.status }}" == "success" ]]; then
-           if [[ "${{ steps.golangci.outcome }}" == "failure" ]]; then
-              echo "::error::Lint issues found in the code. Please fix them before merging."
-              exit 1
-            fi
-          else
-            echo "::warning::Lint warnings and errors have been ignored for this pull request due to the
-            'lint-ignore' label."
-          fi
 
   pr-semver-labels:
     name: PR Semver Labels
