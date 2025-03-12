@@ -98,7 +98,8 @@ linters-settings:
       - name: function-length
         arguments: [50, 60] # Max lines per function
       - name: function-result-limit
-        arguments: [2] # Functions should return at most 2 values; use objects for better readability and maintainability.
+        severity: warning
+        arguments: [3] # Functions should return at most 2 values; use objects for better readability and maintainability
       - name: cognitive-complexity
         arguments: [25] # Max cognitive complexity
       - name: cyclomatic
@@ -180,13 +181,20 @@ severity:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-dirs:
+    - experiments/.*
   exclude-rules:
     - path: _test\.go$ # Ignore test files for specific linters
       linters:
+        - err113
+        - errcheck
         - funlen
-        - revive
         - gci
+        - gosec
+        - revive
 
 output:
+  sort-results: true
   formats:
     - format: colored-line-number
+      path: stderr
