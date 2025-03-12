@@ -9,9 +9,9 @@ import (
 	"runtime"
 
 	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
