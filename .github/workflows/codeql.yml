@@ -109,6 +109,27 @@ jobs:
             exit 1
           fi
 
+  pr-semver-labels:
+    name: PR Semver Label Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mheap/github-action-required-labels@v5
+        with:
+          mode: exactly
+          count: 1
+          labels: |
+            major
+            minor
+            patch
+            no-release
+          add_comment: true
+          message: |
+            > [!WARNING]
+            > This PR is blocked from merging because a required semver label is missing.
+            > {{ provided }}
+            > You'll need to remove it before this PR can be merged.
+
   pr-size-labeler:
     name: PR Size Labeler
     if: github.event_name == 'pull_request'
