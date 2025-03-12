@@ -520,7 +520,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
 		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
-
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
 		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
@@ -563,13 +562,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
 	}
 
+	// Include the system PATH in the test environment
+	tc.Env["PATH"] = os.Getenv("PATH")
+
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
-	// Set environment variables
-	envVars := os.Environ()
+	// Set environment variables without inheriting from the current environment.
+	// This ensures an isolated test environment, preventing unintended side effects
+	// and improving reproducibility across different systems.
+	var envVars []string
 	for key, value := range tc.Env {
-		// t.Logf("Setting env: %s=%s", key, value)
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars

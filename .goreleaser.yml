@@ -44,6 +44,7 @@ release:
   make_latest: false
   name_template: '{{.Tag}}'
   target_commitish: "{{ .Branch }}"
+  prerelease: auto 
 ## ----- DO NOT CHANGE ----- ##
 
 changelog:
