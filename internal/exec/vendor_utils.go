@@ -22,6 +22,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
+var StderrLogger = log.New(os.Stderr)
+
 // ExecuteVendorPullCommand executes `atmos vendor` commands
 func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
@@ -635,8 +638,7 @@ func generateSkipFunction(atmosConfig schema.AtmosConfiguration, tempDir string,
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded.
-		log.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
-
+		StderrLogger.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
 }
