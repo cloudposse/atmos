@@ -135,7 +135,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err) 
+			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
 		}
 
 	case pkgTypeLocal:
