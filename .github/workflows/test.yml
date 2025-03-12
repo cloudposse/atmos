@@ -496,27 +496,6 @@ jobs:
               ]
             }
 
-  lint-golangci:
-    name: "[lint] golangci"
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' # Only runs on PRs
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        id: golangci
-        with:
-          version: v1.64
-          only-new-issues: true # Shows only issues introduced in the PR
-          # see https://github.com/golangci/golangci-lint/issues/4376#issuecomment-1938874827
-          args: >
-            --out-format github-actions
-            --issues-exit-code=0
-
   release:
     needs: [test, lint, mock, k3s, localstack, docker, validate]
     if: github.event_name == 'push'

@@ -6,6 +6,7 @@ on:
   pull_request:
     # The branches below must be a subset of the branches above
     branches: ["main"]
+    types: [opened, labeled, unlabeled, synchronize]
   schedule:
     # runs on 19:17 every Tuesday
     - cron: "27 19 * * 2"
@@ -62,9 +63,9 @@ jobs:
           category: "/language:${{matrix.language}}"
 
   lint-golangci:
-    name: "[lint] golangci"
+    name: "Lint (golangci)"
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' # Only runs on PRs
+    if: github.event_name == 'pull_request'
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
@@ -74,18 +75,45 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         id: golangci
+        continue-on-error: true
         with:
           version: v1.64
           only-new-issues: true # Shows only issues introduced in the PR
           # see https://github.com/golangci/golangci-lint/issues/4376#issuecomment-1938874827
           args: >
             --out-format sarif:golangci-lint.sarif
-            --issues-exit-code=0
+            --issues-exit-code=1
 
       - name: Upload filtered SARIF results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: golangci-lint.sarif
+
+      - name: Ensure PR has required labels
+        uses: mheap/github-action-required-labels@v5
+        id: lint_ignore
+        with:
+          exit_type: success
+          mode: exactly
+          count: 1
+          labels: "lint-ignore"
+          add_comment: true
+          message: |
+            > [!WARNING]
+            >
+            > Lint warnings and errors are ignored on this pull request because the `{{ provided }}` label.
+            >
+
+      - name: Set exit code based on label and lint results
+        if: always()
+        run: |
+          if [[ "${{ steps.lint_ignore.outputs.status }}" == "success" ]]; then
+            echo "::notice::Lint warnings and errors have been ignored for this pull request because the `lint-ignore` label is present."
+            exit 0
+          elif [[ "${{ steps.golangci.outcome }}" == "failure" ]]; then
+            echo "::error::Lint issues found in the code. Please fix them before merging."
+            exit 1
+          fi
 
   pr-size-labeler:
     name: PR Size Labeler
