@@ -483,7 +483,7 @@ func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
-		log.Debug(cmdLineArg, "StacksDir", configAndStacksInfo.StacksDir)
+		log.Debug(cmdLineArg, "stacks.base_path", configAndStacksInfo.StacksDir)
 	}
 	return nil
 }
