@@ -113,7 +113,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 			return err
 		}
 		manifestSchema.Manifest = f
-		log.Debug("Atmos JSON Schema is not configured. Using the default embedded schema")
+		log.Debug("Atmos JSON Schema is not configured. Using the default embedded schema.")
 	case u.FileExists(manifestSchema.Manifest):
 		atmosManifestJsonSchemaFilePath = manifestSchema.Manifest
 	case u.FileExists(atmosManifestJsonSchemaFileAbsPath):
