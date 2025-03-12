@@ -198,7 +198,6 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 
 // mergeConfig merge config from a specified path directory and process imports.return error if config file not exist .
 func mergeConfig(v *viper.Viper, path string, processImports bool) error {
-
 	v.AddConfigPath(path)
 	v.SetConfigName(CliConfigFileName)
 	err := v.MergeInConfig()
