@@ -549,7 +549,7 @@ func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInf
 		}
 		// Only set the log level if validation passes
 		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
-		log.Debug(cmdLineArg, "LogsLevel", configAndStacksInfo.LogsLevel)
+		log.Debug(cmdLineArg, LogsLevelFlag, configAndStacksInfo.LogsLevel)
 	}
 	if len(configAndStacksInfo.LogsFile) > 0 {
 		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
