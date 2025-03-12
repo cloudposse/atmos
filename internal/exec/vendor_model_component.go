@@ -135,7 +135,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
 		if err = GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s: %w", p.name, err) //nolint:err113
+			return fmt.Errorf("failed to download package %s: %w", p.name, err)
 		}
 
 	case pkgTypeOci:
