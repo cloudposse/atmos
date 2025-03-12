@@ -39,14 +39,12 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
-	github.com/lrstanley/bubblezone v0.0.0-20250222012949-f7fb4dcbadeb
 	github.com/lrstanley/bubblezone v0.0.0-20250301021021-ab7b445e9861
 	github.com/mikefarah/yq/v4 v4.45.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/muesli/termenv v0.16.0
-	github.com/open-policy-agent/opa v1.1.0
 	github.com/open-policy-agent/opa v1.2.0
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
