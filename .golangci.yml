@@ -180,14 +180,20 @@ severity:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-dirs:
+    - experiments/.*
   exclude-rules:
     - path: _test\.go$ # Ignore test files for specific linters
       linters:
-        - funlen
-        - revive
-        - gci
+        - err113
         - errcheck
+        - funlen
+        - gci
+        - gosec
+        - revive
 
 output:
+  sort-results: true
   formats:
     - format: colored-line-number
+      path: stderr
