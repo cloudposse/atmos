@@ -375,7 +375,7 @@ func TestPlanDiffCommandFlags(t *testing.T) {
 		},
 	}
 
-	err := TerraformPlanDiff(&atmosConfig,&info)
+	err := TerraformPlanDiff(&atmosConfig, &info)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "original plan file (--orig) is required")
 
@@ -424,7 +424,7 @@ func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 		SkipInit: true, // Skip init for test
 	}
 
-	err = TerraformPlanDiff(&atmosConfig,&info)
+	err = TerraformPlanDiff(&atmosConfig, &info)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not exist")
 	// The error should mention the path relative to the component directory
