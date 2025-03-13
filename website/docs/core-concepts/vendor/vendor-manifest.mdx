@@ -500,14 +500,37 @@ atmos vendor pull -c vpc
 
 ## Vendoring with Globs
 
-When defining vendoring rules in Atmos, **glob patterns** determine which files and directories are included or excluded. Understanding how globs behave—especially when using greedy (`**`) versus non-greedy (`*`) patterns—is crucial for precise vendoring.
+In Atmos, **glob patterns** define which files and directories are included or excluded during vendoring. These patterns go beyond simple wildcard characters like `*`—they follow specific rules that dictate how paths are matched. Understanding the difference between **greedy** (`**`) and **non-greedy** (`*`) patterns, along with other advanced glob syntax, ensures precise control over vendoring behavior.  
 
-### Understanding Greedy and Non-Greedy Globs
+### Understanding Wildcards, Ranges, and Recursion
 
-Globs use special wildcard characters:
+Glob patterns in Atmos provide flexible and powerful matching, that's simpler to understand than regular expressions:
 
-- `*` (single asterisk) matches any sequence of characters **within a single path segment**.
-- `**` (double asterisk) matches across multiple path segments **recursively**.
+<dl>
+  <dt>`*` (single asterisk)</dt>
+  <dd>Matches any sequence of characters <strong>within a single path segment</strong>.</dd>
+  <dd>Example: `vendor/*.yaml` matches `vendor/config.yaml` but <strong>not</strong> `vendor/subdir/config.yaml`.</dd>
+
+  <dt>`**` (double asterisk, also known as a "greedy glob")</dt>
+  <dd>Matches across <strong>multiple path segments recursively</strong>.</dd>
+  <dd>Example: `vendor/**/*.yaml` matches `vendor/config.yaml`, `vendor/subdir/config.yaml`, and `vendor/deep/nested/config.yaml`.</dd>
+
+  <dt>`?` (question mark)</dt>
+  <dd>Matches <strong>exactly one character</strong> in a path segment.</dd>
+  <dd>Example: `file?.txt` matches `file1.txt` and `fileA.txt` but <strong>not</strong> `file10.txt`.</dd>
+
+  <dt>`[abc]` (character class)</dt>
+  <dd>Matches <strong>any single character</strong> inside the brackets.</dd>
+  <dd>Example: `file[123].txt` matches `file1.txt`, `file2.txt`, and `file3.txt`, but <strong>not</strong> `file4.txt` or `file12.txt`.</dd>
+
+  <dt>`[a-z]` (character range)</dt>
+  <dd>Matches <strong>any single character</strong> within the specified range.</dd>
+  <dd>Example: `file[a-c].txt` matches `filea.txt`, `fileb.txt`, and `filec.txt`.</dd>
+
+  <dt>`{a,b,c}` (brace expansion)</dt>
+  <dd>Matches <strong>any of the comma-separated patterns</strong>.</dd>
+  <dd>Example: `*.{jpg,png,gif}` matches `image.jpg`, `image.png`, and `image.gif`.</dd>
+</dl>
 
 This distinction is important when excluding specific directories or files while vendoring.
 
@@ -522,12 +545,12 @@ excluded_paths:
   - "**/demo-library/**/stargazers/**"
 ```
 
-How It Works:
-- The included_paths rule `**/demo-library/**` ensures all files inside `demo-library` (at any depth) are vendored.
-- The excluded_paths rule `**/demo-library/**/stargazers/**` prevents any files inside `stargazers` subdirectories from being vendored.
+How it works:
+- The `included_paths` rule `**/demo-library/**` ensures all files inside `demo-library` (at any depth) are vendored.
+- The `excluded_paths` rule `**/demo-library/**/stargazers/**` prevents any files inside `stargazers` subdirectories from being vendored.
 
 This means:
-- All files within demo-library except those inside any `stargazers` subdirectory are vendored.
+- All files within `demo-library` except those inside any `stargazers` subdirectory are vendored.
 - Any other files outside `stargazers` are unaffected by this exclusion.
 
 #### Example: A Non-Recursive Pattern That Doesn't Work
@@ -540,7 +563,7 @@ excluded_paths:
 ```
 
 In this case:
-- `**/demo-library/*` only matches immediate children of demo-library, not nested files or subdirectories.
+- `**/demo-library/*` only matches immediate children of `demo-library`, not nested files or subdirectories.
 - This means `stargazers/` itself could be matched, but its contents might not be explicitly excluded.
 - To correctly capture all subdirectories and files while still excluding stargazers, use `**/demo-library/**/*`.
 
