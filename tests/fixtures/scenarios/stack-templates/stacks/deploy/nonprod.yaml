@@ -13,7 +13,6 @@ terraform:
       dynamodb_table: "{{ .vars.stage }}-tfstate-lock"
       acl: "bucket-owner-full-control"
       region: "us-east-2"
-      role_arn: null
 
 components:
   terraform:
