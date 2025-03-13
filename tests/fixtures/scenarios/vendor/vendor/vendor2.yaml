@@ -1,0 +1,15 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config-2
+  description: Atmos vendoring manifest
+spec:
+  imports: []
+  sources:
+    - component: "myapp1"
+      source: "oci://ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/myapp:{{.Version}}"
+      version: "v0"
+      tags:
+        - oci
+      targets:
+        - "components/terraform/myapp1"
