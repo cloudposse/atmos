@@ -8,7 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/mitchellh/go-homedir"
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
