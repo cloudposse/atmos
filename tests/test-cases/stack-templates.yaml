@@ -1,0 +1,48 @@
+tests:
+  - name: "atmos stack manifest templates test 1"
+    enabled: true
+    tty: false
+    description: "Ensure the Go templates are evaluated in all Atmos sections."
+    workdir: "fixtures/scenarios/stack-templates/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "describe"
+      - "component"
+      - "component-1"
+      - "-s"
+      - "nonprod"
+    expect:
+      exit_code: 0
+      stdout:
+        - "bucket: nonprod-tfstate"
+        - "dynamodb_table: nonprod-tfstate-lock"
+        - "foo: component-1-a"
+        - "bar: component-1-b"
+        - "baz: component-1-c"
+      stderr:
+        - "^$"
+
+  - name: "atmos stack manifest templates test 2"
+    enabled: true
+    tty: false
+    description: "Ensure the Go templates are evaluated when executing 'atmos terraform generate backend."
+    workdir: "fixtures/scenarios/stack-templates/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "backend"
+      - "component-1"
+      - "-s"
+      - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+    expect:
+      exit_code: 0
+      stdout:
+        - "\"bucket\": \"nonprod-tfstate\""
+        - "\"dynamodb_table\": \"nonprod-tfstate-lock\""
+        - "components/terraform/mock/backend.tf.json"
+      stderr:
+        - "^$"

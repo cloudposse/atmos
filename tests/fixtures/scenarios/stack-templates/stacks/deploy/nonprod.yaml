@@ -21,13 +21,13 @@ components:
       metadata:
         component: mock
       backend:
-       s3:
-        workspace_key_prefix: "{{ .metadata.component }}"
+        s3:
+          workspace_key_prefix: "{{ .metadata.component }}"
       settings:
         config:
-          a: 1
-          b: 2
-          c: 3
+          a: component-1-a
+          b: component-1-b
+          c: component-1-c
       vars:
         foo: "{{ .settings.config.a }}"
         bar: "{{ .settings.config.b }}"
