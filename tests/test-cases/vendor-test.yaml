@@ -1,5 +1,5 @@
 tests:
-  - name: atmos vendor pull
+  - name: atmos vendor pull without configuration
     enabled: true
     description: ""
     workdir: "../"
@@ -26,15 +26,9 @@ tests:
         - "./components/terraform/github/stargazers/main/providers.tf"
         - "./components/terraform/github/stargazers/main/variables.tf"
         - "./components/terraform/github/stargazers/main/versions.tf"
-        # TODO: Fix OCI test repository then re-enable these my-vpc1 file checks
-        # - "./components/terraform/infra/my-vpc1/main.tf"
-        # - "./components/terraform/infra/my-vpc1/outputs.tf"
-        # - "./components/terraform/infra/my-vpc1/providers.tf"
-        # - "./components/terraform/infra/my-vpc1/variables.tf"
-        # - "./components/terraform/infra/my-vpc1/versions.tf"
         - "./components/terraform/test-components/main/main.tf"
         - "./components/terraform/test-components/main/outputs.tf"
-        - "./components/terraform/test-components/main/providers.tf"
+        - "./components/terraform/test-components/main/README.md"
         - "./components/terraform/test-components/main/variables.tf"
         - "./components/terraform/test-components/main/versions.tf"
         - "./components/terraform/weather/main/main.tf"
@@ -42,8 +36,35 @@ tests:
         - "./components/terraform/weather/main/providers.tf"
         - "./components/terraform/weather/main/variables.tf"
         - "./components/terraform/weather/main/versions.tf"
-        - "./components/terraform/vpc-src/main.tf"
-        - "./components/terraform/vpc-src/outputs.tf"
-        - "./components/terraform/vpc-src/variables.tf"
-        - "./components/terraform/vpc-src/versions.tf"
+        - "./components/terraform/myapp2/outputs.tf"
+        - "./components/terraform/myapp2/main.tf"
+        - "./components/terraform/myapp2/variables.tf"
+        - "./components/terraform/myapp2/versions.tf"
+        - "./components/terraform/myapp2/README.md"
+        # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/myapp:v0
+        - "./components/terraform/myapp1/outputs.tf"
+        - "./components/terraform/myapp1/main.tf"
+        - "./components/terraform/myapp1/variables.tf"
+        - "./components/terraform/myapp1/versions.tf"
+        - "./components/terraform/myapp1/README.md"
+      exit_code: 0
+
+  - name: atmos_vendor_pull_oci
+    enabled: true
+    description: "Ensure atmos vendor pull command executes without errors and files are present."
+    workdir: "fixtures/scenarios/vendor"
+    clean: true
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--tags=oci"
+    expect:
+      file_exists:
+        # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/myapp:v0
+        - "./components/terraform/myapp1/outputs.tf"
+        - "./components/terraform/myapp1/main.tf"
+        - "./components/terraform/myapp1/variables.tf"
+        - "./components/terraform/myapp1/versions.tf"
+        - "./components/terraform/myapp1/README.md"
       exit_code: 0

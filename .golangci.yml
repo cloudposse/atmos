@@ -107,7 +107,7 @@ linters-settings:
       - name: add-constant
         arguments:
           - maxLitCount: "3"
-            allowStrs: '""'
+            allowStrs: '"","image","error","path","%w","%s"'
             allowInts: "0,1,2,3,4"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
       - name: argument-limit
