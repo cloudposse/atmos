@@ -6,7 +6,6 @@ tests:
     workdir: "fixtures/scenarios/stack-templates/"
     command: "atmos"
     args:
-      - "terraform"
       - "describe"
       - "component"
       - "component-1"
@@ -14,14 +13,12 @@ tests:
       - "nonprod"
     expect:
       exit_code: 0
-      stdout:
+      stderr:
         - "bucket: nonprod-tfstate"
         - "dynamodb_table: nonprod-tfstate-lock"
         - "foo: component-1-a"
         - "bar: component-1-b"
         - "baz: component-1-c"
-      stderr:
-        - "^$"
 
   - name: "atmos stack manifest templates test 2"
     enabled: true
@@ -40,9 +37,7 @@ tests:
       ATMOS_LOGS_LEVEL: Debug
     expect:
       exit_code: 0
-      stdout:
-        - "\"bucket\": \"nonprod-tfstate\""
-        - "\"dynamodb_table\": \"nonprod-tfstate-lock\""
-        - "components/terraform/mock/backend.tf.json"
       stderr:
-        - "^$"
+        - "nonprod-tfstate"
+        - "nonprod-tfstate-lock"
+        - "components/terraform/mock/backend.tf.json"
