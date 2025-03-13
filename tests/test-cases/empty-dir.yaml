@@ -60,3 +60,21 @@ tests:
       stderr:
         - "^$"
       exit_code: 0
+
+  - name: atmos doesnt warns if in git repo
+    enabled: true
+    snapshot: true
+    description: "Test that atmos doesnt warns if run inside of a git repo"
+    workdir: "fixtures/scenarios/empty-dir"
+    command: "atmos"
+    args:
+      - version
+    env:
+      ATMOS_LOGS_LEVEL: Warning
+    expect:
+      diff: []
+      stdout:
+        - "^(?!.*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!).*$"
+      stderr:
+        - "^$"
+      exit_code: 0
