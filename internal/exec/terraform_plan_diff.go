@@ -562,7 +562,18 @@ func printAttributeDiff(diff *strings.Builder, attrK string, origAttrV, newAttrV
 	} else if newSensitive {
 		diff.WriteString(fmt.Sprintf("  ~ %s: %v => (sensitive value)\n", attrK, formatValue(origAttrV)))
 	} else {
-		diff.WriteString(fmt.Sprintf("  ~ %s: %v => %v\n", attrK, formatValue(origAttrV), formatValue(newAttrV)))
+		// Check if both values are maps and use the specialized diff function
+		origMap, origIsMap := origAttrV.(map[string]interface{})
+		newMap, newIsMap := newAttrV.(map[string]interface{})
+
+		if origIsMap && newIsMap {
+			mapDiff := formatMapDiff(origMap, newMap)
+			if mapDiff != "(no changes)" {
+				diff.WriteString(fmt.Sprintf("  ~ %s: %s\n", attrK, mapDiff))
+			}
+		} else {
+			diff.WriteString(fmt.Sprintf("  ~ %s: %v => %v\n", attrK, formatValue(origAttrV), formatValue(newAttrV)))
+		}
 	}
 }
 
@@ -696,6 +707,102 @@ func formatMapForDisplay(m map[string]interface{}) string {
 		}
 
 		sb.WriteString(fmt.Sprintf("    %s: %s\n", k, valueStr))
+	}
+
+	sb.WriteString("}")
+	return sb.String()
+}
+
+// formatMapDiff formats the difference between two maps showing only changed keys
+func formatMapDiff(origMap, newMap map[string]interface{}) string {
+	var sb strings.Builder
+
+	// Get all keys from both maps
+	allKeys := make(map[string]bool)
+	for k := range origMap {
+		allKeys[k] = true
+	}
+	for k := range newMap {
+		allKeys[k] = true
+	}
+
+	// Sort keys for consistent output
+	keys := make([]string, 0, len(allKeys))
+	for k := range allKeys {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// If no differences, return early
+	if reflect.DeepEqual(origMap, newMap) {
+		return "(no changes)"
+	}
+
+	// For empty or very small diffs, use a compact representation
+	if len(keys) <= 3 {
+		changes := make([]string, 0, len(keys))
+		for _, k := range keys {
+			origVal, origExists := origMap[k]
+			newVal, newExists := newMap[k]
+
+			if !origExists {
+				changes = append(changes, fmt.Sprintf("+%s: %v", k, formatValue(newVal)))
+			} else if !newExists {
+				changes = append(changes, fmt.Sprintf("-%s: %v", k, formatValue(origVal)))
+			} else if !reflect.DeepEqual(origVal, newVal) {
+				changes = append(changes, fmt.Sprintf("~%s: %v => %v", k, formatValue(origVal), formatValue(newVal)))
+			}
+		}
+
+		if len(changes) == 0 {
+			return "(no changes)"
+		}
+
+		return "{" + strings.Join(changes, ", ") + "}"
+	}
+
+	// For larger diffs, show a structured representation with indentation
+	sb.WriteString("{\n")
+	changesFound := false
+
+	for _, k := range keys {
+		origVal, origExists := origMap[k]
+		newVal, newExists := newMap[k]
+
+		// Skip keys that haven't changed
+		if origExists && newExists && reflect.DeepEqual(origVal, newVal) {
+			continue
+		}
+
+		changesFound = true
+
+		// Format based on what changed
+		if !origExists {
+			sb.WriteString(fmt.Sprintf("    + %s: %s\n", k, formatValue(newVal)))
+		} else if !newExists {
+			sb.WriteString(fmt.Sprintf("    - %s: %s\n", k, formatValue(origVal)))
+		} else {
+			// Value changed
+			if origMap, ok := origVal.(map[string]interface{}); ok {
+				if newMap, ok := newVal.(map[string]interface{}); ok {
+					// Recursively diff nested maps
+					nestedDiff := formatMapDiff(origMap, newMap)
+					if nestedDiff != "(no changes)" {
+						// Add indentation to nested diff
+						nestedDiff = strings.ReplaceAll(nestedDiff, "\n", "\n    ")
+						sb.WriteString(fmt.Sprintf("    ~ %s: %s\n", k, nestedDiff))
+					}
+					continue
+				}
+			}
+
+			// Simple value change
+			sb.WriteString(fmt.Sprintf("    ~ %s: %v => %v\n", k, formatValue(origVal), formatValue(newVal)))
+		}
+	}
+
+	if !changesFound {
+		return "(no changes)"
 	}
 
 	sb.WriteString("}")
