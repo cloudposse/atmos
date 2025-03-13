@@ -226,7 +226,7 @@ func getTerraformPlanJSON(atmosConfig schema.AtmosConfiguration, info schema.Con
 			return "", fmt.Errorf("error reading plan file: %w", err)
 		}
 
-		err = os.WriteFile(planFileInComponentDir, planContent, 0644)
+		err = os.WriteFile(planFileInComponentDir, planContent, 0o644)
 		if err != nil {
 			return "", fmt.Errorf("error copying plan file to component directory: %w", err)
 		}

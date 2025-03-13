@@ -409,7 +409,7 @@ func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 
 	// Create a component directory
 	componentDir := filepath.Join(tmpDir, "test-component")
-	err = os.MkdirAll(componentDir, 0755)
+	err = os.MkdirAll(componentDir, 0o755)
 	require.NoError(t, err)
 
 	// Test with non-existent original plan file using a relative path
@@ -464,7 +464,7 @@ func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 
 	// Create a component directory
 	componentDir := filepath.Join(tmpDir, "test-component")
-	err = os.MkdirAll(componentDir, 0755)
+	err = os.MkdirAll(componentDir, 0o755)
 	require.NoError(t, err)
 
 	// Create test plan files
@@ -472,9 +472,9 @@ func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 	newPlanFile := filepath.Join(tmpDir, "new.plan")
 
 	// Create empty files (will cause JSON parsing errors)
-	err = os.WriteFile(origPlanFile, []byte{}, 0644)
+	err = os.WriteFile(origPlanFile, []byte{}, 0o644)
 	require.NoError(t, err)
-	err = os.WriteFile(newPlanFile, []byte{}, 0644)
+	err = os.WriteFile(newPlanFile, []byte{}, 0o644)
 	require.NoError(t, err)
 
 	// Test with empty plan files (should fail when trying to parse the JSON)
