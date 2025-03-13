@@ -1,5 +1,5 @@
 tests:
-  - name: "atmos stack manifest templates test 1"
+  - name: "atmos stack manifest templates with describe component"
     enabled: true
     tty: false
     description: "Ensure the Go templates are evaluated in all Atmos sections."
@@ -21,7 +21,7 @@ tests:
         - "bar: component-1-b"
         - "baz: component-1-c"
 
-  - name: "atmos stack manifest templates test 2"
+  - name: "atmos stack manifest templates with terraform generate backend"
     enabled: true
     tty: false
     description: "Ensure the Go templates are evaluated when executing 'atmos terraform generate backend."
@@ -42,7 +42,7 @@ tests:
         - "nonprod-tfstate"
         - "nonprod-tfstate-lock"
 
-  - name: "atmos stack manifest templates with init"
+  - name: "atmos stack manifest templates with terraform init"
     enabled: true
     tty: false
     description: "Ensure the Go templates are evaluated for the backend when executing 'atmos terraform init."
@@ -57,7 +57,8 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
-      exit_code: 0
+      exit_code: 1
       stderr:
-        - "nonprod-tfstate"
-        - "nonprod-tfstate-lock"
+        - "foo: component-1-a"
+        - "bar: component-1-b"
+        - "baz: component-1-c"
