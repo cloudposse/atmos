@@ -1,11 +1,10 @@
 package exec
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -117,8 +116,8 @@ func TerraformPlanDiff(atmosConfig schema.AtmosConfiguration, info schema.Config
 
 	// Print the diff
 	if hasDiff {
-		fmt.Fprintln(os.Stdout, "Diff Output")
-		fmt.Fprintln(os.Stdout, "=========")
+		fmt.Fprintln(os.Stdout, "\nDiff Output")
+		fmt.Fprintln(os.Stdout, "===========")
 		fmt.Fprintln(os.Stdout, "")
 		fmt.Fprintln(os.Stdout, diff)
 
@@ -131,37 +130,6 @@ func TerraformPlanDiff(atmosConfig schema.AtmosConfiguration, info schema.Config
 	}
 
 	fmt.Fprintln(os.Stdout, "The planfiles are identical")
-	return nil
-}
-
-// runTerraformInit runs terraform init in the component directory
-func runTerraformInit(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath string) error {
-	// Clean terraform workspace to prevent workspace selection prompt
-	cleanTerraformWorkspace(atmosConfig, componentPath)
-
-	// Generate backend config if needed
-	err := generateBackendConfig(&atmosConfig, &info, componentPath)
-	if err != nil {
-		return err
-	}
-
-	// Generate provider overrides if needed
-	err = generateProviderOverrides(&atmosConfig, &info, componentPath)
-	if err != nil {
-		return err
-	}
-
-	// Run terraform init
-	initArgs := []string{"init"}
-	if atmosConfig.Components.Terraform.InitRunReconfigure {
-		initArgs = append(initArgs, "-reconfigure")
-	}
-
-	err = ExecuteShellCommand(atmosConfig, "terraform", initArgs, componentPath, nil, false, info.RedirectStdErr)
-	if err != nil {
-		return fmt.Errorf("error running terraform init: %w", err)
-	}
-
 	return nil
 }
 
@@ -235,19 +203,53 @@ func getTerraformPlanJSON(atmosConfig schema.AtmosConfiguration, info schema.Con
 		defer os.Remove(planFileInComponentDir)
 	}
 
-	// Run terraform show -json in the component directory
-	var stdout bytes.Buffer
-	cmd := exec.Command("terraform", "show", "-json", planFileInComponentDir)
-	cmd.Dir = componentPath
-	cmd.Stdout = &stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
+	// Create a pipe to capture stdout
+	r, w, err := os.Pipe()
 	if err != nil {
-		return "", fmt.Errorf("error running terraform show: %w", err)
+		return "", fmt.Errorf("error creating pipe: %w", err)
 	}
 
-	return stdout.String(), nil
+	// Save original stdout and replace it with our pipe
+	origStdout := os.Stdout
+	os.Stdout = w
+
+	// Create a new info object for the show command
+	showInfo := info
+	showInfo.SubCommand = "show"
+	showInfo.AdditionalArgsAndFlags = []string{"-json", planFileInComponentDir}
+
+	// Execute terraform show command
+	execErr := ExecuteTerraform(showInfo)
+
+	// Close write end of pipe to flush all output
+	w.Close()
+
+	// Restore original stdout
+	os.Stdout = origStdout
+
+	// Read the captured output
+	output, readErr := io.ReadAll(r)
+	r.Close()
+
+	// Check for errors
+	if execErr != nil {
+		return "", fmt.Errorf("error running terraform show: %w", execErr)
+	}
+	if readErr != nil {
+		return "", fmt.Errorf("error reading output: %w", readErr)
+	}
+
+	// Find the beginning of the JSON output (first '{' character)
+	fullOutput := string(output)
+	jsonStartIdx := strings.Index(fullOutput, "{")
+	if jsonStartIdx == -1 {
+		return "", fmt.Errorf("no JSON output found in terraform show output")
+	}
+
+	// Extract just the JSON part
+	jsonOutput := fullOutput[jsonStartIdx:]
+
+	return jsonOutput, nil
 }
 
 // sortMapKeys recursively sorts map keys for consistent comparison
@@ -700,12 +702,31 @@ func formatMapForDisplay(m map[string]interface{}) string {
 	return sb.String()
 }
 
-// runBasicTerraformInit runs a basic terraform init in the specified directory
-func runBasicTerraformInit(dir string) error {
-	cmd := exec.Command("terraform", "init", "-reconfigure")
-	cmd.Dir = dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+// runTerraformInit runs a basic terraform init in the specified directory
+// using terraformRun method (ExecuteTerraform)
+func runTerraformInit(atmosConfig schema.AtmosConfiguration, dir string, env []string) error {
+	// Clean terraform workspace to prevent workspace selection prompt
+	cleanTerraformWorkspace(atmosConfig, dir)
 
-	return cmd.Run()
+	// Create a ConfigAndStacksInfo struct for ExecuteTerraform
+	info := schema.ConfigAndStacksInfo{
+		Command:          "terraform",
+		SubCommand:       "init",
+		ComponentEnvList: env,
+		DryRun:           false,
+		RedirectStdErr:   "",
+	}
+
+	// Add -reconfigure flag conditionally based on config
+	if atmosConfig.Components.Terraform.InitRunReconfigure {
+		info.AdditionalArgsAndFlags = []string{"-reconfigure"}
+	}
+
+	// Run terraform init using ExecuteTerraform
+	err := ExecuteTerraform(info)
+	if err != nil {
+		return fmt.Errorf("error running terraform init: %w", err)
+	}
+
+	return nil
 }
