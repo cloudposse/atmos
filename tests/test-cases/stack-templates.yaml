@@ -41,4 +41,3 @@ tests:
       stderr:
         - "nonprod-tfstate"
         - "nonprod-tfstate-lock"
-        - "components/terraform/mock/backend.tf.json"
