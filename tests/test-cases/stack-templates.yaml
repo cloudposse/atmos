@@ -13,7 +13,8 @@ tests:
       - "nonprod"
     expect:
       exit_code: 0
-      stderr:
+      stdout:
+        - "workspace_key_prefix: mock"
         - "bucket: nonprod-tfstate"
         - "dynamodb_table: nonprod-tfstate-lock"
         - "foo: component-1-a"
