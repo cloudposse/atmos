@@ -15,11 +15,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ErrPlanHasDiff is returned when there are differences between the two plan files
+// ErrPlanHasDiff is returned when there are differences between the two plan files.
 var ErrPlanHasDiff = errors.New("plan files have differences")
 
-// TerraformPlanDiff represents the plan-diff command implementation
-func TerraformPlanDiff(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) error {
+// noChangesText is the text used to represent that no changes were found in a diff.
+const noChangesText = "(no changes)"
+
+// TerraformPlanDiff represents the plan-diff command implementation.
+func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) error {
 	// Get the original plan file path from the --orig flag
 	origPlanFile := ""
 	newPlanFile := ""
@@ -133,10 +136,15 @@ func TerraformPlanDiff(atmosConfig schema.AtmosConfiguration, info schema.Config
 	return nil
 }
 
-// generateNewPlanFile generates a new plan file by running terraform plan
-func generateNewPlanFile(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath string, origPlanFile string, tmpDir string) (string, error) {
+// generateNewPlanFile generates a new plan file by running terraform plan.
+func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath string, origPlanFile string, tmpDir string) (string, error) {
 	// Create a temporary file for the new plan
 	newPlanFile := filepath.Join(tmpDir, "new.plan")
+
+	// Run terraform init before plan
+	if err := runTerraformInit(atmosConfig, componentPath, info.ComponentEnvList); err != nil {
+		return "", err
+	}
 
 	// Create a new info object for the plan command
 	planInfo := info
@@ -178,8 +186,13 @@ func generateNewPlanFile(atmosConfig schema.AtmosConfiguration, info schema.Conf
 	return newPlanFile, nil
 }
 
-// getTerraformPlanJSON gets the JSON representation of a terraform plan
-func getTerraformPlanJSON(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath, planFile string) (string, error) {
+// getTerraformPlanJSON gets the JSON representation of a terraform plan.
+func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath, planFile string) (string, error) {
+	// Run terraform init before show
+	if err := runTerraformInit(atmosConfig, componentPath, info.ComponentEnvList); err != nil {
+		return "", err
+	}
+
 	// Copy the plan file to the component directory if it's not already there
 	planFileInComponentDir := planFile
 	planFileBaseName := filepath.Base(planFile)
@@ -291,7 +304,7 @@ func sortMapKeys(m map[string]interface{}) map[string]interface{} {
 	return result
 }
 
-// generatePlanDiff generates a diff between two terraform plans
+// generatePlanDiff generates a diff between two terraform plans.
 func generatePlanDiff(origPlan, newPlan map[string]interface{}) (string, bool) {
 	var diff strings.Builder
 	hasDiff := false
@@ -380,7 +393,7 @@ func generatePlanDiff(origPlan, newPlan map[string]interface{}) (string, bool) {
 	return diff.String(), hasDiff
 }
 
-// getVariables extracts variables from a terraform plan
+// getVariables extracts variables from a terraform plan.
 func getVariables(plan map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 
@@ -397,7 +410,7 @@ func getVariables(plan map[string]interface{}) map[string]interface{} {
 	return result
 }
 
-// getResources extracts resources from a terraform plan
+// getResources extracts resources from a terraform plan.
 func getResources(plan map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 
@@ -444,7 +457,7 @@ func getResources(plan map[string]interface{}) map[string]interface{} {
 	return result
 }
 
-// getOutputs extracts outputs from a terraform plan
+// getOutputs extracts outputs from a terraform plan.
 func getOutputs(plan map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 
@@ -469,7 +482,7 @@ func getOutputs(plan map[string]interface{}) map[string]interface{} {
 	return result
 }
 
-// compareResources compares resources between two terraform plans
+// compareResources compares resources between two terraform plans.
 func compareResources(origResources, newResources map[string]interface{}) string {
 	var diff strings.Builder
 
@@ -550,7 +563,7 @@ func compareResources(origResources, newResources map[string]interface{}) string
 	return diff.String()
 }
 
-// printAttributeDiff handles the formatting of an attribute diff
+// printAttributeDiff handles the formatting of an attribute diff.
 func printAttributeDiff(diff *strings.Builder, attrK string, origAttrV, newAttrV interface{}) {
 	origSensitive := isSensitive(origAttrV)
 	newSensitive := isSensitive(newAttrV)
@@ -568,7 +581,7 @@ func printAttributeDiff(diff *strings.Builder, attrK string, origAttrV, newAttrV
 
 		if origIsMap && newIsMap {
 			mapDiff := formatMapDiff(origMap, newMap)
-			if mapDiff != "(no changes)" {
+			if mapDiff != noChangesText {
 				diff.WriteString(fmt.Sprintf("  ~ %s: %s\n", attrK, mapDiff))
 			}
 		} else {
@@ -577,7 +590,7 @@ func printAttributeDiff(diff *strings.Builder, attrK string, origAttrV, newAttrV
 	}
 }
 
-// contains checks if a string is in a slice
+// contains checks if a string is in a slice.
 func contains(slice []string, s string) bool {
 	for _, item := range slice {
 		if item == s {
@@ -587,7 +600,7 @@ func contains(slice []string, s string) bool {
 	return false
 }
 
-// getResourceAttributes extracts attributes from a resource
+// getResourceAttributes extracts attributes from a resource.
 func getResourceAttributes(resource interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 
@@ -611,7 +624,7 @@ func getResourceAttributes(resource interface{}) map[string]interface{} {
 	return result
 }
 
-// isSensitive checks if a value is marked as sensitive
+// isSensitive checks if a value is marked as sensitive.
 func isSensitive(value interface{}) bool {
 	if valueMap, ok := value.(map[string]interface{}); ok {
 		if sensitive, ok := valueMap["sensitive"].(bool); ok && sensitive {
@@ -621,7 +634,7 @@ func isSensitive(value interface{}) bool {
 	return false
 }
 
-// formatValue formats a value for display, handling sensitive values
+// formatValue formats a value for display, handling sensitive values.
 func formatValue(value interface{}) string {
 	if isSensitive(value) {
 		return "(sensitive value)"
@@ -669,7 +682,7 @@ func formatValue(value interface{}) string {
 	return fmt.Sprintf("%v", value)
 }
 
-// formatMapForDisplay formats a map for cleaner display
+// formatMapForDisplay formats a map for cleaner display.
 func formatMapForDisplay(m map[string]interface{}) string {
 	// Get all keys and sort them for consistent output
 	keys := make([]string, 0, len(m))
@@ -713,7 +726,7 @@ func formatMapForDisplay(m map[string]interface{}) string {
 	return sb.String()
 }
 
-// formatMapDiff formats the difference between two maps showing only changed keys
+// formatMapDiff formats the difference between two maps showing only changed keys.
 func formatMapDiff(origMap, newMap map[string]interface{}) string {
 	var sb strings.Builder
 
@@ -735,7 +748,7 @@ func formatMapDiff(origMap, newMap map[string]interface{}) string {
 
 	// If no differences, return early
 	if reflect.DeepEqual(origMap, newMap) {
-		return "(no changes)"
+		return noChangesText
 	}
 
 	// For empty or very small diffs, use a compact representation
@@ -755,7 +768,7 @@ func formatMapDiff(origMap, newMap map[string]interface{}) string {
 		}
 
 		if len(changes) == 0 {
-			return "(no changes)"
+			return noChangesText
 		}
 
 		return "{" + strings.Join(changes, ", ") + "}"
@@ -777,17 +790,18 @@ func formatMapDiff(origMap, newMap map[string]interface{}) string {
 		changesFound = true
 
 		// Format based on what changed
-		if !origExists {
+		switch {
+		case !origExists:
 			sb.WriteString(fmt.Sprintf("    + %s: %s\n", k, formatValue(newVal)))
-		} else if !newExists {
+		case !newExists:
 			sb.WriteString(fmt.Sprintf("    - %s: %s\n", k, formatValue(origVal)))
-		} else {
+		default:
 			// Value changed
 			if origMap, ok := origVal.(map[string]interface{}); ok {
 				if newMap, ok := newVal.(map[string]interface{}); ok {
 					// Recursively diff nested maps
 					nestedDiff := formatMapDiff(origMap, newMap)
-					if nestedDiff != "(no changes)" {
+					if nestedDiff != noChangesText {
 						// Add indentation to nested diff
 						nestedDiff = strings.ReplaceAll(nestedDiff, "\n", "\n    ")
 						sb.WriteString(fmt.Sprintf("    ~ %s: %s\n", k, nestedDiff))
@@ -802,20 +816,20 @@ func formatMapDiff(origMap, newMap map[string]interface{}) string {
 	}
 
 	if !changesFound {
-		return "(no changes)"
+		return noChangesText
 	}
 
 	sb.WriteString("}")
 	return sb.String()
 }
 
-// runTerraformInit runs a basic terraform init in the specified directory
-// using terraformRun method (ExecuteTerraform)
-func runTerraformInit(atmosConfig schema.AtmosConfiguration, dir string, env []string) error {
+// runTerraformInit runs a basic terraform init in the specified directory using
+// terraformRun method (ExecuteTerraform).
+func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, env []string) error {
 	// Clean terraform workspace to prevent workspace selection prompt
-	cleanTerraformWorkspace(atmosConfig, dir)
+	cleanTerraformWorkspace(*atmosConfig, dir)
 
-	// Create a ConfigAndStacksInfo struct for ExecuteTerraform
+	// Create a ConfigAndStacksInfo struct for ExecuteTerraform.
 	info := schema.ConfigAndStacksInfo{
 		Command:          "terraform",
 		SubCommand:       "init",
@@ -824,12 +838,12 @@ func runTerraformInit(atmosConfig schema.AtmosConfiguration, dir string, env []s
 		RedirectStdErr:   "",
 	}
 
-	// Add -reconfigure flag conditionally based on config
+	// Add -reconfigure flag conditionally based on config.
 	if atmosConfig.Components.Terraform.InitRunReconfigure {
 		info.AdditionalArgsAndFlags = []string{"-reconfigure"}
 	}
 
-	// Run terraform init using ExecuteTerraform
+	// Run terraform init using ExecuteTerraform.
 	err := ExecuteTerraform(info)
 	if err != nil {
 		return fmt.Errorf("error running terraform init: %w", err)
