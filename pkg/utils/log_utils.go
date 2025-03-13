@@ -19,6 +19,9 @@ const (
 	LogLevelWarning = "Warning"
 )
 
+// OsExit is a variable for testing
+var OsExit = os.Exit
+
 // PrintMessage prints the message to the console
 func PrintMessage(message string) {
 	fmt.Println(message)
@@ -26,7 +29,7 @@ func PrintMessage(message string) {
 
 // PrintMessageInColor prints the message to the console using the provided color
 func PrintMessageInColor(message string, messageColor *color.Color) {
-	_, _ = messageColor.Fprint(os.Stdout, message)
+	messageColor.Println(message)
 }
 
 // Deprecated: Use `log.Error` instead. This function will be removed in a future release.
@@ -43,10 +46,10 @@ func LogErrorAndExit(err error) {
 	// Find the executed command's exit code from the error
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
-		os.Exit(exitError.ExitCode())
+		OsExit(exitError.ExitCode())
 	}
 
-	os.Exit(1)
+	OsExit(1)
 }
 
 // Deprecated: Use `log.Error` instead. This function will be removed in a future release.

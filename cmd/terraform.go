@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	l "github.com/charmbracelet/log"
@@ -52,17 +53,27 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
 	info := getConfigAndStacksInfo("terraform", cmd, args)
 	if info.NeedHelp {
 		err := actualCmd.Usage()
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
-		return
+		return nil
 	}
+
+	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
+	// So if we get here, it means there were no differences or there was an error
 	err := e.ExecuteTerraform(info)
 	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
+		if errors.Is(err, e.ErrPlanHasDiff) {
+			// Print the error message but return the error to be handled by main.go
+			u.PrintErrorMarkdown("", err, "")
+			return err
+		}
+		// For other errors, continue with existing behavior
+		u.LogErrorAndExit(err)
 	}
+	return nil
 }
