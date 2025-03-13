@@ -9,6 +9,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -67,7 +68,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// So if we get here, it means there were no differences or there was an error
 	err := e.ExecuteTerraform(info)
 	if err != nil {
-		if errors.Is(err, e.ErrPlanHasDiff) {
+		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
 			// Print the error message but return the error to be handled by main.go
 			u.PrintErrorMarkdown("", err, "")
 			return err

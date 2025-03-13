@@ -10,13 +10,11 @@ import (
 	"sort"
 	"strings"
 
+	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 )
-
-// ErrPlanHasDiff is returned when there are differences between the two plan files.
-var ErrPlanHasDiff = errors.New("plan files have differences")
 
 // noChangesText is the text used to represent that no changes were found in a diff.
 const noChangesText = "(no changes)"
@@ -125,7 +123,7 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info schema.Confi
 		fmt.Fprintln(os.Stdout, diff)
 
 		// Print the error message
-		u.PrintErrorMarkdown("", ErrPlanHasDiff, "")
+		u.PrintErrorMarkdown("", terrerrors.ErrPlanHasDiff, "")
 
 		// Exit with code 2 to indicate that the plans are different
 		u.OsExit(2)

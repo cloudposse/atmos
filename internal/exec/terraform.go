@@ -284,7 +284,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			atmosConfig,
 			info.Command,
 			initCommandWithArguments,
-			componentPath,
+			workingDir,
 			info.ComponentEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
@@ -392,7 +392,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Handle the plan-diff command
 	if info.SubCommand == "plan-diff" {
-		return TerraformPlanDiff(atmosConfig, info)
+		return TerraformPlanDiff(&atmosConfig, info)
 	}
 
 	// Run `terraform workspace` before executing other terraform commands
@@ -412,7 +412,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				atmosConfig,
 				info.Command,
 				[]string{"workspace", "select", info.TerraformWorkspace},
-				componentPath,
+				workingDir,
 				info.ComponentEnvList,
 				info.DryRun,
 				workspaceSelectRedirectStdErr,
@@ -428,7 +428,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					atmosConfig,
 					info.Command,
 					[]string{"workspace", "new", info.TerraformWorkspace},
-					componentPath,
+					workingDir,
 					info.ComponentEnvList,
 					info.DryRun,
 					info.RedirectStdErr,
@@ -472,7 +472,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			varFile,
 			workingDir,
 			info.TerraformWorkspace,
-			componentPath,
+			workingDir,
 		)
 		if err != nil {
 			return err
@@ -486,7 +486,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			atmosConfig,
 			info.Command,
 			allArgsAndFlags,
-			componentPath,
+			workingDir,
 			info.ComponentEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
