@@ -451,7 +451,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
-		log.Debug(cmdLineArg, "BasePath", configAndStacksInfo.BasePath)
+		log.Debug(cmdLineArg, BasePathFlag, configAndStacksInfo.BasePath)
 	}
 	return nil
 }
@@ -459,11 +459,11 @@ func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *s
 func setTerraformConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.TerraformCommand) > 0 {
 		atmosConfig.Components.Terraform.Command = configAndStacksInfo.TerraformCommand
-		log.Debug(cmdLineArg, "terraform.command", configAndStacksInfo.TerraformCommand)
+		log.Debug(cmdLineArg, TerraformCommandFlag, configAndStacksInfo.TerraformCommand)
 	}
 	if len(configAndStacksInfo.TerraformDir) > 0 {
 		atmosConfig.Components.Terraform.BasePath = configAndStacksInfo.TerraformDir
-		log.Debug(cmdLineArg, "terraform.base_path", configAndStacksInfo.TerraformDir)
+		log.Debug(cmdLineArg, TerraformDirFlag, configAndStacksInfo.TerraformDir)
 	}
 	return nil
 }
@@ -471,11 +471,11 @@ func setTerraformConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksI
 func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.HelmfileCommand) > 0 {
 		atmosConfig.Components.Helmfile.Command = configAndStacksInfo.HelmfileCommand
-		log.Debug(cmdLineArg, "helmfile.command", configAndStacksInfo.HelmfileCommand)
+		log.Debug(cmdLineArg, HelmfileCommandFlag, configAndStacksInfo.HelmfileCommand)
 	}
 	if len(configAndStacksInfo.HelmfileDir) > 0 {
 		atmosConfig.Components.Helmfile.BasePath = configAndStacksInfo.HelmfileDir
-		log.Debug(cmdLineArg, "helmfile.base_path", configAndStacksInfo.HelmfileDir)
+		log.Debug(cmdLineArg, HelmfileDirFlag, configAndStacksInfo.HelmfileDir)
 	}
 	return nil
 }
@@ -483,7 +483,7 @@ func setHelmfileConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 func setStacksConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.StacksDir) > 0 {
 		atmosConfig.Stacks.BasePath = configAndStacksInfo.StacksDir
-		log.Debug(cmdLineArg, "stacks.base_path", configAndStacksInfo.StacksDir)
+		log.Debug(cmdLineArg, StackDirFlag, configAndStacksInfo.StacksDir)
 	}
 	return nil
 }
@@ -495,7 +495,7 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 			return err
 		}
 		atmosConfig.Components.Terraform.DeployRunInit = deployRunInitBool
-		log.Debug(cmdLineArg, "DeployRunInit", configAndStacksInfo.DeployRunInit)
+		log.Debug(cmdLineArg, DeployRunInitFlag, configAndStacksInfo.DeployRunInit)
 	}
 	if len(configAndStacksInfo.AutoGenerateBackendFile) > 0 {
 		autoGenerateBackendFileBool, err := strconv.ParseBool(configAndStacksInfo.AutoGenerateBackendFile)
@@ -507,7 +507,7 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 	}
 	if len(configAndStacksInfo.WorkflowsDir) > 0 {
 		atmosConfig.Workflows.BasePath = configAndStacksInfo.WorkflowsDir
-		log.Debug(cmdLineArg, "WorkflowsBasePath", configAndStacksInfo.WorkflowsDir)
+		log.Debug(cmdLineArg, WorkflowDirFlag, configAndStacksInfo.WorkflowsDir)
 	}
 	if len(configAndStacksInfo.InitRunReconfigure) > 0 {
 		initRunReconfigureBool, err := strconv.ParseBool(configAndStacksInfo.InitRunReconfigure)
@@ -515,7 +515,7 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 			return err
 		}
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
-		log.Debug(cmdLineArg, "InitRunReconfigure", configAndStacksInfo.InitRunReconfigure)
+		log.Debug(cmdLineArg, InitRunReconfigure, configAndStacksInfo.InitRunReconfigure)
 	}
 	return nil
 }
@@ -523,21 +523,21 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.JsonSchemaDir) > 0 {
 		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{BasePath: configAndStacksInfo.JsonSchemaDir}
-		log.Debug(cmdLineArg, "JsonSchemaDir", configAndStacksInfo.JsonSchemaDir)
+		log.Debug(cmdLineArg, JsonSchemaDirFlag, configAndStacksInfo.JsonSchemaDir)
 	}
 	if len(configAndStacksInfo.OpaDir) > 0 {
 		atmosConfig.Schemas["opa"] = schema.ResourcePath{BasePath: configAndStacksInfo.OpaDir}
-		log.Debug(cmdLineArg, "OpaDir", configAndStacksInfo.OpaDir)
+		log.Debug(cmdLineArg, OpaDirFlag, configAndStacksInfo.OpaDir)
 	}
 	if len(configAndStacksInfo.CueDir) > 0 {
 		atmosConfig.Schemas["cue"] = schema.ResourcePath{BasePath: configAndStacksInfo.CueDir}
-		log.Debug(cmdLineArg, "CueDir", configAndStacksInfo.CueDir)
+		log.Debug(cmdLineArg, CueDirFlag, configAndStacksInfo.CueDir)
 	}
 	if len(configAndStacksInfo.AtmosManifestJsonSchema) > 0 {
 		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
 			Manifest: configAndStacksInfo.AtmosManifestJsonSchema,
 		}
-		log.Debug(cmdLineArg, "atmosManifest", configAndStacksInfo.AtmosManifestJsonSchema)
+		log.Debug(cmdLineArg, AtmosManifestJsonSchemaFlag, configAndStacksInfo.AtmosManifestJsonSchema)
 	}
 	return nil
 }
@@ -561,7 +561,7 @@ func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInf
 func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
-		log.Debug(cmdLineArg, "settings.list_merge_strategy", configAndStacksInfo.SettingsListMergeStrategy)
+		log.Debug(cmdLineArg, SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy)
 	}
 
 	return nil
