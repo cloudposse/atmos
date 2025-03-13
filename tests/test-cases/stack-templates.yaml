@@ -41,3 +41,23 @@ tests:
       stderr:
         - "nonprod-tfstate"
         - "nonprod-tfstate-lock"
+
+  - name: "atmos stack manifest templates with init"
+    enabled: true
+    tty: false
+    description: "Ensure the Go templates are evaluated for the backend when executing 'atmos terraform init."
+    workdir: "fixtures/scenarios/stack-templates/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "init"
+      - "component-1"
+      - "-s"
+      - "nonprod"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
+    expect:
+      exit_code: 0
+      stderr:
+        - "nonprod-tfstate"
+        - "nonprod-tfstate-lock"
