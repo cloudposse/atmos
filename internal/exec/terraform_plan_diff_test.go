@@ -375,7 +375,7 @@ func TestPlanDiffCommandFlags(t *testing.T) {
 		},
 	}
 
-	err := TerraformPlanDiff(&atmosConfig, info)
+	err := TerraformPlanDiff(&atmosConfig,&info)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "original plan file (--orig) is required")
 
@@ -391,7 +391,7 @@ func TestPlanDiffCommandFlags(t *testing.T) {
 	// We can't fully test this case without mocking terraform commands,
 	// but we can at least check that it attempts to generate a new plan
 	// The test will fail with a file not found error, which is expected
-	err = TerraformPlanDiff(&atmosConfig, info)
+	err = TerraformPlanDiff(&atmosConfig, &info)
 	assert.Error(t, err)
 	// The error will be related to not finding the file or running terraform
 }
@@ -424,7 +424,7 @@ func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 		SkipInit: true, // Skip init for test
 	}
 
-	err = TerraformPlanDiff(&atmosConfig, info)
+	err = TerraformPlanDiff(&atmosConfig,&info)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not exist")
 	// The error should mention the path relative to the component directory
@@ -443,7 +443,7 @@ func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 		SkipInit: true, // Skip init for test
 	}
 
-	err = TerraformPlanDiff(&atmosConfig, info)
+	err = TerraformPlanDiff(&atmosConfig, &info)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not exist")
 	assert.Contains(t, err.Error(), absPath)
@@ -500,7 +500,7 @@ func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 	}
 
 	// This should return a regular error, not call OsExit
-	err = TerraformPlanDiff(&atmosConfig, info)
+	err = TerraformPlanDiff(&atmosConfig, &info)
 	assert.Error(t, err)
 	assert.False(t, exitCalled, "OsExit should not be called for JSON parsing errors")
 }

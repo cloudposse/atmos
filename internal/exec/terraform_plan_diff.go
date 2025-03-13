@@ -19,31 +19,35 @@ import (
 // noChangesText is the text used to represent that no changes were found in a diff.
 const noChangesText = "(no changes)"
 
+// planFileMode defines the file permission for plan files.
+const planFileMode = 0o600
+
+// maxStringDisplayLength is the maximum length of a string before truncating it in output.
+const maxStringDisplayLength = 300
+
+// halfStringDisplayLength is half of the max string length used for truncation.
+const halfStringDisplayLength = 150
+
+// Static errors
+var (
+	// ErrNoJSONOutput is returned when no JSON output is found in terraform show output.
+	ErrNoJSONOutput = errors.New("no JSON output found in terraform show output")
+)
+
+// PlanFileOptions contains parameters for plan file operations.
+type PlanFileOptions struct {
+	ComponentPath string
+	OrigPlanFile  string
+	NewPlanFile   string
+	TmpDir        string
+}
+
 // TerraformPlanDiff represents the plan-diff command implementation.
-func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) error {
-	// Get the original plan file path from the --orig flag
-	origPlanFile := ""
-	newPlanFile := ""
-
-	// Extract command-specific flags without modifying the original structure
-	for i := 0; i < len(info.AdditionalArgsAndFlags); i++ {
-		arg := info.AdditionalArgsAndFlags[i]
-
-		if strings.HasPrefix(arg, "--orig=") {
-			origPlanFile = strings.TrimPrefix(arg, "--orig=")
-		} else if arg == "--orig" && i+1 < len(info.AdditionalArgsAndFlags) {
-			origPlanFile = info.AdditionalArgsAndFlags[i+1]
-		}
-
-		if strings.HasPrefix(arg, "--new=") {
-			newPlanFile = strings.TrimPrefix(arg, "--new=")
-		} else if arg == "--new" && i+1 < len(info.AdditionalArgsAndFlags) {
-			newPlanFile = info.AdditionalArgsAndFlags[i+1]
-		}
-	}
-
-	if origPlanFile == "" {
-		return errors.New("original plan file (--orig) is required")
+func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	// Extract flags and setup paths
+	origPlanFile, newPlanFile, err := parsePlanDiffFlags(info.AdditionalArgsAndFlags)
+	if err != nil {
+		return err
 	}
 
 	// Create a temporary directory for all temporary files
@@ -56,34 +60,96 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info schema.Confi
 	// Get the component path
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 
+	// Ensure original plan file exists and is absolute
+	origPlanFile, err = validateOriginalPlanFile(origPlanFile, componentPath)
+	if err != nil {
+		return err
+	}
+
+	// Handle new plan file (generate one if needed)
+	opts := PlanFileOptions{
+		ComponentPath: componentPath,
+		OrigPlanFile:  origPlanFile,
+		NewPlanFile:   newPlanFile,
+		TmpDir:        tmpDir,
+	}
+	newPlanFile, err = prepareNewPlanFile(atmosConfig, info, opts)
+	if err != nil {
+		return err
+	}
+
+	// Compare the plans and generate diff
+	return comparePlansAndGenerateDiff(atmosConfig, info, componentPath, origPlanFile, newPlanFile)
+}
+
+// parsePlanDiffFlags extracts the orig and new plan file paths from command arguments.
+func parsePlanDiffFlags(args []string) (string, string, error) {
+	origPlanFile := ""
+	newPlanFile := ""
+
+	// Extract command-specific flags
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		if strings.HasPrefix(arg, "--orig=") {
+			origPlanFile = strings.TrimPrefix(arg, "--orig=")
+		} else if arg == "--orig" && i+1 < len(args) {
+			origPlanFile = args[i+1]
+		}
+
+		if strings.HasPrefix(arg, "--new=") {
+			newPlanFile = strings.TrimPrefix(arg, "--new=")
+		} else if arg == "--new" && i+1 < len(args) {
+			newPlanFile = args[i+1]
+		}
+	}
+
+	if origPlanFile == "" {
+		return "", "", errors.New("original plan file (--orig) is required")
+	}
+
+	return origPlanFile, newPlanFile, nil
+}
+
+// validateOriginalPlanFile ensures original plan file exists and returns absolute path.
+func validateOriginalPlanFile(origPlanFile, componentPath string) (string, error) {
 	// Make sure the original plan file exists
 	if !filepath.IsAbs(origPlanFile) {
 		// If the path is relative, make it absolute based on the component directory
-		absOrigPlanFile := filepath.Join(componentPath, origPlanFile)
-		origPlanFile = absOrigPlanFile
+		origPlanFile = filepath.Join(componentPath, origPlanFile)
 	}
 
 	if _, err := os.Stat(origPlanFile); os.IsNotExist(err) {
-		return errors.Errorf("original plan file '%s' does not exist", origPlanFile)
+		return "", errors.Errorf("original plan file '%s' does not exist", origPlanFile)
 	}
 
+	return origPlanFile, nil
+}
+
+// prepareNewPlanFile handles the new plan file (generates one if not provided).
+func prepareNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts PlanFileOptions) (string, error) {
 	// If no new plan file is specified, generate one
-	if newPlanFile == "" {
-		newPlanFile, err = generateNewPlanFile(atmosConfig, info, componentPath, origPlanFile, tmpDir)
+	if opts.NewPlanFile == "" {
+		var err error
+		opts.NewPlanFile, err = generateNewPlanFile(atmosConfig, info, opts.ComponentPath, opts.OrigPlanFile, opts.TmpDir)
 		if err != nil {
-			return errors.Wrap(err, "error generating new plan file")
+			return "", errors.Wrap(err, "error generating new plan file")
 		}
-	} else if !filepath.IsAbs(newPlanFile) {
+	} else if !filepath.IsAbs(opts.NewPlanFile) {
 		// If the path is relative, make it absolute based on the component directory
-		absNewPlanFile := filepath.Join(componentPath, newPlanFile)
-		newPlanFile = absNewPlanFile
+		opts.NewPlanFile = filepath.Join(opts.ComponentPath, opts.NewPlanFile)
 	}
 
 	// Make sure the new plan file exists
-	if _, err := os.Stat(newPlanFile); os.IsNotExist(err) {
-		return errors.Errorf("new plan file '%s' does not exist", newPlanFile)
+	if _, err := os.Stat(opts.NewPlanFile); os.IsNotExist(err) {
+		return "", errors.Errorf("new plan file '%s' does not exist", opts.NewPlanFile)
 	}
 
+	return opts.NewPlanFile, nil
+}
+
+// comparePlansAndGenerateDiff compares two plan files and generates a diff.
+func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, origPlanFile, newPlanFile string) error {
 	// Get the JSON representation of the original plan
 	origPlanJSON, err := getTerraformPlanJSON(atmosConfig, info, componentPath, origPlanFile)
 	if err != nil {
@@ -135,7 +201,7 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info schema.Confi
 }
 
 // generateNewPlanFile generates a new plan file by running terraform plan.
-func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath string, origPlanFile string, tmpDir string) (string, error) {
+func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, origPlanFile string, tmpDir string) (string, error) {
 	// Create a temporary file for the new plan
 	newPlanFile := filepath.Join(tmpDir, "new.plan")
 
@@ -145,7 +211,7 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info schema.Con
 	}
 
 	// Create a new info object for the plan command
-	planInfo := info
+	planInfo := *info
 	planInfo.SubCommand = "plan"
 
 	// Filter out --orig and --new flags from AdditionalArgsAndFlags
@@ -185,35 +251,63 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info schema.Con
 }
 
 // getTerraformPlanJSON gets the JSON representation of a terraform plan.
-func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, componentPath, planFile string) (string, error) {
+func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, planFile string) (string, error) {
 	// Run terraform init before show
 	if err := runTerraformInit(atmosConfig, componentPath, info.ComponentEnvList); err != nil {
 		return "", err
 	}
 
-	// Copy the plan file to the component directory if it's not already there
+	// Copy the plan file to the component directory if needed
+	planFileInComponentDir, cleanup, err := copyPlanFileIfNeeded(planFile, componentPath)
+	if err != nil {
+		return "", err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	// Run terraform show and capture output
+	output, err := runTerraformShow(info, planFileInComponentDir)
+	if err != nil {
+		return "", err
+	}
+
+	// Extract JSON from output
+	return extractJSONFromOutput(output)
+}
+
+// copyPlanFileIfNeeded copies the plan file to the component directory if it's not already there.
+func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error) {
 	planFileInComponentDir := planFile
 	planFileBaseName := filepath.Base(planFile)
 
-	// Create a temporary copy of the plan file in the component directory
+	// If the plan file is not in the component directory, create a temporary copy
 	if !strings.HasPrefix(planFile, componentPath) {
 		planFileInComponentDir = filepath.Join(componentPath, planFileBaseName)
 
 		// Copy the plan file content
 		planContent, err := os.ReadFile(planFile)
 		if err != nil {
-			return "", fmt.Errorf("error reading plan file: %w", err)
+			return "", nil, fmt.Errorf("error reading plan file: %w", err)
 		}
 
-		err = os.WriteFile(planFileInComponentDir, planContent, 0o644)
+		err = os.WriteFile(planFileInComponentDir, planContent, planFileMode)
 		if err != nil {
-			return "", fmt.Errorf("error copying plan file to component directory: %w", err)
+			return "", nil, fmt.Errorf("error copying plan file to component directory: %w", err)
 		}
 
-		// Clean up the copied plan file when we're done
-		defer os.Remove(planFileInComponentDir)
+		// Return a cleanup function
+		cleanup := func() {
+			os.Remove(planFileInComponentDir)
+		}
+		return planFileInComponentDir, cleanup, nil
 	}
 
+	return planFileInComponentDir, nil, nil
+}
+
+// runTerraformShow runs the terraform show command and captures its output.
+func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string, error) {
 	// Create a pipe to capture stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -225,9 +319,9 @@ func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info schema.Co
 	os.Stdout = w
 
 	// Create a new info object for the show command
-	showInfo := info
+	showInfo := *info
 	showInfo.SubCommand = "show"
-	showInfo.AdditionalArgsAndFlags = []string{"-json", planFileInComponentDir}
+	showInfo.AdditionalArgsAndFlags = []string{"-json", planFile}
 
 	// Execute terraform show command
 	execErr := ExecuteTerraform(showInfo)
@@ -250,20 +344,24 @@ func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info schema.Co
 		return "", fmt.Errorf("error reading output: %w", readErr)
 	}
 
+	return string(output), nil
+}
+
+// extractJSONFromOutput extracts the JSON part from terraform show output.
+func extractJSONFromOutput(output string) (string, error) {
 	// Find the beginning of the JSON output (first '{' character)
-	fullOutput := string(output)
-	jsonStartIdx := strings.Index(fullOutput, "{")
+	jsonStartIdx := strings.Index(output, "{")
 	if jsonStartIdx == -1 {
-		return "", fmt.Errorf("no JSON output found in terraform show output")
+		return "", ErrNoJSONOutput
 	}
 
 	// Extract just the JSON part
-	jsonOutput := fullOutput[jsonStartIdx:]
+	jsonOutput := output[jsonStartIdx:]
 
 	return jsonOutput, nil
 }
 
-// sortMapKeys recursively sorts map keys for consistent comparison
+// sortMapKeys recursively sorts map keys for consistent comparison.
 func sortMapKeys(m map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 
@@ -355,40 +453,56 @@ func generatePlanDiff(origPlan, newPlan map[string]interface{}) (string, bool) {
 		diff.WriteString("Outputs:\n")
 		diff.WriteString("--------\n")
 
-		// Find added outputs
-		for k, v := range newOutputs {
-			if _, exists := origOutputs[k]; !exists {
-				diff.WriteString(fmt.Sprintf("+ %s: %v\n", k, formatValue(v)))
-			}
-		}
-
-		// Find removed outputs
-		for k, v := range origOutputs {
-			if _, exists := newOutputs[k]; !exists {
-				diff.WriteString(fmt.Sprintf("- %s: %v\n", k, formatValue(v)))
-			}
-		}
-
-		// Find changed outputs
-		for k, origV := range origOutputs {
-			if newV, exists := newOutputs[k]; exists && !reflect.DeepEqual(origV, newV) {
-				origSensitive := isSensitive(origV)
-				newSensitive := isSensitive(newV)
-
-				if origSensitive && newSensitive {
-					diff.WriteString(fmt.Sprintf("~ %s: (sensitive value) => (sensitive value)\n", k))
-				} else if origSensitive {
-					diff.WriteString(fmt.Sprintf("~ %s: (sensitive value) => %v\n", k, formatValue(newV)))
-				} else if newSensitive {
-					diff.WriteString(fmt.Sprintf("~ %s: %v => (sensitive value)\n", k, formatValue(origV)))
-				} else {
-					diff.WriteString(fmt.Sprintf("~ %s: %v => %v\n", k, formatValue(origV), formatValue(newV)))
-				}
-			}
-		}
+		outputDiff := compareOutputs(origOutputs, newOutputs)
+		diff.WriteString(outputDiff)
 	}
 
 	return diff.String(), hasDiff
+}
+
+// compareOutputs compares outputs between two terraform plans.
+func compareOutputs(origOutputs, newOutputs map[string]interface{}) string {
+	var diff strings.Builder
+
+	// Find added outputs
+	for k, v := range newOutputs {
+		if _, exists := origOutputs[k]; !exists {
+			diff.WriteString(fmt.Sprintf("+ %s: %v\n", k, formatValue(v)))
+		}
+	}
+
+	// Find removed outputs
+	for k, v := range origOutputs {
+		if _, exists := newOutputs[k]; !exists {
+			diff.WriteString(fmt.Sprintf("- %s: %v\n", k, formatValue(v)))
+		}
+	}
+
+	// Find changed outputs
+	for k, origV := range origOutputs {
+		if newV, exists := newOutputs[k]; exists && !reflect.DeepEqual(origV, newV) {
+			diff.WriteString(formatOutputChange(k, origV, newV))
+		}
+	}
+
+	return diff.String()
+}
+
+// formatOutputChange formats the change between two output values.
+func formatOutputChange(key string, origValue, newValue interface{}) string {
+	origSensitive := isSensitive(origValue)
+	newSensitive := isSensitive(newValue)
+
+	switch {
+	case origSensitive && newSensitive:
+		return fmt.Sprintf("~ %s: (sensitive value) => (sensitive value)\n", key)
+	case origSensitive:
+		return fmt.Sprintf("~ %s: (sensitive value) => %v\n", key, formatValue(newValue))
+	case newSensitive:
+		return fmt.Sprintf("~ %s: %v => (sensitive value)\n", key, formatValue(origValue))
+	default:
+		return fmt.Sprintf("~ %s: %v => %v\n", key, formatValue(origValue), formatValue(newValue))
+	}
 }
 
 // getVariables extracts variables from a terraform plan.
@@ -500,60 +614,64 @@ func compareResources(origResources, newResources map[string]interface{}) string
 
 	// Find changed resources
 	for k, origV := range origResources {
-		if newV, exists := newResources[k]; exists && !reflect.DeepEqual(origV, newV) {
-			diff.WriteString(fmt.Sprintf("%s\n", k))
+		newV, exists := newResources[k]
+		if !exists || reflect.DeepEqual(origV, newV) {
+			continue
+		}
 
-			// Compare resource attributes
-			origAttrs := getResourceAttributes(origV)
-			newAttrs := getResourceAttributes(newV)
+		diff.WriteString(fmt.Sprintf("%s\n", k))
 
-			// Important attributes to always show first if they exist
-			priorityAttrs := []string{"id", "url", "content"}
+		// Compare resource attributes
+		origAttrs := getResourceAttributes(origV)
+		newAttrs := getResourceAttributes(newV)
 
-			// Attributes to skip in the diff to keep it clean
-			skipAttrs := map[string]bool{
-				"response_body_base64": true,
-				"content_base64sha256": true,
-				"content_base64sha512": true,
-				"content_md5":          true,
-				"content_sha1":         true,
-				"content_sha256":       true,
-				"content_sha512":       true,
+		// Important attributes to always show first if they exist
+		priorityAttrs := []string{"id", "url", "content"}
+
+		// Attributes to skip in the diff to keep it clean
+		skipAttrs := map[string]bool{
+			"response_body_base64": true,
+			"content_base64sha256": true,
+			"content_base64sha512": true,
+			"content_md5":          true,
+			"content_sha1":         true,
+			"content_sha256":       true,
+			"content_sha512":       true,
+		}
+
+		// Process priority attributes first
+		for _, attrK := range priorityAttrs {
+			origAttrV, origExists := origAttrs[attrK]
+			newAttrV, newExists := newAttrs[attrK]
+
+			switch {
+			case origExists && newExists && !reflect.DeepEqual(origAttrV, newAttrV):
+				printAttributeDiff(&diff, attrK, origAttrV, newAttrV)
+			case origExists && !newExists:
+				diff.WriteString(fmt.Sprintf("  - %s: %v\n", attrK, formatValue(origAttrV)))
+			case !origExists && newExists:
+				diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
+			}
+		}
+
+		// Process other attributes
+		for attrK, origAttrV := range origAttrs {
+			// Skip priority attributes (already processed) and attributes in the skip list
+			if contains(priorityAttrs, attrK) || skipAttrs[attrK] {
+				continue
 			}
 
-			// Process priority attributes first
-			for _, attrK := range priorityAttrs {
-				origAttrV, origExists := origAttrs[attrK]
-				newAttrV, newExists := newAttrs[attrK]
-
-				if origExists && newExists && !reflect.DeepEqual(origAttrV, newAttrV) {
-					printAttributeDiff(&diff, attrK, origAttrV, newAttrV)
-				} else if origExists && !newExists {
-					diff.WriteString(fmt.Sprintf("  - %s: %v\n", attrK, formatValue(origAttrV)))
-				} else if !origExists && newExists {
-					diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
-				}
+			if newAttrV, exists := newAttrs[attrK]; exists && !reflect.DeepEqual(origAttrV, newAttrV) {
+				printAttributeDiff(&diff, attrK, origAttrV, newAttrV)
+			} else if !exists {
+				diff.WriteString(fmt.Sprintf("  - %s: %v\n", attrK, formatValue(origAttrV)))
 			}
+		}
 
-			// Process other attributes
-			for attrK, origAttrV := range origAttrs {
-				// Skip priority attributes (already processed) and attributes in the skip list
-				if contains(priorityAttrs, attrK) || skipAttrs[attrK] {
-					continue
-				}
-
-				if newAttrV, exists := newAttrs[attrK]; exists && !reflect.DeepEqual(origAttrV, newAttrV) {
-					printAttributeDiff(&diff, attrK, origAttrV, newAttrV)
-				} else if !exists {
-					diff.WriteString(fmt.Sprintf("  - %s: %v\n", attrK, formatValue(origAttrV)))
-				}
-			}
-
-			// Find added attributes (that weren't in the priority list)
-			for attrK, newAttrV := range newAttrs {
-				if _, exists := origAttrs[attrK]; !exists && !contains(priorityAttrs, attrK) && !skipAttrs[attrK] {
-					diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
-				}
+		// Find added attributes (that weren't in the priority list)
+		for attrK, newAttrV := range newAttrs {
+			if _, exists := origAttrs[attrK]; !exists && !contains(priorityAttrs, attrK) && !skipAttrs[attrK] {
+				diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
 			}
 		}
 	}
@@ -566,13 +684,14 @@ func printAttributeDiff(diff *strings.Builder, attrK string, origAttrV, newAttrV
 	origSensitive := isSensitive(origAttrV)
 	newSensitive := isSensitive(newAttrV)
 
-	if origSensitive && newSensitive {
+	switch {
+	case origSensitive && newSensitive:
 		diff.WriteString(fmt.Sprintf("  ~ %s: (sensitive value) => (sensitive value)\n", attrK))
-	} else if origSensitive {
+	case origSensitive:
 		diff.WriteString(fmt.Sprintf("  ~ %s: (sensitive value) => %v\n", attrK, formatValue(newAttrV)))
-	} else if newSensitive {
+	case newSensitive:
 		diff.WriteString(fmt.Sprintf("  ~ %s: %v => (sensitive value)\n", attrK, formatValue(origAttrV)))
-	} else {
+	default:
 		// Check if both values are maps and use the specialized diff function
 		origMap, origIsMap := origAttrV.(map[string]interface{})
 		newMap, newIsMap := newAttrV.(map[string]interface{})
@@ -651,8 +770,8 @@ func formatValue(value interface{}) string {
 		}
 
 		// For other very long strings, show start and end
-		if len(strVal) > 300 {
-			return fmt.Sprintf("%s...%s", strVal[:150], strVal[len(strVal)-150:])
+		if len(strVal) > maxStringDisplayLength {
+			return fmt.Sprintf("%s...%s", strVal[:halfStringDisplayLength], strVal[len(strVal)-halfStringDisplayLength:])
 		}
 	}
 
@@ -726,8 +845,6 @@ func formatMapForDisplay(m map[string]interface{}) string {
 
 // formatMapDiff formats the difference between two maps showing only changed keys.
 func formatMapDiff(origMap, newMap map[string]interface{}) string {
-	var sb strings.Builder
-
 	// Get all keys from both maps
 	allKeys := make(map[string]bool)
 	for k := range origMap {
@@ -751,28 +868,11 @@ func formatMapDiff(origMap, newMap map[string]interface{}) string {
 
 	// For empty or very small diffs, use a compact representation
 	if len(keys) <= 3 {
-		changes := make([]string, 0, len(keys))
-		for _, k := range keys {
-			origVal, origExists := origMap[k]
-			newVal, newExists := newMap[k]
-
-			if !origExists {
-				changes = append(changes, fmt.Sprintf("+%s: %v", k, formatValue(newVal)))
-			} else if !newExists {
-				changes = append(changes, fmt.Sprintf("-%s: %v", k, formatValue(origVal)))
-			} else if !reflect.DeepEqual(origVal, newVal) {
-				changes = append(changes, fmt.Sprintf("~%s: %v => %v", k, formatValue(origVal), formatValue(newVal)))
-			}
-		}
-
-		if len(changes) == 0 {
-			return noChangesText
-		}
-
-		return "{" + strings.Join(changes, ", ") + "}"
+		return formatCompactMapDiff(keys, origMap, newMap)
 	}
 
 	// For larger diffs, show a structured representation with indentation
+	var sb strings.Builder
 	sb.WriteString("{\n")
 	changesFound := false
 
@@ -819,6 +919,31 @@ func formatMapDiff(origMap, newMap map[string]interface{}) string {
 
 	sb.WriteString("}")
 	return sb.String()
+}
+
+// formatCompactMapDiff creates a compact string representation for small map diffs.
+func formatCompactMapDiff(keys []string, origMap, newMap map[string]interface{}) string {
+	changes := make([]string, 0, len(keys))
+
+	for _, k := range keys {
+		origVal, origExists := origMap[k]
+		newVal, newExists := newMap[k]
+
+		switch {
+		case !origExists:
+			changes = append(changes, fmt.Sprintf("+%s: %v", k, formatValue(newVal)))
+		case !newExists:
+			changes = append(changes, fmt.Sprintf("-%s: %v", k, formatValue(origVal)))
+		case !reflect.DeepEqual(origVal, newVal):
+			changes = append(changes, fmt.Sprintf("~%s: %v => %v", k, formatValue(origVal), formatValue(newVal)))
+		}
+	}
+
+	if len(changes) == 0 {
+		return noChangesText
+	}
+
+	return "{" + strings.Join(changes, ", ") + "}"
 }
 
 // runTerraformInit runs a basic terraform init in the specified directory using

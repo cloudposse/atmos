@@ -392,7 +392,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Handle the plan-diff command
 	if info.SubCommand == "plan-diff" {
-		return TerraformPlanDiff(&atmosConfig, info)
+		return TerraformPlanDiff(&atmosConfig, &info)
 	}
 
 	// Run `terraform workspace` before executing other terraform commands
