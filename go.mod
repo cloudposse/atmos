@@ -23,7 +23,6 @@ require (
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.14.0
-	github.com/go-git/go-git/v5 v5.13.2
 	github.com/goccy/go-yaml v1.15.13
 	github.com/gofrs/flock v0.12.1
 	github.com/golang/mock v1.6.0
