@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/pkg/errors"
@@ -61,6 +62,12 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	u.LogDebug("Component backend config:\n\n")
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		j, err := u.ConvertToJSON(componentBackendConfig)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, j)
+
 		err = u.PrintAsJSONToFileDescriptor(atmosConfig, componentBackendConfig)
 		if err != nil {
 			return err
