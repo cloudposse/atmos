@@ -9,6 +9,8 @@ linters:
   enable:
     - bodyclose # Check that HTTP response body is closed
     - cyclop # Check cyclomatic complexity
+    - dogsled # Check for assignments with too many blank identifiers
+    - dupl # Check for duplicated code
     - err113 # Enforces best practices for error handling, specifically around comparing errors.
     - errcheck # Check that errors are handled
     - forbidigo # Forbid specific function calls
@@ -36,6 +38,14 @@ linters:
     - whitespace # Check for leading whitespace
 
 linters-settings:
+  dogsled:
+    # Checks assignments with too many blank identifiers.
+    # Default: 2
+    max-blank-identifiers: 3
+
+  dupl:
+    threshold: 150 # Tokens count to trigger issue.
+
   funlen:
     lines: 60 # Maximum number of lines per function
     statements: 40 # Maximum number of statements per function
@@ -107,7 +117,7 @@ linters-settings:
       - name: add-constant
         arguments:
           - maxLitCount: "3"
-            allowStrs: '""'
+            allowStrs: '"","image","error","path","%w","%s"'
             allowInts: "0,1,2,3,4"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
       - name: argument-limit
