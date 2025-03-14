@@ -96,13 +96,13 @@ func TestValidateOriginalPlanFile(t *testing.T) {
 
 	// Create component path
 	componentPath := filepath.Join(tmpDir, "component")
-	err = os.MkdirAll(componentPath, 0755)
+	err = os.MkdirAll(componentPath, 0o755)
 	require.NoError(t, err)
 
 	// Create a plan file in the component directory
 	relPlanFile := "plan.out"
 	planFilePath := filepath.Join(componentPath, relPlanFile)
-	err = os.WriteFile(planFilePath, []byte("mock plan"), 0644)
+	err = os.WriteFile(planFilePath, []byte("mock plan"), 0o644)
 	require.NoError(t, err)
 
 	tests := []struct {
