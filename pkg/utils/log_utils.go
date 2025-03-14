@@ -29,7 +29,7 @@ func PrintMessage(message string) {
 
 // PrintMessageInColor prints the message to the console using the provided color
 func PrintMessageInColor(message string, messageColor *color.Color) {
-	messageColor.Println(message)
+	_, _ = messageColor.Fprint(os.Stdout, message)
 }
 
 // Deprecated: Use `log.Error` instead. This function will be removed in a future release.

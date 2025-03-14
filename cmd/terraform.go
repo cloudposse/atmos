@@ -74,7 +74,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 			return err
 		}
 		// For other errors, continue with existing behavior
-		u.LogErrorAndExit(err)
+		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 	return nil
 }
