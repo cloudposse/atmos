@@ -33,6 +33,30 @@ func prepareNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	return opts.NewPlanFile, nil
 }
 
+// filterPlanDiffFlags filters out --orig and --new flags from arguments.
+func filterPlanDiffFlags(args []string) []string {
+	var filteredArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Skip --orig and --new flags and their values
+		if arg == "--orig" || arg == "--new" {
+			// Skip the value too if it exists
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+			}
+			continue
+		}
+
+		if strings.HasPrefix(arg, "--orig=") || strings.HasPrefix(arg, "--new=") {
+			continue
+		}
+
+		filteredArgs = append(filteredArgs, arg)
+	}
+	return filteredArgs
+}
+
 // generateNewPlanFile generates a new plan file by running terraform plan.
 func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, tmpDir string) (string, error) {
 	// Create a temporary file for the new plan
@@ -48,25 +72,7 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	planInfo.SubCommand = "plan"
 
 	// Filter out --orig and --new flags from AdditionalArgsAndFlags
-	var planArgs []string
-	for i := 0; i < len(info.AdditionalArgsAndFlags); i++ {
-		arg := info.AdditionalArgsAndFlags[i]
-
-		// Skip --orig and --new flags and their values
-		if arg == "--orig" || arg == "--new" {
-			// Skip the value too if it exists
-			if i+1 < len(info.AdditionalArgsAndFlags) && !strings.HasPrefix(info.AdditionalArgsAndFlags[i+1], "-") {
-				i++
-			}
-			continue
-		}
-
-		if strings.HasPrefix(arg, "--orig=") || strings.HasPrefix(arg, "--new=") {
-			continue
-		}
-
-		planArgs = append(planArgs, arg)
-	}
+	planArgs := filterPlanDiffFlags(info.AdditionalArgsAndFlags)
 
 	// Add -out flag to specify the output plan file
 	planArgs = append(planArgs, "-out="+newPlanFile)
