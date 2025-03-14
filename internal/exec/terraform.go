@@ -21,6 +21,15 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
+
+	applyCommand = "apply"
+	destroyCommand = "destroy"
+	importCommand = "import"
+	planCommand = "plan"
+	planDiffCommand = "plan-diff"
+	refreshCommand = "refresh"
+	showCommand = "show"
+
 )
 
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
@@ -284,7 +293,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			atmosConfig,
 			info.Command,
 			initCommandWithArguments,
-			workingDir,
+			componentPath,
 			info.ComponentEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
@@ -412,7 +421,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				atmosConfig,
 				info.Command,
 				[]string{"workspace", "select", info.TerraformWorkspace},
-				workingDir,
+				componentPath,
 				info.ComponentEnvList,
 				info.DryRun,
 				workspaceSelectRedirectStdErr,
@@ -428,7 +437,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					atmosConfig,
 					info.Command,
 					[]string{"workspace", "new", info.TerraformWorkspace},
-					workingDir,
+					componentPath,
 					info.ComponentEnvList,
 					info.DryRun,
 					info.RedirectStdErr,
@@ -470,7 +479,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.Stack,
 			info.ComponentEnvList,
 			varFile,
-			workingDir,
+			componentPath,
 			info.TerraformWorkspace,
 			workingDir,
 		)
