@@ -470,9 +470,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.Stack,
 			info.ComponentEnvList,
 			varFile,
+			workingDir,
 			componentPath,
 			info.TerraformWorkspace,
-			workingDir,
 		)
 		if err != nil {
 			return err
@@ -486,7 +486,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			atmosConfig,
 			info.Command,
 			allArgsAndFlags,
-			workingDir,
+			componentPath,
 			info.ComponentEnvList,
 			info.DryRun,
 			info.RedirectStdErr,

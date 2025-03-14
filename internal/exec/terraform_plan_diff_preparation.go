@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/pkg/errors"
 )
@@ -76,6 +77,10 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	// Execute the plan command using the standard Atmos terraform execution
 	err := ExecuteTerraform(planInfo)
 	if err != nil {
+		// If the error is ErrPlanHasDiff, we want to propagate that error
+		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
+			return "", err
+		}
 		return "", fmt.Errorf("error running terraform plan: %w", err)
 	}
 

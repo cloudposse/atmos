@@ -69,15 +69,30 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 			// Channel is empty
 		}
 
+		// Create a done channel to signal when main has completed
+		done := make(chan struct{})
+
 		// Run main in a goroutine
 		go func() {
+			defer close(done)
 			main()
 			// If main returns without calling OsExit, send 0
-			exitCodeCh <- 0
+			select {
+			case exitCodeCh <- 0:
+			default:
+				// Channel already has a value, which means OsExit was called
+			}
 		}()
 
-		// Wait for the exit code
-		return <-exitCodeCh
+		// Wait for either an exit code or main to complete
+		select {
+		case code := <-exitCodeCh:
+			<-done // Wait for main to finish
+			return code
+		case <-done:
+			// Main completed without calling OsExit
+			return <-exitCodeCh
+		}
 	}
 
 	origDir, err := os.Getwd()
@@ -130,10 +145,6 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	if exitCode != 2 {
 		t.Fatalf("plan-diff command should have returned exit code 2, got %d", exitCode)
 	}
-
-	// Skip the on-the-fly plan test for now as it requires more complex changes
-	// to the generateNewPlanFile function to properly handle exit codes
-	t.Skip("Skipping on-the-fly plan-diff test as it requires more complex changes")
 
 	// Test with generating a new plan on the fly
 	os.Args = []string{"atmos", "terraform", "plan-diff", "myapp", "-s", "dev", "--orig=" + origPlanFile, "-var", "location=New York"}
