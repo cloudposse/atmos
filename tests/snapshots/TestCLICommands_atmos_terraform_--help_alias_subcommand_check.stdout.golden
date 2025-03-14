@@ -52,6 +52,7 @@ Subcommand Aliases:
   ta                             Alias of "atmos terraform apply" command
   tp                             Alias of "atmos terraform plan" command
 
+
 Flags:
 
         --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
