@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -41,7 +42,7 @@ func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	if err != nil {
 		return err
 	}
-	LogInfo(j)
+	log.Info(j)
 	return nil
 }
 
