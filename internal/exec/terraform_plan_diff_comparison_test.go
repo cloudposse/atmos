@@ -339,7 +339,7 @@ func TestCompareResources_AllScenarios(t *testing.T) {
 	}
 }
 
-// makeVariablesMap converts a map of values to a terraform variables map format
+// makeVariablesMap converts a map of values to a terraform variables map format.
 func makeVariablesMap(vars map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 	for k, v := range vars {
