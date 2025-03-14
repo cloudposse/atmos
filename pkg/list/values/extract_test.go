@@ -41,12 +41,12 @@ func TestExtractStackValues(t *testing.T) {
 			name: "extract settings component",
 			stacksMap: map[string]interface{}{
 				"stack1": map[string]interface{}{
-					"settings": map[string]interface{}{
+					KeySettings: map[string]interface{}{
 						"region": "us-west-2",
 					},
 				},
 			},
-			component: "settings",
+			component: KeySettings,
 			expectedValues: map[string]interface{}{
 				"stack1": map[string]interface{}{
 					"region": "us-west-2",
@@ -328,11 +328,11 @@ func TestHandleSpecialComponent(t *testing.T) {
 		{
 			name: "settings at top level",
 			stack: map[string]interface{}{
-				"settings": map[string]interface{}{
+				KeySettings: map[string]interface{}{
 					"region": "us-west-2",
 				},
 			},
-			component: "settings",
+			component: KeySettings,
 			expected: map[string]interface{}{
 				"region": "us-west-2",
 			},
@@ -355,7 +355,7 @@ func TestHandleSpecialComponent(t *testing.T) {
 			name: "settings from terraform section and components",
 			stack: map[string]interface{}{
 				"terraform": map[string]interface{}{
-					"settings": map[string]interface{}{
+					KeySettings: map[string]interface{}{
 						"config": map[string]interface{}{
 							"test": true,
 						},
@@ -364,7 +364,7 @@ func TestHandleSpecialComponent(t *testing.T) {
 				"components": map[string]interface{}{
 					"terraform": map[string]interface{}{
 						"vpc": map[string]interface{}{
-							"settings": map[string]interface{}{
+							KeySettings: map[string]interface{}{
 								"config": map[string]interface{}{
 									"a": "component-1-a",
 								},
@@ -373,7 +373,7 @@ func TestHandleSpecialComponent(t *testing.T) {
 					},
 				},
 			},
-			component: "settings",
+			component: KeySettings,
 			expected: map[string]interface{}{
 				"terraform": map[string]interface{}{
 					"config": map[string]interface{}{
@@ -423,7 +423,7 @@ func TestExtractAllSettings(t *testing.T) {
 			name: "extract settings from terraform section and components",
 			stack: map[string]interface{}{
 				"terraform": map[string]interface{}{
-					"settings": map[string]interface{}{
+					KeySettings: map[string]interface{}{
 						"config": map[string]interface{}{
 							"test": true,
 						},
@@ -432,14 +432,14 @@ func TestExtractAllSettings(t *testing.T) {
 				"components": map[string]interface{}{
 					"terraform": map[string]interface{}{
 						"vpc": map[string]interface{}{
-							"settings": map[string]interface{}{
+							KeySettings: map[string]interface{}{
 								"config": map[string]interface{}{
 									"a": "component-1-a",
 								},
 							},
 						},
 						"eks": map[string]interface{}{
-							"settings": map[string]interface{}{
+							KeySettings: map[string]interface{}{
 								"config": map[string]interface{}{
 									"cluster_name": "test-cluster",
 								},
@@ -473,7 +473,7 @@ func TestExtractAllSettings(t *testing.T) {
 			name: "only terraform settings",
 			stack: map[string]interface{}{
 				"terraform": map[string]interface{}{
-					"settings": map[string]interface{}{
+					KeySettings: map[string]interface{}{
 						"config": map[string]interface{}{
 							"test": true,
 						},
@@ -495,7 +495,7 @@ func TestExtractAllSettings(t *testing.T) {
 				"components": map[string]interface{}{
 					"terraform": map[string]interface{}{
 						"vpc": map[string]interface{}{
-							"settings": map[string]interface{}{
+							KeySettings: map[string]interface{}{
 								"config": map[string]interface{}{
 									"a": "component-1-a",
 								},
@@ -552,7 +552,7 @@ func TestExtractComponentSettings(t *testing.T) {
 		{
 			name: "valid settings",
 			component: map[string]interface{}{
-				"settings": map[string]interface{}{
+				KeySettings: map[string]interface{}{
 					"region": "us-west-2",
 				},
 			},
@@ -575,7 +575,7 @@ func TestExtractComponentSettings(t *testing.T) {
 		{
 			name: "settings not a map",
 			component: map[string]interface{}{
-				"settings": "string value",
+				KeySettings: "string value",
 			},
 			expected: nil,
 		},

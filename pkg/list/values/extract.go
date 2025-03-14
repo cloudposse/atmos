@@ -9,15 +9,31 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
+// Component and section name constants.
+const (
+	// KeyTerraform is the key for terraform components.
+	KeyTerraform = "terraform"
+	// KeySettings is the key for settings section.
+	KeySettings = "settings"
+	// KeyMetadata is the key for metadata section.
+	KeyMetadata = "metadata"
+	// KeyComponents is the key for components section.
+	KeyComponents = "components"
+	// KeyVars is the key for vars section in components.
+	KeyVars = "vars"
+	// KeyAbstract is the key for abstract flag in components.
+	KeyAbstract = "abstract"
+)
+
 // handleSpecialComponent processes special components like settings and metadata.
 func handleSpecialComponent(stack map[string]interface{}, component string) (map[string]interface{}, bool) {
-	// First check if the component exists at the top level
+	// First check if the component exists at the top level.
 	if section, ok := stack[component].(map[string]interface{}); ok {
 		return section, true
 	}
 
-	// If not found at the top level and component is "settings", look for it in terraform section and components.
-	if component == "settings" {
+	// If not found at the top level and component is settings, look for it in terraform section and components.
+	if component == KeySettings {
 		return extractAllSettings(stack)
 	}
 
@@ -28,16 +44,16 @@ func handleSpecialComponent(stack map[string]interface{}, component string) (map
 func extractAllSettings(stack map[string]interface{}) (map[string]interface{}, bool) {
 	allSettings := make(map[string]interface{})
 
-	// Extract terraform-level settings
+	// Extract terraform-level settings.
 	terraformSettings, foundTerraformSettings := extractTerraformSettings(stack)
 	if foundTerraformSettings {
-		allSettings["terraform"] = terraformSettings
+		allSettings[KeyTerraform] = terraformSettings
 	}
 
 	// Extract component-specific settings.
 	componentSettings, foundComponentSettings := extractComponentsSettings(stack)
 	if foundComponentSettings {
-		allSettings["components"] = componentSettings
+		allSettings[KeyComponents] = componentSettings
 	}
 
 	// Return all settings if we found any.
@@ -51,12 +67,12 @@ func extractAllSettings(stack map[string]interface{}) (map[string]interface{}, b
 
 // extractTerraformSettings extracts settings from the terraform section.
 func extractTerraformSettings(stack map[string]interface{}) (interface{}, bool) {
-	terraform, ok := stack["terraform"].(map[string]interface{})
+	terraform, ok := stack[KeyTerraform].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
 
-	terraformSettings, ok := terraform["settings"].(map[string]interface{})
+	terraformSettings, ok := terraform[KeySettings].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
@@ -66,12 +82,12 @@ func extractTerraformSettings(stack map[string]interface{}) (interface{}, bool) 
 
 // extractComponentsSettings extracts settings from component-specific configurations.
 func extractComponentsSettings(stack map[string]interface{}) (map[string]interface{}, bool) {
-	components, ok := stack["components"].(map[string]interface{})
+	components, ok := stack[KeyComponents].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
 
-	terraform, ok := components["terraform"].(map[string]interface{})
+	terraform, ok := components[KeyTerraform].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
@@ -101,7 +117,7 @@ func extractComponentSettings(componentData interface{}) interface{} {
 		return nil
 	}
 
-	settings, ok := comp["settings"].(map[string]interface{})
+	settings, ok := comp[KeySettings].(map[string]interface{})
 	if !ok {
 		return nil
 	}
@@ -138,12 +154,12 @@ func deepCopyToStringMap(m interface{}) interface{} {
 
 // handleTerraformComponent processes regular terraform components.
 func handleTerraformComponent(stack map[string]interface{}, component string, includeAbstract bool) (map[string]interface{}, bool) {
-	components, ok := stack["components"].(map[string]interface{})
+	components, ok := stack[KeyComponents].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
 
-	terraform, ok := components["terraform"].(map[string]interface{})
+	terraform, ok := components[KeyTerraform].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
@@ -162,12 +178,12 @@ func handleTerraformComponent(stack map[string]interface{}, component string, in
 	}
 
 	if !includeAbstract {
-		if isAbstract, ok := comp["abstract"].(bool); ok && isAbstract {
+		if isAbstract, ok := comp[KeyAbstract].(bool); ok && isAbstract {
 			return nil, false
 		}
 	}
 
-	vars, ok := comp["vars"].(map[string]interface{})
+	vars, ok := comp[KeyVars].(map[string]interface{})
 	if !ok {
 		return nil, false
 	}
@@ -198,7 +214,7 @@ func (e *DefaultExtractor) ExtractStackValues(stacksMap map[string]interface{}, 
 		}
 
 		// Handle special components (settings, metadata).
-		if component == "settings" || component == "metadata" {
+		if component == KeySettings || component == KeyMetadata {
 			if section, ok := handleSpecialComponent(stack, component); ok {
 				values[stackName] = section
 			}
