@@ -1,5 +1,5 @@
 ---
-description: Atmos Rules Fil/
+description: Atmos Rules File
 globs: *.go,website/
 alwaysApply: false
 ---
