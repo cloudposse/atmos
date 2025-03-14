@@ -53,7 +53,7 @@ func TestRunListStacksHandlesListStacksError(t *testing.T) {
 	assert.Contains(t, buf.String(), "mock listStacks error")
 }
 
-// testLogError is a helper function to test error logging with different error scenarios
+// testLogError is a helper function to test error logging with different error scenarios.
 func testLogError(t *testing.T, errorMsg string, err error, expectedOutput []string) {
 	var buf bytes.Buffer
 	testLogger := log.New(&buf)
