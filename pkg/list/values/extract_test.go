@@ -352,13 +352,22 @@ func TestHandleSpecialComponent(t *testing.T) {
 			expectedFound: true,
 		},
 		{
-			name: "settings from components",
+			name: "settings from terraform section and components",
 			stack: map[string]interface{}{
+				"terraform": map[string]interface{}{
+					"settings": map[string]interface{}{
+						"config": map[string]interface{}{
+							"test": true,
+						},
+					},
+				},
 				"components": map[string]interface{}{
 					"terraform": map[string]interface{}{
 						"vpc": map[string]interface{}{
 							"settings": map[string]interface{}{
-								"region": "us-west-2",
+								"config": map[string]interface{}{
+									"a": "component-1-a",
+								},
 							},
 						},
 					},
@@ -366,8 +375,17 @@ func TestHandleSpecialComponent(t *testing.T) {
 			},
 			component: "settings",
 			expected: map[string]interface{}{
-				"vpc": map[string]interface{}{
-					"region": "us-west-2",
+				"terraform": map[string]interface{}{
+					"config": map[string]interface{}{
+						"test": true,
+					},
+				},
+				"components": map[string]interface{}{
+					"vpc": map[string]interface{}{
+						"config": map[string]interface{}{
+							"a": "component-1-a",
+						},
+					},
 				},
 			},
 			expectedFound: true,
@@ -394,7 +412,7 @@ func TestHandleSpecialComponent(t *testing.T) {
 	}
 }
 
-func TestExtractSettingsFromComponents(t *testing.T) {
+func TestExtractAllSettings(t *testing.T) {
 	tests := []struct {
 		name          string
 		stack         map[string]interface{}
@@ -402,54 +420,105 @@ func TestExtractSettingsFromComponents(t *testing.T) {
 		expectedFound bool
 	}{
 		{
-			name: "extract settings from terraform components",
+			name: "extract settings from terraform section and components",
 			stack: map[string]interface{}{
+				"terraform": map[string]interface{}{
+					"settings": map[string]interface{}{
+						"config": map[string]interface{}{
+							"test": true,
+						},
+					},
+				},
 				"components": map[string]interface{}{
 					"terraform": map[string]interface{}{
 						"vpc": map[string]interface{}{
 							"settings": map[string]interface{}{
-								"region": "us-west-2",
+								"config": map[string]interface{}{
+									"a": "component-1-a",
+								},
 							},
 						},
 						"eks": map[string]interface{}{
 							"settings": map[string]interface{}{
-								"cluster_name": "test-cluster",
+								"config": map[string]interface{}{
+									"cluster_name": "test-cluster",
+								},
 							},
 						},
 					},
 				},
 			},
 			expected: map[string]interface{}{
-				"vpc": map[string]interface{}{
-					"region": "us-west-2",
+				"terraform": map[string]interface{}{
+					"config": map[string]interface{}{
+						"test": true,
+					},
 				},
-				"eks": map[string]interface{}{
-					"cluster_name": "test-cluster",
+				"components": map[string]interface{}{
+					"vpc": map[string]interface{}{
+						"config": map[string]interface{}{
+							"a": "component-1-a",
+						},
+					},
+					"eks": map[string]interface{}{
+						"config": map[string]interface{}{
+							"cluster_name": "test-cluster",
+						},
+					},
 				},
 			},
 			expectedFound: true,
 		},
 		{
-			name: "no components section",
+			name: "only terraform settings",
 			stack: map[string]interface{}{
-				"metadata": map[string]interface{}{},
-			},
-			expected:      nil,
-			expectedFound: false,
-		},
-		{
-			name: "no terraform section",
-			stack: map[string]interface{}{
-				"components": map[string]interface{}{
-					"helmfile": map[string]interface{}{},
+				"terraform": map[string]interface{}{
+					"settings": map[string]interface{}{
+						"config": map[string]interface{}{
+							"test": true,
+						},
+					},
 				},
 			},
-			expected:      nil,
-			expectedFound: false,
+			expected: map[string]interface{}{
+				"terraform": map[string]interface{}{
+					"config": map[string]interface{}{
+						"test": true,
+					},
+				},
+			},
+			expectedFound: true,
 		},
 		{
-			name: "no settings in components",
+			name: "only component settings",
 			stack: map[string]interface{}{
+				"components": map[string]interface{}{
+					"terraform": map[string]interface{}{
+						"vpc": map[string]interface{}{
+							"settings": map[string]interface{}{
+								"config": map[string]interface{}{
+									"a": "component-1-a",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"components": map[string]interface{}{
+					"vpc": map[string]interface{}{
+						"config": map[string]interface{}{
+							"a": "component-1-a",
+						},
+					},
+				},
+			},
+			expectedFound: true,
+		},
+		{
+			name: "no settings anywhere",
+			stack: map[string]interface{}{
+				"metadata": map[string]interface{}{},
 				"components": map[string]interface{}{
 					"terraform": map[string]interface{}{
 						"vpc": map[string]interface{}{
@@ -465,7 +534,7 @@ func TestExtractSettingsFromComponents(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, found := extractSettingsFromComponents(test.stack)
+			result, found := extractAllSettings(test.stack)
 			assert.Equal(t, test.expectedFound, found)
 			if found {
 				assert.Equal(t, test.expected, result)

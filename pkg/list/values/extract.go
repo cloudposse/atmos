@@ -16,19 +16,56 @@ func handleSpecialComponent(stack map[string]interface{}, component string) (map
 		return section, true
 	}
 
-	// If not found at the top level and component is "settings", look for it in components
+	// If not found at the top level and component is "settings", look for it in terraform section and components.
 	if component == "settings" {
-		return extractSettingsFromComponents(stack)
+		return extractAllSettings(stack)
 	}
 
 	return nil, false
 }
 
-// extractSettingsFromComponents extracts settings from terraform components.
-func extractSettingsFromComponents(stack map[string]interface{}) (map[string]interface{}, bool) {
+// extractAllSettings extracts settings from all levels: component-specific, terraform-specific, and global.
+func extractAllSettings(stack map[string]interface{}) (map[string]interface{}, bool) {
 	allSettings := make(map[string]interface{})
 
-	// Try to navigate to terraform components
+	// Extract terraform-level settings
+	terraformSettings, foundTerraformSettings := extractTerraformSettings(stack)
+	if foundTerraformSettings {
+		allSettings["terraform"] = terraformSettings
+	}
+
+	// Extract component-specific settings.
+	componentSettings, foundComponentSettings := extractComponentsSettings(stack)
+	if foundComponentSettings {
+		allSettings["components"] = componentSettings
+	}
+
+	// Return all settings if we found any.
+	foundAny := foundTerraformSettings || foundComponentSettings
+	if !foundAny {
+		return nil, false
+	}
+
+	return allSettings, true
+}
+
+// extractTerraformSettings extracts settings from the terraform section.
+func extractTerraformSettings(stack map[string]interface{}) (interface{}, bool) {
+	terraform, ok := stack["terraform"].(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+
+	terraformSettings, ok := terraform["settings"].(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+
+	return deepCopyToStringMap(terraformSettings), true
+}
+
+// extractComponentsSettings extracts settings from component-specific configurations.
+func extractComponentsSettings(stack map[string]interface{}) (map[string]interface{}, bool) {
 	components, ok := stack["components"].(map[string]interface{})
 	if !ok {
 		return nil, false
@@ -39,19 +76,22 @@ func extractSettingsFromComponents(stack map[string]interface{}) (map[string]int
 		return nil, false
 	}
 
-	// Collect settings from all terraform components
+	componentSettings := make(map[string]interface{})
+	foundAny := false
+
+	// Collect settings from all terraform components.
 	for componentName, componentData := range terraform {
 		if settings := extractComponentSettings(componentData); settings != nil {
-			allSettings[componentName] = settings
+			componentSettings[componentName] = settings
+			foundAny = true
 		}
 	}
 
-	// Return all settings if we found any
-	if len(allSettings) > 0 {
-		return allSettings, true
+	if !foundAny {
+		return nil, false
 	}
 
-	return nil, false
+	return componentSettings, true
 }
 
 // extractComponentSettings extracts settings from a component.
@@ -108,7 +148,14 @@ func handleTerraformComponent(stack map[string]interface{}, component string, in
 		return nil, false
 	}
 
-	componentName := strings.TrimPrefix(component, "terraform/")
+	// Extract the component name from the full component path.
+	componentName := component
+
+	parts := strings.Split(component, "/")
+	if len(parts) > 1 {
+		componentName = parts[len(parts)-1]
+	}
+
 	comp, ok := terraform[componentName].(map[string]interface{})
 	if !ok {
 		return nil, false
