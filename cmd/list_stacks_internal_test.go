@@ -53,8 +53,8 @@ func TestRunListStacksHandlesListStacksError(t *testing.T) {
 	assert.Contains(t, buf.String(), "mock listStacks error")
 }
 
-// TestLogErrorCliConfigInitialize tests the error logging for CLI config initialization errors.
-func TestLogErrorCliConfigInitialize(t *testing.T) {
+// testLogError is a helper function to test error logging with different error scenarios
+func testLogError(t *testing.T, errorMsg string, err error, expectedOutput []string) {
 	var buf bytes.Buffer
 	testLogger := log.New(&buf)
 	testLogger.SetLevel(log.DebugLevel)
@@ -68,8 +68,8 @@ func TestLogErrorCliConfigInitialize(t *testing.T) {
 	originalListStacks := listStacksFn
 
 	listStacksFn = func(cmd *cobra.Command) ([]string, error) {
-		log.Error("failed to initialize CLI config", "error", errInitCliConfig)
-		return nil, errInitCliConfig
+		log.Error(errorMsg, "error", err)
+		return nil, err
 	}
 
 	defer func() {
@@ -89,46 +89,23 @@ func TestLogErrorCliConfigInitialize(t *testing.T) {
 
 	cmd.Run(cmd, []string{})
 
-	assert.Contains(t, buf.String(), "failed to initialize CLI config")
-	assert.Contains(t, buf.String(), "init cli config error")
+	for _, expected := range expectedOutput {
+		assert.Contains(t, buf.String(), expected)
+	}
+}
+
+// TestLogErrorCliConfigInitialize tests the error logging for CLI config initialization errors.
+func TestLogErrorCliConfigInitialize(t *testing.T) {
+	testLogError(t,
+		"failed to initialize CLI config",
+		errInitCliConfig,
+		[]string{"failed to initialize CLI config", "init cli config error"})
 }
 
 // TestLogErrorDescribeStacks tests the error logging for ExecuteDescribeStacks errors.
 func TestLogErrorDescribeStacks(t *testing.T) {
-	var buf bytes.Buffer
-	testLogger := log.New(&buf)
-	testLogger.SetLevel(log.DebugLevel)
-	testLogger.SetReportTimestamp(false)
-	testLogger.SetReportCaller(false)
-
-	originalLogger := log.Default()
-	log.SetDefault(testLogger)
-	defer log.SetDefault(originalLogger)
-
-	originalListStacks := listStacksFn
-
-	listStacksFn = func(cmd *cobra.Command) ([]string, error) {
-		log.Error("failed to describe stacks", "error", errDescribeStacks)
-		return nil, errDescribeStacks
-	}
-
-	defer func() {
-		listStacksFn = originalListStacks
-	}()
-
-	originalCheckAtmosConfig := checkAtmosConfigFn
-	checkAtmosConfigFn = func(opts ...AtmosValidateOption) {}
-	defer func() {
-		checkAtmosConfigFn = originalCheckAtmosConfig
-	}()
-
-	cmd := &cobra.Command{
-		Use: "teststacks",
-		Run: listStacksCmd.Run,
-	}
-
-	cmd.Run(cmd, []string{})
-
-	assert.Contains(t, buf.String(), "failed to describe stacks")
-	assert.Contains(t, buf.String(), "describe stacks error")
+	testLogError(t,
+		"failed to describe stacks",
+		errDescribeStacks,
+		[]string{"failed to describe stacks", "describe stacks error"})
 }
