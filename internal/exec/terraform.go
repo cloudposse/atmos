@@ -471,8 +471,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.ComponentEnvList,
 			varFile,
 			workingDir,
-			componentPath,
 			info.TerraformWorkspace,
+			componentPath,
 		)
 		if err != nil {
 			return err
