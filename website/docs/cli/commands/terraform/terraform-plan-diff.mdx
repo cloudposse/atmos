@@ -5,8 +5,8 @@ sidebar_class_name: command
 id: plan-diff
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # terraform plan-diff
 
@@ -24,17 +24,17 @@ atmos terraform plan-diff <component> -s <stack> --orig=<original-plan-file> [--
 
 ## Arguments
 
-| Argument | Description |
-|----------|-------------|
+| Argument    | Description                                          |
+| ----------- | ---------------------------------------------------- |
 | `component` | The name of the component to run the command against |
 
 ## Flags
 
-| Flag | Description |
-|------|-------------|
-| `-s, --stack` | The stack name to use (required) |
-| `--orig` | Path to the original Terraform plan file (required) |
-| `--new` | Path to the new Terraform plan file (optional) |
+| Flag          | Description                                                |
+| ------------- | ---------------------------------------------------------- |
+| `-s, --stack` | The stack name to use (required)                           |
+| `--orig`      | Path to the original Terraform plan file (required)        |
+| `--new`       | Path to the new Terraform plan file (optional)             |
 | `--skip-init` | Skip running `terraform init` before executing the command |
 
 You can also pass any additional flags and arguments that are supported by the `terraform plan` command when generating a new plan.
@@ -51,12 +51,6 @@ atmos terraform plan-diff myapp -s dev --orig=orig.plan
 
 ```shell
 atmos terraform plan-diff myapp -s dev --orig=orig.plan --new=new.plan
-```
-
-### Compare an existing plan with a new plan using different variable values
-
-```shell
-atmos terraform plan-diff myapp -s dev --orig=orig.plan -var location="New York"
 ```
 
 ## Output Format
@@ -96,11 +90,11 @@ Outputs:
 
 ## Exit Codes
 
-| Exit Code | Description |
-|-----------|-------------|
-| 0 | Success - no differences found |
-| 1 | Error occurred during execution |
-| 2 | Success - differences found between plans |
+| Exit Code | Description                               |
+| --------- | ----------------------------------------- |
+| 0         | Success - no differences found            |
+| 1         | Error occurred during execution           |
+| 2         | Success - differences found between plans |
 
 ## Use Cases
 
