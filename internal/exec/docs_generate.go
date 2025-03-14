@@ -14,18 +14,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 
-	tfdocsMarkdown "github.com/terraform-docs/terraform-docs/format"
+	tfdocsFormat "github.com/terraform-docs/terraform-docs/format"
 	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
 	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
 
 	"github.com/hashicorp/go-getter"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate readme' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
-	// Parse CLI flags/args (we ignore any '--all' flag now)
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -39,19 +38,13 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	// The target directory is taken from docs.generate.readme.base-dir.
 	docsGenerate := rootConfig.Settings.Docs.Generate.Readme
 	basedir := docsGenerate.BaseDir
-
 	var targetDir string
 	currDir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 
-	if len(args) > 0 {
-		targetDir = filepath.Join(currDir, basedir)
-	} else {
-		// default to current directory
-		targetDir = currDir
-	}
+	targetDir = filepath.Join(currDir, basedir)
 
 	if len(docsGenerate.Input) == 0 {
 		log.Debug("No 'docs.generate.readme.input' sources defined in atmos.yaml.")
@@ -86,19 +79,28 @@ func generateReadme(
 	if err != nil {
 		return fmt.Errorf("failed to merge input YAMLs: %w", err)
 	}
-
-	// 2) Generate terraform docs if enabled.
+	// 2) Generate terraform docs if enabled and if the specified source (if any) exists.
 	if docsGenerate.Terraform.Enabled {
-		// If a source is provided in the configuration, join it with the base directory.
-		terraformSource := dir
+		var terraformSource string
 		if docsGenerate.Terraform.Source != "" {
-			terraformSource = filepath.Join(dir, docsGenerate.Terraform.Source)
+			joinedPath := filepath.Join(dir, docsGenerate.Terraform.Source)
+			// Check if the specified source directory exists.
+			if stat, err := os.Stat(joinedPath); err == nil && stat.IsDir() {
+				terraformSource = joinedPath
+			} else {
+				log.Debug("Skipping terraform docs generation as the specified source directory does not exist", "path", joinedPath)
+			}
+		} else {
+			terraformSource = dir
 		}
-		terraformDocs, err := runTerraformDocs(terraformSource, docsGenerate.Terraform)
-		if err != nil {
-			return fmt.Errorf("failed to generate terraform docs: %w", err)
+		// Only run runTerraformDocs if we have a valid terraformSource.
+		if terraformSource != "" {
+			terraformDocs, err := runTerraformDocs(terraformSource, docsGenerate.Terraform)
+			if err != nil {
+				return fmt.Errorf("failed to generate terraform docs: %w", err)
+			}
+			mergedData["terraform_docs"] = terraformDocs
 		}
-		mergedData["terraform_docs"] = terraformDocs
 	}
 
 	// 3) Fetch template (via go-getter) or fallback
@@ -175,6 +177,11 @@ func parseYAMLBytes(b []byte) (map[string]interface{}, error) {
 	return data, nil
 }
 
+type Formatter interface {
+	Generate(module *tfdocsTf.Module) error
+	Content() string
+}
+
 func runTerraformDocs(dir string, settings schema.TerraformDocsReadmeSettings) (string, error) {
 	config := tfdocsPrint.DefaultConfig()
 	config.ModuleRoot = dir
@@ -193,11 +200,26 @@ func runTerraformDocs(dir string, settings schema.TerraformDocsReadmeSettings) (
 		return "", fmt.Errorf("failed to load terraform module: %w", err)
 	}
 
-	formatter := tfdocsMarkdown.NewMarkdownTable(tfdocsPrint.DefaultConfig())
+	var formatter Formatter
+
+	// Assign the correct formatter based on settings.Format
+	switch settings.Format {
+	case "markdown table":
+		formatter = tfdocsFormat.NewMarkdownTable(tfdocsPrint.DefaultConfig())
+	case "markdown":
+		formatter = tfdocsFormat.NewMarkdownDocument(tfdocsPrint.DefaultConfig())
+	case "tfvars hcl":
+		formatter = tfdocsFormat.NewTfvarsHCL(tfdocsPrint.DefaultConfig())
+	case "tfvars json":
+		formatter = tfdocsFormat.NewTfvarsJSON(tfdocsPrint.DefaultConfig())
+	default:
+		formatter = tfdocsFormat.NewMarkdownTable(tfdocsPrint.DefaultConfig())
+	}
+
+	// Generate content and return it
 	if err := formatter.Generate(module); err != nil {
 		return "", err
 	}
-
 	return formatter.Content(), nil
 }
 
@@ -216,6 +238,10 @@ func downloadSource(
 	tempDir, err := os.MkdirTemp("", "atmos-docs-*")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	// Ensure directory permissions are restricted
+	if err := os.Chmod(tempDir, 0o700); err != nil {
+		return "", "", fmt.Errorf("failed to set temp directory permissions: %w", err)
 	}
 
 	err = GoGetterGet(atmosConfig, pathOrURL, tempDir, getter.ClientModeAny, 10*time.Minute)
@@ -272,12 +298,4 @@ func isLikelyRemote(s string) bool {
 		}
 	}
 	return false
-}
-
-func fileExists(fp string) bool {
-	info, err := os.Stat(fp)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return err == nil && !info.IsDir()
 }

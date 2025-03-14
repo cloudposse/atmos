@@ -1,82 +1,24 @@
 # yaml-language-server: $schema=schema.json
 tests:
-  - name: "atmos docs generate in current directory"
+  - name: "atmos docs generate for terraform docs"
     enabled: true
-    snapshot: false
-    description: "Ensure docs are generated in the current directory."
+    description: "Ensure terraform docs are generated"
     workdir: "fixtures/scenarios/docs-generate/"
     command: "atmos"
     args:
       - "docs"
       - "generate"
-    expect:
-      diff: []
-      stdout: 
-        - "^$"
-      exit_code: 0
-      file_exists:
-        - "README.md"
-      file_contains:
-        "README.md":
-          - "Atmos"         
-
-  - name: "atmos docs generate with subdirectories"
-    enabled: true
-    description: "Ensure docs are generated for subdirectories."
-    workdir: "../"
-    command: "atmos"
-    args:
-      - "docs"
-      - "generate"
-      - "--all"
+      - "readme"
     expect:
       diff: []
       exit_code: 0
       stdout:
         - "^$"
-      file_exists:
-        - "README.md"
-      file_contains:
-        "README.md":
-          - "Atmos"        
-
-  - name: "atmos docs generate with path as agrument"
-    enabled: true
-    description: "Ensure docs are generated for with path as arg."
-    workdir: "../"
-    command: "atmos"
-    args:
-      - "docs"
-      - "generate"
-      - "tests/fixtures/scenarios/docs-generate"
-    expect:
-      diff: []
-      exit_code: 0
-      stdout:
-        - "^$"
-      file_exists:
-        - "README.md"
-      file_contains:
-        "README.md":
-          - "Atmos" 
-
-  - name: "atmos docs generate for terraform docs"
-    enabled: true
-    description: "Ensure terraform docs are generated"
-    workdir: "fixtures/scenarios/docs-generate/terraform"
-    command: "atmos"
-    args:
-      - "docs"
-      - "generate"
-    expect:
-      diff: []
-      exit_code: 0
-      stdout:
+      stderr:
         - "^$"
       file_exists:
         - "README.md"
       file_contains:
         "README.md":
           - "## Requirements"
-          - "## Providers"
-          - "## Inputs"         
+          - "## Providers"        

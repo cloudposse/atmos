@@ -24,22 +24,22 @@ settings:
   list_merge_strategy: replace
   docs:
     generate:
-      input:
-        - "./README.yaml"
-
-      # Path to your Go template. It can be local, a Git URL, etc.
-      template: "./README.md.gotmpl"
-
-      # Destination for the final output file
-      output: "README.md"
-
-      # (Optional) Terraform doc generation settings
-      terraform:
-        enabled: true
-        format: "markdown"
-        show_providers: false
-        show_inputs: true
-        show_outputs: true
-        sort_by: "name"
-        hide_empty: false
-        indent_level: 2
+      # Generate README in current working directory
+      readme:
+        base-dir: .
+        input:
+          - "./README.yaml"
+        # To Do: template can be a remote URL/github, using this local for testing
+        template:  "./README.md.gotmpl"
+        # The final README
+        output: "README.md"
+        terraform:
+          source: terraform/
+          enabled: true
+          format: "markdown"
+          show_providers: false
+          show_inputs: true
+          show_outputs: true
+          sort_by: "name"
+          hide_empty: false
+          indent_level: 2 
