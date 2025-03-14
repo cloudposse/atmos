@@ -1,19 +1,20 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// listStacksCmd lists atmos stacks.
+// listStacksCmd lists atmos stacks
 var listStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "List all Atmos stacks or stacks for a specific component",
@@ -21,14 +22,14 @@ var listStacksCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration.
-		checkAtmosConfigFn()
-		output, err := listStacksFn(cmd)
+		// Check Atmos configuration
+		checkAtmosConfig()
+		output, err := listStacks(cmd)
 		if err != nil {
-			log.Error("error filtering stacks", "error", err)
+			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
 			return
 		}
-		utils.PrintMessage(strings.Join(output, "\n"))
+		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 	},
 }
 
@@ -38,23 +39,16 @@ func init() {
 	listCmd.AddCommand(listStacksCmd)
 }
 
-var (
-	listStacksFn       = listStacks
-	checkAtmosConfigFn = checkAtmosConfig
-)
-
 func listStacks(cmd *cobra.Command) ([]string, error) {
 	componentFlag, _ := cmd.Flags().GetString("component")
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		log.Error("failed to initialize CLI config", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
 	}
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
-		log.Error("failed to describe stacks", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}
 
 	output, err := l.FilterAndListStacks(stacksMap, componentFlag)
