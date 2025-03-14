@@ -206,7 +206,7 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	newPlanFile := filepath.Join(tmpDir, "new.plan")
 
 	// Run terraform init before plan
-	if err := runTerraformInit(atmosConfig, componentPath, info.ComponentEnvList); err != nil {
+	if err := runTerraformInit(atmosConfig, componentPath, info); err != nil {
 		return "", err
 	}
 
@@ -253,7 +253,7 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 // getTerraformPlanJSON gets the JSON representation of a terraform plan.
 func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, planFile string) (string, error) {
 	// Run terraform init before show
-	if err := runTerraformInit(atmosConfig, componentPath, info.ComponentEnvList); err != nil {
+	if err := runTerraformInit(atmosConfig, componentPath, info); err != nil {
 		return "", err
 	}
 
@@ -948,26 +948,23 @@ func formatCompactMapDiff(keys []string, origMap, newMap map[string]interface{})
 
 // runTerraformInit runs a basic terraform init in the specified directory using
 // terraformRun method (ExecuteTerraform).
-func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, env []string) error {
+func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *schema.ConfigAndStacksInfo) error {
 	// Clean terraform workspace to prevent workspace selection prompt
 	cleanTerraformWorkspace(*atmosConfig, dir)
 
-	// Create a ConfigAndStacksInfo struct for ExecuteTerraform.
-	info := schema.ConfigAndStacksInfo{
-		Command:          "terraform",
-		SubCommand:       "init",
-		ComponentEnvList: env,
-		DryRun:           false,
-		RedirectStdErr:   "",
-	}
+	// Create a copy of the info struct with init subcommand
+	initInfo := *info
+	initInfo.SubCommand = "init"
 
-	// Add -reconfigure flag conditionally based on config.
+	// Add -reconfigure flag conditionally based on config
 	if atmosConfig.Components.Terraform.InitRunReconfigure {
-		info.AdditionalArgsAndFlags = []string{"-reconfigure"}
+		initInfo.AdditionalArgsAndFlags = []string{"-reconfigure"}
+	} else {
+		initInfo.AdditionalArgsAndFlags = []string{}
 	}
 
-	// Run terraform init using ExecuteTerraform.
-	err := ExecuteTerraform(info)
+	// Run terraform init using ExecuteTerraform
+	err := ExecuteTerraform(initInfo)
 	if err != nil {
 		return fmt.Errorf("error running terraform init: %w", err)
 	}
