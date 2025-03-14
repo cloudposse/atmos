@@ -21,15 +21,6 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
-
-	applyCommand = "apply"
-	destroyCommand = "destroy"
-	importCommand = "import"
-	planCommand = "plan"
-	planDiffCommand = "plan-diff"
-	refreshCommand = "refresh"
-	showCommand = "show"
-
 )
 
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.

@@ -19,7 +19,7 @@ const (
 	LogLevelWarning = "Warning"
 )
 
-// OsExit is a variable for testing
+// OsExit is a variable for testing so we can mock os.Exit.
 var OsExit = os.Exit
 
 // PrintMessage prints the message to the console

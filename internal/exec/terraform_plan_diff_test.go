@@ -205,7 +205,7 @@ func TestFormatValue(t *testing.T) {
 	assert.Contains(t, formattedLargeMap, "a: 0")
 }
 
-// TestFormatMapForDisplay tests the formatMapForDisplay function specifically
+// TestFormatMapForDisplay tests the formatMapForDisplay function specifically.
 func TestFormatMapForDisplay(t *testing.T) {
 	// Test small map (3 or fewer entries) - should use compact representation
 	smallMap := map[string]interface{}{
@@ -449,8 +449,8 @@ func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 	assert.Contains(t, err.Error(), absPath)
 }
 
-// TestTerraformPlanDiffErrorHandling tests that the TerraformPlanDiff function
-// returns the correct error types in different scenarios
+// TestTerraformPlanDiffErrorHandling tests that the TerraformPlanDiff function returns the correct error types in
+// different scenarios.
 func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 	// Create a temporary directory for test files
 	tmpDir, err := os.MkdirTemp("", "atmos-test")
@@ -505,7 +505,7 @@ func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 	assert.False(t, exitCalled, "OsExit should not be called for JSON parsing errors")
 }
 
-// TestMockTerraformPlanDiff tests the generatePlanDiff function directly
+// TestMockTerraformPlanDiff tests the generatePlanDiff function directly.
 func TestMockTerraformPlanDiff(t *testing.T) {
 	// Create JSON content for the original plan
 	origPlanJSON := map[string]interface{}{
@@ -557,7 +557,7 @@ func TestMockTerraformPlanDiff(t *testing.T) {
 	assert.Empty(t, diff, "Diff should be empty for identical plans")
 }
 
-// TestFormatMapDiff tests the formatMapDiff function specifically
+// TestFormatMapDiff tests the formatMapDiff function specifically.
 func TestFormatMapDiff(t *testing.T) {
 	// Test case 1: Identical maps should show no changes
 	map1 := map[string]interface{}{
@@ -681,7 +681,7 @@ func TestFormatMapDiff(t *testing.T) {
 	assert.NotContains(t, result, "Content-Type", "Unchanged header should not be shown")
 }
 
-// TestPrintAttributeDiff tests the printAttributeDiff function with maps
+// TestPrintAttributeDiff tests the printAttributeDiff function with maps.
 func TestPrintAttributeDiff(t *testing.T) {
 	// Test how printAttributeDiff handles maps
 	var diff strings.Builder
@@ -727,7 +727,7 @@ func TestPrintAttributeDiff(t *testing.T) {
 	assert.Equal(t, "  ~ test_sensitive: (sensitive value) => (sensitive value)\n", result, "Should handle sensitive values properly")
 }
 
-// TestDebugFormatMapDiff outputs the exact diff format for debugging
+// TestDebugFormatMapDiff outputs the exact diff format for debugging.
 func TestDebugFormatMapDiff(t *testing.T) {
 	// Simple map diff
 	map1 := map[string]interface{}{
