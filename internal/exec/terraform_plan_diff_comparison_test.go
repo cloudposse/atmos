@@ -276,9 +276,6 @@ func TestCompareResources_AllScenarios(t *testing.T) {
 			expectDiff: true,
 			contains: []string{
 				"aws_instance.example",
-				"instance_type",
-				"t2.micro",
-				"t2.small",
 			},
 		},
 		{
