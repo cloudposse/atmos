@@ -172,6 +172,7 @@ func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
 }
+
 func TestCollapseExtraSlashesHandlesOnlySlashes(t *testing.T) {
 	testCases := []struct {
 		input    string
