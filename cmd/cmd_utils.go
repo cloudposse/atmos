@@ -5,16 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -32,43 +34,6 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	return func(cfg *ValidateConfig) {
 		cfg.CheckStack = check
 	}
-}
-
-// checkAtmosConfigFn is a variable that holds the function reference for testing
-var checkAtmosConfigFn = func(opts ...AtmosValidateOption) {
-	vCfg := &ValidateConfig{
-		CheckStack: true,
-	}
-
-	// Apply options
-	for _, opt := range opts {
-		opt(vCfg)
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		log.Error("Failed to initialize CLI config", "error", err)
-		os.Exit(1)
-	}
-
-	if vCfg.CheckStack {
-		// Check if the stack exists
-		stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
-		if err != nil {
-			log.Error("Failed to describe stacks", "error", err)
-			os.Exit(1)
-		}
-
-		if len(stacksMap) == 0 {
-			log.Error("No stacks found in the project")
-			os.Exit(1)
-		}
-	}
-}
-
-// checkAtmosConfig checks Atmos config
-func checkAtmosConfig(opts ...AtmosValidateOption) {
-	checkAtmosConfigFn(opts...)
 }
 
 // processCustomCommands processes and executes custom commands
@@ -520,6 +485,73 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	}
 
 	return &clone, nil
+}
+
+// checkAtmosConfig checks Atmos config
+func checkAtmosConfig(opts ...AtmosValidateOption) {
+	vCfg := &ValidateConfig{
+		CheckStack: true, // Default value true to check the stack
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(vCfg)
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		u.LogErrorAndExit(err)
+	}
+
+	if vCfg.CheckStack {
+		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
+		if !atmosConfigExists || err != nil {
+			printMessageForMissingAtmosConfig(atmosConfig)
+			os.Exit(1)
+		}
+	}
+}
+
+// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos
+func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
+	c1 := theme.Colors.Info
+	c2 := theme.Colors.Success
+
+	fmt.Println()
+	err := tuiUtils.PrintStyledText("ATMOS")
+	if err != nil {
+		u.LogErrorAndExit(err)
+	}
+
+	if atmosConfig.Default {
+		// If Atmos did not find an `atmos.yaml` config file and is using the default config
+		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Println(" CLI config file was not found.")
+		fmt.Print("\nThe default Atmos stacks directory is set to ")
+
+		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
+		fmt.Println(",\nbut the directory does not exist in the current path.")
+	} else {
+		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components
+		u.PrintMessageInColor("atmos.yaml", c1)
+		fmt.Print(" CLI config file specifies the directory for Atmos stacks as ")
+		u.PrintMessageInColor(filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath), c1)
+		fmt.Println(",\nbut the directory does not exist.")
+	}
+
+	u.PrintMessage("\nTo configure and start using Atmos, refer to the following documents:\n")
+
+	u.PrintMessageInColor("Atmos CLI Configuration:\n", c2)
+	u.PrintMessage("https://atmos.tools/cli/configuration\n")
+
+	u.PrintMessageInColor("Atmos Components:\n", c2)
+	u.PrintMessage("https://atmos.tools/core-concepts/components\n")
+
+	u.PrintMessageInColor("Atmos Stacks:\n", c2)
+	u.PrintMessage("https://atmos.tools/core-concepts/stacks\n")
+
+	u.PrintMessageInColor("Quick Start:\n", c2)
+	u.PrintMessage("https://atmos.tools/quick-start\n")
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
