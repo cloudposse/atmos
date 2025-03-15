@@ -15,7 +15,6 @@
 # are independent settings (supporting both absolute and relative paths).
 # If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
 # are considered paths relative to 'base_path'.
-base_path: ""
 
 vendor:
   # Path to vendor configuration file or directory containing vendor files
@@ -231,7 +230,6 @@ commands:
 
 # Integrations
 integrations:
-
   # Atlantis integration
   # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
   atlantis:
@@ -357,17 +355,17 @@ settings:
 
   # Terminal settings for displaying content
   terminal:
-    max_width: 120          # Maximum width for terminal output
-    pager: true             # Pager setting for all terminal output
-    colors: true            # Enable colored output
-    unicode: true           # Use unicode characters
+    max_width: 120 # Maximum width for terminal output
+    pager: true # Pager setting for all terminal output
+    colors: true # Enable colored output
+    unicode: true # Use unicode characters
 
     syntax_highlighting:
       enabled: true
-      formatter: terminal   # Output formatter (e.g., terminal, html)
-      theme: dracula        # Highlighting theme
-      line_numbers: true    # Display line numbers
-      wrap: false           # Wrap long lines
+      formatter: terminal # Output formatter (e.g., terminal, html)
+      theme: dracula # Highlighting theme
+      line_numbers: true # Display line numbers
+      wrap: false # Wrap long lines
 
   # Markdown element styling
   markdown:
@@ -394,4 +392,3 @@ version:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
-
