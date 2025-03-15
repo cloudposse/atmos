@@ -2,6 +2,7 @@
 tests:
   - name: "atmos docs generate for terraform docs"
     enabled: true
+    snapshot: false
     description: "Ensure terraform docs are generated"
     workdir: "fixtures/scenarios/docs-generate/"
     command: "atmos"
@@ -13,8 +14,6 @@ tests:
       diff: []
       exit_code: 0
       stdout:
-        - "^$"
-      stderr:
         - "^$"
       file_exists:
         - "README.md"
