@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 
 	"github.com/pkg/errors"
@@ -385,9 +387,25 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			atmosConfig.StackType = "Logical"
 		}
 	}
+	setLogConfig(&atmosConfig)
 
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
+}
+
+func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
+	switch log.GetLevel() {
+	case log.DebugLevel:
+		atmosConfig.Logs.Level = u.LogLevelDebug
+	case log.InfoLevel:
+		atmosConfig.Logs.Level = u.LogLevelInfo
+	case log.WarnLevel:
+		atmosConfig.Logs.Level = u.LogLevelWarning
+	case math.MaxInt32:
+		atmosConfig.Logs.Level = "Off"
+	default:
+		atmosConfig.Logs.Level = u.LogLevelInfo
+	}
 }
 
 // https://github.com/NCAR/go-figure
