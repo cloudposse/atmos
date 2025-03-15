@@ -109,10 +109,10 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		output = logFile
 	}
 
-	styledLog := logger.NewAtmosLogger(output)
+	atmosLogger := logger.NewAtmosLogger(output)
 
 	// Set the global log instance to our styled logger.
-	log.SetDefault(styledLog)
+	log.SetDefault(atmosLogger)
 
 	// Set the appropriate log level based on configuration.
 	switch atmosConfig.Logs.Level {
