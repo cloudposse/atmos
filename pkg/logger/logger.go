@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
@@ -43,24 +44,71 @@ type Logger struct {
 	AtmosLogger *log.Logger
 }
 
-func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
-	// Determine the output writer based on file path.
-	var writer io.Writer = os.Stdout
-	if file == "/dev/stderr" {
-		writer = os.Stderr
-	} else if file != "" && file != "/dev/stdout" {
-		// For actual files, we'll use a file writer.
-		var err error
-		writer, err = os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+// validateLogDestination validates the log destination path.
+// Returns an error if the path is a device file not in the allowed list.
+func validateLogDestination(file string) error {
+	// Skip validation for empty or standard allowed device files
+	if file == "" || file == "/dev/stdout" || file == "/dev/stderr" || file == "/dev/null" {
+		return nil
+	}
+
+	// Reject other device files
+	if strings.HasPrefix(file, "/dev/") {
+		return fmt.Errorf("unsupported device file: %s", file)
+	}
+
+	return nil
+}
+
+// For testing purposes
+var logWarningFunc = func(message string) {
+	log.Warn(message)
+}
+
+// logWarning is a simple logger for internal warnings.
+func logWarning(message string) {
+	logWarningFunc(message)
+}
+
+// getLogWriter returns an appropriate writer based on the file path.
+// It handles special paths like /dev/stdout, /dev/stderr, and /dev/null.
+func getLogWriter(file string) (io.Writer, error) {
+	switch file {
+	case "":
+		return os.Stdout, nil
+	case "/dev/stdout":
+		logWarning("WARNING: Using stdout for logs may interfere with JSON output parsing")
+		return os.Stdout, nil
+	case "/dev/stderr":
+		return os.Stderr, nil
+	case "/dev/null":
+		return io.Discard, nil
+	default:
+		// For actual files, we'll use a file writer
+		writer, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file: %w", err)
 		}
+		return writer, nil
+	}
+}
+
+func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
+	// Validate the log destination
+	if err := validateLogDestination(file); err != nil {
+		return nil, err
 	}
 
-	// Create the Atmos logger.
+	// Get the appropriate writer based on file path
+	writer, err := getLogWriter(file)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the Atmos logger
 	atmosLogger := NewAtmosLogger(writer)
 
-	// Set the appropriate log level.
+	// Set the appropriate log level
 	switch logLevel {
 	case LogLevelTrace:
 		atmosLogger.SetLevel(AtmosTraceLevel)
@@ -106,42 +154,65 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 	return "", fmt.Errorf("Invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
 }
 
-func (l *Logger) log(logColor *color.Color, message string) {
-	if l.File != "" {
-		if l.File == "/dev/stdout" {
-			_, err := logColor.Fprintln(os.Stdout, message)
-			if err != nil {
-				color.Red("%s\n", err)
-			}
-		} else if l.File == "/dev/stderr" {
-			_, err := logColor.Fprintln(os.Stderr, message)
-			if err != nil {
-				color.Red("%s\n", err)
-			}
-		} else {
-			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
-			if err != nil {
-				color.Red("%s\n", err)
-				return
-			}
+// getLogOutputWriter returns the appropriate writer for logging based on the log file path.
+// This is a helper for the log method to handle different output destinations.
+func (l *Logger) getLogOutputWriter() (io.Writer, func(), error) {
+	// Default to stdout
+	if l.File == "" {
+		return os.Stdout, func() {}, nil
+	}
 
-			defer func(f *os.File) {
-				err = f.Close()
-				if err != nil {
-					color.Red("%s\n", err)
-				}
-			}(f)
-
-			_, err = f.Write([]byte(fmt.Sprintf("%s\n", message)))
-			if err != nil {
-				color.Red("%s\n", err)
-			}
-		}
-	} else {
-		_, err := logColor.Fprintln(os.Stdout, message)
+	switch l.File {
+	case "/dev/stdout":
+		return os.Stdout, func() {}, nil
+	case "/dev/stderr":
+		return os.Stderr, func() {}, nil
+	case "/dev/null":
+		return io.Discard, func() {}, nil
+	default:
+		// For actual files, open the file
+		f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
 		if err != nil {
-			color.Red("%s\n", err)
+			return nil, nil, err
 		}
+		
+		// Return a cleanup function to close the file
+		cleanup := func() {
+			err := f.Close()
+			if err != nil {
+				color.Red("%s\n", err)
+			}
+		}
+		
+		return f, cleanup, nil
+	}
+}
+
+func (l *Logger) log(logColor *color.Color, message string) {
+	// Get the appropriate writer
+	writer, cleanup, err := l.getLogOutputWriter()
+	if err != nil {
+		color.Red("%s\n", err)
+		return
+	}
+	
+	// Ensure cleanup runs after we're done
+	defer cleanup()
+	
+	// Write the log message
+	if writer == io.Discard {
+		// Skip writing if output is discarded
+		return
+	} else if stdWriter, ok := writer.(*os.File); ok && (stdWriter == os.Stdout || stdWriter == os.Stderr) {
+		// Use color for terminal output
+		_, err = logColor.Fprintln(writer, message)
+	} else {
+		// Use plain text for file output
+		_, err = fmt.Fprintln(writer, message)
+	}
+	
+	if err != nil {
+		color.Red("%s\n", err)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	log "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
@@ -283,6 +284,100 @@ func TestLogger_LogMethods(t *testing.T) {
 	}
 }
 
+func TestDevNullLogging(t *testing.T) {
+	// Create a logger with /dev/null to verify log suppression
+	logger, err := NewLogger(LogLevelInfo, "/dev/null")
+	assert.NoError(t, err)
+	assert.NotNil(t, logger)
+	assert.Equal(t, "/dev/null", logger.File)
+
+	// Test that logging to /dev/null doesn't produce any output
+	// Capture os.Stdout
+	r, w, _ := os.Pipe()
+	oldStdout := os.Stdout
+	os.Stdout = w
+
+	// Log a message
+	logger.Info("This should be suppressed")
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	// Verify no output was generated
+	assert.Empty(t, output)
+}
+
+func TestDevStdoutWarning(t *testing.T) {
+	// Save the original function
+	originalFunc := logWarningFunc
+	defer func() { logWarningFunc = originalFunc }()
+	
+	// Create a channel to capture warnings
+	warnings := make(chan string, 1)
+	logWarningFunc = func(message string) {
+		warnings <- message
+	}
+	
+	// Create logger to trigger warning
+	_, err := NewLogger(LogLevelInfo, "/dev/stdout")
+	assert.NoError(t, err)
+	
+	// Try to get the warning (with timeout)
+	var warningMessage string
+	select {
+	case warningMessage = <-warnings:
+		// Got the message
+	case <-time.After(time.Second):
+		t.Fatal("Timed out waiting for warning message")
+	}
+	
+	// Verify warning was generated
+	assert.Contains(t, warningMessage, "WARNING")
+	assert.Contains(t, warningMessage, "stdout")
+	assert.Contains(t, warningMessage, "JSON output parsing")
+}
+
+func TestIllegalDeviceFiles(t *testing.T) {
+	// Test cases for illegal device files
+	illegalDevices := []string{
+		"/dev/random",
+		"/dev/urandom",
+		"/dev/zero",
+		"/dev/tty",
+	}
+
+	for _, device := range illegalDevices {
+		t.Run(fmt.Sprintf("Reject %s", device), func(t *testing.T) {
+			logger, err := NewLogger(LogLevelInfo, device)
+			assert.Error(t, err)
+			assert.Nil(t, logger)
+			assert.Contains(t, err.Error(), "unsupported device file")
+		})
+	}
+
+	// Test that regular files and supported device files work
+	validPaths := []string{
+		"/dev/stderr",
+		"/dev/stdout",
+		"/dev/null",
+		"test.log",
+		os.TempDir() + "/test.log",
+	}
+
+	for _, path := range validPaths {
+		t.Run(fmt.Sprintf("Accept %s", path), func(t *testing.T) {
+			logger, err := NewLogger(LogLevelInfo, path)
+			assert.NoError(t, err)
+			assert.NotNil(t, logger)
+		})
+	}
+}
+
 func TestLoggerFromCliConfig(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -329,6 +424,26 @@ func TestLoggerFromCliConfig(t *testing.T) {
 			},
 			expectError: false,
 		},
+		{
+			name: "/dev/null disables logging",
+			config: schema.AtmosConfiguration{
+				Logs: schema.Logs{
+					Level: "Info",
+					File:  "/dev/null",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Invalid device file causes error",
+			config: schema.AtmosConfiguration{
+				Logs: schema.Logs{
+					Level: "Info",
+					File:  "/dev/random",
+				},
+			},
+			expectError: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -345,6 +460,7 @@ func TestLoggerFromCliConfig(t *testing.T) {
 				} else {
 					assert.Equal(t, LogLevel(test.config.Logs.Level), logger.LogLevel)
 				}
+				
 				assert.Equal(t, test.config.Logs.File, logger.File)
 			}
 		})
