@@ -306,6 +306,9 @@ func NewAtmosLogger(writer io.Writer) *log.Logger {
 	styles.Levels[log.DebugLevel] = createLevelStyle(debugLevelLabel, theme.ColorBlue)
 	styles.Levels[AtmosTraceLevel] = createLevelStyle(traceLevelLabel, theme.ColorPink)
 
+	// Default style for all keys.
+	styles.Keys[""] = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray))
+
 	// Style for error values.
 	styles.Keys["error"] = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
 	styles.Values["error"] = lipgloss.NewStyle().Bold(true)
