@@ -248,7 +248,24 @@ func isCIEnvironment() bool {
 
 // collapseExtraSlashes replaces multiple consecutive slashes with a single slash.
 func collapseExtraSlashes(s string) string {
-	return regexp.MustCompile("/+").ReplaceAllString(s, "/")
+	// Normalize the protocol to have exactly two slashes after http: or https:
+	protocolRegex := regexp.MustCompile(`(?i)(https?):/*`)
+	s = protocolRegex.ReplaceAllString(s, "$1://")
+
+	// Split into protocol and the rest of the URL
+	parts := regexp.MustCompile(`(?i)^(https?://)(.*)$`).FindStringSubmatch(s)
+	if len(parts) == 3 {
+		protocol := parts[1]
+		rest := parts[2]
+		// Collapse multiple slashes in the rest part
+		rest = regexp.MustCompile(`/+`).ReplaceAllString(rest, "/")
+		// Remove any leading slashes after the protocol to avoid triple slashes
+		rest = strings.TrimLeft(rest, "/")
+		return protocol + rest
+	}
+
+	// If no protocol, collapse all slashes
+	return regexp.MustCompile(`/+`).ReplaceAllString(s, "/")
 }
 
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
