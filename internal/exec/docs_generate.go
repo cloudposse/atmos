@@ -54,17 +54,11 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate a single README in the targetDir.
-	return generateReadme(rootConfig, targetDir, docsGenerate)
+	return generateReadme(&rootConfig, targetDir, docsGenerate)
 }
 
-// generateSingleReadme merges data from docsGenerate.Input, runs terraform-docs if needed,
-// and writes out a final README.
-func generateReadme(
-	atmosConfig schema.AtmosConfiguration,
-	dir string,
-	docsGenerate schema.DocsGenerateReadme,
-) error {
-	// 1) Merge data from all YAML inputs
+// mergeInputs merges all YAML inputs defined in docsGenerate.Input.
+func mergeInputs(atmosConfig *schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerateReadme) (map[string]any, error) {
 	var allMaps []map[string]any
 	for _, src := range docsGenerate.Input {
 		dataMap, err := fetchAndParseYAML(atmosConfig, src, dir)
@@ -74,58 +68,93 @@ func generateReadme(
 		}
 		allMaps = append(allMaps, dataMap)
 	}
-	// Use the native Atmos merging
-	mergedData, err := merge.Merge(atmosConfig, allMaps)
+	return merge.Merge(*atmosConfig, allMaps)
+}
+
+// getTerraformSource returns the directory to use for generating Terraform docs.
+// If a source is specified, it verifies that the joined path exists and is a directory.
+// Otherwise, it returns the base directory.
+func getTerraformSource(dir, source string) (string, error) {
+	if source != "" {
+		joinedPath := filepath.Join(dir, source)
+		stat, err := os.Stat(joinedPath)
+		if err != nil || !stat.IsDir() {
+			return "", fmt.Errorf("source directory does not exist: %s", joinedPath)
+		}
+		return joinedPath, nil
+	}
+	return dir, nil
+}
+
+// getTemplateContent downloads and reads the template file from the given URL.
+func getTemplateContent(atmosConfig *schema.AtmosConfiguration, templateURL, dir string) (string, error) {
+	templateFile, tempDir, err := downloadSource(atmosConfig, templateURL, dir)
+	if err != nil {
+		return "", err
+	}
+	defer removeTempDir(*atmosConfig, tempDir)
+	body, err := os.ReadFile(templateFile)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func applyTerraformDocs(atmosConfig schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerateReadme, mergedData map[string]any) error {
+	if !docsGenerate.Terraform.Enabled {
+		return nil
+	}
+
+	terraformSource, err := getTerraformSource(dir, docsGenerate.Terraform.Source)
+	if err != nil {
+		log.Debug("Skipping terraform docs generation", "error", err)
+		return nil
+	}
+
+	terraformDocs, err := runTerraformDocs(terraformSource, docsGenerate.Terraform)
+	if err != nil {
+		return fmt.Errorf("failed to generate terraform docs: %w", err)
+	}
+	mergedData["terraform_docs"] = terraformDocs
+	return nil
+}
+
+func fetchTemplate(atmosConfig schema.AtmosConfiguration, docsGenerate schema.DocsGenerateReadme, dir string) string {
+	if docsGenerate.Template != "" {
+		tmpl, err := getTemplateContent(&atmosConfig, docsGenerate.Template, dir)
+		if err == nil {
+			return tmpl
+		}
+		log.Debug("Error fetching template", "template", docsGenerate.Template, "error", err)
+	}
+	// Return default template if none is provided or on error.
+	return "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
+}
+
+// generateSingleReadme merges data from docsGenerate.Input, runs terraform-docs if needed,
+// and writes out a final README.
+func generateReadme(
+	atmosConfig *schema.AtmosConfiguration,
+	dir string,
+	docsGenerate schema.DocsGenerateReadme,
+) error {
+	// 1) Merge YAML inputs.
+	mergedData, err := mergeInputs(atmosConfig, dir, docsGenerate)
 	if err != nil {
 		return fmt.Errorf("failed to merge input YAMLs: %w", err)
 	}
-	// 2) Generate terraform docs if enabled and if the specified source (if any) exists.
-	if docsGenerate.Terraform.Enabled {
-		var terraformSource string
-		if docsGenerate.Terraform.Source != "" {
-			joinedPath := filepath.Join(dir, docsGenerate.Terraform.Source)
-			// Check if the specified source directory exists.
-			if stat, err := os.Stat(joinedPath); err == nil && stat.IsDir() {
-				terraformSource = joinedPath
-			} else {
-				log.Debug("Skipping terraform docs generation as the specified source directory does not exist", "path", joinedPath)
-			}
-		} else {
-			terraformSource = dir
-		}
-		// Only run runTerraformDocs if we have a valid terraformSource.
-		if terraformSource != "" {
-			terraformDocs, err := runTerraformDocs(terraformSource, docsGenerate.Terraform)
-			if err != nil {
-				return fmt.Errorf("failed to generate terraform docs: %w", err)
-			}
-			mergedData["terraform_docs"] = terraformDocs
-		}
+
+	// 2) Generate terraform docs if enabled.
+	if err := applyTerraformDocs(*atmosConfig, dir, docsGenerate, mergedData); err != nil {
+		return err
 	}
 
-	// 3) Fetch template (via go-getter) or fallback
-	var chosenTemplate string
-	if docsGenerate.Template != "" {
-		templateFile, tempDir, err := downloadSource(atmosConfig, docsGenerate.Template, dir)
-		if err != nil {
-			log.Debug("Error fetching template", "template", docsGenerate.Template, "error", err)
-		} else {
-			defer removeTempDir(atmosConfig, tempDir)
-			body, err := os.ReadFile(templateFile)
-			if err == nil {
-				chosenTemplate = string(body)
-			} else {
-				log.Debug("Error reading template file", "error", err)
-			}
-		}
-	}
-	if chosenTemplate == "" {
-		chosenTemplate = "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
-	}
+	// 3) Fetch the template.
+	chosenTemplate := fetchTemplate(*atmosConfig, docsGenerate, dir)
 
-	// 4) Render final README with existing gomplate call
+	// 4) Render final README with gomplate.
 	rendered, err := ProcessTmplWithDatasourcesGomplate(
-		atmosConfig,
+		*atmosConfig,
 		schema.Settings{},
 		"docs-generate",
 		chosenTemplate,
@@ -136,13 +165,12 @@ func generateReadme(
 		return fmt.Errorf("failed to render template with datasources: %w", err)
 	}
 
-	// 5) Write final README.md (or custom output name)
+	// 5) Write final README (default filename "README.md" if not specified).
 	outputFile := docsGenerate.Output
 	if outputFile == "" {
 		outputFile = "README.md"
 	}
 	outputPath := filepath.Join(dir, outputFile)
-
 	if err = os.WriteFile(outputPath, []byte(rendered), 0o644); err != nil {
 		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
 	}
@@ -151,13 +179,13 @@ func generateReadme(
 	return nil
 }
 
-// fetchAndParseYAML fetches a YAML file from a local path or URL, parses it, and returns the data
-func fetchAndParseYAML(atmosConfig schema.AtmosConfiguration, pathOrURL string, baseDir string) (map[string]interface{}, error) {
+// fetchAndParseYAML fetches a YAML file from a local path or URL, parses it, and returns the data.
+func fetchAndParseYAML(atmosConfig *schema.AtmosConfiguration, pathOrURL string, baseDir string) (map[string]interface{}, error) {
 	localPath, tempDir, err := downloadSource(atmosConfig, pathOrURL, baseDir)
 	if err != nil {
 		return nil, err
 	}
-	defer removeTempDir(atmosConfig, tempDir)
+	defer removeTempDir(*atmosConfig, tempDir)
 	return parseYAML(localPath)
 }
 
@@ -226,7 +254,7 @@ func runTerraformDocs(dir string, settings schema.TerraformDocsReadmeSettings) (
 // downloadSource calls the go-getter,
 // then returns the single file path if exactly one file is found, or an error otherwise.
 func downloadSource(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	pathOrURL string,
 	baseDir string,
 ) (localPath string, temDir string, err error) {
@@ -244,7 +272,7 @@ func downloadSource(
 		return "", "", fmt.Errorf("failed to set temp directory permissions: %w", err)
 	}
 
-	err = GoGetterGet(atmosConfig, pathOrURL, tempDir, getter.ClientModeAny, 10*time.Minute)
+	err = GoGetterGet(*atmosConfig, pathOrURL, tempDir, getter.ClientModeAny, 10*time.Minute)
 	if err != nil {
 		return "", tempDir, fmt.Errorf("failed to download %s: %w", pathOrURL, err)
 	}
@@ -256,15 +284,12 @@ func downloadSource(
 	return downloadedPath, tempDir, nil
 }
 
-/*
-go-getter is used to download files as per provided path by user and
-the function below is a check that user provided a link to a file or a single file in folder,
-not a folder with multiple files, i.e. as of right now we dont have a logic to take just one relevant
-template or yml file from the folder downloaded.
-So this is why an extra check.
-To be decided later: this could be removed
-later to introdce simplier logic (like trust users to provide a single file, etc)
-*/
+// go-getter is used to download files as per provided path by user and the function below is a check that user provided a link to a file or a single file in folder.
+// Not a folder with multiple files, i.e. as of right now we dont have a logic to take just one relevant template or yml file from the folder downloaded.
+// So this is why an extra check.
+// To be decided later: this could be removed
+// later to introdce simpler logic (like trust users to provide a single file, etc).
+
 func findSingleFileInDir(dir string) (string, error) {
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, werr error) error {
@@ -289,7 +314,7 @@ func findSingleFileInDir(dir string) (string, error) {
 	return files[0], nil
 }
 
-// isLikelyRemote does a quick check if a path looks remote
+// isLikelyRemote does a quick check if a path looks remote.
 func isLikelyRemote(s string) bool {
 	prefixes := []string{"http://", "https://", "git::", "github.com/", "git@"}
 	for _, p := range prefixes {

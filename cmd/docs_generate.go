@@ -26,9 +26,7 @@ All file paths are resolved relative to the configured base-dir (default is ".")
 
 Alternatively, using the top-level generate command:
   atmos generate docs readme`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return e.ExecuteDocsGenerateCmd(cmd, args)
-	},
+	RunE: e.ExecuteDocsGenerateCmd,
 }
 
 // generateDocsCmd is a new top-level command so we can do `atmos generate docs`.
