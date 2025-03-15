@@ -1,6 +1,7 @@
 package flags
 
 import (
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 )
 
@@ -22,13 +23,50 @@ func AddCommonListFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("query", "", "Query to filter values (e.g., .vars.region)")
 }
 
+// flagGetter is an interface for getting flag values.
+type flagGetter interface {
+	GetString(name string) (string, error)
+	GetInt(name string) (int, error)
+}
+
+// getFlags returns a flagGetter for a command.
+var getFlagsFn = func(cmd *cobra.Command) flagGetter {
+	return cmd.Flags()
+}
+
 // GetCommonListFlags gets common flags from a command.
 func GetCommonListFlags(cmd *cobra.Command) (*CommonFlags, error) {
-	format, _ := cmd.Flags().GetString("format")
-	maxColumns, _ := cmd.Flags().GetInt("max-columns")
-	delimiter, _ := cmd.Flags().GetString("delimiter")
-	stack, _ := cmd.Flags().GetString("stack")
-	query, _ := cmd.Flags().GetString("query")
+	flags := getFlagsFn(cmd)
+
+	format, err := flags.GetString("format")
+	if err != nil {
+		log.Error("failed to retrieve format flag", "error", err)
+		return nil, err
+	}
+
+	maxColumns, err := flags.GetInt("max-columns")
+	if err != nil {
+		log.Error("failed to retrieve max-columns flag", "error", err)
+		return nil, err
+	}
+
+	delimiter, err := flags.GetString("delimiter")
+	if err != nil {
+		log.Error("failed to retrieve delimiter flag", "error", err)
+		return nil, err
+	}
+
+	stack, err := flags.GetString("stack")
+	if err != nil {
+		log.Error("failed to retrieve stack flag", "error", err)
+		return nil, err
+	}
+
+	query, err := flags.GetString("query")
+	if err != nil {
+		log.Error("failed to retrieve query flag", "error", err)
+		return nil, err
+	}
 
 	return &CommonFlags{
 		Format:     format,
