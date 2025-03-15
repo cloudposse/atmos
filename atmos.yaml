@@ -393,3 +393,4 @@ version:
     enabled: true
     timeout: 1000 # ms
     frequency: 1h
+
