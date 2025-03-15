@@ -14,6 +14,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// Variable declarations for functions that might be mocked in tests.
+var (
+	listStacksFn = listStacks
+)
+
 // listStacksCmd lists atmos stacks
 var listStacksCmd = &cobra.Command{
 	Use:                "stacks",
@@ -24,7 +29,7 @@ var listStacksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		output, err := listStacks(cmd)
+		output, err := listStacksFn(cmd)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
 			return
