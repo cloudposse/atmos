@@ -25,6 +25,8 @@ const (
 	LogLevelError   LogLevel = "Error"
 )
 
+const FilePermission = 0o644
+
 // AtmosTraceLevel is a custom log level one level lower than DebugLevel for more verbose logging.
 const AtmosTraceLevel log.Level = log.DebugLevel - 1
 
@@ -36,6 +38,16 @@ var logLevelOrder = map[LogLevel]int{
 	LogLevelWarning: 3,
 	LogLevelError:   4,
 	LogLevelOff:     5,
+}
+
+// ErrUnsupportedDeviceFile represents an error when an unsupported device file is specified.
+type ErrUnsupportedDeviceFile struct {
+	file string
+}
+
+// Error returns the error message for an unsupported device file.
+func (e ErrUnsupportedDeviceFile) Error() string {
+	return fmt.Sprintf("unsupported device file: %s", e.file)
 }
 
 type Logger struct {
@@ -54,7 +66,7 @@ func validateLogDestination(file string) error {
 
 	// Reject other device files
 	if strings.HasPrefix(file, "/dev/") {
-		return fmt.Errorf("unsupported device file: %s", file)
+		return ErrUnsupportedDeviceFile{file: file}
 	}
 
 	return nil
@@ -84,8 +96,7 @@ func getLogWriter(file string) (io.Writer, error) {
 	case "/dev/null":
 		return io.Discard, nil
 	default:
-		// For actual files, we'll use a file writer
-		writer, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+		writer, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, FilePermission)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file: %w", err)
 		}
@@ -175,7 +186,7 @@ func (l *Logger) getLogOutputWriter() (io.Writer, func(), error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		
+
 		// Return a cleanup function to close the file
 		cleanup := func() {
 			err := f.Close()
@@ -183,7 +194,7 @@ func (l *Logger) getLogOutputWriter() (io.Writer, func(), error) {
 				color.Red("%s\n", err)
 			}
 		}
-		
+
 		return f, cleanup, nil
 	}
 }
@@ -195,22 +206,17 @@ func (l *Logger) log(logColor *color.Color, message string) {
 		color.Red("%s\n", err)
 		return
 	}
-	
-	// Ensure cleanup runs after we're done
+
 	defer cleanup()
-	
-	// Write the log message
+
 	if writer == io.Discard {
-		// Skip writing if output is discarded
 		return
 	} else if stdWriter, ok := writer.(*os.File); ok && (stdWriter == os.Stdout || stdWriter == os.Stderr) {
-		// Use color for terminal output
 		_, err = logColor.Fprintln(writer, message)
 	} else {
-		// Use plain text for file output
 		_, err = fmt.Fprintln(writer, message)
 	}
-	
+
 	if err != nil {
 		color.Red("%s\n", err)
 	}
