@@ -16,10 +16,10 @@ import (
 )
 
 func TestNewLogger(t *testing.T) {
-	logger, err := NewLogger(LogLevelDebug, "/dev/stdout")
+	logger, err := NewLogger(log.DebugLevel, "/dev/stdout")
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
-	assert.Equal(t, LogLevelDebug, logger.LogLevel)
+	assert.Equal(t, log.DebugLevel, logger.GetLevel())
 	assert.Equal(t, "/dev/stdout", logger.File)
 }
 
@@ -31,10 +31,10 @@ func TestNewLoggerFromCliConfig(t *testing.T) {
 		},
 	}
 
-	logger, err := NewLoggerFromCliConfig(atmosConfig)
+	logger, err := NewLoggerFromCliConfig(&atmosConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
-	assert.Equal(t, LogLevelInfo, logger.LogLevel)
+	assert.Equal(t, log.InfoLevel, logger.GetLevel())
 	assert.Equal(t, "/dev/stdout", logger.File)
 }
 
@@ -42,20 +42,20 @@ func TestParseLogLevel(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
-		expected    LogLevel
+		expected    log.Level
 		expectError bool
 	}{
-		{"Empty string returns Info", "", LogLevelInfo, false},
-		{"Valid Trace level", "Trace", LogLevelTrace, false},
-		{"Valid Debug level", "Debug", LogLevelDebug, false},
-		{"Valid Info level", "Info", LogLevelInfo, false},
-		{"Valid Warning level", "Warning", LogLevelWarning, false},
-		{"Valid Off level", "Off", LogLevelOff, false},
-		{"Invalid lowercase level", "trace", "", true},
-		{"Invalid mixed case level", "TrAcE", "", true},
-		{"Invalid level", "InvalidLevel", "", true},
-		{"Invalid empty spaces", "  ", "", true},
-		{"Invalid special characters", "Debug!", "", true},
+		{"Empty string returns Info", "", log.InfoLevel, false},
+		{"Valid Trace level", "Trace", AtmosTraceLevel, false},
+		{"Valid Debug level", "Debug", log.DebugLevel, false},
+		{"Valid Info level", "Info", log.InfoLevel, false},
+		{"Valid Warning level", "Warning", log.WarnLevel, false},
+		{"Valid Off level", "Off", log.FatalLevel + 1, false},
+		{"Invalid lowercase level", "trace", 0, true},
+		{"Invalid mixed case level", "TrAcE", 0, true},
+		{"Invalid level", "InvalidLevel", 0, true},
+		{"Invalid empty spaces", "  ", 0, true},
+		{"Invalid special characters", "Debug!", 0, true},
 	}
 
 	for _, test := range tests {
@@ -72,20 +72,11 @@ func TestParseLogLevel(t *testing.T) {
 }
 
 func TestLogger_Trace(t *testing.T) {
-	// Test the trace level functionality using direct output capture
-
-	// Create a buffer to capture the styled logger output
 	var buf bytes.Buffer
-
-	// Create an Atmos logger writing to our buffer
 	atmosLogger := log.New(&buf)
-
-	// Set the level to AtmosTraceLevel so our custom level messages are shown
 	atmosLogger.SetLevel(AtmosTraceLevel)
 
-	// Create a logger using this Atmos logger
 	testLogger := &Logger{
-		LogLevel:    LogLevelTrace,
 		File:        "/dev/stdout",
 		AtmosLogger: atmosLogger,
 	}
@@ -103,23 +94,25 @@ func TestLogger_Trace(t *testing.T) {
 
 func TestLogger_Debug(t *testing.T) {
 	// Create a logger with Debug level
-	logger, err := NewLogger(LogLevelDebug, "/dev/stdout")
+	logger, err := NewLogger(log.DebugLevel, "/dev/stdout")
 	assert.NoError(t, err)
-	assert.True(t, logger.isLevelEnabled(LogLevelDebug))
+	assert.Equal(t, log.DebugLevel, logger.GetLevel())
 	assert.NotNil(t, logger.AtmosLogger)
-	loggerTrace, err := NewLogger(LogLevelTrace, "/dev/stdout")
+	loggerTrace, err := NewLogger(AtmosTraceLevel, "/dev/stdout")
 	assert.NoError(t, err)
-	assert.True(t, loggerTrace.isLevelEnabled(LogLevelDebug))
+	assert.Equal(t, AtmosTraceLevel, loggerTrace.GetLevel())
 	logger.Debug("Debug message")
 	loggerTrace.Debug("Trace level logger should show debug messages")
 }
 
 func TestLogger_Info(t *testing.T) {
 	var buf bytes.Buffer
+	atmosLogger := NewAtmosLogger(&buf)
+	atmosLogger.SetLevel(log.InfoLevel)
+
 	logger := &Logger{
-		LogLevel:    LogLevelInfo,
 		File:        "/dev/stdout",
-		AtmosLogger: NewAtmosLogger(&buf),
+		AtmosLogger: atmosLogger,
 	}
 
 	logger.Info("Info message")
@@ -129,10 +122,12 @@ func TestLogger_Info(t *testing.T) {
 
 func TestLogger_Warning(t *testing.T) {
 	var buf bytes.Buffer
+	atmosLogger := NewAtmosLogger(&buf)
+	atmosLogger.SetLevel(log.WarnLevel)
+
 	logger := &Logger{
-		LogLevel:    LogLevelWarning,
 		File:        "/dev/stdout",
-		AtmosLogger: NewAtmosLogger(&buf),
+		AtmosLogger: atmosLogger,
 	}
 
 	logger.Warning("Warning message")
@@ -143,10 +138,12 @@ func TestLogger_Warning(t *testing.T) {
 func TestLogger_Error(t *testing.T) {
 	// Test styled logger error with stderr writer
 	var buf bytes.Buffer
+	atmosLogger := NewAtmosLogger(&buf)
+	atmosLogger.SetLevel(log.WarnLevel)
+
 	logger := &Logger{
-		LogLevel:    LogLevelWarning,
 		File:        "/dev/stderr",
-		AtmosLogger: NewAtmosLogger(&buf),
+		AtmosLogger: atmosLogger,
 	}
 
 	err := fmt.Errorf("This is an error")
@@ -156,10 +153,12 @@ func TestLogger_Error(t *testing.T) {
 
 	// Test styled logger with file path
 	var buf2 bytes.Buffer
+	fileAtmosLogger := NewAtmosLogger(&buf2)
+	fileAtmosLogger.SetLevel(log.WarnLevel)
+
 	fileLogger := &Logger{
-		LogLevel:    LogLevelWarning,
 		File:        "test.log",
-		AtmosLogger: NewAtmosLogger(&buf2),
+		AtmosLogger: fileAtmosLogger,
 	}
 
 	err2 := fmt.Errorf("This is a file error")
@@ -174,7 +173,7 @@ func TestLogger_FileLogging(t *testing.T) {
 
 	defer os.Remove(logFile)
 
-	logger, _ := NewLogger(LogLevelInfo, logFile)
+	logger, _ := NewLogger(log.InfoLevel, logFile)
 	logger.Info("File logging test")
 
 	data, err := os.ReadFile(logFile)
@@ -183,47 +182,37 @@ func TestLogger_FileLogging(t *testing.T) {
 }
 
 func TestLogger_SetLogLevel(t *testing.T) {
-	logger, _ := NewLogger(LogLevelInfo, "/dev/stdout")
+	logger, _ := NewLogger(log.InfoLevel, "/dev/stdout")
 
-	err := logger.SetLogLevel(LogLevelDebug)
+	err := logger.SetLogLevel(log.DebugLevel)
 	assert.NoError(t, err)
-	assert.Equal(t, LogLevelDebug, logger.LogLevel)
+	assert.Equal(t, log.DebugLevel, logger.GetLevel())
 }
 
-func TestLogger_isLevelEnabled(t *testing.T) {
+func TestLogger_GetLevel(t *testing.T) {
 	tests := []struct {
 		name          string
-		currentLevel  LogLevel
-		checkLevel    LogLevel
-		expectEnabled bool
+		level         log.Level
+		expectedLevel log.Level
 	}{
-		{"Trace enables all levels", LogLevelTrace, LogLevelTrace, true},
-		{"Trace enables Debug", LogLevelTrace, LogLevelDebug, true},
-		{"Trace enables Info", LogLevelTrace, LogLevelInfo, true},
-		{"Trace enables Warning", LogLevelTrace, LogLevelWarning, true},
-		{"Debug disables Trace", LogLevelDebug, LogLevelTrace, false},
-		{"Debug enables Debug", LogLevelDebug, LogLevelDebug, true},
-		{"Debug enables Info", LogLevelDebug, LogLevelInfo, true},
-		{"Debug enables Warning", LogLevelDebug, LogLevelWarning, true},
-		{"Info disables Trace", LogLevelInfo, LogLevelTrace, false},
-		{"Info disables Debug", LogLevelInfo, LogLevelDebug, false},
-		{"Info enables Info", LogLevelInfo, LogLevelInfo, true},
-		{"Info enables Warning", LogLevelInfo, LogLevelWarning, true},
-		{"Warning disables Trace", LogLevelWarning, LogLevelTrace, false},
-		{"Warning disables Debug", LogLevelWarning, LogLevelDebug, false},
-		{"Warning disables Info", LogLevelWarning, LogLevelInfo, false},
-		{"Warning enables Warning", LogLevelWarning, LogLevelWarning, true},
-		{"Off disables all levels", LogLevelOff, LogLevelTrace, false},
-		{"Off disables Debug", LogLevelOff, LogLevelDebug, false},
-		{"Off disables Info", LogLevelOff, LogLevelInfo, false},
-		{"Off disables Warning", LogLevelOff, LogLevelWarning, false},
+		{"Trace level is preserved", AtmosTraceLevel, AtmosTraceLevel},
+		{"Debug level is preserved", log.DebugLevel, log.DebugLevel},
+		{"Info level is preserved", log.InfoLevel, log.InfoLevel},
+		{"Warn level is preserved", log.WarnLevel, log.WarnLevel},
+		{"Error level is preserved", log.ErrorLevel, log.ErrorLevel},
+		{"Fatal+1 level is preserved", log.FatalLevel + 1, log.FatalLevel + 1},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			logger := &Logger{LogLevel: test.currentLevel}
-			enabled := logger.isLevelEnabled(test.checkLevel)
-			assert.Equal(t, test.expectEnabled, enabled)
+			// Create a logger with a buffer to avoid actual output
+			var buf bytes.Buffer
+			atmosLogger := log.New(&buf)
+			atmosLogger.SetLevel(test.level)
+
+			logger := &Logger{AtmosLogger: atmosLogger}
+			gotLevel := logger.GetLevel()
+			assert.Equal(t, test.expectedLevel, gotLevel)
 		})
 	}
 }
@@ -231,49 +220,44 @@ func TestLogger_isLevelEnabled(t *testing.T) {
 func TestLogger_LogMethods(t *testing.T) {
 	tests := []struct {
 		name         string
-		loggerLevel  LogLevel
+		loggerLevel  log.Level
 		message      string
 		expectOutput bool
 		logFunc      func(*Logger, string)
 	}{
-		{"Trace logs when level is Trace", LogLevelTrace, "trace message", true, (*Logger).Trace},
-		{"Trace doesn't log when level is Debug", LogLevelDebug, "trace message", false, (*Logger).Trace},
-		{"Debug logs when level is Trace", LogLevelTrace, "debug message", true, (*Logger).Debug},
-		{"Debug logs when level is Debug", LogLevelDebug, "debug message", true, (*Logger).Debug},
-		{"Debug doesn't log when level is Info", LogLevelInfo, "debug message", false, (*Logger).Debug},
-		{"Info logs when level is Trace", LogLevelTrace, "info message", true, (*Logger).Info},
-		{"Info logs when level is Debug", LogLevelDebug, "info message", true, (*Logger).Info},
-		{"Info logs when level is Info", LogLevelInfo, "info message", true, (*Logger).Info},
-		{"Info doesn't log when level is Warning", LogLevelWarning, "info message", false, (*Logger).Info},
-		{"Warning logs when level is Trace", LogLevelTrace, "warning message", true, (*Logger).Warning},
-		{"Warning logs when level is Warning", LogLevelWarning, "warning message", true, (*Logger).Warning},
-		{"Nothing logs when level is Off", LogLevelOff, "any message", false, (*Logger).Info},
+		{"Trace logs when level is Trace", AtmosTraceLevel, "trace message", true, (*Logger).Trace},
+		{"Trace doesn't log when level is Debug", log.DebugLevel, "trace message", false, (*Logger).Trace},
+		{"Debug logs when level is Trace", AtmosTraceLevel, "debug message", true, (*Logger).Debug},
+		{"Debug logs when level is Debug", log.DebugLevel, "debug message", true, (*Logger).Debug},
+		{"Debug doesn't log when level is Info", log.InfoLevel, "debug message", false, (*Logger).Debug},
+		{"Info logs when level is Trace", AtmosTraceLevel, "info message", true, (*Logger).Info},
+		{"Info logs when level is Debug", log.DebugLevel, "info message", true, (*Logger).Info},
+		{"Info logs when level is Info", log.InfoLevel, "info message", true, (*Logger).Info},
+		{"Info doesn't log when level is Warning", log.WarnLevel, "info message", false, (*Logger).Info},
+		{"Warning logs when level is Trace", AtmosTraceLevel, "warning message", true, (*Logger).Warning},
+		{"Warning logs when level is Warning", log.WarnLevel, "warning message", true, (*Logger).Warning},
+		{"Nothing logs when level is Off", log.FatalLevel + 1, "any message", false, (*Logger).Info},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// Pipe to capture output
-			r, w, _ := os.Pipe()
-			oldStdout := os.Stdout
-			os.Stdout = w
+			// Create a buffer to capture output
+			var buf bytes.Buffer
 
-			// Channel to capture output
-			outC := make(chan string)
-			go func() {
-				var buf bytes.Buffer
-				io.Copy(&buf, r)
-				outC <- buf.String()
-			}()
+			// Create a logger with the buffer
+			atmosLogger := log.New(&buf)
+			atmosLogger.SetLevel(test.loggerLevel)
 
-			logger, _ := NewLogger(test.loggerLevel, "/dev/stdout")
+			logger := &Logger{
+				File:        "/dev/stdout",
+				AtmosLogger: atmosLogger,
+			}
+
+			// Call the log function
 			test.logFunc(logger, test.message)
 
-			// Close the writer and restore stdout
-			w.Close()
-			os.Stdout = oldStdout
-
 			// Read the output
-			output := <-outC
+			output := buf.String()
 
 			if test.expectOutput {
 				assert.Contains(t, output, test.message)
@@ -286,7 +270,7 @@ func TestLogger_LogMethods(t *testing.T) {
 
 func TestDevNullLogging(t *testing.T) {
 	// Create a logger with /dev/null to verify log suppression
-	logger, err := NewLogger(LogLevelInfo, "/dev/null")
+	logger, err := NewLogger(log.InfoLevel, "/dev/null")
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 	assert.Equal(t, "/dev/null", logger.File)
@@ -316,17 +300,17 @@ func TestDevStdoutWarning(t *testing.T) {
 	// Save the original function
 	originalFunc := logWarningFunc
 	defer func() { logWarningFunc = originalFunc }()
-	
+
 	// Create a channel to capture warnings
 	warnings := make(chan string, 1)
 	logWarningFunc = func(message string) {
 		warnings <- message
 	}
-	
+
 	// Create logger to trigger warning
-	_, err := NewLogger(LogLevelInfo, "/dev/stdout")
+	_, err := NewLogger(log.InfoLevel, "/dev/stdout")
 	assert.NoError(t, err)
-	
+
 	// Try to get the warning (with timeout)
 	var warningMessage string
 	select {
@@ -335,11 +319,11 @@ func TestDevStdoutWarning(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Timed out waiting for warning message")
 	}
-	
+
 	// Verify warning was generated
 	assert.Contains(t, warningMessage, "WARNING")
 	assert.Contains(t, warningMessage, "stdout")
-	assert.Contains(t, warningMessage, "JSON output parsing")
+	assert.Contains(t, warningMessage, "break commands")
 }
 
 func TestIllegalDeviceFiles(t *testing.T) {
@@ -353,7 +337,7 @@ func TestIllegalDeviceFiles(t *testing.T) {
 
 	for _, device := range illegalDevices {
 		t.Run(fmt.Sprintf("Reject %s", device), func(t *testing.T) {
-			logger, err := NewLogger(LogLevelInfo, device)
+			logger, err := NewLogger(log.InfoLevel, device)
 			assert.Error(t, err)
 			assert.Nil(t, logger)
 			assert.Contains(t, err.Error(), "unsupported device file")
@@ -371,7 +355,7 @@ func TestIllegalDeviceFiles(t *testing.T) {
 
 	for _, path := range validPaths {
 		t.Run(fmt.Sprintf("Accept %s", path), func(t *testing.T) {
-			logger, err := NewLogger(LogLevelInfo, path)
+			logger, err := NewLogger(log.InfoLevel, path)
 			assert.NoError(t, err)
 			assert.NotNil(t, logger)
 		})
@@ -380,9 +364,10 @@ func TestIllegalDeviceFiles(t *testing.T) {
 
 func TestLoggerFromCliConfig(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      schema.AtmosConfiguration
-		expectError bool
+		name          string
+		config        schema.AtmosConfiguration
+		expectError   bool
+		expectedLevel log.Level
 	}{
 		{
 			name: "Valid config with Info level",
@@ -392,7 +377,8 @@ func TestLoggerFromCliConfig(t *testing.T) {
 					File:  "/dev/stdout",
 				},
 			},
-			expectError: false,
+			expectError:   false,
+			expectedLevel: log.InfoLevel,
 		},
 		{
 			name: "Valid config with Trace level",
@@ -402,7 +388,8 @@ func TestLoggerFromCliConfig(t *testing.T) {
 					File:  "/dev/stdout",
 				},
 			},
-			expectError: false,
+			expectError:   false,
+			expectedLevel: AtmosTraceLevel,
 		},
 		{
 			name: "Invalid log level",
@@ -412,7 +399,8 @@ func TestLoggerFromCliConfig(t *testing.T) {
 					File:  "/dev/stdout",
 				},
 			},
-			expectError: true,
+			expectError:   true,
+			expectedLevel: 0,
 		},
 		{
 			name: "Empty log level defaults to Info",
@@ -422,7 +410,8 @@ func TestLoggerFromCliConfig(t *testing.T) {
 					File:  "/dev/stdout",
 				},
 			},
-			expectError: false,
+			expectError:   false,
+			expectedLevel: log.InfoLevel,
 		},
 		{
 			name: "/dev/null disables logging",
@@ -432,7 +421,8 @@ func TestLoggerFromCliConfig(t *testing.T) {
 					File:  "/dev/null",
 				},
 			},
-			expectError: false,
+			expectError:   false,
+			expectedLevel: log.InfoLevel,
 		},
 		{
 			name: "Invalid device file causes error",
@@ -442,25 +432,21 @@ func TestLoggerFromCliConfig(t *testing.T) {
 					File:  "/dev/random",
 				},
 			},
-			expectError: true,
+			expectError:   true,
+			expectedLevel: 0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			logger, err := NewLoggerFromCliConfig(test.config)
+			logger, err := NewLoggerFromCliConfig(&test.config)
 			if test.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, logger)
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, logger)
-				if test.config.Logs.Level == "" {
-					assert.Equal(t, LogLevelInfo, logger.LogLevel)
-				} else {
-					assert.Equal(t, LogLevel(test.config.Logs.Level), logger.LogLevel)
-				}
-				
+				assert.Equal(t, test.expectedLevel, logger.GetLevel())
 				assert.Equal(t, test.config.Logs.File, logger.File)
 			}
 		})

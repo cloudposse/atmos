@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -8,21 +9,9 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
-	"github.com/fatih/color"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-)
-
-type LogLevel string
-
-const (
-	LogLevelOff     LogLevel = "Off"
-	LogLevelTrace   LogLevel = "Trace"
-	LogLevelDebug   LogLevel = "Debug"
-	LogLevelInfo    LogLevel = "Info"
-	LogLevelWarning LogLevel = "Warning"
-	LogLevelError   LogLevel = "Error"
 )
 
 const FilePermission = 0o644
@@ -30,14 +19,14 @@ const FilePermission = 0o644
 // AtmosTraceLevel is a custom log level one level lower than DebugLevel for more verbose logging.
 const AtmosTraceLevel log.Level = log.DebugLevel - 1
 
-// logLevelOrder defines the order of log levels from most verbose to least verbose.
-var logLevelOrder = map[LogLevel]int{
-	LogLevelTrace:   0,
-	LogLevelDebug:   1,
-	LogLevelInfo:    2,
-	LogLevelWarning: 3,
-	LogLevelError:   4,
-	LogLevelOff:     5,
+// LogLevelStrings maps string level names to corresponding charmbracelet log levels for compatibility.
+var LogLevelStrings = map[string]log.Level{
+	"Trace":   AtmosTraceLevel,
+	"Debug":   log.DebugLevel,
+	"Info":    log.InfoLevel,
+	"Warning": log.WarnLevel,
+	"Error":   log.ErrorLevel,
+	"Off":     log.FatalLevel + 1, // Higher than Fatal to effectively disable logging
 }
 
 // ErrUnsupportedDeviceFile represents an error when an unsupported device file is specified.
@@ -45,13 +34,15 @@ type ErrUnsupportedDeviceFile struct {
 	file string
 }
 
+// ErrInvalidLogLevel is returned when an invalid log level is provided.
+var ErrInvalidLogLevel = errors.New("invalid log level")
+
 // Error returns the error message for an unsupported device file.
 func (e ErrUnsupportedDeviceFile) Error() string {
 	return fmt.Sprintf("unsupported device file: %s", e.file)
 }
 
 type Logger struct {
-	LogLevel    LogLevel
 	File        string
 	AtmosLogger *log.Logger
 }
@@ -60,7 +51,12 @@ type Logger struct {
 // Returns an error if the path is a device file not in the allowed list.
 func validateLogDestination(file string) error {
 	// Skip validation for empty or standard allowed device files
-	if file == "" || file == "/dev/stdout" || file == "/dev/stderr" || file == "/dev/null" {
+	if file == "" || file == "/dev/stderr" || file == "/dev/null" {
+		return nil
+	}
+
+	// Special warning for stdout but still allow it
+	if file == "/dev/stdout" {
 		return nil
 	}
 
@@ -72,7 +68,7 @@ func validateLogDestination(file string) error {
 	return nil
 }
 
-// For testing purposes
+// For testing purposes.
 var logWarningFunc = func(message string) {
 	log.Warn(message)
 }
@@ -85,11 +81,15 @@ func logWarning(message string) {
 // getLogWriter returns an appropriate writer based on the file path.
 // It handles special paths like /dev/stdout, /dev/stderr, and /dev/null.
 func getLogWriter(file string) (io.Writer, error) {
+	// Default to stderr
+	var writer io.Writer = os.Stderr
+
 	switch file {
 	case "":
-		return os.Stdout, nil
+		// Keep the default (stderr)
+		return writer, nil
 	case "/dev/stdout":
-		logWarning("WARNING: Using stdout for logs may interfere with JSON output parsing")
+		logWarning("WARNING: Sending logs to stdout will break commands that rely on Atmos output")
 		return os.Stdout, nil
 	case "/dev/stderr":
 		return os.Stderr, nil
@@ -104,7 +104,7 @@ func getLogWriter(file string) (io.Writer, error) {
 	}
 }
 
-func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
+func NewLogger(logLevel log.Level, file string) (*Logger, error) {
 	// Validate the log destination
 	if err := validateLogDestination(file); err != nil {
 		return nil, err
@@ -119,30 +119,16 @@ func NewLogger(logLevel LogLevel, file string) (*Logger, error) {
 	// Create the Atmos logger
 	atmosLogger := NewAtmosLogger(writer)
 
-	// Set the appropriate log level
-	switch logLevel {
-	case LogLevelTrace:
-		atmosLogger.SetLevel(AtmosTraceLevel)
-	case LogLevelDebug:
-		atmosLogger.SetLevel(log.DebugLevel)
-	case LogLevelInfo:
-		atmosLogger.SetLevel(log.InfoLevel)
-	case LogLevelWarning:
-		atmosLogger.SetLevel(log.WarnLevel)
-	case LogLevelError:
-		atmosLogger.SetLevel(log.ErrorLevel)
-	case LogLevelOff:
-		atmosLogger.SetLevel(log.FatalLevel)
-	}
+	// Set the log level directly
+	atmosLogger.SetLevel(logLevel)
 
 	return &Logger{
-		LogLevel:    logLevel,
 		File:        file,
 		AtmosLogger: atmosLogger,
 	}, nil
 }
 
-func NewLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
+func NewLoggerFromCliConfig(cfg *schema.AtmosConfiguration) (*Logger, error) {
 	logLevel, err := ParseLogLevel(cfg.Logs.Level)
 	if err != nil {
 		return nil, err
@@ -150,138 +136,66 @@ func NewLoggerFromCliConfig(cfg schema.AtmosConfiguration) (*Logger, error) {
 	return NewLogger(logLevel, cfg.Logs.File)
 }
 
-func ParseLogLevel(logLevel string) (LogLevel, error) {
+// ParseLogLevel parses a string log level and returns the corresponding log.Level.
+func ParseLogLevel(logLevel string) (log.Level, error) {
 	if logLevel == "" {
-		return LogLevelInfo, nil
+		return log.InfoLevel, nil
 	}
 
-	validLevels := []LogLevel{LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarning, LogLevelError, LogLevelOff}
-	for _, level := range validLevels {
-		if LogLevel(logLevel) == level {
-			return level, nil
-		}
+	if level, ok := LogLevelStrings[logLevel]; ok {
+		return level, nil
 	}
 
-	return "", fmt.Errorf("Invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
+	validLevels := []string{"Trace", "Debug", "Info", "Warning", "Error", "Off"}
+	return 0, fmt.Errorf("%w: `%s`, valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
 }
 
-// getLogOutputWriter returns the appropriate writer for logging based on the log file path.
-// This is a helper for the log method to handle different output destinations.
-func (l *Logger) getLogOutputWriter() (io.Writer, func(), error) {
-	// Default to stdout
-	if l.File == "" {
-		return os.Stdout, func() {}, nil
-	}
-
-	switch l.File {
-	case "/dev/stdout":
-		return os.Stdout, func() {}, nil
-	case "/dev/stderr":
-		return os.Stderr, func() {}, nil
-	case "/dev/null":
-		return io.Discard, func() {}, nil
-	default:
-		// For actual files, open the file
-		f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Return a cleanup function to close the file
-		cleanup := func() {
-			err := f.Close()
-			if err != nil {
-				color.Red("%s\n", err)
-			}
-		}
-
-		return f, cleanup, nil
-	}
-}
-
-func (l *Logger) log(logColor *color.Color, message string) {
-	// Get the appropriate writer
-	writer, cleanup, err := l.getLogOutputWriter()
-	if err != nil {
-		color.Red("%s\n", err)
-		return
-	}
-
-	defer cleanup()
-
-	if writer == io.Discard {
-		return
-	} else if stdWriter, ok := writer.(*os.File); ok && (stdWriter == os.Stdout || stdWriter == os.Stderr) {
-		_, err = logColor.Fprintln(writer, message)
-	} else {
-		_, err = fmt.Fprintln(writer, message)
-	}
-
-	if err != nil {
-		color.Red("%s\n", err)
-	}
-}
-
-func (l *Logger) SetLogLevel(logLevel LogLevel) error {
-	l.LogLevel = logLevel
-
+func (l *Logger) SetLogLevel(logLevel log.Level) error {
 	if l.AtmosLogger != nil {
-		switch logLevel {
-		case LogLevelTrace:
-			l.AtmosLogger.SetLevel(AtmosTraceLevel)
-		case LogLevelDebug:
-			l.AtmosLogger.SetLevel(log.DebugLevel)
-		case LogLevelInfo:
-			l.AtmosLogger.SetLevel(log.InfoLevel)
-		case LogLevelWarning:
-			l.AtmosLogger.SetLevel(log.WarnLevel)
-		case LogLevelError:
-			l.AtmosLogger.SetLevel(log.ErrorLevel)
-		case LogLevelOff:
-			l.AtmosLogger.SetLevel(log.FatalLevel)
-		}
+		l.AtmosLogger.SetLevel(logLevel)
 	}
 
 	return nil
 }
 
-// isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
-func (l *Logger) isLevelEnabled(level LogLevel) bool {
-	return logLevelOrder[level] >= logLevelOrder[l.LogLevel]
+// GetLevel returns the current log level of the logger.
+func (l *Logger) GetLevel() log.Level {
+	return l.AtmosLogger.GetLevel()
 }
 
 func (l *Logger) Error(err error) {
-	if l.isLevelEnabled(LogLevelError) {
+	if l.GetLevel() <= log.ErrorLevel {
 		l.AtmosLogger.Error("Error occurred", "error", err)
 	}
 }
 
 func (l *Logger) Trace(message string) {
-	if l.isLevelEnabled(LogLevelTrace) {
+	if l.GetLevel() <= AtmosTraceLevel {
 		l.AtmosLogger.Log(AtmosTraceLevel, message)
 	}
 }
 
 func (l *Logger) Debug(message string) {
-	if l.isLevelEnabled(LogLevelDebug) {
+	if l.GetLevel() <= log.DebugLevel {
 		l.AtmosLogger.Debug(message)
 	}
 }
 
 func (l *Logger) Info(message string) {
-	if l.isLevelEnabled(LogLevelInfo) {
+	if l.GetLevel() <= log.InfoLevel {
 		l.AtmosLogger.Info(message)
 	}
 }
 
 func (l *Logger) Warning(message string) {
-	if l.isLevelEnabled(LogLevelWarning) {
+	if l.GetLevel() <= log.WarnLevel {
 		l.AtmosLogger.Warn(message)
 	}
 }
 
-// Log level labels.
+// Constants for logger configuration.
 const (
+	// Log level labels.
 	errorLevelLabel = "ERROR"
 	warnLevelLabel  = "WARN"
 	infoLevelLabel  = "INFO"
@@ -296,8 +210,8 @@ func createLevelStyle(label string, bgColor string) lipgloss.Style {
 		Padding(0, 1, 0, 1).
 		Background(lipgloss.Color(bgColor)).
 		Foreground(lipgloss.Color(theme.ColorWhite)).
-		Bold(true).                                                 // Make text bold for better visibility
-		Border(lipgloss.NormalBorder(), false, false, false, false) // Add borders for better visibility
+		Bold(true).
+		Border(lipgloss.NormalBorder(), false, false, false, false)
 }
 
 // NewAtmosLogger creates a new Charmbracelet logger styled with Atmos theme colors.
