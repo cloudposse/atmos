@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -45,7 +46,7 @@ var docsCmd = &cobra.Command{
 			maxWidth := atmosConfig.Settings.Terminal.MaxWidth
 			if maxWidth == 0 && atmosConfig.Settings.Docs.MaxWidth > 0 {
 				maxWidth = atmosConfig.Settings.Docs.MaxWidth
-				u.LogWarning("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
+				log.Warn("'settings.docs.max-width' is deprecated and will be removed in a future version. Please use 'settings.terminal.max_width' instead")
 			}
 			defaultWidth := 120
 			screenWidth := defaultWidth
@@ -67,24 +68,21 @@ var docsCmd = &cobra.Command{
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
+				log.Debug(err)
+				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component not found"), "")
 			}
 			if !componentPathExists {
-				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component `%s` not found in path: `%s`", info.Component, componentPath), "")
+				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component not found"), "")
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
-				if os.IsNotExist(err) {
-					u.LogErrorAndExit(fmt.Errorf("No README found for component: %s", info.Component))
-				} else {
-					u.LogErrorAndExit(fmt.Errorf("Component %s not found", info.Component))
-				}
+				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Documentation is missing for the component `%s`. Consider adding a README.md to provide more context and details.", info.Component), "")
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 
 			r, err := glamour.NewTermRenderer(
@@ -94,22 +92,22 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
-				u.LogErrorAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err))
+				u.PrintErrorMarkdownAndExit("", fmt.Errorf("failed to initialize markdown renderer: %w", err), "")
 			}
 
 			componentDocs, err := r.Render(string(readmeContent))
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 
 			pager := atmosConfig.Settings.Terminal.Pager
 			if !pager && atmosConfig.Settings.Docs.Pagination {
 				pager = atmosConfig.Settings.Docs.Pagination
-				u.LogWarning("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
+				log.Warn("'settings.docs.pagination' is deprecated and will be removed in a future version. Please use 'settings.terminal.pager' instead")
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {
-				u.LogErrorAndExit(fmt.Errorf("failed to display documentation: %w", err))
+				u.PrintErrorMarkdownAndExit("", fmt.Errorf("failed to display documentation: %w", err), "")
 			}
 
 			return
@@ -119,7 +117,7 @@ var docsCmd = &cobra.Command{
 		var err error
 
 		if os.Getenv("GO_TEST") == "1" {
-			u.LogDebug("Skipping browser launch in test environment")
+			log.Debug("Skipping browser launch in test environment")
 		} else {
 			switch runtime.GOOS {
 			case "linux":
@@ -133,7 +131,7 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err != nil {
-				u.LogErrorAndExit(err)
+				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 		}
 
