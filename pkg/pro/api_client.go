@@ -20,11 +20,11 @@ type AtmosProAPIClient struct {
 	BaseAPIEndpoint string
 	BaseURL         string
 	HTTPClient      *http.Client
-	Logger          *logger.Logger
+	Logger          *logger.AtmosLogger
 }
 
 // NewAtmosProAPIClient creates a new instance of AtmosProAPIClient
-func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiToken string) *AtmosProAPIClient {
+func NewAtmosProAPIClient(logger *logger.AtmosLogger, baseURL, baseAPIEndpoint, apiToken string) *AtmosProAPIClient {
 	return &AtmosProAPIClient{
 		Logger:          logger,
 		BaseURL:         baseURL,
@@ -35,7 +35,7 @@ func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiTo
 }
 
 // NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables
-func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, error) {
+func NewAtmosProAPIClientFromEnv(logger *logger.AtmosLogger) (*AtmosProAPIClient, error) {
 	baseURL := os.Getenv(cfg.AtmosProBaseUrlEnvVarName)
 	if baseURL == "" {
 		baseURL = cfg.AtmosProDefaultBaseUrl
