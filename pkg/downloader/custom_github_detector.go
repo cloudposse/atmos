@@ -12,8 +12,8 @@ import (
 )
 
 // CustomGitHubDetector Intercepts GitHub URLs and transforms them
-// into something like git::https://<token>@github.com/... so we can
-// do a git-based clone with a token.
+// into something like git::https://<token>@github.com/...
+// so we can do a git-based clone with a token.
 type CustomGitHubDetector struct {
 	AtmosConfig *schema.AtmosConfiguration
 }
