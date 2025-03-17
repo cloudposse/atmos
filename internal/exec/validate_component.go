@@ -206,11 +206,11 @@ func validateComponentInternal(
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.JsonSchema.BasePath, schemaPath)
+				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.Opa.BasePath, schemaPath)
+				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
 			}
 		}
 
@@ -237,7 +237,7 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.Schemas.Opa.BasePath), modulePaths)
+			modulePathsAbsolute, err := u.JoinAbsolutePathWithPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}

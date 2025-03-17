@@ -3,6 +3,7 @@ module github.com/cloudposse/atmos
 go 1.24.0
 
 require (
+	cloud.google.com/go/secretmanager v1.11.5
 	dario.cat/mergo v1.0.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alecthomas/chroma v0.10.0
@@ -28,6 +29,7 @@ require (
 	github.com/google/go-containerregistry v0.20.3
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
+	github.com/googleapis/gax-go/v2 v2.12.3
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
 	github.com/hashicorp/go-getter v1.7.8
 	github.com/hashicorp/hcl v1.0.0
@@ -60,6 +62,8 @@ require (
 	golang.org/x/oauth2 v0.28.0
 	golang.org/x/term v0.30.0
 	golang.org/x/text v0.23.0
+	google.golang.org/api v0.171.0
+	google.golang.org/grpc v1.70.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -183,6 +187,7 @@ require (
 	github.com/google/wire v0.5.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
@@ -315,9 +320,9 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/api v0.215.0 // indirect
 	google.golang.org/genproto v0.0.0-20241118233622-e639e219e697 // indirect
+	google.golang.org/genproto v0.0.0-20240213162025-012b6fc9bca9 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250115164207-1a7da9e5054f // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
-	google.golang.org/grpc v1.70.0 // indirect
 	google.golang.org/protobuf v1.36.3 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
