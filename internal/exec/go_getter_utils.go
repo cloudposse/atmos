@@ -290,7 +290,7 @@ func RegisterCustomDetectors(atmosConfig *schema.AtmosConfiguration) {
 
 // GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination.
 func GoGetterGet(
-	atmosConfig *schema.AtmosConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	src string,
 	dest string,
 	clientMode getter.ClientMode,
@@ -300,7 +300,7 @@ func GoGetterGet(
 	defer cancel()
 
 	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
+	RegisterCustomDetectors(&atmosConfig)
 
 	client := &getter.Client{
 		Ctx: ctx,
@@ -363,7 +363,7 @@ func DownloadDetectFormatAndParseFile(atmosConfig *schema.AtmosConfiguration, fi
 	tempDir := os.TempDir()
 	f := filepath.Join(tempDir, uuid.New().String())
 
-	if err := GoGetterGet(atmosConfig, file, f, getter.ClientModeFile, time.Second*30); err != nil {
+	if err := GoGetterGet(*atmosConfig, file, f, getter.ClientModeFile, time.Second*30); err != nil {
 		return nil, fmt.Errorf("failed to download the file '%s': %w", file, err)
 	}
 
