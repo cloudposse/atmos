@@ -73,11 +73,6 @@ var logWarningFunc = func(message string) {
 	log.Warn(message)
 }
 
-// logWarning is a simple logger for internal warnings.
-func logWarning(message string) {
-	logWarningFunc(message)
-}
-
 // getLogWriter returns an appropriate writer based on the file path.
 // It handles special paths like /dev/stdout, /dev/stderr, and /dev/null.
 func getLogWriter(file string) (io.Writer, error) {
@@ -89,7 +84,7 @@ func getLogWriter(file string) (io.Writer, error) {
 		// Keep the default (stderr)
 		return writer, nil
 	case "/dev/stdout":
-		logWarning("WARNING: Sending logs to stdout will break commands that rely on Atmos output")
+		logWarningFunc("WARNING: Sending logs to stdout will break commands that rely on Atmos output")
 		return os.Stdout, nil
 	case "/dev/stderr":
 		return os.Stderr, nil
