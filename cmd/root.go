@@ -122,7 +122,6 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		atmosLogger.SetLevel(log.InfoLevel)
 	}
 
-
 	log.SetOutput(output)
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
 		//nolint:all // The reason to escape this is because it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required
