@@ -113,6 +113,7 @@ func parseFlags() map[string]string {
 	}
 	return flags
 }
+
 func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
 	atmosConfig, err := LoadConfig(configAndStacksInfo)
 	if err != nil {
