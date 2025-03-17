@@ -4,7 +4,9 @@ DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 INFO Vendoring from 'vendor.yaml'
 WARN No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
+DEBU Downloading and installing package package=terraform-null-label-cred
 INFO ✓ terraform-null-label-cred (0.25.0)
+DEBU Downloading and installing package package=terraform-null-label-basic
 INFO ✓ terraform-null-label-basic (0.25.0)
 INFO Done! Dry run completed. No components vendored.
 
