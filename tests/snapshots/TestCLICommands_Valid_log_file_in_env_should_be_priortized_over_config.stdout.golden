@@ -1,8 +1,4 @@
-DEBU no matches found for glob pattern path=/absolute/path/to/repo/atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/atmos.d/**/*.yaml' ('/absolute/path/to/repo/atmos.d' + '**/*.yaml')"
-DEBU no matches found for glob pattern path=/absolute/path/to/repo/atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/atmos.d/**/*.yml' ('/absolute/path/to/repo/atmos.d' + '**/*.yml')"
 DEBU Failed to find atmos config file path=/absolute/path/to/repo/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
-DEBU no matches found for glob pattern path=/absolute/path/to/repo/.atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/.atmos.d/**/*.yaml' ('/absolute/path/to/repo/.atmos.d' + '**/*.yaml')"
-DEBU no matches found for glob pattern path=/absolute/path/to/repo/.atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/.atmos.d/**/*.yml' ('/absolute/path/to/repo/.atmos.d' + '**/*.yml')"
 DEBU Failed to find atmos config file path=/absolute/path/to/repo/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU Found ENV var ATMOS_LOGS_FILE=/dev/stdout
 DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
