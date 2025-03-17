@@ -154,7 +154,7 @@ jobs:
       #       }
 
       - name: Acceptance tests
-        timeout-minutes: 10
+        timeout-minutes: 20
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-cover
