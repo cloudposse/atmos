@@ -68,9 +68,9 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	}
 	defer os.Chdir(origDir)
 
-	// Change to the examples/demo-stacks directory
-	if err := os.Chdir("examples/demo-stacks"); err != nil {
-		t.Fatalf("failed to change to examples/demo-stacks directory: %v", err)
+	// Change to the tests/fixtures/scenarios/plan-diff directory
+	if err := os.Chdir("tests/fixtures/scenarios/plan-diff"); err != nil {
+		t.Fatalf("failed to change to tests/fixtures/scenarios/plan-diff directory: %v", err)
 	}
 
 	// Capture the original arguments
@@ -88,7 +88,7 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	newPlanFile := path.Join(tmpDir, "new.plan")
 
 	// Generate the original plan
-	os.Args = []string{"atmos", "terraform", "plan", "myapp", "-s", "dev", "-out=" + origPlanFile}
+	os.Args = []string{"atmos", "terraform", "plan", "component-1", "-s", "nonprod", "-out=" + origPlanFile}
 	exitCode := runMainWithExitCode()
 	t.Logf("After first plan, exit code: %d", exitCode)
 	if exitCode != 0 {
@@ -96,7 +96,7 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	}
 
 	// Generate a new plan with a different variable
-	os.Args = []string{"atmos", "terraform", "plan", "myapp", "-s", "dev", "-out=" + newPlanFile, "-var", "location=New York"}
+	os.Args = []string{"atmos", "terraform", "plan", "component-1", "-s", "nonprod", "-out=" + newPlanFile, "-var", "foo=new-value"}
 	exitCode = runMainWithExitCode()
 	t.Logf("After second plan, exit code: %d", exitCode)
 	if exitCode != 0 {
@@ -104,7 +104,7 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	}
 
 	// Run the plan-diff command
-	os.Args = []string{"atmos", "terraform", "plan-diff", "myapp", "-s", "dev", "--orig=" + origPlanFile, "--new=" + newPlanFile}
+	os.Args = []string{"atmos", "terraform", "plan-diff", "component-1", "-s", "nonprod", "--orig=" + origPlanFile, "--new=" + newPlanFile}
 	exitCode = runMainWithExitCode()
 	t.Logf("After plan-diff, exit code: %d", exitCode)
 
@@ -114,7 +114,7 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	}
 
 	// Test with generating a new plan on the fly
-	os.Args = []string{"atmos", "terraform", "plan-diff", "myapp", "-s", "dev", "--orig=" + origPlanFile, "-var", "location=New York"}
+	os.Args = []string{"atmos", "terraform", "plan-diff", "component-1", "-s", "nonprod", "--orig=" + origPlanFile, "-var", "foo=new-value"}
 	exitCode = runMainWithExitCode()
 	t.Logf("After on-the-fly plan-diff, exit code: %d", exitCode)
 
