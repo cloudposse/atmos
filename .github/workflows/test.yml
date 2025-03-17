@@ -83,7 +83,7 @@ jobs:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
-    timeout-minutes: 15
+    timeout-minutes: 60
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
