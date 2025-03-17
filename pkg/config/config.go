@@ -395,6 +395,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 
 func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	// TODO: This is a quick patch to mitigate the issue we can look for better code later
+	// Issue: https://linear.app/cloudposse/issue/DEV-3093/create-a-cli-command-core-library
 	if os.Getenv("ATMOS_LOGS_LEVEL") != "" {
 		atmosConfig.Logs.Level = os.Getenv("ATMOS_LOGS_LEVEL")
 	}
