@@ -69,7 +69,7 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 	}
 
 	// Process command-line args
-	err = processCommandLineArgs(&atmosConfig, *configAndStacksInfo)
+	err = processCommandLineArgs(&atmosConfig, configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, err
 	}
