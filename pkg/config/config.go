@@ -62,6 +62,8 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 	if err != nil {
 		return atmosConfig, err
 	}
+	atmosConfig.ProcessSchemas()
+
 	// Process ENV vars
 	err = processEnvVars(&atmosConfig)
 	if err != nil {
