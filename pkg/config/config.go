@@ -16,7 +16,7 @@ import (
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 //
-// TODO: Change configAndStacksInfo to pointer. 
+// TODO: Change configAndStacksInfo to pointer.
 // Temporarily suppressing gocritic warnings; refactoring InitCliConfig would require extensive changes.
 // nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
