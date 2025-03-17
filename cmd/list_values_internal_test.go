@@ -57,7 +57,7 @@ func TestListValuesFlags(t *testing.T) {
 func TestListVarsFlags(t *testing.T) {
 	cmd := &cobra.Command{
 		Use:   "vars [component]",
-		Short: "List component vars across stacks (alias for 'list values --query .vars')",
+		Short: "List component vars across stacks (alias for `list values --query .vars`)",
 		Long:  "List vars for a component across all stacks where it is used",
 		Args:  cobra.ExactArgs(1),
 	}
