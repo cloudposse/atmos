@@ -42,8 +42,8 @@ func (e ErrUnsupportedDeviceFile) Error() string {
 	return fmt.Sprintf("unsupported device file: %s", e.file)
 }
 
-type Logger struct {
-	AtmosLogger *log.Logger
+type AtmosLogger struct {
+	*log.Logger
 }
 
 // validateLogDestination validates the log destination path.
@@ -98,7 +98,7 @@ func getLogWriter(file string) (io.Writer, error) {
 	}
 }
 
-func NewLogger(logLevel log.Level, file string) (*Logger, error) {
+func NewLogger(logLevel log.Level, file string) (*AtmosLogger, error) {
 	// Validate the log destination
 	if err := validateLogDestination(file); err != nil {
 		return nil, err
@@ -110,18 +110,18 @@ func NewLogger(logLevel log.Level, file string) (*Logger, error) {
 		return nil, err
 	}
 
-	// Create the Atmos logger
-	atmosLogger := NewAtmosLogger(writer)
+	// Create the Atmos logger with styled output
+	logger := NewAtmosLogger(writer)
 
 	// Set the log level directly
-	atmosLogger.SetLevel(logLevel)
+	logger.SetLevel(logLevel)
 
-	return &Logger{
-		AtmosLogger: atmosLogger,
+	return &AtmosLogger{
+		Logger: logger,
 	}, nil
 }
 
-func NewLoggerFromCliConfig(cfg *schema.AtmosConfiguration) (*Logger, error) {
+func NewLoggerFromCliConfig(cfg *schema.AtmosConfiguration) (*AtmosLogger, error) {
 	logLevel, err := ParseLogLevel(cfg.Logs.Level)
 	if err != nil {
 		return nil, err
@@ -143,46 +143,43 @@ func ParseLogLevel(logLevel string) (log.Level, error) {
 	return 0, fmt.Errorf("%w `%s`. Valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
 }
 
-func (l *Logger) SetLogLevel(logLevel log.Level) error {
-	if l.AtmosLogger != nil {
-		l.AtmosLogger.SetLevel(logLevel)
-	}
-
+func (l *AtmosLogger) SetLogLevel(logLevel log.Level) error {
+	l.SetLevel(logLevel)
 	return nil
 }
 
 // GetLevel returns the current log level of the logger.
-func (l *Logger) GetLevel() log.Level {
-	return l.AtmosLogger.GetLevel()
+func (l *AtmosLogger) GetLevel() log.Level {
+	return l.Logger.GetLevel()
 }
 
-func (l *Logger) Error(err error) {
+func (l *AtmosLogger) Error(err error) {
 	if l.GetLevel() <= log.ErrorLevel {
-		l.AtmosLogger.Error("Error occurred", "error", err)
+		l.Logger.Error("Error occurred", "error", err)
 	}
 }
 
-func (l *Logger) Trace(message string) {
+func (l *AtmosLogger) Trace(message string) {
 	if l.GetLevel() <= AtmosTraceLevel {
-		l.AtmosLogger.Log(AtmosTraceLevel, message)
+		l.Logger.Log(AtmosTraceLevel, message)
 	}
 }
 
-func (l *Logger) Debug(message string) {
+func (l *AtmosLogger) Debug(message string) {
 	if l.GetLevel() <= log.DebugLevel {
-		l.AtmosLogger.Debug(message)
+		l.Logger.Debug(message)
 	}
 }
 
-func (l *Logger) Info(message string) {
+func (l *AtmosLogger) Info(message string) {
 	if l.GetLevel() <= log.InfoLevel {
-		l.AtmosLogger.Info(message)
+		l.Logger.Info(message)
 	}
 }
 
-func (l *Logger) Warning(message string) {
+func (l *AtmosLogger) Warning(message string) {
 	if l.GetLevel() <= log.WarnLevel {
-		l.AtmosLogger.Warn(message)
+		l.Logger.Warn(message)
 	}
 }
 

@@ -74,8 +74,8 @@ func TestLogger_Trace(t *testing.T) {
 	atmosLogger := log.New(&buf)
 	atmosLogger.SetLevel(AtmosTraceLevel)
 
-	testLogger := &Logger{
-		AtmosLogger: atmosLogger,
+	testLogger := &AtmosLogger{
+		Logger: atmosLogger,
 	}
 
 	// Generate trace output using our custom AtmosTraceLevel
@@ -94,7 +94,7 @@ func TestLogger_Debug(t *testing.T) {
 	logger, err := NewLogger(log.DebugLevel, "/dev/stdout")
 	assert.NoError(t, err)
 	assert.Equal(t, log.DebugLevel, logger.GetLevel())
-	assert.NotNil(t, logger.AtmosLogger)
+	assert.NotNil(t, logger.Logger)
 	loggerTrace, err := NewLogger(AtmosTraceLevel, "/dev/stdout")
 	assert.NoError(t, err)
 	assert.Equal(t, AtmosTraceLevel, loggerTrace.GetLevel())
@@ -107,8 +107,8 @@ func TestLogger_Info(t *testing.T) {
 	atmosLogger := NewAtmosLogger(&buf)
 	atmosLogger.SetLevel(log.InfoLevel)
 
-	logger := &Logger{
-		AtmosLogger: atmosLogger,
+	logger := &AtmosLogger{
+		Logger: atmosLogger,
 	}
 
 	logger.Info("Info message")
@@ -121,8 +121,8 @@ func TestLogger_Warning(t *testing.T) {
 	atmosLogger := NewAtmosLogger(&buf)
 	atmosLogger.SetLevel(log.WarnLevel)
 
-	logger := &Logger{
-		AtmosLogger: atmosLogger,
+	logger := &AtmosLogger{
+		Logger: atmosLogger,
 	}
 
 	logger.Warning("Warning message")
@@ -136,8 +136,8 @@ func TestLogger_Error(t *testing.T) {
 	atmosLogger := NewAtmosLogger(&buf)
 	atmosLogger.SetLevel(log.WarnLevel)
 
-	logger := &Logger{
-		AtmosLogger: atmosLogger,
+	logger := &AtmosLogger{
+		Logger: atmosLogger,
 	}
 
 	err := fmt.Errorf("This is an error")
@@ -150,8 +150,8 @@ func TestLogger_Error(t *testing.T) {
 	fileAtmosLogger := NewAtmosLogger(&buf2)
 	fileAtmosLogger.SetLevel(log.WarnLevel)
 
-	fileLogger := &Logger{
-		AtmosLogger: fileAtmosLogger,
+	fileLogger := &AtmosLogger{
+		Logger: fileAtmosLogger,
 	}
 
 	err2 := fmt.Errorf("This is a file error")
@@ -203,7 +203,7 @@ func TestLogger_GetLevel(t *testing.T) {
 			atmosLogger := log.New(&buf)
 			atmosLogger.SetLevel(test.level)
 
-			logger := &Logger{AtmosLogger: atmosLogger}
+			logger := &AtmosLogger{Logger: atmosLogger}
 			gotLevel := logger.GetLevel()
 			assert.Equal(t, test.expectedLevel, gotLevel)
 		})
@@ -216,20 +216,20 @@ func TestLogger_LogMethods(t *testing.T) {
 		loggerLevel  log.Level
 		message      string
 		expectOutput bool
-		logFunc      func(*Logger, string)
+		logFunc      func(*AtmosLogger, string)
 	}{
-		{"Trace logs when level is Trace", AtmosTraceLevel, "trace message", true, (*Logger).Trace},
-		{"Trace doesn't log when level is Debug", log.DebugLevel, "trace message", false, (*Logger).Trace},
-		{"Debug logs when level is Trace", AtmosTraceLevel, "debug message", true, (*Logger).Debug},
-		{"Debug logs when level is Debug", log.DebugLevel, "debug message", true, (*Logger).Debug},
-		{"Debug doesn't log when level is Info", log.InfoLevel, "debug message", false, (*Logger).Debug},
-		{"Info logs when level is Trace", AtmosTraceLevel, "info message", true, (*Logger).Info},
-		{"Info logs when level is Debug", log.DebugLevel, "info message", true, (*Logger).Info},
-		{"Info logs when level is Info", log.InfoLevel, "info message", true, (*Logger).Info},
-		{"Info doesn't log when level is Warning", log.WarnLevel, "info message", false, (*Logger).Info},
-		{"Warning logs when level is Trace", AtmosTraceLevel, "warning message", true, (*Logger).Warning},
-		{"Warning logs when level is Warning", log.WarnLevel, "warning message", true, (*Logger).Warning},
-		{"Nothing logs when level is Off", log.FatalLevel + 1, "any message", false, (*Logger).Info},
+		{"Trace logs when level is Trace", AtmosTraceLevel, "trace message", true, (*AtmosLogger).Trace},
+		{"Trace doesn't log when level is Debug", log.DebugLevel, "trace message", false, (*AtmosLogger).Trace},
+		{"Debug logs when level is Trace", AtmosTraceLevel, "debug message", true, (*AtmosLogger).Debug},
+		{"Debug logs when level is Debug", log.DebugLevel, "debug message", true, (*AtmosLogger).Debug},
+		{"Debug doesn't log when level is Info", log.InfoLevel, "debug message", false, (*AtmosLogger).Debug},
+		{"Info logs when level is Trace", AtmosTraceLevel, "info message", true, (*AtmosLogger).Info},
+		{"Info logs when level is Debug", log.DebugLevel, "info message", true, (*AtmosLogger).Info},
+		{"Info logs when level is Info", log.InfoLevel, "info message", true, (*AtmosLogger).Info},
+		{"Info doesn't log when level is Warning", log.WarnLevel, "info message", false, (*AtmosLogger).Info},
+		{"Warning logs when level is Trace", AtmosTraceLevel, "warning message", true, (*AtmosLogger).Warning},
+		{"Warning logs when level is Warning", log.WarnLevel, "warning message", true, (*AtmosLogger).Warning},
+		{"Nothing logs when level is Off", log.FatalLevel + 1, "any message", false, (*AtmosLogger).Info},
 	}
 
 	for _, test := range tests {
@@ -241,8 +241,8 @@ func TestLogger_LogMethods(t *testing.T) {
 			atmosLogger := log.New(&buf)
 			atmosLogger.SetLevel(test.loggerLevel)
 
-			logger := &Logger{
-				AtmosLogger: atmosLogger,
+			logger := &AtmosLogger{
+				Logger: atmosLogger,
 			}
 
 			// Call the log function
