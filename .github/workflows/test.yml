@@ -83,7 +83,7 @@ jobs:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
-    timeout-minutes: 20
+    timeout-minutes: 15
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -92,12 +92,6 @@ jobs:
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows'
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
-
-      - name: Exclude workspace from Windows Defender
-        if: matrix.flavor.target == 'windows'
-        shell: pwsh
-        run: |
-          Add-MpPreference -ExclusionPath "${{ github.workspace }}"
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
@@ -160,7 +154,7 @@ jobs:
       #       }
 
       - name: Acceptance tests
-        timeout-minutes: 20
+        timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-cover
