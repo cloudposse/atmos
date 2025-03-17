@@ -80,11 +80,11 @@ var (
 			File:  "/dev/stderr",
 			Level: "Info",
 		},
-		Schemas: schema.Schemas{
-			JsonSchema: schema.JsonSchema{
+		Schemas: map[string]interface{}{
+			"jsonschema": schema.ResourcePath{
 				BasePath: "stacks/schemas/jsonschema",
 			},
-			Opa: schema.Opa{
+			"opa": schema.ResourcePath{
 				BasePath: "stacks/schemas/opa",
 			},
 		},
@@ -260,6 +260,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err = v.Unmarshal(&atmosConfig)
+	atmosConfig.ProcessSchemas()
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -283,7 +284,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Process command-line args
-	err = processCommandLineArgs(&atmosConfig, configAndStacksInfo)
+	err = processCommandLineArgs(&atmosConfig, &configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, err
 	}

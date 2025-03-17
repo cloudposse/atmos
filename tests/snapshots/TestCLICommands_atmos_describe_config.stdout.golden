@@ -47,12 +47,6 @@
   "integrations": {
     "atlantis": {}
   },
-  "schemas": {
-    "jsonschema": {},
-    "cue": {},
-    "opa": {},
-    "atmos": {}
-  },
   "templates": {
     "settings": {
       "enabled": false,
