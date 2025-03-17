@@ -93,6 +93,12 @@ jobs:
         if: matrix.flavor.target == 'windows'
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
+      - name: Exclude workspace from Windows Defender
+        if: matrix.flavor.target == 'windows'
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         uses: actions/download-artifact@v4
         with:
