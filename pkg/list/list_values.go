@@ -10,7 +10,6 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	"github.com/cloudposse/atmos/pkg/list/format"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -92,13 +91,6 @@ func FilterAndListValues(stacksMap map[string]interface{}, options *FilterOption
 func extractComponentValues(stacksMap map[string]interface{}, component string, includeAbstract bool) (map[string]interface{}, error) {
 	values := make(map[string]interface{})
 
-	// Create a minimal AtmosConfiguration to avoid nil pointer dereference
-	minimalConfig := &schema.AtmosConfiguration{
-		Logs: schema.Logs{
-			Level: "info",
-		},
-	}
-
 	for stackName, stackData := range stacksMap {
 		stack, ok := stackData.(map[string]interface{})
 		if !ok {
@@ -110,7 +102,7 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 		yqExpression := processComponentType(component, includeAbstract)
 
 		// Execute YQ query
-		queryResult, err := utils.EvaluateYqExpression(minimalConfig, stack, yqExpression)
+		queryResult, err := utils.EvaluateYqExpression(nil, stack, yqExpression)
 		if err != nil || queryResult == nil {
 			log.Debug("no values found",
 				KeyStack, stackName,
@@ -252,16 +244,9 @@ func applyQuery(filteredValues map[string]interface{}, query string) (map[string
 
 	results := make(map[string]interface{})
 
-	// Create a minimal AtmosConfiguration to avoid nil pointer maybe theres a better way to handle this
-	minimalConfig := &schema.AtmosConfiguration{
-		Logs: schema.Logs{
-			Level: "info",
-		},
-	}
-
 	for stackName, stackData := range filteredValues {
 		// Apply YQ expression directly to the data
-		queryResult, err := utils.EvaluateYqExpression(minimalConfig, stackData, query)
+		queryResult, err := utils.EvaluateYqExpression(nil, stackData, query)
 		if err != nil {
 			log.Debug("YQ query failed",
 				KeyStack, stackName,
