@@ -18,7 +18,8 @@ import (
 //
 // TODO: Change configAndStacksInfo to pointer.
 // Temporarily suppressing gocritic warnings; refactoring InitCliConfig would require extensive changes.
-// nolint:gocritic
+//
+//nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 	atmosConfig, err := processAtmosConfigs(&configAndStacksInfo)
 	if err != nil {
