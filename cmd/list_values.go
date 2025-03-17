@@ -36,7 +36,8 @@ var listValuesCmd = &cobra.Command{
 	Long:  "List values for a component across all stacks where it is used",
 	Example: "atmos list values vpc\n" +
 		"atmos list values vpc --abstract\n" +
-		"atmos list values vpc --query .vars\n" +
+		"atmos list values vpc --query '.vars'\n" +
+		"atmos list values vpc --query '.vars.region'\n" +
 		"atmos list values vpc --format json\n" +
 		"atmos list values vpc --format yaml\n" +
 		"atmos list values vpc --format csv",
@@ -85,6 +86,9 @@ var listVarsCmd = &cobra.Command{
 func init() {
 	// Add common flags
 	fl.AddCommonListFlags(listValuesCmd)
+	if queryFlag := listValuesCmd.PersistentFlags().Lookup("query"); queryFlag != nil {
+		queryFlag.Usage = "Filter the results using YQ expressions"
+	}
 
 	// Add additional flags
 	listValuesCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")

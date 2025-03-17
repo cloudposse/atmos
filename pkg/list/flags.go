@@ -19,7 +19,7 @@ const DefaultMaxColumns = 10
 
 // AddCommonListFlags adds the common flags to a command.
 func AddCommonListFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().String("query", "", "JMESPath query to filter values")
+	cmd.PersistentFlags().String("query", "", "YQ query to filter values")
 	cmd.PersistentFlags().Int("max-columns", DefaultMaxColumns, "Maximum number of columns to display")
 	cmd.PersistentFlags().String("format", "", "Output format (table, json, yaml, csv, tsv)")
 	cmd.PersistentFlags().String("delimiter", "\t", "Delimiter for csv/tsv output (default: tab for tsv, comma for csv)")

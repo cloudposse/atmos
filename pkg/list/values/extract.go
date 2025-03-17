@@ -2,8 +2,9 @@ package values
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
+
+	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/list/errors"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -25,205 +26,73 @@ const (
 	KeyAbstract = "abstract"
 )
 
-// handleSpecialComponent processes special components like settings and metadata.
-func handleSpecialComponent(stack map[string]interface{}, component string) (map[string]interface{}, bool) {
-	// First check if the component exists at the top level.
-	if section, ok := stack[component].(map[string]interface{}); ok {
-		return section, true
-	}
-
-	// If not found at the top level and component is settings, look for it in terraform section and components.
-	if component == KeySettings {
-		return extractAllSettings(stack)
-	}
-
-	return nil, false
-}
-
-// extractAllSettings extracts settings from all levels: component-specific, terraform-specific, and global.
-func extractAllSettings(stack map[string]interface{}) (map[string]interface{}, bool) {
-	allSettings := make(map[string]interface{})
-
-	// Extract terraform-level settings.
-	terraformSettings, foundTerraformSettings := extractTerraformSettings(stack)
-	if foundTerraformSettings {
-		allSettings[KeyTerraform] = terraformSettings
-	}
-
-	// Extract component-specific settings.
-	componentSettings, foundComponentSettings := extractComponentsSettings(stack)
-	if foundComponentSettings {
-		allSettings[KeyComponents] = componentSettings
-	}
-
-	// Return all settings if we found any.
-	foundAny := foundTerraformSettings || foundComponentSettings
-	if !foundAny {
-		return nil, false
-	}
-
-	return allSettings, true
-}
-
-// extractTerraformSettings extracts settings from the terraform section.
-func extractTerraformSettings(stack map[string]interface{}) (interface{}, bool) {
-	terraform, ok := stack[KeyTerraform].(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	terraformSettings, ok := terraform[KeySettings].(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	return deepCopyToStringMap(terraformSettings), true
-}
-
-// extractComponentsSettings extracts settings from component-specific configurations.
-func extractComponentsSettings(stack map[string]interface{}) (map[string]interface{}, bool) {
-	components, ok := stack[KeyComponents].(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	terraform, ok := components[KeyTerraform].(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	componentSettings := make(map[string]interface{})
-	foundAny := false
-
-	// Collect settings from all terraform components.
-	for componentName, componentData := range terraform {
-		if settings := extractComponentSettings(componentData); settings != nil {
-			componentSettings[componentName] = settings
-			foundAny = true
-		}
-	}
-
-	if !foundAny {
-		return nil, false
-	}
-
-	return componentSettings, true
-}
-
-// extractComponentSettings extracts settings from a component.
-func extractComponentSettings(componentData interface{}) interface{} {
-	comp, ok := componentData.(map[string]interface{})
-	if !ok {
-		return nil
-	}
-
-	settings, ok := comp[KeySettings].(map[string]interface{})
-	if !ok {
-		return nil
-	}
-
-	return deepCopyToStringMap(settings)
-}
-
-// deepCopyToStringMap creates a deep copy of a map, ensuring all keys are strings.
-// This helps with JSON marshaling which requires string keys.
-func deepCopyToStringMap(m interface{}) interface{} {
-	switch m := m.(type) {
-	case map[string]interface{}:
-		copy := make(map[string]interface{})
-		for k, v := range m {
-			copy[k] = deepCopyToStringMap(v)
-		}
-		return copy
-	case map[interface{}]interface{}:
-		copy := make(map[string]interface{})
-		for k, v := range m {
-			copy[fmt.Sprintf("%v", k)] = deepCopyToStringMap(v)
-		}
-		return copy
-	case []interface{}:
-		copy := make([]interface{}, len(m))
-		for i, v := range m {
-			copy[i] = deepCopyToStringMap(v)
-		}
-		return copy
-	default:
-		return m
-	}
-}
-
-// handleTerraformComponent processes regular terraform components.
-func handleTerraformComponent(stack map[string]interface{}, component string, includeAbstract bool) (map[string]interface{}, bool) {
-	components, ok := stack[KeyComponents].(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	terraform, ok := components[KeyTerraform].(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	// Extract the component name from the full component path.
-	componentName := component
-
-	parts := strings.Split(component, "/")
-	if len(parts) > 1 {
-		componentName = parts[len(parts)-1]
-	}
-
-	comp, ok := terraform[componentName].(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	if !includeAbstract {
-		if isAbstract, ok := comp[KeyAbstract].(bool); ok && isAbstract {
-			return nil, false
-		}
-	}
-
-	vars, ok := comp[KeyVars].(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-
-	return vars, true
-}
-
-// formatArrayValue converts an array to a comma-separated string.
-func formatArrayValue(value interface{}) interface{} {
-	if arr, ok := value.([]interface{}); ok {
-		strValues := make([]string, len(arr))
-		for i, v := range arr {
-			strValues[i] = fmt.Sprintf("%v", v)
-		}
-		return strings.Join(strValues, ",")
-	}
-	return value
-}
-
 // ExtractStackValues implements the ValueExtractor interface for DefaultExtractor.
+// Uses YQ expressions to extract component values from stacks.
 func (e *DefaultExtractor) ExtractStackValues(stacksMap map[string]interface{}, component string, includeAbstract bool) (map[string]interface{}, error) {
 	values := make(map[string]interface{})
 
 	for stackName, stackData := range stacksMap {
 		stack, ok := stackData.(map[string]interface{})
 		if !ok {
+			log.Debug("stack data is not a map", "stack", stackName)
 			continue
 		}
 
-		// Handle special components (settings, metadata).
-		if component == KeySettings || component == KeyMetadata {
-			if section, ok := handleSpecialComponent(stack, component); ok {
-				values[stackName] = section
+		var yqExpression string
+		var queryResult interface{}
+		var err error
+
+		switch component {
+		case KeySettings:
+			yqExpression = "select(.settings // .terraform.settings // .components.terraform.*.settings)"
+			queryResult, err = utils.EvaluateYqExpression(nil, stack, yqExpression)
+			if err == nil && queryResult != nil {
+				values[stackName] = queryResult
+			} else {
+				log.Debug("no settings found", "stack", stackName, "error", err)
 			}
 			continue
-		}
 
-		// Handle regular terraform components.
-		if vars, ok := handleTerraformComponent(stack, component, includeAbstract); ok {
-			values[stackName] = vars
+		case KeyMetadata:
+			yqExpression = ".metadata"
+			queryResult, err = utils.EvaluateYqExpression(nil, stack, yqExpression)
+			if err == nil && queryResult != nil {
+				values[stackName] = queryResult
+			} else {
+				log.Debug("no metadata found", "stack", stackName, "error", err)
+			}
+			continue
+
+		default:
+			// Extract the component name from the full component path
+			componentName := component
+			parts := strings.Split(component, "/")
+			if len(parts) > 1 {
+				componentName = parts[len(parts)-1]
+			}
+
+			// Build query for component vars
+			yqExpression = fmt.Sprintf(".components.%s.%s", KeyTerraform, componentName)
+
+			// If not including abstract components, filter them out
+			if !includeAbstract {
+				// Only get component that either doesn't have abstract flag or has it set to false
+				yqExpression += " | select(has(\"abstract\") == false or .abstract == false)"
+			}
+
+			// Get the vars
+			yqExpression += " | .vars"
+
+			queryResult, err = utils.EvaluateYqExpression(nil, stack, yqExpression)
+			if err == nil && queryResult != nil {
+				values[stackName] = queryResult
+			} else {
+				log.Debug("no component values found",
+					"stack", stackName,
+					"component", component,
+					"yq_expression", yqExpression,
+					"error", err)
+			}
 		}
 	}
 
@@ -235,137 +104,64 @@ func (e *DefaultExtractor) ExtractStackValues(stacksMap map[string]interface{}, 
 }
 
 // ApplyValueQuery implements the ValueExtractor interface for DefaultExtractor.
+// It uses YQ expressions to query the extracted values.
 func (e *DefaultExtractor) ApplyValueQuery(values map[string]interface{}, query string) (map[string]interface{}, error) {
 	if query == "" {
 		return values, nil
 	}
 
-	result := make(map[string]interface{})
+	results := make(map[string]interface{})
+
 	for stackName, stackData := range values {
-		data, ok := stackData.(map[string]interface{})
-		if !ok {
-			continue
+		// Apply YQ expression directly to the data
+		queryResult, err := utils.EvaluateYqExpression(nil, stackData, query)
+		if err != nil {
+			log.Debug("YQ query failed",
+				"stack", stackName,
+				"query", query,
+				"error", err)
+			continue // Skip this stack if query fails
 		}
 
-		// Get value using query path.
-		value := getValueFromPath(data, query)
-		if value != nil {
-			result[stackName] = map[string]interface{}{
-				"value": formatArrayValue(value),
-			}
-		}
-	}
-
-	if len(result) == 0 {
-		return nil, &errors.QueryError{
-			Query: query,
-			Cause: &errors.NoValuesFoundError{Component: "query", Query: query},
-		}
-	}
-
-	return result, nil
-}
-
-// getValueFromPath gets a value from a nested map using a dot-separated path.
-func getValueFromPath(data map[string]interface{}, path string) interface{} {
-	if path == "" {
-		return data
-	}
-
-	parts := strings.Split(strings.TrimPrefix(path, "."), ".")
-	return navigatePath(data, parts)
-}
-
-// navigatePath follows a path of parts through nested data structures.
-func navigatePath(data interface{}, parts []string) interface{} {
-	current := data
-
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-
-		switch v := current.(type) {
+		// Handle the query result based on its type
+		switch result := queryResult.(type) {
 		case map[string]interface{}:
-			var found bool
-			current, found = processMapPart(v, part)
-			if !found {
-				return nil
-			}
+			// Maps can be added directly
+			results[stackName] = result
 		case []interface{}:
-			var found bool
-			current, found = processArrayPart(v, part)
-			if !found {
-				return current // Return array if we can't process part
+			// Arrays should be added directly
+			results[stackName] = result
+		case string, int, int32, int64, float32, float64, bool:
+			// Scalar values need to be wrapped in a map to display correctly in tables
+			// Use the last part of the query as the key (e.g., .location -> location)
+			key := strings.TrimPrefix(query, ".")
+			if strings.Contains(key, ".") {
+				parts := strings.Split(key, ".")
+				key = parts[len(parts)-1]
 			}
+			// Create a map with the value using the key from query
+			results[stackName] = map[string]interface{}{
+				key: result,
+			}
+		case nil:
+			// Skip nil results
+			log.Debug("query returned nil", "stack", stackName, "query", query)
 		default:
-			return nil
-		}
-	}
-
-	return current
-}
-
-// processMapPart handles traversing a map with the given part key.
-func processMapPart(mapData map[string]interface{}, part string) (interface{}, bool) {
-	// Check for direct key match first
-	if val, exists := mapData[part]; exists {
-		return val, true
-	}
-
-	// If the part contains a wildcard pattern, check all keys
-	if strings.Contains(part, "*") {
-		return processWildcardPattern(mapData, part)
-	}
-
-	// No match found
-	return nil, false
-}
-
-// processWildcardPattern handles wildcard matching in map keys.
-func processWildcardPattern(mapData map[string]interface{}, pattern string) (interface{}, bool) {
-	matchFound := false
-	result := make(map[string]interface{})
-
-	for key, val := range mapData {
-		matched, err := utils.MatchWildcard(pattern, key)
-		if err == nil && matched {
-			matchFound = true
-			result[key] = val
-		}
-	}
-
-	if !matchFound {
-		return nil, false
-	}
-
-	// If only one match, continue with that value
-	if len(result) == 1 {
-		for _, val := range result {
-			return val, true
-		}
-	}
-
-	// Otherwise return the map of all matches
-	return result, true
-}
-
-// processArrayPart handles traversing an array with the given part.
-func processArrayPart(arrayData []interface{}, part string) (interface{}, bool) {
-	// If part is a number, get that specific index
-	if idx, err := strconv.Atoi(part); err == nil && idx >= 0 && idx < len(arrayData) {
-		return arrayData[idx], true
-	}
-
-	// If array has map elements, try to access by key
-	if len(arrayData) > 0 {
-		if mapElement, ok := arrayData[0].(map[string]interface{}); ok {
-			if val, exists := mapElement[part]; exists {
-				return val, true
+			// For any other types, wrap them like scalar values
+			key := strings.TrimPrefix(query, ".")
+			if strings.Contains(key, ".") {
+				parts := strings.Split(key, ".")
+				key = parts[len(parts)-1]
+			}
+			results[stackName] = map[string]interface{}{
+				key: result,
 			}
 		}
 	}
 
-	// Return false to indicate we should return the array itself
-	return nil, false
+	if len(results) == 0 {
+		return nil, &errors.NoValuesFoundError{Query: query}
+	}
+
+	return results, nil
 }
