@@ -33,6 +33,16 @@ var (
 	ErrWriteTempFile           = errors.New("failed to write to temp file")
 	ErrUploadFile              = errors.New("failed to upload file")
 
+	// Google Secret Manager specific errors.
+	ErrProjectIDRequired = errors.New("project_id is required in Google Secret Manager store configuration")
+	ErrValueMustBeString = errors.New("value must be a string")
+	ErrCreateClient      = errors.New("failed to create Secret Manager client")
+	ErrCreateSecret      = errors.New("failed to create secret")
+	ErrAddSecretVersion  = errors.New("failed to add secret version")
+	ErrAccessSecret      = errors.New("failed to access secret version")
+	ErrResourceNotFound  = errors.New("resource not found")
+	ErrPermissionDenied  = errors.New("permission denied")
+
 	// Registry specific errors.
 	ErrParseArtifactoryOptions = errors.New("failed to parse Artifactory store options")
 	ErrParseSSMOptions         = errors.New("failed to parse SSM store options")
