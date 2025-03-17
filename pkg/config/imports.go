@@ -376,7 +376,6 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 	for _, pattern := range patterns {
 		matches, err := u.GetGlobMatches(pattern)
 		if err != nil {
-			log.Debug("no matches found for glob pattern", "path", pattern, "error", err)
 			continue
 		}
 		filePaths = append(filePaths, matches...)
