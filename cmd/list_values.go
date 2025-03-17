@@ -63,7 +63,7 @@ var listValuesCmd = &cobra.Command{
 // listVarsCmd is an alias for 'list values --query .vars'.
 var listVarsCmd = &cobra.Command{
 	Use:   "vars [component]",
-	Short: "List component vars across stacks (alias for 'list values --query .vars')",
+	Short: "List component vars across stacks (alias for `list values --query .vars`)",
 	Long:  "List vars for a component across all stacks where it is used",
 	Example: "atmos list vars vpc\n" +
 		"atmos list vars vpc --abstract\n" +
