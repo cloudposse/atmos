@@ -20,7 +20,7 @@ func AddCommonListFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Int("max-columns", 0, "Maximum number of columns to display")
 	cmd.PersistentFlags().String("delimiter", "", "Delimiter for CSV/TSV output")
 	cmd.PersistentFlags().String("stack", "", "Stack pattern to filter by")
-	cmd.PersistentFlags().String("query", "", "YQ expression to filter values (e.g., '.vars.region')")
+	cmd.PersistentFlags().String("query", "", "YQ expression to filter values (e.g., `.vars.region`)")
 }
 
 // flagGetter is an interface for getting flag values.
