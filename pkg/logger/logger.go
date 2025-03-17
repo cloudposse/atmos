@@ -35,7 +35,7 @@ type ErrUnsupportedDeviceFile struct {
 }
 
 // ErrInvalidLogLevel is returned when an invalid log level is provided.
-var ErrInvalidLogLevel = errors.New("invalid log level")
+var ErrInvalidLogLevel = errors.New("Invalid log level")
 
 // Error returns the error message for an unsupported device file.
 func (e ErrUnsupportedDeviceFile) Error() string {
@@ -43,7 +43,6 @@ func (e ErrUnsupportedDeviceFile) Error() string {
 }
 
 type Logger struct {
-	File        string
 	AtmosLogger *log.Logger
 }
 
@@ -118,7 +117,6 @@ func NewLogger(logLevel log.Level, file string) (*Logger, error) {
 	atmosLogger.SetLevel(logLevel)
 
 	return &Logger{
-		File:        file,
 		AtmosLogger: atmosLogger,
 	}, nil
 }

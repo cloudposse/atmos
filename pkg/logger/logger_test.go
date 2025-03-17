@@ -20,7 +20,6 @@ func TestNewLogger(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 	assert.Equal(t, log.DebugLevel, logger.GetLevel())
-	assert.Equal(t, "/dev/stdout", logger.File)
 }
 
 func TestNewLoggerFromCliConfig(t *testing.T) {
@@ -35,7 +34,6 @@ func TestNewLoggerFromCliConfig(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
 	assert.Equal(t, log.InfoLevel, logger.GetLevel())
-	assert.Equal(t, "/dev/stdout", logger.File)
 }
 
 func TestParseLogLevel(t *testing.T) {
@@ -77,7 +75,6 @@ func TestLogger_Trace(t *testing.T) {
 	atmosLogger.SetLevel(AtmosTraceLevel)
 
 	testLogger := &Logger{
-		File:        "/dev/stdout",
 		AtmosLogger: atmosLogger,
 	}
 
@@ -111,7 +108,6 @@ func TestLogger_Info(t *testing.T) {
 	atmosLogger.SetLevel(log.InfoLevel)
 
 	logger := &Logger{
-		File:        "/dev/stdout",
 		AtmosLogger: atmosLogger,
 	}
 
@@ -126,7 +122,6 @@ func TestLogger_Warning(t *testing.T) {
 	atmosLogger.SetLevel(log.WarnLevel)
 
 	logger := &Logger{
-		File:        "/dev/stdout",
 		AtmosLogger: atmosLogger,
 	}
 
@@ -142,7 +137,6 @@ func TestLogger_Error(t *testing.T) {
 	atmosLogger.SetLevel(log.WarnLevel)
 
 	logger := &Logger{
-		File:        "/dev/stderr",
 		AtmosLogger: atmosLogger,
 	}
 
@@ -157,7 +151,6 @@ func TestLogger_Error(t *testing.T) {
 	fileAtmosLogger.SetLevel(log.WarnLevel)
 
 	fileLogger := &Logger{
-		File:        "test.log",
 		AtmosLogger: fileAtmosLogger,
 	}
 
@@ -249,7 +242,6 @@ func TestLogger_LogMethods(t *testing.T) {
 			atmosLogger.SetLevel(test.loggerLevel)
 
 			logger := &Logger{
-				File:        "/dev/stdout",
 				AtmosLogger: atmosLogger,
 			}
 
@@ -273,7 +265,6 @@ func TestDevNullLogging(t *testing.T) {
 	logger, err := NewLogger(log.InfoLevel, "/dev/null")
 	assert.NoError(t, err)
 	assert.NotNil(t, logger)
-	assert.Equal(t, "/dev/null", logger.File)
 
 	// Test that logging to /dev/null doesn't produce any output
 	// Capture os.Stdout
@@ -447,7 +438,6 @@ func TestLoggerFromCliConfig(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, logger)
 				assert.Equal(t, test.expectedLevel, logger.GetLevel())
-				assert.Equal(t, test.config.Logs.File, logger.File)
 			}
 		})
 	}
