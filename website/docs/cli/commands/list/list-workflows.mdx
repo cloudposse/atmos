@@ -1,0 +1,94 @@
+---
+title: "atmos list workflows"
+id: "list-workflows"
+sidebar_label: workflows
+sidebar_class_name: command
+---
+
+# atmos list workflows
+
+The `atmos list workflows` command displays all Atmos workflows defined in your project.
+
+## Usage
+
+```shell
+atmos list workflows [flags]
+```
+
+## Description
+
+The `atmos list workflows` command helps you inspect all Atmos workflows defined in your project's workflow manifests. It provides a tabular view where:
+
+- Each row represents a workflow
+- Columns show the file, workflow name, and description
+
+This command is useful for:
+- Getting an overview of all available workflows
+- Finding workflows for specific tasks
+- Understanding workflow organization in your project
+
+## Flags
+
+<dl>
+  <dt>`--file, -f string`</dt>
+  <dd>Filter workflows by file (e.g., `atmos list workflows -f workflow1`)</dd>
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dt>`--delimiter string`</dt>
+  <dd>Delimiter for csv/tsv output (default: `\t`)</dd>
+</dl>
+
+## Examples
+
+List all workflows:
+```shell
+atmos list workflows
+```
+
+Filter workflows by file:
+```shell
+atmos list workflows -f networking.yaml
+```
+
+Output in different formats:
+```shell
+# JSON format for machine processing
+atmos list workflows --format json
+
+# YAML format for configuration files
+atmos list workflows --format yaml
+
+# CSV format for spreadsheet compatibility
+atmos list workflows --format csv
+
+# TSV format with tab delimiters
+atmos list workflows --format tsv
+```
+
+Specify delimiter for CSV output:
+```shell
+atmos list workflows --format csv --delimiter ','
+```
+
+## Example Output
+
+```shell
+> atmos list workflows
+┌────────────────┬─────────────────────────────┬─────────────────────────────────────────┐
+│      File      │          Workflow           │               Description               │
+├────────────────┼─────────────────────────────┼─────────────────────────────────────────┤
+│ compliance.yaml│ deploy/aws-config/global    │ Deploy AWS Config Global                │
+│ networking.yaml│ apply-all-components        │ Apply all networking components         │
+│ networking.yaml│ plan-all-vpc                │ Plan all VPC changes                    │
+│ datadog.yaml   │ deploy/datadog-integration  │ Deploy Datadog integration              │
+└────────────────┴─────────────────────────────┴─────────────────────────────────────────┘
+```
+
+:::tip
+- Use the `--file` flag to filter workflows from a specific manifest file
+- The `describe workflows` command provides more detailed information about workflows
+:::
+
+## Related Commands
+
+- [atmos describe workflows](../describe/describe-workflows) - Show detailed information about workflows 
