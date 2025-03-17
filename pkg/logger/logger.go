@@ -142,7 +142,7 @@ func ParseLogLevel(logLevel string) (log.Level, error) {
 	}
 
 	validLevels := []string{"Trace", "Debug", "Info", "Warning", "Off"}
-	return 0, fmt.Errorf("%w: %s (valid options are: %v)", ErrInvalidLogLevel, logLevel, validLevels)
+	return 0, fmt.Errorf("%w `%s`. Valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
 }
 
 func (l *Logger) SetLogLevel(logLevel log.Level) error {
