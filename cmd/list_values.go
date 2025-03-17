@@ -92,7 +92,7 @@ func init() {
 
 	// Add additional flags
 	listValuesCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
-	listValuesCmd.PersistentFlags().Bool("vars", false, "Show only vars (equivalent to --query .vars)")
+	listValuesCmd.PersistentFlags().Bool("vars", false, "Show only vars (equivalent to `--query .vars`)")
 
 	// Add stack pattern completion
 	AddStackCompletion(listValuesCmd)
