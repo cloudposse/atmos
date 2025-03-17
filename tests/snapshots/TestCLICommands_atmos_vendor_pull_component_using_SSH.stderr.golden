@@ -1,4 +1,4 @@
-DEBU Using command line argument '--logs-level=Debug'
+DEBU Set using command line argument --logs-level=Debug
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
