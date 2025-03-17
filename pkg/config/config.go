@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -48,7 +50,61 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			return atmosConfig, err
 		}
 	}
+	setLogConfig(&atmosConfig)
 
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
+}
+
+func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
+	// TODO: This is a quick patch to mitigate the issue we can look for better code later
+	// Issue: https://linear.app/cloudposse/issue/DEV-3093/create-a-cli-command-core-library
+	if os.Getenv("ATMOS_LOGS_LEVEL") != "" {
+		atmosConfig.Logs.Level = os.Getenv("ATMOS_LOGS_LEVEL")
+	}
+	flagKeyValue := parseFlags()
+	if v, ok := flagKeyValue["logs-level"]; ok {
+		atmosConfig.Logs.Level = v
+	}
+	if os.Getenv("ATMOS_LOGS_FILE") != "" {
+		atmosConfig.Logs.File = os.Getenv("ATMOS_LOGS_FILE")
+	}
+	if v, ok := flagKeyValue["logs-file"]; ok {
+		atmosConfig.Logs.File = v
+	}
+}
+
+// TODO: This function works well, but we should generally avoid implementing manual flag parsing,
+// as Cobra typically handles this.
+
+// If there's no alternative, this approach may be necessary.
+// However, this TODO serves as a reminder to revisit and verify if a better solution exists.
+
+// Function to manually parse flags with double dash "--" like Cobra.
+func parseFlags() map[string]string {
+	args := os.Args
+	flags := make(map[string]string)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		// Check if the argument starts with '--' (double dash)
+		if !strings.HasPrefix(arg, "--") {
+			continue
+		}
+		// Strip the '--' prefix and check if it's followed by a value
+		arg = arg[2:]
+		switch {
+		case strings.Contains(arg, "="):
+			// Case like --flag=value
+			parts := strings.SplitN(arg, "=", 2)
+			flags[parts[0]] = parts[1]
+		case i+1 < len(args) && !strings.HasPrefix(args[i+1], "--"):
+			// Case like --flag value
+			flags[arg] = args[i+1]
+			i++ // Skip the next argument as it's the value
+		default:
+			// Case where flag has no value, e.g., --flag (we set it to "true")
+			flags[arg] = "true"
+		}
+	}
+	return flags
 }
