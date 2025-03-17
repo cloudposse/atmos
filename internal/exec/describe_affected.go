@@ -22,7 +22,7 @@ type DescribeAffectedCmdArgs struct {
 	IncludeDependents           bool
 	IncludeSettings             bool
 	IncludeSpaceliftAdminStacks bool
-	Logger                      *l.Logger
+	Logger                      *l.AtmosLogger
 	OutputFile                  string
 	Ref                         string
 	RepoPath                    string

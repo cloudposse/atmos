@@ -12,7 +12,7 @@ import (
 
 type ProLockUnlockCmdArgs struct {
 	Component string
-	Logger    *l.Logger
+	Logger    *l.AtmosLogger
 	Stack     string
 }
 
