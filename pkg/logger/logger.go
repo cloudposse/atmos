@@ -141,8 +141,8 @@ func ParseLogLevel(logLevel string) (log.Level, error) {
 		return level, nil
 	}
 
-	validLevels := []string{"Trace", "Debug", "Info", "Warning", "Error", "Off"}
-	return 0, fmt.Errorf("%w: `%s`, valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
+	validLevels := []string{"Trace", "Debug", "Info", "Warning", "Off"}
+	return 0, fmt.Errorf("Invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
 }
 
 func (l *Logger) SetLogLevel(logLevel log.Level) error {
@@ -191,7 +191,7 @@ func (l *Logger) Warning(message string) {
 // Constants for logger configuration.
 const (
 	// Log level labels.
-	errorLevelLabel = "ERROR"
+	errorLevelLabel = "ERRO"
 	warnLevelLabel  = "WARN"
 	infoLevelLabel  = "INFO"
 	debugLevelLabel = "DEBU"
@@ -202,7 +202,7 @@ const (
 func createLevelStyle(label string, bgColor string) lipgloss.Style {
 	return lipgloss.NewStyle().
 		SetString(label).
-		Padding(0, 1, 0, 1).
+		Padding(0, 0, 0, 0).
 		Background(lipgloss.Color(bgColor)).
 		Foreground(lipgloss.Color(theme.ColorWhite)).
 		Bold(true).
