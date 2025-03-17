@@ -28,7 +28,7 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 
 	// Execute the command
 	RootCmd.SetArgs([]string{"terraform", "generate", "backend", "component-1", "-s", "nonprod"})
-	err = RootCmd.Execute()
+	err = Execute()
 	assert.NoError(t, err, "'TestTerraformGenerateBackendCmd' should execute without error")
 
 	// Close the writer and restore stdout
