@@ -117,19 +117,19 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	// Set the appropriate log level based on configuration.
 	switch atmosConfig.Logs.Level {
 	case "Trace":
-		styledLog.SetLevel(logger.AtmosTraceLevel)
+		atmosLogger.SetLevel(logger.AtmosTraceLevel)
 	case "Debug":
-		styledLog.SetLevel(log.DebugLevel)
+		atmosLogger.SetLevel(log.DebugLevel)
 	case "Info":
-		styledLog.SetLevel(log.InfoLevel)
+		atmosLogger.SetLevel(log.InfoLevel)
 	case "Warning":
-		styledLog.SetLevel(log.WarnLevel)
+		atmosLogger.SetLevel(log.WarnLevel)
 	case "Error":
-		styledLog.SetLevel(log.ErrorLevel)
+		atmosLogger.SetLevel(log.ErrorLevel)
 	case "Off":
-		styledLog.SetLevel(math.MaxInt32)
+		atmosLogger.SetLevel(math.MaxInt32)
 	default:
-		styledLog.SetLevel(log.InfoLevel)
+		atmosLogger.SetLevel(log.InfoLevel)
 	}
 }
 

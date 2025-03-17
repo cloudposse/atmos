@@ -48,7 +48,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
-	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
+	logger, err := l.NewLoggerFromCliConfig(&atmosConfig)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
@@ -151,7 +151,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 	if verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
-		err := logger.SetLogLevel(l.LogLevelTrace)
+		err := logger.SetLogLevel(l.AtmosTraceLevel)
 		if err != nil {
 			return DescribeAffectedCmdArgs{}, err
 		}
