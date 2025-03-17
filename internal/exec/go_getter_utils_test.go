@@ -244,7 +244,7 @@ func TestGoGetterGet_File(t *testing.T) {
 	destFile := filepath.Join(destDir, "downloaded.txt")
 	srcURL := "file://" + srcFile
 	config := fakeAtmosConfig(false)
-	err = GoGetterGet(&config, srcURL, destFile, getter.ClientModeFile, 5*time.Second)
+	err = GoGetterGet(config, srcURL, destFile, getter.ClientModeFile, 5*time.Second)
 	if err != nil {
 		t.Errorf("GoGetterGet failed: %v", err)
 	}
