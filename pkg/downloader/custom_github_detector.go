@@ -7,11 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// CustomGitHubDetector intercepts GitHub URLs and transforms them
+// CustomGitHubDetector Intercepts GitHub URLs and transforms them
 // into something like git::https://<token>@github.com/... so we can
 // do a git-based clone with a token.
 type CustomGitHubDetector struct {
@@ -53,7 +53,6 @@ func (d *customGitHubDetector) Detect(src, _ string) (string, bool, error) {
 
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-
 		log.Debug("Failed to parse URL", "source", src, "error", err)
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
 	}
