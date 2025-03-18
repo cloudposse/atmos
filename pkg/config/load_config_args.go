@@ -2,7 +2,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -10,10 +12,11 @@ import (
 )
 
 var (
-	ErrExpectedDirOrPattern   = errors.New("--config-path expected directory found file")
-	ErrFileNotFound           = errors.New("file not found")
-	ErrExpectedFile           = errors.New("--config expected file found directory")
-	ErrAtmosArgConfigNotFound = errors.New("atmos configuration not found")
+	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
+	ErrFileNotFound                = errors.New("file not found")
+	ErrExpectedFile                = errors.New("--config expected file found directory")
+	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
+	ErrAtmosFilesDIrConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration  file not found on directory")
 )
 
 // loadConfigFromCLIArgs handles the loading of configurations provided via --config-path and --config.
@@ -90,7 +93,7 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 			log.Debug("Failed to find atmos config", "path", confDirPath, "error", err)
 			switch err.(type) {
 			case viper.ConfigFileNotFoundError:
-				log.Debug("Failed to found atmos config", "file", v.ConfigFileUsed())
+				log.Debug("Failed to found atmos config", "file", filepath.Join(confDirPath, CliConfigFileName))
 			default:
 				return nil, err
 			}
@@ -102,8 +105,8 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 		}
 		err = mergeConfig(v, confDirPath, DotCliConfigFileName, true)
 		if err != nil {
-			log.Debug("Failed to found .atmos config", "path", confDirPath, "error", err)
-			return nil, ErrAtmosArgConfigNotFound
+			log.Debug("Failed to found .atmos config", "path", filepath.Join(confDirPath, CliConfigFileName), "error", err)
+			return nil, fmt.Errorf("%w: %s", ErrAtmosFilesDIrConfigNotFound, confDirPath)
 		}
 		log.Debug(".atmos config file merged", "path", v.ConfigFileUsed())
 		configPaths = append(configPaths, confDirPath)
