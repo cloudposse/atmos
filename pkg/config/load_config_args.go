@@ -16,7 +16,7 @@ var (
 	ErrAtmosArgConfigNotFound = errors.New("atmos configuration not found")
 )
 
-// loadConfigFromCLIArgs handles the loading of configurations provided via --config-path.
+// loadConfigFromCLIArgs handles the loading of configurations provided via --config-path and --config.
 func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) error {
 	log.Debug("loading config from command line arguments")
 

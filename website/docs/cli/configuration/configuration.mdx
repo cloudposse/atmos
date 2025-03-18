@@ -26,7 +26,16 @@ you'd specify the command to run (e.g. [`opentofu`](/core-concepts/projects/conf
 the base path location of the components, and so forth.
 
 ## Configuration File (`atmos.yaml`)
-
+The --config flag allows you to specify a relative or absolute path to a valid configuration file. Only the configuration files specified by this flag will be loaded.
+The --config-path flag designates a directory containing Atmos configuration files (atmos, .atmos). Only files from the specified directory will be loaded.
+You can use both --config and --config-path multiple times in a single command. Configurations will be deep-merged in the order provided, 
+with the first specified config having the lowest priority and the last one having the highest. This allows later configurations to override settings from earlier ones.
+For example, to load multiple configuration files, you would run:
+  ```bash
+    atmos --config /path/to/config1.yaml --config /path/to/config2.yaml --config-path /path/first/config/ -config-path /path/second/config/ ...
+  ```
+Configuration Load Order
+If --config and --config-path not specified in command
 The CLI config is loaded from the following locations (from lowest to highest priority):
 
 - System directory (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
