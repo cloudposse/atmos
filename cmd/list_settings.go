@@ -41,6 +41,10 @@ var listSettingsCmd = &cobra.Command{
 func init() {
 	fl.AddCommonListFlags(listSettingsCmd)
 
+	// Add template and function processing flags
+	listSettingsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
+	listSettingsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+
 	AddStackCompletion(listSettingsCmd)
 
 	listCmd.AddCommand(listSettingsCmd)
@@ -51,6 +55,23 @@ func listSettings(cmd *cobra.Command) (string, error) {
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
 		return "", &errors.CommonFlagsError{Cause: err}
+	}
+
+	// Get template and function processing flags
+	processTemplates := true
+	if cmd.Flags().Lookup("process-templates") != nil {
+		processTemplates, err = cmd.Flags().GetBool("process-templates")
+		if err != nil {
+			log.Warn("failed to get process-templates flag, using default true", "error", err)
+		}
+	}
+
+	processYamlFunctions := true
+	if cmd.Flags().Lookup("process-functions") != nil {
+		processYamlFunctions, err = cmd.Flags().GetBool("process-functions")
+		if err != nil {
+			log.Warn("failed to get process-functions flag, using default true", "error", err)
+		}
 	}
 
 	if f.Format(commonFlags.Format) == f.FormatCSV && commonFlags.Delimiter == f.DefaultTSVDelimiter {
@@ -65,10 +86,19 @@ func listSettings(cmd *cobra.Command) (string, error) {
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processTemplates, processYamlFunctions, false, nil)
 	if err != nil {
 		return "", &errors.DescribeStacksError{Cause: err}
 	}
+
+	// Log the settings query
+	log.Info("Filtering settings",
+		"query", commonFlags.Query,
+		"maxColumns", commonFlags.MaxColumns,
+		"format", commonFlags.Format,
+		"stackPattern", commonFlags.Stack,
+		"processTemplates", processTemplates,
+		"processYamlFunctions", processYamlFunctions)
 
 	// Use empty query to avoid further processing since handleComponentProperties will extract the settings
 	output, err := l.FilterAndListValues(stacksMap, &l.FilterOptions{

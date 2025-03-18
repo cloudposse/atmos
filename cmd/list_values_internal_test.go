@@ -23,6 +23,8 @@ func TestListValuesFlags(t *testing.T) {
 	cmd.PersistentFlags().Int("max-columns", 0, "Maximum columns")
 	cmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
 	cmd.PersistentFlags().Bool("vars", false, "Show only vars")
+	cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing")
+	cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing")
 
 	formatFlag := cmd.PersistentFlags().Lookup("format")
 	assert.NotNil(t, formatFlag, "Expected format flag to exist")
@@ -51,6 +53,14 @@ func TestListValuesFlags(t *testing.T) {
 	varsFlag := cmd.PersistentFlags().Lookup("vars")
 	assert.NotNil(t, varsFlag, "Expected vars flag to exist")
 	assert.Equal(t, "false", varsFlag.DefValue)
+
+	processTemplatesFlag := cmd.PersistentFlags().Lookup("process-templates")
+	assert.NotNil(t, processTemplatesFlag, "Expected process-templates flag to exist")
+	assert.Equal(t, "true", processTemplatesFlag.DefValue)
+
+	processFunctionsFlag := cmd.PersistentFlags().Lookup("process-functions")
+	assert.NotNil(t, processFunctionsFlag, "Expected process-functions flag to exist")
+	assert.Equal(t, "true", processFunctionsFlag.DefValue)
 }
 
 // TestListVarsFlags tests that the list vars command has the correct flags.
@@ -68,6 +78,8 @@ func TestListVarsFlags(t *testing.T) {
 	cmd.PersistentFlags().String("query", "", "JQ query")
 	cmd.PersistentFlags().Int("max-columns", 0, "Maximum columns")
 	cmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
+	cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing")
+	cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing")
 
 	assert.Equal(t, "vars [component]", cmd.Use)
 	assert.Contains(t, cmd.Short, "List component vars across stacks")
@@ -96,6 +108,14 @@ func TestListVarsFlags(t *testing.T) {
 	abstractFlag := cmd.PersistentFlags().Lookup("abstract")
 	assert.NotNil(t, abstractFlag, "Expected abstract flag to exist")
 	assert.Equal(t, "false", abstractFlag.DefValue)
+
+	processTemplatesFlag := cmd.PersistentFlags().Lookup("process-templates")
+	assert.NotNil(t, processTemplatesFlag, "Expected process-templates flag to exist")
+	assert.Equal(t, "true", processTemplatesFlag.DefValue)
+
+	processFunctionsFlag := cmd.PersistentFlags().Lookup("process-functions")
+	assert.NotNil(t, processFunctionsFlag, "Expected process-functions flag to exist")
+	assert.Equal(t, "true", processFunctionsFlag.DefValue)
 }
 
 // TestListValuesValidatesArgs tests that the command validates arguments.

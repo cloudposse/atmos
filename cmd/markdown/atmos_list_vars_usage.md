@@ -30,5 +30,16 @@
 ```
  $ atmos list vars <component> --stack '*-ue2-*' --query .vars.region
 ```
+
+– Disable Go template processing
+```
+ $ atmos list vars <component> --process-templates=false
+```
+
+– Disable YAML functions processing
+```
+ $ atmos list vars <component> --process-functions=false
+```
+
 - Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
 

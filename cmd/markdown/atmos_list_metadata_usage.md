@@ -3,15 +3,14 @@
  $ atmos list metadata
 ```
 
-– List metadata for specific stacks
+– List specific metadata
 ```
- $ atmos list metadata --stack '*-dev-*'
+ $ atmos list metadata --query '.component'
 ```
 
-– List specific metadata fields
+– Filter by stack pattern
 ```
- $ atmos list metadata --query .metadata.component
- $ atmos list metadata --query .metadata.type
+ $ atmos list metadata --stack '*-dev-*'
 ```
 
 – Output in different formats
@@ -22,7 +21,14 @@
  $ atmos list metadata --format tsv
 ```
 
-– Filter by stack and specific metadata
+– Disable Go template processing
 ```
- $ atmos list metadata --stack '*-ue2-*' --query .metadata.version
+ $ atmos list metadata --process-templates=false
 ```
+
+– Disable YAML functions processing
+```
+ $ atmos list metadata --process-functions=false
+```
+
+- Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)

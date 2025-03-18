@@ -40,5 +40,31 @@
 ```
  $ atmos list values <component> --query .vars.tags --stack '*-ue2-*'
 ```
+
+– Apply a custom query
+```
+ $ atmos list values <component> --query '.vars.region'
+```
+
+– Filter by stack pattern
+```
+ $ atmos list values <component> --stack '*-ue2-*'
+```
+
+– Limit the number of stacks displayed
+```
+ $ atmos list values <component> --max-columns 3
+```
+
+– Disable Go template processing
+```
+ $ atmos list values <component> --process-templates=false
+```
+
+– Disable YAML functions processing
+```
+ $ atmos list values <component> --process-functions=false
+```
+
 - Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
 

@@ -3,15 +3,14 @@
  $ atmos list settings
 ```
 
-– List settings for specific stacks
+– List specific settings
 ```
- $ atmos list settings --stack '*-dev-*'
+ $ atmos list settings --query '.terraform'
 ```
 
-– List specific settings using query
+– Filter by stack pattern
 ```
- $ atmos list settings --query .settings.templates
- $ atmos list settings --query .settings.validation
+ $ atmos list settings --stack '*-dev-*'
 ```
 
 – Output in different formats
@@ -22,7 +21,14 @@
  $ atmos list settings --format tsv
 ```
 
-– Filter by stack and specific settings
+– Disable Go template processing
 ```
- $ atmos list settings --stack '*-ue2-*' --query .settings.templates.gomplate
+ $ atmos list settings --process-templates=false
 ```
+
+– Disable YAML functions processing
+```
+ $ atmos list settings --process-functions=false
+```
+
+- Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)

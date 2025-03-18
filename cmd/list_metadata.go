@@ -41,6 +41,10 @@ var listMetadataCmd = &cobra.Command{
 func init() {
 	fl.AddCommonListFlags(listMetadataCmd)
 
+	// Add template and function processing flags
+	listMetadataCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
+	listMetadataCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+
 	AddStackCompletion(listMetadataCmd)
 
 	listCmd.AddCommand(listMetadataCmd)
@@ -52,6 +56,23 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 		return "", &errors.QueryError{
 			Query: "common flags",
 			Cause: err,
+		}
+	}
+
+	// Get template and function processing flags
+	processTemplates := true
+	if cmd.Flags().Lookup("process-templates") != nil {
+		processTemplates, err = cmd.Flags().GetBool("process-templates")
+		if err != nil {
+			log.Warn("failed to get process-templates flag, using default true", "error", err)
+		}
+	}
+
+	processYamlFunctions := true
+	if cmd.Flags().Lookup("process-functions") != nil {
+		processYamlFunctions, err = cmd.Flags().GetBool("process-functions")
+		if err != nil {
+			log.Warn("failed to get process-functions flag, using default true", "error", err)
 		}
 	}
 
@@ -67,10 +88,19 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processTemplates, processYamlFunctions, false, nil)
 	if err != nil {
 		return "", &errors.DescribeStacksError{Cause: err}
 	}
+
+	// Log the metadata query
+	log.Info("Filtering metadata",
+		"query", commonFlags.Query,
+		"maxColumns", commonFlags.MaxColumns,
+		"format", commonFlags.Format,
+		"stackPattern", commonFlags.Stack,
+		"processTemplates", processTemplates,
+		"processYamlFunctions", processYamlFunctions)
 
 	// Use .metadata as the default query if none provided
 	if commonFlags.Query == "" {

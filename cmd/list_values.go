@@ -23,12 +23,19 @@ var (
 	ErrGettingVarsFlag       = errors.New("error getting vars flag")
 	ErrInitializingCLIConfig = errors.New("error initializing CLI config")
 	ErrDescribingStacks      = errors.New("error describing stacks")
+	ErrComponentNameRequired = errors.New("component name is required")
 )
 
 // Error format strings.
 const (
 	ErrFmtWrapErr = "%w: %v" // Format for wrapping errors.
 )
+
+// ProcessingOptions holds flags for processing templates and YAML functions.
+type ProcessingOptions struct {
+	Templates bool
+	Functions bool
+}
 
 // listValuesCmd lists component values across stacks.
 var listValuesCmd = &cobra.Command{
@@ -88,7 +95,9 @@ var listVarsCmd = &cobra.Command{
 				strings.Contains(err.Error(), "query '.vars'") &&
 				len(args) > 0 {
 				// Replace with a more descriptive error
-				log.Error(fmt.Sprintf("no values found for component '%s' with query '.vars'", args[0]))
+				log.Error("no values found for component with query",
+					"component", args[0],
+					"query", ".vars")
 				return
 			}
 			log.Error(err.Error())
@@ -109,6 +118,8 @@ func init() {
 	// Add additional flags
 	listValuesCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
 	listValuesCmd.PersistentFlags().Bool("vars", false, "Show only vars (equivalent to `--query .vars`)")
+	listValuesCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
+	listValuesCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 
 	// Add common flags to vars command
 	fl.AddCommonListFlags(listVarsCmd)
@@ -118,6 +129,8 @@ func init() {
 
 	// Add abstract flag to vars command
 	listVarsCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
+	listVarsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
+	listVarsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 
 	// Add stack pattern completion
 	AddStackCompletion(listValuesCmd)
@@ -128,26 +141,50 @@ func init() {
 	listCmd.AddCommand(listVarsCmd)
 }
 
-func listValues(cmd *cobra.Command, args []string) (string, error) {
+// getBoolFlagWithDefault gets a boolean flag value or returns the default if error.
+func getBoolFlagWithDefault(cmd *cobra.Command, flagName string, defaultValue bool) bool {
+	if cmd.Flags().Lookup(flagName) == nil {
+		return defaultValue
+	}
+
+	value, err := cmd.Flags().GetBool(flagName)
+	if err != nil {
+		log.Warn("failed to get flag, using default",
+			"flag", flagName,
+			"default", defaultValue,
+			"error", err)
+		return defaultValue
+	}
+
+	return value
+}
+
+// getProcessingFlags gets template and function processing flags.
+func getProcessingFlags(cmd *cobra.Command) ProcessingOptions {
+	return ProcessingOptions{
+		Templates: getBoolFlagWithDefault(cmd, "process-templates", true),
+		Functions: getBoolFlagWithDefault(cmd, "process-functions", true),
+	}
+}
+
+// getListValuesFlags extracts and processes all flags needed for list values command.
+func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, ProcessingOptions, error) {
 	// Get common flags
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
-		return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingCommonFlags, err)
+		return nil, ProcessingOptions{}, fmt.Errorf(ErrFmtWrapErr, ErrGettingCommonFlags, err)
 	}
 
 	// Get additional flags
 	abstractFlag, err := cmd.Flags().GetBool("abstract")
 	if err != nil {
-		return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingAbstractFlag, err)
+		return nil, ProcessingOptions{}, fmt.Errorf(ErrFmtWrapErr, ErrGettingAbstractFlag, err)
 	}
 
-	// Get vars flag if it exists
-	varsFlag := false
-	if cmd.Flags().Lookup("vars") != nil {
-		varsFlag, err = cmd.Flags().GetBool("vars")
-		if err != nil {
-			return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingVarsFlag, err)
-		}
+	// Get vars flag and adjust query if needed
+	varsFlag := getBoolFlagWithDefault(cmd, "vars", false)
+	if varsFlag {
+		commonFlags.Query = ".vars"
 	}
 
 	// Set appropriate default delimiter based on format
@@ -155,17 +192,36 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		commonFlags.Delimiter = f.DefaultCSVDelimiter
 	}
 
-	// If vars flag is set, override query
-	if varsFlag {
-		commonFlags.Query = ".vars"
+	// Get processing flags
+	processingOpts := getProcessingFlags(cmd)
+
+	filterOptions := &l.FilterOptions{
+		Query:           commonFlags.Query,
+		IncludeAbstract: abstractFlag,
+		MaxColumns:      commonFlags.MaxColumns,
+		FormatStr:       commonFlags.Format,
+		Delimiter:       commonFlags.Delimiter,
+		StackPattern:    commonFlags.Stack,
 	}
 
+	return filterOptions, processingOpts, nil
+}
+
+func listValues(cmd *cobra.Command, args []string) (string, error) {
 	// Ensure we have a component name
 	if len(args) == 0 {
-		return "", fmt.Errorf("component name is required")
+		return "", ErrComponentNameRequired
+	}
+	component := args[0]
+
+	// Get all flags and options
+	filterOptions, processingOpts, err := getListValuesFlags(cmd)
+	if err != nil {
+		return "", err
 	}
 
-	component := args[0]
+	// Set component in filter options
+	filterOptions.Component = component
 
 	// Log the component name
 	log.Debug("Processing component", "component", component)
@@ -178,24 +234,22 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingOpts.Templates, processingOpts.Functions, false, nil)
 	if err != nil {
 		return "", fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
 	}
 
-	// Filter and list component values across stacks
-	output, err := l.FilterAndListValues(stacksMap, &l.FilterOptions{
-		Component:       component,
-		Query:           commonFlags.Query,
-		IncludeAbstract: abstractFlag,
-		MaxColumns:      commonFlags.MaxColumns,
-		FormatStr:       commonFlags.Format,
-		Delimiter:       commonFlags.Delimiter,
-		StackPattern:    commonFlags.Stack,
-	})
-	if err != nil {
-		return "", err // Return error directly without wrapping
-	}
+	// Log the filter options
+	log.Info("Filtering values",
+		"component", component,
+		"query", filterOptions.Query,
+		"includeAbstract", filterOptions.IncludeAbstract,
+		"maxColumns", filterOptions.MaxColumns,
+		"format", filterOptions.FormatStr,
+		"stackPattern", filterOptions.StackPattern,
+		"processTemplates", processingOpts.Templates,
+		"processYamlFunctions", processingOpts.Functions)
 
-	return output, nil
+	// Filter and list component values across stacks
+	return l.FilterAndListValues(stacksMap, filterOptions)
 }
