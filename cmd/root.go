@@ -126,7 +126,17 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		//nolint:all // The reason to escape this is because it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required
 		log.Fatal(err)
 	}
-	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
+	// Use the log level from config directly for consistent output
+	logLevelStr := strings.ToLower(atmosConfig.Logs.Level)
+	if logLevelStr == "" {
+		logLevelStr = "info" // Default value if not specified
+	}
+
+	if strings.ToLower(atmosConfig.Logs.Level) == "trace" {
+		log.Log(logger.AtmosTraceLevel, "Set", "logs-level", logLevelStr, "logs-file", atmosConfig.Logs.File)
+	} else {
+		log.Debug("Set", "logs-level", logLevelStr, "logs-file", atmosConfig.Logs.File)
+	}
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
