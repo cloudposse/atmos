@@ -31,12 +31,6 @@ const (
 	ErrFmtWrapErr = "%w: %v" // Format for wrapping errors.
 )
 
-// ProcessingOptions holds flags for processing templates and YAML functions.
-type ProcessingOptions struct {
-	Templates bool
-	Functions bool
-}
-
 // listValuesCmd lists component values across stacks.
 var listValuesCmd = &cobra.Command{
 	Use:   "values [component]",
@@ -85,7 +79,10 @@ var listVarsCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		// Set the query flag to .vars
-		cmd.Flags().Set("query", ".vars")
+		if err := cmd.Flags().Set("query", ".vars"); err != nil {
+			log.Error("failed to set query flag", "error", err)
+			return
+		}
 
 		// Run listValues with the component argument
 		output, err := listValues(cmd, args)
@@ -159,26 +156,18 @@ func getBoolFlagWithDefault(cmd *cobra.Command, flagName string, defaultValue bo
 	return value
 }
 
-// getProcessingFlags gets template and function processing flags.
-func getProcessingFlags(cmd *cobra.Command) ProcessingOptions {
-	return ProcessingOptions{
-		Templates: getBoolFlagWithDefault(cmd, "process-templates", true),
-		Functions: getBoolFlagWithDefault(cmd, "process-functions", true),
-	}
-}
-
 // getListValuesFlags extracts and processes all flags needed for list values command.
-func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, ProcessingOptions, error) {
+func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, *fl.ProcessingFlags, error) {
 	// Get common flags
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
-		return nil, ProcessingOptions{}, fmt.Errorf(ErrFmtWrapErr, ErrGettingCommonFlags, err)
+		return nil, nil, fmt.Errorf(ErrFmtWrapErr, ErrGettingCommonFlags, err)
 	}
 
 	// Get additional flags
 	abstractFlag, err := cmd.Flags().GetBool("abstract")
 	if err != nil {
-		return nil, ProcessingOptions{}, fmt.Errorf(ErrFmtWrapErr, ErrGettingAbstractFlag, err)
+		return nil, nil, fmt.Errorf(ErrFmtWrapErr, ErrGettingAbstractFlag, err)
 	}
 
 	// Get vars flag and adjust query if needed
@@ -193,7 +182,7 @@ func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, ProcessingOptions
 	}
 
 	// Get processing flags
-	processingOpts := getProcessingFlags(cmd)
+	processingFlags := fl.GetProcessingFlags(cmd)
 
 	filterOptions := &l.FilterOptions{
 		Query:           commonFlags.Query,
@@ -204,7 +193,7 @@ func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, ProcessingOptions
 		StackPattern:    commonFlags.Stack,
 	}
 
-	return filterOptions, processingOpts, nil
+	return filterOptions, processingFlags, nil
 }
 
 func listValues(cmd *cobra.Command, args []string) (string, error) {
@@ -215,7 +204,7 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	component := args[0]
 
 	// Get all flags and options
-	filterOptions, processingOpts, err := getListValuesFlags(cmd)
+	filterOptions, processingFlags, err := getListValuesFlags(cmd)
 	if err != nil {
 		return "", err
 	}
@@ -234,7 +223,7 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingOpts.Templates, processingOpts.Functions, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil)
 	if err != nil {
 		return "", fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
 	}
@@ -247,8 +236,8 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		"maxColumns", filterOptions.MaxColumns,
 		"format", filterOptions.FormatStr,
 		"stackPattern", filterOptions.StackPattern,
-		"processTemplates", processingOpts.Templates,
-		"processYamlFunctions", processingOpts.Functions)
+		"processTemplates", processingFlags.Templates,
+		"processYamlFunctions", processingFlags.Functions)
 
 	// Filter and list component values across stacks
 	return l.FilterAndListValues(stacksMap, filterOptions)

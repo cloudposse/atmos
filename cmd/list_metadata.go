@@ -60,21 +60,7 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 	}
 
 	// Get template and function processing flags
-	processTemplates := true
-	if cmd.Flags().Lookup("process-templates") != nil {
-		processTemplates, err = cmd.Flags().GetBool("process-templates")
-		if err != nil {
-			log.Warn("failed to get process-templates flag, using default true", "error", err)
-		}
-	}
-
-	processYamlFunctions := true
-	if cmd.Flags().Lookup("process-functions") != nil {
-		processYamlFunctions, err = cmd.Flags().GetBool("process-functions")
-		if err != nil {
-			log.Warn("failed to get process-functions flag, using default true", "error", err)
-		}
-	}
+	processingFlags := fl.GetProcessingFlags(cmd)
 
 	if f.Format(commonFlags.Format) == f.FormatCSV && commonFlags.Delimiter == f.DefaultTSVDelimiter {
 		commonFlags.Delimiter = f.DefaultCSVDelimiter
@@ -88,7 +74,7 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processTemplates, processYamlFunctions, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil)
 	if err != nil {
 		return "", &errors.DescribeStacksError{Cause: err}
 	}
@@ -99,8 +85,8 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 		"maxColumns", commonFlags.MaxColumns,
 		"format", commonFlags.Format,
 		"stackPattern", commonFlags.Stack,
-		"processTemplates", processTemplates,
-		"processYamlFunctions", processYamlFunctions)
+		"processTemplates", processingFlags.Templates,
+		"processYamlFunctions", processingFlags.Functions)
 
 	// Use .metadata as the default query if none provided
 	if commonFlags.Query == "" {

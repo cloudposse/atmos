@@ -14,6 +14,12 @@ type CommonFlags struct {
 	Query      string
 }
 
+// ProcessingFlags holds flags for processing templates and YAML functions.
+type ProcessingFlags struct {
+	Templates bool
+	Functions bool
+}
+
 // AddCommonListFlags adds common flags to list commands.
 func AddCommonListFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("format", "", "Output format: `table`, `json`, `yaml`, `csv`, `tsv`")
@@ -75,4 +81,36 @@ func GetCommonListFlags(cmd *cobra.Command) (*CommonFlags, error) {
 		Stack:      stack,
 		Query:      query,
 	}, nil
+}
+
+// GetProcessingFlags gets template and function processing flags from a command.
+func GetProcessingFlags(cmd *cobra.Command) *ProcessingFlags {
+	processTemplates := true
+	if cmd.Flags().Lookup("process-templates") != nil {
+		templateVal, err := cmd.Flags().GetBool("process-templates")
+		if err != nil {
+			log.Warn("failed to get process-templates flag, using default",
+				"default", true,
+				"error", err)
+		} else {
+			processTemplates = templateVal
+		}
+	}
+
+	processYamlFunctions := true
+	if cmd.Flags().Lookup("process-functions") != nil {
+		functionsVal, err := cmd.Flags().GetBool("process-functions")
+		if err != nil {
+			log.Warn("failed to get process-functions flag, using default",
+				"default", true,
+				"error", err)
+		} else {
+			processYamlFunctions = functionsVal
+		}
+	}
+
+	return &ProcessingFlags{
+		Templates: processTemplates,
+		Functions: processYamlFunctions,
+	}
 }
