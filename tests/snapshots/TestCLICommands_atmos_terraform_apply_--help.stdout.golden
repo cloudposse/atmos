@@ -27,15 +27,15 @@ Global Flags:
 
         --base-path string            Base path for Atmos project
 
-        --config stringSlice          Paths to configuration file (default "[]")
+        --config stringSlice          Paths to configuration file (default [])
 
         --config-path stringSlice     Path to configuration directory (default
-                                      "[]")
+                                      [])
 
         --logs-file string            The file to write Atmos logs to. Logs can
                                       be written to any file or any standard
-                                      file descriptor, including /dev/stdout,
-                                      /dev/stderr and /dev/null (default
+                                      file descriptor, including '/dev/stdout',
+                                      '/dev/stderr' and '/dev/null' (default
                                       /dev/stderr)
 
         --logs-level string           Logs level. Supported log levels are
@@ -69,8 +69,3 @@ Examples:
 Use atmos terraform apply --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
 
 
-╭──────────────────────────────────────────────────────────────╮
-│               Update available! test » 1.163.0               │
-│ Atmos Releases: https://github.com/cloudposse/atmos/releases │
-│          Install Atmos: https://atmos.tools/install          │
-╰──────────────────────────────────────────────────────────────╯
