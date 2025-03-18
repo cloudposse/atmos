@@ -1,8 +1,19 @@
 package flags
 
 import (
+	"fmt"
+
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+)
+
+// Error constants for flag operations
+var (
+	ErrFetchingFormat     = fmt.Errorf("error fetching format flag")
+	ErrFetchingMaxColumns = fmt.Errorf("error fetching max-columns flag")
+	ErrFetchingDelimiter  = fmt.Errorf("error fetching delimiter flag")
+	ErrFetchingStack      = fmt.Errorf("error fetching stack flag")
+	ErrFetchingQuery      = fmt.Errorf("error fetching query flag")
 )
 
 // CommonFlags contains common flags for list commands.
@@ -47,31 +58,31 @@ func GetCommonListFlags(cmd *cobra.Command) (*CommonFlags, error) {
 	format, err := flags.GetString("format")
 	if err != nil {
 		log.Error("failed to retrieve format flag", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFetchingFormat, err)
 	}
 
 	maxColumns, err := flags.GetInt("max-columns")
 	if err != nil {
 		log.Error("failed to retrieve max-columns flag", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFetchingMaxColumns, err)
 	}
 
 	delimiter, err := flags.GetString("delimiter")
 	if err != nil {
 		log.Error("failed to retrieve delimiter flag", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFetchingDelimiter, err)
 	}
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
 		log.Error("failed to retrieve stack flag", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFetchingStack, err)
 	}
 
 	query, err := flags.GetString("query")
 	if err != nil {
 		log.Error("failed to retrieve query flag", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFetchingQuery, err)
 	}
 
 	return &CommonFlags{

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
@@ -30,6 +29,12 @@ var (
 const (
 	ErrFmtWrapErr = "%w: %v" // Format for wrapping errors.
 )
+
+// ProcessingOptions holds flags for processing templates and YAML functions.
+type ProcessingOptions struct {
+	Templates bool
+	Functions bool
+}
 
 // listValuesCmd lists component values across stacks.
 var listValuesCmd = &cobra.Command{
@@ -87,11 +92,8 @@ var listVarsCmd = &cobra.Command{
 		// Run listValues with the component argument
 		output, err := listValues(cmd, args)
 		if err != nil {
-			// Check if it's a "no values found" error with empty component but has query
-			if strings.Contains(err.Error(), "no values found for component ''") &&
-				strings.Contains(err.Error(), "query '.vars'") &&
-				len(args) > 0 {
-				// Replace with a more descriptive error
+			// Use IsNoValuesFoundError instead of string matching
+			if l.IsNoValuesFoundError(err) && len(args) > 0 {
 				log.Error("no values found for component with query",
 					"component", args[0],
 					"query", ".vars")
