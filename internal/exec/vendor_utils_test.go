@@ -48,7 +48,9 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	cmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
 	cmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
 	cmd.PersistentFlags().Bool("everything", false, "Vendor all components")
-
+	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
+	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
+	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
 	// Execute the command
 	err = cmd.RunE(cmd, []string{})
 	assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
