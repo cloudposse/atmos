@@ -142,8 +142,6 @@ For example, we can import from multiple locations like this:
 import:
   # Load the Atmos configuration from the main branch of the 'cloudposse/atmos' repository
   - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"
-  # Then load the repository root's configuration
-  - !repo-root
   # Then merge the configs
   - "configs.d/**/*"
   # Finally, override some logging settings
