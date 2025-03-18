@@ -71,6 +71,7 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 	assert.Equal(t, atmosConfig.Logs.Level, "Debug", "Logs level should be Debug")
 	assert.Equal(t, atmosConfig.Logs.File, "/dev/stderr", "Logs file should be /dev/stderr")
 }
+
 func TestLoadConfigFromCLIArgs(t *testing.T) {
 	// Setup valid configuration for base case
 	validDir := t.TempDir()
@@ -80,7 +81,7 @@ logs:
   level: Info
 `
 	validPath := filepath.Join(validDir, "atmos.yaml")
-	if err := os.WriteFile(validPath, []byte(validConfig), 0644); err != nil {
+	if err := os.WriteFile(validPath, []byte(validConfig), 0o644); err != nil {
 		t.Fatalf("Setup failed: %v", err)
 	}
 
