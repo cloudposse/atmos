@@ -172,3 +172,43 @@ func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
 	}
 }
+
+func TestCollapseExtraSlashesHandlesOnlySlashes(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		// Basic cases with only slashes
+		{"///", "/"},
+		{"/", "/"},
+		{"//", "/"},
+		{"", ""},
+
+		// Relative paths
+		{"..//path", "../path"},
+		{"/path//to//file", "/path/to/file"},
+		{"./../path", "./../path"}, // No change expected
+
+		// Protocol handling
+		{"https://", "https://"},
+		{"http://", "http://"},
+		{"http://example.com//path//", "http://example.com/path/"},
+		{"https:////example.com", "https://example.com"}, // Normalize after protocol
+		{"http:/example.com", "http://example.com"},      // Fix missing slashes after protocol
+
+		// Complex URLs
+		{"http://example.com:8080//api//v1", "http://example.com:8080/api/v1"},
+		{"http://user:pass@example.com//path", "http://user:pass@example.com/path"},
+
+		// Edge cases for trimming
+		{"http:////example.com", "http://example.com"}, // Extra slashes after protocol
+		{"http:///path", "http://path"},                // Implicit empty authority
+	}
+
+	for _, tc := range testCases {
+		result := collapseExtraSlashes(tc.input)
+		if result != tc.expected {
+			t.Errorf("collapseExtraSlashes(%q) = %q, want %q", tc.input, result, tc.expected)
+		}
+	}
+}

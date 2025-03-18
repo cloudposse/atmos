@@ -51,7 +51,7 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 		return nil
 	}
 	importPaths := source.Import
-	baseBath, err := filepath.Abs(source.BasePath)
+	basePath, err := filepath.Abs(source.BasePath)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func processConfigImports(source *schema.AtmosConfiguration, dst *viper.Viper) e
 		return err
 	}
 	defer os.RemoveAll(tempDir)
-	resolvedPaths, err := processImports(baseBath, importPaths, tempDir, 1, MaximumImportLvL)
+	resolvedPaths, err := processImports(basePath, importPaths, tempDir, 1, MaximumImportLvL)
 	if err != nil {
 		return err
 	}
@@ -376,7 +376,6 @@ func findMatchingFiles(patterns []string) ([]string, error) {
 	for _, pattern := range patterns {
 		matches, err := u.GetGlobMatches(pattern)
 		if err != nil {
-			log.Debug("no matches found for glob pattern", "path", pattern, "error", err)
 			continue
 		}
 		filePaths = append(filePaths, matches...)

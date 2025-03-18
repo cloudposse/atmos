@@ -10,9 +10,9 @@ import (
 	"runtime"
 
 	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -183,18 +183,17 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	if atmosPath == "" {
 		return nil
 	}
-	configFilePath := filepath.Join(atmosPath, CliConfigFileName)
-	err := mergeConfig(v, configFilePath, CliConfigFileName, true)
+	err := mergeConfig(v, atmosPath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
-			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", configFilePath)
+			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", atmosPath)
 			return nil
 		default:
 			return err
 		}
 	}
-	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", configFilePath)
+	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", atmosPath)
 
 	return nil
 }
@@ -214,8 +213,8 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	return nil
 }
 
-// mergeConfig merge config from a specified path directory and process imports.return error if config file not exist .
-func mergeConfig(v *viper.Viper, path string, fileName string, processImports bool) error {
+// mergeConfig merge config from a specified path directory and process imports. Return error if config file does not exist.
+func mergeConfig(v *viper.Viper, path, fileName string, processImports bool) error {
 	v.AddConfigPath(path)
 	v.SetConfigName(fileName)
 	err := v.MergeInConfig()
@@ -310,7 +309,7 @@ func mergeImports(dst *viper.Viper) error {
 func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
 	var rootNode yaml.Node
 	if err := yaml.Unmarshal(yamlContent, &rootNode); err != nil {
-		log.Debug("failed to parse YAML", "content", yamlContent, "error", err)
+		log.Debug("failed to parse YAML", "error", err)
 		return err
 	}
 	processNode(&rootNode, v, "")

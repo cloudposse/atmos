@@ -1,4 +1,4 @@
-base_path: ""
+base_path: ./
 components:
     terraform:
         base_path: components/terraform
@@ -160,7 +160,7 @@ validate:
         color: true
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 import:
-    - https:/raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml
+    - https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml
     - configs.d/**/*
     - ./logs.yaml
 

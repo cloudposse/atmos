@@ -1,8 +1,5 @@
-DEBU no matches found for glob pattern path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d/**/*.yaml' ('/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d' + '**/*.yaml')"
-DEBU no matches found for glob pattern path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d/**/*.yml' ('/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d' + '**/*.yml')"
+DEBU Set logs-level=debug logs-file=/dev/stderr
 DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
-DEBU no matches found for glob pattern path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/*.yaml error="failed to find a match for the import '/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/*.yaml' ('/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d' + '**/*.yaml')"
-DEBU no matches found for glob pattern path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/*.yml error="failed to find a match for the import '/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/*.yml' ('/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d' + '**/*.yml')"
 DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
