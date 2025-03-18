@@ -78,7 +78,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, options *FilterOption
 	}
 
 	// Apply query to values
-	queriedValues, err := applyQuery(filteredValues, options.Query)
+	queriedValues, err := applyQuery(filteredValues, options.Query, options.Component)
 	if err != nil {
 		return "", err
 	}
@@ -237,7 +237,7 @@ func limitColumns(values map[string]interface{}, maxColumns int) map[string]inte
 }
 
 // applyQuery applies a query to the filtered values.
-func applyQuery(filteredValues map[string]interface{}, query string) (map[string]interface{}, error) {
+func applyQuery(filteredValues map[string]interface{}, query string, component string) (map[string]interface{}, error) {
 	if query == "" {
 		return filteredValues, nil
 	}
@@ -268,7 +268,7 @@ func applyQuery(filteredValues map[string]interface{}, query string) (map[string
 	}
 
 	if len(results) == 0 {
-		return nil, &listerrors.NoValuesFoundError{Query: query}
+		return nil, &listerrors.NoValuesFoundError{Component: component, Query: query}
 	}
 
 	return results, nil

@@ -62,9 +62,40 @@ func TestListVarsFlags(t *testing.T) {
 		Args:  cobra.ExactArgs(1),
 	}
 
+	cmd.PersistentFlags().String("format", "", "Output format")
+	cmd.PersistentFlags().String("delimiter", "", "Delimiter for CSV/TSV output")
+	cmd.PersistentFlags().String("stack", "", "Stack pattern")
+	cmd.PersistentFlags().String("query", "", "JQ query")
+	cmd.PersistentFlags().Int("max-columns", 0, "Maximum columns")
+	cmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
+
 	assert.Equal(t, "vars [component]", cmd.Use)
 	assert.Contains(t, cmd.Short, "List component vars across stacks")
 	assert.Contains(t, cmd.Long, "List vars for a component")
+
+	formatFlag := cmd.PersistentFlags().Lookup("format")
+	assert.NotNil(t, formatFlag, "Expected format flag to exist")
+	assert.Equal(t, "", formatFlag.DefValue)
+
+	delimiterFlag := cmd.PersistentFlags().Lookup("delimiter")
+	assert.NotNil(t, delimiterFlag, "Expected delimiter flag to exist")
+	assert.Equal(t, "", delimiterFlag.DefValue)
+
+	stackFlag := cmd.PersistentFlags().Lookup("stack")
+	assert.NotNil(t, stackFlag, "Expected stack flag to exist")
+	assert.Equal(t, "", stackFlag.DefValue)
+
+	queryFlag := cmd.PersistentFlags().Lookup("query")
+	assert.NotNil(t, queryFlag, "Expected query flag to exist")
+	assert.Equal(t, "", queryFlag.DefValue)
+
+	maxColumnsFlag := cmd.PersistentFlags().Lookup("max-columns")
+	assert.NotNil(t, maxColumnsFlag, "Expected max-columns flag to exist")
+	assert.Equal(t, "0", maxColumnsFlag.DefValue)
+
+	abstractFlag := cmd.PersistentFlags().Lookup("abstract")
+	assert.NotNil(t, abstractFlag, "Expected abstract flag to exist")
+	assert.Equal(t, "false", abstractFlag.DefValue)
 }
 
 // TestListValuesValidatesArgs tests that the command validates arguments.

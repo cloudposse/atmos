@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
@@ -73,13 +74,28 @@ var listVarsCmd = &cobra.Command{
 		"atmos list vars vpc --format csv",
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
+		checkAtmosConfig()
+
 		// Set the query flag to .vars
-		if err := cmd.Flags().Set("query", ".vars"); err != nil {
-			log.Error("failed to set query flag", "error", err, "component", args[0])
+		cmd.Flags().Set("query", ".vars")
+
+		// Run listValues with the component argument
+		output, err := listValues(cmd, args)
+		if err != nil {
+			// Check if it's a "no values found" error with empty component but has query
+			if strings.Contains(err.Error(), "no values found for component ''") &&
+				strings.Contains(err.Error(), "query '.vars'") &&
+				len(args) > 0 {
+				// Replace with a more descriptive error
+				log.Error(fmt.Sprintf("no values found for component '%s' with query '.vars'", args[0]))
+				return
+			}
+			log.Error(err.Error())
 			return
 		}
-		// Run the values command
-		listValuesCmd.Run(cmd, args)
+
+		u.PrintMessage(output)
 	},
 }
 
@@ -94,8 +110,18 @@ func init() {
 	listValuesCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
 	listValuesCmd.PersistentFlags().Bool("vars", false, "Show only vars (equivalent to `--query .vars`)")
 
+	// Add common flags to vars command
+	fl.AddCommonListFlags(listVarsCmd)
+	if queryFlag := listVarsCmd.PersistentFlags().Lookup("query"); queryFlag != nil {
+		queryFlag.Usage = "Filter the results using YQ expressions"
+	}
+
+	// Add abstract flag to vars command
+	listVarsCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
+
 	// Add stack pattern completion
 	AddStackCompletion(listValuesCmd)
+	AddStackCompletion(listVarsCmd)
 
 	// Add commands to list command
 	listCmd.AddCommand(listValuesCmd)
@@ -115,9 +141,13 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingAbstractFlag, err)
 	}
 
-	varsFlag, err := cmd.Flags().GetBool("vars")
-	if err != nil {
-		return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingVarsFlag, err)
+	// Get vars flag if it exists
+	varsFlag := false
+	if cmd.Flags().Lookup("vars") != nil {
+		varsFlag, err = cmd.Flags().GetBool("vars")
+		if err != nil {
+			return "", fmt.Errorf(ErrFmtWrapErr, ErrGettingVarsFlag, err)
+		}
 	}
 
 	// Set appropriate default delimiter based on format
@@ -130,7 +160,15 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		commonFlags.Query = ".vars"
 	}
 
+	// Ensure we have a component name
+	if len(args) == 0 {
+		return "", fmt.Errorf("component name is required")
+	}
+
 	component := args[0]
+
+	// Log the component name
+	log.Debug("Processing component", "component", component)
 
 	// Initialize CLI config
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
