@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	log "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
@@ -116,7 +115,8 @@ func TestLogger_Info(t *testing.T) {
 	assert.Contains(t, output, "Info message")
 }
 
-func TestLogger_Warning(t *testing.T) {
+func TestLogger_Warn(t *testing.T) {
+	// Test styled logger warn with stderr writer
 	var buf bytes.Buffer
 	atmosLogger := NewAtmosLogger(&buf)
 	atmosLogger.SetLevel(log.WarnLevel)
@@ -125,7 +125,7 @@ func TestLogger_Warning(t *testing.T) {
 		Logger: atmosLogger,
 	}
 
-	logger.Warning("Warning message")
+	logger.Warn("Warning message")
 	output := buf.String()
 	assert.Contains(t, output, "Warning message")
 }
@@ -227,8 +227,8 @@ func TestLogger_LogMethods(t *testing.T) {
 		{"Info logs when level is Debug", log.DebugLevel, "info message", true, (*AtmosLogger).Info},
 		{"Info logs when level is Info", log.InfoLevel, "info message", true, (*AtmosLogger).Info},
 		{"Info doesn't log when level is Warning", log.WarnLevel, "info message", false, (*AtmosLogger).Info},
-		{"Warning logs when level is Trace", AtmosTraceLevel, "warning message", true, (*AtmosLogger).Warning},
-		{"Warning logs when level is Warning", log.WarnLevel, "warning message", true, (*AtmosLogger).Warning},
+		{"Warn logs when level is Trace", AtmosTraceLevel, "warning message", true, (*AtmosLogger).Warn},
+		{"Warn logs when level is Warning", log.WarnLevel, "warning message", true, (*AtmosLogger).Warn},
 		{"Nothing logs when level is Off", log.FatalLevel + 1, "any message", false, (*AtmosLogger).Info},
 	}
 
@@ -288,32 +288,25 @@ func TestDevNullLogging(t *testing.T) {
 }
 
 func TestDevStdoutWarning(t *testing.T) {
-	// Save the original function
-	originalFunc := logWarningFunc
-	defer func() { logWarningFunc = originalFunc }()
+	// Redirect warning logs to capture the warning
+	var buf bytes.Buffer
+	oldLogger := log.Default()
+	newLogger := log.New(&buf)
+	newLogger.SetLevel(log.WarnLevel)
+	log.SetDefault(newLogger)
 
-	// Create a channel to capture warnings
-	warnings := make(chan string, 1)
-	logWarningFunc = func(message string) {
-		warnings <- message
-	}
+	// Restore the original logger after the test
+	defer log.SetDefault(oldLogger)
 
 	// Create logger to trigger warning
 	_, err := NewLogger(log.InfoLevel, "/dev/stdout")
 	assert.NoError(t, err)
 
-	// Try to get the warning (with timeout)
-	var warningMessage string
-	select {
-	case warningMessage = <-warnings:
-		// Got the message
-	case <-time.After(time.Second):
-		t.Fatal("Timed out waiting for warning message")
-	}
+	// Get the warning message
+	warningMessage := buf.String()
 
 	// Verify warning was generated
-	assert.Contains(t, warningMessage, "WARNING")
-	assert.Contains(t, warningMessage, "stdout")
+	assert.Contains(t, warningMessage, "Sending logs to stdout")
 	assert.Contains(t, warningMessage, "break commands")
 }
 
