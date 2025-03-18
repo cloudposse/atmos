@@ -105,6 +105,9 @@ func TestExecuteVendorPull(t *testing.T) {
 	}
 	// set vendor pull command
 	cmd := cobra.Command{}
+	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
+	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
+	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
 	flags := cmd.Flags()
 	flags.String("component", "", "")
 	flags.String("stack", "", "")
