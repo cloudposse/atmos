@@ -60,8 +60,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
-		processTemplatesAndYamlFunctions := needProcessTemplatesAndYamlFunctions(info.SubCommand)
-		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, processTemplatesAndYamlFunctions, processTemplatesAndYamlFunctions, nil)
+		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip)
 		if err != nil {
 			return err
 		}

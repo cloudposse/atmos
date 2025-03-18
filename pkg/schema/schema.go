@@ -2,7 +2,6 @@ package schema
 
 import (
 	"encoding/json"
-
 	"github.com/cloudposse/atmos/pkg/store"
 	"gopkg.in/yaml.v3"
 )
@@ -417,6 +416,9 @@ type ConfigAndStacksInfo struct {
 	LogsFile                      string
 	SettingsListMergeStrategy     string
 	Query                         string
+	ProcessTemplates              bool
+	ProcessFunctions              bool
+	Skip                          []string
 }
 
 // Workflows

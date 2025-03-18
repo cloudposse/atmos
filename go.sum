@@ -999,10 +999,10 @@ github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+m
 github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad h1:Qk76DOWdOp+GlyDKBAG3Klr9cn7N+LcYc82AZ2S7+cA=
 github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad/go.mod h1:mPKfmRa823oBIgl2r20LeMSpTAteW5j7FLkc0vjmzyQ=
 github.com/dvyukov/go-fuzz v0.0.0-20210103155950-6a8e9d1f2415/go.mod h1:11Gm+ccJnvAhCNLlf5+cS9KjtbaD5I5zaZpFMsTHWTw=
-github.com/editorconfig-checker/editorconfig-checker/v3 v3.2.0 h1:uH7cZAGj3I8rS57oVy6qGnSDPbSyCImb8Tr4nWjji2g=
-github.com/editorconfig-checker/editorconfig-checker/v3 v3.2.0/go.mod h1:pyykRV3+SalXDuX1fAN7e5THne4+asZu/FhP5dXiWSo=
-github.com/editorconfig/editorconfig-core-go/v2 v2.6.2 h1:dKG8sc7n321deIVRcQtwlMNoBEra7j0qQ8RwxO8RN0w=
-github.com/editorconfig/editorconfig-core-go/v2 v2.6.2/go.mod h1:7dvD3GCm7eBw53xZ/lsiq72LqobdMg3ITbMBxnmJmqY=
+github.com/editorconfig-checker/editorconfig-checker/v3 v3.2.1 h1:6+fbs16ERubS72Yu2xJzcZt2JurYZ10xkgRIFl/866g=
+github.com/editorconfig-checker/editorconfig-checker/v3 v3.2.1/go.mod h1:wE98yNspIjOqhu/tRiz0gMWAQSORSpIu5XRO5MNv5CM=
+github.com/editorconfig/editorconfig-core-go/v2 v2.6.3 h1:XVUp6qW3BIkmM3/1EkrHpa6bL56APOynfXcZEmIgOhs=
+github.com/editorconfig/editorconfig-core-go/v2 v2.6.3/go.mod h1:ThHVc+hqbUsmE1wmK/MASpQEhCleWu1JDJDNhUOMy0c=
 github.com/elazarl/goproxy v1.7.2 h1:Y2o6urb7Eule09PjlhQRGNsqRfPmYI3KKQLFpCAV3+o=
 github.com/elazarl/goproxy v1.7.2/go.mod h1:82vkLNir0ALaW14Rc399OTTjyNREgmdL2cVoIbS6XaE=
 github.com/elewis787/boa v0.1.2 h1:xNKWJ9X2MWbLSLLOA31N4l1Jdec9FZSkbTvXy3C8rw4=
@@ -1072,8 +1072,8 @@ github.com/gkampitakis/ciinfo v0.3.1 h1:lzjbemlGI4Q+XimPg64ss89x8Mf3xihJqy/0Mgag
 github.com/gkampitakis/ciinfo v0.3.1/go.mod h1:1NIwaOcFChN4fa/B0hEBdAb6npDlFL8Bwx4dfRLRqAo=
 github.com/gkampitakis/go-diff v1.3.2 h1:Qyn0J9XJSDTgnsgHRdz9Zp24RaJeKMUHg2+PDZZdC4M=
 github.com/gkampitakis/go-diff v1.3.2/go.mod h1:LLgOrpqleQe26cte8s36HTWcTmMEur6OPYerdAAS9tk=
-github.com/gkampitakis/go-snaps v0.5.8 h1:BB4ihcyXgJEVO/Pj/P+4bs7pFzsLcEjsfU2+mFdJh1c=
-github.com/gkampitakis/go-snaps v0.5.8/go.mod h1:PcKmy8q5Se7p48ywpogN5Td13reipz1Iivah4wrTIvY=
+github.com/gkampitakis/go-snaps v0.5.11 h1:LFG0ggUKR+KEiiaOvFCmLgJ5NO2zf93AxxddkBn3LdQ=
+github.com/gkampitakis/go-snaps v0.5.11/go.mod h1:PcKmy8q5Se7p48ywpogN5Td13reipz1Iivah4wrTIvY=
 github.com/gliderlabs/ssh v0.3.8 h1:a4YXD1V7xMF9g5nTkdfnja3Sxy1PVDCj1Zg4Wb8vY6c=
 github.com/gliderlabs/ssh v0.3.8/go.mod h1:xYoytBv1sV0aL3CavoDuJIQNURXkkfPA/wxQ1pL1fAU=
 github.com/go-asn1-ber/asn1-ber v1.3.1/go.mod h1:hEBeB/ic+5LoWskz+yKT7vGhhPYkProFKoKdwZRWMe0=

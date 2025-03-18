@@ -61,7 +61,29 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
 		}
 		return
 	}
-	err := e.ExecuteTerraform(info)
+
+	flags := cmd.Flags()
+
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	info.ProcessTemplates = processTemplates
+	info.ProcessFunctions = processYamlFunctions
+	info.Skip = skip
+
+	err = e.ExecuteTerraform(info)
 	if err != nil {
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
