@@ -67,7 +67,7 @@ func TestIsValidScheme(t *testing.T) {
 // Test ensureScheme method.
 func TestEnsureScheme(t *testing.T) {
 	config := fakeAtmosConfig(false)
-	detector := &CustomGitDetector{AtmosConfig: &config}
+	detector := &CustomGitDetector{AtmosConfig: config}
 	in := "https://example.com/repo.git"
 	out := detector.ensureScheme(in)
 	if !strings.HasPrefix(out, "https://") {
@@ -120,7 +120,7 @@ func TestInjectToken(t *testing.T) {
 	os.Setenv("GITHUB_TOKEN", "testtoken")
 	defer os.Unsetenv("GITHUB_TOKEN")
 	config := fakeAtmosConfig(true)
-	detector := &CustomGitDetector{AtmosConfig: &config}
+	detector := &CustomGitDetector{AtmosConfig: config}
 	uObj, err := url.Parse("https://github.com/user/repo.git")
 	if err != nil {
 		t.Fatalf("Failed to parse URL: %v", err)
@@ -141,7 +141,7 @@ func TestResolveToken(t *testing.T) {
 	os.Setenv("GITHUB_TOKEN", "ghToken")
 	defer os.Unsetenv("GITHUB_TOKEN")
 	config := fakeAtmosConfig(true)
-	detector := &CustomGitDetector{AtmosConfig: &config}
+	detector := &CustomGitDetector{AtmosConfig: config}
 	token, source := detector.resolveToken(hostGitHub)
 	if token != "ghToken" {
 		t.Errorf("Expected token ghToken, got %s", token)
@@ -288,7 +288,7 @@ func TestRegisterCustomDetectors(t *testing.T) {
 	getter.Detectors = []getter.Detector{}
 	defer func() { getter.Detectors = orig }()
 	config := fakeAtmosConfig(false)
-	RegisterCustomDetectors(&config)
+	RegisterCustomDetectors(config)
 	if len(getter.Detectors) == 0 {
 		t.Error("Expected at least one detector after registration.")
 	}
