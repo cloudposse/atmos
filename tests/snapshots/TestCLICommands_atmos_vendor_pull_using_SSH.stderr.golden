@@ -1,4 +1,4 @@
-DEBU Using command line argument '--logs-level=Debug'
+DEBU Set logs-level=debug logs-file=/dev/stderr
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
