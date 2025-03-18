@@ -1,5 +1,5 @@
+DEBU Set logs-level=debug logs-file=/dev/stderr
 DEBU Failed to find atmos config file path=/absolute/path/to/repo/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU Failed to find atmos config file path=/absolute/path/to/repo/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
-DEBU Found ENV var ATMOS_LOGS_LEVEL=Info
 DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
