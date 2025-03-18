@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/json"
+
 	"github.com/cloudposse/atmos/pkg/store"
 	"gopkg.in/yaml.v3"
 )
