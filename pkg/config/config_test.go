@@ -106,7 +106,7 @@ logs:
 	}
 }
 
-// Helper functions
+// Helper functions.
 func createConfigFile(t *testing.T, dir string, fileName string, content string) {
 	path := filepath.Join(dir, fileName)
 	err := os.WriteFile(path, []byte(content), 0o644)
