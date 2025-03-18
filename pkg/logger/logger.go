@@ -134,7 +134,10 @@ func ParseLogLevel(logLevel string) (log.Level, error) {
 		return level, nil
 	}
 
-	validLevels := []string{"Trace", "Debug", "Info", "Warning", "Off"}
+	validLevels := make([]string, 0, len(LogLevelStrings))
+	for level := range LogLevelStrings {
+		validLevels = append(validLevels, level)
+	}
 	return 0, fmt.Errorf("%w `%s`. Valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
 }
 
