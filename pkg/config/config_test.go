@@ -109,7 +109,7 @@ logs:
 // Helper functions
 func createConfigFile(t *testing.T, dir string, fileName string, content string) {
 	path := filepath.Join(dir, fileName)
-	err := os.WriteFile(path, []byte(content), 0644)
+	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err, "Failed to create config file")
 }
 
