@@ -140,7 +140,7 @@ func ParseLogLevel(logLevel string) (log.Level, error) {
 	for k := range LogLevelStrings {
 		validLevels = append(validLevels, k)
 	}
-	
+
 	// Sort the levels alphabetically to ensure consistent output
 	sort.Strings(validLevels)
 
