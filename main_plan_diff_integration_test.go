@@ -49,13 +49,15 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 			}
 		}()
 
-		// Wait for either an exit code or main to complete
+		// Handle Windows specially - just wait for exit code
+		if runtime.GOOS == "windows" {
+			return <-exitCodeCh
+		}
+
+		// For non-Windows platforms, use the original logic
 		select {
 		case code := <-exitCodeCh:
-			// On Windows, don't wait for done as it might deadlock
-			if runtime.GOOS != "windows" {
-				<-done // Wait for main to finish on non-Windows platforms
-			}
+			<-done // Wait for main to finish on non-Windows platforms
 			return code
 		case <-done:
 			// Main completed without calling OsExit

@@ -292,7 +292,7 @@ func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *
 		initInfo.AdditionalArgsAndFlags = []string{}
 	}
 
-	// Run terraform init using ExecuteTerraform
+	// Run terraform init using ExecuteTerraform.
 	err := ExecuteTerraform(initInfo)
 	if err != nil {
 		return fmt.Errorf("error running terraform init: %w", err)
