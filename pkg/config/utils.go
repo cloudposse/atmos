@@ -356,26 +356,9 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
-	logsFile := os.Getenv("ATMOS_LOGS_FILE")
-	if len(logsFile) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_LOGS_FILE=%s", logsFile))
-		atmosConfig.Logs.File = logsFile
-	}
-
-	logsLevel := os.Getenv("ATMOS_LOGS_LEVEL")
-	if len(logsLevel) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_LOGS_LEVEL=%s", logsLevel))
-		// Validate the log level before setting it
-		if _, err := logger.ParseLogLevel(logsLevel); err != nil {
-			return err
-		}
-		// Only set the log level if validation passes
-		atmosConfig.Logs.Level = logsLevel
-	}
-
 	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
 	if len(tfAppendUserAgent) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT=%s", tfAppendUserAgent))
+		log.Debug("Found ENV", "ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT", tfAppendUserAgent)
 		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 
