@@ -133,7 +133,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	if strings.ToLower(atmosConfig.Logs.Level) == "trace" {
-		log.Log(logger.AtmosTraceLevel, "Set", "logs-level", logLevelStr, "logs-file", atmosConfig.Logs.File)
+		log.Trace("Set", "logs-level", logLevelStr, "logs-file", atmosConfig.Logs.File)
 	} else {
 		log.Debug("Set", "logs-level", logLevelStr, "logs-file", atmosConfig.Logs.File)
 	}
