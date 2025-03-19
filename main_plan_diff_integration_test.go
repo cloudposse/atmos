@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path"
+	"runtime"
 	"testing"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -52,7 +53,7 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 		select {
 		case code := <-exitCodeCh:
 			// On Windows, don't wait for done as it might deadlock
-			if os.Getenv("OS") != "Windows_NT" {
+			if runtime.GOOS != "windows" {
 				<-done // Wait for main to finish on non-Windows platforms
 			}
 			return code
