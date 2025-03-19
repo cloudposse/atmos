@@ -38,8 +38,13 @@ func PrintErrorInColor(message string) {
 	_, _ = messageColor.Fprint(os.Stderr, message)
 }
 
+// PrintfMessageToTUI prints the message to the stderr.
+func PrintfMessageToTUI(message string, args ...any) {
+	fmt.Fprintf(os.Stderr, message, args...)
+}
+
 // Deprecated: Use `log.Fatal` instead. This function will be removed in a future release.
-// LogErrorAndExit logs errors to std.Error and exits with an error code
+// LogErrorAndExit logs errors to std.Error and exits with an error code.
 func LogErrorAndExit(err error) {
 	log.Error(err)
 
