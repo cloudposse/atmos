@@ -5,6 +5,7 @@ import (
 	"path"
 	"runtime"
 	"testing"
+	"time"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -115,6 +116,9 @@ func TestMainTerraformPlanDiffIntegration(t *testing.T) {
 	if exitCode != 2 {
 		t.Fatalf("plan-diff command should have returned exit code 2, got %d", exitCode)
 	}
+
+	// Add a small delay to ensure Windows file operations are complete
+	time.Sleep(500 * time.Millisecond)
 
 	// Test with generating a new plan on the fly
 	os.Args = []string{"atmos", "terraform", "plan-diff", "component-1", "-s", "nonprod", "--orig=" + origPlanFile, "-var", "foo=new-value"}
