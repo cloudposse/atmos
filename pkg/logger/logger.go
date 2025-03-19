@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -134,7 +135,14 @@ func ParseLogLevel(logLevel string) (log.Level, error) {
 		return level, nil
 	}
 
-	validLevels := []string{"Trace", "Debug", "Info", "Warning", "Off"}
+	// Extract the keys from LogLevelStrings map to avoid redundancy
+	var validLevels []string
+	for k := range LogLevelStrings {
+		validLevels = append(validLevels, k)
+	}
+	
+	// Sort the levels alphabetically to ensure consistent output
+	sort.Strings(validLevels)
 
 	return 0, fmt.Errorf("%w `%s`. Valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
 }
