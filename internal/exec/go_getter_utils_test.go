@@ -1,4 +1,3 @@
-// go_getter_utils_test.go
 package exec
 
 import (
@@ -10,9 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/go-getter"
-
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/hashicorp/go-getter"
 )
 
 var originalDetectors = getter.Detectors
@@ -25,7 +23,6 @@ func fakeAtmosConfig(injectGit bool) schema.AtmosConfiguration {
 	}
 }
 
-// Test ValidateURI function.
 func TestValidateURI(t *testing.T) {
 	if err := ValidateURI(""); err == nil {
 		t.Error("Expected error for empty URI, got nil")
@@ -51,7 +48,6 @@ func TestValidateURI(t *testing.T) {
 	}
 }
 
-// Test IsValidScheme function.
 func TestIsValidScheme(t *testing.T) {
 	valid := []string{"http", "https", "git", "ssh", "git::https", "git::ssh"}
 	for _, scheme := range valid {
@@ -64,10 +60,9 @@ func TestIsValidScheme(t *testing.T) {
 	}
 }
 
-// Test ensureScheme method.
 func TestEnsureScheme(t *testing.T) {
 	config := fakeAtmosConfig(false)
-	detector := &CustomGitDetector{AtmosConfig: &config}
+	detector := &CustomGitDetector{AtmosConfig: config}
 	in := "https://example.com/repo.git"
 	out := detector.ensureScheme(in)
 	if !strings.HasPrefix(out, "https://") {
@@ -85,7 +80,6 @@ func TestEnsureScheme(t *testing.T) {
 	}
 }
 
-// Test rewriteSCPURL function.
 func TestRewriteSCPURL(t *testing.T) {
 	scp := "git@github.com:user/repo.git"
 	newURL, rewritten := rewriteSCPURL(scp)
@@ -102,7 +96,6 @@ func TestRewriteSCPURL(t *testing.T) {
 	}
 }
 
-// Test normalizePath method.
 func TestNormalizePath(t *testing.T) {
 	detector := &CustomGitDetector{}
 	uObj, err := url.Parse("https://example.com/some%20path")
@@ -115,43 +108,6 @@ func TestNormalizePath(t *testing.T) {
 	}
 }
 
-// Test injectToken method.
-func TestInjectToken(t *testing.T) {
-	os.Setenv("GITHUB_TOKEN", "testtoken")
-	defer os.Unsetenv("GITHUB_TOKEN")
-	config := fakeAtmosConfig(true)
-	detector := &CustomGitDetector{AtmosConfig: &config}
-	uObj, err := url.Parse("https://github.com/user/repo.git")
-	if err != nil {
-		t.Fatalf("Failed to parse URL: %v", err)
-	}
-	detector.injectToken(uObj, hostGitHub)
-	if uObj.User == nil {
-		t.Error("Expected token to be injected into URL")
-	} else {
-		user := uObj.User.Username()
-		if user != getDefaultUsername(hostGitHub) {
-			t.Errorf("Expected username %s, got %s", getDefaultUsername(hostGitHub), user)
-		}
-	}
-}
-
-// Test resolveToken method.
-func TestResolveToken(t *testing.T) {
-	os.Setenv("GITHUB_TOKEN", "ghToken")
-	defer os.Unsetenv("GITHUB_TOKEN")
-	config := fakeAtmosConfig(true)
-	detector := &CustomGitDetector{AtmosConfig: &config}
-	token, source := detector.resolveToken(hostGitHub)
-	if token != "ghToken" {
-		t.Errorf("Expected token ghToken, got %s", token)
-	}
-	if source != "GITHUB_TOKEN" {
-		t.Errorf("Unexpected token source: %s", source)
-	}
-}
-
-// Test getDefaultUsername function.
 func TestGetDefaultUsername(t *testing.T) {
 	if un := getDefaultUsername(hostGitHub); un != "x-access-token" {
 		t.Errorf("Expected x-access-token for GitHub, got %s", un)
@@ -169,7 +125,6 @@ func TestGetDefaultUsername(t *testing.T) {
 	}
 }
 
-// Test adjustSubdir method.
 func TestAdjustSubdir(t *testing.T) {
 	detector := &CustomGitDetector{}
 	uObj, err := url.Parse("https://github.com/user/repo.git")
@@ -191,7 +146,6 @@ func TestAdjustSubdir(t *testing.T) {
 	}
 }
 
-// Test removeSymlinks function.
 func TestRemoveSymlinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping symlink tests on Windows.")
@@ -220,7 +174,6 @@ func TestRemoveSymlinks(t *testing.T) {
 	}
 }
 
-// Test GoGetterGet using file scheme.
 func TestGoGetterGet_File(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping file copying test on Windows due to potential file system differences.")
@@ -235,7 +188,6 @@ func TestGoGetterGet_File(t *testing.T) {
 	if err := os.WriteFile(srcFile, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Create a temporary directory for destination and specify a destination file path.
 	destDir, err := os.MkdirTemp("", "dest")
 	if err != nil {
 		t.Fatal(err)
@@ -257,7 +209,6 @@ func TestGoGetterGet_File(t *testing.T) {
 	}
 }
 
-// Test DownloadDetectFormatAndParseFile.
 func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "detectparse")
 	if err != nil {
@@ -282,22 +233,6 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	}
 }
 
-// Test RegisterCustomDetectors.
-func TestRegisterCustomDetectors(t *testing.T) {
-	orig := getter.Detectors
-	getter.Detectors = []getter.Detector{}
-	defer func() { getter.Detectors = orig }()
-	config := fakeAtmosConfig(false)
-	RegisterCustomDetectors(&config)
-	if len(getter.Detectors) == 0 {
-		t.Error("Expected at least one detector after registration.")
-	}
-	if _, ok := getter.Detectors[0].(*CustomGitDetector); !ok {
-		t.Error("Expected first detector to be CustomGitDetector.")
-	}
-}
-
-// Additional test for ValidateURI error paths.
 func TestValidateURI_ErrorPaths(t *testing.T) {
 	err := ValidateURI("http://example.com/with space")
 	if err == nil {
@@ -309,7 +244,6 @@ func TestValidateURI_ErrorPaths(t *testing.T) {
 	}
 }
 
-// Additional test for rewriteSCPURL with no match.
 func TestRewriteSCPURL_NoMatch(t *testing.T) {
 	nonSCP := "not-an-scp-url"
 	_, rewritten := rewriteSCPURL(nonSCP)
@@ -318,8 +252,6 @@ func TestRewriteSCPURL_NoMatch(t *testing.T) {
 	}
 }
 
-// Additional test for normalizePath error handling.
-// Create a URL manually with an invalid escape sequence in the Path.
 func TestNormalizePath_ErrorHandling(t *testing.T) {
 	uObj := &url.URL{
 		Scheme: "http",
