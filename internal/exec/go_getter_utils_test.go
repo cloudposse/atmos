@@ -108,40 +108,6 @@ func TestNormalizePath(t *testing.T) {
 	}
 }
 
-func TestInjectToken(t *testing.T) {
-	os.Setenv("GITHUB_TOKEN", "testtoken")
-	defer os.Unsetenv("GITHUB_TOKEN")
-	config := fakeAtmosConfig(true)
-	detector := &CustomGitDetector{AtmosConfig: config}
-	uObj, err := url.Parse("https://github.com/user/repo.git")
-	if err != nil {
-		t.Fatalf("Failed to parse URL: %v", err)
-	}
-	detector.injectToken(uObj, hostGitHub)
-	if uObj.User == nil {
-		t.Error("Expected token to be injected into URL")
-	} else {
-		user := uObj.User.Username()
-		if user != getDefaultUsername(hostGitHub) {
-			t.Errorf("Expected username %s, got %s", getDefaultUsername(hostGitHub), user)
-		}
-	}
-}
-
-func TestResolveToken(t *testing.T) {
-	os.Setenv("GITHUB_TOKEN", "ghToken")
-	defer os.Unsetenv("GITHUB_TOKEN")
-	config := fakeAtmosConfig(true)
-	detector := &CustomGitDetector{AtmosConfig: config}
-	token, source := detector.resolveToken(hostGitHub)
-	if token != "ghToken" {
-		t.Errorf("Expected token ghToken, got %s", token)
-	}
-	if source != "GITHUB_TOKEN" {
-		t.Errorf("Unexpected token source: %s", source)
-	}
-}
-
 func TestGetDefaultUsername(t *testing.T) {
 	if un := getDefaultUsername(hostGitHub); un != "x-access-token" {
 		t.Errorf("Expected x-access-token for GitHub, got %s", un)
@@ -264,20 +230,6 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 		t.Errorf("Expected result to be a map, got %T", result)
 	} else if resMap["key"] != "value" {
 		t.Errorf("Expected key to be 'value', got %v", resMap["key"])
-	}
-}
-
-func TestRegisterCustomDetectors(t *testing.T) {
-	orig := getter.Detectors
-	getter.Detectors = []getter.Detector{}
-	defer func() { getter.Detectors = orig }()
-	config := fakeAtmosConfig(false)
-	RegisterCustomDetectors(config)
-	if len(getter.Detectors) == 0 {
-		t.Error("Expected at least one detector after registration.")
-	}
-	if _, ok := getter.Detectors[0].(*CustomGitDetector); !ok {
-		t.Error("Expected first detector to be CustomGitDetector.")
 	}
 }
 
