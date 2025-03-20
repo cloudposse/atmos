@@ -7,3 +7,15 @@ schemas:
     manifest: https://json.schemastore.org/bower.json
     matches:
       - bower.yaml
+  schemaFromInline:
+    manifest: |
+      {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "age": { "type": "integer" }
+        },
+        "required": ["name"]
+      }
+    matches:
+      - inline.yaml

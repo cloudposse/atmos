@@ -606,6 +606,7 @@ type ResourcePath struct {
 
 type SchemaRegistry struct {
 	Manifest string   `yaml:"manifest,omitempty" json:"manifest,omitempty" mapstructure:"manifest"`
+	Schema   string   `yaml:"schema,omitempty" json:"schema,omitempty" mapstructure:"schema"`
 	Matches  []string `yaml:"matches,omitempty" json:"matches,omitempty" mapstructure:"matches"`
 }
 

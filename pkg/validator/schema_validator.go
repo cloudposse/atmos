@@ -40,7 +40,7 @@ func yamlToJSON(yamlData []byte) ([]byte, error) {
 	return json.Marshal(rawData)
 }
 
-func (y yamlSchemaValidator) ValidateYAMLSchema(manifestSource, yamlSource string) ([]gojsonschema.ResultError, error) {
+func (y yamlSchemaValidator) ValidateYAMLSchema(schemaSource, yamlSource string) ([]gojsonschema.ResultError, error) {
 	yamlData, err := y.dataFetcher.GetData(yamlSource)
 	if err != nil {
 		return nil, err
@@ -49,20 +49,20 @@ func (y yamlSchemaValidator) ValidateYAMLSchema(manifestSource, yamlSource strin
 	if err != nil {
 		return nil, err
 	}
-	if manifestSource == "" {
-		manifestSource, err = y.getSchemaSourceFromYAML(data)
+	if schemaSource == "" {
+		schemaSource, err = y.getSchemaSourceFromYAML(data)
 		if err != nil {
 			return nil, err
 		}
 	}
-	schemaData, err := y.dataFetcher.GetData(manifestSource)
+	schemaData, err := y.dataFetcher.GetData(schemaSource)
 	if err != nil {
 		return nil, err
 	}
-	manifestLoader := gojsonschema.NewStringLoader(string(schemaData))
+	schemaLoader := gojsonschema.NewStringLoader(string(schemaData))
 	dataLoader := gojsonschema.NewStringLoader(string(data))
 
-	result, err := gojsonschema.Validate(manifestLoader, dataLoader)
+	result, err := gojsonschema.Validate(schemaLoader, dataLoader)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (v yamlSchemaValidator) getSchemaSourceFromYAML(data []byte) (string, error
 		return "", ErrSchemaNotFound
 	}
 	yamlGenericData := yamlData.(map[string]any)
-	if val, ok := yamlGenericData["manifest"]; ok && val != "" {
+	if val, ok := yamlGenericData["schema"]; ok && val != "" {
 		if schema, ok := val.(string); ok {
 			return schema, nil
 		}

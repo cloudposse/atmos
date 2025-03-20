@@ -122,7 +122,7 @@ func TestSchemaExtractor_Success(t *testing.T) {
 	// Create validator with mock fetcher
 	v := &yamlSchemaValidator{}
 	// Execute the method
-	schemaSource, err := v.getSchemaSourceFromYAML([]byte(`{"manifest": "schema.json"}`))
+	schemaSource, err := v.getSchemaSourceFromYAML([]byte(`{"schema": "schema.json"}`))
 	assert.NoError(t, err)
 	assert.Equal(t, "schema.json", schemaSource)
 }

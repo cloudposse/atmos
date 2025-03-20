@@ -39,7 +39,7 @@ func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosVal
 }
 
 func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
-	validationManifestWithFiles := make(map[string][]string)
+	validationSchemaWithFiles := make(map[string][]string)
 	for k := range av.atmosConfig.Schemas {
 		if sourceKey != "" && sourceKey != k {
 			continue
@@ -47,21 +47,21 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(sourceKey string
 		log.Debug("Collecting", "schemaName", k)
 		value := av.atmosConfig.GetSchemaRegistry(k)
 		if sourceKey != "" && customSchema != "" {
-			value.Manifest = customSchema
+			value.Schema = customSchema
 		}
-		if value.Manifest == "" {
+		if value.Schema == "" {
 			continue
 		}
 		files, err := av.fileMatcher.MatchFiles(value.Matches)
 		if err != nil {
 			return err
 		}
-		log.Debug("Files matched", "manifest", value.Manifest, "matcher", value.Matches, "filesMatched", files)
-		validationManifestWithFiles[value.Manifest] = files
+		log.Debug("Files matched", "schema", value.Schema, "matcher", value.Matches, "filesMatched", files)
+		validationSchemaWithFiles[value.Schema] = files
 	}
 	totalErrCount := uint(0)
-	for k := range validationManifestWithFiles {
-		errCount, err := av.printValidation(k, validationManifestWithFiles[k])
+	for k := range validationSchemaWithFiles {
+		errCount, err := av.printValidation(k, validationSchemaWithFiles[k])
 		if err != nil {
 			return err
 		}
@@ -73,16 +73,16 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(sourceKey string
 	return nil
 }
 
-func (av *atmosValidatorExecuter) printValidation(manifest string, files []string) (uint, error) {
+func (av *atmosValidatorExecuter) printValidation(schema string, files []string) (uint, error) {
 	count := uint(0)
 	for _, file := range files {
-		log.Debug("validating", "manifest", manifest, "file", file)
-		validationErrors, err := av.validator.ValidateYAMLSchema(manifest, file)
+		log.Debug("validating", "schema", schema, "file", file)
+		validationErrors, err := av.validator.ValidateYAMLSchema(schema, file)
 		if err != nil {
 			return count, err
 		}
 		if len(validationErrors) == 0 {
-			log.Info("No Validation Errors", "file", file, "manifest", manifest)
+			log.Info("No Validation Errors", "file", file, "schema", schema)
 			continue
 		}
 		log.Error("Invalid YAML:")
