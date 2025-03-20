@@ -366,6 +366,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if atmosConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
+		// Add `--var-file` if configured in `atmos.yaml
+		// OpenTofu supports passing a varfile to `init` to dynamically configure backends
+		if atmosConfig.Components.Terraform.Init.PassVars {
+			allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
+		}
 	case "workspace":
 		if info.SubCommand2 == "list" || info.SubCommand2 == "show" {
 			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2}...)
