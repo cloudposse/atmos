@@ -19,14 +19,10 @@ var ValidateSchemaCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		fileName := ""
 		schema := ""
 		key := ""
 		if len(args) > 0 {
 			key = args[0] // Use provided argument
-		}
-		if cmd.Flags().Changed("file") {
-			fileName, _ = cmd.Flags().GetString("file")
 		}
 		if cmd.Flags().Changed("schema") {
 			schema, _ = cmd.Flags().GetString("schemas-atmos-manifest")

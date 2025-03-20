@@ -112,7 +112,6 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			mockSetup: func(mv *validator.MockValidator, mfd *downloader.MockFileDownloader, fmi *filematch.MockFileMatcherInterface) {
 				fmi.EXPECT().MatchFiles([]string{"atmos.yaml"}).Return([]string{"atmos.yaml"}, nil)
 				mv.EXPECT().ValidateYAMLSchema("atmos://schema", "atmos.yaml").Return([]gojsonschema.ResultError{}, nil)
-
 			},
 			expectedError: nil,
 		},
