@@ -20,7 +20,7 @@ func TestAtmosFetcher(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.source, func(t *testing.T) {
-			fetcher := &AtmosFetcher{}
+			fetcher := &atmosFetcher{}
 			_, err := fetcher.FetchData(tt.source)
 			if !errors.Is(err, tt.err) {
 				t.Errorf("Expected error %v, got %v", tt.err, err)
@@ -31,14 +31,14 @@ func TestAtmosFetcher(t *testing.T) {
 
 func TestGetDataFetcher(t *testing.T) {
 	// Test URL fetcher
-	dataFetcher := NewDataFetcher()
-	_, err := dataFetcher.GetData(&schema.AtmosConfiguration{}, "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
+	dataFetcher := NewDataFetcher(&schema.AtmosConfiguration{})
+	_, err := dataFetcher.GetData("https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	// Test Atmos fetcher
-	_, err = dataFetcher.getDataFetcher(&schema.AtmosConfiguration{}, "atmos://config")
+	_, err = dataFetcher.getDataFetcher("atmos://config")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -64,7 +64,7 @@ func TestGetDataFetcher(t *testing.T) {
 	}
 
 	// Test File fetcher
-	_, err = dataFetcher.GetData(&schema.AtmosConfiguration{}, tmpFile.Name())
+	_, err = dataFetcher.GetData(tmpFile.Name())
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

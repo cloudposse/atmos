@@ -5,15 +5,26 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/filematch"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
 var ErrInvalidYAML = fmt.Errorf("invalid YAML")
 
+type ErrInvalidPattern struct {
+	Pattern string
+	err     error
+}
+
+func (e ErrInvalidPattern) Error() string {
+	return fmt.Sprintf("invalid pattern %q: %v", e.Pattern, e.err)
+}
+
 type atmosValidatorExecuter struct {
 	validator      validator.Validator
 	fileDownloader downloader.FileDownloader
+	fileMatcher    filematch.FileMatcherInterface
 }
 
 func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosValidatorExecuter {
@@ -21,24 +32,56 @@ func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosVal
 	return &atmosValidatorExecuter{
 		validator:      validator.NewYAMLSchemaValidator(atmosConfig),
 		fileDownloader: fileDownloader,
+		fileMatcher:    filematch.NewGlobMatcher(),
 	}
 }
 
-func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(yamlSource string, customSchema string, sourceKey string) error {
-	if yamlSource == "" {
-		yamlSource = "atmos.yaml"
+func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(atmosSchema *schema.AtmosConfiguration, sourceKey string, customSchema string) error {
+	validationManifestWithFiles := make(map[string][]string)
+	for k := range atmosSchema.Schemas {
+		if sourceKey != "" && sourceKey != k {
+			continue
+		}
+		value := atmosSchema.GetSchemaRegistry(k)
+		if value.Manifest == "" {
+			continue
+		}
+		files, err := av.fileMatcher.MatchFiles(value.Matches)
+		if err != nil {
+			return err
+		}
+		validationManifestWithFiles[value.Manifest] = files
 	}
-	validationErrors, err := av.validator.ValidateYAMLSchema(customSchema, yamlSource, sourceKey)
-	if err != nil {
-		return err
+	totalErrCount := uint(0)
+	for k := range validationManifestWithFiles {
+		errCount, err := av.printValidation(k, validationManifestWithFiles[k])
+		if err != nil {
+			return err
+		}
+		totalErrCount += errCount
 	}
-	if len(validationErrors) == 0 {
-		log.Info("No Validation Errors", "source", yamlSource, "schema", customSchema)
-		return nil
+	if totalErrCount > 0 {
+		return ErrInvalidYAML
 	}
-	log.Error("Invalid YAML:")
-	for _, err := range validationErrors {
-		log.Error(fmt.Sprintf("- %s\n", err))
+	return nil
+}
+
+func (av *atmosValidatorExecuter) printValidation(schema string, files []string) (uint, error) {
+	count := uint(0)
+	for _, file := range files {
+		validationErrors, err := av.validator.ValidateYAMLSchema(schema, file)
+		if err != nil {
+			return count, err
+		}
+		if len(validationErrors) == 0 {
+			log.Info("No Validation Errors", "source", file, "schema", schema)
+			continue
+		}
+		log.Error("Invalid YAML:")
+		for _, err := range validationErrors {
+			log.Error(fmt.Sprintf("- %s\n", err))
+			count++
+		}
 	}
-	return ErrInvalidYAML
+	return count, nil
 }
