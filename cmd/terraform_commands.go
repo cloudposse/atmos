@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -20,6 +21,20 @@ func getTerraformCommands() []*cobra.Command {
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
+		},
+		{
+			Use:   "plan-diff",
+			Short: "Compare two Terraform plans and show the differences",
+			Long: `The 'atmos terraform plan-diff' command compares two Terraform plans and shows the differences between them.
+
+It takes an original plan file (--orig) and optionally a new plan file (--new). If the new plan file is not provided,
+it will generate one by running 'terraform plan' with the current configuration.
+
+The command shows differences in variables, resources, and outputs between the two plans.
+
+Example usage:
+  atmos terraform plan-diff myapp -s dev --orig=orig.plan
+  atmos terraform plan-diff myapp -s dev --orig=orig.plan --new=new.plan`,
 		},
 		{
 			Use:   "apply",
@@ -275,7 +290,12 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 				args = os.Args[2:]
 			}
 
-			terraformRun(parentCmd, cmd_, args)
+			err := terraformRun(parentCmd, cmd_, args)
+			if err != nil {
+				// Let the main function handle errors like ErrPlanHasDiff
+				// by simply propagating them without exiting here
+				return
+			}
 		}
 		parentCmd.AddCommand(cmd)
 	}
@@ -295,5 +315,14 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 		cmd.PersistentFlags().Bool("everything", false, "If set atmos will also delete the Terraform state files and directories for the component.")
 		cmd.PersistentFlags().Bool("force", false, "Forcefully delete Terraform state files and directories without interaction")
 		cmd.PersistentFlags().Bool("skip-lock-file", false, "Skip deleting the `.terraform.lock.hcl` file")
+	},
+	"plan-diff": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().String("orig", "", "Path to the original Terraform plan file (required)")
+		cmd.PersistentFlags().String("new", "", "Path to the new Terraform plan file (optional)")
+		err := cmd.MarkPersistentFlagRequired("orig")
+		if err != nil {
+			//nolint:revive // intentional exit for initialization error
+			log.Fatalf("Error marking 'orig' flag as required: %v", err)
+		}
 	},
 }
