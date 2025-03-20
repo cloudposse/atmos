@@ -153,6 +153,36 @@ logs:
 				assert.Equal(t, "env/test/path", cfg.BasePath)
 			},
 		},
+		{
+			name: "valid import .atmos.d",
+			setup: func(t *testing.T, dir string, tc testCase) {
+				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-configuration")
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "./", cfg.BasePath)
+				assert.Contains(t, cfg.CliConfigPath, "fixtures/scenarios/atmos-configuration")
+				baseInfo, err := os.Stat(cfg.BasePath)
+				require.NoError(t, err)
+				assert.True(t, baseInfo.IsDir())
+				assert.Equal(t, "{dev}", cfg.Stacks.NamePattern)
+			},
+		},
+		{
+			name: "valid import custom",
+			setup: func(t *testing.T, dir string, tc testCase) {
+				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports")
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "./", cfg.BasePath)
+				assert.Contains(t, cfg.CliConfigPath, "fixtures/scenarios/atmos-configuration")
+				baseInfo, err := os.Stat(cfg.BasePath)
+				require.NoError(t, err)
+				assert.True(t, baseInfo.IsDir())
+				assert.Equal(t, "Debug", cfg.Logs.Level)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
