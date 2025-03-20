@@ -2,15 +2,6 @@ package exec
 
 import (
 	"errors"
-	"time"
-)
-
-const (
-	progressWidth               = 30
-	getterTimeout               = 10 * time.Minute
-	componentTempDirPermissions = 0o700
-	wrapErrFmtWithDetails       = "%w: %v"
-	timeFormatBase              = 10
 )
 
 var (
