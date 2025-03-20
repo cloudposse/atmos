@@ -1,7 +1,5 @@
-DEBU Found ENV var ATMOS_LOGS_FILE=/dev/stderr
+DEBU Set logs-level=debug logs-file=/dev/stdout
 DEBU Found ENV var ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Using command line argument '--logs-level=Debug'
-DEBU Using command line argument '--logs-file=/dev/stdout'
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 
 👽 Atmos test on darwin/arm64

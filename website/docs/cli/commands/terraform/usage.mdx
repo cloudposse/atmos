@@ -28,7 +28,7 @@ Atmos supports all `terraform` commands and options described in [Terraform CLI 
 In addition, the `component` argument and `stack` flag are required to generate variables and backend config for the component in the stack.
 
 :::note Disambiguation
-The term “Terraform” is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
+The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
 HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
 :::
 
@@ -58,7 +58,7 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
   planfile
 
 - `atmos terraform clean` command deletes the `.terraform` folder, `.terraform.lock.hcl` lock file, and the previously generated `planfile`
-  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file. 
+  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file.
   It deletes all local Terraform state files and directories
   (including [`terraform.tfstate.d`](https://developer.hashicorp.com/terraform/cli/workspaces#workspace-internals)
   used for local state) for a component in a stack.
@@ -82,6 +82,8 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
 - `atmos terraform generate varfile` command generates a varfile for an Atmos component in a stack
 
 - `atmos terraform generate varfiles` command generates varfiles for all Atmos components in all stacks
+
+- `atmos terraform plan-diff` command compares two Terraform plans and shows the differences between them. It takes an original plan file (`--orig`) and optionally a new plan file (`--new`). If the new plan file is not provided, it will generate one by running `terraform plan` with the current configuration.
 
 - `atmos terraform shell` command configures an environment for an Atmos component in a stack and starts a new shell allowing executing all native
   terraform commands inside the shell
@@ -122,7 +124,7 @@ atmos terraform clean
 atmos terraform clean vpc
 
 # Clean a specific component in a stack
-atmos terraform clean vpc --stack dev 
+atmos terraform clean vpc --stack dev
 
 # Clean without confirmation prompt
 atmos terraform clean --force

@@ -330,7 +330,6 @@ func max(a, b int) int {
 
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
-		log.Debug("Downloading and installing package", "package", p.name)
 		if dryRun {
 			return handleDryRunInstall(p)
 		}
@@ -344,10 +343,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 			return newInstallError(err, p.name)
 		}
 		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
-			return installedPkgMsg{
-				err:  fmt.Errorf(wrapErrFmtWithDetails, ErrCopyPackageToTarget, err),
-				name: p.name,
-			}
+			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
 		return installedPkgMsg{
 			err:  nil,
