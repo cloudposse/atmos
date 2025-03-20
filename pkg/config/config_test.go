@@ -30,7 +30,7 @@ logs:
 
 	testCases := []testCase{
 		{
-			name:           "valid basic configuration",
+			name:           "valid configuration file name atmos.yaml",
 			configFileName: "atmos.yaml",
 			configContent:  configContent,
 			setup: func(t *testing.T, dir string, tc testCase) {
@@ -41,10 +41,39 @@ logs:
 				require.NoError(t, err)
 				assert.Equal(t, "./", cfg.BasePath)
 				assert.Contains(t, cfg.CliConfigPath, tempDirPath)
-
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
+			},
+		},
+		{
+			name:           "valid configuration file name atmos.yml",
+			configFileName: "atmos.yml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "./", cfg.BasePath)
+				assert.Contains(t, cfg.CliConfigPath, tempDirPath)
+				baseInfo, err := os.Stat(cfg.BasePath)
+				require.NoError(t, err)
+				assert.True(t, baseInfo.IsDir())
+			},
+		},
+		{
+			name:           "invalid config file name",
+			configFileName: "config.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "", cfg.CliConfigPath)
 			},
 		},
 		{
@@ -62,19 +91,6 @@ logs:
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
 				assert.Equal(t, "env/test/path", cfg.BasePath)
-			},
-		},
-		{
-			name:           "invalid config file name",
-			configFileName: "config.yaml",
-			configContent:  configContent,
-			setup: func(t *testing.T, dir string, tc testCase) {
-				createConfigFile(t, dir, tc.configFileName, tc.configContent)
-				changeWorkingDir(t, dir)
-			},
-			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
-				require.NoError(t, err)
-				assert.Equal(t, "", cfg.CliConfigPath)
 			},
 		},
 	}

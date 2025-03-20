@@ -25,6 +25,7 @@ var (
 	ErrSourceDestination  = errors.New("source and destination cannot be nil")
 	ErrImportPathRequired = errors.New("import path required to process imports")
 	ErrNOFileMatchPattern = errors.New("no files matching patterns found")
+	ErrMaxImportDepth     = errors.New("maximum import depth reached")
 )
 
 type importTypes int
@@ -85,7 +86,7 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 		return nil, ErrTempDir
 	}
 	if currentDepth > maxDepth {
-		return nil, errors.New("maximum import depth reached")
+		return nil, ErrMaxImportDepth
 	}
 	basePath, err = filepath.Abs(basePath)
 	if err != nil {
