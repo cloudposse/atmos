@@ -229,7 +229,6 @@ func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error
 
 		// Copy the file contents without loading it all into memory
 		_, err = io.Copy(dst, src)
-
 		if err != nil {
 			return "", nil, fmt.Errorf("error copying plan file to component directory: %w", err)
 		}
