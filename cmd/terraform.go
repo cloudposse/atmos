@@ -89,7 +89,6 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
 	// So if we get here, it means there were no differences or there was an error
-	err = e.ExecuteTerraform(info)
 	if err != nil {
 		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
 			// Print the error message but return the error to be handled by main.go
