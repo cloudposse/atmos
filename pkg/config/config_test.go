@@ -15,6 +15,22 @@ import (
 func TestInitCliConfig(t *testing.T) {
 	configContent := `
 base_path: ./
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: true
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"	
+vendor:  
+  base_path: "./test-vendor.yaml"
 logs:
   file: /dev/stderr
   level: Info
@@ -26,6 +42,7 @@ logs:
 		envSetup       func(t *testing.T) func()
 		setup          func(t *testing.T, dir string, tc testCase)
 		assertions     func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error)
+		processStacks  bool
 	}
 
 	testCases := []testCase{
@@ -44,11 +61,64 @@ logs:
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
+				//check if the vendor path is set correctly
+				assert.Equal(t, "./test-vendor.yaml", cfg.Vendor.BasePath)
+				//check if the apply auto approve is set correctly
+				assert.Equal(t, true, cfg.Components.Terraform.ApplyAutoApprove)
 			},
 		},
 		{
-			name:           "valid configuration file name atmos.yml",
-			configFileName: "atmos.yml",
+			name: "valid process Stacks",
+			setup: func(t *testing.T, dir string, tc testCase) {
+				changeWorkingDir(t, "../../examples/demo-stacks")
+			},
+			processStacks: true,
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "./", cfg.BasePath)
+				assert.Contains(t, cfg.CliConfigPath, "examples/demo-stacks")
+				baseInfo, err := os.Stat(cfg.BasePath)
+				require.NoError(t, err)
+				assert.True(t, baseInfo.IsDir())
+
+			},
+		},
+		{
+			name:           "invalid process Stacks,should return error",
+			configFileName: "atmos.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			processStacks: true,
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.Error(t, err)
+
+			},
+		},
+		{
+			name:           "invalid config file name. Should fallback to default configuration",
+			configFileName: "config.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				// check if the atmos config path is set to empty
+				assert.Equal(t, "", cfg.CliConfigPath)
+				// check if the base path is set correctly from the default value
+				assert.Equal(t, ".", cfg.BasePath)
+				//check if the apply auto approve is set correctly from the default value
+				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
+
+			},
+		},
+		{
+			name:           "valid configuration file name atmos.yaml",
+			configFileName: "atmos.yaml",
 			configContent:  configContent,
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
@@ -61,19 +131,10 @@ logs:
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
-			},
-		},
-		{
-			name:           "invalid config file name",
-			configFileName: "config.yaml",
-			configContent:  configContent,
-			setup: func(t *testing.T, dir string, tc testCase) {
-				createConfigFile(t, dir, tc.configFileName, tc.configContent)
-				changeWorkingDir(t, dir)
-			},
-			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
-				require.NoError(t, err)
-				assert.Equal(t, "", cfg.CliConfigPath)
+				//check if the vendor path is set correctly
+				assert.Equal(t, "./test-vendor.yaml", cfg.Vendor.BasePath)
+				//check if the apply auto approve is set correctly
+				assert.Equal(t, true, cfg.Components.Terraform.ApplyAutoApprove)
 			},
 		},
 		{
@@ -112,7 +173,7 @@ logs:
 			}
 
 			// Run test
-			cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, tc.processStacks)
 
 			// Assertions
 			if tc.assertions != nil {
