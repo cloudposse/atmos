@@ -340,6 +340,7 @@ type ArgsAndFlagsInfo struct {
 	VendorBasePath            string
 	DeployRunInit             string
 	InitRunReconfigure        string
+	InitPassVars              string
 	AutoGenerateBackendFile   string
 	AppendUserAgent           string
 	UseTerraformPlan          bool
