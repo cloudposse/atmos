@@ -171,7 +171,7 @@ func TestMatchFiles(t *testing.T) {
 			}
 			if runtime.GOOS == "darwin" {
 				for i := range tt.want {
-					tt.want[i] = filepath.Join("private", tt.want[i])
+					tt.want[i] = "/" + filepath.Join("private", tt.want[i])
 				}
 			}
 			sort.Strings(got)

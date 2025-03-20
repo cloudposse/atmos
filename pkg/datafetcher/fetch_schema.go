@@ -50,6 +50,8 @@ func (d *dataFetcher) getDataFetcher(source string) (Fetcher, error) {
 		return downloader.NewGoGetterDownloader(d.atmosConfig), nil
 	case strings.HasPrefix(source, "atmos://"):
 		return atmosFetcher{}, nil
+	case strings.Contains(source, "{") && strings.Contains(source, "}"):
+		return inlineFetcher{}, nil
 	default:
 		if _, err := os.Stat(source); err == nil {
 			return fileFetcher{}, nil

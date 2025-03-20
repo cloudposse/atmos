@@ -40,7 +40,7 @@ func yamlToJSON(yamlData []byte) ([]byte, error) {
 	return json.Marshal(rawData)
 }
 
-func (y yamlSchemaValidator) ValidateYAMLSchema(schemaSource, yamlSource string) ([]gojsonschema.ResultError, error) {
+func (y yamlSchemaValidator) ValidateYAMLSchema(manifestSource, yamlSource string) ([]gojsonschema.ResultError, error) {
 	yamlData, err := y.dataFetcher.GetData(yamlSource)
 	if err != nil {
 		return nil, err
@@ -49,20 +49,20 @@ func (y yamlSchemaValidator) ValidateYAMLSchema(schemaSource, yamlSource string)
 	if err != nil {
 		return nil, err
 	}
-	if schemaSource == "" {
-		schemaSource, err = y.getSchemaSourceFromYAML(data)
+	if manifestSource == "" {
+		manifestSource, err = y.getSchemaSourceFromYAML(data)
 		if err != nil {
 			return nil, err
 		}
 	}
-	schemaData, err := y.dataFetcher.GetData(schemaSource)
+	schemaData, err := y.dataFetcher.GetData(manifestSource)
 	if err != nil {
 		return nil, err
 	}
-	schemaLoader := gojsonschema.NewStringLoader(string(schemaData))
+	manifestLoader := gojsonschema.NewStringLoader(string(schemaData))
 	dataLoader := gojsonschema.NewStringLoader(string(data))
 
-	result, err := gojsonschema.Validate(schemaLoader, dataLoader)
+	result, err := gojsonschema.Validate(manifestLoader, dataLoader)
 	if err != nil {
 		return nil, err
 	}
