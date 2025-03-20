@@ -24,7 +24,6 @@ func TestValidateYAMLSchema(t *testing.T) {
 		fetcherErr     error
 		expectedErrors int
 		wantErr        bool
-		key            string
 		setMockExpect  func(*datafetcher.MockDataFetcher)
 	}{
 		{
@@ -68,7 +67,7 @@ key: value
 `), // Invalid YAML
 			wantErr: true,
 			setMockExpect: func(mockFetcher *datafetcher.MockDataFetcher) {
-				mockFetcher.EXPECT().GetData(gomock.Any(), "data.yaml").
+				mockFetcher.EXPECT().GetData("data.yaml").
 					Return(nil, yaml.ErrExceededMaxDepth) // Return nil data to trigger YAML unmarshal error
 			},
 		},
@@ -78,22 +77,6 @@ key: value
 			yamlSource:   "data.yaml",
 			fetcherErr:   ErrFailedToFetchSchema,
 			wantErr:      true,
-		},
-		{
-			name:         "Valid YAML against schema with key",
-			schemaSource: "schema.json",
-			yamlSource:   "data.yaml",
-			schemaData: []byte(`{
-		        "type": "object",
-		        "properties": {
-		            "name": {"type": "string"}
-		        },
-		        "required": ["name"]
-		    }`),
-			yamlData:       []byte("data:\n  name: test"),
-			expectedErrors: 0,
-			wantErr:        false,
-			key:            "data",
 		},
 	}
 
@@ -108,9 +91,9 @@ key: value
 			if tt.setMockExpect != nil {
 				tt.setMockExpect(mockFetcher)
 			} else {
-				mockFetcher.EXPECT().GetData(atmosConfig, tt.yamlSource).
+				mockFetcher.EXPECT().GetData(tt.yamlSource).
 					Return(tt.yamlData, nil)
-				mockFetcher.EXPECT().GetData(atmosConfig, tt.schemaSource).
+				mockFetcher.EXPECT().GetData(tt.schemaSource).
 					Return(tt.schemaData, nil)
 			}
 
@@ -121,7 +104,7 @@ key: value
 			}
 
 			// Execute the method
-			resultErrors, err := v.ValidateYAMLSchema(tt.schemaSource, tt.yamlSource, tt.key)
+			resultErrors, err := v.ValidateYAMLSchema(tt.schemaSource, tt.yamlSource)
 
 			// Assertions
 			if tt.wantErr {
@@ -139,7 +122,7 @@ func TestSchemaExtractor_Success(t *testing.T) {
 	// Create validator with mock fetcher
 	v := &yamlSchemaValidator{}
 	// Execute the method
-	schemaSource, err := v.getSchemaSourceFromYAML([]byte(`{"schema": "schema.json"}`))
+	schemaSource, err := v.getSchemaSourceFromYAML([]byte(`{"manifest": "schema.json"}`))
 	assert.NoError(t, err)
 	assert.Equal(t, "schema.json", schemaSource)
 }

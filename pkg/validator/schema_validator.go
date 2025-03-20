@@ -14,7 +14,7 @@ var ErrSchemaNotFound = errors.New("failed to fetch schema")
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type Validator interface {
-	ValidateYAMLSchema(schema, sourceFile, sourceKey string) ([]gojsonschema.ResultError, error)
+	ValidateYAMLSchema(schema, sourceFile string) ([]gojsonschema.ResultError, error)
 }
 
 type yamlSchemaValidator struct {
@@ -25,30 +25,27 @@ type yamlSchemaValidator struct {
 func NewYAMLSchemaValidator(atmosConfig *schema.AtmosConfiguration) Validator {
 	return &yamlSchemaValidator{
 		atmosConfig: atmosConfig,
-		dataFetcher: datafetcher.NewDataFetcher(),
+		dataFetcher: datafetcher.NewDataFetcher(atmosConfig),
 	}
 }
 
 // yamlToJSON converts YAML data to JSON format in an optimized way.
-func yamlToJSON(yamlData []byte, yamlKey string) ([]byte, error) {
+func yamlToJSON(yamlData []byte) ([]byte, error) {
 	var rawData any
 	err := yaml.Unmarshal(yamlData, &rawData)
 	if err != nil {
 		return nil, err
 	}
-	if yamlKey != "" {
-		rawData = rawData.(map[string]any)[yamlKey]
-	}
 	// Marshal the processed structure into JSON
 	return json.Marshal(rawData)
 }
 
-func (y yamlSchemaValidator) ValidateYAMLSchema(schemaSource, yamlSource, yamlKey string) ([]gojsonschema.ResultError, error) {
-	yamlData, err := y.dataFetcher.GetData(y.atmosConfig, yamlSource)
+func (y yamlSchemaValidator) ValidateYAMLSchema(schemaSource, yamlSource string) ([]gojsonschema.ResultError, error) {
+	yamlData, err := y.dataFetcher.GetData(yamlSource)
 	if err != nil {
 		return nil, err
 	}
-	data, err := yamlToJSON(yamlData, yamlKey)
+	data, err := yamlToJSON(yamlData)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +55,7 @@ func (y yamlSchemaValidator) ValidateYAMLSchema(schemaSource, yamlSource, yamlKe
 			return nil, err
 		}
 	}
-	schemaData, err := y.dataFetcher.GetData(y.atmosConfig, schemaSource)
+	schemaData, err := y.dataFetcher.GetData(schemaSource)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +79,7 @@ func (v yamlSchemaValidator) getSchemaSourceFromYAML(data []byte) (string, error
 		return "", ErrSchemaNotFound
 	}
 	yamlGenericData := yamlData.(map[string]any)
-	if val, ok := yamlGenericData["schema"]; ok && val != "" {
+	if val, ok := yamlGenericData["manifest"]; ok && val != "" {
 		if schema, ok := val.(string); ok {
 			return schema, nil
 		}

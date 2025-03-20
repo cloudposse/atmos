@@ -34,7 +34,7 @@ var ValidateSchemaCmd = &cobra.Command{
 		if schema == "" {
 			schema = os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 		}
-		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(fileName, schema, key); err != nil {
+		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(&atmosConfig, fileName, schema, key); err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},

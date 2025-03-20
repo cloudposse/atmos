@@ -35,16 +35,16 @@ func (m *MockValidator) EXPECT() *MockValidatorMockRecorder {
 }
 
 // ValidateYAMLSchema mocks base method.
-func (m *MockValidator) ValidateYAMLSchema(schema, sourceFile, sourceKey string) ([]gojsonschema.ResultError, error) {
+func (m *MockValidator) ValidateYAMLSchema(schema, sourceFile string) ([]gojsonschema.ResultError, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateYAMLSchema", schema, sourceFile, sourceKey)
+	ret := m.ctrl.Call(m, "ValidateYAMLSchema", schema, sourceFile)
 	ret0, _ := ret[0].([]gojsonschema.ResultError)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ValidateYAMLSchema indicates an expected call of ValidateYAMLSchema.
-func (mr *MockValidatorMockRecorder) ValidateYAMLSchema(schema, sourceFile, sourceKey interface{}) *gomock.Call {
+func (mr *MockValidatorMockRecorder) ValidateYAMLSchema(schema, sourceFile interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateYAMLSchema", reflect.TypeOf((*MockValidator)(nil).ValidateYAMLSchema), schema, sourceFile, sourceKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateYAMLSchema", reflect.TypeOf((*MockValidator)(nil).ValidateYAMLSchema), schema, sourceFile)
 }
