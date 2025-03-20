@@ -65,7 +65,7 @@ func IsValidScheme(scheme string) bool {
 
 // CustomGitDetector intercepts GitHub URLs and transforms them into something like git::https://<token>@github.com/ so we can do a git-based clone with a token.
 type CustomGitDetector struct {
-	AtmosConfig *schema.AtmosConfiguration
+	AtmosConfig schema.AtmosConfiguration
 	source      string
 }
 
@@ -267,7 +267,7 @@ func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
 
 // RegisterCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig *schema.AtmosConfiguration, source string) {
+func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration, source string) {
 	getter.Detectors = append(
 		[]getter.Detector{
 			&CustomGitDetector{AtmosConfig: atmosConfig, source: source},
@@ -278,7 +278,7 @@ func RegisterCustomDetectors(atmosConfig *schema.AtmosConfiguration, source stri
 
 // GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination.
 func GoGetterGet(
-	atmosConfig *schema.AtmosConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	src string,
 	dest string,
 	clientMode getter.ClientMode,
@@ -353,7 +353,7 @@ func DownloadDetectFormatAndParseFile(atmosConfig *schema.AtmosConfiguration, fi
 	tempDir := os.TempDir()
 	f := filepath.Join(tempDir, uuid.New().String())
 
-	if err := GoGetterGet(atmosConfig, file, f, getter.ClientModeFile, 30*time.Second); err != nil {
+	if err := GoGetterGet(*atmosConfig, file, f, getter.ClientModeFile, 30*time.Second); err != nil {
 		return nil, fmt.Errorf("failed to download the file '%s': %w", file, err)
 	}
 

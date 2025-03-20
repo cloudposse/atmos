@@ -26,4 +26,6 @@ var (
 	ErrCopyPackageToTarget                   = errors.New("failed to copy package to target")
 	ErrNoValidInstallerPackage               = errors.New("no valid installer package provided")
 	ErrFailedToInitializeTUIModelWithDetails = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
+	ErrValidPackage                          = errors.New("no valid installer package provided for")
+	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 )
