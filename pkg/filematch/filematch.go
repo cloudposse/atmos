@@ -1,9 +1,9 @@
 package filematch
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -27,7 +27,6 @@ func (m *matcher) MatchFiles(patterns []string) ([]string, error) {
 			basePath = filepath.Join(cwd, basePath)
 		}
 		isRecursive := strings.Contains(globPattern, "**")
-		fmt.Println("extractBasePathAndGlob", "basePath", basePath, "globPattern", globPattern, "isRecursive", isRecursive)
 
 		if isRecursive {
 			globPattern = strings.ReplaceAll(globPattern, "*/*", "")
@@ -63,7 +62,7 @@ func (m *matcher) createWalkFunc(basePath string, g compiledGlob, isRecursive bo
 		if !isRecursive && depth > 0 {
 			return nil
 		}
-		if g.Match(relPath) {
+		if g.Match(filepath.ToSlash(relPath)) {
 			*matches = append(*matches, path)
 		}
 		return nil
@@ -86,7 +85,9 @@ func extractBasePathAndGlob(pattern string) (string, string) {
 			break
 		}
 	}
-
+	if runtime.GOOS == "windows" && len(parts) > 0 && strings.HasSuffix(parts[0], ":") {
+		parts[0] = parts[0] + string(os.PathSeparator)
+	}
 	// Extract the base path (everything before the glob starts)
 	basePath := filepath.Join(parts[:globStartIndex]...)
 
@@ -96,7 +97,7 @@ func extractBasePathAndGlob(pattern string) (string, string) {
 	}
 
 	// Extract the glob pattern (everything after the base path)
-	globPattern := filepath.Join(parts[globStartIndex:]...)
+	globPattern := strings.Join(parts[globStartIndex:], "/")
 
 	// Handle trailing slashes (e.g., "dir/" -> "dir/**")
 	if strings.HasSuffix(pattern, "/") {

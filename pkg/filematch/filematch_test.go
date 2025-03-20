@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -73,6 +74,7 @@ func TestMatchFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to set up fixtures: %v", err)
 	}
+	pathSeperator := string(os.PathSeparator)
 
 	tests := []struct {
 		name     string
@@ -100,7 +102,7 @@ func TestMatchFiles(t *testing.T) {
 		},
 		{
 			name:     "absolute path with trailing double star",
-			patterns: []string{tempDir + "/subdirectory/**/*.log"},
+			patterns: []string{tempDir + pathSeperator + "subdirectory" + pathSeperator + "**/*.log"},
 			want: []string{
 				filepath.Join(tempDir, "subdirectory", "error.log"),
 				filepath.Join(tempDir, "subdirectory", "access.log"),
@@ -110,13 +112,13 @@ func TestMatchFiles(t *testing.T) {
 		},
 		{
 			name:     "non-existent directory",
-			patterns: []string{"nonexistent/*.txt"},
+			patterns: []string{"nonexistent" + pathSeperator + "*.txt"},
 			want:     nil,
 			wantErr:  true,
 		},
 		{
 			name:     "multiple patterns",
-			patterns: []string{"*.txt", "subdirectory/*.log"},
+			patterns: []string{"*.txt", "subdirectory" + pathSeperator + "*.log"},
 			want: []string{
 				filepath.Join(tempDir, "file1.txt"),
 				filepath.Join(tempDir, "file2.txt"),
@@ -166,6 +168,11 @@ func TestMatchFiles(t *testing.T) {
 			}
 			if tt.wantErr {
 				return
+			}
+			if runtime.GOOS == "darwin" {
+				for i := range tt.want {
+					tt.want[i] = filepath.Join("private", tt.want[i])
+				}
 			}
 			sort.Strings(got)
 			sort.Strings(tt.want)
