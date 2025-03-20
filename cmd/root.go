@@ -4,12 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
 
@@ -80,21 +79,6 @@ var RootCmd = &cobra.Command{
 }
 
 func setupLogger(atmosConfig *schema.AtmosConfiguration) {
-	switch atmosConfig.Logs.Level {
-	case "Trace":
-		log.SetLevel(log.DebugLevel)
-	case "Debug":
-		log.SetLevel(log.DebugLevel)
-	case "Info":
-		log.SetLevel(log.InfoLevel)
-	case "Warning":
-		log.SetLevel(log.WarnLevel)
-	case "Off":
-		log.SetLevel(math.MaxInt32)
-	default:
-		log.SetLevel(log.InfoLevel)
-	}
-
 	var output io.Writer
 
 	switch atmosConfig.Logs.File {
@@ -107,18 +91,34 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	default:
 		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 		if err != nil {
-			log.Fatal("Failed to open log file:", err)
+			log.Fatal("Failed to open log file:", "error", err)
 		}
 		defer logFile.Close()
 		output = logFile
 	}
 
-	log.SetOutput(output)
+	atmosLogger := logger.NewAtmosLogger(
+		output,
+		log.Options{
+			ReportTimestamp: false,
+		},
+	)
+
+	// Set the level based on configuration
+	logger.SetAtmosLogLevel(atmosLogger, atmosConfig.Logs.Level)
+
+	// Set as default logger for compatibility with existing code
+	log.SetDefault(atmosLogger.Logger)
+
+	// Validate the log level
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		//nolint:all // The reason to escape this is because it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required
+		//nolint:all // The reason to escape this is because it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required.
+		atmosLogger.Logger.Error(err.Error(), "error", err)
 		log.Fatal(err)
 	}
-	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
+
+	// Log the configuration using proper structured format
+	atmosLogger.Debug("Set", "logs-level", atmosLogger.GetLevel(), "logs-file", atmosConfig.Logs.File)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

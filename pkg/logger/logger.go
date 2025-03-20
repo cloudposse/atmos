@@ -2,8 +2,10 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
 
+	log "github.com/charmbracelet/log"
 	"github.com/fatih/color"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -120,7 +122,7 @@ func (l *Logger) Error(err error) {
 	}
 }
 
-// isLevelEnabled checks if a given log level should be enabled based on the logger's current level
+// isLevelEnabled checks if a given log level should be enabled based on the logger's current level.
 func (l *Logger) isLevelEnabled(level LogLevel) bool {
 	if l.LogLevel == LogLevelOff {
 		return false
@@ -149,5 +151,40 @@ func (l *Logger) Info(message string) {
 func (l *Logger) Warning(message string) {
 	if l.isLevelEnabled(LogLevelWarning) {
 		l.log(theme.Colors.Warning, message)
+	}
+}
+
+// AtmosLogger wraps the Charmbracelet logger to provide enhanced functionality.
+type AtmosLogger struct {
+	*log.Logger
+}
+
+// NewAtmosLogger creates a new AtmosLogger with the given options.
+func NewAtmosLogger(out io.Writer, options log.Options) *AtmosLogger {
+	return &AtmosLogger{
+		Logger: log.NewWithOptions(out, options),
+	}
+}
+
+// NewDefaultAtmosLogger creates a new AtmosLogger with default settings.
+func NewDefaultAtmosLogger() *AtmosLogger {
+	return &AtmosLogger{
+		Logger: log.Default(),
+	}
+}
+
+// SetAtmosLogLevel configures the logger level based on Atmos log level strings.
+func SetAtmosLogLevel(l *AtmosLogger, level string) {
+	switch level {
+	case "Trace", "Debug":
+		l.SetLevel(log.DebugLevel)
+	case "Info":
+		l.SetLevel(log.InfoLevel)
+	case "Warning":
+		l.SetLevel(log.WarnLevel)
+	case "Off":
+		l.SetLevel(log.FatalLevel + 1) // A level higher than any defined level
+	default:
+		l.SetLevel(log.InfoLevel)
 	}
 }
