@@ -60,8 +60,21 @@ Flags:
 
     -h, --help                        help for terraform
 
+        --process-functions           Enable/disable YAML functions processing
+                                      in Atmos stack manifests when executing
+                                      terraform commands (default true)
+
+        --process-templates           Enable/disable Go template processing in
+                                      Atmos stack manifests when executing
+                                      terraform commands (default true)
+
+        --skip stringSlice            Skip executing specific YAML functions in
+                                      the Atmos stack manifests when executing
+                                      terraform commands (default [])
+
         --skip-init                   Skip running terraform init before
-                                      executing the command (default false)
+                                      executing terraform commands (default
+                                      false)
 
     -s, --stack string                The stack flag specifies the environment
                                       or configuration set for deployment in
