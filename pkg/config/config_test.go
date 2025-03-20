@@ -61,9 +61,9 @@ logs:
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
-				//check if the vendor path is set correctly
+				// check if the vendor path is set correctly
 				assert.Equal(t, "./test-vendor.yaml", cfg.Vendor.BasePath)
-				//check if the apply auto approve is set correctly
+				// check if the apply auto approve is set correctly
 				assert.Equal(t, true, cfg.Components.Terraform.ApplyAutoApprove)
 			},
 		},
@@ -80,7 +80,6 @@ logs:
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
-
 			},
 		},
 		{
@@ -94,7 +93,6 @@ logs:
 			processStacks: true,
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.Error(t, err)
-
 			},
 		},
 		{
@@ -111,9 +109,8 @@ logs:
 				assert.Equal(t, "", cfg.CliConfigPath)
 				// check if the base path is set correctly from the default value
 				assert.Equal(t, ".", cfg.BasePath)
-				//check if the apply auto approve is set correctly from the default value
+				// check if the apply auto approve is set correctly from the default value
 				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
-
 			},
 		},
 		{
@@ -131,9 +128,9 @@ logs:
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
-				//check if the vendor path is set correctly
+				// check if the vendor path is set correctly
 				assert.Equal(t, "./test-vendor.yaml", cfg.Vendor.BasePath)
-				//check if the apply auto approve is set correctly
+				// check if the apply auto approve is set correctly
 				assert.Equal(t, true, cfg.Components.Terraform.ApplyAutoApprove)
 			},
 		},
