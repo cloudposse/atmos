@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -268,6 +269,16 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
 	}
 
+	componentsInitPassVars := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS")
+	if len(componentsInitPassVars) > 0 {
+		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS=%s", componentsInitPassVars))
+		initPassVarsBool, err := strconv.ParseBool(componentsInitPassVars)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
+	}
+
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
 		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile))
@@ -499,6 +510,14 @@ func setFeatureFlags(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo
 		}
 		atmosConfig.Components.Terraform.InitRunReconfigure = initRunReconfigureBool
 		log.Debug(cmdLineArg, InitRunReconfigure, configAndStacksInfo.InitRunReconfigure)
+	}
+	if len(configAndStacksInfo.InitPassVars) > 0 {
+		initPassVarsBool, err := strconv.ParseBool(configAndStacksInfo.InitPassVars)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.Init.PassVars = initPassVarsBool
+		log.Debug(cmdLineArg, InitPassVars, configAndStacksInfo.InitPassVars)
 	}
 	return nil
 }

@@ -41,10 +41,13 @@ var (
 		},
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath:                "components/terraform",
-				ApplyAutoApprove:        false,
-				DeployRunInit:           true,
-				InitRunReconfigure:      true,
+				BasePath:           "components/terraform",
+				ApplyAutoApprove:   false,
+				DeployRunInit:      true,
+				InitRunReconfigure: true,
+				Init: schema.TerraformInit{
+					PassVars: false,
+				},
 				AutoGenerateBackendFile: true,
 				AppendUserAgent:         fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version),
 			},

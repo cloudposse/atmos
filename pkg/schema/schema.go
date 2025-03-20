@@ -258,8 +258,7 @@ type Terraform struct {
 }
 
 type TerraformInit struct {
-	RunReconfigure bool `yaml:"run_reconfigure" json:"run_reconfigure" mapstructure:"run_reconfigure"`
-	PassVars       bool `yaml:"pass_vars" json:"pass_vars" mapstructure:"pass_vars"`
+	PassVars bool `yaml:"pass_vars" json:"pass_vars" mapstructure:"pass_vars"`
 }
 
 type ShellConfig struct {
@@ -399,6 +398,7 @@ type ConfigAndStacksInfo struct {
 	ContextPrefix                 string
 	DeployRunInit                 string
 	InitRunReconfigure            string
+	InitPassVars                  string
 	AutoGenerateBackendFile       string
 	UseTerraformPlan              bool
 	PlanFile                      string

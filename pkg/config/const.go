@@ -28,6 +28,7 @@ const (
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
 	AppendUserAgentFlag         = "--append-user-agent"
 	InitRunReconfigure          = "--init-run-reconfigure"
+	InitPassVars                = "--init-pass-vars"
 
 	FromPlanFlag       = "--from-plan"
 	PlanFileFlag       = "--planfile"
