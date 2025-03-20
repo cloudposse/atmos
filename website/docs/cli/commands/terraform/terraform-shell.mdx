@@ -76,7 +76,7 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
     <dd>
         Dry run.
 
-        ```
+        ```shell
         atmos terraform shell <component> -s <stack> --dry-run=true
         ```
     </dd>
@@ -87,7 +87,7 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
 
         If the flag is not passed, template processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform shell <component> -s <stack> --process-templates=false
         ```
     </dd>
@@ -98,7 +98,7 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
 
         If the flag is not passed, YAML function processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform shell <component> -s <stack> --process-functions=false
         ```
     </dd>
@@ -109,9 +109,9 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
 
         To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
 
-        ```
+        ```shell
         atmos terraform shell <component> -s <stack> --skip=eval --skip=include
         atmos terraform shell <component> -s <stack> --skip=terraform.output,include
-            ```
+        ```
     </dd>
 </dl>

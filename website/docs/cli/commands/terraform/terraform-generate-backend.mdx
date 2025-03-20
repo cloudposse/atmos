@@ -58,7 +58,7 @@ atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-p
     <dd>
         Dry run.
 
-        ```
+        ```shell
         atmos terraform generate backend <component> -s <stack> --dry-run=true
         ```
     </dd>
@@ -69,7 +69,7 @@ atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-p
 
         If the flag is not passed, template processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform generate backend <component> -s <stack> --process-templates=false
         ```
     </dd>
@@ -80,7 +80,7 @@ atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-p
 
         If the flag is not passed, YAML function processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform generate backend <component> -s <stack> --process-functions=false
         ```
     </dd>
@@ -91,10 +91,10 @@ atmos terraform generate backend test/test-component-override-2 -s tenant2-ue2-p
 
         To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
 
-        ```
+        ```shell
         atmos terraform generate backend <component> -s <stack> --skip=eval --skip=include
         atmos terraform generate backend <component> -s <stack> --skip=terraform.output,include
-            ```
+        ```
     </dd>
 </dl>
 

@@ -57,7 +57,7 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
     <dd>
         Dry run.
 
-        ```
+        ```shell
         atmos terraform generate varfile <component> -s <stack> --dry-run=true
         ```
     </dd>
@@ -68,7 +68,7 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
 
         If the flag is not passed, template processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform generate varfile <component> -s <stack> --process-templates=false
         ```
     </dd>
@@ -79,7 +79,7 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
 
         If the flag is not passed, YAML function processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform generate varfile <component> -s <stack> --process-functions=false
         ```
     </dd>
@@ -90,9 +90,9 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
 
         To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
 
-        ```
+        ```shell
         atmos terraform generate varfile <component> -s <stack> --skip=eval --skip=include
         atmos terraform generate varfile <component> -s <stack> --skip=terraform.output,include
-            ```
+        ```
     </dd>
 </dl>

@@ -157,7 +157,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
     <dd>
         Dry run.
 
-        ```
+        ```shell
         atmos terraform <command> <component> -s <stack> --dry-run=true
         ```
     </dd>
@@ -180,7 +180,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
     <dd>
         Skip running `terraform init` before executing terraform commands.
 
-        ```
+        ```shell
         atmos terraform apply <component> -s <stack> --skip-init
         ```
     </dd>
@@ -191,7 +191,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
         If the flag is not passed, template processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform plan <component> -s <stack> --process-templates=false
         ```
     </dd>
@@ -202,7 +202,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
         If the flag is not passed, YAML function processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform plan <component> -s <stack> --process-functions=false
         ```
     </dd>
@@ -213,7 +213,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
         To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
 
-        ```
+        ```shell
         atmos terraform plan <component> -s <stack> --skip=eval --skip=include
         atmos terraform apply <component> -s <stack> --skip=terraform.output,include
         ```

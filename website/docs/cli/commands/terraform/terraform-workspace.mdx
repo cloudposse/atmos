@@ -62,7 +62,7 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
     <dd>
         Dry run.
 
-        ```
+        ```shell
         atmos terraform workspace <component> -s <stack> --dry-run=true
         ```
     </dd>
@@ -73,7 +73,7 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 
         If the flag is not passed, template processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform workspace <component> -s <stack> --process-templates=false
         ```
     </dd>
@@ -84,7 +84,7 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 
         If the flag is not passed, YAML function processing is enabled by default.
 
-        ```
+        ```shell
         atmos terraform workspace <component> -s <stack> --process-functions=false
         ```
     </dd>
@@ -95,9 +95,9 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 
         To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
 
-        ```
+        ```shell
         atmos terraform workspace <component> -s <stack> --skip=eval --skip=include
         atmos terraform workspace <component> -s <stack> --skip=terraform.output,include
-            ```
+        ```
     </dd>
 </dl>
