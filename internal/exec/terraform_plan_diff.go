@@ -213,13 +213,23 @@ func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error
 	if !strings.HasPrefix(planFile, componentPath) {
 		planFileInComponentDir = filepath.Join(componentPath, planFileBaseName)
 
-		// Copy the plan file content
-		planContent, err := os.ReadFile(planFile)
+		// Open source file
+		src, err := os.Open(planFile)
 		if err != nil {
-			return "", nil, fmt.Errorf("error reading plan file: %w", err)
+			return "", nil, fmt.Errorf("error opening source plan file: %w", err)
 		}
+		defer src.Close()
 
-		err = os.WriteFile(planFileInComponentDir, planContent, planFileMode)
+		// Create destination file
+		dst, err := os.OpenFile(planFileInComponentDir, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, planFileMode)
+		if err != nil {
+			return "", nil, fmt.Errorf("error creating destination plan file: %w", err)
+		}
+		defer dst.Close()
+
+		// Copy the file contents without loading it all into memory
+		_, err = io.Copy(dst, src)
+
 		if err != nil {
 			return "", nil, fmt.Errorf("error copying plan file to component directory: %w", err)
 		}
