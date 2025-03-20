@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+
+	"github.com/charmbracelet/log"
 )
 
 func setupTestFixtures(baseDir string) error {
@@ -29,6 +31,8 @@ func setupTestFixtures(baseDir string) error {
 		filepath.Join(baseDir, "subdirectory"): {
 			"error.log",
 			"access.log",
+			"config.yaml",
+			"config1.yml",
 		},
 		filepath.Join(baseDir, "subdirectory", "nested"): {
 			"debug.log",
@@ -87,7 +91,7 @@ func TestMatchFiles(t *testing.T) {
 		},
 		{
 			name:     "nested directory with wildcard",
-			patterns: []string{"subdirectory/*.log"},
+			patterns: []string{"subdirectory" + string(os.PathSeparator) + "*.log"},
 			want: []string{
 				filepath.Join(tempDir, "subdirectory", "error.log"),
 				filepath.Join(tempDir, "subdirectory", "access.log"),
@@ -140,7 +144,17 @@ func TestMatchFiles(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name:     "pattern that accepts multiple yaml file types",
+			patterns: []string{"**/*.{yaml,yml}"},
+			want: []string{
+				filepath.Join(tempDir, "subdirectory", "config.yaml"),
+				filepath.Join(tempDir, "subdirectory", "config1.yml"),
+			},
+		},
 	}
+
+	log.SetLevel(log.DebugLevel)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

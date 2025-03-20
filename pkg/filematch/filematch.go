@@ -1,6 +1,7 @@
 package filematch
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,7 @@ func (m *matcher) MatchFiles(patterns []string) ([]string, error) {
 			basePath = filepath.Join(cwd, basePath)
 		}
 		isRecursive := strings.Contains(globPattern, "**")
+		fmt.Println("extractBasePathAndGlob", "basePath", basePath, "globPattern", globPattern, "isRecursive", isRecursive)
 
 		if isRecursive {
 			globPattern = strings.ReplaceAll(globPattern, "*/*", "")

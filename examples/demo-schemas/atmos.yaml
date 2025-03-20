@@ -1,0 +1,9 @@
+schemas:
+  schemaFromFile:
+    manifest: ./manifest.json
+    matches:
+      - config.yaml
+  schemaFromInternet:
+    manifest: https://json.schemastore.org/bower.json
+    matches:
+      - bower.yaml

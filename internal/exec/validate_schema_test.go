@@ -138,17 +138,17 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 				validator:      mockValidator,
 				fileDownloader: mockFileDownloader,
 				fileMatcher:    mockFileMatcher,
-			}
-			atmosSchema := &schema.AtmosConfiguration{
-				Schemas: map[string]interface{}{
-					"something": schema.SchemaRegistry{
-						Manifest: tt.customSchema,
-						Matches:  []string{tt.yamlSource},
+				atmosConfig: &schema.AtmosConfiguration{
+					Schemas: map[string]interface{}{
+						"something": schema.SchemaRegistry{
+							Manifest: tt.customSchema,
+							Matches:  []string{tt.yamlSource},
+						},
 					},
 				},
 			}
 
-			err := av.ExecuteAtmosValidateSchemaCmd(atmosSchema, "", tt.customSchema)
+			err := av.ExecuteAtmosValidateSchemaCmd("", "")
 			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedError)
