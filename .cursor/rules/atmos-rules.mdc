@@ -1,0 +1,241 @@
+---
+description: Atmos Rules File
+globs: *.go,website/
+alwaysApply: false
+---
+# Cursor Rules for Atmos CLI Project
+
+## Project Overview
+This is a Golang CLI project using Cobra for command structure and Viper for configuration management. The project maintains high code quality standards through golangci-lint and aims for maximum test coverage. The repository also includes the website source code for https://atmos.tools.
+
+## Code Structure
+
+### CLI Structure
+- Use Cobra's recommended command structure with a root command and subcommands
+- Implement each command in a separate file under `cmd/` directory
+- Use Viper for managing configuration, environment variables, and flags
+- Follow the principle of separation of concerns between CLI interface and actual logic
+
+```go
+// Preferred command structure
+cmd/
+  root.go
+  command1.go
+  command2.go
+  ...
+pkg/
+  feature1/
+    feature1.go
+    feature1_test.go
+  feature2/
+    feature2.go
+    feature2_test.go
+```
+
+### Dependencies
+- Manage dependencies with Go modules
+- Keep dependencies up to date
+- Minimize external dependencies where possible
+
+## Testing Requirements
+
+### Unit Tests
+- Every new feature must include comprehensive unit tests
+- Target >80% code coverage for all packages
+- Test both happy paths and error conditions
+- Use table-driven tests for testing multiple scenarios
+
+```go
+// Example of table-driven test
+func TestFeature(t *testing.T) {
+    testCases := []struct {
+        name     string
+        input    string
+        expected string
+        wantErr  bool
+    }{
+        {
+            name:     "valid input",
+            input:    "valid",
+            expected: "processed",
+            wantErr:  false,
+        },
+        {
+            name:     "invalid input",
+            input:    "",
+            expected: "",
+            wantErr:  true,
+        },
+    }
+    
+    for _, tc := range testCases {
+        t.Run(tc.name, func(t *testing.T) {
+            result, err := Feature(tc.input)
+            if tc.wantErr {
+                assert.Error(t, err)
+            } else {
+                assert.NoError(t, err)
+                assert.Equal(t, tc.expected, result)
+            }
+        })
+    }
+}
+```
+
+### Integration Tests
+- Include integration tests for command flows
+- Test CLI end-to-end when possible
+- Use test fixtures for complex inputs
+
+### Test Mocks
+- Use interfaces for external dependencies to facilitate mocking
+- Consider using testify/mock for creating mock implementations
+
+## Code Quality
+
+### Linting
+- All code must pass golangci-lint checks
+- Configure golangci-lint in `.golangci.yml` with the following linters enabled:
+  - gofmt
+  - goimports
+  - govet
+  - staticcheck
+  - errcheck
+  - ineffassign
+  - misspell
+  - unused
+  - revive
+  - gocritic
+
+### Error Handling
+- Follow Go's error handling idioms
+- Use meaningful error messages
+- Wrap errors with context using `fmt.Errorf("context: %w", err)`
+- Consider using a custom error type for domain-specific errors
+
+### Code Style
+- Follow standard Go coding style
+- Use `gofmt` and `goimports` to format code
+- Prefer short, descriptive variable names
+- Use kebab-case for command-line flags
+- Use snake_case for environment variables
+
+## Documentation
+
+### Code Documentation
+- Document all exported functions, types, and methods
+- Document complex logic with inline comments
+- Follow Go's documentation conventions
+
+```go
+// FeatureName processes the input and returns the processed output.
+// It returns an error if the input is invalid.
+func FeatureName(input string) (string, error) {
+    // Implementation
+}
+```
+
+### CLI Documentation
+- Provide comprehensive help text for all commands and flags
+- Include examples in command help
+- Update README.md with new commands and features
+
+```go
+// Example of proper command documentation
+var exampleCmd = &cobra.Command{
+    Use:   "example [name]",
+    Short: "A brief description of the command",
+    Long: `A longer description that explains the command in detail
+    and provides context for its usage.`,
+    Example: `
+  atmos example foo
+  atmos example bar --flag=value`,
+    Run: func(cmd *cobra.Command, args []string) {
+        // Implementation
+    },
+}
+```
+
+### Website Documentation
+- Update website documentation in the `website/` directory when adding new features
+- Ensure consistency between CLI help text and website documentation
+- Follow the website's documentation structure and style
+
+## Feature Implementation
+
+### Configuration
+- Use Viper for configuration management
+- Support configuration via files, environment variables, and flags
+- Follow the precedence order: flags > environment variables > config file > defaults
+
+```go
+// Example of Viper configuration
+func initConfig() {
+    viper.SetConfigName("config")
+    viper.SetConfigType("yaml")
+    viper.AddConfigPath("$HOME/.atmos")
+    viper.AutomaticEnv()
+    viper.SetEnvPrefix("ATMOS")
+    
+    // Set defaults
+    viper.SetDefault("timeout", 30)
+    
+    if err := viper.ReadInConfig(); err != nil {
+        if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+            // Config file was found but another error occurred
+            fmt.Println("Error reading config file:", err)
+        }
+    }
+}
+```
+
+### Command Implementation
+- Follow the single responsibility principle
+- Separate command interface from business logic
+- Provide meaningful feedback to users
+- Include progress indicators for long-running operations
+
+### Error Reporting
+- Provide clear error messages to users
+- Include troubleshooting hints when appropriate
+- Log detailed errors for debugging
+
+## Pull Request Guidelines
+
+### Before Submitting
+- Ensure all tests pass
+- Verify code coverage meets targets
+- Run golangci-lint and fix any issues
+- Update documentation as needed
+
+### PR Description
+- Clearly describe the changes
+- Reference any related issues
+- Include before/after examples if UI is changed
+
+## Website Development
+
+### Website Structure
+- Keep website code in the `website/` directory
+- Follow the existing website architecture and style
+- Test website changes locally before committing
+
+### Documentation Updates
+- Keep CLI documentation and website documentation in sync
+- Document new features on the website
+- Include examples and use cases
+
+## Continuous Integration
+
+### CI Checks
+- All pull requests must pass CI checks
+- CI should run:
+  - Unit tests
+  - Integration tests
+  - golangci-lint
+  - Coverage reporting
+
+### Release Process
+- Follow semantic versioning
+- Update CHANGELOG.md with each release
+- Create GitHub releases with detailed release notes
