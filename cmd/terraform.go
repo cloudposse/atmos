@@ -86,7 +86,6 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Skip = skip
 
 	err = e.ExecuteTerraform(info)
-
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
 	// So if we get here, it means there were no differences or there was an error
 	if err != nil {
