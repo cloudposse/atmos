@@ -47,7 +47,7 @@ logs:
 
 	testCases := []testCase{
 		{
-			name:           "valid configuration file name atmos.yaml",
+			name:           "valid configuration file name atmos.yaml extension yaml",
 			configFileName: "atmos.yaml",
 			configContent:  configContent,
 			setup: func(t *testing.T, dir string, tc testCase) {
@@ -65,6 +65,41 @@ logs:
 				assert.Equal(t, "./test-vendor.yaml", cfg.Vendor.BasePath)
 				// check if the apply auto approve is set correctly
 				assert.Equal(t, true, cfg.Components.Terraform.ApplyAutoApprove)
+			},
+		},
+		{
+			name:           "valid configuration file name atmos.yml extension yml",
+			configFileName: "atmos.yml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "./", cfg.BasePath)
+				assert.Contains(t, cfg.CliConfigPath, tempDirPath)
+				baseInfo, err := os.Stat(cfg.BasePath)
+				require.NoError(t, err)
+				assert.True(t, baseInfo.IsDir())
+			},
+		},
+		{
+			name:           "invalid config file name. Should fallback to default configuration",
+			configFileName: "config.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				// check if the atmos config path is set to empty
+				assert.Equal(t, "", cfg.CliConfigPath)
+				// check if the base path is set correctly from the default value
+				assert.Equal(t, ".", cfg.BasePath)
+				// check if the apply auto approve is set correctly from the default value
+				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
 			},
 		},
 		{
@@ -93,45 +128,6 @@ logs:
 			processStacks: true,
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.Error(t, err)
-			},
-		},
-		{
-			name:           "invalid config file name. Should fallback to default configuration",
-			configFileName: "config.yaml",
-			configContent:  configContent,
-			setup: func(t *testing.T, dir string, tc testCase) {
-				createConfigFile(t, dir, tc.configFileName, tc.configContent)
-				changeWorkingDir(t, dir)
-			},
-			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
-				require.NoError(t, err)
-				// check if the atmos config path is set to empty
-				assert.Equal(t, "", cfg.CliConfigPath)
-				// check if the base path is set correctly from the default value
-				assert.Equal(t, ".", cfg.BasePath)
-				// check if the apply auto approve is set correctly from the default value
-				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
-			},
-		},
-		{
-			name:           "valid configuration file name atmos.yaml",
-			configFileName: "atmos.yaml",
-			configContent:  configContent,
-			setup: func(t *testing.T, dir string, tc testCase) {
-				createConfigFile(t, dir, tc.configFileName, tc.configContent)
-				changeWorkingDir(t, dir)
-			},
-			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
-				require.NoError(t, err)
-				assert.Equal(t, "./", cfg.BasePath)
-				assert.Contains(t, cfg.CliConfigPath, tempDirPath)
-				baseInfo, err := os.Stat(cfg.BasePath)
-				require.NoError(t, err)
-				assert.True(t, baseInfo.IsDir())
-				// check if the vendor path is set correctly
-				assert.Equal(t, "./test-vendor.yaml", cfg.Vendor.BasePath)
-				// check if the apply auto approve is set correctly
-				assert.Equal(t, true, cfg.Components.Terraform.ApplyAutoApprove)
 			},
 		},
 		{
