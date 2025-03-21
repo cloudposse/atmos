@@ -1,0 +1,50 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "settings": {
+        "type": "object",
+        "properties": {
+          "timeout": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "debug": {
+            "type": "boolean"
+          }
+        },
+        "required": ["timeout"]
+      },
+      "users": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string",
+              "enum": ["admin", "user", "guest"]
+            }
+          },
+          "required": ["id", "name", "role"]
+        }
+      }
+    },
+    "required": ["name", "version", "enabled", "settings"]
+  }
+  

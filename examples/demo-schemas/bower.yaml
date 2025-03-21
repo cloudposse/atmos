@@ -1,0 +1,10 @@
+name: "my-project"
+version: "1.0.0"
+description: "A sample project to demonstrate bower.json schema validation."
+main: "index.js"
+authors:
+  - "Jane Doe <jane.doe@example.com>"
+license: "MIT"
+dependencies:
+  jquery: "^3.5.1"
+  lodash: "^4.17.20"
