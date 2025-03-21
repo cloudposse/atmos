@@ -19,6 +19,12 @@ func setupTestFile(content, tempDir string, filename string) (string, error) {
 
 // Test for processImports.
 func TestProcessImports(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_LOGS_LEVEL")
+	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
 	// Step 1: Setup a mock HTTP server for a remote URL
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "base_path: ./") // Mock YAML content
@@ -30,7 +36,7 @@ func TestProcessImports(t *testing.T) {
 	defer os.Remove(baseDir)
 	// Step 2.1: Create a directory for recursive imports
 	configDir := filepath.Join(baseDir, "configs.d")
-	err := os.MkdirAll(configDir, 0o755)
+	err = os.MkdirAll(configDir, 0o755)
 	assert.NoError(t, err)
 
 	// Create mock configuration files in the directory
@@ -91,6 +97,12 @@ func TestProcessImports(t *testing.T) {
 }
 
 func TestProcessImportNested(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_LOGS_LEVEL")
+	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
 	baseDir, err := os.MkdirTemp("", "config-test")
 	assert.NoError(t, err)
 	defer os.RemoveAll(baseDir)

@@ -13,6 +13,13 @@ import (
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.
 // It should also check that the base path and atmos Config File Path are correctly set and directory.
 func TestInitCliConfig(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_LOGS_LEVEL")
+	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+
 	configContent := `
 base_path: ./
 components:
