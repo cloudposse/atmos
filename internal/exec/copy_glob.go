@@ -369,38 +369,97 @@ func copyToTargetWithPatterns(
 	sourceIsLocalFile bool,
 	uri string,
 ) error {
-	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		targetPath = filepath.Join(targetPath, SanitizeFileName(uri))
-	}
-	log.Debug("Copying files", "source", sourceDir, "target", targetPath)
-	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
-		return fmt.Errorf("creating target directory %q: %w", targetPath, err)
+	var finalTarget string
+	if sourceIsLocalFile {
+		if filepath.Ext(targetPath) == "" {
+			// Case 1: file-to-folder copy.
+			finalTarget = filepath.Join(targetPath, SanitizeFileName(filepath.Base(sourceDir)))
+			log.Debug("Test case 1: file-to-folder copy", "finalTarget", finalTarget)
+			// Create the target folder.
+			if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
+				log.Debug("Error creating target directory", "targetPath", targetPath, "error", err)
+				return fmt.Errorf("creating target directory %q: %w", targetPath, err)
+			}
+		} else {
+			// Case 2: file-to-file copy.
+			finalTarget = targetPath
+			log.Debug("Test case 2: file-to-file copy", "finalTarget", finalTarget)
+			// Create only the parent directory.
+			parent := filepath.Dir(finalTarget)
+			if err := os.MkdirAll(parent, os.ModePerm); err != nil {
+				log.Debug("Error creating parent directory", "parent", parent, "error", err)
+				return fmt.Errorf("creating parent directory %q: %w", parent, err)
+			}
+		}
+	} else {
+		finalTarget = targetPath
+		log.Debug("Non-local file source; using target as final", "finalTarget", finalTarget)
+		if err := os.MkdirAll(finalTarget, os.ModePerm); err != nil {
+			log.Debug("Error creating target directory", "finalTarget", finalTarget, "error", err)
+			return fmt.Errorf("creating target directory %q: %w", finalTarget, err)
+		}
 	}
 
-	// Optimization: if no inclusion and no exclusion patterns are defined, use the cp library.
+	log.Debug("Copying files", "source", sourceDir, "finalTarget", finalTarget)
+	if sourceIsLocalFile {
+		log.Debug("Local file source detected; invoking ComponentOrMixinsCopy", "sourceFile", sourceDir, "finalTarget", finalTarget)
+		return ComponentOrMixinsCopy(sourceDir, finalTarget)
+	}
+
+	// If no inclusion or exclusion patterns are defined, use the cp library.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
-		log.Debug("No inclusion or exclusion patterns defined; using cp library for fast copy")
-		return cp.Copy(sourceDir, targetPath)
+		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy", "source", sourceDir, "finalTarget", finalTarget)
+		return cp.Copy(sourceDir, finalTarget)
 	}
 
 	// Process each inclusion pattern.
 	for _, pattern := range s.IncludedPaths {
-		if err := processIncludedPattern(sourceDir, targetPath, pattern, s.ExcludedPaths); err != nil {
+		log.Debug("Processing inclusion pattern", "pattern", pattern, "source", sourceDir, "finalTarget", finalTarget)
+		if err := processIncludedPattern(sourceDir, finalTarget, pattern, s.ExcludedPaths); err != nil {
 			return err
 		}
 	}
 
 	// If no inclusion patterns are defined, copy everything except those matching excluded items.
 	if len(s.IncludedPaths) == 0 {
+		log.Debug("No inclusion patterns defined; copying entire directory recursively", "source", sourceDir, "finalTarget", finalTarget)
 		if err := copyDirRecursive(&CopyContext{
 			SrcDir:   sourceDir,
-			DstDir:   targetPath,
+			DstDir:   finalTarget,
 			BaseDir:  sourceDir,
 			Excluded: s.ExcludedPaths,
 			Included: s.IncludedPaths,
 		}); err != nil {
-			return fmt.Errorf("error copying from %q to %q: %w", sourceDir, targetPath, err)
+			return fmt.Errorf("error copying from %q to %q: %w", sourceDir, finalTarget, err)
 		}
 	}
 	return nil
+}
+
+// ComponentOrMixinsCopy covers 2 cases: file-to-folder and file-to-file copy).
+func ComponentOrMixinsCopy(sourceFile, finalTarget string) error {
+	var dest string
+	if filepath.Ext(finalTarget) == "" {
+		// File-to-folder copy: append the source file's base name to the directory.
+		dest = filepath.Join(finalTarget, filepath.Base(sourceFile))
+		log.Debug("ComponentOrMixinsCopy: file-to-folder copy", "sourceFile", sourceFile, "destination", dest)
+	} else {
+		// File-to-file copy: use finalTarget as is.
+		dest = finalTarget
+		// Create only the parent directory.
+		parent := filepath.Dir(dest)
+		if err := os.MkdirAll(parent, os.ModePerm); err != nil {
+			log.Debug("ComponentOrMixinsCopy: error creating parent directory", "parent", parent, "error", err)
+			return fmt.Errorf("creating parent directory %q: %w", parent, err)
+		}
+		log.Debug("ComponentOrMixinsCopy: file-to-file copy", "sourceFile", sourceFile, "destination", dest)
+	}
+	// Remove any existing directory at dest to avoid "is a directory" errors.
+	if info, err := os.Stat(dest); err == nil && info.IsDir() {
+		log.Debug("ComponentOrMixinsCopy: destination exists as directory, removing", "destination", dest)
+		if err := os.RemoveAll(dest); err != nil {
+			return fmt.Errorf("removing existing directory %q: %w", dest, err)
+		}
+	}
+	return cp.Copy(sourceFile, dest)
 }
