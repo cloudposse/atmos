@@ -1,0 +1,35 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: demo-vendoring
+  description: Atmos vendoring manifest for Atmos demo component library
+spec:
+  imports: []
+
+  sources:
+    # Basic HTTPS default (token injection expected)
+    - component: "terraform-null-label-basic"
+      source: "github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
+      version: "0.25.0"
+      targets:
+        - "library/basic/{{ .Component }}"
+      tags:
+        - demo
+    
+    # Direct credentials provided in the URL (token injection should be skipped)
+    - component: "terraform-null-label-direct"
+      source: "https://myuser:supersecret@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
+      version: "0.25.0"
+      targets:
+        - "library/direct/{{ .Component }}"
+      tags:
+        - demo
+
+    # HTTPS with pre-existing credentials (token injection skipped)
+    - component: "terraform-null-label-cred"
+      source: "https://git@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
+      version: "0.25.0"
+      targets:
+        - "library/cred/{{ .Component }}"
+      tags:
+        - demo

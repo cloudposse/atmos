@@ -19,6 +19,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
+var StderrLogger = log.New(os.Stderr)
+
 var (
 	ErrVendorComponents              = errors.New("failed to vendor components")
 	ErrSourceMissing                 = errors.New("'source' must be specified in 'sources' in the vendor config file")
@@ -508,7 +511,7 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		log.Debug("Including", u.TrimBasePathFromPath(tempDir+"/", src))
+		StderrLogger.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
 }

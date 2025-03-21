@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: atmos vendor pull using SSH
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Dry-run vendoring with SSH style URL (verified and prepended with SSH prefix by Atmos)"
+    workdir: "fixtures/scenarios/vendor-pulls-ssh"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--logs-level=Debug"
+      - "--dry-run"
+    env:
+      ATMOS_GITHUB_TOKEN: "supersecret"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: atmos vendor pull with custom detector and handling credentials leakage
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Ensure that injected credentials are never leaked in logs"
+    workdir: "fixtures/scenarios/vendor-creds-sanitize"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--logs-level=Debug"
+    env:
+      ATMOS_GITHUB_TOKEN: supersecret
+    expect:
+      diff: []
+    stdout:
+      - !not 'supersecret'  
+      - !not 'ATMOS_GITHUB_TOKEN'
+    exit_code: 0
