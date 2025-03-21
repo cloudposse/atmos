@@ -141,8 +141,8 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 				atmosConfig: &schema.AtmosConfiguration{
 					Schemas: map[string]interface{}{
 						"something": schema.SchemaRegistry{
-							Manifest: tt.customSchema,
-							Matches:  []string{tt.yamlSource},
+							Schema:  tt.customSchema,
+							Matches: []string{tt.yamlSource},
 						},
 					},
 				},
