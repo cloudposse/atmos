@@ -342,7 +342,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}
-		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
+		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
 			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
 		return installedPkgMsg{

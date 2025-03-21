@@ -19,6 +19,12 @@ const (
 	logKeyError       = "error"
 	logKeyPattern     = "pattern"
 	shallowCopySuffix = "/*"
+
+	// finalTargetKey is used as a logging key for the final target.
+	finalTargetKey = "finalTarget"
+
+	// sourceKey is used as a logging key for the source.
+	sourceKey = "source"
 )
 
 // PrefixCopyContext groups parameters for prefix-based copy operations.
@@ -361,68 +367,68 @@ func processIncludedPattern(sourceDir, targetPath, pattern string, excluded []st
 	return nil
 }
 
-// copyToTargetWithPatterns copies the contents from sourceDir to targetPath,
-// applying inclusion and exclusion patterns from the vendor source configuration.
+// initFinalTarget initializes the final target path based on source type.
+func initFinalTarget(sourceDir, targetPath string, sourceIsLocalFile bool) (string, error) {
+	if sourceIsLocalFile {
+		if filepath.Ext(targetPath) == "" {
+			// File-to-folder copy.
+			finalTarget := filepath.Join(targetPath, SanitizeFileName(filepath.Base(sourceDir)))
+			if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
+				return "", fmt.Errorf("creating target directory %q: %w", targetPath, err)
+			}
+			return finalTarget, nil
+		}
+		// File-to-file copy.
+		finalTarget := targetPath
+		parent := filepath.Dir(finalTarget)
+		if err := os.MkdirAll(parent, os.ModePerm); err != nil {
+			return "", fmt.Errorf("creating parent directory %q: %w", parent, err)
+		}
+		return finalTarget, nil
+	}
+	// Non-local file source.
+	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
+		return "", fmt.Errorf("creating target directory %q: %w", targetPath, err)
+	}
+	return targetPath, nil
+}
+
+// handleLocalFileSource handles copy for local file sources.
+func handleLocalFileSource(sourceDir, finalTarget string) error {
+	log.Debug("Local file source detected; invoking ComponentOrMixinsCopy",
+		"sourceFile", sourceDir, finalTargetKey, finalTarget)
+	return ComponentOrMixinsCopy(sourceDir, finalTarget)
+}
+
+// copyToTargetWithPatterns copies the contents from sourceDir to targetPath, applying inclusion and exclusion patterns.
 func copyToTargetWithPatterns(
 	sourceDir, targetPath string,
 	s *schema.AtmosVendorSource,
 	sourceIsLocalFile bool,
-	uri string,
 ) error {
-	var finalTarget string
-	if sourceIsLocalFile {
-		if filepath.Ext(targetPath) == "" {
-			// Case 1: file-to-folder copy.
-			finalTarget = filepath.Join(targetPath, SanitizeFileName(filepath.Base(sourceDir)))
-			log.Debug("Test case 1: file-to-folder copy", "finalTarget", finalTarget)
-			// Create the target folder.
-			if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
-				log.Debug("Error creating target directory", "targetPath", targetPath, "error", err)
-				return fmt.Errorf("creating target directory %q: %w", targetPath, err)
-			}
-		} else {
-			// Case 2: file-to-file copy.
-			finalTarget = targetPath
-			log.Debug("Test case 2: file-to-file copy", "finalTarget", finalTarget)
-			// Create only the parent directory.
-			parent := filepath.Dir(finalTarget)
-			if err := os.MkdirAll(parent, os.ModePerm); err != nil {
-				log.Debug("Error creating parent directory", "parent", parent, "error", err)
-				return fmt.Errorf("creating parent directory %q: %w", parent, err)
-			}
-		}
-	} else {
-		finalTarget = targetPath
-		log.Debug("Non-local file source; using target as final", "finalTarget", finalTarget)
-		if err := os.MkdirAll(finalTarget, os.ModePerm); err != nil {
-			log.Debug("Error creating target directory", "finalTarget", finalTarget, "error", err)
-			return fmt.Errorf("creating target directory %q: %w", finalTarget, err)
-		}
+	finalTarget, err := initFinalTarget(sourceDir, targetPath, sourceIsLocalFile)
+	if err != nil {
+		return err
 	}
-
-	log.Debug("Copying files", "source", sourceDir, "finalTarget", finalTarget)
+	log.Debug("Copying files", "source", sourceDir, finalTargetKey, finalTarget)
 	if sourceIsLocalFile {
-		log.Debug("Local file source detected; invoking ComponentOrMixinsCopy", "sourceFile", sourceDir, "finalTarget", finalTarget)
-		return ComponentOrMixinsCopy(sourceDir, finalTarget)
+		return handleLocalFileSource(sourceDir, finalTarget)
 	}
-
 	// If no inclusion or exclusion patterns are defined, use the cp library.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
-		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy", "source", sourceDir, "finalTarget", finalTarget)
+		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy", "source", sourceDir, finalTargetKey, finalTarget)
 		return cp.Copy(sourceDir, finalTarget)
 	}
-
 	// Process each inclusion pattern.
 	for _, pattern := range s.IncludedPaths {
-		log.Debug("Processing inclusion pattern", "pattern", pattern, "source", sourceDir, "finalTarget", finalTarget)
+		log.Debug("Processing inclusion pattern", "pattern", pattern, "source", sourceDir, finalTargetKey, finalTarget)
 		if err := processIncludedPattern(sourceDir, finalTarget, pattern, s.ExcludedPaths); err != nil {
 			return err
 		}
 	}
-
-	// If no inclusion patterns are defined, copy everything except those matching excluded items.
+	// Copy entire directory if no inclusion patterns are defined.
 	if len(s.IncludedPaths) == 0 {
-		log.Debug("No inclusion patterns defined; copying entire directory recursively", "source", sourceDir, "finalTarget", finalTarget)
+		log.Debug("No inclusion patterns defined; copying entire directory recursively", "source", sourceDir, finalTargetKey, finalTarget)
 		if err := copyDirRecursive(&CopyContext{
 			SrcDir:   sourceDir,
 			DstDir:   finalTarget,
@@ -436,7 +442,7 @@ func copyToTargetWithPatterns(
 	return nil
 }
 
-// ComponentOrMixinsCopy covers 2 cases: file-to-folder and file-to-file copy).
+// ComponentOrMixinsCopy covers 2 cases: file-to-folder and file-to-file copy.
 func ComponentOrMixinsCopy(sourceFile, finalTarget string) error {
 	var dest string
 	if filepath.Ext(finalTarget) == "" {
