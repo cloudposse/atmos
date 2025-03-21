@@ -418,6 +418,9 @@ type ConfigAndStacksInfo struct {
 	LogsFile                      string
 	SettingsListMergeStrategy     string
 	Query                         string
+	ProcessTemplates              bool
+	ProcessFunctions              bool
+	Skip                          []string
 }
 
 // Workflows

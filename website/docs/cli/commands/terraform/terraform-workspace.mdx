@@ -43,13 +43,61 @@ atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 
 ## Arguments
 
-| Argument    | Description     | Required |
-|:------------|:----------------|:---------|
-| `component` | Atmos component | yes      |
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+</dl>
 
 ## Flags
 
-| Flag        | Description | Alias | Required |
-|:------------|:------------|:------|:---------|
-| `--stack`   | Atmos stack | `-s`  | yes      |
-| `--dry-run` | Dry run     |       | no       |
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Dry run.
+
+        ```shell
+        atmos terraform workspace <component> -s <stack> --dry-run=true
+        ```
+    </dd>
+
+    <dt>`--process-templates` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable Go template processing in Atmos stack manifests when executing terraform commands.
+
+        If the flag is not passed, template processing is enabled by default.
+
+        ```shell
+        atmos terraform workspace <component> -s <stack> --process-templates=false
+        ```
+    </dd>
+
+    <dt>`--process-functions` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable YAML functions processing in Atmos stack manifests<br/>when executing terraform commands.
+
+        If the flag is not passed, YAML function processing is enabled by default.
+
+        ```shell
+        atmos terraform workspace <component> -s <stack> --process-functions=false
+        ```
+    </dd>
+
+    <dt>`--skip` <em>(optional)</em></dt>
+    <dd>
+        Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing terraform commands.
+
+        To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
+
+        ```shell
+        atmos terraform workspace <component> -s <stack> --skip=eval --skip=include
+        atmos terraform workspace <component> -s <stack> --skip=terraform.output,include
+        ```
+    </dd>
+</dl>
