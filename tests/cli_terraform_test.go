@@ -8,9 +8,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCLITerraformClean(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -138,18 +144,6 @@ func verifyStateFilesDeleted(t *testing.T, stateFiles []string) {
 
 func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string) {
 	cmd := exec.Command(binaryPath, "terraform", "clean", "station", "-s", environment, "--force")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	t.Logf("Clean command output:\n%s", stdout.String())
-	if err != nil {
-		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
-	}
-}
-
-func runCLITerraformClean(t *testing.T, binaryPath string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
