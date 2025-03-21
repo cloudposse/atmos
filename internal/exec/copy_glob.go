@@ -370,23 +370,27 @@ func processIncludedPattern(sourceDir, targetPath, pattern string, excluded []st
 // initFinalTarget initializes the final target path based on source type.
 func initFinalTarget(sourceDir, targetPath string, sourceIsLocalFile bool) (string, error) {
 	if sourceIsLocalFile {
-		if filepath.Ext(targetPath) == "" {
-			// File-to-folder copy.
-			finalTarget := filepath.Join(targetPath, SanitizeFileName(filepath.Base(sourceDir)))
-			if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
-				return "", fmt.Errorf("creating target directory %q: %w", targetPath, err)
-			}
-			return finalTarget, nil
-		}
-		// File-to-file copy.
-		finalTarget := targetPath
-		parent := filepath.Dir(finalTarget)
-		if err := os.MkdirAll(parent, os.ModePerm); err != nil {
-			return "", fmt.Errorf("creating parent directory %q: %w", parent, err)
-		}
-		return finalTarget, nil
+		return getLocalFinalTarget(sourceDir, targetPath)
 	}
-	// Non-local file source.
+	return getNonLocalFinalTarget(targetPath)
+}
+
+func getLocalFinalTarget(sourceDir, targetPath string) (string, error) {
+	if filepath.Ext(targetPath) == "" {
+		if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
+			return "", fmt.Errorf("creating target directory %q: %w", targetPath, err)
+		}
+		return filepath.Join(targetPath, SanitizeFileName(filepath.Base(sourceDir))), nil
+	}
+
+	parent := filepath.Dir(targetPath)
+	if err := os.MkdirAll(parent, os.ModePerm); err != nil {
+		return "", fmt.Errorf("creating parent directory %q: %w", parent, err)
+	}
+	return targetPath, nil
+}
+
+func getNonLocalFinalTarget(targetPath string) (string, error) {
 	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
 		return "", fmt.Errorf("creating target directory %q: %w", targetPath, err)
 	}
@@ -410,7 +414,7 @@ func copyToTargetWithPatterns(
 	if err != nil {
 		return err
 	}
-	log.Debug("Copying files", "source", sourceDir, finalTargetKey, finalTarget)
+	log.Debug("Copying files", sourceKey, sourceDir, finalTargetKey, finalTarget)
 	if sourceIsLocalFile {
 		return handleLocalFileSource(sourceDir, finalTarget)
 	}
