@@ -117,7 +117,7 @@ logs:
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
 				assert.Equal(t, "./", cfg.BasePath)
-				assert.Contains(t, cfg.CliConfigPath, "examples/demo-stacks")
+				assert.Contains(t, cfg.CliConfigPath, filepath.Join("examples", "demo-stacks"))
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
@@ -161,7 +161,7 @@ logs:
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
 				assert.Equal(t, "./", cfg.BasePath)
-				assert.Contains(t, cfg.CliConfigPath, "fixtures/scenarios/atmos-configuration")
+				assert.Contains(t, cfg.CliConfigPath, filepath.Join("fixtures", "scenarios", "atmos-configuration"))
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
@@ -176,7 +176,7 @@ logs:
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
 				assert.Equal(t, "./", cfg.BasePath)
-				assert.Contains(t, cfg.CliConfigPath, "fixtures/scenarios/atmos-cli-imports")
+				assert.Contains(t, cfg.CliConfigPath, filepath.Join("fixtures", "scenarios", "atmos-cli-imports"))
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
