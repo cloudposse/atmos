@@ -27,6 +27,7 @@ tests:
         - "./components/globs/examples/demo-localstack/docker-compose.yml"
         - "./components/globs/examples/demo-localstack/README.md"
       file_not_exists:
+        - "./components/library/examples/demo-workflows/stacks/catalog/myapp.yaml"
         - "./components/library/examples/demo-library/github/stargazers/main.tf"
         - "./components/library/examples/demo-library/github/stargazers/outputs.tf"
         - "./components/library/examples/demo-library/github/stargazers/providers.tf"
