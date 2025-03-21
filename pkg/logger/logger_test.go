@@ -194,8 +194,6 @@ func TestNewDefaultAtmosLogger(t *testing.T) {
 	assert.NotNil(t, atmosLogger.Logger)
 }
 
-
-
 func TestSetAtmosLogLevel(t *testing.T) {
 	var buf bytes.Buffer
 	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
