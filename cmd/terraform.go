@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	l "github.com/charmbracelet/log"
@@ -8,6 +9,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -52,17 +54,48 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) {
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
 	info := getConfigAndStacksInfo("terraform", cmd, args)
 	if info.NeedHelp {
 		err := actualCmd.Usage()
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
-		return
+		return nil
 	}
-	err := e.ExecuteTerraform(info)
+
+	flags := cmd.Flags()
+
+	processTemplates, err := flags.GetBool("process-templates")
 	if err != nil {
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	info.ProcessTemplates = processTemplates
+	info.ProcessFunctions = processYamlFunctions
+	info.Skip = skip
+
+	err = e.ExecuteTerraform(info)
+	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
+	// So if we get here, it means there were no differences or there was an error
+	if err != nil {
+		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
+			// Print the error message but return the error to be handled by main.go
+			u.PrintErrorMarkdown("", err, "")
+			return err
+		}
+		// For other errors, continue with existing behavior
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+	return nil
 }

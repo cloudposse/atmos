@@ -50,6 +50,9 @@ var commonFlags = []string{
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
 	cfg.QueryFlag,
+	cfg.ProcessTemplatesFlag,
+	cfg.ProcessFunctionsFlag,
+	cfg.SkipFlag,
 }
 
 // ProcessComponentConfig processes component config sections
