@@ -78,7 +78,7 @@ var RootCmd = &cobra.Command{
 	},
 }
 
-func setupLogger(atmosConfig *schema.AtmosConfiguration) {
+func setupLogger(atmosConfig *schema.AtmosConfiguration) error {
 	var output io.Writer
 
 	switch atmosConfig.Logs.File {
@@ -91,34 +91,36 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	default:
 		logFile, err := os.OpenFile(atmosConfig.Logs.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 		if err != nil {
-			log.Fatal("Failed to open log file:", "error", err)
+			return fmt.Errorf("failed to open log file: %w", err)
 		}
 		defer logFile.Close()
 		output = logFile
 	}
 
+	options := &log.Options{
+		ReportTimestamp: false,
+	}
 	atmosLogger := logger.NewAtmosLogger(
 		output,
-		log.Options{
-			ReportTimestamp: false,
-		},
+		options,
 	)
 
-	// Set the level based on configuration
+	// Set the level based on configuration.
 	logger.SetAtmosLogLevel(atmosLogger, atmosConfig.Logs.Level)
 
-	// Set as default logger for compatibility with existing code
+	//This is for compatibility with existing code will be removed in future versions.
 	log.SetDefault(atmosLogger.Logger)
 
-	// Validate the log level
+	// Validate the log level.
 	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		//nolint:all // The reason to escape this is because it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required.
-		atmosLogger.Logger.Error(err.Error(), "error", err)
-		log.Fatal(err)
+		atmosLogger.Logger.Error("invalid log level configuration", "error", err)
+		return fmt.Errorf("invalid log level configuration: %w", err)
 	}
 
-	// Log the configuration using proper structured format
+	// Log the configuration.
 	atmosLogger.Debug("Set", "logs-level", atmosLogger.GetLevel(), "logs-file", atmosConfig.Logs.File)
+
+	return nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -139,7 +141,9 @@ func Execute() error {
 	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig
-	setupLogger(&atmosConfig)
+	if err := setupLogger(&atmosConfig); err != nil {
+		u.LogErrorAndExit(err)
+	}
 
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases

@@ -181,7 +181,7 @@ func TestLogger_SetLogLevel(t *testing.T) {
 
 func TestNewAtmosLogger(t *testing.T) {
 	var buf bytes.Buffer
-	atmosLogger := NewAtmosLogger(&buf, log.Options{})
+	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
 
 	assert.NotNil(t, atmosLogger)
 	assert.NotNil(t, atmosLogger.Logger)
@@ -198,7 +198,7 @@ func TestNewDefaultAtmosLogger(t *testing.T) {
 
 func TestSetAtmosLogLevel(t *testing.T) {
 	var buf bytes.Buffer
-	atmosLogger := NewAtmosLogger(&buf, log.Options{})
+	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
 
 	// Test different log levels
 	tests := []struct {

@@ -160,9 +160,9 @@ type AtmosLogger struct {
 }
 
 // NewAtmosLogger creates a new AtmosLogger with the given options.
-func NewAtmosLogger(out io.Writer, options log.Options) *AtmosLogger {
+func NewAtmosLogger(out io.Writer, options *log.Options) *AtmosLogger {
 	return &AtmosLogger{
-		Logger: log.NewWithOptions(out, options),
+		Logger: log.NewWithOptions(out, *options),
 	}
 }
 
