@@ -31,7 +31,7 @@ func TestTerraformGenerateBackendCmd(t *testing.T) {
 	err = Execute()
 	assert.NoError(t, err, "'TestTerraformGenerateBackendCmd' should execute without error")
 
-	// Close the writer and restore stdout
+	// Close the writer and restore stderr
 	err = w.Close()
 	assert.NoError(t, err, "'TestTerraformGenerateBackendCmd' should execute without error")
 
