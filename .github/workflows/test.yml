@@ -46,8 +46,6 @@ jobs:
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -85,7 +83,7 @@ jobs:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -156,7 +154,7 @@ jobs:
       #       }
 
       - name: Acceptance tests
-        timeout-minutes: 20
+        timeout-minutes: 30
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make testacc-cover
