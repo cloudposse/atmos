@@ -141,11 +141,12 @@ func Execute() error {
 	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig
-	if err := setupLogger(&atmosConfig); err != nil {
-		u.LogErrorAndExit(err)
+	var err error
+	err = setupLogger(&atmosConfig)
+	if err != nil {
+		return fmt.Errorf("failed to setup logger: %w", err)
 	}
 
-	var err error
 	// If CLI configuration was found, process its custom commands and command aliases
 	if initErr == nil {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
@@ -256,10 +257,3 @@ func initCobraConfig() {
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
 }
-
-// https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
-// https://github.com/spf13/cobra/blob/master/user_guide.md
-// https://blog.knoldus.com/create-kubectl-like-cli-with-go-and-cobra/
-// https://pkg.go.dev/github.com/c-bata/go-prompt
-// https://pkg.go.dev/github.com/spf13/cobra
-// https://scene-si.org/2017/04/20/managing-configuration-with-viper/
