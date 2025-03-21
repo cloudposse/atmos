@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	log "github.com/charmbracelet/log"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 
@@ -174,6 +175,45 @@ func TestLogger_SetLogLevel(t *testing.T) {
 	err := logger.SetLogLevel(LogLevelDebug)
 	assert.NoError(t, err)
 	assert.Equal(t, LogLevelDebug, logger.LogLevel)
+}
+
+// Tests for the new AtmosLogger implementation.
+func TestNewAtmosLogger(t *testing.T) {
+	var buf bytes.Buffer
+	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
+
+	assert.NotNil(t, atmosLogger)
+	assert.NotNil(t, atmosLogger.Logger)
+}
+
+func TestNewDefaultAtmosLogger(t *testing.T) {
+	atmosLogger := NewDefaultAtmosLogger()
+
+	assert.NotNil(t, atmosLogger)
+	assert.NotNil(t, atmosLogger.Logger)
+}
+
+func TestSetAtmosLogLevel(t *testing.T) {
+	var buf bytes.Buffer
+	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
+
+	// Test different log levels
+	tests := []struct {
+		level    string
+		expected log.Level
+	}{
+		{"Trace", log.DebugLevel},
+		{"Debug", log.DebugLevel},
+		{"Info", log.InfoLevel},
+		{"Warning", log.WarnLevel},
+		{"Off", log.FatalLevel + 1},
+		{"Invalid", log.InfoLevel}, // Default
+	}
+
+	for _, test := range tests {
+		SetAtmosLogLevel(atmosLogger, test.level)
+		assert.Equal(t, test.expected, atmosLogger.GetLevel())
+	}
 }
 
 func TestLogger_isLevelEnabled(t *testing.T) {
