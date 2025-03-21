@@ -108,7 +108,7 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) error {
 	// Set the level based on configuration.
 	logger.SetAtmosLogLevel(atmosLogger, atmosConfig.Logs.Level)
 
-	//This is for compatibility with existing code will be removed in future versions.
+	// This is for compatibility with existing code will be removed in future versions.
 	log.SetDefault(atmosLogger.Logger)
 
 	// Validate the log level.
