@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -47,7 +48,7 @@ func processTagInclude(
 	if fileType == u.AtmosYamlFuncIncludeLocalFile {
 		res, err = u.DetectFormatAndParseFile(f)
 	} else if fileType == u.AtmosYamlFuncIncludeGoGetter {
-		res, err = DownloadDetectFormatAndParseFile(atmosConfig, f)
+		res, err = downloader.NewGoGetterDownloader(&atmosConfig).FetchAndAutoParse(f)
 	}
 
 	if err != nil {
