@@ -64,9 +64,30 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		return nil
 	}
 
+	flags := cmd.Flags()
+
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	info.ProcessTemplates = processTemplates
+	info.ProcessFunctions = processYamlFunctions
+	info.Skip = skip
+
+	err = e.ExecuteTerraform(info)
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
 	// So if we get here, it means there were no differences or there was an error
-	err := e.ExecuteTerraform(info)
 	if err != nil {
 		if errors.Is(err, terrerrors.ErrPlanHasDiff) {
 			// Print the error message but return the error to be handled by main.go
