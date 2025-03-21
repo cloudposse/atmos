@@ -42,6 +42,11 @@ func TestValidateFormat(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid yaml format",
+			format:  "yaml",
+			wantErr: false,
+		},
+		{
 			name:    "invalid format",
 			format:  "invalid",
 			wantErr: true,

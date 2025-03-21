@@ -1,0 +1,122 @@
+---
+title: "atmos list vars"
+id: "list-vars"
+sidebar_label: vars
+sidebar_class_name: command
+---
+
+# atmos list vars
+
+The `atmos list vars` command displays component variables across all stacks where the component is used.
+
+## Usage
+
+```shell
+atmos list vars <component> [flags]
+```
+
+## Description
+
+The `atmos list vars` command helps you inspect component variables across different stacks. It provides a tabular view where:
+
+- Each column represents a stack (e.g., dev-ue1, staging-ue1, prod-ue1)
+- Each row represents a variable in the component's configuration
+- Cells contain the variable values for each stack
+
+This command is an alias for `atmos list values --query .vars` and is useful for:
+- Comparing component variables across different environments
+- Verifying configuration consistency across stacks
+- Troubleshooting configuration issues
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The component to list variables for</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--query string`</dt>
+  <dd>Filter the results using YQ expressions (default: `.vars`)</dd>
+  <dt>`--abstract`</dt>
+  <dd>Include abstract components</dd>
+  <dt>`--max-columns int`</dt>
+  <dd>Maximum number of columns to display (default: `50`)</dd>
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dt>`--delimiter string`</dt>
+  <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
+  <dt>`--stack string`</dt>
+  <dd>Filter by stack pattern (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)</dd>
+</dl>
+
+## Examples
+
+List all variables for a component:
+```shell
+atmos list vars vpc
+```
+
+List specific variables using query:
+```shell
+# List specific variable
+atmos list vars vpc --query .vars.tags
+
+# List a nested variable
+atmos list vars vpc --query .vars.settings.vpc
+```
+
+Filter by stack pattern:
+```shell
+# List variables for dev stacks
+atmos list vars vpc --stack '*-dev-*'
+
+# List variables for production stacks
+atmos list vars vpc --stack 'prod-*'
+```
+
+Output in different formats:
+```shell
+# JSON format for machine processing
+atmos list vars vpc --format json
+
+# YAML format for configuration files
+atmos list vars vpc --format yaml
+
+# CSV format for spreadsheet compatibility
+atmos list vars vpc --format csv
+
+# TSV format with tab delimiters
+atmos list vars vpc --format tsv
+```
+
+Include abstract components:
+```shell
+atmos list vars vpc --abstract
+```
+
+Filter by stack and specific variables:
+```shell
+atmos list vars vpc --stack '*-ue2-*' --query .vars.region
+```
+
+## Example Output
+
+```shell
+> atmos list vars vpc
+┌─────────────┬──────────────┬──────────────┬──────────────┐
+│             │   dev-ue1    │  staging-ue1 │   prod-ue1   │
+├─────────────┼──────────────┼──────────────┼──────────────┤
+│ name        │ platform-vpc │ platform-vpc │ platform-vpc │
+│ region      │ us-east-1    │ us-east-1    │ us-east-1    │
+│ environment │ dev          │ staging      │ prod         │
+└─────────────┴──────────────┴──────────────┴──────────────┘
+```
+
+:::tip
+- For wide tables, try using more specific queries or reduce the number of stacks
+- Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
+- Use `--abstract` to include abstract components in the results
+:::
