@@ -19,6 +19,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const keyURL = "url"
+
 // ValidateURI validates URIs
 func ValidateURI(uri string) error {
 	if uri == "" {
@@ -128,9 +130,38 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 		}
 	}
 
+	// Adjust subdirectory if needed.
+	d.adjustSubdir(parsedURL, d.source)
+
+	// Set "depth=1" for a shallow clone if not specified.
+	q := parsedURL.Query()
+	if _, exists := q["depth"]; !exists {
+		q.Set("depth", "1")
+	}
+	parsedURL.RawQuery = q.Encode()
+
 	finalURL := "git::" + parsedURL.String()
+	maskedFinal, err := u.MaskBasicAuth(strings.TrimPrefix(finalURL, "git::"))
+	if err != nil {
+		log.Debug("Masking failed", "error", err)
+	} else {
+		log.Debug("Final URL (masked)", "url", "git::"+maskedFinal)
+	}
 
 	return finalURL, true, nil
+}
+
+// adjustSubdir appends "//." to the path if no subdirectory is specified.
+func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
+	normalizedSource := filepath.ToSlash(source)
+	if normalizedSource != "" && !strings.Contains(normalizedSource, "//") {
+		parts := strings.SplitN(parsedURL.Path, "/", 4)
+		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
+			maskedSrc, _ := u.MaskBasicAuth(source)
+			log.Debug("Detected top-level repo with no subdir: appending '//.'", keyURL, maskedSrc)
+			parsedURL.Path += "//."
+		}
+	}
 }
 
 // RegisterCustomDetectors prepends the custom detector so it runs before
