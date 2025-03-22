@@ -122,6 +122,41 @@ If Atmos does not find an `atmos.yaml` file and the default CLI config is used, 
 
 What follows are all the sections of the `atmos.yaml` configuration file.
 
+## Imports
+
+Additionally, Atmos supports `imports` of other CLI configurations. Use imports to break large Atmos CLI configurations into smaller ones, such as organized by top-level section. File imports are relative to the base path (if `import`  section is set in the config). All imports are processed at the time the configuration is loaded, and then deep-merged in order, so that the last file in the list supersedes settings in the preceding imports. For an example, see [`scenarios/demo-atmos-cli-imports`](https://github.com/cloudposse/atmos/tree/main/tests/fixtures/scenarios/atmos-cli-imports).
+
+:::tip Pro-Tip
+Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
+names/paths (double-star/globstar `**` is supported as well)
+:::
+
+Imports can be any of the following:
+- Remote URL
+- Specific Path
+- Wildcard globs (`*`), including recursive globs (`**`), can be combined (e.g., `**/*` matches all files and subfolders recursively). Only files ending in `.yml` or `.yaml` will be considered for import when using globs.
+
+For example, we can import from multiple locations like this:
+
+```yaml
+import:
+  # Load the Atmos configuration from the main branch of the 'cloudposse/atmos' repository
+  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"
+  # Then merge the configs
+  - "configs.d/**/*"
+  # Finally, override some logging settings
+  - "./logs.yaml"
+```
+Note, templated imports of Atmos configuration are not supported (unlike stacks).
+
+:::warning Be Careful with Remote Imports
+- Always use HTTPS URLs (currently correctly demonstrated in the example).
+- Verify the authenticity of remote sources.
+- Consider pinning to specific commit hashes instead of branch references
+:::
+
+Each configuration file discovered is deep-merged with the preceding configurations.
+
 ## Base Path
 
 The base path for components, stacks, workflows and validation configurations.

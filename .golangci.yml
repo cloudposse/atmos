@@ -117,7 +117,7 @@ linters-settings:
       - name: add-constant
         arguments:
           - maxLitCount: "3"
-            allowStrs: '"","image","error","path","%w","%s"'
+            allowStrs: '"","image","error","path","import","path","%w","%s"'
             allowInts: "0,1,2,3,4"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
       - name: argument-limit
@@ -126,7 +126,7 @@ linters-settings:
       - name: early-return
       - name: comment-spacings
         disabled: false
-        exclude: [""]
+        exclude: []
         arguments:
           - mypragma
           - otherpragma
