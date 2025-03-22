@@ -375,8 +375,8 @@ func ExecuteDescribeStacks(
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
-									atmosConfig,
-									configAndStacksInfo,
+									&atmosConfig,
+									&configAndStacksInfo,
 									settingsSectionStruct,
 									"describe-stacks-all-sections",
 									componentSectionStr,
@@ -577,8 +577,8 @@ func ExecuteDescribeStacks(
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
-									atmosConfig,
-									configAndStacksInfo,
+									&atmosConfig,
+									&configAndStacksInfo,
 									settingsSectionStruct,
 									"templates-describe-stacks-all-atmos-sections",
 									componentSectionStr,

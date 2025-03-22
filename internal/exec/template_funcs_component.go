@@ -14,8 +14,8 @@ import (
 var componentFuncSyncMap = sync.Map{}
 
 func componentFunc(
-	atmosConfig schema.AtmosConfiguration,
-	configAndStacksInfo schema.ConfigAndStacksInfo,
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	component string,
 	stack string,
 ) (any, error) {
@@ -62,7 +62,7 @@ func componentFunc(
 			terraformOutputs = remoteStateBackendStaticTypeOutputs
 		} else {
 			// Execute `terraform output`
-			terraformOutputs, err = execTerraformOutput(&atmosConfig, component, stack, sections)
+			terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections)
 			if err != nil {
 				return nil, err
 			}

@@ -12,7 +12,7 @@ import (
 
 var gomplateDatasourceFuncSyncMap = sync.Map{}
 
-func gomplateDatasourceFunc(atmosConfig schema.AtmosConfiguration, alias string, gomplateData *data.Data, args ...string) (any, error) {
+func gomplateDatasourceFunc(atmosConfig *schema.AtmosConfiguration, alias string, gomplateData *data.Data, args ...string) (any, error) {
 	u.LogTrace(fmt.Sprintf("atmos.GomplateDatasource(): processing datasource alias '%s'", alias))
 
 	// If the result for the alias already exists in the cache, return it

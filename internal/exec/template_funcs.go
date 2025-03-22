@@ -17,8 +17,8 @@ import (
 
 // FuncMap creates and returns a map of template functions
 func FuncMap(
-	atmosConfig schema.AtmosConfiguration,
-	configAndStacksInfo schema.ConfigAndStacksInfo,
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	ctx context.Context,
 	gomplateData *data.Data,
 ) template.FuncMap {
@@ -30,8 +30,8 @@ func FuncMap(
 }
 
 type AtmosFuncs struct {
-	atmosConfig         schema.AtmosConfiguration
-	configAndStacksInfo schema.ConfigAndStacksInfo
+	atmosConfig         *schema.AtmosConfiguration
+	configAndStacksInfo *schema.ConfigAndStacksInfo
 	ctx                 context.Context
 	gomplateData        *data.Data
 }
