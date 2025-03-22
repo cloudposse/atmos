@@ -1,6 +1,12 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
+DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 WARN Vendor config file does not exist. Proceeding without vendor configurations path="{ApiVersion: Kind: Metadata:{Name: Description:} Spec:{Imports:[] Sources:[]}}"
 WARN No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
