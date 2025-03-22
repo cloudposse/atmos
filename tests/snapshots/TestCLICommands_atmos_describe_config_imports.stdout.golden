@@ -10,6 +10,8 @@ components:
         command: terraform
         shell:
             prompt: ""
+        init:
+            pass_vars: false
     helmfile:
         base_path: components/helmfile
         use_eks: true

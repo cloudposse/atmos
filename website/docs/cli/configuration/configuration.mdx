@@ -57,6 +57,8 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: true
+    init:
+      pass_vars: false
   helmfile:
     base_path: components/helmfile
     use_eks: true
@@ -692,6 +694,7 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE         | components.terraform.apply_auto_approve         | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                     |
 | ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT            | components.terraform.deploy_run_init            | Run `terraform init` when executing `atmos terraform deploy` command                                                                                                                                                         |
 | ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE       | components.terraform.init_run_reconfigure       | Run `terraform init -reconfigure` when executing `atmos terraform` commands                                                                                                                                                  |
+| ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS             | components.terraform.init.pass_vars             | Pass the generated varfile to `terraform init` using the `--var-file` flag. [OpenTofu supports passing a varfile to `init`](https://opentofu.org/docs/cli/commands/init/#general-options) to dynamically configure backends  |
 | ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE | components.terraform.auto_generate_backend_file | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                     |
 | ATMOS_COMPONENTS_HELMFILE_COMMAND                     | components.helmfile.command                     | The executable to be called by `atmos` when running Helmfile commands                                                                                                                                                        |
 | ATMOS_COMPONENTS_HELMFILE_BASE_PATH                   | components.helmfile.base_path                   | Path to helmfile components                                                                                                                                                                                                  |

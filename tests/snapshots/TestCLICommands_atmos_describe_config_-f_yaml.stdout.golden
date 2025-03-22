@@ -10,6 +10,8 @@ components:
         command: ""
         shell:
             prompt: ""
+        init:
+            pass_vars: false
     helmfile:
         base_path: ""
         use_eks: true

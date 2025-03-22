@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
+
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -38,6 +39,9 @@ var (
 				InitRunReconfigure:      true,
 				AutoGenerateBackendFile: true,
 				AppendUserAgent:         fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version),
+				Init: schema.TerraformInit{
+					PassVars: false,
+				},
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
