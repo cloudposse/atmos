@@ -1,0 +1,17 @@
+DEBU Using command line argument '--logs-level=Debug'
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+WARN Vendor config file 'vendor' does not exist. Proceeding without vendor configurations
+WARN TTY is not supported. Running in non-interactive mode
+DEBU Entering dry-run flow for component vendoring component=ipinfo
+DEBU CustomGitDetector.Detect called
+DEBU Rewriting SCP-style SSH URL old_url="github.com:cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main" new_url="ssh://github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
+DEBU Reading config param InjectGithubToken=true
+DEBU Injected token env=ATMOS_GITHUB_TOKEN url="ssh://xxx:xxx@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
+DEBU Final URL final_url="git::ssh://xxx:xxx@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?depth=1&ref=main"
+INFO ✓ ipinfo (main)
+INFO Done! Dry run completed. No components vendored.
+
+INFO Vendored 1 components.
+

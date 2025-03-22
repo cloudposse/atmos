@@ -8,12 +8,11 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/charmbracelet/log"
-
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
@@ -335,6 +334,7 @@ func max(a, b int) int {
 
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
+		log.Debug("Downloading and installing package", "package", p.name)
 		if dryRun {
 			return handleDryRunInstall(p)
 		}

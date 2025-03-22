@@ -508,7 +508,7 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded
-		log.Debug("Including", u.TrimBasePathFromPath(tempDir+"/", src))
+		log.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
 }
