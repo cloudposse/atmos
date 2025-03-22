@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/charmbracelet/log"
 	"github.com/samber/lo"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -19,7 +20,7 @@ func componentFunc(
 	component string,
 	stack string,
 ) (any, error) {
-	u.LogTrace(fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
+	log.Debug(fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
 
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
@@ -79,15 +80,15 @@ func componentFunc(
 	componentFuncSyncMap.Store(stackSlug, sections)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace {
-		u.LogTrace(fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'", component, stack))
+		log.Debug(fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'", component, stack))
 
 		if configAndStacksInfo.ComponentType == cfg.TerraformComponentType {
-			u.LogTrace("'outputs' section:")
+			log.Debug("'outputs' section:")
 			y, err2 := u.ConvertToYAML(terraformOutputs)
 			if err2 != nil {
-				u.LogError(err2)
+				log.Error(err2)
 			} else {
-				u.LogTrace(y)
+				log.Debug(y)
 			}
 		}
 	}

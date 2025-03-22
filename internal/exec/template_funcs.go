@@ -41,5 +41,5 @@ func (f AtmosFuncs) Component(component string, stack string) (any, error) {
 }
 
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
-	return gomplateDatasourceFunc(f.atmosConfig, alias, f.gomplateData, args...)
+	return gomplateDatasourceFunc(alias, f.gomplateData, args...)
 }
