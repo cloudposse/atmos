@@ -225,17 +225,17 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 			token = os.Getenv(tokenSource)
 		}
 	case hostBitbucket:
-		tokenSource = "BITBUCKET_TOKEN"
+		tokenSource = "ATMOS_BITBUCKET_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
-			tokenSource = "ATMOS_BITBUCKET_TOKEN"
+			tokenSource = "BITBUCKET_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	case hostGitLab:
-		tokenSource = "GITLAB_TOKEN"
+		tokenSource = "ATMOS_GITLAB_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
-			tokenSource = "ATMOS_GITLAB_TOKEN"
+			tokenSource = "GITLAB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	}
