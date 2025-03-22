@@ -42,3 +42,21 @@ tests:
     expect:
       diff: []
       exit_code: 0
+
+  - name: atmos warns if not in git repo
+    enabled: true
+    snapshot: true
+    description: "Test that atmos warns if not run inside of a git repo"
+    workdir: "/"
+    command: "atmos"
+    args:
+      - version
+    env:
+      ATMOS_LOGS_LEVEL: Warning
+    expect:
+      diff: []
+      stdout:
+        - "You're not inside a git repository. Atmos feels lonely outside - bring it home!"
+      stderr:
+        - "^$"
+      exit_code: 0
