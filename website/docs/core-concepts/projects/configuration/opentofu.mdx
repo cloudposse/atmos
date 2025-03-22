@@ -27,8 +27,51 @@ Additionally, if using Spacelift together with Atmos, make sure you review the [
 
 ## CLI Configuration
 
-All the default configuration settings to support OpenTofu are defined in the [Atmos CLI Configuration](/cli/configuration),
-but can also be overridden at any level of the [Stack](/core-concepts/stacks/#schema) configuration.
+All the default configuration settings to support OpenTofu are defined in the [Atmos CLI Configuration](/cli/configuration).
+
+```yaml
+components:
+  terraform:
+    # The executable to be called by `atmos` when running Terraform commands
+    command: "/usr/bin/tofu"  # or just `tofu`
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_BASE_PATH' ENV var, or '--terraform-dir' command-line argument
+    # Supports both absolute and relative paths
+    base_path: "components/tofu"
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE' ENV var
+    apply_auto_approve: false
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT' ENV var, or '--deploy-run-init' command-line argument
+    deploy_run_init: true
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE' ENV var, or '--init-run-reconfigure' command-line argument
+    init_run_reconfigure: true
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
+    auto_generate_backend_file: false
+    # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT' ENV var, or '--append-user-agent' command-line argument
+    append_user_agent: "Acme/1.0 (Build 1234; arm64)"
+    init:
+      # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS' ENV var, or '--init-pass-vars' command-line argument
+      pass_vars: true
+```
+
+<dl>
+    <dt>components.terraform.apply_auto_approve</dt>
+    <dd>if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without
+        asking for confirmation when executing `terraform apply` command</dd>
+
+    <dt>`components.terraform.deploy_run_init`</dt>
+    <dd>if set to `true`, Atmos runs `terraform init` before executing [`atmos terraform deploy`](/cli/commands/terraform/deploy) command</dd>
+
+    <dt>`components.terraform.init_run_reconfigure`</dt>
+    <dd>if set to `true`, Atmos automatically adds the `-reconfigure` option to update the backend configuration when executing `terraform init` command</dd>
+
+    <dt>`components.terraform.auto_generate_backend_file`</dt>
+    <dd>if set to `true`, Atmos automatically generates the Terraform backend file from the component configuration when executing `terraform plan` and `terraform apply` commands</dd>
+
+    <dt>`components.terraform.init.pass_vars`</dt>
+    <dd>
+        if set to `true`, Atmos automatically passes the generated varfile to the `tofu init` command using the `--var-file` flag.
+        [OpenTofu supports passing a varfile to `init`](https://opentofu.org/docs/cli/commands/init/#general-options) to dynamically configure backends
+    </dd>
+</dl>
 
 To make OpenTofu the default command when running "terraform", modify [`atmos.yaml`](/cli/configuration) to configure the following global settings:
 
