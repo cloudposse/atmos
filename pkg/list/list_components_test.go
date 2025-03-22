@@ -31,7 +31,7 @@ func TestListComponents(t *testing.T) {
 	require.NoError(t, err)
 	dependentsYaml, err := u.ConvertToYAML(output)
 	require.NoError(t, err)
-	
+
 	// Add assertions to validate the output structure
 	assert.NotNil(t, dependentsYaml)
 	assert.Greater(t, len(dependentsYaml), 0)
@@ -52,9 +52,11 @@ func TestListComponentsWithStack(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, output)
 	assert.Greater(t, len(output), 0)
-	assert.ElementsMatch(t, []string{"infra/vpc", "mixin/test-1", "mixin/test-2", "test/test-component", 
-		"test/test-component-override", "test/test-component-override-2", "test/test-component-override-3", 
-		"top-level-component1", "vpc", "vpc/new"}, output)
+	assert.ElementsMatch(t, []string{
+		"infra/vpc", "mixin/test-1", "mixin/test-2", "test/test-component",
+		"test/test-component-override", "test/test-component-override-2", "test/test-component-override-3",
+		"top-level-component1", "vpc", "vpc/new",
+	}, output)
 }
 
 // TestGetStackComponents tests the getStackComponents function.
@@ -222,8 +224,8 @@ func TestFilterAndListComponents(t *testing.T) {
 		"stack2": map[string]any{
 			"components": map[string]any{
 				"terraform": map[string]any{
-					"vpc":     map[string]any{},
-					"eks":     map[string]any{},
+					"vpc":         map[string]any{},
+					"eks":         map[string]any{},
 					"elasticache": map[string]any{},
 				},
 			},
