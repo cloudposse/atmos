@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/log"
@@ -169,7 +170,10 @@ func TestMatchFiles(t *testing.T) {
 			if tt.wantErr {
 				return
 			}
-			if runtime.GOOS == "darwin" {
+			if runtime.GOOS == "darwin" &&
+				// We use this because when we pass absolute path the matcher does not try to find the absolute path which would have introduce
+				// `/private` at the start of the directory.
+				!strings.Contains(tt.name, "absolute") {
 				for i := range tt.want {
 					tt.want[i] = "/" + filepath.Join("private", tt.want[i])
 				}
