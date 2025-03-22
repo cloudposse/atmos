@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/hairyhenderson/gomplate/v3/data"
 )
 

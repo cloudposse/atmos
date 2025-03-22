@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/samber/lo"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
