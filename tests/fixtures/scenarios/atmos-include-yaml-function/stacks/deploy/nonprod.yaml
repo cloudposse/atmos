@@ -14,3 +14,8 @@ components:
         boolean_var: !include config/vars.yaml .boolean_var
         list_var: !include config/vars.tfvars .list_var
         map_var: !include config/vars.tfvars .map_var
+        # Relative paths are relative to the file containing the `!include` directive
+        complex_yq_var: !include '"../../config/vars.json" ".list_var + .other_list_var"'
+        hyphenated_list_var: !include '"../../config/vars.json" ".list_var + .other_list_var + .list_objects[0].hyphenated-list-var"'
+        ### http include with space based jq filter requires triple quotes.
+        http_var: !include '"https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json" """.definitions.backend_type.enum + .definitions.metadata.properties.type.enum"""'
