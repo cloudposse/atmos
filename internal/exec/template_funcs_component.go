@@ -27,16 +27,16 @@ func componentFunc(
 	// If the result for the component in the stack already exists in the cache, return it
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
-		if atmosConfig.Logs.Level == u.LogLevelTrace {
-			u.LogTrace(fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
+		if atmosConfig.Logs.Level == u.LogLevelDebug {
+			log.Debug(fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
 
 			if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
-				u.LogTrace("'outputs' section:")
+				log.Debug("'outputs' section:")
 				y, err2 := u.ConvertToYAML(outputsSection)
 				if err2 != nil {
-					u.LogError(err2)
+					log.Error(err2)
 				} else {
-					u.LogTrace(y)
+					log.Debug(y)
 				}
 			}
 		}
@@ -79,7 +79,7 @@ func componentFunc(
 	// Cache the result
 	componentFuncSyncMap.Store(stackSlug, sections)
 
-	if atmosConfig.Logs.Level == u.LogLevelTrace {
+	if atmosConfig.Logs.Level == u.LogLevelDebug {
 		log.Debug(fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'", component, stack))
 
 		if configAndStacksInfo.ComponentType == cfg.TerraformComponentType {
