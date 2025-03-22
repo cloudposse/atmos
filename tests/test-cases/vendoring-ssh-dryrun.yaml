@@ -54,6 +54,6 @@ tests:
     expect:
       diff: []
     stdout:
-      - !not 'supersecret'  
+      - !not 'supersecret'
       - !not 'ATMOS_GITHUB_TOKEN'
     exit_code: 0

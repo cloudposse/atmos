@@ -18,3 +18,4 @@ stacks:
 logs:
   file: "/dev/stderr"
   level: Info
+  

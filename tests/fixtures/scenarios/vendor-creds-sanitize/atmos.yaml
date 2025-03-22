@@ -1,4 +1,3 @@
-
 base_path: "./"
 settings:
   inject_github_token: true
