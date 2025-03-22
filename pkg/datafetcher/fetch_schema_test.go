@@ -38,7 +38,7 @@ func TestGetDataFetcher(t *testing.T) {
 	}
 
 	// Test Atmos fetcher
-	_, err = dataFetcher.getDataFetcher("atmos://config")
+	_, err = dataFetcher.getDataFetcher("atmos://schemas/atmos/manifest/1.0")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

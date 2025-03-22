@@ -1,12 +1,13 @@
 package datafetcher
 
 import (
-	_ "embed"
+	"embed"
 	"errors"
+	"strings"
 )
 
-//go:embed schema/atmos-manifest.json
-var atmosSchema string
+//go:embed schemas/*
+var schemaFiles embed.FS
 
 // atmosFetcher fetches data from the in-memory Atmos storage.
 type atmosFetcher struct{}
@@ -14,13 +15,11 @@ type atmosFetcher struct{}
 // Sentinel error for quick checks.
 var ErrAtmosSchemaNotFound = errors.New("atmos schema not found")
 
-var atmosData = map[string][]byte{
-	"atmos://schema": []byte(atmosSchema),
-}
-
 func (a atmosFetcher) FetchData(source string) ([]byte, error) {
-	if data, exists := atmosData[source]; exists {
-		return data, nil
+	source = strings.TrimPrefix(source, "atmos://")
+	data, err := schemaFiles.ReadFile(source + ".json")
+	if err != nil {
+		return nil, ErrAtmosSchemaNotFound
 	}
-	return nil, ErrAtmosSchemaNotFound
+	return data, nil
 }
