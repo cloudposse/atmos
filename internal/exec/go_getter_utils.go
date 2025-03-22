@@ -20,6 +20,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const doubleSlash = "://"
+
 // ValidateURI validates URIs
 func ValidateURI(uri string) error {
 	if uri == "" {
@@ -41,8 +43,8 @@ func ValidateURI(uri string) error {
 		if !strings.Contains(uri[6:], "/") {
 			return fmt.Errorf("invalid OCI URI format")
 		}
-	} else if strings.Contains(uri, "://") {
-		scheme := strings.Split(uri, "://")[0]
+	} else if strings.Contains(uri, doubleSlash) {
+		scheme := strings.Split(uri, doubleSlash)[0]
 		if !IsValidScheme(scheme) {
 			return fmt.Errorf("unsupported URI scheme: %s", scheme)
 		}
@@ -146,7 +148,7 @@ func (d *CustomGitDetector) ensureScheme(src string) string {
 	// Strip any existing "git::" prefix
 	src = strings.TrimPrefix(src, GitPrefix)
 
-	if !strings.Contains(src, "://") {
+	if !strings.Contains(src, doubleSlash) {
 		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
 			maskedOld, _ := u.MaskBasicAuth(src)
 			maskedNew, _ := u.MaskBasicAuth(newSrc)
@@ -279,10 +281,10 @@ func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
 
 // RegisterCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
+func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration, source string) {
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitDetector{AtmosConfig: atmosConfig},
+			&CustomGitDetector{AtmosConfig: atmosConfig, source: source},
 		},
 		getter.Detectors...,
 	)
@@ -300,7 +302,7 @@ func GoGetterGet(
 	defer cancel()
 
 	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
+	RegisterCustomDetectors(atmosConfig, src)
 
 	client := &getter.Client{
 		Ctx: ctx,
