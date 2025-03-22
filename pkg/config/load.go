@@ -47,6 +47,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		}
 		return atmosConfig, nil
 	}
+
 	// Load configuration from different sources.
 	if err := loadConfigSources(v, configAndStacksInfo); err != nil {
 		return atmosConfig, err
@@ -61,16 +62,18 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			return atmosConfig, err
 		}
 	}
-	// get dir of atmosConfigFilePath
-	atmosConfigDir := filepath.Dir(v.ConfigFileUsed())
-	atmosConfig.CliConfigPath = atmosConfigDir
-	// Set the CLI config path in the atmosConfig struct
-	if atmosConfig.CliConfigPath != "" && !filepath.IsAbs(atmosConfig.CliConfigPath) {
-		absPath, err := filepath.Abs(atmosConfig.CliConfigPath)
-		if err != nil {
-			return atmosConfig, err
+	if v.ConfigFileUsed() != "" {
+		// get dir of atmosConfigFilePath
+		atmosConfigDir := filepath.Dir(v.ConfigFileUsed())
+		atmosConfig.CliConfigPath = atmosConfigDir
+		// Set the CLI config path in the atmosConfig struct
+		if !filepath.IsAbs(atmosConfig.CliConfigPath) {
+			absPath, err := filepath.Abs(atmosConfig.CliConfigPath)
+			if err != nil {
+				return atmosConfig, err
+			}
+			atmosConfig.CliConfigPath = absPath
 		}
-		atmosConfig.CliConfigPath = absPath
 	}
 	// We want the editorconfig color by default to be true
 	atmosConfig.Validate.EditorConfig.Color = true

@@ -72,6 +72,10 @@ const (
 
 	QueryFlag = "--query"
 
+	ProcessTemplatesFlag = "--process-templates"
+	ProcessFunctionsFlag = "--process-functions"
+	SkipFlag             = "--skip"
+
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro

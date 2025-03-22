@@ -420,6 +420,9 @@ type ConfigAndStacksInfo struct {
 	Query                         string
 	AtmosConfigFilesFromArg       []string
 	AtmosConfigDirsFromArg        []string
+	ProcessTemplates              bool
+	ProcessFunctions              bool
+	Skip                          []string
 }
 
 // Workflows
