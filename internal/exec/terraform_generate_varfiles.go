@@ -247,6 +247,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
 					atmosConfig,
+					configAndStacksInfo,
 					settingsSectionStruct,
 					"terraform-generate-varfiles",
 					componentSectionStr,

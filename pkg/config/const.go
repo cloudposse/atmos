@@ -39,6 +39,9 @@ const (
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
 
+	TerraformComponentType = "terraform"
+	HelmfileComponentType  = "helmfile"
+
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
 

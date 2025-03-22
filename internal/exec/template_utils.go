@@ -31,7 +31,7 @@ func ProcessTmpl(
 	ctx := context.TODO()
 
 	// Add Gomplate, Sprig and Atmos template functions
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(schema.AtmosConfiguration{}, ctx, &d))
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(schema.AtmosConfiguration{}, schema.ConfigAndStacksInfo{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -63,6 +63,7 @@ func ProcessTmpl(
 // ProcessTmplWithDatasources parses and executes Go templates with datasources
 func ProcessTmplWithDatasources(
 	atmosConfig schema.AtmosConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
 	settingsSection schema.Settings,
 	tmplName string,
 	tmplValue string,
@@ -145,7 +146,7 @@ func ProcessTmplWithDatasources(
 		}
 
 		// Atmos functions
-		funcs = lo.Assign(funcs, FuncMap(atmosConfig, context.TODO(), &d))
+		funcs = lo.Assign(funcs, FuncMap(atmosConfig, configAndStacksInfo, context.TODO(), &d))
 
 		// Process and add environment variables
 		for k, v := range templateSettings.Env {
