@@ -40,6 +40,9 @@ components:
     auto_generate_backend_file: false
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT' ENV var, or '--append-user-agent' command-line argument
     append_user_agent: "Acme/1.0 (Build 1234; arm64)"
+    init:
+      # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS' ENV var, or '--init-pass-vars' command-line argument
+      pass_vars: false
 ```
 
 <dl>
