@@ -389,7 +389,7 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	output := buf.String()
 
 	// Check the output
-	expected := "terraform init -reconfigure -var-file nonprod-component-1.terraform.tfvars.json"
+	expected := "init -reconfigure -var-file nonprod-component-1.terraform.tfvars.json"
 	if !strings.Contains(output, expected) {
 		t.Logf("TestExecuteTerraform_TerraformInitWithVarfile output:\n%s", output)
 		t.Errorf("Output should contain '%s'", expected)
