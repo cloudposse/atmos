@@ -8,15 +8,6 @@
 # It supports POSIX-style Globs for file names/paths (double-star '**' is supported)
 # https://en.wikipedia.org/wiki/Glob_(programming)
 
-# Base path for components, stacks and workflows configurations.
-# Can also be set using 'ATMOS_BASE_PATH' ENV var, or '--base-path' command-line argument.
-# Supports both absolute and relative paths.
-# If not provided or is an empty string, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
-# are independent settings (supporting both absolute and relative paths).
-# If 'base_path' is provided, 'components.terraform.base_path', 'components.helmfile.base_path', 'stacks.base_path' and 'workflows.base_path'
-# are considered paths relative to 'base_path'.
-base_path: ""
-
 vendor:
   # Path to vendor configuration file or directory containing vendor files
   # Supports both absolute and relative paths

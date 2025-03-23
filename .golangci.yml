@@ -9,14 +9,15 @@ linters:
   enable:
     - bodyclose # Check that HTTP response body is closed
     - cyclop # Check cyclomatic complexity
-    - err113 # Detects the use of the deprecated context.Done() method
+    - dogsled # Check for assignments with too many blank identifiers
+    - dupl # Check for duplicated code
+    - err113 # Enforces best practices for error handling, specifically around comparing errors.
     - errcheck # Check that errors are handled
     - forbidigo # Forbid specific function calls
     - funlen # Enforce function length limits
     - gocognit # Check cognitive complexity
     - gocritic # Enable additional checks for code issues
     - godot # Enforce comment formatting
-    - gofmt # Enforce gofmt style
     - gofumpt # Enforce consistent formatting
     - goimports # Enforce import formatting
     - gosec # Inspect source code for security problems
@@ -26,6 +27,7 @@ linters:
     - misspell # Detect spelling mistakes
     - nestif # Detect deeply nested if statements
     - nilerr # Finds the code that returns nil even if it checks that the error is not nil.
+    - nolintlint # Check for nolint comments
     - revive # Fast, configurable linter
     - rowserrcheck # Check that rows are closed
     - staticcheck # Perform static analysis
@@ -36,6 +38,14 @@ linters:
     - whitespace # Check for leading whitespace
 
 linters-settings:
+  dogsled:
+    # Checks assignments with too many blank identifiers.
+    # Default: 2
+    max-blank-identifiers: 3
+
+  dupl:
+    threshold: 150 # Tokens count to trigger issue.
+
   funlen:
     lines: 60 # Maximum number of lines per function
     statements: 40 # Maximum number of statements per function
@@ -97,6 +107,9 @@ linters-settings:
             skipBlankLines: true
       - name: function-length
         arguments: [50, 60] # Max lines per function
+      - name: function-result-limit
+        severity: warning
+        arguments: [3] # Functions should return at most 2 values; use objects for better readability and maintainability
       - name: cognitive-complexity
         arguments: [25] # Max cognitive complexity
       - name: cyclomatic
@@ -104,7 +117,7 @@ linters-settings:
       - name: add-constant
         arguments:
           - maxLitCount: "3"
-            allowStrs: '""'
+            allowStrs: '"","image","error","path","import","path","%w","%s"'
             allowInts: "0,1,2,3,4"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
       - name: argument-limit
@@ -114,7 +127,7 @@ linters-settings:
       - name: comment-spacings
         severity: warning
         disabled: false
-        exclude: [""]
+        exclude: []
         arguments:
           - mypragma
           - otherpragma
@@ -160,16 +173,38 @@ linters-settings:
     # Minimal complexity of if statements to report.
     min-complexity: 4
 
+severity:
+  default-severity: error
+  case-sensitive: true
+  rules:
+    # Downgrade severity for specific linters until we increase the code quality
+    # to avoid overwhelming PRs with too many required changes.
+    - linters:
+        - function-length
+        - function-result-limit
+        - nestif
+        - cognitive-complexity
+        - cyclomatic
+        - nolintlint
+      severity: warning
+
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-dirs:
+    - experiments/.*
   exclude-rules:
     - path: _test\.go$ # Ignore test files for specific linters
       linters:
+        - err113
+        - errcheck
         - funlen
-        - revive
         - gci
+        - gosec
+        - revive
 
 output:
+  sort-results: true
   formats:
     - format: colored-line-number
+      path: stderr
