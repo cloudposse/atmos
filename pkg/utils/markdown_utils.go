@@ -74,13 +74,13 @@ func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 	// Find the executed command's exit code from the error
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
-		os.Exit(exitError.ExitCode())
+		OsExit(exitError.ExitCode())
 	}
 
 	// TODO: Refactor so that we only call `os.Exit` in `main()` or `init()` functions.
 	// Exiting here makes it difficult to test.
 	// revive:disable-next-line:deep-exit
-	os.Exit(1)
+	OsExit(1)
 }
 
 // PrintInvalidUsageErrorAndExit prints a message about the incorrect command usage and exist with the exit code 1.

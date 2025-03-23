@@ -64,8 +64,9 @@ type TestCase struct {
 	Env         map[string]string `yaml:"env"`         // Environment variables
 	Expect      Expectation       `yaml:"expect"`      // Expected output
 	Tty         bool              `yaml:"tty"`         // Enable TTY simulation
-	Snapshot    bool              `yaml:"snapshot"`    // Enable snapshot comparison
-	Clean       bool              `yaml:"clean"`       // Removes untracked files in work directory
+	New         bool              `yaml:"new"`
+	Snapshot    bool              `yaml:"snapshot"` // Enable snapshot comparison
+	Clean       bool              `yaml:"clean"`    // Removes untracked files in work directory
 	Skip        struct {
 		OS MatchPattern `yaml:"os"`
 	} `yaml:"skip"`
@@ -589,7 +590,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	tc.Env["PATH"] = os.Getenv("PATH")
 
 	// Prepare the command using the context
-	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
+	cmdExec := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
 	// Set environment variables without inheriting from the current environment.
 	// This ensures an isolated test environment, preventing unintended side effects
@@ -598,14 +599,14 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	for key, value := range tc.Env {
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
-	cmd.Env = envVars
+	cmdExec.Env = envVars
 
 	var stdout, stderr bytes.Buffer
 	var exitCode int
 
 	if tc.Tty {
 		// Run the command in TTY mode
-		ptyOutput, err := simulateTtyCommand(t, cmd, "")
+		ptyOutput, err := simulateTtyCommand(t, cmdExec, "")
 
 		// Check if the context timeout was exceeded
 		if ctx.Err() == context.DeadlineExceeded {
@@ -631,14 +632,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			}
 		}
 		stdout.WriteString(ptyOutput)
+	} else if tc.New {
+		exitCode, stdout, stderr = executeCommand(t, tc)
 	} else {
 		// Run the command in non-TTY mode
 
 		// Attach stdout and stderr buffers for non-TTY execution
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+		cmdExec.Stdout = &stdout
+		cmdExec.Stderr = &stderr
 
-		err := cmd.Run()
+		err := cmdExec.Run()
 		if ctx.Err() == context.DeadlineExceeded {
 			// Handle the timeout case first
 			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)

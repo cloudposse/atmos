@@ -17,6 +17,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -219,7 +220,7 @@ func preCustomCommand(
 				)
 			}
 			u.LogInfo(sb.String())
-			os.Exit(1)
+			utils.OsExit(1)
 		} else {
 			// truly invalid, nothing to do
 			u.PrintErrorMarkdownAndExit("Invalid command", errors.New(
@@ -281,7 +282,7 @@ func preCustomCommand(
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
 		_ = cmd.Help()
-		os.Exit(0)
+		utils.OsExit(0)
 	}
 }
 
@@ -507,7 +508,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			printMessageForMissingAtmosConfig(atmosConfig)
-			os.Exit(1)
+			utils.OsExit(1)
 		}
 	}
 }
@@ -613,7 +614,7 @@ func isVersionCommand() bool {
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
 		cmd.Help()
-		os.Exit(0)
+		utils.OsExit(0)
 	}
 }
 
@@ -626,7 +627,7 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
 		showErrorExampleFromMarkdown(cmd, args[0])
 	}
-	os.Exit(1)
+	utils.OsExit(1)
 }
 
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
@@ -640,7 +641,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 		}
 	}
 	showUsageExample(cmd, unknownCommand)
-	os.Exit(1)
+	utils.OsExit(1)
 	return nil
 }
 

@@ -43,6 +43,7 @@ tests:
   - name: "Valid Log Level in Config File"
     enabled: true
     snapshot: true
+    new: true
     description: "Test validation of valid log level in atmos.yaml config file"
     workdir: "fixtures/scenarios/valid-log-level"
     env:
@@ -58,6 +59,7 @@ tests:
       exit_code: 0
 
   - name: "Valid Log Level in Environment Variable"
+    new: true
     enabled: true
     snapshot: true
     description: "Test validation of valid log level in ATMOS_LOGS_LEVEL env var"
@@ -79,6 +81,7 @@ tests:
 
   - name: "Valid Log Level in Command Line Flag"
     enabled: true
+    new: true
     snapshot: true
     description: "Test validation of valid log level in --logs-level flag"
     workdir: "../"
@@ -98,6 +101,7 @@ tests:
         - "^$"
       exit_code: 0
   - name: "Valid log level in env should be priortized over config"
+    new: true
     enabled: true
     snapshot: true
     description: "Test validation of env priority over config"
@@ -116,6 +120,7 @@ tests:
         - "DEBU"
       exit_code: 0
   - name: "Valid log level in flag should be priortized over env and config"
+    new: true
     enabled: true
     snapshot: true
     description: "Test validation of env priority over config"
@@ -136,6 +141,7 @@ tests:
         - "DEBU"
       exit_code: 0
   - name: "Valid log file in env should be priortized over config"
+    new: true
     enabled: true
     snapshot: true
     description: "Test validation of env priority over config"
@@ -156,6 +162,7 @@ tests:
         - "DEBU"
       exit_code: 0
   - name: "Valid log file in flag should be priortized over env and config"
+    new: true
     enabled: true
     snapshot: true
     description: "Test validation of env priority over config"

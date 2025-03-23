@@ -7,6 +7,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/cloudposse/atmos/pkg/version"
@@ -34,7 +35,8 @@ func (v versionExec) Execute(checkFlag bool) {
 	err := v.printStyledText("ATMOS")
 	if err != nil {
 		//nolint:revive
-		log.Fatal(err)
+		log.Error(err)
+		utils.OsExit(1)
 	}
 
 	atmosIcon := "\U0001F47D"

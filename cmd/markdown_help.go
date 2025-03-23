@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 //go:embed markdown/*
@@ -46,7 +47,8 @@ var examples map[string]ExampleContent = map[string]ExampleContent{
 func init() {
 	files, err := fs.ReadDir(usageFiles, "markdown")
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		utils.OsExit(1)
 	}
 
 	for _, file := range files {

@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 
+	utils2 "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -152,7 +152,7 @@ func runMainLogic() {
 		for _, file := range filePaths {
 			u.LogInfo(file)
 		}
-		os.Exit(0)
+		utils2.OsExit(0)
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
@@ -160,7 +160,7 @@ func runMainLogic() {
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
-		os.Exit(1)
+		utils2.OsExit(1)
 	}
 	u.PrintMessage("No errors found")
 }
