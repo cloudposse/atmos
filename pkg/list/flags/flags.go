@@ -41,7 +41,7 @@ func AddCommonListFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("format", "", "Output format: `table`, `json`, `yaml`, `csv`, `tsv`")
 	cmd.PersistentFlags().Int("max-columns", 0, "Maximum number of columns to display")
 	cmd.PersistentFlags().String("delimiter", "", "Delimiter for CSV/TSV output")
-	cmd.PersistentFlags().String("stack", "", "Stack pattern to filter by")
+	cmd.PersistentFlags().StringP("stack", "s", "", "Stack pattern to filter by")
 	cmd.PersistentFlags().String("query", "", "YQ expression to filter values (e.g., `.vars.region`)")
 }
 
