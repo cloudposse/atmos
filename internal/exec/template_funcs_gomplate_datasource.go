@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"fmt"
 	"sync"
 
 	log "github.com/charmbracelet/log"
@@ -11,7 +10,7 @@ import (
 var gomplateDatasourceFuncSyncMap = sync.Map{}
 
 func gomplateDatasourceFunc(alias string, gomplateData *data.Data, args ...string) (any, error) {
-  log.Debug("atmos.GomplateDatasource(): processing datasource", "alias", alias)
+	log.Debug("atmos.GomplateDatasource(): processing datasource", "alias", alias)
 
 	// If the result for the alias already exists in the cache, return it
 	existingResult, found := gomplateDatasourceFuncSyncMap.Load(alias)
@@ -27,7 +26,7 @@ func gomplateDatasourceFunc(alias string, gomplateData *data.Data, args ...strin
 	// Cache the result
 	gomplateDatasourceFuncSyncMap.Store(alias, result)
 
-	log.Debug("atmos.GomplateDatasource(): processed datasource", "alias",  alias, "result", result)
+	log.Debug("atmos.GomplateDatasource(): processed datasource", "alias", alias, "result", result)
 
 	return result, nil
 }
