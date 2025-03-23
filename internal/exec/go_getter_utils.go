@@ -20,7 +20,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const doubleSlash = "://"
+const schemeSeparator = "://"
 
 // ValidateURI validates URIs
 func ValidateURI(uri string) error {
@@ -43,8 +43,8 @@ func ValidateURI(uri string) error {
 		if !strings.Contains(uri[6:], "/") {
 			return fmt.Errorf("invalid OCI URI format")
 		}
-	} else if strings.Contains(uri, doubleSlash) {
-		scheme := strings.Split(uri, doubleSlash)[0]
+	} else if strings.Contains(uri, schemeSeparator) {
+		scheme := strings.Split(uri, schemeSeparator)[0]
 		if !IsValidScheme(scheme) {
 			return fmt.Errorf("unsupported URI scheme: %s", scheme)
 		}
@@ -148,7 +148,7 @@ func (d *CustomGitDetector) ensureScheme(src string) string {
 	// Strip any existing "git::" prefix
 	src = strings.TrimPrefix(src, GitPrefix)
 
-	if !strings.Contains(src, doubleSlash) {
+	if !strings.Contains(src, schemeSeparator) {
 		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
 			maskedOld, _ := u.MaskBasicAuth(src)
 			maskedNew, _ := u.MaskBasicAuth(newSrc)
