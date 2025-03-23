@@ -15,7 +15,7 @@ func TestAtmosFetcher(t *testing.T) {
 		source string
 		err    error
 	}{
-		{"Valid key should work", "atmos://schemas/atmos/manifest/1.0", nil},
+		{"Valid key should work", "atmos://schema/atmos/manifest/1.0", nil},
 		{"Invalid key should not work", "atmos://unknown", ErrAtmosSchemaNotFound},
 	}
 	for _, tt := range tests {
@@ -38,7 +38,7 @@ func TestGetDataFetcher(t *testing.T) {
 	}
 
 	// Test Atmos fetcher
-	_, err = dataFetcher.getDataFetcher("atmos://schemas/atmos/manifest/1.0")
+	_, err = dataFetcher.getDataFetcher("atmos://schema/atmos/manifest/1.0")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}

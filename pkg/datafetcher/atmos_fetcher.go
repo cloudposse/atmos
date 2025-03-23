@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-//go:embed schemas/*
+//go:embed schema/*
 var schemaFiles embed.FS
 
 // atmosFetcher fetches data from the in-memory Atmos storage.
