@@ -45,6 +45,10 @@ func PrintErrorMarkdown(title string, err error, suggestion string) {
 	}
 	// Print stack trace
 	if log.GetLevel() == log.DebugLevel {
+		// Just in case debug.PrintStack panics
+		defer func() {
+			recover()
+		}()
 		debug.PrintStack()
 	}
 }

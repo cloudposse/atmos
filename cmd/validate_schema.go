@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -31,6 +33,9 @@ var ValidateSchemaCmd = &cobra.Command{
 			schema = os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 		}
 		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
+			if errors.Is(err, exec.ErrInvalidYAML) {
+				utils.OsExit(1)
+			}
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
