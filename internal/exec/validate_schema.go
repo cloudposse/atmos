@@ -87,7 +87,7 @@ func (av *atmosValidatorExecuter) printValidation(schema string, files []string)
 		}
 		log.Error("Invalid YAML:")
 		for _, err := range validationErrors {
-			log.Error(fmt.Sprintf("- %s\n", err))
+			log.Error(fmt.Sprintf("- %s", err))
 			count++
 		}
 	}

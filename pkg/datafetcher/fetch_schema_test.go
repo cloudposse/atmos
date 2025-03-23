@@ -15,7 +15,7 @@ func TestAtmosFetcher(t *testing.T) {
 		source string
 		err    error
 	}{
-		{"Valid key should work", "atmos://schema", nil},
+		{"Valid key should work", "atmos://schemas/atmos/manifest/1.0", nil},
 		{"Invalid key should not work", "atmos://unknown", ErrAtmosSchemaNotFound},
 	}
 	for _, tt := range tests {

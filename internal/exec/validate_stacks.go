@@ -413,7 +413,7 @@ func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, erro
 
 func getEmbeddedSchemaPath(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	fetcher := datafetcher.NewDataFetcher(atmosConfig)
-	embedded, err := fetcher.GetData("atmos://schemas/atmos/atmos-manifest/1.0")
+	embedded, err := fetcher.GetData("atmos://schemas/atmos/manifest/1.0")
 	if err != nil {
 		return "", err
 	}
