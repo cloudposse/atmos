@@ -8,9 +8,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCLITerraformClean(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -148,18 +154,6 @@ func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string)
 	}
 }
 
-func runCLITerraformClean(t *testing.T, binaryPath string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	t.Logf("Clean command output:\n%s", stdout.String())
-	if err != nil {
-		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
-	}
-}
-
 func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
 	cmdArgs := append([]string{"terraform", "clean"}, args...)
 	cmd := exec.Command(binaryPath, cmdArgs...)
@@ -170,5 +164,45 @@ func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
 	t.Logf("Clean command output:\n%s", stdout.String())
 	if err != nil {
 		t.Fatalf("Failed to run terraform clean: %v", stderr.String())
+	}
+}
+
+func TestCollapseExtraSlashesHandlesOnlySlashes(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		// Basic cases with only slashes
+		{"///", "/"},
+		{"/", "/"},
+		{"//", "/"},
+		{"", ""},
+
+		// Relative paths
+		{"..//path", "../path"},
+		{"/path//to//file", "/path/to/file"},
+		{"./../path", "./../path"}, // No change expected
+
+		// Protocol handling
+		{"https://", "https://"},
+		{"http://", "http://"},
+		{"http://example.com//path//", "http://example.com/path/"},
+		{"https:////example.com", "https://example.com"}, // Normalize after protocol
+		{"http:/example.com", "http://example.com"},      // Fix missing slashes after protocol
+
+		// Complex URLs
+		{"http://example.com:8080//api//v1", "http://example.com:8080/api/v1"},
+		{"http://user:pass@example.com//path", "http://user:pass@example.com/path"},
+
+		// Edge cases for trimming
+		{"http:////example.com", "http://example.com"}, // Extra slashes after protocol
+		{"http:///path", "http://path"},                // Implicit empty authority
+	}
+
+	for _, tc := range testCases {
+		result := collapseExtraSlashes(tc.input)
+		if result != tc.expected {
+			t.Errorf("collapseExtraSlashes(%q) = %q, want %q", tc.input, result, tc.expected)
+		}
 	}
 }

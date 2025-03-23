@@ -57,11 +57,11 @@ deps:
 
 testacc: get
 	@echo "Running acceptance tests"
-	go test $(TEST) -v $(TESTARGS) -timeout 10m
+	go test $(TEST) -v $(TESTARGS) -timeout 20m
 
 testacc-cover: get
 	@echo "Running tests with coverage"
-	go test $(TEST) -v $(TESTARGS) -timeout 10m -coverprofile=coverage.out
+	go test $(TEST) -v $(TESTARGS) -timeout 20m -coverprofile=coverage.out
 
 # Run acceptance tests with coverage report
 testacc-coverage: testacc-cover

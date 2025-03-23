@@ -7,13 +7,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// CustomGitHubDetector intercepts GitHub URLs and transforms them
-// into something like git::https://<token>@github.com/... so we can
-// do a git-based clone with a token.
+// CustomGitHubDetector Intercepts GitHub URLs and transforms them
+// into something like git::https://<token>@github.com/...
+// so we can do a git-based clone with a token.
 type CustomGitHubDetector struct {
 	AtmosConfig *schema.AtmosConfiguration
 }
