@@ -46,7 +46,7 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing CLI config: %v", err)
 	}
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,7 +15,7 @@ import (
 // TestExecuteTerraform_ExportEnvVar check that when executing the terraform apply command.
 // It checks that the environment variables are correctly exported and used.
 // Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
-// Check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` is refer to directory.
+// Check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` refers to directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -329,6 +330,69 @@ func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
 	err = ExecuteTerraform(info)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "invalid")
+}
+
+func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "../../tests/fixtures/scenarios/terraform-init"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	info := schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            "nonprod",
+		StackFile:        "",
+		ComponentType:    "terraform",
+		ComponentFromArg: "component-1",
+		SubCommand:       "init",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(w)
+
+	err = ExecuteTerraform(info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+
+	// Restore stderr
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stderr = oldStderr
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	// Check the output
+	expected := "terraform init -reconfigure -var-file nonprod-component-1.terraform.tfvars.json"
+	if !strings.Contains(output, expected) {
+		t.Errorf("Output should contain '%s'", expected)
+	}
 }
 
 // Helper Function to extract key-value pairs from a string.
