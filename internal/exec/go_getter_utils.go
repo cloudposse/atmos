@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/charmbracelet/log"
@@ -21,6 +22,9 @@ import (
 )
 
 const schemeSeparator = "://"
+
+// detectorsMutex guards modifications to getter.Detectors.
+var detectorsMutex sync.Mutex
 
 // ValidateURI validates URIs
 func ValidateURI(uri string) error {
@@ -279,9 +283,12 @@ func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
 	}
 }
 
-// RegisterCustomDetectors prepends the custom detector so it runs before
-// the built-in ones. Any code that calls go-getter should invoke this.
+// RegisterCustomDetectors prepends the custom detector so it runs before the built-in ones.
+// Any code that calls go-getter should invoke this.
 func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration, source string) {
+	detectorsMutex.Lock()
+	defer detectorsMutex.Unlock()
+
 	getter.Detectors = append(
 		[]getter.Detector{
 			&CustomGitDetector{AtmosConfig: atmosConfig, source: source},
