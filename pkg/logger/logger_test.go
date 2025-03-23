@@ -197,8 +197,8 @@ func TestSetAtmosLogLevel(t *testing.T) {
 	var buf bytes.Buffer
 	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
 
-	// Test different log levels
-	tests := []struct {
+	// Test valid log levels
+	validTests := []struct {
 		level    string
 		expected log.Level
 	}{
@@ -207,13 +207,18 @@ func TestSetAtmosLogLevel(t *testing.T) {
 		{"Info", log.InfoLevel},
 		{"Warning", log.WarnLevel},
 		{"Off", log.FatalLevel + 1},
-		{"Invalid", log.InfoLevel}, // Default
 	}
 
-	for _, test := range tests {
-		SetAtmosLogLevel(atmosLogger, test.level)
+	for _, test := range validTests {
+		err := SetAtmosLogLevel(atmosLogger, test.level)
+		assert.NoError(t, err)
 		assert.Equal(t, test.expected, atmosLogger.GetLevel())
 	}
+
+	// Test invalid log level
+	err := SetAtmosLogLevel(atmosLogger, "Invalid")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Invalid log level")
 }
 
 func TestLogger_isLevelEnabled(t *testing.T) {

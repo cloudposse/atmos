@@ -174,7 +174,13 @@ func NewDefaultAtmosLogger() *AtmosLogger {
 }
 
 // SetAtmosLogLevel configures the logger level based on Atmos log level strings.
-func SetAtmosLogLevel(l *AtmosLogger, level string) {
+func SetAtmosLogLevel(l *AtmosLogger, level string) error {
+	// Validate log level
+	_, err := ParseLogLevel(level)
+	if err != nil {
+		return err
+	}
+
 	switch level {
 	case "Trace", "Debug":
 		l.SetLevel(log.DebugLevel)
@@ -184,7 +190,6 @@ func SetAtmosLogLevel(l *AtmosLogger, level string) {
 		l.SetLevel(log.WarnLevel)
 	case "Off":
 		l.SetLevel(log.FatalLevel + 1) // A level higher than any defined level
-	default:
-		l.SetLevel(log.InfoLevel)
 	}
+	return nil
 }

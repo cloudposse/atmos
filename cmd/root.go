@@ -105,16 +105,14 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) error {
 		options,
 	)
 
-	// Set the level based on configuration.
-	logger.SetAtmosLogLevel(atmosLogger, atmosConfig.Logs.Level)
+	// Set the level based on configuration and validate it.
+	if err := logger.SetAtmosLogLevel(atmosLogger, atmosConfig.Logs.Level); err != nil {
+		//nolint:all // The reason to escape this is because it is expected to fail fast with FATA prefix for invalid log levels
+		log.Fatal(err)
+	}
 
 	// This is for compatibility with existing code will be removed in future versions.
 	log.SetDefault(atmosLogger.Logger)
-
-	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		//nolint:all // The reason to escape this is because it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required
-		log.Fatal(err)
-	}
 
 	// Log the configuration.
 	atmosLogger.Debug("Set", "logs-level", atmosLogger.GetLevel(), "logs-file", atmosConfig.Logs.File)
