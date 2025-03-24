@@ -19,6 +19,9 @@ const (
 	LogLevelWarning = "Warning"
 )
 
+// OsExit is a variable for testing so we can mock os.Exit.
+var OsExit = os.Exit
+
 // PrintMessage prints the message to the console
 func PrintMessage(message string) {
 	fmt.Println(message)
@@ -35,18 +38,23 @@ func PrintErrorInColor(message string) {
 	_, _ = messageColor.Fprint(os.Stderr, message)
 }
 
+// PrintfMessageToTUI prints the message to the stderr.
+func PrintfMessageToTUI(message string, args ...any) {
+	fmt.Fprintf(os.Stderr, message, args...)
+}
+
 // Deprecated: Use `log.Fatal` instead. This function will be removed in a future release.
-// LogErrorAndExit logs errors to std.Error and exits with an error code
+// LogErrorAndExit logs errors to std.Error and exits with an error code.
 func LogErrorAndExit(err error) {
 	log.Error(err)
 
 	// Find the executed command's exit code from the error
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
-		os.Exit(exitError.ExitCode())
+		OsExit(exitError.ExitCode())
 	}
 
-	os.Exit(1)
+	OsExit(1)
 }
 
 // Deprecated: Use `log.Error` instead. This function will be removed in a future release.

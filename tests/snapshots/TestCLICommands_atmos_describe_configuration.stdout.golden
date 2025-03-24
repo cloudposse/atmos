@@ -1,0 +1,61 @@
+base_path: ./
+components:
+    terraform:
+        base_path: components/terraform
+        apply_auto_approve: false
+        append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+        deploy_run_init: true
+        init_run_reconfigure: true
+        auto_generate_backend_file: true
+        command: terraform
+        shell:
+            prompt: ""
+    helmfile:
+        base_path: components/helmfile
+        use_eks: true
+        kubeconfig_path: /dev/shm
+        helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
+        cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+        command: ""
+stacks:
+    base_path: stacks
+    included_paths:
+        - deploy/**/*
+    excluded_paths:
+        - '**/_defaults.yaml'
+    name_pattern: '{dev}'
+    name_template: ""
+logs:
+    file: /dev/stderr
+    level: Debug
+commands:
+    - name: test
+      description: Run all tests with custom command
+      env: []
+      arguments: []
+      flags: []
+      component_config:
+        component: ""
+        stack: ""
+      steps:
+        - atmos describe config
+      commands: []
+      verbose: false
+settings:
+    list_merge_strategy: ""
+    inject_github_token: true
+initialized: true
+stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks
+includeStackAbsolutePaths:
+    - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks/deploy/**/*
+excludeStackAbsolutePaths:
+    - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks/**/_defaults.yaml
+terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/components/terraform
+helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/components/helmfile
+default: false
+validate:
+    editorconfig:
+        color: true
+cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
+import: []
+
