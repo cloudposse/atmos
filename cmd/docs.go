@@ -9,7 +9,8 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -19,6 +20,10 @@ import (
 )
 
 const atmosDocsURL = "https://atmos.tools"
+
+var (
+	ErrComponentNotFound = errors.New("component not found")
+)
 
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
@@ -67,17 +72,18 @@ var docsCmd = &cobra.Command{
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
+
 			if err != nil {
 				log.Debug(err)
-				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component not found"), "")
+				u.PrintErrorMarkdownAndExit("", ErrComponentNotFound, "")
 			}
 			if !componentPathExists {
-				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Component not found"), "")
+				u.PrintErrorMarkdownAndExit("", ErrComponentNotFound, "")
 			}
 
 			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
-				u.PrintErrorMarkdownAndExit("", fmt.Errorf("Documentation is missing for the component `%s`. Consider adding a README.md to provide more context and details.", info.Component), "")
+				u.PrintErrorMarkdownAndExit("", fmt.Errorf("documentation is missing for the component `%s`. Consider adding a README.md to provide more context and details", info.Component), "")
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
