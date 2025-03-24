@@ -19,7 +19,8 @@ Atmos provides many settings that are specific to Terraform and OpenTofu.
 
 ## CLI Configuration
 
-All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration) found in `atmos.yaml`.
+All of these settings are defined by default in the [Atmos CLI Configuration](/cli/configuration) found in `atmos.yaml`,
+but can also be overridden at any level of the [Stack](/core-concepts/stacks/#schema) configuration.
 
 ```yaml
 components:
@@ -45,7 +46,7 @@ components:
 ```
 
 <dl>
-  <dt>components.terraform.apply_auto_approve</dt>
+  <dt>`components.terraform.apply_auto_approve`</dt>
   <dd>if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without
   asking for confirmation when executing `terraform apply` command</dd>
 
