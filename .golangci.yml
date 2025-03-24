@@ -1,9 +1,6 @@
 # Configuration for golangci-lint
 # Documentation: https://golangci-lint.run/usage/configuration/
 
-# Specify the configuration version
-version: "1"
-
 run:
   timeout: 5m # Set a time limit for the linter run
   tests: true # Include test files in the analysis
