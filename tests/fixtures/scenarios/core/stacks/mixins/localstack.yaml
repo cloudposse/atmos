@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+env:
+  # We need to ensure no profile is set when using LocalStack, or the AWS SDK will try to use it
+  AWS_PROFILE: ""
+  TF_CLI_ARGS_plan: "-compact-warnings"
+  TF_CLI_ARGS_apply: "-compact-warnings"
+
+terraform:
+  providers:
+    aws:
+      region: "us-east-1"
+      access_key: "test"
+      secret_key: "test"
+      s3_use_path_style: false
+      skip_credentials_validation: true
+      skip_metadata_api_check: true
+      endpoints:
+        # An alias for the default LocalStack URL
+        sts: &localstack_url "https://localhost.localstack.cloud:4566"
+
+        # S3 is an exception, and requires a TLS endpoint
+        s3: "https://localhost.localstack.cloud:4566"
+
+        # Everything else can use HTTP on localhost
+        apigateway: *localstack_url
+        apigatewayv2: *localstack_url
+        cloudformation: *localstack_url
+        cloudwatch: *localstack_url
+        dynamodb: *localstack_url
+        ec2: *localstack_url
+        es: *localstack_url
+        elasticache: *localstack_url
+        iam: *localstack_url
+        lambda: *localstack_url
+        rds: *localstack_url
+        route53: *localstack_url
+        secretsmanager: *localstack_url
+        ses: *localstack_url
+        sns: *localstack_url
+        sqs: *localstack_url
+        ssm: *localstack_url
+

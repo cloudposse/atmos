@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+- mixins/localstack
+- catalog/demo
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    demo:
+      metadata:
+        type: real
