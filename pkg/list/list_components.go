@@ -20,8 +20,6 @@ var (
 	ErrStackNotFound = errors.New("stack not found")
 	// ErrProcessStack is returned when there's an error processing a stack.
 	ErrProcessStack = errors.New("error processing stack")
-	// ErrNilStacksMap is returned when stacksMap is nil.
-	ErrNilStacksMap = errors.New("stacks map is nil")
 )
 
 // getStackComponents extracts Terraform components from the final map of stacks.
@@ -78,7 +76,7 @@ func processAllStacks(stacksMap map[string]any) []string {
 func FilterAndListComponents(stackFlag string, stacksMap map[string]any) ([]string, error) {
 	var components []string
 	if stacksMap == nil {
-		return nil, ErrNilStacksMap
+		return nil, fmt.Errorf("%w: %s", ErrStackNotFound, stackFlag)
 	}
 
 	// Handle specific stack case.
