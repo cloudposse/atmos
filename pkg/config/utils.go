@@ -187,61 +187,61 @@ func FindAllStackConfigsInPaths(
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_BASE_PATH=%s", basePath))
+		log.Debug("Found ENV variable", "ATMOS_BASE_PATH", basePath)
 		atmosConfig.BasePath = basePath
 	}
 
 	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
 	if len(vendorBasePath) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_VENDOR_BASE_PATH=%s", vendorBasePath))
+		log.Debug("Found ENV variable", "ATMOS_VENDOR_BASE_PATH", vendorBasePath)
 		atmosConfig.Vendor.BasePath = vendorBasePath
 	}
 
 	stacksBasePath := os.Getenv("ATMOS_STACKS_BASE_PATH")
 	if len(stacksBasePath) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_STACKS_BASE_PATH=%s", stacksBasePath))
+		log.Debug("Found ENV variable", "ATMOS_STACKS_BASE_PATH", stacksBasePath)
 		atmosConfig.Stacks.BasePath = stacksBasePath
 	}
 
 	stacksIncludedPaths := os.Getenv("ATMOS_STACKS_INCLUDED_PATHS")
 	if len(stacksIncludedPaths) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_STACKS_INCLUDED_PATHS=%s", stacksIncludedPaths))
+		log.Debug("Found ENV variable", "ATMOS_STACKS_INCLUDED_PATHS", stacksIncludedPaths)
 		atmosConfig.Stacks.IncludedPaths = strings.Split(stacksIncludedPaths, ",")
 	}
 
 	stacksExcludedPaths := os.Getenv("ATMOS_STACKS_EXCLUDED_PATHS")
 	if len(stacksExcludedPaths) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_STACKS_EXCLUDED_PATHS=%s", stacksExcludedPaths))
+		log.Debug("Found ENV variable", "ATMOS_STACKS_EXCLUDED_PATHS", stacksExcludedPaths)
 		atmosConfig.Stacks.ExcludedPaths = strings.Split(stacksExcludedPaths, ",")
 	}
 
 	stacksNamePattern := os.Getenv("ATMOS_STACKS_NAME_PATTERN")
 	if len(stacksNamePattern) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_PATTERN=%s", stacksNamePattern))
+		log.Debug("Found ENV variable", "ATMOS_STACKS_NAME_PATTERN", stacksNamePattern)
 		atmosConfig.Stacks.NamePattern = stacksNamePattern
 	}
 
 	stacksNameTemplate := os.Getenv("ATMOS_STACKS_NAME_TEMPLATE")
 	if len(stacksNameTemplate) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_STACKS_NAME_TEMPLATE=%s", stacksNameTemplate))
+		log.Debug("Found ENV variable", "ATMOS_STACKS_NAME_TEMPLATE", stacksNameTemplate)
 		atmosConfig.Stacks.NameTemplate = stacksNameTemplate
 	}
 
 	componentsTerraformCommand := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND")
 	if len(componentsTerraformCommand) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_COMMAND=%s", componentsTerraformCommand))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_TERRAFORM_COMMAND", componentsTerraformCommand)
 		atmosConfig.Components.Terraform.Command = componentsTerraformCommand
 	}
 
 	componentsTerraformBasePath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
 	if len(componentsTerraformBasePath) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_BASE_PATH=%s", componentsTerraformBasePath))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", componentsTerraformBasePath)
 		atmosConfig.Components.Terraform.BasePath = componentsTerraformBasePath
 	}
 
 	componentsTerraformApplyAutoApprove := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE")
 	if len(componentsTerraformApplyAutoApprove) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=%s", componentsTerraformApplyAutoApprove))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE", componentsTerraformApplyAutoApprove)
 		applyAutoApproveBool, err := strconv.ParseBool(componentsTerraformApplyAutoApprove)
 		if err != nil {
 			return err
@@ -251,7 +251,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsTerraformDeployRunInit := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT")
 	if len(componentsTerraformDeployRunInit) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=%s", componentsTerraformDeployRunInit))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT", componentsTerraformDeployRunInit)
 		deployRunInitBool, err := strconv.ParseBool(componentsTerraformDeployRunInit)
 		if err != nil {
 			return err
@@ -261,7 +261,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsInitRunReconfigure := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE")
 	if len(componentsInitRunReconfigure) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=%s", componentsInitRunReconfigure))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE", componentsInitRunReconfigure)
 		initRunReconfigureBool, err := strconv.ParseBool(componentsInitRunReconfigure)
 		if err != nil {
 			return err
@@ -271,7 +271,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsInitPassVars := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS")
 	if len(componentsInitPassVars) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS=%s", componentsInitPassVars))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS", componentsInitPassVars)
 		initPassVarsBool, err := strconv.ParseBool(componentsInitPassVars)
 		if err != nil {
 			return err
@@ -281,7 +281,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsTerraformAutoGenerateBackendFile := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE")
 	if len(componentsTerraformAutoGenerateBackendFile) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=%s", componentsTerraformAutoGenerateBackendFile))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE", componentsTerraformAutoGenerateBackendFile)
 		componentsTerraformAutoGenerateBackendFileBool, err := strconv.ParseBool(componentsTerraformAutoGenerateBackendFile)
 		if err != nil {
 			return err
@@ -291,19 +291,19 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsHelmfileCommand := os.Getenv("ATMOS_COMPONENTS_HELMFILE_COMMAND")
 	if len(componentsHelmfileCommand) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_COMMAND=%s", componentsHelmfileCommand))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_HELMFILE_COMMAND", componentsHelmfileCommand)
 		atmosConfig.Components.Helmfile.Command = componentsHelmfileCommand
 	}
 
 	componentsHelmfileBasePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
 	if len(componentsHelmfileBasePath) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_BASE_PATH=%s", componentsHelmfileBasePath))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_HELMFILE_BASE_PATH", componentsHelmfileBasePath)
 		atmosConfig.Components.Helmfile.BasePath = componentsHelmfileBasePath
 	}
 
 	componentsHelmfileUseEKS := os.Getenv("ATMOS_COMPONENTS_HELMFILE_USE_EKS")
 	if len(componentsHelmfileUseEKS) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_USE_EKS=%s", componentsHelmfileUseEKS))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_HELMFILE_USE_EKS", componentsHelmfileUseEKS)
 		useEKSBool, err := strconv.ParseBool(componentsHelmfileUseEKS)
 		if err != nil {
 			return err
@@ -313,31 +313,31 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	componentsHelmfileKubeconfigPath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH")
 	if len(componentsHelmfileKubeconfigPath) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH=%s", componentsHelmfileKubeconfigPath))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH", componentsHelmfileKubeconfigPath)
 		atmosConfig.Components.Helmfile.KubeconfigPath = componentsHelmfileKubeconfigPath
 	}
 
 	componentsHelmfileHelmAwsProfilePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN")
 	if len(componentsHelmfileHelmAwsProfilePattern) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN=%s", componentsHelmfileHelmAwsProfilePattern))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN", componentsHelmfileHelmAwsProfilePattern)
 		atmosConfig.Components.Helmfile.HelmAwsProfilePattern = componentsHelmfileHelmAwsProfilePattern
 	}
 
 	componentsHelmfileClusterNamePattern := os.Getenv("ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN")
 	if len(componentsHelmfileClusterNamePattern) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN=%s", componentsHelmfileClusterNamePattern))
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN", componentsHelmfileClusterNamePattern)
 		atmosConfig.Components.Helmfile.ClusterNamePattern = componentsHelmfileClusterNamePattern
 	}
 
 	workflowsBasePath := os.Getenv("ATMOS_WORKFLOWS_BASE_PATH")
 	if len(workflowsBasePath) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_WORKFLOWS_BASE_PATH=%s", workflowsBasePath))
+		log.Debug("Found ENV variable", "ATMOS_WORKFLOWS_BASE_PATH", workflowsBasePath)
 		atmosConfig.Workflows.BasePath = workflowsBasePath
 	}
 
 	jsonschemaBasePath := os.Getenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH")
 	if len(jsonschemaBasePath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"jsonschema\"] using ENV", "ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH", jsonschemaBasePath)
+		log.Debug("Set atmosConfig.Schemas[\"jsonschema\"] using ENV variable", "ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH", jsonschemaBasePath)
 		atmosConfig.Schemas["jsonschema"] = schema.ResourcePath{
 			BasePath: jsonschemaBasePath,
 		}
@@ -345,7 +345,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	opaBasePath := os.Getenv("ATMOS_SCHEMAS_OPA_BASE_PATH")
 	if len(opaBasePath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"opa\"] using ENV", "ATMOS_SCHEMAS_OPA_BASE_PATH", opaBasePath)
+		log.Debug("Set atmosConfig.Schemas[\"opa\"] using ENV variable", "ATMOS_SCHEMAS_OPA_BASE_PATH", opaBasePath)
 		atmosConfig.Schemas["opa"] = schema.ResourcePath{
 			BasePath: opaBasePath,
 		}
@@ -353,7 +353,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	cueBasePath := os.Getenv("ATMOS_SCHEMAS_CUE_BASE_PATH")
 	if len(cueBasePath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"cue\"] using ENV", "ATMOS_SCHEMAS_CUE_BASE_PATH", cueBasePath)
+		log.Debug("Set atmosConfig.Schemas[\"cue\"] using ENV variable", "ATMOS_SCHEMAS_CUE_BASE_PATH", cueBasePath)
 		atmosConfig.Schemas["cue"] = schema.ResourcePath{
 			BasePath: cueBasePath,
 		}
@@ -361,7 +361,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
 	if len(atmosManifestJsonSchemaPath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"atmos\"] using env", "ATMOS_SCHEMAS_ATMOS_MANIFEST", atmosManifestJsonSchemaPath)
+		log.Debug("Set atmosConfig.Schemas[\"atmos\"] using ENV variable", "ATMOS_SCHEMAS_ATMOS_MANIFEST", atmosManifestJsonSchemaPath)
 		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
 			Manifest: atmosManifestJsonSchemaPath,
 		}
@@ -369,22 +369,22 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 
 	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
 	if len(tfAppendUserAgent) > 0 {
-		log.Debug("Found ENV", "ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT", tfAppendUserAgent)
+		log.Debug("Found ENV variable", "ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT", tfAppendUserAgent)
 		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 
 	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
 	if len(listMergeStrategy) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_SETTINGS_LIST_MERGE_STRATEGY=%s", listMergeStrategy))
+		log.Debug("Found ENV variable", "ATMOS_SETTINGS_LIST_MERGE_STRATEGY", listMergeStrategy)
 		atmosConfig.Settings.ListMergeStrategy = listMergeStrategy
 	}
 
 	versionEnabled := os.Getenv("ATMOS_VERSION_CHECK_ENABLED")
 	if len(versionEnabled) > 0 {
-		log.Debug(fmt.Sprintf("Found ENV var ATMOS_VERSION_CHECK_ENABLED=%s", versionEnabled))
+		log.Debug("Found ENV variable", "ATMOS_VERSION_CHECK_ENABLED", versionEnabled)
 		enabled, err := strconv.ParseBool(versionEnabled)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Invalid boolean value '%s' for ATMOS_VERSION_CHECK_ENABLED; using default.", versionEnabled))
+			log.Warn("Invalid boolean value for ENV variable; using default.", "ATMOS_VERSION_CHECK_ENABLED", versionEnabled)
 		} else {
 			atmosConfig.Version.Check.Enabled = enabled
 		}

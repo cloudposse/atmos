@@ -28,7 +28,7 @@ func componentFunc(
 	// If the result for the component in the stack already exists in the cache, return it
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
-		log.Debug("cache hit for template function", "function", functionName)
+		log.Debug("Cache hit for template function", "function", functionName)
 
 		if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
 			y, err2 := u.ConvertToYAML(outputsSection)
