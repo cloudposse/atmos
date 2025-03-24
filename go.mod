@@ -10,8 +10,8 @@ require (
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/arsham/figurine v1.3.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
-	github.com/aws/aws-sdk-go-v2/config v1.29.9
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.57.2
+	github.com/aws/aws-sdk-go-v2/config v1.29.10
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.58.0
 	github.com/bmatcuk/doublestar/v4 v4.8.1
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.3.4
@@ -104,7 +104,7 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go v1.44.206 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.1 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.62 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.63 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.30 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.14 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.34 // indirect
@@ -117,7 +117,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.13.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.25.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.29.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.29.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.17 // indirect
 	github.com/aws/smithy-go v1.22.2 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -176,7 +176,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.4 // indirect
 	github.com/goccy/go-yaml v1.15.13 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.1 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
