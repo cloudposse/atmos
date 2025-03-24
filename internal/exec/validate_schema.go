@@ -53,6 +53,12 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(sourceKey string
 		if sourceKey != "" && customSchema != "" {
 			value.Schema = customSchema
 		}
+		if k == "atmos" && value.Schema == "" && value.Manifest == "" {
+			value.Schema = "atmos://schema/atmos/manifest/1.0"
+		}
+		if k == "atmos" && value.Schema == "" && value.Manifest != "" {
+			value.Schema = value.Manifest
+		}
 		if value.Schema == "" {
 			continue
 		}

@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"errors"
-	"os"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -26,12 +26,15 @@ var ValidateSchemaCmd = &cobra.Command{
 		if len(args) > 0 {
 			key = args[0] // Use provided argument
 		}
+
 		if cmd.Flags().Changed("schema") {
-			schema, _ = cmd.Flags().GetString("schemas-atmos-manifest")
+			schema, _ = cmd.Flags().GetString("schema")
 		}
-		if schema == "" {
-			schema = os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
+
+		if key == "" && schema != "" {
+			log.Fatal("key not provided for the schema to be used")
 		}
+
 		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
 			if errors.Is(err, exec.ErrInvalidYAML) {
 				utils.OsExit(1)
