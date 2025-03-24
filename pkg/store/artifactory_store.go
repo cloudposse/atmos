@@ -14,6 +14,8 @@ import (
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
 	"github.com/jfrog/jfrog-client-go/config"
 	al "github.com/jfrog/jfrog-client-go/utils/log"
+
+	log "github.com/charmbracelet/log"
 )
 
 const (
@@ -74,7 +76,17 @@ func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 		stackDelimiter = *options.StackDelimiter
 	}
 
-	al.SetLogger(al.NewLogger(al.WARN, nil))
+	// Set the artifactory SDK logging level based on Atmos log level
+	// Only enable logging in the JFrog client when Atmos is in debug mode
+	if log.GetLevel() == log.DebugLevel {
+		// Show DEBUG logs when Atmos is in debug mode
+		al.SetLogger(al.NewLogger(al.DEBUG, nil))
+	} else {
+		// Completely disable logging from the JFrog SDK
+		// The JFrog SDK doesn't have an explicit OFF level, but setting a custom logger
+		// with a nil output writer effectively disables all logging
+		al.SetLogger(createNoopLogger())
+	}
 
 	rtDetails := auth.NewArtifactoryDetails()
 	rtDetails.SetUrl(options.URL)

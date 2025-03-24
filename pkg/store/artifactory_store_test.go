@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	log "github.com/charmbracelet/log"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
+	al "github.com/jfrog/jfrog-client-go/utils/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -328,6 +330,69 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 				assert.NotNil(t, result)
 			}
 			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
+	// Save the original function and restore it after the test
+	origCreateNoopLogger := createNoopLogger
+	defer func() {
+		createNoopLogger = origCreateNoopLogger
+	}()
+
+	// Save original log level and restore after test
+	originalLogLevel := log.GetLevel()
+	defer log.SetLevel(originalLogLevel)
+
+	tests := []struct {
+		name             string
+		atmosLogLevel    log.Level
+		expectNoopLogger bool
+	}{
+		{
+			name:             "Debug level uses standard logger",
+			atmosLogLevel:    log.DebugLevel,
+			expectNoopLogger: false,
+		},
+		{
+			name:             "Info level uses noopLogger",
+			atmosLogLevel:    log.InfoLevel,
+			expectNoopLogger: true,
+		},
+		{
+			name:             "Warn level uses noopLogger",
+			atmosLogLevel:    log.WarnLevel,
+			expectNoopLogger: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Track if noopLogger was created
+			noopLoggerCreated := false
+
+			// Override the factory function
+			createNoopLogger = func() al.Log {
+				noopLoggerCreated = true
+				return origCreateNoopLogger()
+			}
+
+			// Set the test log level
+			log.SetLevel(tt.atmosLogLevel)
+
+			// Create store which should trigger logging setup
+			_, err := NewArtifactoryStore(ArtifactoryStoreOptions{
+				AccessToken: aws.String("test-token"),
+				RepoName:    "test-repo",
+				URL:         "http://example.com",
+			})
+			assert.NoError(t, err)
+
+			// Verify if noopLogger was created as expected
+			assert.Equal(t, tt.expectNoopLogger, noopLoggerCreated,
+				"For log level %s, noopLogger created: %v, expected: %v",
+				tt.atmosLogLevel, noopLoggerCreated, tt.expectNoopLogger)
 		})
 	}
 }
