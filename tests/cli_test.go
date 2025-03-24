@@ -330,6 +330,15 @@ func sanitizeOutput(output string) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
+	// 6. Handle URLs in the output to ensure they are normalized.
+	//    Use a regex to find URLs and collapse extra slashes while preserving the protocol.
+	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
+	result = urlRegex.ReplaceAllStringFunc(result, collapseExtraSlashes)
+
+	// 7. Remove the random number added to file name like `atmos-import-454656846`
+	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
+	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
+
 	return result, nil
 }
 

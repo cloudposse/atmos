@@ -1,0 +1,3 @@
+# Description: Configuration file for the Atmos CLI
+# default import path is ./atmos.d import .yaml files from the directory and merge them
+base_path: "./"
