@@ -52,10 +52,6 @@ func FindAllStackConfigsInPathsForStack(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				if atmosConfig.Logs.Level == u.LogLevelDebug {
-					y, _ := u.ConvertToYAML(atmosConfig)
-					return nil, nil, false, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
-				}
 				return nil, nil, false, err
 			}
 			// If there's no error but still no matches, we continue to the next path
@@ -147,10 +143,6 @@ func FindAllStackConfigsInPaths(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				if atmosConfig.Logs.Level == u.LogLevelDebug {
-					y, _ := u.ConvertToYAML(atmosConfig)
-					return nil, nil, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
-				}
 				return nil, nil, err
 			}
 			// If there's no error but still no matches, we continue to the next path
