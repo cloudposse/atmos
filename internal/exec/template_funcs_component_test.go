@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	log "github.com/charmbracelet/log"
@@ -23,8 +24,15 @@ func TestComponentFunc(t *testing.T) {
 	}
 
 	defer func() {
+		// Delete the generated files and folders after the test
+		err := os.RemoveAll(filepath.Join("components", "terraform", "mock", ".terraform"))
+		assert.NoError(t, err)
+
+		err = os.RemoveAll(filepath.Join("components", "terraform", "mock", "terraform.tfstate.d"))
+		assert.NoError(t, err)
+
 		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
+		if err = os.Chdir(startingDir); err != nil {
 			t.Fatalf("Failed to change back to the starting directory: %v", err)
 		}
 	}()
