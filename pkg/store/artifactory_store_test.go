@@ -7,10 +7,24 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	log "github.com/charmbracelet/log"
 	"github.com/jfrog/jfrog-client-go/artifactory"
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
+	al "github.com/jfrog/jfrog-client-go/utils/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+)
+
+// Define custom log levels for testing
+// Using charmbracelet/log package level constants.
+var (
+	// Standard levels from the charmbracelet/log package.
+	debugLogLevel = log.DebugLevel
+	infoLogLevel  = log.InfoLevel
+	warnLogLevel  = log.WarnLevel
+
+	// Trace is lower than debug in the charmbracelet/log package.
+	traceLogLevel log.Level = -4
 )
 
 type MockArtifactoryClient struct {
@@ -22,17 +36,17 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 	totalDownloaded := args.Int(0)
 	totalFailed := args.Int(1)
 	err := args.Error(2)
-	// First check: if there's an error, return immediately
+	// First check: if there's an error, return immediately.
 	if err != nil {
 		return totalDownloaded, totalFailed, err
 	}
 
-	// Second check: if there are failures, return without creating files
+	// Second check: if there are failures, return without creating files.
 	if totalFailed > 0 {
 		return totalDownloaded, totalFailed, nil
 	}
 
-	// Third check: if no downloads, return without creating files
+	// Third check: if no downloads, return without creating files.
 	if totalDownloaded == 0 {
 		return totalDownloaded, totalFailed, nil
 	}
@@ -328,6 +342,74 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 				assert.NotNil(t, result)
 			}
 			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
+	// Save the original function and restore it after the test
+	origCreateNoopLogger := createNoopLogger
+	defer func() {
+		createNoopLogger = origCreateNoopLogger
+	}()
+
+	// Save original log level and restore after test
+	originalLogLevel := log.GetLevel()
+	defer log.SetLevel(originalLogLevel)
+
+	tests := []struct {
+		name             string
+		atmosLogLevel    log.Level
+		expectNoopLogger bool
+	}{
+		{
+			name:             "Debug level uses standard logger",
+			atmosLogLevel:    debugLogLevel,
+			expectNoopLogger: false,
+		},
+		{
+			name:             "Trace level uses standard logger",
+			atmosLogLevel:    traceLogLevel,
+			expectNoopLogger: false,
+		},
+		{
+			name:             "Info level uses noopLogger",
+			atmosLogLevel:    infoLogLevel,
+			expectNoopLogger: true,
+		},
+		{
+			name:             "Warn level uses noopLogger",
+			atmosLogLevel:    warnLogLevel,
+			expectNoopLogger: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Track if noopLogger was created
+			noopLoggerCreated := false
+
+			// Override the factory function
+			createNoopLogger = func() al.Log {
+				noopLoggerCreated = true
+				return origCreateNoopLogger()
+			}
+
+			// Set the test log level
+			log.SetLevel(tt.atmosLogLevel)
+
+			// Create store which should trigger logging setup
+			_, err := NewArtifactoryStore(ArtifactoryStoreOptions{
+				AccessToken: aws.String("test-token"),
+				RepoName:    "test-repo",
+				URL:         "http://example.com",
+			})
+			assert.NoError(t, err)
+
+			// Verify if noopLogger was created as expected
+			assert.Equal(t, tt.expectNoopLogger, noopLoggerCreated,
+				"For log level %s, noopLogger created: %v, expected: %v",
+				tt.atmosLogLevel, noopLoggerCreated, tt.expectNoopLogger)
 		})
 	}
 }
