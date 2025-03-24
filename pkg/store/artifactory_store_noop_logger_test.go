@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Test each method individually to ensure coverage
+// Test each method individually to ensure coverage.
 func TestNoopLoggerMethods(t *testing.T) {
 	logger := &noopLogger{}
 
