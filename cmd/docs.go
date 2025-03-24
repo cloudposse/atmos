@@ -21,9 +21,7 @@ import (
 
 const atmosDocsURL = "https://atmos.tools"
 
-var (
-	ErrComponentNotFound = errors.New("component not found")
-)
+var ErrComponentNotFound = errors.New("component not found")
 
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
@@ -72,7 +70,6 @@ var docsCmd = &cobra.Command{
 			// Construct the full path to the Terraform component by combining the Atmos base path, Terraform base path, and component name
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
-
 			if err != nil {
 				log.Debug(err)
 				u.PrintErrorMarkdownAndExit("", ErrComponentNotFound, "")
