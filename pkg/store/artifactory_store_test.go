@@ -15,6 +15,18 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// Define custom log levels for testing
+// Using charmbracelet/log package level constants.
+var (
+	// Standard levels from the charmbracelet/log package.
+	debugLogLevel = log.DebugLevel
+	infoLogLevel  = log.InfoLevel
+	warnLogLevel  = log.WarnLevel
+
+	// Trace is lower than debug in the charmbracelet/log package.
+	traceLogLevel log.Level = -4
+)
+
 type MockArtifactoryClient struct {
 	mock.Mock
 }
@@ -24,17 +36,17 @@ func (m *MockArtifactoryClient) DownloadFiles(params ...services.DownloadParams)
 	totalDownloaded := args.Int(0)
 	totalFailed := args.Int(1)
 	err := args.Error(2)
-	// First check: if there's an error, return immediately
+	// First check: if there's an error, return immediately.
 	if err != nil {
 		return totalDownloaded, totalFailed, err
 	}
 
-	// Second check: if there are failures, return without creating files
+	// Second check: if there are failures, return without creating files.
 	if totalFailed > 0 {
 		return totalDownloaded, totalFailed, nil
 	}
 
-	// Third check: if no downloads, return without creating files
+	// Third check: if no downloads, return without creating files.
 	if totalDownloaded == 0 {
 		return totalDownloaded, totalFailed, nil
 	}
@@ -352,17 +364,22 @@ func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
 	}{
 		{
 			name:             "Debug level uses standard logger",
-			atmosLogLevel:    log.DebugLevel,
+			atmosLogLevel:    debugLogLevel,
+			expectNoopLogger: false,
+		},
+		{
+			name:             "Trace level uses standard logger",
+			atmosLogLevel:    traceLogLevel,
 			expectNoopLogger: false,
 		},
 		{
 			name:             "Info level uses noopLogger",
-			atmosLogLevel:    log.InfoLevel,
+			atmosLogLevel:    infoLogLevel,
 			expectNoopLogger: true,
 		},
 		{
 			name:             "Warn level uses noopLogger",
-			atmosLogLevel:    log.WarnLevel,
+			atmosLogLevel:    warnLogLevel,
 			expectNoopLogger: true,
 		},
 	}
