@@ -414,13 +414,13 @@ func copyToTargetWithPatterns(
 	if err != nil {
 		return err
 	}
-	log.Debug("Copying files", sourceKey, sourceDir, finalTargetKey, finalTarget)
+
 	if sourceIsLocalFile {
 		return handleLocalFileSource(sourceDir, finalTarget)
 	}
 	// If no inclusion or exclusion patterns are defined, use the cp library.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
-		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy", "source", sourceDir, finalTargetKey, finalTarget)
+		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy")
 		return cp.Copy(sourceDir, finalTarget)
 	}
 	// Process each inclusion pattern.
