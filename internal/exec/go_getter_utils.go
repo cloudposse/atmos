@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/charmbracelet/log"
@@ -19,6 +20,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+const schemeSeparator = "://"
+
+// detectorsMutex guards modifications to getter.Detectors.
+var detectorsMutex sync.Mutex
 
 // ValidateURI validates URIs
 func ValidateURI(uri string) error {
@@ -41,8 +47,8 @@ func ValidateURI(uri string) error {
 		if !strings.Contains(uri[6:], "/") {
 			return fmt.Errorf("invalid OCI URI format")
 		}
-	} else if strings.Contains(uri, "://") {
-		scheme := strings.Split(uri, "://")[0]
+	} else if strings.Contains(uri, schemeSeparator) {
+		scheme := strings.Split(uri, schemeSeparator)[0]
 		if !IsValidScheme(scheme) {
 			return fmt.Errorf("unsupported URI scheme: %s", scheme)
 		}
@@ -146,7 +152,7 @@ func (d *CustomGitDetector) ensureScheme(src string) string {
 	// Strip any existing "git::" prefix
 	src = strings.TrimPrefix(src, GitPrefix)
 
-	if !strings.Contains(src, "://") {
+	if !strings.Contains(src, schemeSeparator) {
 		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
 			maskedOld, _ := u.MaskBasicAuth(src)
 			maskedNew, _ := u.MaskBasicAuth(newSrc)
@@ -225,17 +231,17 @@ func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 			token = os.Getenv(tokenSource)
 		}
 	case hostBitbucket:
-		tokenSource = "BITBUCKET_TOKEN"
+		tokenSource = "ATMOS_BITBUCKET_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
-			tokenSource = "ATMOS_BITBUCKET_TOKEN"
+			tokenSource = "BITBUCKET_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	case hostGitLab:
-		tokenSource = "GITLAB_TOKEN"
+		tokenSource = "ATMOS_GITLAB_TOKEN"
 		token = os.Getenv(tokenSource)
 		if token == "" {
-			tokenSource = "ATMOS_GITLAB_TOKEN"
+			tokenSource = "GITLAB_TOKEN"
 			token = os.Getenv(tokenSource)
 		}
 	}
@@ -277,12 +283,15 @@ func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
 	}
 }
 
-// RegisterCustomDetectors prepends the custom detector so it runs before
-// the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
+// RegisterCustomDetectors prepends the custom detector so it runs before the built-in ones.
+// Any code that calls go-getter should invoke this.
+func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration, source string) {
+	detectorsMutex.Lock()
+	defer detectorsMutex.Unlock()
+
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitDetector{AtmosConfig: atmosConfig},
+			&CustomGitDetector{AtmosConfig: atmosConfig, source: source},
 		},
 		getter.Detectors...,
 	)
@@ -300,7 +309,7 @@ func GoGetterGet(
 	defer cancel()
 
 	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
+	RegisterCustomDetectors(atmosConfig, src)
 
 	client := &getter.Client{
 		Ctx: ctx,
