@@ -5,7 +5,8 @@ import (
 	"net/url"
 )
 
-// MaskBasicAuth replaces the username and password in a URL with "xxx" if present.
+const MaskedSecret = "xxx"
+
 func MaskBasicAuth(rawURL string) (string, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
@@ -13,7 +14,12 @@ func MaskBasicAuth(rawURL string) (string, error) {
 	}
 
 	if parsedURL.User != nil {
-		parsedURL.User = url.UserPassword("xxx", "xxx")
+		// If both username and password are set, mask both, otherwise mask only the username
+		if _, hasPassword := parsedURL.User.Password(); hasPassword {
+			parsedURL.User = url.UserPassword(MaskedSecret, MaskedSecret)
+		} else {
+			parsedURL.User = url.User(MaskedSecret)
+		}
 	}
 
 	return parsedURL.String(), nil
