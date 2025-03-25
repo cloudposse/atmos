@@ -1,0 +1,258 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Atmos CLI Configuration",
+    "description": "Schema for Atmos CLI configuration",
+    "fileMatch": [
+        "atmos.{yml,yaml}",
+        "*.atmos.{yml,yaml}",
+        ".atmos.{yml,yaml}",
+        "atmos.d/**/*.{yml,yaml}"
+    ],
+    "type": "object",
+    "properties": {
+      "base_path": {
+        "type": "string",
+        "description": "Base path for components, stacks, and workflows configurations. Supports absolute and relative paths."
+      },
+      "vendor": {
+        "type": "object",
+        "description": "Vendor configuration settings",
+        "properties": {
+          "base_path": {
+            "type": "string",
+            "description": "Path to vendor configuration file or directory containing vendor files"
+          }
+        },
+        "required": ["base_path"]
+      },
+      "components": {
+        "type": "object",
+        "description": "Configuration for components",
+        "properties": {
+          "terraform": {
+            "type": "object",
+            "description": "Terraform component configuration",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Command to execute Terraform (e.g., terraform or tofu)"
+              },
+              "base_path": {
+                "type": "string",
+                "description": "Path to Terraform components directory"
+              },
+              "apply_auto_approve": {
+                "type": "boolean",
+                "description": "Automatically approve Terraform apply"
+              },
+              "deploy_run_init": {
+                "type": "boolean",
+                "description": "Run 'terraform init' before deploying"
+              },
+              "init_run_reconfigure": {
+                "type": "boolean",
+                "description": "Run 'terraform init -reconfigure'"
+              },
+              "auto_generate_backend_file": {
+                "type": "boolean",
+                "description": "Automatically generate backend file"
+              }
+            }
+          },
+          "helmfile": {
+            "type": "object",
+            "description": "Helmfile component configuration",
+            "properties": {
+              "base_path": {
+                "type": "string",
+                "description": "Path to Helmfile components directory"
+              },
+              "use_eks": {
+                "type": "boolean",
+                "description": "Enable EKS integration"
+              },
+              "kubeconfig_path": {
+                "type": "string",
+                "description": "Path to kubeconfig file"
+              },
+              "helm_aws_profile_pattern": {
+                "type": "string",
+                "description": "Pattern for AWS profiles used by Helm"
+              },
+              "cluster_name_pattern": {
+                "type": "string",
+                "description": "Pattern for cluster names"
+              }
+            }
+          }
+        }
+      },
+      "stacks": {
+        "type": "object",
+        "description": "Configuration for stacks",
+        "properties": {
+          "base_path": {
+            "type": "string",
+            "description": "Path to stacks directory"
+          },
+          "included_paths": {
+            "type": "array",
+            "description": "Glob patterns for included paths",
+            "items": {
+              "type": "string"
+            }
+          },
+          "excluded_paths": {
+            "type": "array",
+            "description": "Glob patterns for excluded paths",
+            "items": {
+              "type": "string"
+            }
+          },
+          "name_pattern": {
+            "type": "string",
+            "description": "Pattern for stack names"
+          }
+        }
+      },
+      "workflows": {
+        "type": "object",
+        "description": "Configuration for workflows",
+        "properties": {
+          "base_path": {
+            "type": "string",
+            "description": "Path to workflows directory"
+          }
+        }
+      },
+      "logs": {
+        "type": "object",
+        "description": "Logging configuration",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "File or descriptor to write logs to (e.g., /dev/stderr)"
+          },
+          "level": {
+            "type": "string",
+            "description": "Log level (Trace, Debug, Info, Warning, Off)",
+            "enum": ["Trace", "Debug", "Info", "Warning", "Off"]
+          }
+        }
+      },
+      "validate": {
+        "type": "object",
+        "description": "Validation configuration",
+        "properties": {
+          "editorconfig": {
+            "type": "object",
+            "description": "EditorConfig validation settings",
+            "properties": {
+              "exclude": {
+                "type": "array",
+                "description": "List of file paths or patterns to exclude from checks",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "ignore_defaults": {
+                "type": "boolean",
+                "description": "Ignore default patterns (e.g., .git/*)"
+              },
+              "dry_run": {
+                "type": "boolean",
+                "description": "Run checks in dry-run mode"
+              },
+              "format": {
+                "type": "string",
+                "description": "Output format for validation (default or json)",
+                "enum": ["default", "json"]
+              },
+              "color": {
+                "type": "boolean",
+                "description": "Enable colored output"
+              }
+            }
+          }
+        }
+      },
+      "commands": {
+        "type": "array",
+        "description": "Custom CLI commands",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of the command"
+            },
+            "description": {
+              "type": "string",
+              "description": "Description of the command"
+            },
+            "commands": {
+              "type": "array",
+              "description": "Subcommands",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the subcommand"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Description of the subcommand"
+                  },
+                  "arguments": {
+                    "type": "array",
+                    "description": "Arguments for the subcommand",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Argument name"
+                        },
+                        "description": {
+                          "type": "string",
+                          "description": "Argument description"
+                        }
+                      }
+                    }
+                  },
+                  "flags": {
+                    "type": "array",
+                    "description": "Flags for the subcommand",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Flag name"
+                        },
+                        "shorthand": {
+                          "type": "string",
+                          "description": "Shorthand for the flag"
+                        },
+                        "description": {
+                          "type": "string",
+                          "description": "Flag description"
+                        },
+                        "required": {
+                          "type": "boolean",
+                          "description": "Whether the flag is required"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": ["name", "description"]
+        }
+      }
+    },
+    "required": ["base_path", "components", "stacks", "logs"]
+  }

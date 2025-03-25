@@ -4,7 +4,6 @@ schemas:
   atmos:
     manifest: "schemas/atmos-manifest.json"
 
-
 templates:
   settings:
     enabled: true
@@ -24,7 +23,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
 logs:
   file: "/dev/stderr"
@@ -34,61 +33,60 @@ logs:
 
 # No arguments or flags are required
 commands:
-- name: "test"
-  description: "Run all tests"
-  steps:
-  - atmos validate stacks
-  - atmos helmfile apply demo -s dev
-
-  # This is equivalent to the following commands:
-  #- atmos helmfile generate varfile demo -s dev
-  #- helmfile -f components/helmfile/nginx/helmfile.yaml apply --values dev-demo.helmfile.vars.yaml
-
-# Use Nested Custom Commands to provide easier interface for Docker Compose
-- name: "k3s"
-  commands:
-  - name: "up"
-    description: Start k3s in the background
+  - name: "test"
+    description: "Run all tests"
     steps:
-      - |
-        container_running=$(docker ps -q -f "name=k3s")
-        if [ -n "$container_running" ]; then
-          echo "k3s is already running; run \`atmos k3s down\` to stop it"
-        else
-          docker compose up -d --wait
-        fi
+      - atmos validate stacks
+      - atmos helmfile apply demo -s dev
 
-  - name: "down"
-    description: Stop k3s
-    steps:
-      - docker compose down
+    # This is equivalent to the following commands:
+    #- atmos helmfile generate varfile demo -s dev
+    #- helmfile -f components/helmfile/nginx/helmfile.yaml apply --values dev-demo.helmfile.vars.yaml
 
-  - name: "restart"
-    description: Restart k3s
-    steps:
-      - docker compose restart
+  # Use Nested Custom Commands to provide easier interface for Docker Compose
+  - name: "k3s"
+    commands:
+      - name: "up"
+        description: Start k3s in the background
+        steps:
+          - |
+            container_running=$(docker ps -q -f "name=k3s")
+            if [ -n "$container_running" ]; then
+              echo "k3s is already running; run \`atmos k3s down\` to stop it"
+            else
+              docker compose up -d --wait
+            fi
 
-  - name: "reset"
-    description: Reset k3s (delete all data)
-    steps:
-      - docker compose down --volumes
+      - name: "down"
+        description: Stop k3s
+        steps:
+          - docker compose down
 
-  - name: "status"
-    description: Show the status of k3s
-    steps:
-      - |
-        container_running=$(docker ps -q -f "name=k3s")
-        if [ -n "$container_running" ]; then
-          docker compose ps --format "{{`{{.Service}} is {{.State}}`}}"
-        else
-          echo "k3s is not running; run \`atmos k3s up\` to start it"
-        fi
+      - name: "restart"
+        description: Restart k3s
+        steps:
+          - docker compose restart
 
-- name: "terraform"
-  commands:
-    - name: "reset"
-      description: Delete all local state files
-      steps:
-        - find . -type f -name "*.tfstate" -delete
-        - echo "Deleted all state files"
+      - name: "reset"
+        description: Reset k3s (delete all data)
+        steps:
+          - docker compose down --volumes
 
+      - name: "status"
+        description: Show the status of k3s
+        steps:
+          - |
+            container_running=$(docker ps -q -f "name=k3s")
+            if [ -n "$container_running" ]; then
+              docker compose ps --format "{{`{{.Service}} is {{.State}}`}}"
+            else
+              echo "k3s is not running; run \`atmos k3s up\` to start it"
+            fi
+
+  - name: "terraform"
+    commands:
+      - name: "reset"
+        description: Delete all local state files
+        steps:
+          - find . -type f -name "*.tfstate" -delete
+          - echo "Deleted all state files"

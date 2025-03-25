@@ -1,0 +1,49 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://json.schemastore.org/workflow-manifest.json",
+    "title": "Atmos Workflow Manifest",
+    "fileMatch": [
+        "workflows/**/*.{yml,yaml}"
+    ],
+    "type": "object",
+    "description": "Schema for Atmos workflows",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string",
+        "description": "A description of the workflow."
+      },
+      "stack": {
+        "type": "string",
+        "description": "The stack associated with this workflow."
+      },
+      "steps": {
+        "type": "array",
+        "description": "The list of steps to execute in the workflow.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "The name of the step."
+            },
+            "command": {
+              "type": "string",
+              "description": "The command to execute for this step."
+            },
+            "stack": {
+              "type": "string",
+              "description": "The stack to use for this step."
+            },
+            "type": {
+              "type": "string",
+              "description": "The type of step (e.g., shell, script, etc.)."
+            }
+          },
+          "required": ["command"]
+        }
+      }
+    },
+    "required": ["steps"]
+  }

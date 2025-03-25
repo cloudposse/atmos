@@ -45,7 +45,7 @@ atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
 
 :::tip
 
-Refer to [`atmos workflow`](/cli/commands/workflow) for the complete description of the CLI command
+Refer to [`atmos workflow`](/cli/commands/workflow) for the complete description of the CLI command used to execute workflows.
 
 :::
 
@@ -119,6 +119,10 @@ workflows:
     description: "Description of Workflow #2"
     steps: [ ]
 ```
+
+:::tip
+View the full Workflow configuration schema in the [Workflow Schema](/schemas/workflow) reference section.
+:::
 
 Each workflow file must have the `workflows:` top-level section with a map of workflow definitions.
 
@@ -375,7 +379,7 @@ The Atmos stack used by the workflow commands of type `atmos` can be specified i
 
 When a workflow step fails, Atmos will:
 1. Display which step failed
-2. Show the exact command that failed 
+2. Show the exact command that failed
 3. Provide a ready-to-use command to resume the workflow from the failed step
 
 Given this workflow:
@@ -398,7 +402,7 @@ If step-2 fails, you'll see:
 ```console
 Step 'step-2' failed!
 
-Command failed: 
+Command failed:
 terraform plan vpc -s plat-ue2-staging
 
 To resume the workflow from this step, run:

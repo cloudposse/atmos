@@ -11,14 +11,14 @@ import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 
 <Intro>
-When you design cloud architectures with Atmos, you break them apart into pieces called components that you implement with Terraform "root modules". Stacks are how you connect your components with configuration, so that everything comes together.
+When you design cloud architectures with Atmos, Stacks are how you configure your [components](/core-concepts/components), bringing everything together.
 </Intro>
 
-The power of components comes from their ability to be reused: you can compose stacks with one or more components, even reusing any component multiple times within a stack. But as your stacks grow with more and more components, it often makes sense to start splitting them into different files and that's why you might want to make use of imports. This lets you keep your Stack files easier to scan and reuse their configuration in multiple places.
+The power of stacks comes from their flexibility: you can compose them with one or more components, reusing configurations across different environments. As your stacks grow, adding more components, it often makes sense to split them into separate files. This is where imports come in—helping you keep stack files organized and making configurations easier to reuse across multiple places.
 
 Stacks define the complete configuration of an environment. Think of Stacks like an architectural "Blueprints" composed of one or more [Components](/core-concepts/components) configurations and defined using a [standardized YAML configuration](#schema).
 
-Then by running the `atmos` command, automate the orchestrate the deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. By doing this, it enables scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks) by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., [Terraform components](/core-concepts/components/terraform)).
+Then by running the `atmos` command, you can automate and orchestrate the deployment of loosely coupled [components](/core-concepts/components), such as Terraform "root" modules. By doing this, it enables scalable infrastructure-as-code configurations, allowing environments to inherit from one or more common bases (child stacks) by importing configuration that gets deep-merged, thus minimizing config duplication and manual effort. Each stack uses a simple schema that provides a declarative description of your various environments. This approach empowers you to separate your infrastructure’s environment configuration settings from the code it manages (e.g., [Terraform components](/core-concepts/components/terraform)).
 
 By facilitating the infrastructure configurations this way, developers achieve DRY (Don't Repeat Yourself) architectures with minimal
 configuration. Stacks make infrastructure more streamlined and consistent, significantly enhancing productivity. Best of all, Stacks
@@ -49,10 +49,64 @@ various [design patterns](/design-patterns/).
 
 ### Stack Names (aka "slugs")
 
-Every stack is uniquely identified by a name. The name is used to reference the stack in the Atmos CLI, or with stack dependencies.
+Each stack has a unique name used for referencing it both in configuration as dependencies and on the command line (e.g. `--stack plat-dev-ue2`). This name is automatically generated based on a template defined in [`atmos.yaml`](/cli/configuration/#default-cli-configuration).
 
-These are computed from either the `name_pattern` (old way) or the more configurable
-`name_template` (new way). These are configured in the `atmos.yaml` configuration file.
+Atmos supports two methods of configuration for defining stack names:
+<dl>
+<dt>`stacks.name_template` (recommended method)</dt>
+<dd>
+  A Go template that can reference any section of the stack configuration.
+
+  ```yaml
+  # atmos.yaml
+  stacks:
+    name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+  ```
+
+</dd>
+<dt>`stacks.name_pattern` (deprecated)</dt>
+<dd>
+
+  The `name_pattern` is the *legacy* method for determining stack names, retained for backward compatibility.
+
+  It **only** supports the following optionated interpolations, and therefore is not recommended. Use `name_template` instead.
+  <dl>
+    <dt>`{tenant}`</dt>
+    <dd>Replaced with the value from the `vars.tenant` variable in the stack configuration.</dd>
+    <dt>`{environment}`</dt>
+    <dd>Replaced with the value from the `vars.environment` variable in the stack configuration.</dd>
+    <dt>`{stage}`</dt>
+    <dd>Replaced with the value from the `vars.stage` variable in the stack configuration.</dd>
+  </dl>
+
+  For example:
+
+  ```yaml
+  # atmos.yaml
+  stacks:
+    name_pattern: "{tenant}-{environment}-{stage}"
+  ```
+
+  :::important Deprecated
+  The `name_pattern` is deprecated and will be removed in a future release. Please use `name_template` instead.
+  :::
+
+
+
+</dd>
+</dl>
+
+Both options are configured in [`atmos.yaml`](/cli/configuration).
+
+For example:
+
+```yaml
+# atmos.yaml
+stacks:
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment}}-{{ .vars.stage }}"
+```
+
+This will use the `tenant`, `environment`, and `stage` variables from the component's configuration in the stack to compute the stack name.
 
 For example, using the slug, we can reference a stack like this when applying the `vpc` stack in the `us2-dev` environment:
 
@@ -60,11 +114,11 @@ For example, using the slug, we can reference a stack like this when applying th
 atmos terraform apply vpc -s us2-dev
 ```
 
-### Components vs Component instances
+### Components vs Component Instances
 
-Components are different from Stacks.
+Components and Stacks are distinct concepts.
 
-When a component is added to a stack, we call that a "Component Instance"
+When a component is added to a stack, it becomes a **Component Instance**—essentially a deployment of that component within the stack.
 
 ### Parent Stacks vs Child Stacks
 
@@ -100,12 +154,21 @@ Note, the logical representation is never influenced by file paths or directorie
 
 A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/core-concepts/stacks/imports) configurations and use [inheritance](/core-concepts/stacks/inheritance) to achieve DRY configuration.
 
+:::tip
+View the full Stack configuration schema in the [Stack Schema](/schemas/stack) reference section.
+:::
+
+
 <File title="stack.yaml">
 ```yaml
 # Configurations that should get deep-merged into this one
 import:
   # each import is a "Stack" file. The `.yaml` extension is optional, and we do not recommend using it.
   - ue2-globals
+
+# Top-level environment variables are inherited by every single component.
+env:
+  AWS_REGION: "us-east-2"
 
 # Top-level variables that are inherited by every single component.
 # Use these wisely. Too many global vars will pollute the variable namespace.
@@ -157,8 +220,8 @@ components:
 
   ```yaml
   components:
-    sometool: # "sometool" can be any tool
-      somecomponent: # "somecomponent" can be the name of any "sometool" component
+    sometool: # "sometool" can be any tool (typically "terraform" or "helmfile")
+      somecomponent: # "somecomponent" is the name of any component managed by that tool
         vars: # etc...
   ```
   </dd>
@@ -176,6 +239,8 @@ components:
   </dd>
 </dl>
 
+
+
 ## Stack Files
 
 Stack files can be very numerous in large cloud environments (think many dozens to hundreds of stack files). To enable the proper organization of stack files, SweetOps has established some conventions that are good to follow. However, these are just conventions, and there are no limits enforced by the tool.
@@ -184,17 +249,16 @@ By convention, we recommend storing all Stacks in a `stacks/` folder at the root
 
 The filename of individual environment stacks can follow any convention, and the best one will depend on how you model environments at your organization.
 
-### Basic Layout
+### Basic Filesystem Layout
 
-A basic form of organization is to follow the naming pattern where each `$environment-$stage.yaml` is a file. This works well until you have so
-many environments and stages.
+A basic form of organization is to follow the naming pattern where each `$environment-$stage.yaml` is a file. This works well until you have so many environments and stages.
 
 For example, `$environment` might be `ue2` (for `us-east-2`) and `$stage` might be `prod` which would result in `stacks/ue2-prod.yaml`
 
 Some resources, however, are global in scope. For example, Route53 and IAM might not make sense to tie to a region. These are what we call "global
 resources". You might want to put these into a file like `stacks/global-region.yaml` to connote that they are not tied to any particular region.
 
-### Hierarchical Layout
+### Hierarchical Filesystem Layout
 
 We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens or
 hundreds of accounts and regions that you operate in. Use [Catalogs](/core-concepts/stacks/catalogs) to organize your Stack configurations.
