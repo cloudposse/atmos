@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,14 +32,11 @@ const (
 )
 
 var (
-	ErrValidPackage       = errors.New("no valid installer package provided for")
-	ErrTUIModel           = errors.New("failed to initialize TUI model")
-	ErrUnknownPackageType = errors.New("unknown package type")
-	currentPkgNameStyle   = theme.Styles.PackageName
-	doneStyle             = lipgloss.NewStyle().Margin(1, 2)
-	checkMark             = theme.Styles.Checkmark
-	xMark                 = theme.Styles.XMark
-	grayColor             = theme.Styles.GrayText
+	currentPkgNameStyle = theme.Styles.PackageName
+	doneStyle           = lipgloss.NewStyle().Margin(1, 2)
+	checkMark           = theme.Styles.Checkmark
+	xMark               = theme.Styles.XMark
+	grayColor           = theme.Styles.GrayText
 )
 
 type installedPkgMsg struct {
@@ -347,7 +343,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}
-		if err := copyToTarget(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile, p.uri); err != nil {
+		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
 			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
 		return installedPkgMsg{

@@ -1,0 +1,43 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: demo-vendoring
+  description: Atmos vendoring manifest for Atmos demo component library
+spec:
+  # Import other vendor manifests, if necessary
+  imports: []
+
+  sources:
+    - component: "test globs"
+      source: "github.com/cloudposse/atmos.git"
+      included_paths:
+        - "**/{demo-library,demo-stacks}/**/*.{tf,md}"
+      excluded_paths:
+        - "**/demo-library/**/*.{tfvars,tf}"
+      targets:
+        - "components/library/"
+      tags:
+        - demo
+
+    - component: "test globs without double stars upfront"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library?ref={{.Version}}"
+      included_paths:
+        - "/weather/*.md"
+      version: "main"
+      targets:
+        - "components/library/"
+      tags:
+        - demo
+    
+    - component: "test shallow globs and folder exclusion"
+      source: "github.com/cloudposse/atmos.git"
+      included_paths:
+        - "**/demo-localstack/*"
+        - "**/demo-library/**"
+      excluded_paths:
+        - "**/demo-library/**/stargazers/**"
+        - "**/demo-library/**/*.tf"
+      targets:
+        - "components/globs/"
+      tags:
+        - demo
