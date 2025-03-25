@@ -11,6 +11,9 @@
       "command": "",
       "shell": {
         "prompt": ""
+      },
+      "init": {
+        "pass_vars": false
       }
     },
     "helmfile": {

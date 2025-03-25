@@ -11,12 +11,15 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/charmbracelet/log"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-getter"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+const keyURL = "url"
 
 // ValidateURI validates URIs
 func ValidateURI(uri string) error {
@@ -61,15 +64,14 @@ func IsValidScheme(scheme string) bool {
 	return validSchemes[scheme]
 }
 
-// CustomGitHubDetector intercepts GitHub URLs and transforms them
-// into something like git::https://<token>@github.com/... so we can
-// do a git-based clone with a token.
-type CustomGitHubDetector struct {
+// CustomGitDetector intercepts GitHub URLs and transforms them into something like git::https://<token>@github.com/ so we can do a git-based clone with a token.
+type CustomGitDetector struct {
 	AtmosConfig schema.AtmosConfiguration
+	source      string
 }
 
 // Detect implements the getter.Detector interface for go-getter v1.
-func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
+func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if len(src) == 0 {
 		return "", false, nil
 	}
@@ -128,23 +130,52 @@ func (d *CustomGitHubDetector) Detect(src, _ string) (string, bool, error) {
 		}
 	}
 
+	// Adjust subdirectory if needed.
+	d.adjustSubdir(parsedURL, d.source)
+
+	// Set "depth=1" for a shallow clone if not specified.
+	q := parsedURL.Query()
+	if _, exists := q["depth"]; !exists {
+		q.Set("depth", "1")
+	}
+	parsedURL.RawQuery = q.Encode()
+
 	finalURL := "git::" + parsedURL.String()
+	maskedFinal, err := u.MaskBasicAuth(strings.TrimPrefix(finalURL, "git::"))
+	if err != nil {
+		log.Debug("Masking failed", "error", err)
+	} else {
+		log.Debug("Final URL (masked)", "url", "git::"+maskedFinal)
+	}
 
 	return finalURL, true, nil
 }
 
+// adjustSubdir appends "//." to the path if no subdirectory is specified.
+func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
+	normalizedSource := filepath.ToSlash(source)
+	if normalizedSource != "" && !strings.Contains(normalizedSource, "//") {
+		parts := strings.SplitN(parsedURL.Path, "/", 4)
+		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
+			maskedSrc, _ := u.MaskBasicAuth(source)
+			log.Debug("Detected top-level repo with no subdir: appending '//.'", keyURL, maskedSrc)
+			parsedURL.Path += "//."
+		}
+	}
+}
+
 // RegisterCustomDetectors prepends the custom detector so it runs before
 // the built-in ones. Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration) {
+func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration, source string) {
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitHubDetector{AtmosConfig: atmosConfig},
+			&CustomGitDetector{AtmosConfig: atmosConfig, source: source},
 		},
 		getter.Detectors...,
 	)
 }
 
-// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination
+// GoGetterGet downloads packages (files and folders) from different sources using `go-getter` and saves them into the destination.
 func GoGetterGet(
 	atmosConfig schema.AtmosConfiguration,
 	src string,
@@ -155,8 +186,11 @@ func GoGetterGet(
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Register custom detectors
-	RegisterCustomDetectors(atmosConfig)
+	// Register custom detectors, passing the original `src` to the CustomGitDetector.
+	// go-getter typically strips subdirectories before calling the detector, so the
+	// unaltered source is needed to identify whether a top-level repository or a
+	// subdirectory was specified (e.g., for appending "//." only when no subdir is present).
+	RegisterCustomDetectors(atmosConfig, src)
 
 	client := &getter.Client{
 		Ctx: ctx,
@@ -164,8 +198,17 @@ func GoGetterGet(
 		// Destination where the files will be stored. This will create the directory if it doesn't exist
 		Dst:  dest,
 		Mode: clientMode,
+		Getters: map[string]getter.Getter{
+			// Overriding 'git'
+			"git":   &CustomGitGetter{},
+			"file":  &getter.FileGetter{},
+			"hg":    &getter.HgGetter{},
+			"http":  &getter.HttpGetter{},
+			"https": &getter.HttpGetter{},
+			// "s3": &getter.S3Getter{}, // add as needed
+			// "gcs": &getter.GCSGetter{},
+		},
 	}
-
 	if err := client.Get(); err != nil {
 		return err
 	}
@@ -173,12 +216,43 @@ func GoGetterGet(
 	return nil
 }
 
-// DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
-func DownloadDetectFormatAndParseFile(atmosConfig schema.AtmosConfiguration, file string) (any, error) {
+// CustomGitGetter is a custom getter for git (git::) that removes symlinks.
+type CustomGitGetter struct {
+	getter.GitGetter
+}
+
+// Get implements the custom getter logic removing symlinks.
+func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
+	// Normal clone
+	if err := c.GitGetter.Get(dst, url); err != nil {
+		return err
+	}
+	// Remove symlinks
+	return removeSymlinks(dst)
+}
+
+// removeSymlinks walks the directory and removes any symlinks
+// it encounters.
+func removeSymlinks(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			log.Debug("Removing symlink", "path", path)
+			// Symlinks are removed for the entire repo, regardless if there are any subfolders specified
+			return os.Remove(path)
+		}
+		return nil
+	})
+}
+
+// DownloadDetectFormatAndParseFile downloads a remote file, detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type.
+func DownloadDetectFormatAndParseFile(atmosConfig *schema.AtmosConfiguration, file string) (any, error) {
 	tempDir := os.TempDir()
 	f := filepath.Join(tempDir, uuid.New().String())
 
-	if err := GoGetterGet(atmosConfig, file, f, getter.ClientModeFile, time.Second*30); err != nil {
+	if err := GoGetterGet(*atmosConfig, file, f, getter.ClientModeFile, 30*time.Second); err != nil {
 		return nil, fmt.Errorf("failed to download the file '%s': %w", file, err)
 	}
 
@@ -202,41 +276,40 @@ scp, sftp
 Shortcuts like github.com, bitbucket.org
 
 - File-related Schemes:
-file - Local filesystem paths
-dir - Local directories
-tar - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
-zip - Zip files
+  file - Local filesystem paths
+  dir - Local directories
+  tar - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
+  zip - Zip files
 
 - HTTP/HTTPS:
-http - HTTP URLs
-https - HTTPS URLs
+  http - HTTP URLs
+  https - HTTPS URLs
 
 - Git:
-git - Git repositories, which can be accessed via HTTPS or SSH
+  git - Git repositories, which can be accessed via HTTPS or SSH
 
 - Mercurial:
-hg - Mercurial repositories, accessed via HTTP/S or SSH
+  hg - Mercurial repositories, accessed via HTTP/S or SSH
 
 - Amazon S3:
-s3 - Amazon S3 bucket URLs
+  s3 - Amazon S3 bucket URLs
 
 - Google Cloud Storage:
-gcs - Google Cloud Storage URLs
+  gcs - Google Cloud Storage URLs
 
 - OCI:
-oci - Open Container Initiative (OCI) images
+  oci - Open Container Initiative (OCI) images
 
 - Other Protocols:
-scp - Secure Copy Protocol for SSH-based transfers
-sftp - SSH File Transfer Protocol
+  scp - Secure Copy Protocol for SSH-based transfers
+  sftp - SSH File Transfer Protocol
 
 - GitHub/Bitbucket/Other Shortcuts:
-github.com - Direct GitHub repository shortcuts
-bitbucket.org - Direct Bitbucket repository shortcuts
+  github.com - Direct GitHub repository shortcuts
+  bitbucket.org - Direct Bitbucket repository shortcuts
 
 - Composite Schemes:
-go-getter allows for composite schemes, where multiple operations can be combined. For example:
-git::https://github.com/user/repo - Forces the use of git over an HTTPS URL.
-tar::http://example.com/archive.tar.gz - Treats the HTTP resource as a tarball.
-
+  go-getter allows for composite schemes, where multiple operations can be combined. For example:
+    git::https://github.com/user/repo - Forces the use of git over an HTTPS URL.
+    tar::http://example.com/archive.tar.gz - Treats the HTTP resource as a tarball.
 */
