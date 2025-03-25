@@ -237,7 +237,8 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				componentSectionProcessed, err := ProcessTmplWithDatasources(
-					atmosConfig,
+					&atmosConfig,
+					&configAndStacksInfo,
 					settingsSectionStruct,
 					"terraform-generate-backends",
 					componentSectionStr,

@@ -16,8 +16,13 @@ import (
 )
 
 // FuncMap creates and returns a map of template functions
-func FuncMap(atmosConfig schema.AtmosConfiguration, ctx context.Context, gomplateData *data.Data) template.FuncMap {
-	atmosFuncs := &AtmosFuncs{atmosConfig, ctx, gomplateData}
+func FuncMap(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	ctx context.Context,
+	gomplateData *data.Data,
+) template.FuncMap {
+	atmosFuncs := &AtmosFuncs{atmosConfig, configAndStacksInfo, ctx, gomplateData}
 
 	return map[string]any{
 		"atmos": func() any { return atmosFuncs },
@@ -25,15 +30,16 @@ func FuncMap(atmosConfig schema.AtmosConfiguration, ctx context.Context, gomplat
 }
 
 type AtmosFuncs struct {
-	atmosConfig  schema.AtmosConfiguration
-	ctx          context.Context
-	gomplateData *data.Data
+	atmosConfig         *schema.AtmosConfiguration
+	configAndStacksInfo *schema.ConfigAndStacksInfo
+	ctx                 context.Context
+	gomplateData        *data.Data
 }
 
 func (f AtmosFuncs) Component(component string, stack string) (any, error) {
-	return componentFunc(f.atmosConfig, component, stack)
+	return componentFunc(f.atmosConfig, f.configAndStacksInfo, component, stack)
 }
 
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
-	return gomplateDatasourceFunc(f.atmosConfig, alias, f.gomplateData, args...)
+	return gomplateDatasourceFunc(alias, f.gomplateData, args...)
 }

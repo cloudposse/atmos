@@ -24,8 +24,8 @@ func TestListComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
-		nil, false, false, false, false, nil)
-	require.NoError(t, err)
+		nil, false, true, true, false, nil)
+	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents("", stacksMap)
 	require.NoError(t, err)
@@ -45,8 +45,8 @@ func TestListComponentsWithStack(t *testing.T) {
 	require.NoError(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, testStack, nil, nil,
-		nil, false, false, false, false, nil)
-	require.NoError(t, err)
+		nil, false, true, true, false, nil)
+	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents(testStack, stacksMap)
 	require.NoError(t, err)
