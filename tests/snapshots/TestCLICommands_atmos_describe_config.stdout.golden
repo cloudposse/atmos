@@ -11,6 +11,9 @@
       "command": "",
       "shell": {
         "prompt": ""
+      },
+      "init": {
+        "pass_vars": false
       }
     },
     "helmfile": {
@@ -139,5 +142,6 @@
       "color": true
     }
   },
-  "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks"
+  "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks",
+  "import": null
 }
