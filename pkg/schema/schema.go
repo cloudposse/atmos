@@ -216,10 +216,12 @@ type Docs struct {
 	// Deprecated: this has moved to `settings.terminal.max-width`
 	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
 	// Deprecated: this has moved to `settings.terminal.pagination`
-	Pagination bool `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
-	Generate   struct {
-		Readme DocsGenerateReadme `yaml:"readme" json:"readme" mapstructure:"readme"`
-	} `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
+	Pagination bool         `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	Generate   DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
+}
+
+type DocsGenerate struct {
+	Readme DocsGenerateReadme `yaml:"readme" json:"readme" mapstructure:"readme"`
 }
 
 type Templates struct {
