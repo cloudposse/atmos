@@ -15,6 +15,7 @@ spec:
         - "library/basic/{{ .Component }}"
       tags:
         - demo
+    
     # Direct credentials provided in the URL (token injection should be skipped)
     - component: "terraform-null-label-direct"
       source: "https://myuser:supersecret@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"

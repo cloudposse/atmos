@@ -14,7 +14,7 @@ spec:
         - "library/cred/{{ .Component }}"
       tags:
         - demo
-    ## Explicit ssh vendoring (the schema is explicitly spcified along with a username, no custom detector is invoked)
+    ## Explicit ssh vednoring (the schema is explicitly spcified along with a username, no custom detector is invoked)
     - component: "terraform-null-label-basic"
       source: "git::ssh://git@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
       version: "0.25.0"

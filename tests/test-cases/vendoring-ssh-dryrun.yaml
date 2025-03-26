@@ -18,7 +18,6 @@ tests:
     expect:
       diff: []
       exit_code: 0
-
   - name: atmos vendor pull component using SSH
     enabled: true
     snapshot: true
@@ -37,7 +36,6 @@ tests:
     expect:
       diff: []
       exit_code: 0
-
   - name: atmos vendor pull with custom detector and handling credentials leakage
     enabled: true
     snapshot: true
@@ -54,6 +52,6 @@ tests:
     expect:
       diff: []
     stdout:
-      - !not 'supersecret'
+      - !not 'supersecret'  
       - !not 'ATMOS_GITHUB_TOKEN'
     exit_code: 0
