@@ -10,6 +10,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
+	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -92,15 +93,20 @@ var listVarsCmd = &cobra.Command{
 		// Run listValues with the component argument
 		output, err := listValues(cmd, args)
 		if err != nil {
-			// Use IsNoValuesFoundError instead of string matching
-			if l.IsNoValuesFoundError(err) && len(args) > 0 {
+			switch e := err.(type) {
+			case *listerrors.ComponentVarsNotFoundError:
+				log.Error("no vars found for component",
+					"component", e.Component)
+				return
+			case *listerrors.NoValuesFoundError:
 				log.Error("no values found for component with query",
 					"component", args[0],
 					"query", ".vars")
 				return
+			default:
+				log.Error(err.Error())
+				return
 			}
-			log.Error(err.Error())
-			return
 		}
 
 		u.PrintMessage(output)
@@ -203,7 +209,7 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	if len(args) == 0 {
 		return "", ErrComponentNameRequired
 	}
-	component := args[0]
+	componentName := args[0]
 
 	// Get all flags and options
 	filterOptions, processingFlags, err := getListValuesFlags(cmd)
@@ -211,11 +217,26 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		return "", err
 	}
 
-	// Set component in filter options
-	filterOptions.Component = component
+	// Use ComponentFilter instead of Component for filtering by component name
+	// This allows the extractComponentValues function to handle it properly
+	filterOptions.ComponentFilter = componentName
+
+	// For vars command (using .vars query), we clear the Component field
+	// to let the system determine the correct query path
+	if filterOptions.Query == ".vars" {
+		// Using ComponentFilter with empty Component
+		// lets the system build the correct YQ expression
+		filterOptions.Component = ""
+	} else {
+		// For other cases where we're not querying vars, use the standard approach
+		filterOptions.Component = componentName
+	}
 
 	// Log the component name
-	log.Debug("Processing component", "component", component)
+	log.Debug("Processing component",
+		"component", componentName,
+		"component_field", filterOptions.Component,
+		"component_filter", filterOptions.ComponentFilter)
 
 	// Initialize CLI config
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -232,7 +253,8 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 
 	// Log the filter options
 	log.Info("Filtering values",
-		"component", component,
+		"component", componentName,
+		"componentFilter", filterOptions.ComponentFilter,
 		"query", filterOptions.Query,
 		"includeAbstract", filterOptions.IncludeAbstract,
 		"maxColumns", filterOptions.MaxColumns,

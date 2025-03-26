@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
@@ -17,10 +19,11 @@ import (
 
 // listMetadataCmd lists metadata across stacks.
 var listMetadataCmd = &cobra.Command{
-	Use:   "metadata",
+	Use:   "metadata [component]",
 	Short: "List metadata across stacks",
-	Long:  "List metadata information across all stacks",
+	Long:  "List metadata information across all stacks or for a specific component",
 	Example: "atmos list metadata\n" +
+		"atmos list metadata c1\n" +
 		"atmos list metadata --query .component\n" +
 		"atmos list metadata --format json\n" +
 		"atmos list metadata --stack '*-{dev,staging}-*'\n" +
@@ -28,7 +31,7 @@ var listMetadataCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		output, err := listMetadata(cmd)
+		output, err := listMetadata(cmd, args)
 		if err != nil {
 			log.Error("failed to list metadata", "error", err)
 			return
@@ -50,7 +53,56 @@ func init() {
 	listCmd.AddCommand(listMetadataCmd)
 }
 
-func listMetadata(cmd *cobra.Command) (string, error) {
+// setupMetadataOptions sets up the filter options for metadata listing.
+func setupMetadataOptions(commonFlags fl.CommonFlags, componentFilter string) *l.FilterOptions {
+	query := commonFlags.Query
+	if query == "" {
+		query = ".metadata"
+	}
+
+	return &l.FilterOptions{
+		Component:       l.KeyMetadata,
+		ComponentFilter: componentFilter,
+		Query:           query,
+		IncludeAbstract: false,
+		MaxColumns:      commonFlags.MaxColumns,
+		FormatStr:       commonFlags.Format,
+		Delimiter:       commonFlags.Delimiter,
+		StackPattern:    commonFlags.Stack,
+	}
+}
+
+// handleMetadataError handles specific metadata-related errors.
+func handleMetadataError(err error, componentFilter, query, format string) (string, error) {
+	if componentFilter != "" {
+		_, isComponentMetadataError := err.(*errors.ComponentMetadataNotFoundError)
+		_, isNoValuesError := err.(*errors.NoValuesFoundError)
+		_, isNoMetadataError := err.(*errors.NoMetadataFoundError)
+
+		if isComponentMetadataError || isNoValuesError || isNoMetadataError {
+			log.Debug("No metadata found for component, returning empty result",
+				"component", componentFilter,
+				"error_type", fmt.Sprintf("%T", err))
+
+			switch f.Format(format) {
+			case f.FormatJSON, f.FormatYAML:
+				return "{}", nil
+			case f.FormatCSV, f.FormatTSV:
+				return "", nil
+			default:
+				return fmt.Sprintf("No metadata found for component '%s'\n", componentFilter), nil
+			}
+		}
+	}
+
+	if u.IsNoValuesFoundError(err) {
+		return "", &errors.NoMetadataFoundError{Query: query}
+	}
+
+	return "", &errors.MetadataFilteringError{Cause: err}
+}
+
+func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
 		return "", &errors.QueryError{
@@ -74,39 +126,27 @@ func listMetadata(cmd *cobra.Command) (string, error) {
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
+		processingFlags.Templates, processingFlags.Functions, false, nil)
 	if err != nil {
 		return "", &errors.DescribeStacksError{Cause: err}
 	}
 
-	// Log the metadata query
-	log.Info("Filtering metadata",
-		"query", commonFlags.Query,
-		"maxColumns", commonFlags.MaxColumns,
-		"format", commonFlags.Format,
-		"stackPattern", commonFlags.Stack,
-		"processTemplates", processingFlags.Templates,
-		"processYamlFunctions", processingFlags.Functions)
-
-	// Use .metadata as the default query if none provided
-	if commonFlags.Query == "" {
-		commonFlags.Query = ".metadata"
+	componentFilter := ""
+	if len(args) > 0 {
+		componentFilter = args[0]
 	}
 
-	output, err := l.FilterAndListValues(stacksMap, &l.FilterOptions{
-		Component:       "",
-		Query:           commonFlags.Query,
-		IncludeAbstract: false,
-		MaxColumns:      commonFlags.MaxColumns,
-		FormatStr:       commonFlags.Format,
-		Delimiter:       commonFlags.Delimiter,
-		StackPattern:    commonFlags.Stack,
-	})
+	log.Info("Filtering metadata",
+		"component", componentFilter, "query", commonFlags.Query,
+		"maxColumns", commonFlags.MaxColumns, "format", commonFlags.Format,
+		"stackPattern", commonFlags.Stack, "templates", processingFlags.Templates)
+
+	filterOptions := setupMetadataOptions(*commonFlags, componentFilter)
+	output, err := l.FilterAndListValues(stacksMap, filterOptions)
 	if err != nil {
-		if u.IsNoValuesFoundError(err) {
-			return "", &errors.NoMetadataFoundError{Query: commonFlags.Query}
-		}
-		return "", &errors.MetadataFilteringError{Cause: err}
+		return handleMetadataError(err, componentFilter, commonFlags.Query,
+			commonFlags.Format)
 	}
 
 	return output, nil

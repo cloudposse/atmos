@@ -35,17 +35,22 @@ const (
 	KeyAbstract = "abstract"
 	// KeyStack is the key used in log messages to identify stack contexts.
 	KeyStack = "stack"
+	// KeyComponent is the key used to identify component in log messages and errors.
+	KeyComponent = "component"
 	// DotChar is the dot character used in queries.
 	DotChar = "."
 	// LeftBracketChar is the left bracket character used in array indices.
 	LeftBracketChar = "["
 	// KeyValue is the key used for scalar values in result maps.
 	KeyValue = "value"
+	// KeyQuery is the key used for query information in log messages and errors.
+	KeyQuery = "query"
 )
 
 // FilterOptions contains the options for filtering and listing component values.
 type FilterOptions struct {
 	Component       string
+	ComponentFilter string
 	Query           string
 	IncludeAbstract bool
 	MaxColumns      int
@@ -66,7 +71,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, options *FilterOption
 	}
 
 	// Extract stack values
-	extractedValues, err := extractComponentValues(stacksMap, options.Component, options.IncludeAbstract)
+	extractedValues, err := extractComponentValues(stacksMap, options.Component, options.ComponentFilter, options.IncludeAbstract)
 	if err != nil {
 		return "", err
 	}
@@ -88,8 +93,22 @@ func FilterAndListValues(stacksMap map[string]interface{}, options *FilterOption
 }
 
 // extractComponentValues extracts the component values from all stacks.
-func extractComponentValues(stacksMap map[string]interface{}, component string, includeAbstract bool) (map[string]interface{}, error) {
+func extractComponentValues(stacksMap map[string]interface{}, component string, componentFilter string, includeAbstract bool) (map[string]interface{}, error) {
 	values := make(map[string]interface{})
+
+	// Check if this is a regular component (not a section like settings/metadata)
+	isComponentSection := component != KeySettings && component != KeyMetadata
+
+	// If it's a regular component with no specific filter, use the component as the filter
+	if isComponentSection && componentFilter == "" {
+		log.Debug("Using component as filter", KeyComponent, component)
+		componentFilter = component
+		component = ""
+	}
+
+	log.Debug("Building YQ expression",
+		KeyComponent, component,
+		"componentFilter", componentFilter)
 
 	for stackName, stackData := range stacksMap {
 		stack, ok := stackData.(map[string]interface{})
@@ -99,14 +118,15 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 		}
 
 		// Build YQ expression based on component type
-		yqExpression := processComponentType(component, includeAbstract)
+		yqExpression := processComponentType(component, componentFilter, includeAbstract)
 
 		// Execute YQ query
 		queryResult, err := utils.EvaluateYqExpression(nil, stack, yqExpression)
 		if err != nil || queryResult == nil {
 			log.Debug("no values found",
 				KeyStack, stackName,
-				"component", component,
+				KeyComponent, component,
+				"componentFilter", componentFilter,
 				"yq_expression", yqExpression,
 				"error", err)
 			continue
@@ -117,6 +137,30 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 	}
 
 	if len(values) == 0 {
+		if componentFilter != "" {
+			switch component {
+			case KeySettings:
+				return nil, &listerrors.NoComponentSettingsFoundError{
+					Component: componentFilter,
+				}
+			case KeyMetadata:
+				// For metadata with component filter, return a specific error
+				// but we want to handle this gracefully at a higher level.
+				return nil, &listerrors.ComponentMetadataNotFoundError{
+					Component: componentFilter,
+				}
+			case "":
+				// This is for when we're using .vars query with componentFilter.
+				return nil, &listerrors.ComponentVarsNotFoundError{
+					Component: componentFilter,
+				}
+			default:
+				// For other components.
+				return nil, &listerrors.NoValuesFoundError{
+					Component: componentFilter,
+				}
+			}
+		}
 		return nil, &listerrors.NoValuesFoundError{Component: component}
 	}
 
@@ -124,17 +168,37 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 }
 
 // processComponentType determines the YQ expression based on component type.
-func processComponentType(component string, includeAbstract bool) string {
+func processComponentType(component string, componentFilter string, includeAbstract bool) string {
+	// If this is a regular component query with a specific component filter
+	if component == "" && componentFilter != "" {
+		// Extract component name from path
+		componentName := getComponentNameFromPath(componentFilter)
+
+		// Return a direct path to the component.
+		return fmt.Sprintf(".components.%s.%s", KeyTerraform, componentName)
+	}
+
+	// Handle special section queries.
 	switch component {
 	case KeySettings:
+		if componentFilter != "" {
+			componentName := getComponentNameFromPath(componentFilter)
+			return fmt.Sprintf(".components.%s.%s", KeyTerraform, componentName)
+		}
 		return "select(.settings // .terraform.settings // .components.terraform.*.settings)"
 	case KeyMetadata:
+		if componentFilter != "" {
+			// For metadata with component filter, target the specific component.
+			componentName := getComponentNameFromPath(componentFilter)
+			return fmt.Sprintf(".components.%s.%s", KeyTerraform, componentName)
+		}
+		// For general metadata query.
 		return DotChar + KeyMetadata
 	default:
-		// Extract component name from path
+		// Extract component name from path.
 		componentName := getComponentNameFromPath(component)
 
-		// Build query for component vars
+		// Build query for component vars.
 		return buildComponentYqExpression(componentName, includeAbstract)
 	}
 }
@@ -242,21 +306,33 @@ func applyQuery(filteredValues map[string]interface{}, query string, component s
 		return filteredValues, nil
 	}
 
+	log.Debug("Applying query to filtered values",
+		KeyQuery, query,
+		KeyComponent, component,
+		"num_stacks", len(filteredValues))
+
 	results := make(map[string]interface{})
 
 	for stackName, stackData := range filteredValues {
+		log.Debug("Processing stack data",
+			KeyStack, stackName,
+			"data_type", fmt.Sprintf("%T", stackData))
+
 		// Apply YQ expression directly to the data
 		queryResult, err := utils.EvaluateYqExpression(nil, stackData, query)
 		if err != nil {
 			log.Debug("YQ query failed",
 				KeyStack, stackName,
-				"query", query,
+				KeyQuery, query,
 				"error", err)
 			continue // Skip this stack if query fails
 		}
 
 		if queryResult == nil {
-			log.Debug("query returned nil", KeyStack, stackName, "query", query)
+			log.Debug("query returned nil",
+				KeyStack, stackName,
+				KeyQuery, query,
+				"data_structure", fmt.Sprintf("%T", stackData))
 			continue
 		}
 
@@ -268,6 +344,9 @@ func applyQuery(filteredValues map[string]interface{}, query string, component s
 	}
 
 	if len(results) == 0 {
+		log.Debug("No results found after applying query",
+			KeyComponent, component,
+			KeyQuery, query)
 		return nil, &listerrors.NoValuesFoundError{Component: component, Query: query}
 	}
 

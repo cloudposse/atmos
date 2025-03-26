@@ -138,3 +138,43 @@ func (e *SettingsFilteringError) Error() string {
 func (e *SettingsFilteringError) Unwrap() error {
 	return e.Cause
 }
+
+// NoComponentSettingsFoundError indicates that no settings were found for a specific component.
+type NoComponentSettingsFoundError struct {
+	Component string
+}
+
+func (e *NoComponentSettingsFoundError) Error() string {
+	return fmt.Sprintf("no settings found for component '%s'", e.Component)
+}
+
+// NoSettingsFoundForComponentError indicates that no settings were found for a specific component with query.
+type NoSettingsFoundForComponentError struct {
+	Component string
+	Query     string
+}
+
+func (e *NoSettingsFoundForComponentError) Error() string {
+	if e.Query != "" {
+		return fmt.Sprintf("no settings found for component '%s' with query '%s'", e.Component, e.Query)
+	}
+	return fmt.Sprintf("no settings found for component '%s'", e.Component)
+}
+
+// ComponentVarsNotFoundError indicates that no vars were found for a specific component.
+type ComponentVarsNotFoundError struct {
+	Component string
+}
+
+func (e *ComponentVarsNotFoundError) Error() string {
+	return fmt.Sprintf("no vars found for component '%s'", e.Component)
+}
+
+// ComponentMetadataNotFoundError indicates that no metadata was found for a specific component.
+type ComponentMetadataNotFoundError struct {
+	Component string
+}
+
+func (e *ComponentMetadataNotFoundError) Error() string {
+	return fmt.Sprintf("no metadata found for component '%s'", e.Component)
+}

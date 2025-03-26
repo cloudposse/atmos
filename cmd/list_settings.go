@@ -17,18 +17,20 @@ import (
 
 // listSettingsCmd lists settings across stacks.
 var listSettingsCmd = &cobra.Command{
-	Use:   "settings",
-	Short: "List settings across stacks",
-	Long:  "List settings configuration across all stacks",
+	Use:   "settings [component]",
+	Short: "List settings across stacks or for a specific component",
+	Long:  "List settings configuration across all stacks or for a specific component",
 	Example: "atmos list settings\n" +
+		"atmos list settings c1\n" +
 		"atmos list settings --query .terraform\n" +
 		"atmos list settings --format json\n" +
 		"atmos list settings --stack '*-dev-*'\n" +
 		"atmos list settings --stack 'prod-*'",
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		output, err := listSettings(cmd)
+		output, err := listSettings(cmd, args)
 		if err != nil {
 			log.Error("failed to list settings", "error", err)
 			return
@@ -50,57 +52,73 @@ func init() {
 	listCmd.AddCommand(listSettingsCmd)
 }
 
-func listSettings(cmd *cobra.Command) (string, error) {
-	// Get common flags
-	commonFlags, err := fl.GetCommonListFlags(cmd)
-	if err != nil {
-		return "", &errors.CommonFlagsError{Cause: err}
-	}
-
-	// Get template and function processing flags
-	processingFlags := fl.GetProcessingFlags(cmd)
-
-	if f.Format(commonFlags.Format) == f.FormatCSV && commonFlags.Delimiter == f.DefaultTSVDelimiter {
-		commonFlags.Delimiter = f.DefaultCSVDelimiter
-	}
-
-	// Initialize CLI config
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-	if err != nil {
-		return "", &errors.InitConfigError{Cause: err}
-	}
-
-	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil)
-	if err != nil {
-		return "", &errors.DescribeStacksError{Cause: err}
-	}
-
-	// Log the settings query
-	log.Info("Filtering settings",
-		"query", commonFlags.Query,
-		"maxColumns", commonFlags.MaxColumns,
-		"format", commonFlags.Format,
-		"stackPattern", commonFlags.Stack,
-		"processTemplates", processingFlags.Templates,
-		"processYamlFunctions", processingFlags.Functions)
-
-	// Use empty query to avoid further processing since handleComponentProperties will extract the settings
-	output, err := l.FilterAndListValues(stacksMap, &l.FilterOptions{
+// setupSettingsOptions sets up the filter options for settings listing.
+func setupSettingsOptions(commonFlags fl.CommonFlags, componentFilter string) *l.FilterOptions {
+	return &l.FilterOptions{
 		Component:       "settings",
+		ComponentFilter: componentFilter,
 		Query:           commonFlags.Query,
 		IncludeAbstract: false,
 		MaxColumns:      commonFlags.MaxColumns,
 		FormatStr:       commonFlags.Format,
 		Delimiter:       commonFlags.Delimiter,
 		StackPattern:    commonFlags.Stack,
-	})
-	if err != nil {
-		if u.IsNoValuesFoundError(err) {
-			return "", &errors.NoSettingsFoundError{Query: commonFlags.Query}
+	}
+}
+
+// handleSettingsError handles specific settings-related errors.
+func handleSettingsError(err error, componentFilter, query string) (string, error) {
+	if u.IsNoValuesFoundError(err) {
+		if componentFilter != "" {
+			return "", &errors.NoSettingsFoundForComponentError{
+				Component: componentFilter,
+				Query:     query,
+			}
 		}
-		return "", &errors.SettingsFilteringError{Cause: err}
+		return "", &errors.NoSettingsFoundError{Query: query}
+	}
+	return "", &errors.SettingsFilteringError{Cause: err}
+}
+
+func listSettings(cmd *cobra.Command, args []string) (string, error) {
+	commonFlags, err := fl.GetCommonListFlags(cmd)
+	if err != nil {
+		return "", &errors.CommonFlagsError{Cause: err}
+	}
+
+	processingFlags := fl.GetProcessingFlags(cmd)
+
+	if f.Format(commonFlags.Format) == f.FormatCSV && commonFlags.Delimiter == f.DefaultTSVDelimiter {
+		commonFlags.Delimiter = f.DefaultCSVDelimiter
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return "", &errors.InitConfigError{Cause: err}
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
+		processingFlags.Templates, processingFlags.Functions, false, nil)
+	if err != nil {
+		return "", &errors.DescribeStacksError{Cause: err}
+	}
+
+	componentFilter := ""
+	if len(args) > 0 {
+		componentFilter = args[0]
+	}
+
+	log.Info("Filtering settings",
+		"query", commonFlags.Query, "component", componentFilter,
+		"maxColumns", commonFlags.MaxColumns, "format", commonFlags.Format,
+		"stackPattern", commonFlags.Stack, "processTemplates", processingFlags.Templates,
+		"processYamlFunctions", processingFlags.Functions)
+
+	filterOptions := setupSettingsOptions(*commonFlags, componentFilter)
+	output, err := l.FilterAndListValues(stacksMap, filterOptions)
+	if err != nil {
+		return handleSettingsError(err, componentFilter, commonFlags.Query)
 	}
 
 	return output, nil
