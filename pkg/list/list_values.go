@@ -92,23 +92,46 @@ func FilterAndListValues(stacksMap map[string]interface{}, options *FilterOption
 	return formatOutput(queriedValues, options.FormatStr, options.Delimiter, options.MaxColumns)
 }
 
+// createComponentError creates the appropriate error based on component type and filter.
+func createComponentError(component, componentFilter string) error {
+	if componentFilter == "" {
+		return &listerrors.NoValuesFoundError{Component: component}
+	}
+
+	switch component {
+	case KeySettings:
+		return &listerrors.NoComponentSettingsFoundError{
+			Component: componentFilter,
+		}
+	case KeyMetadata:
+		return &listerrors.ComponentMetadataNotFoundError{
+			Component: componentFilter,
+		}
+	case "":
+		// This is for when we're using .vars query with componentFilter.
+		return &listerrors.ComponentVarsNotFoundError{
+			Component: componentFilter,
+		}
+	default:
+		return &listerrors.NoValuesFoundError{
+			Component: componentFilter,
+		}
+	}
+}
+
 // extractComponentValues extracts the component values from all stacks.
 func extractComponentValues(stacksMap map[string]interface{}, component string, componentFilter string, includeAbstract bool) (map[string]interface{}, error) {
 	values := make(map[string]interface{})
 
-	// Check if this is a regular component (not a section like settings/metadata)
+	// Check if this is a regular component and use it as filter if no specific filter
 	isComponentSection := component != KeySettings && component != KeyMetadata
-
-	// If it's a regular component with no specific filter, use the component as the filter
 	if isComponentSection && componentFilter == "" {
 		log.Debug("Using component as filter", KeyComponent, component)
 		componentFilter = component
 		component = ""
 	}
 
-	log.Debug("Building YQ expression",
-		KeyComponent, component,
-		"componentFilter", componentFilter)
+	log.Debug("Building YQ expression", KeyComponent, component, "componentFilter", componentFilter)
 
 	for stackName, stackData := range stacksMap {
 		stack, ok := stackData.(map[string]interface{})
@@ -117,17 +140,13 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 			continue
 		}
 
-		// Build YQ expression based on component type
+		// Build and execute YQ expression
 		yqExpression := processComponentType(component, componentFilter, includeAbstract)
-
-		// Execute YQ query
 		queryResult, err := utils.EvaluateYqExpression(nil, stack, yqExpression)
 		if err != nil || queryResult == nil {
-			log.Debug("no values found",
-				KeyStack, stackName,
-				KeyComponent, component,
-				"componentFilter", componentFilter,
-				"yq_expression", yqExpression,
+			log.Debug("no values found", 
+				KeyStack, stackName, KeyComponent, component,
+				"componentFilter", componentFilter, "yq_expression", yqExpression, 
 				"error", err)
 			continue
 		}
@@ -137,31 +156,7 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 	}
 
 	if len(values) == 0 {
-		if componentFilter != "" {
-			switch component {
-			case KeySettings:
-				return nil, &listerrors.NoComponentSettingsFoundError{
-					Component: componentFilter,
-				}
-			case KeyMetadata:
-				// For metadata with component filter, return a specific error
-				// but we want to handle this gracefully at a higher level.
-				return nil, &listerrors.ComponentMetadataNotFoundError{
-					Component: componentFilter,
-				}
-			case "":
-				// This is for when we're using .vars query with componentFilter.
-				return nil, &listerrors.ComponentVarsNotFoundError{
-					Component: componentFilter,
-				}
-			default:
-				// For other components.
-				return nil, &listerrors.NoValuesFoundError{
-					Component: componentFilter,
-				}
-			}
-		}
-		return nil, &listerrors.NoValuesFoundError{Component: component}
+		return nil, createComponentError(component, componentFilter)
 	}
 
 	return values, nil
