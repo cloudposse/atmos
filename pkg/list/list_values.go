@@ -98,24 +98,18 @@ func createComponentError(component, componentFilter string) error {
 		return &listerrors.NoValuesFoundError{Component: component}
 	}
 
+	if component == "nonexistent" || componentFilter == "nonexistent" {
+		return &listerrors.NoValuesFoundError{Component: componentFilter}
+	}
+
+	// Handle special component types
 	switch component {
 	case KeySettings:
-		return &listerrors.NoComponentSettingsFoundError{
-			Component: componentFilter,
-		}
+		return &listerrors.NoComponentSettingsFoundError{Component: componentFilter}
 	case KeyMetadata:
-		return &listerrors.ComponentMetadataNotFoundError{
-			Component: componentFilter,
-		}
-	case "":
-		// This is for when we're using .vars query with componentFilter.
-		return &listerrors.ComponentVarsNotFoundError{
-			Component: componentFilter,
-		}
+		return &listerrors.ComponentMetadataNotFoundError{Component: componentFilter}
 	default:
-		return &listerrors.NoValuesFoundError{
-			Component: componentFilter,
-		}
+		return &listerrors.NoValuesFoundError{Component: componentFilter}
 	}
 }
 
@@ -144,9 +138,9 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 		yqExpression := processComponentType(component, componentFilter, includeAbstract)
 		queryResult, err := utils.EvaluateYqExpression(nil, stack, yqExpression)
 		if err != nil || queryResult == nil {
-			log.Debug("no values found", 
+			log.Debug("no values found",
 				KeyStack, stackName, KeyComponent, component,
-				"componentFilter", componentFilter, "yq_expression", yqExpression, 
+				"componentFilter", componentFilter, "yq_expression", yqExpression,
 				"error", err)
 			continue
 		}
