@@ -177,48 +177,125 @@ func TestLogger_SetLogLevel(t *testing.T) {
 	assert.Equal(t, LogLevelDebug, logger.LogLevel)
 }
 
-// Tests for the new AtmosLogger implementation.
-func TestNewAtmosLogger(t *testing.T) {
-	var buf bytes.Buffer
-	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
-
-	assert.NotNil(t, atmosLogger)
-	assert.NotNil(t, atmosLogger.Logger)
-}
-
-func TestNewDefaultAtmosLogger(t *testing.T) {
-	atmosLogger := NewDefaultAtmosLogger()
-
-	assert.NotNil(t, atmosLogger)
-	assert.NotNil(t, atmosLogger.Logger)
-}
-
-func TestSetAtmosLogLevel(t *testing.T) {
-	var buf bytes.Buffer
-	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
-
-	// Test valid log levels
-	validTests := []struct {
-		level    string
-		expected log.Level
+func TestAtmosLogger_AllLevels(t *testing.T) {
+	testCases := []struct {
+		name     string
+		msgOrErr interface{}
+		keyvals  []interface{}
+		checks   []string
 	}{
-		{"Trace", log.DebugLevel},
-		{"Debug", log.DebugLevel},
-		{"Info", log.InfoLevel},
-		{"Warning", log.WarnLevel},
-		{"Off", log.FatalLevel + 1},
+		{
+			name:     "String message with key-value pairs",
+			msgOrErr: "event_name",
+			keyvals:  []interface{}{"key1", "value1", "key2", 42},
+			checks:   []string{"event_name", "key1", "value1", "key2", "42"},
+		},
+		{
+			name:     "Standard error",
+			msgOrErr: fmt.Errorf("standard error"),
+			keyvals:  []interface{}{"context", "test"},
+			checks:   []string{"standard error", "error", "context", "test"},
+		},
+		{
+			name: "AtmosError with context",
+			msgOrErr: NewAtmosError("structured error", fmt.Errorf("base error")).
+				WithContext("meta_key", "meta_value").
+				WithTips("helpful tip"),
+			keyvals: []interface{}{"extra", "context"},
+			checks:  []string{"structured error", "base_error", "base error", "meta_key", "meta_value", "tips", "helpful tip", "extra", "context"},
+		},
 	}
 
-	for _, test := range validTests {
-		err := SetAtmosLogLevel(atmosLogger, test.level)
-		assert.NoError(t, err)
-		assert.Equal(t, test.expected, atmosLogger.GetLevel())
+	// Test each logging level
+	logLevels := []struct {
+		name      string
+		logMethod func(*AtmosLogger, interface{}, ...interface{})
+	}{
+		{"Error", (*AtmosLogger).Error},
+		{"Warning", (*AtmosLogger).Warning},
+		{"Info", (*AtmosLogger).Info},
+		{"Debug", (*AtmosLogger).Debug},
 	}
 
-	// Test invalid log level
-	err := SetAtmosLogLevel(atmosLogger, "Invalid")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Invalid log level")
+	// Test cases for all log levels
+	for _, level := range logLevels {
+		for _, tc := range testCases {
+			t.Run(fmt.Sprintf("%s_%s", level.name, tc.name), func(t *testing.T) {
+				var buf bytes.Buffer
+
+				// Create logger with Debug level to ensure all messages are captured
+				options := log.Options{
+					Level:           log.DebugLevel, // Set to Debug to capture all levels
+					ReportTimestamp: false,          // Disable timestamp so we can predict the output
+					ReportCaller:    false,          // Disable caller so we can predict the output
+				}
+				logger := NewAtmosLogger(&buf, &options)
+
+				// Call the log method with test case inputs
+				level.logMethod(logger, tc.msgOrErr, tc.keyvals...)
+
+				output := buf.String()
+				for _, check := range tc.checks {
+					assert.Contains(t, output, check, "Log level '%s' failed to contain expected string", level.name)
+				}
+			})
+		}
+	}
+}
+
+func TestAtmosLogger_Error(t *testing.T) {
+	var buf bytes.Buffer
+	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
+
+	// Test with string message (structured event pattern)
+	buf.Reset()
+	atmosLogger.Error("error_occurred", "description", "test error message", "component", "test")
+	output := buf.String()
+	assert.Contains(t, output, "error_occurred")
+	assert.Contains(t, output, "description")
+	assert.Contains(t, output, "test error message")
+	assert.Contains(t, output, "component")
+	assert.Contains(t, output, "test")
+
+	// Test with standard error as the first argument
+	buf.Reset()
+	stdErr := fmt.Errorf("standard error")
+	atmosLogger.Error(stdErr, "component", "test")
+	output = buf.String()
+	assert.Contains(t, output, "standard error")
+	assert.Contains(t, output, "error")
+	assert.Contains(t, output, "component")
+	assert.Contains(t, output, "test")
+
+	// Test with event name and error as a field
+	buf.Reset()
+	stdErr = fmt.Errorf("connection failed")
+	atmosLogger.Error("operation_failed", "error", stdErr, "component", "database")
+	output = buf.String()
+	assert.Contains(t, output, "operation_failed")
+	assert.Contains(t, output, "connection failed")
+	assert.Contains(t, output, "component")
+	assert.Contains(t, output, "database")
+
+	// Test with AtmosError object as first argument
+	buf.Reset()
+	baseErr := fmt.Errorf("base error")
+	atmosErr := NewAtmosError("structured error message", baseErr).
+		WithContext("key1", "value1", "key2", 42).
+		WithTips("Try this instead", "Check documentation")
+
+	atmosLogger.Error(atmosErr, "source", "user_input")
+	output = buf.String()
+	assert.Contains(t, output, "structured error message")
+	assert.Contains(t, output, "base_error")
+	assert.Contains(t, output, "base error")
+	assert.Contains(t, output, "key1")
+	assert.Contains(t, output, "value1")
+	assert.Contains(t, output, "key2")
+	assert.Contains(t, output, "42")
+	assert.Contains(t, output, "tips")
+	assert.Contains(t, output, "source")
+	assert.Contains(t, output, "user_input")
 }
 
 func TestLogger_isLevelEnabled(t *testing.T) {
@@ -228,7 +305,7 @@ func TestLogger_isLevelEnabled(t *testing.T) {
 		checkLevel    LogLevel
 		expectEnabled bool
 	}{
-		{"Trace enables all levels", LogLevelTrace, LogLevelTrace, true},
+		{"Trace enables Trace", LogLevelTrace, LogLevelTrace, true},
 		{"Trace enables Debug", LogLevelTrace, LogLevelDebug, true},
 		{"Trace enables Info", LogLevelTrace, LogLevelInfo, true},
 		{"Trace enables Warning", LogLevelTrace, LogLevelWarning, true},
