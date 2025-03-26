@@ -144,9 +144,9 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 		yqExpression := processComponentType(component, componentFilter, includeAbstract)
 		queryResult, err := utils.EvaluateYqExpression(nil, stack, yqExpression)
 		if err != nil || queryResult == nil {
-			log.Debug("no values found", 
+			log.Debug("no values found",
 				KeyStack, stackName, KeyComponent, component,
-				"componentFilter", componentFilter, "yq_expression", yqExpression, 
+				"componentFilter", componentFilter, "yq_expression", yqExpression,
 				"error", err)
 			continue
 		}
