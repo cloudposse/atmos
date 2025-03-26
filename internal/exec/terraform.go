@@ -275,6 +275,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if info.SubCommand == "workspace" || atmosConfig.Components.Terraform.InitRunReconfigure {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
 		}
+		// Add `--var-file` if configured in `atmos.yaml
+		// OpenTofu supports passing a varfile to `init` to dynamically configure backends
+		if atmosConfig.Components.Terraform.Init.PassVars {
+			initCommandWithArguments = append(initCommandWithArguments, []string{varFileFlag, varFile}...)
+		}
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
 		cleanTerraformWorkspace(atmosConfig, componentPath)
@@ -365,6 +370,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 		if atmosConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
+		}
+		// Add `--var-file` if configured in `atmos.yaml
+		// OpenTofu supports passing a varfile to `init` to dynamically configure backends
+		if atmosConfig.Components.Terraform.Init.PassVars {
+			allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 		}
 	case "workspace":
 		if info.SubCommand2 == "list" || info.SubCommand2 == "show" {
