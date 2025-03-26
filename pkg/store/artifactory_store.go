@@ -14,6 +14,8 @@ import (
 	"github.com/jfrog/jfrog-client-go/artifactory/services"
 	"github.com/jfrog/jfrog-client-go/config"
 	al "github.com/jfrog/jfrog-client-go/utils/log"
+
+	log "github.com/charmbracelet/log"
 )
 
 const (
@@ -35,14 +37,14 @@ type ArtifactoryStoreOptions struct {
 	URL            string  `mapstructure:"url"`
 }
 
-// ArtifactoryClient interface allows us to mock the Artifactory Services Managernager in test with only the methods
+// ArtifactoryClient interface allows us to mock the Artifactory Services Manager in test with only the methods
 // we are using in the ArtifactoryStore.
 type ArtifactoryClient interface {
 	DownloadFiles(...services.DownloadParams) (int, int, error)
 	UploadFiles(artifactory.UploadServiceOptions, ...services.UploadParams) (int, int, error)
 }
 
-// Ensure SSMStore implements the store.Store interface.
+// Ensure ArtifactoryStore implements the store.Store interface.
 var _ Store = (*ArtifactoryStore)(nil)
 
 func getAccessKey(options *ArtifactoryStoreOptions) (string, error) {
@@ -61,6 +63,24 @@ func getAccessKey(options *ArtifactoryStoreOptions) (string, error) {
 	return "", ErrMissingArtifactoryToken
 }
 
+// setupArtifactoryLogger configures the JFrog SDK logger based on the current Atmos log level.
+// It enables debug logging when Atmos is in debug or trace mode, otherwise disables all logging.
+func setupArtifactoryLogger() {
+	// Enable logging in the JFrog client when Atmos is in debug or trace mode
+	currentLogLevel := log.GetLevel()
+
+	// Debug level is 0, Trace level would be below Debug (negative values)
+	if currentLogLevel <= log.DebugLevel {
+		// Show DEBUG logs when Atmos is in debug or trace mode
+		al.SetLogger(al.NewLogger(al.DEBUG, nil))
+	} else {
+		// Completely disable logging from the JFrog SDK
+		// The JFrog SDK doesn't have an explicit OFF level, but setting a custom logger
+		// with a nil output writer effectively disables all logging
+		al.SetLogger(createNoopLogger())
+	}
+}
+
 func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 	ctx := context.TODO()
 
@@ -74,7 +94,8 @@ func NewArtifactoryStore(options ArtifactoryStoreOptions) (Store, error) {
 		stackDelimiter = *options.StackDelimiter
 	}
 
-	al.SetLogger(al.NewLogger(al.WARN, nil))
+	// Configure the artifactory SDK logging based on Atmos log level
+	setupArtifactoryLogger()
 
 	rtDetails := auth.NewArtifactoryDetails()
 	rtDetails.SetUrl(options.URL)
