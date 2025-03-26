@@ -243,6 +243,119 @@ func TestAtmosLogger_AllLevels(t *testing.T) {
 	}
 }
 
+func TestAtmosError(t *testing.T) {
+	// Test Error() method
+	err := &AtmosError{
+		Message: "test error message",
+		Base:    fmt.Errorf("base error"),
+		Meta: map[string]interface{}{
+			"key1": "value1",
+			"key2": 42,
+		},
+		Tips: []string{"tip1", "tip2"},
+	}
+	
+	// Test nil error case
+	nilErr := &AtmosError{
+		Message: "nil base error",
+		Base:    nil,
+	}
+
+	// Test nil error's Unwrap method
+	assert.Nil(t, nilErr.Unwrap())
+	
+	// Test Error() method
+	assert.Equal(t, "test error message", err.Error())
+
+	// Test Unwrap() method
+	baseErr := err.Unwrap()
+	assert.Equal(t, "base error", baseErr.Error())
+
+	// Test Fields() method
+	fields := err.Fields()
+	assert.Equal(t, 2, len(fields))
+	assert.Equal(t, "value1", fields["key1"])
+	assert.Equal(t, 42, fields["key2"])
+
+	// Test WithContext() method - even number of args
+	err2 := err.WithContext("key3", "value3", "key4", 84)
+	assert.Equal(t, 4, len(err2.Meta))
+	assert.Equal(t, "value3", err2.Meta["key3"])
+	assert.Equal(t, 84, err2.Meta["key4"])
+
+	// Test WithContext() method - odd number of args
+	err3 := err.WithContext("key3", "value3", "key4")
+	assert.Equal(t, 4, len(err3.Meta))
+	assert.Equal(t, "value3", err3.Meta["key3"])
+	assert.Equal(t, "", err3.Meta["key4"])
+	
+	// Test WithContext() method with non-string key
+	err5 := err.WithContext(123, "value5")
+	assert.Equal(t, 5, len(err5.Meta)) // Original 2 keys + key3 + key4 + 123
+	assert.Equal(t, "value5", err5.Meta["123"])
+
+	// Test WithTips() method
+	err4 := err.WithTips("tip3", "tip4")
+	assert.Equal(t, 4, len(err4.Tips))
+	assert.Equal(t, "tip3", err4.Tips[2])
+	assert.Equal(t, "tip4", err4.Tips[3])
+}
+
+func TestNewBaseError(t *testing.T) {
+	baseErr := NewBaseError("base error message")
+	
+	assert.Equal(t, "base error message", baseErr.Message)
+	assert.Nil(t, baseErr.Base)
+	assert.Empty(t, baseErr.Meta)
+	assert.Empty(t, baseErr.Tips)
+}
+
+func TestNewDefaultAtmosLogger(t *testing.T) {
+	logger := NewDefaultAtmosLogger()
+	
+	assert.NotNil(t, logger)
+	assert.NotNil(t, logger.Logger)
+}
+
+func TestSetAtmosLogLevel(t *testing.T) {
+	// Valid level
+	logger := NewDefaultAtmosLogger()
+	err := SetAtmosLogLevel(logger, string(LogLevelError))
+	assert.NoError(t, err)
+	
+	// Invalid level
+	err = SetAtmosLogLevel(logger, "InvalidLevel")
+	assert.Error(t, err)
+	
+	// Non-existent mapped level (should not panic)
+	err = SetAtmosLogLevel(logger, "NonExistentMappedLevel")
+	assert.Error(t, err)
+}
+
+func TestAtmosLoggerWithOddKeyvals(t *testing.T) {
+	var buf bytes.Buffer
+	options := log.Options{
+		Level:           log.DebugLevel,
+		ReportTimestamp: false,
+		ReportCaller:    false,
+	}
+	logger := NewAtmosLogger(&buf, &options)
+	
+	// Test with odd number of keyvals
+	buf.Reset()
+	logger.Info("test", "key1", "value1", "key2")
+	output := buf.String()
+	assert.Contains(t, output, "key1=value1")
+	assert.Contains(t, output, "key2=")
+	
+	// Test with non-string type for msgOrErr
+	buf.Reset()
+	logger.Info(123, "key", "value")
+	output = buf.String()
+	assert.Contains(t, output, "123")
+	assert.Contains(t, output, "key=value")
+}
+
 func TestAtmosLogger_Error(t *testing.T) {
 	var buf bytes.Buffer
 	atmosLogger := NewAtmosLogger(&buf, &log.Options{})
