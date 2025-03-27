@@ -48,6 +48,8 @@ const (
 	KeyQuery = "query"
 	// TypeFormatSpec is the format specifier used to print variable types.
 	TypeFormatSpec = "%T"
+	// KeyPattern is the key used in log messages for pattern matching contexts.
+	KeyPattern = "pattern"
 )
 
 // FilterOptions contains the options for filtering and listing component values.
@@ -249,11 +251,61 @@ func applyFilters(extractedValues map[string]interface{}, stackPattern string, m
 	return limitColumns(filteredByPattern, maxColumns), nil
 }
 
+// containsGlobCharacters checks if any pattern in the slice contains glob characters.
+func containsGlobCharacters(patterns []string) bool {
+	for _, pat := range patterns {
+		pat = strings.TrimSpace(pat)
+		if strings.ContainsAny(pat, "*?[") {
+			log.Debug("Pattern contains glob characters", KeyPattern, pat)
+			return true
+		}
+	}
+	return false
+}
+
+// filterByDirectNames filters values by direct stack name matching.
+func filterByDirectNames(values map[string]interface{}, patterns []string) map[string]interface{} {
+	filteredValues := make(map[string]interface{})
+	log.Debug("Using direct stack name matching for patterns without glob characters")
+
+	for _, stackName := range patterns {
+		stackName = strings.TrimSpace(stackName)
+		if value, exists := values[stackName]; exists {
+			log.Debug("Matched stack by direct name", KeyStack, stackName)
+			filteredValues[stackName] = value
+		}
+	}
+	return filteredValues
+}
+
+// filterByGlobPatterns filters values using glob pattern matching.
+func filterByGlobPatterns(values map[string]interface{}, patterns []string) (map[string]interface{}, error) {
+	filteredValues := make(map[string]interface{})
+	log.Debug("Using glob pattern matching")
+
+	for stackName, value := range values {
+		for _, pat := range patterns {
+			pat = strings.TrimSpace(pat)
+			matched, err := filepath.Match(pat, stackName)
+			if err != nil {
+				return nil, errors.Errorf("invalid stack pattern '%s'", pat)
+			}
+
+			if matched {
+				log.Debug("Stack matched glob pattern", KeyStack, stackName, KeyPattern, pat)
+				filteredValues[stackName] = value
+				break
+			}
+		}
+	}
+	return filteredValues, nil
+}
+
 // filterByStackPattern filters values by a stack pattern, supporting both comma-separated stack names
 // and glob patterns for more complex matching.
 func filterByStackPattern(values map[string]interface{}, pattern string) (map[string]interface{}, error) {
 	log.Debug("Starting stack pattern filtering",
-		"pattern", pattern,
+		KeyPattern, pattern,
 		"pattern_empty", pattern == "",
 		"num_stacks", len(values))
 
@@ -262,51 +314,22 @@ func filterByStackPattern(values map[string]interface{}, pattern string) (map[st
 		return values, nil
 	}
 
-	log.Debug("Filtering by stack pattern", "pattern", pattern, "stacks", len(values))
+	log.Debug("Filtering by stack pattern", KeyPattern, pattern, "stacks", len(values))
 
 	patterns := strings.Split(pattern, ",")
 	log.Debug("Split pattern into segments", "num_patterns", len(patterns), "patterns", patterns)
-	filteredValues := make(map[string]interface{})
 
-	// Check if we have a simple comma-separated list without glob characters
-	hasGlobChars := false
-	for _, pat := range patterns {
-		pat = strings.TrimSpace(pat)
-		if strings.ContainsAny(pat, "*?[") {
-			hasGlobChars = true
-			log.Debug("Pattern contains glob characters", "pattern", pat)
-			break
-		}
+	var filteredValues map[string]interface{}
+	var err error
+
+	if containsGlobCharacters(patterns) {
+		filteredValues, err = filterByGlobPatterns(values, patterns)
+	} else {
+		filteredValues = filterByDirectNames(values, patterns)
 	}
 
-	// If we have a simple list of stack names without glob chars, do direct matching
-	if !hasGlobChars {
-		log.Debug("Using direct stack name matching for patterns without glob characters")
-		for _, stackName := range patterns {
-			stackName = strings.TrimSpace(stackName)
-			if value, exists := values[stackName]; exists {
-				log.Debug("Matched stack by direct name", "stack", stackName)
-				filteredValues[stackName] = value
-			}
-		}
-	} else {
-		// Use glob pattern matching for patterns with glob characters
-		log.Debug("Using glob pattern matching")
-		for stackName, value := range values {
-			for _, pat := range patterns {
-				pat = strings.TrimSpace(pat)
-				matched, err := filepath.Match(pat, stackName)
-				if err != nil {
-					return nil, errors.Errorf("invalid stack pattern '%s'", pat)
-				}
-
-				if matched {
-					log.Debug("Stack matched glob pattern", "stack", stackName, "pattern", pat)
-					filteredValues[stackName] = value
-					break
-				}
-			}
-		}
+	if err != nil {
+		return nil, err
 	}
 
 	log.Debug("Filtered stacks", "original", len(values), "filtered", len(filteredValues))
@@ -339,9 +362,7 @@ func limitColumns(values map[string]interface{}, maxColumns int) map[string]inte
 
 // rewriteQueryForVarsAccess rewrites dot-notation queries to properly access properties in the vars map.
 func rewriteQueryForVarsAccess(query string, stackData map[string]interface{}) string {
-	// Only process queries that start with a dot but don't already reference vars
 	if strings.HasPrefix(query, ".") && !strings.HasPrefix(query, ".vars") {
-		// Extract property name (everything after the dot)
 		propName := query[1:]
 
 		if varsMap, ok := stackData["vars"].(map[string]interface{}); ok {
@@ -354,6 +375,44 @@ func rewriteQueryForVarsAccess(query string, stackData map[string]interface{}) s
 		}
 	}
 	return query
+}
+
+// processStackWithQuery processes a single stack with the given query and returns the formatted result.
+func processStackWithQuery(stackName string, stackData interface{}, query string) (interface{}, bool) {
+	log.Debug("Processing stack data",
+		KeyStack, stackName,
+		"data_type", fmt.Sprintf(TypeFormatSpec, stackData))
+
+	stackDataMap, ok := stackData.(map[string]interface{})
+	if !ok {
+		log.Debug("Stack data is not a map",
+			KeyStack, stackName,
+			"data_type", fmt.Sprintf(TypeFormatSpec, stackData))
+		return nil, false
+	}
+
+	effectiveQuery := rewriteQueryForVarsAccess(query, stackDataMap)
+
+	queryResult, err := utils.EvaluateYqExpression(nil, stackData, effectiveQuery)
+	if err != nil {
+		log.Debug("YQ query failed",
+			KeyStack, stackName,
+			KeyQuery, effectiveQuery,
+			"original_query", query,
+			"error", err)
+		return nil, false
+	}
+
+	if queryResult == nil {
+		log.Debug("Query returned nil",
+			KeyStack, stackName,
+			KeyQuery, effectiveQuery,
+			"original_query", query)
+		return nil, false
+	}
+
+	formattedResult := formatResultForDisplay(queryResult, query)
+	return formattedResult, formattedResult != nil
 }
 
 // applyQuery applies a query to the filtered values.
@@ -370,45 +429,8 @@ func applyQuery(filteredValues map[string]interface{}, query string, component s
 	results := make(map[string]interface{})
 
 	for stackName, stackData := range filteredValues {
-		log.Debug("Processing stack data",
-			KeyStack, stackName,
-			"data_type", fmt.Sprintf(TypeFormatSpec, stackData))
-
-		// Convert to map for type safety
-		stackDataMap, ok := stackData.(map[string]interface{})
-		if !ok {
-			log.Debug("Stack data is not a map",
-				KeyStack, stackName,
-				"data_type", fmt.Sprintf(TypeFormatSpec, stackData))
-			continue
-		}
-
-		// Rewrite the query if needed to properly access vars properties
-		effectiveQuery := rewriteQueryForVarsAccess(query, stackDataMap)
-
-		// Apply YQ expression with the potentially rewritten query
-		queryResult, err := utils.EvaluateYqExpression(nil, stackData, effectiveQuery)
-		if err != nil {
-			log.Debug("YQ query failed",
-				KeyStack, stackName,
-				KeyQuery, effectiveQuery,
-				"original_query", query,
-				"error", err)
-			continue // Skip this stack if query fails
-		}
-
-		if queryResult == nil {
-			log.Debug("Query returned nil",
-				KeyStack, stackName,
-				KeyQuery, effectiveQuery,
-				"original_query", query)
-			continue
-		}
-
-		// Format the result for display
-		formattedResult := formatResultForDisplay(queryResult, query)
-		if formattedResult != nil {
-			results[stackName] = formattedResult
+		if result, ok := processStackWithQuery(stackName, stackData, query); ok {
+			results[stackName] = result
 		}
 	}
 
@@ -423,54 +445,81 @@ func applyQuery(filteredValues map[string]interface{}, query string, component s
 	return results, nil
 }
 
-// formatResultForDisplay formats query results for display.
-func formatResultForDisplay(result interface{}, query string) interface{} {
-	// Log the input result type for debugging
-	log.Debug("Formatting query result for display",
-		"result_type", fmt.Sprintf(TypeFormatSpec, result),
-		"query", query)
-
-	// Handle different result types
-	switch v := result.(type) {
-	case map[string]interface{}:
-		// Maps can be added directly if not empty
-		if len(v) > 0 {
-			// For nested maps from a query, wrap them in a value key
-			// This is needed for test compatibility
-			if query != "" {
-				// Allow any query type to be processed consistently
-				return map[string]interface{}{
-					KeyValue: v,
-				}
-			}
-			return v
-		}
+// formatMapResult formats a map result based on the query context.
+func formatMapResult(v map[string]interface{}, query string) interface{} {
+	if len(v) == 0 {
 		return nil
+	}
 
-	case []interface{}:
-		if len(v) > 0 {
-			jsonBytes, err := json.Marshal(v)
-			arrayStr := fmt.Sprintf("%v", v)
-			if err == nil {
-				arrayStr = string(jsonBytes)
-			}
-
-			log.Debug("Formatting array result",
-				"array_length", len(v),
-				"first_element_type", fmt.Sprintf(TypeFormatSpec, v[0]))
-
-			return map[string]interface{}{
-				KeyValue: arrayStr,
-			}
-		}
-		return nil
-
-	case string, int, int32, int64, float32, float64, bool:
-		// For scalar values, wrap them in a map with "value" key
-		log.Debug("Formatting scalar result", "value", v)
+	if query != "" {
 		return map[string]interface{}{
 			KeyValue: v,
 		}
+	}
+
+	return v
+}
+
+// formatArrayResult formats an array result for display.
+func formatArrayResult(v []interface{}) interface{} {
+	if len(v) == 0 {
+		return nil
+	}
+
+	jsonBytes, err := json.Marshal(v)
+	arrayStr := fmt.Sprintf("%v", v)
+	if err == nil {
+		arrayStr = string(jsonBytes)
+	}
+
+	log.Debug("Formatting array result",
+		"array_length", len(v),
+		"first_element_type", fmt.Sprintf(TypeFormatSpec, v[0]))
+
+	return map[string]interface{}{
+		KeyValue: arrayStr,
+	}
+}
+
+// formatScalarResult formats a scalar result (string, number, boolean) for display.
+func formatScalarResult(v interface{}) interface{} {
+	log.Debug("Formatting scalar result", "value", v)
+	return map[string]interface{}{
+		KeyValue: v,
+	}
+}
+
+// formatUnknownResult formats a result of an unknown type for display.
+func formatUnknownResult(v interface{}) interface{} {
+	log.Debug("Formatting unknown type result",
+		"type", fmt.Sprintf(TypeFormatSpec, v))
+
+	jsonBytes, err := json.Marshal(v)
+	if err == nil {
+		return map[string]interface{}{
+			KeyValue: string(jsonBytes),
+		}
+	}
+
+	return map[string]interface{}{
+		KeyValue: fmt.Sprintf("%v", v),
+	}
+}
+
+// formatResultForDisplay formats query results for display.
+func formatResultForDisplay(result interface{}, query string) interface{} {
+	log.Debug("Formatting query result for display",
+		"result_type", fmt.Sprintf(TypeFormatSpec, result),
+		"query", query)
+	switch v := result.(type) {
+	case map[string]interface{}:
+		return formatMapResult(v, query)
+
+	case []interface{}:
+		return formatArrayResult(v)
+
+	case string, int, int32, int64, float32, float64, bool:
+		return formatScalarResult(v)
 
 	case nil:
 		// Skip nil results
@@ -478,20 +527,7 @@ func formatResultForDisplay(result interface{}, query string) interface{} {
 		return nil
 
 	default:
-		log.Debug("Formatting unknown type result",
-			"type", fmt.Sprintf(TypeFormatSpec, v))
-
-		// Try to JSON encode the value for better representation
-		jsonBytes, err := json.Marshal(v)
-		if err == nil {
-			return map[string]interface{}{
-				KeyValue: string(jsonBytes),
-			}
-		}
-
-		return map[string]interface{}{
-			KeyValue: fmt.Sprintf("%v", v),
-		}
+		return formatUnknownResult(v)
 	}
 }
 

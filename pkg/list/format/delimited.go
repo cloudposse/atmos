@@ -115,6 +115,27 @@ func (f *DelimitedFormatter) generateValueKeyRows(keys []string, data map[string
 	return rows
 }
 
+// extractPropertyValue gets a property value from a stack's data structure,
+// checking both top-level keys and the vars map.
+func extractPropertyValue(stackData map[string]interface{}, propertyKey string) string {
+	// Check if this is a top-level key
+	if val, ok := stackData[propertyKey]; ok {
+		return formatValue(val)
+	}
+
+	// Check if this is a nested key in the vars map
+	varsData, ok := stackData["vars"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	if val, ok := varsData[propertyKey]; ok {
+		return formatValue(val)
+	}
+
+	return ""
+}
+
 // generatePropertyKeyRows creates rows where each row represents a property key with values
 // from different stacks as columns. This is different from generateValueKeyRows which handles
 // the special case where stacks have a single "value" key.
@@ -127,16 +148,9 @@ func (f *DelimitedFormatter) generatePropertyKeyRows(keys []string, valueKeys []
 
 		for _, stackName := range keys {
 			value := ""
-			if stackData, ok := data[stackName].(map[string]interface{}); ok {
-				// Check if this is a top-level key
-				if val, ok := stackData[valueKey]; ok {
-					value = formatValue(val)
-				} else if varsData, ok := stackData["vars"].(map[string]interface{}); ok {
-					// Check if this is a nested key in the vars map
-					if val, ok := varsData[valueKey]; ok {
-						value = formatValue(val)
-					}
-				}
+			stackData, ok := data[stackName].(map[string]interface{})
+			if ok {
+				value = extractPropertyValue(stackData, valueKey)
 			}
 			row = append(row, value)
 		}
