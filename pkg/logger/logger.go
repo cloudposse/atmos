@@ -241,9 +241,11 @@ func validateKeyValuePairs(l *AtmosLogger, keyvals []interface{}) []interface{} 
 	if len(keyvals)%2 != 0 {
 		oddIndex := len(keyvals) - 1
 		oddKey := fmt.Sprintf("%v", keyvals[oddIndex])
-		l.Logger.Warn("programming error: odd number of key-value pairs",
-			"missing_value_for_key", oddKey)
-		keyvals = append(keyvals, "MISSING_VALUE")
+
+		l.Logger.Error("odd number of key-value pairs",
+			"key_without_value", oddKey)
+
+		keyvals = append(keyvals, "")
 	}
 
 	return keyvals
