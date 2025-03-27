@@ -121,16 +121,17 @@ func TestFilterAndListValues(t *testing.T) {
 		checkFunc       func(t *testing.T, output string)
 	}{
 		{
-			name:      "basic table format",
-			component: "vpc",
-			format:    "",
+			name:         "basic table format",
+			component:    "vpc",
+			format:       "",
+			stackPattern: "dev,staging",
 			checkFunc: func(t *testing.T, output string) {
 				assert.Contains(t, output, "environment")
 				assert.Contains(t, output, "region")
 				assert.Contains(t, output, "cidr_block")
 				assert.Contains(t, output, "dev")
 				assert.Contains(t, output, "staging")
-				assert.NotContains(t, output, "prod") // Abstract component
+				assert.NotContains(t, output, "prod")
 			},
 		},
 		{
@@ -168,20 +169,22 @@ func TestFilterAndListValues(t *testing.T) {
 			},
 		},
 		{
-			name:      "csv format",
-			component: "vpc",
-			format:    "csv",
-			delimiter: ",",
+			name:         "csv format",
+			component:    "vpc",
+			format:       "csv",
+			delimiter:    ",",
+			stackPattern: "dev,staging",
 			checkFunc: func(t *testing.T, output string) {
 				assert.Contains(t, output, "Key,dev,staging")
 				assert.Contains(t, output, "environment,dev,staging")
 			},
 		},
 		{
-			name:      "tsv format",
-			component: "vpc",
-			format:    "tsv",
-			delimiter: "\t",
+			name:         "tsv format",
+			component:    "vpc",
+			format:       "tsv",
+			delimiter:    "\t",
+			stackPattern: "dev,staging",
 			checkFunc: func(t *testing.T, output string) {
 				assert.Contains(t, output, "Key\tdev\tstaging")
 				assert.Contains(t, output, "environment\tdev\tstaging")

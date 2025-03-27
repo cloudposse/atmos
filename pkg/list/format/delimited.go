@@ -53,11 +53,22 @@ func getValueKeysFromStacks(data map[string]interface{}, keys []string) []string
 
 	for _, stackName := range keys {
 		if stackData, ok := data[stackName].(map[string]interface{}); ok {
+			// Check for special case with "value" key
 			if _, hasValue := stackData[ValueKey]; hasValue {
 				valueKeys = []string{ValueKey}
 				break
 			}
-			// collect all keys from the map
+
+			// Check for "vars" key which may contain nested properties
+			if varsData, ok := stackData["vars"].(map[string]interface{}); ok {
+				// Extract all keys from the vars map for flattened display
+				for k := range varsData {
+					valueKeys = append(valueKeys, k)
+				}
+				break
+			}
+
+			// Default: collect all keys from the map
 			for k := range stackData {
 				valueKeys = append(valueKeys, k)
 			}
@@ -109,14 +120,22 @@ func (f *DelimitedFormatter) generateValueKeyRows(keys []string, data map[string
 // the special case where stacks have a single "value" key.
 func (f *DelimitedFormatter) generatePropertyKeyRows(keys []string, valueKeys []string, data map[string]interface{}) [][]string {
 	var rows [][]string
+	
 	// Property key case: for each value key, create a row
 	for _, valueKey := range valueKeys {
 		row := []string{valueKey}
+		
 		for _, stackName := range keys {
 			value := ""
 			if stackData, ok := data[stackName].(map[string]interface{}); ok {
+				// Check if this is a top-level key
 				if val, ok := stackData[valueKey]; ok {
 					value = formatValue(val)
+				} else if varsData, ok := stackData["vars"].(map[string]interface{}); ok {
+					// Check if this is a nested key in the vars map
+					if val, ok := varsData[valueKey]; ok {
+						value = formatValue(val)
+					}
 				}
 			}
 			row = append(row, value)
