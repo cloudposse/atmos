@@ -98,6 +98,8 @@ stores:
     type: aws-ssm-parameter-store
     options:
       region: us-east-2
+      read_role_arn: "arn:aws:iam::123456789012:role/ssm-read-role"  # Optional role ARN for read operations
+      write_role_arn: "arn:aws:iam::123456789012:role/ssm-write-role"  # Optional role ARN for write operations
 ```
 
 <dl>
@@ -111,7 +113,7 @@ stores:
   <dd>A map of options specific to the store type. For AWS SSM Parameter Store, the following options are supported:</dd>
 
   <dt>`stores.[store_name].options.prefix (optional)`</dt>
-  <dd>A prefix path that will be added to all keys stored or retreived from SSM Parameter Store. For example if the prefix
+  <dd>A prefix path that will be added to all keys stored or retrieved from SSM Parameter Store. For example if the prefix
   is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
   would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
 
@@ -123,12 +125,19 @@ stores:
     The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
     key path for the store.
   </dd>
+
+  <dt>`stores.[store_name].options.read_role_arn (optional)`</dt>
+  <dd>The ARN of an IAM role to assume for read operations. If specified, this role will be assumed before performing any read operations.</dd>
+
+  <dt>`stores.[store_name].options.write_role_arn (optional)`</dt>
+  <dd>The ARN of an IAM role to assume for write operations. If specified, this role will be assumed before performing any write operations.</dd>
 </dl>
 
 #### Authentication
 
 The AWS SSM Parameter Store supports the standard AWS methods for authentication and the `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables.
+`AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables. Additionally, if `read_role_arn` or `write_role_arn`
+is specified, the store will assume that role before performing the respective operations.
 
 ### Google Secret Manager
 
