@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type pkgType int
@@ -421,6 +422,16 @@ func needsCustomDetection(src string) bool {
 	}
 
 	getSrc, _ = getter.SourceDirSubdir(getSrc)
+
+	if absPath, err := filepath.Abs(getSrc); err == nil {
+		if u.FileExists(absPath) {
+			return false
+		}
+		isDir, err := u.IsDirectory(absPath)
+		if err == nil && isDir {
+			return false
+		}
+	}
 
 	parsed, err := url.Parse(getSrc)
 	if err != nil || parsed.Scheme == "" {
