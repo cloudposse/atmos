@@ -247,9 +247,10 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 
 	// Try to unmarshal the value as JSON
 	var result interface{}
+	//nolint:nilerr // Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party parameters that might not be JSON-encoded
 	if err := json.Unmarshal([]byte(*output.Parameter.Value), &result); err != nil {
-		// If it's not valid JSON, return the raw string value and the error
-		return nil, fmt.Errorf("failed to unmarshal JSON value: %w", err)
+		// If it's not valid JSON, return the raw string value
+		return *output.Parameter.Value, nil
 	}
 
 	return result, nil

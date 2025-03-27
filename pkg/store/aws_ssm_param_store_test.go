@@ -414,7 +414,8 @@ func TestSSMStore_Get(t *testing.T) {
 					},
 				}, nil)
 			},
-			wantErr: true,
+			want:    "plain text value",
+			wantErr: false,
 		},
 		{
 			name:      "malformed_json_value",
@@ -430,7 +431,8 @@ func TestSSMStore_Get(t *testing.T) {
 					},
 				}, nil)
 			},
-			wantErr: true,
+			want:    "}invalid json{",
+			wantErr: false,
 		},
 		{
 			name:      "integer_value",
@@ -584,7 +586,6 @@ func TestNewSSMStore(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store, err := NewSSMStore(tt.options)
-			//nolint:nestif // Complexity required to test all optional fields and their defaults
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, store)
