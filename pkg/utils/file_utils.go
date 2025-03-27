@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -10,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/hashicorp/hcl"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"gopkg.in/yaml.v3"
 )
 
@@ -302,16 +303,40 @@ func DetectFormatAndParseFile(filename string) (any, error) {
 
 	data := string(d)
 
-	if IsHCL(data) {
-		err = hcl.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-	} else if IsJSON(data) {
+	if IsJSON(data) {
 		err = json.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
+	} else if IsHCL(data) {
+		parser := hclparse.NewParser()
+		file, diags := parser.ParseHCL(d, filename)
+		if diags != nil && diags.HasErrors() {
+			return nil, errors.New(diags.Error())
+		}
+		if file == nil {
+			return nil, fmt.Errorf("unable to parse HCL file %s", filename)
+		}
+		// Extract all attributes from the file body
+		attributes, diags := file.Body.JustAttributes()
+		if diags != nil && diags.HasErrors() {
+			return nil, errors.New(diags.Error())
+		}
+
+		// Map to store parsed attribute values
+		result := make(map[string]any)
+
+		// Evaluate each attribute and store it in the result map
+		for name, attr := range attributes {
+			ctyValue, diags := attr.Expr.Value(nil) // Evaluate attribute
+			if diags != nil && diags.HasErrors() {
+				return nil, errors.New(diags.Error())
+			}
+
+			// Convert cty.Value to appropriate Go type
+			result[name] = CtyToGo(ctyValue)
+		}
+		v = result
 	} else if IsYAML(data) {
 		err = yaml.Unmarshal(d, &v)
 		if err != nil {
