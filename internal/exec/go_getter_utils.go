@@ -271,7 +271,6 @@ func getDefaultUsername(host string) string {
 				return "x-token-auth"
 			}
 		}
-		log.Debug("Using Bitbucket username", "username", defaultUsername)
 		return defaultUsername
 	default:
 		return "x-access-token"
