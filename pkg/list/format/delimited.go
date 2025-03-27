@@ -120,11 +120,11 @@ func (f *DelimitedFormatter) generateValueKeyRows(keys []string, data map[string
 // the special case where stacks have a single "value" key.
 func (f *DelimitedFormatter) generatePropertyKeyRows(keys []string, valueKeys []string, data map[string]interface{}) [][]string {
 	var rows [][]string
-	
+
 	// Property key case: for each value key, create a row
 	for _, valueKey := range valueKeys {
 		row := []string{valueKey}
-		
+
 		for _, stackName := range keys {
 			value := ""
 			if stackData, ok := data[stackName].(map[string]interface{}); ok {

@@ -252,11 +252,11 @@ func applyFilters(extractedValues map[string]interface{}, stackPattern string, m
 // filterByStackPattern filters values by a stack pattern, supporting both comma-separated stack names
 // and glob patterns for more complex matching.
 func filterByStackPattern(values map[string]interface{}, pattern string) (map[string]interface{}, error) {
-	log.Debug("Starting stack pattern filtering", 
-		"pattern", pattern, 
+	log.Debug("Starting stack pattern filtering",
+		"pattern", pattern,
 		"pattern_empty", pattern == "",
 		"num_stacks", len(values))
-	
+
 	if pattern == "" {
 		log.Debug("No stack pattern provided, returning all stacks")
 		return values, nil
