@@ -1,0 +1,17 @@
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: ipinfo
+  description: Vendor configuration for the ipinfo component
+spec:
+  source:
+    uri: "git::git@github.com:cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
+    version: "main"
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+  targets:
+    - "components/terraform/ipinfo/main"
+  tags:
+    - demo
