@@ -10,7 +10,6 @@ type AtmosError struct {
 	Message  string                 // Human-readable message
 	Meta     map[string]interface{} // Contextual metadata
 	Tips     []string               // User guidance
-	ExitCode int                    // Process exit code
 }
 
 // Error implements the error interface.

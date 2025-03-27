@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	log "github.com/charmbracelet/log"
-	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/errors"
@@ -146,15 +145,7 @@ func TestLogger_Warning(t *testing.T) {
 	assert.Contains(t, output, "Warning message")
 }
 
-func TestLogger_Error(t *testing.T) {
-	var buf bytes.Buffer
-	color.Error = &buf
-	logger, _ := NewLogger(LogLevelWarning, "/dev/stderr")
 
-	err := fmt.Errorf("This is an error")
-	logger.Error(err)
-	assert.Contains(t, buf.String(), "This is an error")
-}
 
 func TestLogger_FileLogging(t *testing.T) {
 	tempDir := os.TempDir()

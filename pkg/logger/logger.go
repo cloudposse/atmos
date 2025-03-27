@@ -127,17 +127,20 @@ func (l *Logger) isLevelEnabled(level LogLevel) bool {
 	return logLevelOrder[level] >= logLevelOrder[l.LogLevel]
 }
 
-// Error logs an error message if the error is not nil and the log level is not Off.
-func (l *Logger) Error(err error) {
-	if err != nil && l.LogLevel != LogLevelOff {
-		_, err2 := theme.Colors.Error.Fprintln(color.Error, err.Error()+"\n")
-		if err2 != nil {
-			color.Red("Error logging the error:")
-			color.Red("%s\n", err2)
-			color.Red("Original error:")
-			color.Red("%s\n", err)
-		}
+// Error logs at ERROR level with different input types, supporting structured logging.
+// It accepts:
+// - String message: Error("event_name", "key", "value").
+// - Error object: Error(err, "key", "value").
+// - AtmosError: Error(atmosErr, "key", "value"). // atmosErr is of type *errors.AtmosError.
+func (l *Logger) Error(errOrMsg interface{}, keyvals ...interface{}) {
+	// Only proceed if the log level allows for error messages
+	if l.LogLevel == LogLevelOff {
+		return
 	}
+
+	// Use AtmosLogger to handle the structured error logging
+	atmosLogger := &AtmosLogger{Logger: log.New(os.Stderr)}
+	atmosLogger.Error(errOrMsg, keyvals...)
 }
 
 // Trace logs a message at TRACE level if the current log level permits.
@@ -215,7 +218,10 @@ func (l *AtmosLogger) Log(level log.Level, msgOrErr interface{}, keyvals ...inte
 			}
 		}
 
+		// Store tips in a structured field for machine-readable logs
+		// but we'll also display them separately for better user experience
 		if len(v.Tips) > 0 {
+			// Add to structured log output for completeness
 			keyvals = append(keyvals, "tips", v.Tips)
 		}
 
@@ -230,12 +236,27 @@ func (l *AtmosLogger) Log(level log.Level, msgOrErr interface{}, keyvals ...inte
 		msg = fmt.Sprintf("%v", v)
 	}
 
-	// This is basically for the case where we have an odd number of key-value pairs
+	// Validate key-value pairs - odd number of arguments is a programming error
 	if len(keyvals)%2 != 0 {
-		keyvals = append(keyvals, "")
+		// In development, this might be a panic for immediate detection
+		// For now, log a warning and continue with a labeled "MISSING_VALUE"
+		oddIndex := len(keyvals) - 1
+		oddKey := fmt.Sprintf("%v", keyvals[oddIndex])
+		l.Logger.Warn("programming error: odd number of key-value pairs",
+			"missing_value_for_key", oddKey)
+		keyvals = append(keyvals, "MISSING_VALUE")
 	}
 
 	l.Logger.Log(level, msg, keyvals...)
+
+	// Print tips separately for errors if we have them
+	// This makes them much more visible to users
+	switch v := msgOrErr.(type) {
+	case *errors.AtmosError:
+		if level >= log.ErrorLevel && len(v.Tips) > 0 {
+			PrintTips(v.Tips)
+		}
+	}
 }
 
 // Error logs at ERROR level with different input types.
@@ -288,4 +309,22 @@ func SetAtmosLogLevel(l *AtmosLogger, level string) error {
 		l.SetLevel(charmLevel)
 	}
 	return nil
+}
+
+// PrintTips displays user guidance tips in a console-friendly format.
+func PrintTips(tips []string) {
+	if len(tips) == 0 {
+		return
+	}
+
+	var output io.Writer = os.Stderr
+	if color.Error != nil {
+		output = color.Error
+	}
+
+	for i, tip := range tips {
+		fmt.Fprintf(output, "  %s %s\n",
+			theme.Colors.Info.Sprintf("%d.", i+1),
+			tip)
+	}
 }
