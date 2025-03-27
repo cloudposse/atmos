@@ -99,7 +99,6 @@ func setDefaultConfiguration(v *viper.Viper) {
 // loadConfigSources delegates reading configs from each source,
 // returning early if any step in the chain fails.
 func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
-	// Check if --config flag is provided
 	if err := readSystemConfig(v); err != nil {
 		return err
 	}

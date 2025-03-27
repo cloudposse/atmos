@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// test configuration with flags --config and --config-path with multiple files and directories merge
+// test configuration with flags --config and --config-path with multiple files and directories merge.
 func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 	// create tmp folder
 	tmpDir, err := os.MkdirTemp("", "atmos-config-test")
