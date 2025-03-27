@@ -95,13 +95,21 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", maskedSrc, err)
 	}
 
+	// If no host is detected, this is likely a local file path.
+	// Skip custom processing so that go getter handles it as is.
+	if parsedURL.Host == "" {
+		log.Debug("No host detected in URL, skipping custom git detection", keyURL, src)
+		return "", false, nil
+	}
+
 	// Normalize the path.
 	d.normalizePath(parsedURL)
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
 	host := strings.ToLower(parsedURL.Host)
 	if host != hostGitHub && host != hostBitbucket && host != hostGitLab {
-		log.Debug("Skipping token injection for a unsupported host", "host", parsedURL.Host)
+		log.Debug("Skipping token injection for an unsupported host", "host", parsedURL.Host)
+		return "", false, nil
 	}
 
 	log.Debug("Reading config param", "InjectGithubToken", d.AtmosConfig.Settings.InjectGithubToken)
@@ -263,7 +271,6 @@ func getDefaultUsername(host string) string {
 				return "x-token-auth"
 			}
 		}
-		log.Debug("Using Bitbucket username", "username", defaultUsername)
 		return defaultUsername
 	default:
 		return "x-access-token"
