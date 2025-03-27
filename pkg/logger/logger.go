@@ -200,8 +200,8 @@ func NewDefaultAtmosLogger() *AtmosLogger {
 	}
 }
 
-// Log implements the core logging functionality with intelligent handling of different input types.
-func (l *AtmosLogger) Log(level log.Level, msgOrErr interface{}, keyvals ...interface{}) {
+// processLogMessage extracts the appropriate message and processes keyvals based on msgOrErr type.
+func processLogMessage(msgOrErr interface{}, keyvals []interface{}) (string, []interface{}) {
 	var msg string
 
 	switch v := msgOrErr.(type) {
@@ -218,10 +218,7 @@ func (l *AtmosLogger) Log(level log.Level, msgOrErr interface{}, keyvals ...inte
 			}
 		}
 
-		// Store tips in a structured field for machine-readable logs
-		// but we'll also display them separately for better user experience
 		if len(v.Tips) > 0 {
-			// Add to structured log output for completeness
 			keyvals = append(keyvals, "tips", v.Tips)
 		}
 
@@ -236,10 +233,12 @@ func (l *AtmosLogger) Log(level log.Level, msgOrErr interface{}, keyvals ...inte
 		msg = fmt.Sprintf("%v", v)
 	}
 
-	// Validate key-value pairs - odd number of arguments is a programming error
+	return msg, keyvals
+}
+
+// validateKeyValuePairs ensures keyvals has an even number of elements.
+func validateKeyValuePairs(l *AtmosLogger, keyvals []interface{}) []interface{} {
 	if len(keyvals)%2 != 0 {
-		// In development, this might be a panic for immediate detection
-		// For now, log a warning and continue with a labeled "MISSING_VALUE"
 		oddIndex := len(keyvals) - 1
 		oddKey := fmt.Sprintf("%v", keyvals[oddIndex])
 		l.Logger.Warn("programming error: odd number of key-value pairs",
@@ -247,16 +246,31 @@ func (l *AtmosLogger) Log(level log.Level, msgOrErr interface{}, keyvals ...inte
 		keyvals = append(keyvals, "MISSING_VALUE")
 	}
 
-	l.Logger.Log(level, msg, keyvals...)
+	return keyvals
+}
 
-	// Print tips separately for errors if we have them
-	// This makes them much more visible to users
-	switch v := msgOrErr.(type) {
-	case *errors.AtmosError:
-		if level >= log.ErrorLevel && len(v.Tips) > 0 {
-			PrintTips(v.Tips)
+// handleTips displays tips for appropriate error levels.
+func handleTips(level log.Level, msgOrErr interface{}) {
+	if atmosErr, ok := msgOrErr.(*errors.AtmosError); ok {
+		if level >= log.ErrorLevel && len(atmosErr.Tips) > 0 {
+			PrintTips(atmosErr.Tips)
 		}
 	}
+}
+
+// Log implements the core logging functionality with intelligent handling of different input types.
+func (l *AtmosLogger) Log(level log.Level, msgOrErr interface{}, keyvals ...interface{}) {
+	// Process the message based on type
+	msg, processedKeyvals := processLogMessage(msgOrErr, keyvals)
+
+	// Validate key-value pairs
+	processedKeyvals = validateKeyValuePairs(l, processedKeyvals)
+
+	// Log the message
+	l.Logger.Log(level, msg, processedKeyvals...)
+
+	// Handle tips for display
+	handleTips(level, msgOrErr)
 }
 
 // Error logs at ERROR level with different input types.
