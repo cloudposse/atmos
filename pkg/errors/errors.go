@@ -6,10 +6,10 @@ import (
 
 // AtmosError represents a structured error with rich context.
 type AtmosError struct {
-	Base     error                  // Underlying error for unwrapping
-	Message  string                 // Human-readable message
-	Meta     map[string]interface{} // Contextual metadata
-	Tips     []string               // User guidance
+	Base    error                  // Underlying error for unwrapping
+	Message string                 // Human-readable message
+	Meta    map[string]interface{} // Contextual metadata
+	Tips    []string               // User guidance
 }
 
 // Error implements the error interface.

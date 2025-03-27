@@ -145,8 +145,6 @@ func TestLogger_Warning(t *testing.T) {
 	assert.Contains(t, output, "Warning message")
 }
 
-
-
 func TestLogger_FileLogging(t *testing.T) {
 	tempDir := os.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
