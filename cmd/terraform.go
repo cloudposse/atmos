@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -27,6 +28,44 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().Bool("", false, doubleDashHint)
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		FlagName:     "terraform-command",
+		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_COMMAND",
+		Description:  "Specifies the executable to be called by `atmos` when running Terraform commands.",
+		Key:          "components.terraform.command",
+		DefaultValue: "terraform",
+	})
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		FlagName:     "terraform-dir",
+		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_BASE_PATH",
+		Description:  "Specifies the directory where Terraform commands are executed.",
+		Key:          "components.terraform.base_path",
+		DefaultValue: "",
+	})
+	config.DefaultConfigHandler.BindEnv("components.terraform.apply_auto_approve", "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE")
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:          "components.terraform.deploy_run_init",
+		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT",
+		FlagName:     "deploy-run-init",
+		Description:  "Run `terraform init` before running `terraform apply`",
+		DefaultValue: false,
+	})
+
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:          "components.terraform.init_run_config",
+		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE",
+		FlagName:     "init-run-reconfigure",
+		Description:  "Run `terraform init` with reconfigure before running `terraform apply`",
+		DefaultValue: false,
+	})
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:          "components.terraform.auto_generate_backend_file",
+		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE",
+		FlagName:     "auto-generate-backend-file",
+		Description:  "Automatically generate a backend file for Terraform commands",
+		DefaultValue: false,
+	})
+
 	AddStackCompletion(terraformCmd)
 	attachTerraformCommands(terraformCmd)
 	RootCmd.AddCommand(terraformCmd)

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -14,5 +15,12 @@ var vendorCmd = &cobra.Command{
 }
 
 func init() {
+	config.DefaultConfigHandler.AddConfig(vendorCmd, config.ConfigOptions{
+		FlagName:     "vendor-base-path",
+		EnvVar:       "ATMOS_VENDOR_BASE_PATH",
+		Description:  "Base path for vendored dependencies.",
+		Key:          "vendor.base_path",
+		DefaultValue: "",
+	})
 	RootCmd.AddCommand(vendorCmd)
 }

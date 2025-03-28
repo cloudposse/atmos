@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -45,6 +46,24 @@ func init() {
 	if err != nil {
 		u.LogErrorAndExit(err)
 	}
-
+	validateComponentCommandConfig()
 	validateCmd.AddCommand(validateComponentCmd)
+}
+
+func validateComponentCommandConfig() {
+	config.DefaultConfigHandler.AddConfig(validateComponentCmd, config.ConfigOptions{
+		FlagName:     "schemas-jsonschema-dir",
+		EnvVar:       "ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH",
+		Description:  "Base path for JSON Schema files.",
+		Key:          "schemas.jsonschema.base_path",
+		DefaultValue: "",
+	})
+	config.DefaultConfigHandler.AddConfig(validateComponentCmd, config.ConfigOptions{
+		FlagName:     "schemas-opa-dir",
+		EnvVar:       "ATMOS_SCHEMAS_OPA_BASE_PATH",
+		Description:  "Base path for OPA policy files.",
+		Key:          "schemas.opa.base_path",
+		DefaultValue: "",
+	})
+
 }

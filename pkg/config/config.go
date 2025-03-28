@@ -23,7 +23,14 @@ import (
 //
 //nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-	atmosConfig, err := processAtmosConfigs(&configAndStacksInfo)
+
+	if err := DefaultConfigHandler.load(); err != nil {
+		return schema.AtmosConfiguration{}, err
+	}
+
+	atmosConfig := *DefaultConfigHandler.atmosConfig
+
+	// processAtmosConfigs(&configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -61,18 +68,13 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	return atmosConfig, nil
 }
 
+var flagKeyValue = parseFlags()
+
 func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	// TODO: This is a quick patch to mitigate the issue we can look for better code later
 	// Issue: https://linear.app/cloudposse/issue/DEV-3093/create-a-cli-command-core-library
-	if os.Getenv("ATMOS_LOGS_LEVEL") != "" {
-		atmosConfig.Logs.Level = os.Getenv("ATMOS_LOGS_LEVEL")
-	}
-	flagKeyValue := parseFlags()
 	if v, ok := flagKeyValue["logs-level"]; ok {
 		atmosConfig.Logs.Level = v
-	}
-	if os.Getenv("ATMOS_LOGS_FILE") != "" {
-		atmosConfig.Logs.File = os.Getenv("ATMOS_LOGS_FILE")
 	}
 	if v, ok := flagKeyValue["logs-file"]; ok {
 		atmosConfig.Logs.File = v

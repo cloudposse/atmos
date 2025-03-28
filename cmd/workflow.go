@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -64,4 +65,14 @@ func init() {
 	workflowCmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
 
 	RootCmd.AddCommand(workflowCmd)
+}
+
+func workflowCommandConfig() {
+	config.DefaultConfigHandler.AddConfig(workflowCmd, config.ConfigOptions{
+		FlagName:     "workflows-dir",
+		EnvVar:       "ATMOS_WORKFLOWS_BASE_PATH",
+		Description:  "Base path for workflows configurations.",
+		Key:          "workflows.base_path",
+		DefaultValue: "",
+	})
 }

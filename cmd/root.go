@@ -16,6 +16,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/config"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -188,9 +189,34 @@ func init() {
 
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
-
-	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
-	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`")
+	config.DefaultConfigHandler.AddConfig(RootCmd, cfg.ConfigOptions{
+		FlagName:     "logs-level",
+		EnvVar:       "ATMOS_LOGS_LEVEL",
+		Description:  "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages",
+		Key:          "logs.level",
+		DefaultValue: "Info",
+	})
+	// RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
+	config.DefaultConfigHandler.AddConfig(RootCmd, cfg.ConfigOptions{
+		FlagName:     "logs-file",
+		DefaultValue: "/dev/stderr",
+		Description:  "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`",
+		Key:          "logs.file",
+	})
+	config.DefaultConfigHandler.AddConfig(RootCmd, cfg.ConfigOptions{
+		FlagName:     "base-path",
+		EnvVar:       "ATMOS_BASE_PATH",
+		Key:          "base_path",
+		Description:  "Base path for components, stacks and workflows configurations.",
+		DefaultValue: "",
+	})
+	config.DefaultConfigHandler.AddConfig(RootCmd, cfg.ConfigOptions{
+		FlagName:     "stacks-dir",
+		EnvVar:       "ATMOS_STACKS_BASE_PATH",
+		Key:          "stacks.base_path",
+		Description:  "Base path for stacks configurations.",
+		DefaultValue: "",
+	})
 
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)

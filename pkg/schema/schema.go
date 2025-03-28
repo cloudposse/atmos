@@ -96,7 +96,7 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 			continue
 		}
 
-		if key == "cue" || key == "opa" || key == "jsonschema" {
+		if key == "opa" || key == "jsonschema" {
 			var temp ResourcePath
 			if err := node.Decode(&temp); err == nil {
 				m.Schemas[key] = temp
@@ -120,7 +120,7 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 
 func (a *AtmosConfiguration) ProcessSchemas() {
 	for key := range a.Schemas {
-		if key == "cue" || key == "opa" || key == "jsonschema" {
+		if key == "opa" || key == "jsonschema" {
 			a.processResourceSchema(key)
 			continue
 		}
