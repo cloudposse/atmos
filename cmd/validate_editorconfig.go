@@ -51,7 +51,7 @@ func initializeConfig(cmd *cobra.Command) {
 
 	configPaths := []string{}
 	if len(configFilePaths) == 0 {
-		configPaths = append(configPaths, defaultConfigFileNames[:]...)
+		configPaths = append(configPaths, defaultConfigFileNames...)
 	} else {
 		configPaths = append(configPaths, configFilePaths...)
 	}
@@ -179,7 +179,7 @@ func checkVersion(config config.Config) error {
 
 // addPersistentFlags adds flags to the root command
 func addPersistentFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringSliceVar(&configFilePaths, "config", []string{}, "Path to the configuration file")
+	cmd.PersistentFlags().StringSliceVar(&configFilePaths, "config", defaultConfigFileNames, "Path to the configuration file")
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
 	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "creates an initial configuration")
 
