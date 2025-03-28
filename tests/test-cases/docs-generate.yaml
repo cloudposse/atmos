@@ -20,4 +20,26 @@ tests:
       file_contains:
         "README.md":
           - "## Requirements"
-          - "## Providers"        
+          - "## Providers" 
+
+  - name: "atmos docs generate with remote temlate"
+    enabled: true
+    snapshot: false
+    description: "Ensure terraform docs are generated"
+    workdir: "fixtures/scenarios/docs-generate/readme/"
+    command: "atmos"
+    args:
+      - "docs"
+      - "generate"
+      - "readme"
+    expect:
+      diff: []
+      exit_code: 0
+      stdout:
+        - "^$"
+      file_exists:
+        - "README.md"
+      file_contains:
+        "README.md":
+          - "## Use Atmos to break your architecture into reusable"
+          - "## Screenshots"        
