@@ -23,6 +23,8 @@ import (
 	log "github.com/charmbracelet/log"
 )
 
+const DefaultDirPerm os.FileMode = 0o700
+
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate readme' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
@@ -43,6 +45,7 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	log.Debug("Current directory", "dir", currDir, "basedir", basedir)
 
 	targetDir = filepath.Join(currDir, basedir)
 
@@ -54,11 +57,11 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate a single README in the targetDir.
-	return generateReadme(&rootConfig, targetDir, docsGenerate)
+	return generateReadme(&rootConfig, targetDir, &docsGenerate)
 }
 
 // mergeInputs merges all YAML inputs defined in docsGenerate.Input.
-func mergeInputs(atmosConfig *schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerateReadme) (map[string]any, error) {
+func mergeInputs(atmosConfig *schema.AtmosConfiguration, dir string, docsGenerate *schema.DocsGenerateReadme) (map[string]any, error) {
 	var allMaps []map[string]any
 	for _, src := range docsGenerate.Input {
 		dataMap, err := fetchAndParseYAML(atmosConfig, src, dir)
@@ -79,7 +82,7 @@ func getTerraformSource(dir, source string) (string, error) {
 		joinedPath := filepath.Join(dir, source)
 		stat, err := os.Stat(joinedPath)
 		if err != nil || !stat.IsDir() {
-			return "", fmt.Errorf("source directory does not exist: %s", joinedPath)
+			return "", fmt.Errorf("%w: %s", ErrSourceDirNotExist, joinedPath)
 		}
 		return joinedPath, nil
 	}
@@ -100,7 +103,7 @@ func getTemplateContent(atmosConfig *schema.AtmosConfiguration, templateURL, dir
 	return string(body), nil
 }
 
-func applyTerraformDocs(atmosConfig schema.AtmosConfiguration, dir string, docsGenerate schema.DocsGenerateReadme, mergedData map[string]any) error {
+func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerateReadme, mergedData map[string]any) error {
 	if !docsGenerate.Terraform.Enabled {
 		return nil
 	}
@@ -119,9 +122,9 @@ func applyTerraformDocs(atmosConfig schema.AtmosConfiguration, dir string, docsG
 	return nil
 }
 
-func fetchTemplate(atmosConfig schema.AtmosConfiguration, docsGenerate schema.DocsGenerateReadme, dir string) string {
+func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.DocsGenerateReadme, dir string) string {
 	if docsGenerate.Template != "" {
-		tmpl, err := getTemplateContent(&atmosConfig, docsGenerate.Template, dir)
+		tmpl, err := getTemplateContent(atmosConfig, docsGenerate.Template, dir)
 		if err == nil {
 			return tmpl
 		}
@@ -136,7 +139,7 @@ func fetchTemplate(atmosConfig schema.AtmosConfiguration, docsGenerate schema.Do
 func generateReadme(
 	atmosConfig *schema.AtmosConfiguration,
 	dir string,
-	docsGenerate schema.DocsGenerateReadme,
+	docsGenerate *schema.DocsGenerateReadme,
 ) error {
 	// 1) Merge YAML inputs.
 	mergedData, err := mergeInputs(atmosConfig, dir, docsGenerate)
@@ -145,22 +148,15 @@ func generateReadme(
 	}
 
 	// 2) Generate terraform docs if enabled.
-	if err := applyTerraformDocs(*atmosConfig, dir, docsGenerate, mergedData); err != nil {
+	if err := applyTerraformDocs(dir, docsGenerate, mergedData); err != nil {
 		return err
 	}
 
 	// 3) Fetch the template.
-	chosenTemplate := fetchTemplate(*atmosConfig, docsGenerate, dir)
+	chosenTemplate := fetchTemplate(atmosConfig, docsGenerate, dir)
 
 	// 4) Render final README with gomplate.
-	rendered, err := ProcessTmplWithDatasourcesGomplate(
-		*atmosConfig,
-		schema.Settings{},
-		"docs-generate",
-		chosenTemplate,
-		mergedData,
-		true,
-	)
+	rendered, err := ProcessTmplWithDatasourcesGomplate("docs-generate", chosenTemplate, mergedData, true)
 	if err != nil {
 		return fmt.Errorf("failed to render template with datasources: %w", err)
 	}
@@ -262,19 +258,21 @@ func downloadSource(
 	if !filepath.IsAbs(pathOrURL) && !isLikelyRemote(pathOrURL) {
 		pathOrURL = filepath.Join(baseDir, pathOrURL)
 	}
-
+	log.Debug("Downloading source", "source", pathOrURL, "baseDir", baseDir)
 	tempDir, err := os.MkdirTemp("", "atmos-docs-*")
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create temp directory: %w", err)
+		return "", "", fmt.Errorf("%w: %v", ErrCreateTempDir, err)
 	}
 	// Ensure directory permissions are restricted
-	if err := os.Chmod(tempDir, 0o700); err != nil {
-		return "", "", fmt.Errorf("failed to set temp directory permissions: %w", err)
+	if err := os.Chmod(tempDir, DefaultDirPerm); err != nil {
+		return "", "", fmt.Errorf("%w: %v", ErrSetTempDirPermissions, err)
 	}
+
+	log.Debug("Downloading source", "source", pathOrURL, "tempDir", tempDir)
 
 	err = GoGetterGet(*atmosConfig, pathOrURL, tempDir, getter.ClientModeAny, 10*time.Minute)
 	if err != nil {
-		return "", tempDir, fmt.Errorf("failed to download %s: %w", pathOrURL, err)
+		return "", tempDir, fmt.Errorf("%w: %s: %v", ErrDownloadPackage, pathOrURL, err)
 	}
 	downloadedPath, err := findSingleFileInDir(tempDir)
 	if err != nil {
@@ -306,10 +304,10 @@ func findSingleFileInDir(dir string) (string, error) {
 	}
 
 	if len(files) == 0 {
-		return "", fmt.Errorf("no files found in %s", dir)
+		return "", fmt.Errorf("%w: %s", ErrNoFilesFound, dir)
 	}
 	if len(files) > 1 {
-		return "", fmt.Errorf("multiple files found in %s (found %d)", dir, len(files))
+		return "", fmt.Errorf("%w: %s (found %d)", ErrMultipleFilesFound, dir, len(files))
 	}
 	return files[0], nil
 }

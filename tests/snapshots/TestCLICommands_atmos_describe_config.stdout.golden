@@ -84,7 +84,10 @@
       "max_width": 0,
       "pagination": false,
       "generate": {
-        "terraform": {}
+        "readme": {
+          "output": "README.md",
+          "terraform": {}
+        }
       }
     },
     "markdown": {

@@ -32,6 +32,12 @@ logs:
     level: Info
 settings:
     list_merge_strategy: ""
+    docs:
+        max-width: 0
+        pagination: false
+        generate:
+            readme:
+                output: README.md
     inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks

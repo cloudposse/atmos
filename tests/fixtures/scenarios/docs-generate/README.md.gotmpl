@@ -1,6 +1,6 @@
 {{- $data := (ds "config") -}}
 
-# {{ $data.name | default "Project Title" }}
+{{ $data.name | default "Project Title" }}
 
 {{ $data.description | default "No description provided." }}
 

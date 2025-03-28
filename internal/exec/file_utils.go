@@ -13,6 +13,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const forwardSlash = "/"
+
 func removeTempDir(atmosConfig schema.AtmosConfiguration, path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
@@ -103,24 +105,23 @@ func SanitizeFileName(uri string) string {
 //
 // On Windows, e.g. localPath = "D:\Temp\foo.json" => "file://D:/Temp/foo.json"
 // On Linux,  e.g. localPath = "/tmp/foo.json"    => "file:///tmp/foo.json"
-func toFileScheme(localPath string) (string, error) {
+func toFileScheme(localPath string) string {
 	pathSlashed := filepath.ToSlash(localPath)
 
 	if runtime.GOOS == "windows" {
 		// If pathSlashed is "/D:/Temp/foo.json", remove the leading slash => "D:/Temp/foo.json"
 		// Then prepend "file://"
-		if strings.HasPrefix(pathSlashed, "/") {
-			pathSlashed = strings.TrimPrefix(pathSlashed, "/") // e.g. "D:/Temp/foo.json"
-		}
-		return "file://" + pathSlashed, nil // e.g. "file://D:/Temp/foo.json"
+		pathSlashed = strings.TrimPrefix(pathSlashed, forwardSlash)
+
+		return "file://" + pathSlashed // e.g. "file://D:/Temp/foo.json"
 	}
 
 	// Non-Windows: a path like "/tmp/foo.json" => "file:///tmp/foo.json"
 	// If it doesn't start with '/', make it absolute
-	if !strings.HasPrefix(pathSlashed, "/") {
-		pathSlashed = "/" + pathSlashed
+	if !strings.HasPrefix(pathSlashed, forwardSlash) {
+		pathSlashed = forwardSlash + pathSlashed
 	}
-	return "file://" + pathSlashed, nil
+	return "file://" + pathSlashed
 }
 
 func fixWindowsFileScheme(rawURL string) (*url.URL, error) {
@@ -133,8 +134,8 @@ func fixWindowsFileScheme(rawURL string) (*url.URL, error) {
 			u.Path = u.Host + u.Path
 			u.Host = ""
 		}
-		if strings.HasPrefix(u.Path, "/") && len(u.Path) > 2 && u.Path[2] == ':' {
-			u.Path = strings.TrimPrefix(u.Path, "/") // => "D:/Temp/foo.json"
+		if strings.HasPrefix(u.Path, forwardSlash) && len(u.Path) > 2 && u.Path[2] == ':' {
+			u.Path = strings.TrimPrefix(u.Path, forwardSlash) // => "D:/Temp/foo.json"
 		}
 	}
 

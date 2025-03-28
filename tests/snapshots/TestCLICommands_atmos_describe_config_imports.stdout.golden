@@ -121,6 +121,12 @@ settings:
             pager: false
             line_numbers: true
             wrap: false
+    docs:
+        max-width: 0
+        pagination: false
+        generate:
+            readme:
+                output: README.md
     markdown:
         document:
             color: ${colors.text}
