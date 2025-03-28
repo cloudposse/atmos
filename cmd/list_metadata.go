@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
@@ -130,7 +132,7 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	if params.ComponentFilter != "" {
-		if !checkComponentExists(&atmosConfig, params.ComponentFilter) {
+		if !listutils.CheckComponentExists(&atmosConfig, params.ComponentFilter) {
 			return "", &listerrors.ComponentDefinitionNotFoundError{Component: params.ComponentFilter}
 		}
 	}

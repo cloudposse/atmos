@@ -65,8 +65,7 @@ func TestComponentDefinitionNotFoundError(t *testing.T) {
 			args := []string{tc.componentName}
 
 			// Mock the listValues/listSettings/listMetadata function
-			var mockRunFunc func(cmd *cobra.Command, args []string) (string, error)
-			mockRunFunc = tc.runFunc
+			mockRunFunc := tc.runFunc
 
 			// Run the command with the mocked function
 			output, err := mockRunFunc(cmd, args)
@@ -168,8 +167,7 @@ func TestNoValuesFoundError(t *testing.T) {
 				cmd.Flags().Set("query", tc.query)
 			}
 
-			var mockRunFunc func(cmd *cobra.Command, args []string) (string, error)
-			mockRunFunc = tc.runFunc
+			mockRunFunc := tc.runFunc
 
 			output, err := mockRunFunc(cmd, args)
 			assert.Equal(t, "", output)

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
@@ -108,6 +110,8 @@ func initSettingsParams(cmd *cobra.Command, args []string) (*SettingsParams, err
 	}, nil
 }
 
+
+
 // getStacksMapForSettings initializes the Atmos config and returns the stacks map.
 func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilter string) (map[string]interface{}, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -118,7 +122,7 @@ func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilte
 
 	// Check if component exists
 	if componentFilter != "" {
-		if !checkComponentExists(&atmosConfig, componentFilter) {
+		if !listutils.CheckComponentExists(&atmosConfig, componentFilter) {
 			return nil, &listerrors.ComponentDefinitionNotFoundError{Component: componentFilter}
 		}
 	}

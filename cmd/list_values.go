@@ -14,6 +14,7 @@ import (
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
+	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -212,6 +213,8 @@ func logNoValuesFoundMessage(componentName string, query string) {
 	}
 }
 
+
+
 func listValues(cmd *cobra.Command, args []string) (string, error) {
 	// Ensure we have a component name
 	if len(args) == 0 {
@@ -254,7 +257,7 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	// Check if the component exists
-	if !checkComponentExists(&atmosConfig, componentName) {
+	if !listutils.CheckComponentExists(&atmosConfig, componentName) {
 		return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentName}
 	}
 
