@@ -21,11 +21,7 @@ func IsEmptyTable(output string) bool {
 	}
 
 	newlineCount := strings.Count(output, "\n")
-	if newlineCount <= 4 {
-		return true
-	}
-
-	return false
+	return newlineCount <= 4
 }
 
 // CheckComponentExists checks if a component exists in the Atmos configuration.
