@@ -25,6 +25,7 @@ var (
 	ErrInitializingCLIConfig = pkgerrors.New("error initializing CLI config")
 	ErrDescribingStacks      = pkgerrors.New("error describing stacks")
 	ErrComponentNameRequired = pkgerrors.New("component name is required")
+	ErrInvalidArguments      = pkgerrors.New("invalid arguments: the command requires one argument 'component'")
 )
 
 // Error format strings.
@@ -53,7 +54,7 @@ var listValuesCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 {
-			return fmt.Errorf("invalid arguments: the command requires one argument 'component'")
+			return ErrInvalidArguments
 		}
 
 		// Check Atmos configuration

@@ -72,36 +72,6 @@ func setupMetadataOptions(commonFlags fl.CommonFlags, componentFilter string) *l
 	}
 }
 
-// handleMetadataError handles specific metadata-related errors.
-func handleMetadataError(err error, componentFilter, query, format string) (string, error) {
-	if componentFilter != "" {
-		_, isComponentMetadataError := err.(*listerrors.ComponentMetadataNotFoundError)
-		_, isNoValuesError := err.(*listerrors.NoValuesFoundError)
-		_, isNoMetadataError := err.(*listerrors.NoMetadataFoundError)
-
-		if isComponentMetadataError || isNoValuesError || isNoMetadataError {
-			log.Debug("No metadata found for component, returning empty result",
-				"component", componentFilter,
-				"error_type", fmt.Sprintf("%T", err))
-
-			switch f.Format(format) {
-			case f.FormatJSON, f.FormatYAML:
-				return "{}", nil
-			case f.FormatCSV, f.FormatTSV:
-				return "", nil
-			default:
-				return "", nil
-			}
-		}
-	}
-
-	if u.IsNoValuesFoundError(err) {
-		return "", &listerrors.NoMetadataFoundError{Query: query}
-	}
-
-	return "", &listerrors.MetadataFilteringError{Cause: err}
-}
-
 // logNoMetadataFoundMessage logs an appropriate message when no metadata is found.
 func logNoMetadataFoundMessage(componentFilter string) {
 	if componentFilter != "" {
@@ -111,16 +81,23 @@ func logNoMetadataFoundMessage(componentFilter string) {
 	}
 }
 
-func listMetadata(cmd *cobra.Command, args []string) (string, error) {
+// MetadataParams contains the parameters needed for listing metadata.
+type MetadataParams struct {
+	CommonFlags     *fl.CommonFlags
+	ProcessingFlags *fl.ProcessingFlags
+	ComponentFilter string
+}
+
+// initMetadataParams initializes and returns the parameters needed for listing metadata.
+func initMetadataParams(cmd *cobra.Command, args []string) (*MetadataParams, error) {
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
-		return "", &listerrors.QueryError{
+		return nil, &listerrors.QueryError{
 			Query: "common flags",
 			Cause: err,
 		}
 	}
 
-	// Get template and function processing flags
 	processingFlags := fl.GetProcessingFlags(cmd)
 
 	if f.Format(commonFlags.Format) == f.FormatCSV && commonFlags.Delimiter == f.DefaultTSVDelimiter {
@@ -132,6 +109,19 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 		componentFilter = args[0]
 	}
 
+	return &MetadataParams{
+		CommonFlags:     commonFlags,
+		ProcessingFlags: processingFlags,
+		ComponentFilter: componentFilter,
+	}, nil
+}
+
+func listMetadata(cmd *cobra.Command, args []string) (string, error) {
+	params, err := initMetadataParams(cmd, args)
+	if err != nil {
+		return "", err
+	}
+
 	// Initialize CLI config
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
@@ -139,37 +129,37 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 		return "", &listerrors.InitConfigError{Cause: err}
 	}
 
-	if componentFilter != "" {
-		if !checkComponentExists(&atmosConfig, componentFilter) {
-			return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentFilter}
+	if params.ComponentFilter != "" {
+		if !checkComponentExists(&atmosConfig, params.ComponentFilter) {
+			return "", &listerrors.ComponentDefinitionNotFoundError{Component: params.ComponentFilter}
 		}
 	}
 
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
-		processingFlags.Templates, processingFlags.Functions, false, nil)
+		params.ProcessingFlags.Templates, params.ProcessingFlags.Functions, false, nil)
 	if err != nil {
 		return "", &listerrors.DescribeStacksError{Cause: err}
 	}
 
 	log.Debug("Filtering metadata",
-		"component", componentFilter, "query", commonFlags.Query,
-		"maxColumns", commonFlags.MaxColumns, "format", commonFlags.Format,
-		"stackPattern", commonFlags.Stack, "templates", processingFlags.Templates)
+		"component", params.ComponentFilter, "query", params.CommonFlags.Query,
+		"maxColumns", params.CommonFlags.MaxColumns, "format", params.CommonFlags.Format,
+		"stackPattern", params.CommonFlags.Stack, "templates", params.ProcessingFlags.Templates)
 
-	filterOptions := setupMetadataOptions(*commonFlags, componentFilter)
+	filterOptions := setupMetadataOptions(*params.CommonFlags, params.ComponentFilter)
 	output, err := l.FilterAndListValues(stacksMap, filterOptions)
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {
-			logNoMetadataFoundMessage(componentFilter)
+			logNoMetadataFoundMessage(params.ComponentFilter)
 			return "", nil
 		}
 		return "", err
 	}
 
 	if output == "" || u.IsEmptyTable(output) {
-		logNoMetadataFoundMessage(componentFilter)
+		logNoMetadataFoundMessage(params.ComponentFilter)
 		return "", nil
 	}
 

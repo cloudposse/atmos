@@ -54,7 +54,6 @@ func extractValueKeys(data map[string]interface{}, stackKeys []string) []string 
 			for k := range typedData {
 				valueKeys = append(valueKeys, k)
 			}
-			break
 		case []interface{}:
 			return []string{KeyValue}
 		default:

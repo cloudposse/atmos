@@ -66,15 +66,12 @@ func getValueKeysFromStacks(data map[string]interface{}, keys []string) []string
 			for k := range typedData {
 				valueKeys = append(valueKeys, k)
 			}
-			break
 
 		case []interface{}:
 			valueKeys = []string{ValueKey}
-			break
 
 		default:
 			valueKeys = []string{ValueKey}
-			break
 		}
 
 		if len(valueKeys) > 0 {
