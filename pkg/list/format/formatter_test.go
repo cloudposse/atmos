@@ -70,9 +70,7 @@ func TestDelimitedFormatter(t *testing.T) {
 			name:   "CSV format",
 			format: FormatCSV,
 			data: map[string]interface{}{
-				"stack1": map[string]interface{}{
-					"value": "test-value",
-				},
+				"stack1": "test-value",
 			},
 			options: FormatOptions{
 				Format:    FormatCSV,
@@ -80,16 +78,14 @@ func TestDelimitedFormatter(t *testing.T) {
 			},
 			expected: []string{
 				"Key,stack1",
-				"stack1,test-value",
+				"value,test-value",
 			},
 		},
 		{
 			name:   "TSV format",
 			format: FormatTSV,
 			data: map[string]interface{}{
-				"stack1": map[string]interface{}{
-					"value": "test-value",
-				},
+				"stack1": "test-value",
 			},
 			options: FormatOptions{
 				Format:    FormatTSV,
@@ -97,7 +93,7 @@ func TestDelimitedFormatter(t *testing.T) {
 			},
 			expected: []string{
 				"Key\tstack1",
-				"stack1\ttest-value",
+				"value\ttest-value",
 			},
 		},
 	}
@@ -124,9 +120,7 @@ func TestTableFormatter(t *testing.T) {
 		{
 			name: "TTY output",
 			data: map[string]interface{}{
-				"stack1": map[string]interface{}{
-					"value": "test-value",
-				},
+				"stack1": "test-value",
 			},
 			options: FormatOptions{
 				Format: FormatTable,
@@ -134,16 +128,14 @@ func TestTableFormatter(t *testing.T) {
 			},
 			expected: []string{
 				"Key",
-				"stack1",
+				"value",
 				"test-value",
 			},
 		},
 		{
 			name: "Non-TTY output",
 			data: map[string]interface{}{
-				"stack1": map[string]interface{}{
-					"value": "test-value",
-				},
+				"stack1": "test-value",
 			},
 			options: FormatOptions{
 				Format:    FormatTable,
@@ -152,7 +144,7 @@ func TestTableFormatter(t *testing.T) {
 			},
 			expected: []string{
 				"Key,stack1",
-				"stack1,test-value",
+				"value,test-value",
 			},
 		},
 	}

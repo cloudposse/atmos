@@ -19,6 +19,7 @@ const (
 	MaxColumnWidth     = 60 // Maximum width for a column.
 	TableColumnPadding = 3  // Padding for table columns.
 	DefaultKeyWidth    = 15 // Default base width for keys.
+	KeyValue           = "value"
 )
 
 // Error variables for table formatting.
@@ -44,19 +45,27 @@ func extractAndSortKeys(data map[string]interface{}, maxColumns int) []string {
 // extractValueKeys extracts value keys from the first stack data.
 func extractValueKeys(data map[string]interface{}, stackKeys []string) []string {
 	var valueKeys []string
+
 	for _, stackName := range stackKeys {
-		if stackData, ok := data[stackName].(map[string]interface{}); ok {
-			// If it's a simple value map with "value" key, return it.
-			if _, hasValue := stackData["value"]; hasValue {
-				return []string{"value"}
-			}
-			// Otherwise, collect all keys from the map
-			for k := range stackData {
+		stackData := data[stackName]
+
+		switch typedData := stackData.(type) {
+		case map[string]interface{}:
+			for k := range typedData {
 				valueKeys = append(valueKeys, k)
 			}
 			break
+		case []interface{}:
+			return []string{KeyValue}
+		default:
+			return []string{KeyValue}
+		}
+
+		if len(valueKeys) > 0 {
+			break
 		}
 	}
+
 	sort.Strings(valueKeys)
 	return valueKeys
 }
@@ -70,6 +79,18 @@ func createHeader(stackKeys []string) []string {
 // createRows creates the table rows using value keys and stack keys.
 func createRows(data map[string]interface{}, valueKeys, stackKeys []string) [][]string {
 	var rows [][]string
+
+	if len(valueKeys) == 1 && valueKeys[0] == KeyValue {
+		row := []string{KeyValue}
+		for _, stackName := range stackKeys {
+			stackData := data[stackName]
+			value := formatTableCellValue(stackData)
+			row = append(row, value)
+		}
+		rows = append(rows, row)
+		return rows
+	}
+
 	for _, valueKey := range valueKeys {
 		row := []string{valueKey}
 		for _, stackName := range stackKeys {

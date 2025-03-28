@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"strings"
+
 	"github.com/cloudposse/atmos/pkg/list/errors"
 )
 
@@ -10,11 +12,16 @@ func IsNoValuesFoundError(err error) bool {
 	return ok
 }
 
-// Common flag names and descriptions.
-const (
-	FlagFormat     = "format"
-	FlagMaxColumns = "max-columns"
-	FlagDelimiter  = "delimiter"
-	FlagStack      = "stack"
-	FlagQuery      = "query"
-)
+// IsEmptyTable checks if the output is an empty table (only contains headers and formatting).
+func IsEmptyTable(output string) bool {
+	if output == "" {
+		return true
+	}
+
+	newlineCount := strings.Count(output, "\n")
+	if newlineCount <= 4 {
+		return true
+	}
+
+	return false
+}

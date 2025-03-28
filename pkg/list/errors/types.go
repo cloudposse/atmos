@@ -178,3 +178,12 @@ type ComponentMetadataNotFoundError struct {
 func (e *ComponentMetadataNotFoundError) Error() string {
 	return fmt.Sprintf("no metadata found for component '%s'", e.Component)
 }
+
+// ComponentDefinitionNotFoundError indicates that the component definition was not found in the Atmos configuration.
+type ComponentDefinitionNotFoundError struct {
+	Component string
+}
+
+func (e *ComponentDefinitionNotFoundError) Error() string {
+	return fmt.Sprintf("component '%s' does not exist", e.Component)
+}

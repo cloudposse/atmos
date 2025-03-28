@@ -1,10 +1,11 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -18,12 +19,12 @@ import (
 )
 
 var (
-	ErrGettingCommonFlags    = errors.New("error getting common flags")
-	ErrGettingAbstractFlag   = errors.New("error getting abstract flag")
-	ErrGettingVarsFlag       = errors.New("error getting vars flag")
-	ErrInitializingCLIConfig = errors.New("error initializing CLI config")
-	ErrDescribingStacks      = errors.New("error describing stacks")
-	ErrComponentNameRequired = errors.New("component name is required")
+	ErrGettingCommonFlags    = pkgerrors.New("error getting common flags")
+	ErrGettingAbstractFlag   = pkgerrors.New("error getting abstract flag")
+	ErrGettingVarsFlag       = pkgerrors.New("error getting vars flag")
+	ErrInitializingCLIConfig = pkgerrors.New("error initializing CLI config")
+	ErrDescribingStacks      = pkgerrors.New("error describing stacks")
+	ErrComponentNameRequired = pkgerrors.New("component name is required")
 )
 
 // Error format strings.
@@ -50,21 +51,20 @@ var listValuesCmd = &cobra.Command{
 		"atmos list values vpc --format yaml\n" +
 		"atmos list values vpc --format csv",
 	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 {
-			log.Error("invalid arguments. The command requires one argument 'component'")
-			return
+			return fmt.Errorf("invalid arguments: the command requires one argument 'component'")
 		}
 
 		// Check Atmos configuration
 		checkAtmosConfig()
 		output, err := listValues(cmd, args)
 		if err != nil {
-			log.Error(err.Error())
-			return
+			return err
 		}
 
 		u.PrintMessage(output)
+		return nil
 	},
 }
 
@@ -80,36 +80,34 @@ var listVarsCmd = &cobra.Command{
 		"atmos list vars vpc --format yaml\n" +
 		"atmos list vars vpc --format csv",
 	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
 
 		// Set the query flag to .vars
 		if err := cmd.Flags().Set("query", ".vars"); err != nil {
-			log.Error("failed to set query flag", "error", err)
-			return
+			return fmt.Errorf("failed to set query flag: %w", err)
 		}
 
-		// Run listValues with the component argument
 		output, err := listValues(cmd, args)
 		if err != nil {
-			switch e := err.(type) {
-			case *listerrors.ComponentVarsNotFoundError:
-				log.Error("no vars found for component",
-					"component", e.Component)
-				return
-			case *listerrors.NoValuesFoundError:
-				log.Error("no values found for component with query",
-					"component", args[0],
-					"query", ".vars")
-				return
-			default:
-				log.Error(err.Error())
-				return
+			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
+			if errors.As(err, &componentVarsNotFoundErr) {
+				log.Info(fmt.Sprintf("No vars found for component '%s'", componentVarsNotFoundErr.Component))
+				return nil
 			}
+
+			var noValuesErr *listerrors.NoValuesFoundError
+			if errors.As(err, &noValuesErr) {
+				log.Info(fmt.Sprintf("No values found for component '%s' with query '.vars'", args[0]))
+				return nil
+			}
+
+			return err
 		}
 
 		u.PrintMessage(output)
+		return nil
 	},
 }
 
@@ -204,6 +202,15 @@ func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, *fl.ProcessingFla
 	return filterOptions, processingFlags, nil
 }
 
+// logNoValuesFoundMessage logs an appropriate message when no values or vars are found
+func logNoValuesFoundMessage(componentName string, query string) {
+	if query == ".vars" {
+		log.Info(fmt.Sprintf("No vars found for component '%s'", componentName))
+	} else {
+		log.Info(fmt.Sprintf("No values found for component '%s'", componentName))
+	}
+}
+
 func listValues(cmd *cobra.Command, args []string) (string, error) {
 	// Ensure we have a component name
 	if len(args) == 0 {
@@ -245,6 +252,11 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		return "", fmt.Errorf(ErrFmtWrapErr, ErrInitializingCLIConfig, err)
 	}
 
+	// Check if the component exists
+	if !checkComponentExists(&atmosConfig, componentName) {
+		return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentName}
+	}
+
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil)
 	if err != nil {
@@ -252,7 +264,7 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	// Log the filter options
-	log.Info("Filtering values",
+	log.Debug("Filtering values",
 		"component", componentName,
 		"componentFilter", filterOptions.ComponentFilter,
 		"query", filterOptions.Query,
@@ -264,5 +276,15 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		"processYamlFunctions", processingFlags.Functions)
 
 	// Filter and list component values across stacks
-	return l.FilterAndListValues(stacksMap, filterOptions)
+	output, err := l.FilterAndListValues(stacksMap, filterOptions)
+	if err != nil {
+		var noValuesErr *listerrors.NoValuesFoundError
+		if errors.As(err, &noValuesErr) {
+			logNoValuesFoundMessage(componentName, filterOptions.Query)
+			return "", nil
+		}
+		return "", err
+	}
+
+	return output, nil
 }

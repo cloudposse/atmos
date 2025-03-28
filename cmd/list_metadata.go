@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
@@ -9,7 +10,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
-	"github.com/cloudposse/atmos/pkg/list/errors"
+	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	u "github.com/cloudposse/atmos/pkg/list/utils"
@@ -28,16 +29,15 @@ var listMetadataCmd = &cobra.Command{
 		"atmos list metadata --format json\n" +
 		"atmos list metadata --stack '*-{dev,staging}-*'\n" +
 		"atmos list metadata --stack 'prod-*'",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
+	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig()
 		output, err := listMetadata(cmd, args)
 		if err != nil {
-			log.Error("failed to list metadata", "error", err)
-			return
+			return err
 		}
 
 		utils.PrintMessage(output)
+		return nil
 	},
 }
 
@@ -75,9 +75,9 @@ func setupMetadataOptions(commonFlags fl.CommonFlags, componentFilter string) *l
 // handleMetadataError handles specific metadata-related errors.
 func handleMetadataError(err error, componentFilter, query, format string) (string, error) {
 	if componentFilter != "" {
-		_, isComponentMetadataError := err.(*errors.ComponentMetadataNotFoundError)
-		_, isNoValuesError := err.(*errors.NoValuesFoundError)
-		_, isNoMetadataError := err.(*errors.NoMetadataFoundError)
+		_, isComponentMetadataError := err.(*listerrors.ComponentMetadataNotFoundError)
+		_, isNoValuesError := err.(*listerrors.NoValuesFoundError)
+		_, isNoMetadataError := err.(*listerrors.NoMetadataFoundError)
 
 		if isComponentMetadataError || isNoValuesError || isNoMetadataError {
 			log.Debug("No metadata found for component, returning empty result",
@@ -90,22 +90,31 @@ func handleMetadataError(err error, componentFilter, query, format string) (stri
 			case f.FormatCSV, f.FormatTSV:
 				return "", nil
 			default:
-				return fmt.Sprintf("No metadata found for component '%s'\n", componentFilter), nil
+				return "", nil
 			}
 		}
 	}
 
 	if u.IsNoValuesFoundError(err) {
-		return "", &errors.NoMetadataFoundError{Query: query}
+		return "", &listerrors.NoMetadataFoundError{Query: query}
 	}
 
-	return "", &errors.MetadataFilteringError{Cause: err}
+	return "", &listerrors.MetadataFilteringError{Cause: err}
+}
+
+// logNoMetadataFoundMessage logs an appropriate message when no metadata is found.
+func logNoMetadataFoundMessage(componentFilter string) {
+	if componentFilter != "" {
+		log.Info(fmt.Sprintf("No metadata found for component '%s'", componentFilter))
+	} else {
+		log.Info("No metadata found")
+	}
 }
 
 func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
-		return "", &errors.QueryError{
+		return "", &listerrors.QueryError{
 			Query: "common flags",
 			Cause: err,
 		}
@@ -118,26 +127,32 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 		commonFlags.Delimiter = f.DefaultCSVDelimiter
 	}
 
+	componentFilter := ""
+	if len(args) > 0 {
+		componentFilter = args[0]
+	}
+
 	// Initialize CLI config
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return "", &errors.InitConfigError{Cause: err}
+		return "", &listerrors.InitConfigError{Cause: err}
+	}
+
+	if componentFilter != "" {
+		if !checkComponentExists(&atmosConfig, componentFilter) {
+			return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentFilter}
+		}
 	}
 
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
 		processingFlags.Templates, processingFlags.Functions, false, nil)
 	if err != nil {
-		return "", &errors.DescribeStacksError{Cause: err}
+		return "", &listerrors.DescribeStacksError{Cause: err}
 	}
 
-	componentFilter := ""
-	if len(args) > 0 {
-		componentFilter = args[0]
-	}
-
-	log.Info("Filtering metadata",
+	log.Debug("Filtering metadata",
 		"component", componentFilter, "query", commonFlags.Query,
 		"maxColumns", commonFlags.MaxColumns, "format", commonFlags.Format,
 		"stackPattern", commonFlags.Stack, "templates", processingFlags.Templates)
@@ -145,8 +160,17 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 	filterOptions := setupMetadataOptions(*commonFlags, componentFilter)
 	output, err := l.FilterAndListValues(stacksMap, filterOptions)
 	if err != nil {
-		return handleMetadataError(err, componentFilter, commonFlags.Query,
-			commonFlags.Format)
+		var noValuesErr *listerrors.NoValuesFoundError
+		if errors.As(err, &noValuesErr) {
+			logNoMetadataFoundMessage(componentFilter)
+			return "", nil
+		}
+		return "", err
+	}
+
+	if output == "" || u.IsEmptyTable(output) {
+		logNoMetadataFoundMessage(componentFilter)
+		return "", nil
 	}
 
 	return output, nil

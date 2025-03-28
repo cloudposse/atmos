@@ -1,7 +1,6 @@
 package list
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -445,90 +444,18 @@ func applyQuery(filteredValues map[string]interface{}, query string, component s
 	return results, nil
 }
 
-// formatMapResult formats a map result based on the query context.
-func formatMapResult(v map[string]interface{}, query string) interface{} {
-	if len(v) == 0 {
-		return nil
-	}
-
-	if query != "" {
-		return map[string]interface{}{
-			KeyValue: v,
-		}
-	}
-
-	return v
-}
-
-// formatArrayResult formats an array result for display.
-func formatArrayResult(v []interface{}) interface{} {
-	if len(v) == 0 {
-		return nil
-	}
-
-	jsonBytes, err := json.Marshal(v)
-	arrayStr := fmt.Sprintf("%v", v)
-	if err == nil {
-		arrayStr = string(jsonBytes)
-	}
-
-	log.Debug("Formatting array result",
-		"array_length", len(v),
-		"first_element_type", fmt.Sprintf(TypeFormatSpec, v[0]))
-
-	return map[string]interface{}{
-		KeyValue: arrayStr,
-	}
-}
-
-// formatScalarResult formats a scalar result (string, number, boolean) for display.
-func formatScalarResult(v interface{}) interface{} {
-	log.Debug("Formatting scalar result", "value", v)
-	return map[string]interface{}{
-		KeyValue: v,
-	}
-}
-
-// formatUnknownResult formats a result of an unknown type for display.
-func formatUnknownResult(v interface{}) interface{} {
-	log.Debug("Formatting unknown type result",
-		"type", fmt.Sprintf(TypeFormatSpec, v))
-
-	jsonBytes, err := json.Marshal(v)
-	if err == nil {
-		return map[string]interface{}{
-			KeyValue: string(jsonBytes),
-		}
-	}
-
-	return map[string]interface{}{
-		KeyValue: fmt.Sprintf("%v", v),
-	}
-}
-
 // formatResultForDisplay formats query results for display.
 func formatResultForDisplay(result interface{}, query string) interface{} {
 	log.Debug("Formatting query result for display",
 		"result_type", fmt.Sprintf(TypeFormatSpec, result),
 		"query", query)
-	switch v := result.(type) {
-	case map[string]interface{}:
-		return formatMapResult(v, query)
 
-	case []interface{}:
-		return formatArrayResult(v)
-
-	case string, int, int32, int64, float32, float64, bool:
-		return formatScalarResult(v)
-
-	case nil:
-		// Skip nil results
+	if result == nil {
 		log.Debug("Skipping nil result")
 		return nil
-
-	default:
-		return formatUnknownResult(v)
 	}
+
+	return result
 }
 
 // formatOutput formats the output based on the specified format.
@@ -546,12 +473,6 @@ func formatOutput(values map[string]interface{}, formatStr, delimiter string, ma
 	}
 
 	return formatter.Format(values, options)
-}
-
-// IsNoValuesFoundError checks if an error is a NoValuesFoundError.
-func IsNoValuesFoundError(err error) bool {
-	_, ok := err.(*listerrors.NoValuesFoundError)
-	return ok
 }
 
 // ValidateFormat validates the output format.

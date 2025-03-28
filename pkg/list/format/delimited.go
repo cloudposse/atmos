@@ -52,26 +52,32 @@ func getValueKeysFromStacks(data map[string]interface{}, keys []string) []string
 	var valueKeys []string
 
 	for _, stackName := range keys {
-		if stackData, ok := data[stackName].(map[string]interface{}); ok {
-			// Check for special case with "value" key
-			if _, hasValue := stackData[ValueKey]; hasValue {
-				valueKeys = []string{ValueKey}
-				break
-			}
+		stackData := data[stackName]
 
-			// Check for "vars" key which may contain nested properties
-			if varsData, ok := stackData["vars"].(map[string]interface{}); ok {
-				// Extract all keys from the vars map for flattened display
+		switch typedData := stackData.(type) {
+		case map[string]interface{}:
+			if varsData, ok := typedData["vars"].(map[string]interface{}); ok {
 				for k := range varsData {
 					valueKeys = append(valueKeys, k)
 				}
 				break
 			}
 
-			// Default: collect all keys from the map
-			for k := range stackData {
+			for k := range typedData {
 				valueKeys = append(valueKeys, k)
 			}
+			break
+
+		case []interface{}:
+			valueKeys = []string{ValueKey}
+			break
+
+		default:
+			valueKeys = []string{ValueKey}
+			break
+		}
+
+		if len(valueKeys) > 0 {
 			break
 		}
 	}
@@ -87,7 +93,6 @@ func (f *DelimitedFormatter) generateHeaderAndRows(keys []string, valueKeys []st
 
 	var rows [][]string
 
-	// Determine if we have the special case with a "value" key
 	if len(valueKeys) == 1 && valueKeys[0] == ValueKey {
 		rows = f.generateValueKeyRows(keys, data)
 	} else {
@@ -100,18 +105,28 @@ func (f *DelimitedFormatter) generateHeaderAndRows(keys []string, valueKeys []st
 // generateValueKeyRows creates rows for the special case with a "value" key.
 func (f *DelimitedFormatter) generateValueKeyRows(keys []string, data map[string]interface{}) [][]string {
 	var rows [][]string
-	// In this special case, we create rows using stack names as the first column
+	row := []string{ValueKey}
+
 	for _, stackName := range keys {
-		row := []string{stackName}
 		value := ""
-		if stackData, ok := data[stackName].(map[string]interface{}); ok {
-			if val, ok := stackData[ValueKey]; ok {
+
+		stackData := data[stackName]
+
+		switch typedData := stackData.(type) {
+		case map[string]interface{}:
+			if val, ok := typedData[ValueKey]; ok {
 				value = formatValue(val)
+			} else {
+				value = formatValue(typedData)
 			}
+		default:
+			value = formatValue(stackData)
 		}
+
 		row = append(row, value)
-		rows = append(rows, row)
 	}
+
+	rows = append(rows, row)
 	return rows
 }
 

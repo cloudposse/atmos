@@ -2,6 +2,7 @@ package list
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -270,11 +271,10 @@ func TestFilterAndListValues(t *testing.T) {
 				err := json.Unmarshal([]byte(output), &result)
 				assert.NoError(t, err)
 				for _, env := range []string{"dev", "staging"} {
-					envData, ok := result[env].(map[string]interface{})
+					// After removing the value wrapper, the tags map is directly under each env
+					tagsMap, ok := result[env].(map[string]interface{})
 					assert.True(t, ok)
-					value, ok := envData["value"].(map[string]interface{})
-					assert.True(t, ok)
-					assert.Equal(t, "devops", value["Team"])
+					assert.Equal(t, "devops", tagsMap["Team"])
 				}
 			},
 		},
@@ -287,12 +287,16 @@ func TestFilterAndListValues(t *testing.T) {
 				var result map[string]interface{}
 				err := json.Unmarshal([]byte(output), &result)
 				assert.NoError(t, err)
-				devData, ok := result["dev"].(map[string]interface{})
+				// After removing the value wrapper, the subnets array is directly under dev
+				subnets, ok := result["dev"].([]interface{})
 				assert.True(t, ok)
-				value, ok := devData["value"].(string)
-				assert.True(t, ok)
-				assert.Contains(t, value, "10.0.1.0/24")
-				assert.Contains(t, value, "10.0.2.0/24")
+				// Convert to strings for easier assertion
+				subnetStrings := make([]string, len(subnets))
+				for i, subnet := range subnets {
+					subnetStrings[i] = fmt.Sprintf("%v", subnet)
+				}
+				assert.Contains(t, subnetStrings, "10.0.1.0/24")
+				assert.Contains(t, subnetStrings, "10.0.2.0/24")
 			},
 		},
 		{
@@ -305,9 +309,9 @@ func TestFilterAndListValues(t *testing.T) {
 				err := json.Unmarshal([]byte(output), &result)
 				assert.NoError(t, err)
 				for env, expected := range map[string]string{"dev": "dev", "staging": "staging", "prod": "prod"} {
-					envData, ok := result[env].(map[string]interface{})
+					name, ok := result[env].(string)
 					assert.True(t, ok)
-					assert.Equal(t, expected, envData["value"])
+					assert.Equal(t, expected, name)
 				}
 			},
 		},
@@ -320,11 +324,60 @@ func TestFilterAndListValues(t *testing.T) {
 				var result map[string]interface{}
 				err := json.Unmarshal([]byte(output), &result)
 				assert.NoError(t, err)
+				// After removing the value wrapper, the team value is directly under each env
 				for _, env := range []string{"dev", "staging", "prod"} {
-					envData, ok := result[env].(map[string]interface{})
+					team, ok := result[env].(string)
 					assert.True(t, ok)
-					assert.Equal(t, "platform", envData["value"])
+					assert.Equal(t, "platform", team)
 				}
+			},
+		},
+		{
+			name:      "scalar query result - table format",
+			component: "vpc",
+			query:     ".region",
+			format:    "table",
+			checkFunc: func(t *testing.T, output string) {
+				assert.Contains(t, output, "Key")
+				assert.Contains(t, output, "value")
+				assert.Contains(t, output, "us-east-1")
+			},
+		},
+		{
+			name:      "scalar query result - csv format",
+			component: "vpc",
+			query:     ".region",
+			format:    "csv",
+			checkFunc: func(t *testing.T, output string) {
+				assert.Contains(t, output, "Key,dev,prod,staging")
+				assert.Contains(t, output, "value,us-east-1,us-east-1,us-east-1")
+			},
+		},
+		{
+			name:      "array query result - yaml format",
+			component: "vpc",
+			query:     ".subnets",
+			format:    "yaml",
+			checkFunc: func(t *testing.T, output string) {
+				assert.Contains(t, output, "dev:")
+				assert.Contains(t, output, "- 10.0.1.0/24")
+				assert.Contains(t, output, "- 10.0.2.0/24")
+				assert.Contains(t, output, "staging:")
+				assert.Contains(t, output, "- 10.1.1.0/24")
+				assert.Contains(t, output, "- 10.1.2.0/24")
+			},
+		},
+		{
+			name:      "array query result - tsv format",
+			component: "vpc",
+			query:     ".subnets",
+			format:    "tsv",
+			checkFunc: func(t *testing.T, output string) {
+				assert.Contains(t, output, "Key\tdev\tprod\tstaging")
+				assert.Contains(t, output, "value\t")
+				assert.Contains(t, output, "10.0.1.0/24,10.0.2.0/24")
+				assert.Contains(t, output, "10.2.1.0/24,10.2.2.0/24") // prod stack subnets
+				assert.Contains(t, output, "10.1.1.0/24,10.1.2.0/24")
 			},
 		},
 	}

@@ -1,13 +1,16 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
+
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
-	"github.com/cloudposse/atmos/pkg/list/errors"
+	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	u "github.com/cloudposse/atmos/pkg/list/utils"
@@ -27,23 +30,21 @@ var listSettingsCmd = &cobra.Command{
 		"atmos list settings --stack '*-dev-*'\n" +
 		"atmos list settings --stack 'prod-*'",
 	Args: cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
+	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig()
 		output, err := listSettings(cmd, args)
 		if err != nil {
-			log.Error("failed to list settings", "error", err)
-			return
+			return err
 		}
 
 		utils.PrintMessage(output)
+		return nil
 	},
 }
 
 func init() {
 	fl.AddCommonListFlags(listSettingsCmd)
 
-	// Add template and function processing flags
 	listSettingsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	listSettingsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 
@@ -66,24 +67,27 @@ func setupSettingsOptions(commonFlags fl.CommonFlags, componentFilter string) *l
 	}
 }
 
-// handleSettingsError handles specific settings-related errors.
-func handleSettingsError(err error, componentFilter, query string) (string, error) {
-	if u.IsNoValuesFoundError(err) {
-		if componentFilter != "" {
-			return "", &errors.NoSettingsFoundForComponentError{
-				Component: componentFilter,
-				Query:     query,
-			}
-		}
-		return "", &errors.NoSettingsFoundError{Query: query}
+// logNoSettingsFoundMessage logs an appropriate message when no settings are found.
+func logNoSettingsFoundMessage(componentFilter string) {
+	if componentFilter != "" {
+		log.Info(fmt.Sprintf("No settings found for component '%s'", componentFilter))
+	} else {
+		log.Info("No settings found")
 	}
-	return "", &errors.SettingsFilteringError{Cause: err}
 }
 
-func listSettings(cmd *cobra.Command, args []string) (string, error) {
+// SettingsParams contains all parameters needed for the list settings command.
+type SettingsParams struct {
+	CommonFlags     *fl.CommonFlags
+	ProcessingFlags *fl.ProcessingFlags
+	ComponentFilter string
+}
+
+// initSettingsParams initializes and returns the parameters needed for listing settings.
+func initSettingsParams(cmd *cobra.Command, args []string) (*SettingsParams, error) {
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
-		return "", &errors.CommonFlagsError{Cause: err}
+		return nil, &listerrors.CommonFlagsError{Cause: err}
 	}
 
 	processingFlags := fl.GetProcessingFlags(cmd)
@@ -92,33 +96,75 @@ func listSettings(cmd *cobra.Command, args []string) (string, error) {
 		commonFlags.Delimiter = f.DefaultCSVDelimiter
 	}
 
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-	if err != nil {
-		return "", &errors.InitConfigError{Cause: err}
-	}
-
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
-		processingFlags.Templates, processingFlags.Functions, false, nil)
-	if err != nil {
-		return "", &errors.DescribeStacksError{Cause: err}
-	}
-
 	componentFilter := ""
 	if len(args) > 0 {
 		componentFilter = args[0]
 	}
 
-	log.Info("Filtering settings",
-		"query", commonFlags.Query, "component", componentFilter,
-		"maxColumns", commonFlags.MaxColumns, "format", commonFlags.Format,
-		"stackPattern", commonFlags.Stack, "processTemplates", processingFlags.Templates,
-		"processYamlFunctions", processingFlags.Functions)
+	return &SettingsParams{
+		CommonFlags:     commonFlags,
+		ProcessingFlags: processingFlags,
+		ComponentFilter: componentFilter,
+	}, nil
+}
 
-	filterOptions := setupSettingsOptions(*commonFlags, componentFilter)
+// getStacksMapForSettings initializes the Atmos config and returns the stacks map.
+func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilter string) (map[string]interface{}, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, &listerrors.InitConfigError{Cause: err}
+	}
+
+	// Check if component exists
+	if componentFilter != "" {
+		if !checkComponentExists(&atmosConfig, componentFilter) {
+			return nil, &listerrors.ComponentDefinitionNotFoundError{Component: componentFilter}
+		}
+	}
+
+	// Execute describe stacks
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
+		processingFlags.Templates, processingFlags.Functions, false, nil)
+	if err != nil {
+		return nil, &listerrors.DescribeStacksError{Cause: err}
+	}
+
+	return stacksMap, nil
+}
+
+func listSettings(cmd *cobra.Command, args []string) (string, error) {
+	// Initialize parameters
+	params, err := initSettingsParams(cmd, args)
+	if err != nil {
+		return "", err
+	}
+
+	stacksMap, err := getStacksMapForSettings(params.ProcessingFlags, params.ComponentFilter)
+	if err != nil {
+		return "", err
+	}
+
+	log.Debug("Filtering settings",
+		"query", params.CommonFlags.Query, "component", params.ComponentFilter,
+		"maxColumns", params.CommonFlags.MaxColumns, "format", params.CommonFlags.Format,
+		"stackPattern", params.CommonFlags.Stack, "processTemplates", params.ProcessingFlags.Templates,
+		"processYamlFunctions", params.ProcessingFlags.Functions)
+
+	filterOptions := setupSettingsOptions(*params.CommonFlags, params.ComponentFilter)
 	output, err := l.FilterAndListValues(stacksMap, filterOptions)
 	if err != nil {
-		return handleSettingsError(err, componentFilter, commonFlags.Query)
+		var noValuesErr *listerrors.NoValuesFoundError
+		if errors.As(err, &noValuesErr) {
+			logNoSettingsFoundMessage(params.ComponentFilter)
+			return "", nil
+		}
+		return "", err
+	}
+
+	if output == "" || u.IsEmptyTable(output) {
+		logNoSettingsFoundMessage(params.ComponentFilter)
+		return "", nil
 	}
 
 	return output, nil
