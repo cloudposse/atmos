@@ -386,13 +386,26 @@ func parseMixinURI(mixin *schema.VendorComponentMixins) (string, error) {
 func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
-			// Simulate the action
+			if needsCustomDetection(p.uri) {
+				log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.uri)
+				detector := &CustomGitDetector{AtmosConfig: *atmosConfig, source: ""}
+				_, _, err := detector.Detect(p.uri, "")
+				if err != nil {
+					return installedPkgMsg{
+						err:  fmt.Errorf("dry-run: detection failed for component %s: %w", p.name, err),
+						name: p.name,
+					}
+				}
+			} else {
+				log.Debug("Dry-run mode: skipping custom detection; URI already supported by go-getter", "component", p.name, "uri", p.uri)
+			}
 			time.Sleep(100 * time.Millisecond)
 			return installedPkgMsg{
 				err:  nil,
 				name: p.name,
 			}
 		}
+
 		if p.IsComponent {
 			err := installComponent(p, atmosConfig)
 			if err != nil {
