@@ -89,7 +89,6 @@ func TestComponentDefinitionNotFoundError(t *testing.T) {
 
 // TestNoValuesFoundError tests that the NoValuesFoundError is properly handled.
 func TestNoValuesFoundError(t *testing.T) {
-
 	testCases := []struct {
 		name            string
 		componentName   string
