@@ -267,6 +267,40 @@ func TestNormalizePath_ErrorHandling(t *testing.T) {
 	}
 }
 
+func TestDetect_LocalFilePath(t *testing.T) {
+	// This tests the branch when the input is a local file path (no host).
+	config := fakeAtmosConfig(false)
+	detector := &CustomGitDetector{AtmosConfig: config, source: "/home/user/repo"}
+	localFile := "/home/user/repo/README.md"
+	result, ok, err := detector.Detect(localFile, "")
+	if err != nil {
+		t.Fatalf("Expected no error for local file path, got: %v", err)
+	}
+	if ok != false {
+		t.Errorf("Expected ok to be false for local file path, got true")
+	}
+	if result != "" {
+		t.Errorf("Expected result to be empty for local file path, got: %s", result)
+	}
+}
+
+func TestDetect_UnsupportedHost(t *testing.T) {
+	// This tests the branch when the URL host is not supported (not GitHub, GitLab, or Bitbucket)
+	config := fakeAtmosConfig(false)
+	detector := &CustomGitDetector{AtmosConfig: config, source: "repo.git"}
+	unsupportedURL := "https://example.com/repo.git"
+	result, ok, err := detector.Detect(unsupportedURL, "")
+	if err != nil {
+		t.Fatalf("Expected no error for unsupported host, got: %v", err)
+	}
+	if ok != false {
+		t.Errorf("Expected ok to be false for unsupported host, got true")
+	}
+	if result != "" {
+		t.Errorf("Expected result to be empty for unsupported host, got: %s", result)
+	}
+}
+
 func TestMain(m *testing.M) {
 	code := m.Run()
 	getter.Detectors = originalDetectors
