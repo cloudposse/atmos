@@ -204,7 +204,7 @@ func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, *fl.ProcessingFla
 	return filterOptions, processingFlags, nil
 }
 
-// logNoValuesFoundMessage logs an appropriate message when no values or vars are found
+// logNoValuesFoundMessage logs an appropriate message when no values or vars are found.
 func logNoValuesFoundMessage(componentName string, query string) {
 	if query == ".vars" {
 		log.Info(fmt.Sprintf("No vars found for component '%s'", componentName))
@@ -215,17 +215,12 @@ func logNoValuesFoundMessage(componentName string, query string) {
 
 
 
-func listValues(cmd *cobra.Command, args []string) (string, error) {
-	// Ensure we have a component name
-	if len(args) == 0 {
-		return "", ErrComponentNameRequired
-	}
-	componentName := args[0]
-
+// prepareListValuesOptions prepares filter options based on component name and flags.
+func prepareListValuesOptions(cmd *cobra.Command, componentName string) (*l.FilterOptions, *fl.ProcessingFlags, error) {
 	// Get all flags and options
 	filterOptions, processingFlags, err := getListValuesFlags(cmd)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	// Use ComponentFilter instead of Component for filtering by component name
@@ -249,22 +244,49 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		"component_field", filterOptions.Component,
 		"component_filter", filterOptions.ComponentFilter)
 
+	return filterOptions, processingFlags, nil
+}
+
+// initAtmosAndDescribeStacksForList initializes Atmos config and describes stacks.
+func initAtmosAndDescribeStacksForList(componentName string, processingFlags *fl.ProcessingFlags) (schema.AtmosConfiguration, map[string]interface{}, error) {
 	// Initialize CLI config
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return "", fmt.Errorf(ErrFmtWrapErr, ErrInitializingCLIConfig, err)
+		return schema.AtmosConfiguration{}, nil, fmt.Errorf(ErrFmtWrapErr, ErrInitializingCLIConfig, err)
 	}
 
 	// Check if the component exists
 	if !listutils.CheckComponentExists(&atmosConfig, componentName) {
-		return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentName}
+		return schema.AtmosConfiguration{}, nil, &listerrors.ComponentDefinitionNotFoundError{Component: componentName}
 	}
 
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil)
 	if err != nil {
-		return "", fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
+		return schema.AtmosConfiguration{}, nil, fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
+	}
+
+	return atmosConfig, stacksMap, nil
+}
+
+func listValues(cmd *cobra.Command, args []string) (string, error) {
+	// Ensure we have a component name
+	if len(args) == 0 {
+		return "", ErrComponentNameRequired
+	}
+	componentName := args[0]
+
+	// Prepare filter options and processing flags
+	filterOptions, processingFlags, err := prepareListValuesOptions(cmd, componentName)
+	if err != nil {
+		return "", err
+	}
+
+	// Initialize Atmos config and get stacks
+	_, stacksMap, err := initAtmosAndDescribeStacksForList(componentName, processingFlags)
+	if err != nil {
+		return "", err
 	}
 
 	// Log the filter options
