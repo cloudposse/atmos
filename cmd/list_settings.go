@@ -110,8 +110,6 @@ func initSettingsParams(cmd *cobra.Command, args []string) (*SettingsParams, err
 	}, nil
 }
 
-
-
 // getStacksMapForSettings initializes the Atmos config and returns the stacks map.
 func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilter string) (map[string]interface{}, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}

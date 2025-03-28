@@ -213,8 +213,6 @@ func logNoValuesFoundMessage(componentName string, query string) {
 	}
 }
 
-
-
 // prepareListValuesOptions prepares filter options based on component name and flags.
 func prepareListValuesOptions(cmd *cobra.Command, componentName string) (*l.FilterOptions, *fl.ProcessingFlags, error) {
 	// Get all flags and options
