@@ -114,7 +114,7 @@ func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerateReadme, mer
 		return nil
 	}
 
-	terraformDocs, err := runTerraformDocs(terraformSource, docsGenerate.Terraform)
+	terraformDocs, err := runTerraformDocs(terraformSource, &docsGenerate.Terraform)
 	if err != nil {
 		return fmt.Errorf("failed to generate terraform docs: %w", err)
 	}
@@ -206,7 +206,7 @@ type Formatter interface {
 	Content() string
 }
 
-func runTerraformDocs(dir string, settings schema.TerraformDocsReadmeSettings) (string, error) {
+func runTerraformDocs(dir string, settings *schema.TerraformDocsReadmeSettings) (string, error) {
 	config := tfdocsPrint.DefaultConfig()
 	config.ModuleRoot = dir
 
