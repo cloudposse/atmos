@@ -160,6 +160,10 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 				}
 			}
 
+			// Process local file
+
+			// Process remote file with `go-getter`
+
 			// Evaluate the YQ expression if provided
 			if q != "" {
 				res, err = EvaluateYqExpression(atmosConfig, res, q)
@@ -168,19 +172,20 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 				}
 			}
 
+			// Convert the structure to YAML
 			y, err := ConvertToYAML(res)
 			if err != nil {
 				return err
 			}
 
-			// Decode the included YAML content into the same structure
+			// Decode the YAML content into a YAML node
 			var includedNode yaml.Node
 			err = yaml.Unmarshal([]byte(y), &includedNode)
 			if err != nil {
 				return fmt.Errorf("failed to parse !include %s in the file %s: %v", val, file, err)
 			}
 
-			// Replace the current node with the included content
+			// Replace the current node with the decoded YAML node with the included content
 			*n = includedNode
 		}
 

@@ -14,3 +14,18 @@ components:
         boolean_var: !include config/vars.yaml .boolean_var
         list_var: !include config/vars.tfvars .list_var
         map_var: !include config/vars.tfvars .map_var
+
+    component-2:
+      metadata:
+        component: yaml-functions
+      vars: !include config/vars.tfvars
+
+    component-3:
+      metadata:
+        component: yaml-functions
+      vars: !include config/vars.json
+
+    component-4:
+      metadata:
+        component: yaml-functions
+      vars: !include config/vars.yaml
