@@ -1,0 +1,32 @@
+---
+title: atmos docs generate
+sidebar_label: generate
+sidebar_class_name: command
+description: "Generate subcommand for Atmos docs"
+id: generate
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note Purpose
+
+Use this command to generate a README.md from one or more input sources defined in `atmos.yaml`. The command deep-merges local or remote YAML files to maintain a centralized boilerplate. If README.yaml is present, it’s combined automatically. You can optionally enable terraform-docs by configuring it in `atmos.yaml` docs section, which exposes all terraform-docs settings for templating. This command also aliases to “atmos generate docs”.
+
+:::
+
+<Screengrab title="atmos docs generate --help" slug="atmos-docs-generate--help" />
+
+## Usage
+
+```shell
+atmos docs generate
+atmos docs generate components/terraform/vpc
+atmos docs generate --all
+``` 
+
+:::
+
+## Flags
+
+| Flag          | Description                                                                                                  | Alias | Required |
+|:--------------|:-------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--all`       | Atmos to process and include all available input sources when generating the `README.md`                     | no    | no       |
