@@ -239,6 +239,7 @@ func changeWorkingDir(t *testing.T, dir string) {
 	err = os.Chdir(dir)
 	require.NoError(t, err, "Failed to change working directory")
 }
+
 func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
 	tempDir := t.TempDir() // Empty directory, no config file
 
@@ -247,8 +248,8 @@ func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Config File \"atmos\" Not Found")
-
 }
+
 func TestMergeConfig_MultipleConfigFilesMerge(t *testing.T) {
 	tempDir := t.TempDir()
 	content := `
