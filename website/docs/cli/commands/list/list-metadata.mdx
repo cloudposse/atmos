@@ -1,0 +1,106 @@
+---
+title: "atmos list metadata"
+id: "list-metadata"
+sidebar_label: metadata
+sidebar_class_name: command
+---
+
+# atmos list metadata
+
+The `atmos list metadata` command displays component metadata across all stacks.
+
+## Usage
+
+```shell
+atmos list metadata [flags]
+```
+
+## Description
+
+The `atmos list metadata` command helps you inspect component metadata across different stacks. It provides a tabular view where:
+
+- Each column represents a stack (e.g., dev-ue1, staging-ue1, prod-ue1)
+- Each row represents a key in the component's metadata
+- Cells contain the metadata values for each key in each stack
+
+The command is particularly useful for:
+- Comparing component metadata across different environments
+- Verifying component types and versions across stacks
+- Understanding component organization patterns across your infrastructure
+
+## Flags
+
+<dl>
+  <dt>`--query string`</dt>
+  <dd>JMESPath query to filter metadata (default: `.metadata`)</dd>
+  <dt>`--max-columns int`</dt>
+  <dd>Maximum number of columns to display (default: `50`)</dd>
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dt>`--delimiter string`</dt>
+  <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
+  <dt>`--stack string`</dt>
+  <dd>Filter by stack pattern (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)</dd>
+</dl>
+
+## Examples
+
+List all metadata:
+```shell
+atmos list metadata
+```
+
+List metadata for specific stacks:
+```shell
+# List metadata for dev stacks
+atmos list metadata --stack '*-dev-*'
+
+# List metadata for production stacks
+atmos list metadata --stack 'prod-*'
+```
+
+List specific metadata using JMESPath queries:
+```shell
+# Query component names
+atmos list metadata --query '.metadata.component'
+
+# Query component types
+atmos list metadata --query '.metadata.type'
+
+# Query component versions
+atmos list metadata --query '.metadata.version'
+```
+
+Output in different formats:
+```shell
+# JSON format for machine processing
+atmos list metadata --format json
+
+# YAML format for configuration files
+atmos list metadata --format yaml
+
+# CSV format for spreadsheet compatibility
+atmos list metadata --format csv
+
+# TSV format with tab delimiters
+atmos list metadata --format tsv
+```
+
+## Example Output
+
+```shell
+> atmos list metadata
+┌──────────────┬──────────────┬──────────────┬──────────────┐
+│              │   dev-ue1    │  staging-ue1 │   prod-ue1   │
+├──────────────┼──────────────┼──────────────┼──────────────┤
+│ component    │ vpc          │ vpc          │ vpc          │
+│ type         │ terraform    │ terraform    │ terraform    │
+│ version      │ 1.0.0        │ 1.0.0        │ 1.0.0        │
+└──────────────┴──────────────┴──────────────┴──────────────┘
+```
+
+:::tip
+- For wide tables, try using more specific queries or reduce the number of stacks
+- Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
+- Metadata is typically found under component configurations
+:::
