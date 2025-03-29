@@ -145,22 +145,30 @@ func (l *Logger) Error(errOrMsg interface{}, keyvals ...interface{}) {
 
 // Trace logs a message at TRACE level if the current log level permits.
 func (l *Logger) Trace(message string) {
-	l.log(theme.Colors.Info, message)
+	if l.isLevelEnabled(LogLevelTrace) {
+		l.log(theme.Colors.Info, message)
+	}
 }
 
 // Debug logs a message at DEBUG level if the current log level permits.
 func (l *Logger) Debug(message string) {
-	l.log(theme.Colors.Info, message)
+	if l.isLevelEnabled(LogLevelDebug) {
+		l.log(theme.Colors.Info, message)
+	}
 }
 
 // Info logs a message at INFO level if the current log level permits.
 func (l *Logger) Info(message string) {
-	l.log(theme.Colors.Info, message)
+	if l.isLevelEnabled(LogLevelInfo) {
+		l.log(theme.Colors.Info, message)
+	}
 }
 
 // Warning logs a message at WARNING level if the current log level permits.
 func (l *Logger) Warning(message string) {
-	l.log(theme.Colors.Warning, message)
+	if l.isLevelEnabled(LogLevelWarning) {
+		l.log(theme.Colors.Warning, message)
+	}
 }
 
 // Map Atmos log levels to Charmbracelet log levels for direct conversion.
