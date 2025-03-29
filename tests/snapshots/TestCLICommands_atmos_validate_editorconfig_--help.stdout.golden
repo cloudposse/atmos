@@ -8,7 +8,9 @@ Usage:
 
 Flags:
 
-        --config string                       Path to the configuration file
+        --config stringSlice                  Path to the configuration file
+                                              (default
+                                              [.editorconfig,.editorconfig-checker.json,.ecrc])
 
         --disable-end-of-line                 Disable end-of-line check (default
                                               false)
