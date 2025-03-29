@@ -218,10 +218,6 @@ func processLogMessage(msgOrErr interface{}, keyvals []interface{}) (string, []i
 			}
 		}
 
-		if len(v.Tips) > 0 {
-			keyvals = append(keyvals, "tips", v.Tips)
-		}
-
 	case error:
 		msg = v.Error()
 		keyvals = append([]interface{}{"error", v.Error()}, keyvals...)
@@ -245,7 +241,7 @@ func validateKeyValuePairs(l *AtmosLogger, keyvals []interface{}) []interface{} 
 		l.Logger.Error("odd number of key-value pairs",
 			"key_without_value", oddKey)
 
-		keyvals = append(keyvals, "")
+		keyvals = keyvals[:oddIndex]
 	}
 
 	return keyvals
