@@ -244,7 +244,7 @@ func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
 	tempDir := t.TempDir() // Empty directory, no config file
 
 	v := viper.New()
-	err := mergeConfig(v, tempDir, true)
+	err := mergeConfig(v, tempDir, CliConfigFileName, true)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Config File \"atmos\" Not Found")
@@ -262,7 +262,7 @@ logs:
 	createConfigFile(t, tempDir, "atmos.yaml", content)
 	v := viper.New()
 	v.SetConfigType("yaml")
-	err := mergeConfig(v, tempDir, false)
+	err := mergeConfig(v, tempDir, CliConfigFileName, false)
 	assert.NoError(t, err)
 	assert.Equal(t, "./", v.GetString("base_path"))
 	content2 := `
@@ -272,7 +272,7 @@ vendor:
 `
 	tempDir2 := t.TempDir()
 	createConfigFile(t, tempDir2, "atmos.yml", content2)
-	err = mergeConfig(v, tempDir2, false)
+	err = mergeConfig(v, tempDir2, CliConfigFileName, false)
 	assert.NoError(t, err)
 	assert.Equal(t, "./test", v.GetString("base_path"))
 	assert.Equal(t, "./test2-vendor.yaml", v.GetString("vendor.base_path"))
