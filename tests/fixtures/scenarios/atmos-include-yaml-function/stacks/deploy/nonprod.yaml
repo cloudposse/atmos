@@ -2,6 +2,8 @@
 
 import: !include config/import.yaml
 
+settings: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
+
 components:
   terraform:
     component-1:
