@@ -38,93 +38,133 @@
   "additionalProperties": true,
   "oneOf": [
     {
-      "required": ["workflows"]
+      "required": [
+        "workflows"
+      ]
     },
     {
       "anyOf": [
         {
           "additionalProperties": true,
           "not": {
-            "required": ["workflows"]
+            "required": [
+              "workflows"
+            ]
           }
         },
         {
-          "required": ["import"]
+          "required": [
+            "import"
+          ]
         },
         {
-          "required": ["terraform"]
+          "required": [
+            "terraform"
+          ]
         },
         {
-          "required": ["helmfile"]
+          "required": [
+            "helmfile"
+          ]
         },
         {
-          "required": ["vars"]
+          "required": [
+            "vars"
+          ]
         },
         {
-          "required": ["hooks"]
+          "required": [
+            "hooks"
+          ]
         },
         {
-          "required": ["env"]
+          "required": [
+            "env"
+          ]
         },
         {
-          "required": ["settings"]
+          "required": [
+            "settings"
+          ]
         },
         {
-          "required": ["components"]
+          "required": [
+            "components"
+          ]
         },
         {
-          "required": ["overrides"]
+          "required": [
+            "overrides"
+          ]
         }
       ]
     }
   ],
   "definitions": {
     "import": {
-      "type": "array",
-      "description": "Import section",
-      "items": {
-        "oneOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "path": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "description": "Import section",
+          "items": {
+            "oneOf": [
+              {
                 "type": "string"
               },
-              "skip_templates_processing": {
-                "type": "boolean"
-              },
-              "ignore_missing_template_values": {
-                "type": "boolean"
-              },
-              "skip_if_missing": {
-                "type": "boolean"
-              },
-              "context": {
+              {
                 "type": "object",
-                "additionalProperties": true
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "skip_templates_processing": {
+                    "type": "boolean"
+                  },
+                  "ignore_missing_template_values": {
+                    "type": "boolean"
+                  },
+                  "skip_if_missing": {
+                    "type": "boolean"
+                  },
+                  "context": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "path"
+                ]
               }
-            },
-            "required": ["path"]
+            ]
           }
-        ]
-      }
+        }
+      ]
     },
     "components": {
-      "type": "object",
-      "description": "Components section",
-      "additionalProperties": false,
-      "properties": {
-        "terraform": {
-          "$ref": "#/definitions/terraform_components"
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
         },
-        "helmfile": {
-          "$ref": "#/definitions/helmfile_components"
+        {
+          "type": "object",
+          "description": "Components section",
+          "additionalProperties": false,
+          "properties": {
+            "terraform": {
+              "$ref": "#/definitions/terraform_components"
+            },
+            "helmfile": {
+              "$ref": "#/definitions/helmfile_components"
+            }
+          }
         }
-      },
+      ],
       "required": [],
       "title": "components"
     },
@@ -305,7 +345,10 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["abstract", "real"]
+          "enum": [
+            "abstract",
+            "real"
+          ]
         },
         "enabled": {
           "type": "boolean",
@@ -386,7 +429,10 @@
       "properties": {
         "schema_type": {
           "type": "string",
-          "enum": ["jsonschema", "opa"]
+          "enum": [
+            "jsonschema",
+            "opa"
+          ]
         },
         "schema_path": {
           "type": "string"
@@ -411,7 +457,10 @@
         }
       },
       "additionalProperties": false,
-      "required": ["schema_type", "schema_path"],
+      "required": [
+        "schema_type",
+        "schema_path"
+      ],
       "title": "validation_manifest"
     },
     "vars": {
@@ -569,13 +618,19 @@
       },
       "oneOf": [
         {
-          "required": ["component"]
+          "required": [
+            "component"
+          ]
         },
         {
-          "required": ["file"]
+          "required": [
+            "file"
+          ]
         },
         {
-          "required": ["folder"]
+          "required": [
+            "folder"
+          ]
         }
       ],
       "additionalProperties": false,
@@ -688,11 +743,15 @@
                 "type": "string"
               }
             },
-            "required": ["command"]
+            "required": [
+              "command"
+            ]
           }
         }
       },
-      "required": ["steps"],
+      "required": [
+        "steps"
+      ],
       "title": "workflow_manifest"
     },
     "providers": {

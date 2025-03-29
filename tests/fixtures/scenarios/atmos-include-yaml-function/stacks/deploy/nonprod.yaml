@@ -1,7 +1,6 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
-import:
-  - mixins/stage/nonprod
+import: !include config/import.yaml
 
 components:
   terraform:

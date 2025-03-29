@@ -19,10 +19,6 @@ const (
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
 	AtmosYamlFuncEnv             = "!env"
 	AtmosYamlFuncInclude         = "!include"
-
-	// For internal use by Atmos when processing the `!include` function
-	AtmosYamlFuncIncludeLocalFile = "!include-local-file"
-	AtmosYamlFuncIncludeGoGetter  = "!include-go-getter"
 )
 
 var AtmosYamlTags = []string{
@@ -103,9 +99,10 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 		// Handle the !include tag
 		if tag == AtmosYamlFuncInclude {
-			var f string
+			var includeFile string
+			var includeQuery string
 			var res any
-			q := ""
+			var localFile string
 
 			parts, err := SplitStringByDelimiter(val, ' ')
 			if err != nil {
@@ -115,64 +112,69 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 			partsLen := len(parts)
 
 			if partsLen == 2 {
-				f = strings.TrimSpace(parts[0])
-				q = strings.TrimSpace(parts[1])
+				includeFile = strings.TrimSpace(parts[0])
+				includeQuery = strings.TrimSpace(parts[1])
 			} else if partsLen == 1 {
-				f = strings.TrimSpace(parts[0])
+				includeFile = strings.TrimSpace(parts[0])
 			} else {
 				return fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s %s. The function accepts 1 or 2 arguments", tag, val)
 			}
 
 			// If absolute path is provided, check if the file exists
-			if filepath.IsAbs(f) {
-				if !FileExists(f) {
+			if filepath.IsAbs(includeFile) {
+				if !FileExists(includeFile) {
 					return fmt.Errorf("the function '%s %s' points to a file that does not exist", tag, val)
 				}
-				res, err = DetectFormatAndParseFile(f)
-				if err != nil {
-					return err
-				}
+				localFile = includeFile
 			}
 
 			// Detect relative paths (relative to the manifest file) and convert to absolute paths
-			resolved := ResolveRelativePath(f, file)
-			if FileExists(resolved) {
-				resolvedAbsolutePath, err := filepath.Abs(resolved)
-				if err != nil {
-					return fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
-				}
-				res, err = DetectFormatAndParseFile(resolvedAbsolutePath)
-				if err != nil {
-					return err
+			if localFile == "" {
+				resolved := ResolveRelativePath(includeFile, file)
+				if FileExists(resolved) {
+					resolvedAbsolutePath, err := filepath.Abs(resolved)
+					if err != nil {
+						return fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
+					}
+					localFile = resolvedAbsolutePath
 				}
 			}
 
 			// Check if the `!include` function points to an Atmos stack manifest relative to the `base_path` defined in `atmos.yaml`
-			atmosManifestPath := filepath.Join(atmosConfig.BasePath, f)
-			if FileExists(atmosManifestPath) {
-				atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
-				if err != nil {
-					return fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
-				}
-				res, err = DetectFormatAndParseFile(atmosManifestAbsolutePath)
-				if err != nil {
-					return err
+			if localFile == "" {
+				atmosManifestPath := filepath.Join(atmosConfig.BasePath, includeFile)
+				if FileExists(atmosManifestPath) {
+					atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
+					if err != nil {
+						return fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
+					}
+					localFile = atmosManifestAbsolutePath
 				}
 			}
 
 			// Process local file
-
-			// Process remote file with `go-getter`
-
-			// Evaluate the YQ expression if provided
-			if q != "" {
-				res, err = EvaluateYqExpression(atmosConfig, res, q)
+			if localFile != "" {
+				res, err = DetectFormatAndParseFile(localFile)
+				if err != nil {
+					return err
+				}
+			} else {
+				// Process remote file with `go-getter`
+				res, err = DownloadDetectFormatAndParseFile(atmosConfig, includeFile)
 				if err != nil {
 					return err
 				}
 			}
 
-			// Convert the structure to YAML
+			// Evaluate the YQ expression if provided
+			if includeQuery != "" {
+				res, err = EvaluateYqExpression(atmosConfig, res, includeQuery)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Convert the Go structure to YAML
 			y, err := ConvertToYAML(res)
 			if err != nil {
 				return err
