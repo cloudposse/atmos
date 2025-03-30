@@ -25,8 +25,8 @@ func TestYAMLToMapOfInterfacesRedPath(t *testing.T) {
 }
 
 func TestUnmarshalYAMLFromFile(t *testing.T) {
-	stacksPath := "../../tests/fixtures/scenarios/atmos-include-yaml-function"
-	file := filepath.Join(stacksPath, "/stacks/deploy/nonprod.yaml")
+	stacksPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-include-yaml-function")
+	file := filepath.Join(stacksPath, "stacks", "deploy", "nonprod.yaml")
 
 	yamlFileContent, err := os.ReadFile(file)
 	assert.Nil(t, err)
@@ -39,6 +39,7 @@ func TestUnmarshalYAMLFromFile(t *testing.T) {
 	}
 
 	manifest, err := UnmarshalYAMLFromFile[schema.AtmosSectionMapType](atmosConfig, string(yamlFileContent), file)
+	assert.Nil(t, err)
 
 	expected := `components:
     terraform:

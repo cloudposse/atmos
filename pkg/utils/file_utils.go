@@ -15,6 +15,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var (
+	ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
+)
+
 // IsDirectory checks if the path is a directory
 func IsDirectory(path string) (bool, error) {
 	fileInfo, err := os.Stat(path)
@@ -303,46 +307,51 @@ func DetectFormatAndParseFile(filename string) (any, error) {
 
 	data := string(d)
 
-	if IsJSON(data) {
+	switch {
+	case IsJSON(data):
 		err = json.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
-	} else if IsHCL(data) {
+
+	case IsHCL(data):
 		parser := hclparse.NewParser()
 		file, diags := parser.ParseHCL(d, filename)
 		if diags != nil && diags.HasErrors() {
-			return nil, errors.New(diags.Error())
+			return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
 		}
 		if file == nil {
-			return nil, fmt.Errorf("unable to parse HCL file %s", filename)
+			return nil, fmt.Errorf("%w, file: %s, file parsing returned nil", ErrFailedToProcessHclFile, filename)
 		}
+
 		// Extract all attributes from the file body
 		attributes, diags := file.Body.JustAttributes()
 		if diags != nil && diags.HasErrors() {
-			return nil, errors.New(diags.Error())
+			return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
 		}
 
-		// Map to store parsed attribute values
+		// Map to store the parsed attribute values
 		result := make(map[string]any)
 
 		// Evaluate each attribute and store it in the result map
 		for name, attr := range attributes {
-			ctyValue, diags := attr.Expr.Value(nil) // Evaluate attribute
+			ctyValue, diags := attr.Expr.Value(nil)
 			if diags != nil && diags.HasErrors() {
-				return nil, errors.New(diags.Error())
+				return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
 			}
 
 			// Convert cty.Value to appropriate Go type
 			result[name] = CtyToGo(ctyValue)
 		}
 		v = result
-	} else if IsYAML(data) {
+
+	case IsYAML(data):
 		err = yaml.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
-	} else {
+
+	default:
 		v = data
 	}
 
