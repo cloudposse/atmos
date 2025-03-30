@@ -415,12 +415,20 @@
               "description": "Terraform/OpenTofu/Helmfile component"
             },
             "inherits": {
-              "type": "array",
-              "description": "A list of Atmos components that the current component inherits from",
-              "uniqueItems": true,
-              "items": {
-                "type": "string"
-              }
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "array",
+                  "description": "A list of Atmos components that the current component inherits from",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
             },
             "terraform_workspace": {
               "type": "string",
@@ -431,10 +439,18 @@
               "description": "Terraform workspace pattern"
             },
             "custom": {
-              "type": "object",
-              "description": "Custom configuration per component, not inherited by derived components",
-              "additionalProperties": true,
-              "title": "custom"
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "description": "Custom configuration per component, not inherited by derived components",
+                  "additionalProperties": true,
+                  "title": "custom"
+                }
+              ]
             },
             "locked": {
               "type": "boolean",
@@ -641,36 +657,100 @@
           "additionalProperties": false,
           "properties": {
             "local": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "s3": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "remote": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "vault": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "static": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "azurerm": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "gcs": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "cloud": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             }
           },
           "required": []
@@ -837,19 +917,43 @@
               "type": "string"
             },
             "config_template": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "project_template_name": {
               "type": "string"
             },
             "project_template": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             },
             "workflow_templates": {
-              "type": "object",
-              "additionalProperties": true
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
             }
           },
           "required": []
@@ -902,28 +1006,36 @@
               "type": "string"
             },
             "steps": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "command": {
-                    "type": "string"
-                  },
-                  "stack": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string"
-                  }
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
                 },
-                "required": [
-                  "command"
-                ]
-              }
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "command": {
+                        "type": "string"
+                      },
+                      "stack": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "command"
+                    ]
+                  }
+                }
+              ]
             }
           },
           "required": [
