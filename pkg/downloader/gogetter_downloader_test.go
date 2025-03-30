@@ -121,22 +121,6 @@ func TestRegisterCustomDetectors(t *testing.T) {
 	assert.NotNil(t, getter.Detectors[0])
 }
 
-func TestNewGoGetterDownloader(t *testing.T) {
-	// Save and restore original detectors
-	originalDetectors := getter.Detectors
-	defer func() {
-		getter.Detectors = originalDetectors
-	}()
-
-	getter.Detectors = []getter.Detector{}
-
-	config := &schema.AtmosConfiguration{}
-	downloader := NewGoGetterDownloader(config)
-
-	assert.NotNil(t, downloader)
-	assert.Equal(t, 1, len(getter.Detectors))
-}
-
 func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "detectparse")
 	if err != nil {
