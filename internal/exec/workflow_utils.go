@@ -43,7 +43,7 @@ func ExecuteWorkflow(
 	logFunc(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err := u.PrintAsYAMLToFileDescriptor(atmosConfig, workflowDefinition)
+		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
 		if err != nil {
 			return err
 		}

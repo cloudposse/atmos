@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,23 +27,31 @@ const (
 	AtmosYamlFuncIncludeGoGetter  = "!include-go-getter"
 )
 
-var AtmosYamlTags = []string{
-	AtmosYamlFuncExec,
-	AtmosYamlFuncStore,
-	AtmosYamlFuncTemplate,
-	AtmosYamlFuncTerraformOutput,
-	AtmosYamlFuncEnv,
-	AtmosYamlFuncInclude,
-}
+var (
+	AtmosYamlTags = []string{
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncEnv,
+		AtmosYamlFuncInclude,
+	}
 
-// PrintAsYAML prints the provided value as YAML document to the console
+	ErrNilAtmosConfig = errors.New("atmosConfig cannot be nil")
+)
+
+// PrintAsYAML prints the provided value as YAML document to the console.
 func PrintAsYAML(data any) error {
 	atmosConfig := ExtractAtmosConfig(data)
-	return PrintAsYAMLWithConfig(atmosConfig, data)
+	return PrintAsYAMLWithConfig(&atmosConfig, data)
 }
 
-// PrintAsYAMLWithConfig prints the provided value as YAML document to the console with custom configuration
-func PrintAsYAMLWithConfig(atmosConfig schema.AtmosConfiguration, data any) error {
+// PrintAsYAMLWithConfig prints the provided value as YAML document to the console with custom configuration.
+func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
+	if atmosConfig == nil {
+		return ErrNilAtmosConfig
+	}
+
 	indent := atmosConfig.Settings.Terminal.TabWidth
 	if indent <= 0 {
 		indent = 2
@@ -53,7 +62,7 @@ func PrintAsYAMLWithConfig(atmosConfig schema.AtmosConfiguration, data any) erro
 		return err
 	}
 
-	highlighted, err := HighlightCodeWithConfig(y, atmosConfig, "yaml")
+	highlighted, err := HighlightCodeWithConfig(y, *atmosConfig, "yaml")
 	if err != nil {
 		// Fallback to plain text if highlighting fails
 		PrintMessage(y)
@@ -63,17 +72,21 @@ func PrintAsYAMLWithConfig(atmosConfig schema.AtmosConfiguration, data any) erro
 	return nil
 }
 
-// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
-func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
+// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor.
+func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data any) error {
+	if atmosConfig == nil {
+		return ErrNilAtmosConfig
+	}
+
 	y, err := ConvertToYAML(data)
 	if err != nil {
 		return err
 	}
-	fmt.Print(y)
+	LogInfo(y)
 	return nil
 }
 
-// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file
+// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file.
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	y, err := ConvertToYAML(data)
 	if err != nil {
@@ -208,6 +221,10 @@ func UnmarshalYAML[T any](input string) (T, error) {
 
 // UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type
 func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, error) {
+	if atmosConfig == nil {
+		return *new(T), ErrNilAtmosConfig
+	}
+
 	var zeroValue T
 	var node yaml.Node
 	b := []byte(input)

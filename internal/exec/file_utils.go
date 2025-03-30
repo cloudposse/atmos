@@ -44,7 +44,7 @@ func printOrWriteToFile(
 		yamlOpts := []u.YAMLOptions{{Indent: indent}}
 
 		if file == "" {
-			err := u.PrintAsYAMLWithConfig(atmosConfig, data)
+			err := u.PrintAsYAMLWithConfig(&atmosConfig, data)
 			if err != nil {
 				return err
 			}

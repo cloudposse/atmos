@@ -317,7 +317,7 @@ func ProcessStacks(
 			msg = "\nFound stack manifests:"
 		}
 		u.LogTrace(msg)
-		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
+		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, atmosConfig.StackConfigFilesRelativePaths)
 		if err != nil {
 			return configAndStacksInfo, err
 		}

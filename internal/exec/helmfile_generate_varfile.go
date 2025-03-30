@@ -62,7 +62,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 	u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
+		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
 		if err != nil {
 			return err
 		}
