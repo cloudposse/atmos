@@ -644,6 +644,9 @@ func ProcessStacks(
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
+//
+// Deprecated: use Cobra command flag parser instead.
+// Post https://github.com/cloudposse/atmos/pull/1174 we can use the api provided by this pr for better handling of flags.
 func processArgsAndFlags(
 	componentType string,
 	inputArgsAndFlags []string,
