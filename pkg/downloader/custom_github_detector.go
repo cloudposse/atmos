@@ -13,9 +13,7 @@ import (
 	"github.com/hashicorp/go-getter"
 )
 
-var (
-	ErrInvalidURL = fmt.Errorf("invalid URL")
-)
+var ErrInvalidURL = fmt.Errorf("invalid URL")
 
 const schemeSeparator = "://"
 
