@@ -75,6 +75,35 @@ components:
 ```
 </File>
 
+<File title="stack.yaml">
+```yaml
+import: !include config/import.yaml
+
+# Download the remote file using `go-getter` and assign the `components.terraform.component-1.settings` section
+# from the file to the `settings` section` in the current stack
+settings: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
+
+components:
+  terraform:
+    component-1:
+      vars:
+        # The `config` folder is relative to the `base_path` setting in `atmos.yaml`
+        string_var: !include config/vars.json .string_var
+        boolean_var: !include config/vars.yaml .boolean_var
+        list_var: !include config/vars.tfvars .list_var
+        map_var: !include config/vars.tfvars .map_var
+
+    component-2:
+      vars: !include config/vars.tfvars
+
+    component-3:
+      vars: !include config/vars.json
+
+    component-4:
+      vars: !include config/vars.yaml
+```
+</File>
+
 ## Description
 
 The YAML standard provides [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), that allow you
