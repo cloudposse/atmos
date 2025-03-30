@@ -598,15 +598,7 @@
     "backend": {
       "title": "backend",
       "description": "Backend section",
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^!include"
-        },
-        {
-          "$ref": "#/definitions/backend_manifest"
-        }
-      ]
+      "$ref": "#/definitions/backend_manifest"
     },
     "remote_state_backend_type": {
       "title": "remote_state_backend_type",
@@ -634,56 +626,56 @@
     "remote_state_backend": {
       "title": "remote_state_backend",
       "description": "Remote state backend section",
+      "$ref": "#/definitions/backend_manifest"
+    },
+    "backend_manifest": {
+      "title": "backend",
+      "description": "Backend manifest",
       "oneOf": [
         {
           "type": "string",
           "pattern": "^!include"
         },
         {
-          "$ref": "#/definitions/backend_manifest"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "local": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "s3": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "remote": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "vault": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "static": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "azurerm": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "gcs": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "cloud": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": []
         }
       ]
-    },
-    "backend_manifest": {
-      "title": "backend",
-      "description": "Backend manifest",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "local": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "s3": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "remote": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "vault": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "static": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "azurerm": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "gcs": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "cloud": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      },
-      "required": []
     },
     "overrides": {
       "title": "overrides",
@@ -739,48 +731,56 @@
     "depends_on_manifest": {
       "title": "depends_on_manifest",
       "description": "Depends_on manifest",
-      "type": "object",
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "tenant": {
-          "type": "string"
-        },
-        "environment": {
-          "type": "string"
-        },
-        "stage": {
-          "type": "string"
-        },
-        "component": {
-          "type": "string"
-        },
-        "file": {
-          "type": "string"
-        },
-        "folder": {
-          "type": "string"
-        }
-      },
       "oneOf": [
         {
-          "required": [
-            "component"
-          ]
+          "type": "string",
+          "pattern": "^!include"
         },
         {
-          "required": [
-            "file"
-          ]
-        },
-        {
-          "required": [
-            "folder"
-          ]
+          "type": "object",
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "tenant": {
+              "type": "string"
+            },
+            "environment": {
+              "type": "string"
+            },
+            "stage": {
+              "type": "string"
+            },
+            "component": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "folder": {
+              "type": "string"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "component"
+              ]
+            },
+            {
+              "required": [
+                "file"
+              ]
+            },
+            {
+              "required": [
+                "folder"
+              ]
+            }
+          ],
+          "additionalProperties": false
         }
-      ],
-      "additionalProperties": false
+      ]
     },
     "spacelift": {
       "title": "spacelift",
