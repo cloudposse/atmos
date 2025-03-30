@@ -229,6 +229,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.WorkflowsDir = argsAndFlagsInfo.WorkflowsDir
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
+	configAndStacksInfo.InitPassVars = argsAndFlagsInfo.InitPassVars
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
 	configAndStacksInfo.PlanFile = argsAndFlagsInfo.PlanFile
@@ -510,7 +511,8 @@ func ProcessStacks(
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
-			atmosConfig,
+			&atmosConfig,
+			&configAndStacksInfo,
 			settingsSectionStruct,
 			"templates-all-atmos-sections",
 			componentSectionStr,
@@ -843,6 +845,19 @@ func processArgsAndFlags(
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.InitRunReconfigure = initRunReconfigureParts[1]
+		}
+
+		if arg == cfg.InitPassVars {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.InitPassVars = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.InitPassVars) {
+			initPassVarsParts := strings.Split(arg, "=")
+			if len(initPassVarsParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.InitPassVars = initPassVarsParts[1]
 		}
 
 		if arg == cfg.JsonSchemaDirFlag {

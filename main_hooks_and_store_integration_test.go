@@ -37,7 +37,7 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	os.Args = []string{"atmos", "terraform", "deploy", "component1", "-s", "test"}
 	main()
 
-	// Set the arguments for the second call to main() to deeploy the `component2` component, which uses a `store` to read a
+	// Set the arguments for the second call to main() to deploy the `component2` component, which uses a `store` to read a
 	// value  that was set in the first apply.
 	os.Args = []string{"atmos", "terraform", "deploy", "component2", "-s", "test"}
 	main()
