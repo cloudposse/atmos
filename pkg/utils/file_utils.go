@@ -15,9 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var (
-	ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
-)
+var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
 
 // IsDirectory checks if the path is a directory
 func IsDirectory(path string) (bool, error) {
