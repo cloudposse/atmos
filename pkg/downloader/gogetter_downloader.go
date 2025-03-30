@@ -42,6 +42,16 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		Src:  src,
 		Dst:  dest,
 		Mode: clientMode,
+		Getters: map[string]getter.Getter{
+			// Overriding 'git'
+			"git":   &CustomGitGetter{},
+			"file":  &getter.FileGetter{},
+			"hg":    &getter.HgGetter{},
+			"http":  &getter.HttpGetter{},
+			"https": &getter.HttpGetter{},
+			// "s3": &getter.S3Getter{}, // add as needed
+			// "gcs": &getter.GCSGetter{},
+		},
 	}
 
 	return &goGetterClient{client: client}, nil

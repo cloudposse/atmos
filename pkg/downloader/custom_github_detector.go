@@ -10,7 +10,6 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/hashicorp/go-getter"
 )
 
 var ErrInvalidURL = fmt.Errorf("invalid URL")
@@ -47,7 +46,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if err != nil {
 		maskedSrc, _ := maskBasicAuth(src)
 		log.Debug("Failed to parse URL", keyURL, maskedSrc, "error", err)
-		return "", false, ErrInvalidURL
+		return "", false, fmt.Errorf("failed to parse URL %q: %w", maskedSrc, err)
 	}
 
 	// If no host is detected, this is likely a local file path.
@@ -243,18 +242,4 @@ func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
 			parsedURL.Path += "//."
 		}
 	}
-}
-
-// RegisterCustomDetectors prepends the custom detector so it runs before the built-in ones.
-// Any code that calls go-getter should invoke this.
-func RegisterCustomDetectors(atmosConfig *schema.AtmosConfiguration, source string) {
-	detectorsMutex.Lock()
-	defer detectorsMutex.Unlock()
-
-	getter.Detectors = append(
-		[]getter.Detector{
-			&CustomGitDetector{atmosConfig: atmosConfig, source: source},
-		},
-		getter.Detectors...,
-	)
 }
