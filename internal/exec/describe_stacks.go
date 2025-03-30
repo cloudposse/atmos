@@ -136,7 +136,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		res = finalStacksMap
 	}
 
-	err = printOrWriteToFile(atmosConfig, format, file, res)
+	err = printOrWriteToFile(&atmosConfig, format, file, res)
 	if err != nil {
 		return err
 	}

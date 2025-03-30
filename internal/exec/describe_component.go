@@ -87,7 +87,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		res = componentSection
 	}
 
-	err = printOrWriteToFile(atmosConfig, format, file, res)
+	err = printOrWriteToFile(&atmosConfig, format, file, res)
 	if err != nil {
 		return err
 	}

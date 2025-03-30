@@ -76,7 +76,7 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	err = printOrWriteToFile(atmosConfig, format, "", res)
+	err = printOrWriteToFile(&atmosConfig, format, "", res)
 	if err != nil {
 		return err
 	}
