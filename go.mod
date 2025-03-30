@@ -1,6 +1,7 @@
 module github.com/cloudposse/atmos
 
 go 1.24.0
+
 require (
 	cloud.google.com/go/secretmanager v1.14.6
 	dario.cat/mergo v1.0.1
