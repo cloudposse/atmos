@@ -7,8 +7,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 // Error format constants.
@@ -22,12 +24,19 @@ type SSMStore struct {
 	client         SSMClient
 	prefix         string
 	stackDelimiter *string
+	awsConfig      *aws.Config
+	readRoleArn    *string
+	writeRoleArn   *string
+	newSTSClient   func(cfg aws.Config) STSClient
+	newSSMClient   func(cfg aws.Config) SSMClient
 }
 
 type SSMStoreOptions struct {
 	Prefix         *string `mapstructure:"prefix"`
 	Region         string  `mapstructure:"region"`
 	StackDelimiter *string `mapstructure:"stack_delimiter"`
+	ReadRoleArn    *string `mapstructure:"read_role_arn"`
+	WriteRoleArn   *string `mapstructure:"write_role_arn"`
 }
 
 // Ensure SSMStore implements the store.Store interface.
@@ -39,7 +48,12 @@ type SSMClient interface {
 	GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
 }
 
-// NewInMemoryStore initializes a new MemoryStore.
+// STSClient interface allows us to mock the AWS STS client.
+type STSClient interface {
+	AssumeRole(ctx context.Context, params *sts.AssumeRoleInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleOutput, error)
+}
+
+// NewSSMStore initializes a new SSMStore.
 func NewSSMStore(options SSMStoreOptions) (Store, error) {
 	ctx := context.TODO()
 
@@ -57,7 +71,15 @@ func NewSSMStore(options SSMStoreOptions) (Store, error) {
 
 	// Create the SSM client
 	client := ssm.NewFromConfig(awsConfig)
-	store := &SSMStore{client: client}
+	store := &SSMStore{
+		client: client,
+		newSTSClient: func(cfg aws.Config) STSClient {
+			return sts.NewFromConfig(cfg)
+		},
+		newSSMClient: func(cfg aws.Config) SSMClient {
+			return ssm.NewFromConfig(cfg)
+		},
+	}
 
 	if options.Prefix != nil {
 		store.prefix = *options.Prefix
@@ -71,6 +93,14 @@ func NewSSMStore(options SSMStoreOptions) (Store, error) {
 		store.stackDelimiter = aws.String("-")
 	}
 
+	store.awsConfig = &awsConfig
+	if options.ReadRoleArn != nil {
+		store.readRoleArn = options.ReadRoleArn
+	}
+	if options.WriteRoleArn != nil {
+		store.writeRoleArn = options.WriteRoleArn
+	}
+
 	return store, nil
 }
 
@@ -80,6 +110,36 @@ func (s *SSMStore) getKey(stack string, component string, key string) (string, e
 	}
 
 	return getKey(s.prefix, *s.stackDelimiter, stack, component, key, "/")
+}
+
+// assumeRole assumes the specified IAM role and returns a new AWS config.
+func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config, error) {
+	if roleArn == nil {
+		return s.awsConfig, nil
+	}
+
+	var stsClient STSClient
+	if s.newSTSClient != nil {
+		stsClient = s.newSTSClient(*s.awsConfig)
+	} else {
+		stsClient = sts.NewFromConfig(*s.awsConfig)
+	}
+
+	result, err := stsClient.AssumeRole(ctx, &sts.AssumeRoleInput{
+		RoleArn:         roleArn,
+		RoleSessionName: aws.String("atmos-ssm-session"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to assume role %s: %w", *roleArn, err)
+	}
+
+	cfg := s.awsConfig.Copy()
+	cfg.Credentials = credentials.NewStaticCredentialsProvider(
+		*result.Credentials.AccessKeyId,
+		*result.Credentials.SecretAccessKey,
+		*result.Credentials.SessionToken,
+	)
+	return &cfg, nil
 }
 
 // Set stores a key-value pair in AWS SSM Parameter Store.
@@ -109,8 +169,25 @@ func (s *SSMStore) Set(stack string, component string, key string, value interfa
 		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
+	// Assume write role if specified
+	cfg, err := s.assumeRole(ctx, s.writeRoleArn)
+	if err != nil {
+		return fmt.Errorf("failed to assume write role: %w", err)
+	}
+
+	// Use the same client if no role was assumed
+	client := s.client
+	if s.writeRoleArn != nil {
+		// Create SSM client with assumed role if applicable
+		if s.newSSMClient != nil {
+			client = s.newSSMClient(*cfg)
+		} else {
+			client = ssm.NewFromConfig(*cfg)
+		}
+	}
+
 	// Put the parameter in SSM Parameter Store
-	_, err = s.client.PutParameter(ctx, &ssm.PutParameterInput{
+	_, err = client.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:      aws.String(paramName),
 		Value:     aws.String(strValue),
 		Type:      types.ParameterTypeString,
@@ -143,21 +220,38 @@ func (s *SSMStore) Get(stack string, component string, key string) (interface{},
 		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
+	// Assume read role if specified
+	cfg, err := s.assumeRole(ctx, s.readRoleArn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to assume read role: %w", err)
+	}
+
+	// Use the same client if no role was assumed
+	client := s.client
+	if s.readRoleArn != nil {
+		// Create SSM client with assumed role if applicable
+		if s.newSSMClient != nil {
+			client = s.newSSMClient(*cfg)
+		} else {
+			client = ssm.NewFromConfig(*cfg)
+		}
+	}
+
 	// Get the parameter from SSM Parameter Store
-	result, err := s.client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(paramName),
-		WithDecryption: aws.Bool(true), // Decrypt secure parameters if necessary
+	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
+		Name: aws.String(paramName),
 	})
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
 	}
 
-	// First try to unmarshal as JSON
-	var value interface{}
-	if err := json.Unmarshal([]byte(*result.Parameter.Value), &value); err == nil {
-		return value, nil
+	// Try to unmarshal the value as JSON
+	var result interface{}
+	//nolint:nilerr // Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party parameters that might not be JSON-encoded
+	if err := json.Unmarshal([]byte(*output.Parameter.Value), &result); err != nil {
+		// If it's not valid JSON, return the raw string value
+		return *output.Parameter.Value, nil
 	}
 
-	// If JSON unmarshalling fails, return the raw string value
-	return *result.Parameter.Value, nil
+	return result, nil
 }

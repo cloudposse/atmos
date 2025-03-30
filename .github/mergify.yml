@@ -50,3 +50,21 @@ pull_request_rules:
           >
           > Please verify that this PR does not address multiple issues.
           > Consider refactoring it into smaller, more focused PRs to facilitate a smoother review process.
+
+  - name: Label PRs that are not targeting main as stacked
+    conditions:
+      - and: *is_open
+      - and: [base!=main]
+    actions:
+      label:
+        add:
+          - stacked
+
+  - name: Remove stacked label when PR targets main
+    conditions:
+      - and: *is_open
+      - and: *is_default_branch
+    actions:
+      label:
+        remove:
+          - stacked

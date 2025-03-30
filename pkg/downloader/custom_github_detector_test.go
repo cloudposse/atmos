@@ -1,129 +1,161 @@
 package downloader
 
 import (
+	"net/url"
+	"os"
+	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestCustomGitHubDetector_Detect(t *testing.T) {
-	t.Run("should inject token for GitHub URL when GITHUB_TOKEN is set", func(t *testing.T) {
-		envMock := func(key string) string {
-			if key == "ATMOS_GITHUB_TOKEN" {
-				return ""
-			}
-			if key == "GITHUB_TOKEN" {
-				return "test-token"
-			}
-			return ""
-		}
+func fakeAtmosConfig(injectGit bool) schema.AtmosConfiguration {
+	return schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			InjectGithubToken: injectGit,
+		},
+	}
+}
 
-		detector := customGitHubDetector{
-			AtmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{InjectGithubToken: true},
-			},
-			GetEnv: envMock,
-		}
+func TestRewriteSCPURL_NoMatch(t *testing.T) {
+	nonSCP := "not-an-scp-url"
+	_, rewritten := rewriteSCPURL(nonSCP)
+	if rewritten {
+		t.Error("Expected non-SCP URL not to be rewritten")
+	}
+}
 
-		finalURL, detected, err := detector.Detect("https://github.com/owner/repo.git", "")
+func TestRewriteSCPURL(t *testing.T) {
+	scp := "git@github.com:user/repo.git"
+	newURL, rewritten := rewriteSCPURL(scp)
+	if !rewritten {
+		t.Errorf("Expected SCP URL to be rewritten")
+	}
+	if !strings.HasPrefix(newURL, "ssh://") {
+		t.Errorf("Expected rewritten URL to start with ssh://, got %s", newURL)
+	}
+	nonSCP := "https://github.com/user/repo.git"
+	_, ok := rewriteSCPURL(nonSCP)
+	if ok {
+		t.Error("Expected non-SCP URL to not be rewritten")
+	}
+}
 
-		assert.NoError(t, err)
-		assert.True(t, detected)
-		assert.Contains(t, finalURL, "git::https://x-access-token:test-token@github.com/owner/repo.git")
-	})
+func TestNormalizePath_ErrorHandling(t *testing.T) {
+	uObj := &url.URL{
+		Scheme: "http",
+		Host:   "example.com",
+		Path:   "%zz",
+	}
+	(&CustomGitDetector{}).normalizePath(uObj)
+	if uObj.Path == "" {
+		t.Error("Expected normalized path to be non-empty even on unescape error")
+	}
+	if uObj.Path != "%zz" {
+		t.Errorf("Expected path to remain unchanged on error, got %s", uObj.Path)
+	}
+}
 
-	t.Run("should inject token for GitHub URL when ATMOS_GITHUB_TOKEN is set", func(t *testing.T) {
-		envMock := func(key string) string {
-			if key == "ATMOS_GITHUB_TOKEN" {
-				return "atmos-token"
-			}
-			return ""
-		}
+func TestDetect_LocalFilePath(t *testing.T) {
+	// This tests the branch when the input is a local file path (no host).
+	config := fakeAtmosConfig(false)
+	detector := &CustomGitDetector{atmosConfig: &config, source: "/home/user/repo"}
+	localFile := "/home/user/repo/README.md"
+	result, ok, err := detector.Detect(localFile, "")
+	if err != nil {
+		t.Fatalf("Expected no error for local file path, got: %v", err)
+	}
+	if ok != false {
+		t.Errorf("Expected ok to be false for local file path, got true")
+	}
+	if result != "" {
+		t.Errorf("Expected result to be empty for local file path, got: %s", result)
+	}
+}
 
-		detector := customGitHubDetector{
-			AtmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{InjectGithubToken: true},
-			},
-			GetEnv: envMock,
-		}
+func TestEnsureScheme(t *testing.T) {
+	config := fakeAtmosConfig(false)
+	detector := &CustomGitDetector{atmosConfig: &config}
+	in := "https://example.com/repo.git"
+	out := detector.ensureScheme(in)
+	if !strings.HasPrefix(out, "https://") {
+		t.Errorf("Expected scheme to be preserved, got %s", out)
+	}
+	scp := "git@github.com:user/repo.git"
+	rewritten := detector.ensureScheme(scp)
+	if !strings.HasPrefix(rewritten, "ssh://") {
+		t.Errorf("Expected rewritten SCP-style URL to use ssh://, got %s", rewritten)
+	}
+	plain := "example.com/repo.git"
+	defaulted := detector.ensureScheme(plain)
+	if !strings.HasPrefix(defaulted, "https://") {
+		t.Errorf("Expected default scheme https://, got %s", defaulted)
+	}
+}
 
-		finalURL, detected, err := detector.Detect("https://github.com/owner/repo.git", "")
+func TestNormalizePath(t *testing.T) {
+	detector := &CustomGitDetector{}
+	uObj, err := url.Parse("https://example.com/some%20path")
+	if err != nil {
+		t.Fatalf("Failed to parse URL: %v", err)
+	}
+	detector.normalizePath(uObj)
+	if !strings.Contains(uObj.Path, " ") {
+		t.Errorf("Expected normalized path to contain spaces, got %s", uObj.Path)
+	}
+}
 
-		assert.NoError(t, err)
-		assert.True(t, detected)
-		assert.Contains(t, finalURL, "git::https://x-access-token:atmos-token@github.com/owner/repo.git")
-	})
+func TestGetDefaultUsername(t *testing.T) {
+	if un := getDefaultUsername(hostGitHub); un != "x-access-token" {
+		t.Errorf("Expected x-access-token for GitHub, got %s", un)
+	}
+	if un := getDefaultUsername(hostGitLab); un != "oauth2" {
+		t.Errorf("Expected oauth2 for GitLab, got %s", un)
+	}
+	os.Setenv("BITBUCKET_USERNAME", "bbUser")
+	defer os.Unsetenv("BITBUCKET_USERNAME")
+	if un := getDefaultUsername(hostBitbucket); un != "bbUser" {
+		t.Errorf("Expected bbUser for Bitbucket, got %s", un)
+	}
+	if un := getDefaultUsername("unknown.com"); un != "x-access-token" {
+		t.Errorf("Expected default x-access-token for unknown host, got %s", un)
+	}
+}
 
-	t.Run("should not inject token if InjectGithubToken=false", func(t *testing.T) {
-		envMock := func(key string) string {
-			if key == "GITHUB_TOKEN" {
-				return "test-token"
-			}
-			return ""
-		}
+func TestAdjustSubdir(t *testing.T) {
+	detector := &CustomGitDetector{}
+	uObj, err := url.Parse("https://github.com/user/repo.git")
+	if err != nil {
+		t.Fatalf("Failed to parse URL: %v", err)
+	}
+	source := "repo.git"
+	detector.adjustSubdir(uObj, source)
+	if !strings.Contains(uObj.Path, "//.") {
+		t.Errorf("Expected '//.' appended to path, got %s", uObj.Path)
+	}
+	uObj2, err := url.Parse("https://github.com/user/repo.git//subdir")
+	if err != nil {
+		t.Fatalf("Failed to parse URL: %v", err)
+	}
+	detector.adjustSubdir(uObj2, "repo.git//subdir")
+	if strings.HasSuffix(uObj2.Path, "//.") {
+		t.Errorf("Did not expect subdir adjustment, got %s", uObj2.Path)
+	}
+}
 
-		detector := customGitHubDetector{
-			AtmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{InjectGithubToken: false},
-			},
-			GetEnv: envMock,
-		}
-
-		finalURL, detected, err := detector.Detect("https://github.com/owner/repo.git", "")
-
-		assert.NoError(t, err)
-		assert.True(t, detected)
-		assert.NotContains(t, finalURL, "x-access-token")
-	})
-
-	t.Run("should not modify non-GitHub URLs", func(t *testing.T) {
-		detector := customGitHubDetector{
-			GetEnv: func(_ string) string { return "" },
-		}
-
-		finalURL, detected, err := detector.Detect("https://gitlab.com/owner/repo.git", "")
-
-		assert.NoError(t, err)
-		assert.False(t, detected)
-		assert.Empty(t, finalURL)
-	})
-
-	t.Run("should not modify URL if credentials are already present", func(t *testing.T) {
-		detector := customGitHubDetector{
-			GetEnv:      func(_ string) string { return "" },
-			AtmosConfig: &schema.AtmosConfiguration{Settings: schema.AtmosSettings{InjectGithubToken: false}},
-		}
-
-		finalURL, detected, err := detector.Detect("https://user:pass@github.com/owner/repo.git", "")
-
-		assert.NoError(t, err)
-		assert.True(t, detected)
-		assert.Equal(t, "git::https://user:pass@github.com/owner/repo.git", finalURL)
-	})
-
-	t.Run("should return an error for invalid URLs", func(t *testing.T) {
-		detector := customGitHubDetector{
-			GetEnv: func(_ string) string { return "" },
-		}
-
-		finalURL, detected, err := detector.Detect("inva^^$$lid-url", "")
-
-		assert.Error(t, err)
-		assert.False(t, detected)
-		assert.Empty(t, finalURL)
-	})
-
-	t.Run("should return an error for empty source URL", func(t *testing.T) {
-		detector := customGitHubDetector{
-			GetEnv: func(_ string) string { return "" },
-		}
-
-		finalURL, detected, err := detector.Detect("", "")
-
-		assert.Error(t, err)
-		assert.False(t, detected)
-		assert.Empty(t, finalURL)
-	})
+func TestDetect_UnsupportedHost(t *testing.T) {
+	// This tests the branch when the URL host is not supported (not GitHub, GitLab, or Bitbucket)
+	config := fakeAtmosConfig(false)
+	detector := &CustomGitDetector{atmosConfig: &config, source: "repo.git"}
+	unsupportedURL := "https://example.com/repo.git"
+	result, ok, err := detector.Detect(unsupportedURL, "")
+	if err != nil {
+		t.Fatalf("Expected no error for unsupported host, got: %v", err)
+	}
+	if ok != false {
+		t.Errorf("Expected ok to be false for unsupported host, got true")
+	}
+	if result != "" {
+		t.Errorf("Expected result to be empty for unsupported host, got: %s", result)
+	}
 }

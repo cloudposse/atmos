@@ -200,13 +200,23 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 
 // mergeConfig merge config from a specified path directory and process imports. Return error if config file does not exist.
 func mergeConfig(v *viper.Viper, path string, processImports bool) error {
-	v.AddConfigPath(path)
-	v.SetConfigName(CliConfigFileName)
+	// Create a temporary Viper instance to isolate this configuration load
+	tempViper := viper.New()
+	tempViper.AddConfigPath(path)
+	tempViper.SetConfigName(CliConfigFileName)
+	tempViper.SetConfigType("yaml")
+	// Read configuration into temporary instance
+	if err := tempViper.ReadInConfig(); err != nil {
+		return err
+	}
+	configFilePath := tempViper.ConfigFileUsed()
+
+	v.SetConfigFile(configFilePath)
 	err := v.MergeInConfig()
 	if err != nil {
 		return err
 	}
-	content, err := os.ReadFile(v.ConfigFileUsed())
+	content, err := os.ReadFile(configFilePath)
 	if err != nil {
 		return err
 	}

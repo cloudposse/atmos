@@ -15,6 +15,7 @@ var (
 	ErrUnsupportedURIScheme          = fmt.Errorf("unsupported URI scheme")
 	ErrInvalidOCIURIFormat           = fmt.Errorf("invalid OCI URI format")
 )
+var schemeSeparator string = "://"
 
 const MaxURISize = 2048
 
@@ -39,8 +40,8 @@ func ValidateURI(uri string) error {
 		if !strings.Contains(uri[6:], "/") {
 			return ErrInvalidOCIURIFormat
 		}
-	} else if strings.Contains(uri, "://") {
-		scheme := strings.Split(uri, "://")[0]
+	} else if strings.Contains(uri, schemeSeparator) {
+		scheme := strings.Split(uri, schemeSeparator)[0]
 		if !IsValidScheme(scheme) {
 			return ErrUnsupportedURIScheme
 		}
@@ -73,41 +74,40 @@ scp, sftp
 Shortcuts like github.com, bitbucket.org
 
 - File-related Schemes:
-file - Local filesystem paths
-dir - Local directories
-tar - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
-zip - Zip files
+  file - Local filesystem paths
+  dir - Local directories
+  tar - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
+  zip - Zip files
 
 - HTTP/HTTPS:
-http - HTTP URLs
-https - HTTPS URLs
+  http - HTTP URLs
+  https - HTTPS URLs
 
 - Git:
-git - Git repositories, which can be accessed via HTTPS or SSH
+  git - Git repositories, which can be accessed via HTTPS or SSH
 
 - Mercurial:
-hg - Mercurial repositories, accessed via HTTP/S or SSH
+  hg - Mercurial repositories, accessed via HTTP/S or SSH
 
 - Amazon S3:
-s3 - Amazon S3 bucket URLs
+  s3 - Amazon S3 bucket URLs
 
 - Google Cloud Storage:
-gcs - Google Cloud Storage URLs
+  gcs - Google Cloud Storage URLs
 
 - OCI:
-oci - Open Container Initiative (OCI) images
+  oci - Open Container Initiative (OCI) images
 
 - Other Protocols:
-scp - Secure Copy Protocol for SSH-based transfers
-sftp - SSH File Transfer Protocol
+  scp - Secure Copy Protocol for SSH-based transfers
+  sftp - SSH File Transfer Protocol
 
 - GitHub/Bitbucket/Other Shortcuts:
-github.com - Direct GitHub repository shortcuts
-bitbucket.org - Direct Bitbucket repository shortcuts
+  github.com - Direct GitHub repository shortcuts
+  bitbucket.org - Direct Bitbucket repository shortcuts
 
 - Composite Schemes:
-go-getter allows for composite schemes, where multiple operations can be combined. For example:
-git::https://github.com/user/repo - Forces the use of git over an HTTPS URL.
-tar::http://example.com/archive.tar.gz - Treats the HTTP resource as a tarball.
-
+  go-getter allows for composite schemes, where multiple operations can be combined. For example:
+    git::https://github.com/user/repo - Forces the use of git over an HTTPS URL.
+    tar::http://example.com/archive.tar.gz - Treats the HTTP resource as a tarball.
 */

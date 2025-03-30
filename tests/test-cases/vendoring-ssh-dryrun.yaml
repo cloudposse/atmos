@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: atmos vendor pull using SSH
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "2 links are vendored (generic vendoring, not component/mixin), one that hits custom detector and another one doesn't"
+    workdir: "fixtures/scenarios/vendor-pulls-ssh"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--logs-level=Debug"
+      - "--dry-run"
+    env:
+      ATMOS_GITHUB_TOKEN: "supersecret"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: atmos vendor pull component using SSH
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Dry-run for component vendoring (not generic)"
+    workdir: "fixtures/scenarios/vendoring-dry-run"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--component=ipinfo"
+      - "--logs-level=Debug"
+      - "--dry-run"
+    env:
+      ATMOS_GITHUB_TOKEN: "supersecret"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: atmos vendor pull with custom detector and handling credentials leakage
+    enabled: true
+    snapshot: true
+    tty: false
+    description: "Ensure that injected credentials for GitHub, GitLab, and Bitbucket are never leaked in logs"
+    workdir: "fixtures/scenarios/vendor-creds-sanitize"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--logs-level=Debug"
+      - "--dry-run"
+    env:
+      ATMOS_GITHUB_TOKEN: "supersecret"
+      ATMOS_GITLAB_TOKEN: "gitlabsecret"
+      ATMOS_BITBUCKET_TOKEN: "bitbucketsecret"
+      ATMOS_BITBUCKET_USERNAME: "bitbucketusername"
+    expect:
+      diff: []
+    stdout:
+      # GitHub case
+      - !not 'supersecret'
+      # GitLab case
+      - !not 'gitlabsecret'
+      # Bitbucket case
+      - !not 'bitbucketsecret'
+      - !not 'bitbucketusername'
+
+    exit_code: 0

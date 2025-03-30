@@ -15,7 +15,7 @@ comment:
   layout: "reach,diff,flags,tree"  # Display different coverage views
   behavior: default                # Default PR comment behavior
   require_changes: true             # Only post if coverage changes
-  require_base: yes                 # Compare against base branch coverage
+  require_base: true                 # Compare against base branch coverage
 
 github_checks:
   annotations: true    # Enable GitHub Checks Annotations

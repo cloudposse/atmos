@@ -217,7 +217,7 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
 
   <dt>`included_paths` and `excluded_paths`</dt>
   <dd>
-  `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths (double-star/globstar `**` is supported as well).
+  `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths (double-star/globstar `**` is supported as well). For more details, see [Vendoring with Globs](#vendoring-with-globs).  
   </dd>
 
   <dt>`component`</dt>
@@ -497,3 +497,115 @@ To vendor the `vpc` component, execute the following command:
 atmos vendor pull -c vpc
 ```
 </Terminal>
+
+## Vendoring with Globs
+
+In Atmos, **glob patterns** define which files and directories are included or excluded during vendoring. These patterns go beyond simple wildcard characters like `*`—they follow specific rules that dictate how paths are matched. Understanding the difference between **greedy** (`**`) and **non-greedy** (`*`) patterns, along with other advanced glob syntax, ensures precise control over vendoring behavior.  
+
+### Understanding Wildcards, Ranges, and Recursion
+
+Glob patterns in Atmos provide flexible and powerful matching, that's simpler to understand than regular expressions:
+
+<dl>
+  <dt>`*` (single asterisk)</dt>
+  <dd>Matches any sequence of characters <strong>within a single path segment</strong>.</dd>
+  <dd>Example: `vendor/*.yaml` matches `vendor/config.yaml` but <strong>not</strong> `vendor/subdir/config.yaml`.</dd>
+
+  <dt>`**` (double asterisk, also known as a "greedy glob")</dt>
+  <dd>Matches across <strong>multiple path segments recursively</strong>.</dd>
+  <dd>Example: `vendor/**/*.yaml` matches `vendor/config.yaml`, `vendor/subdir/config.yaml`, and `vendor/deep/nested/config.yaml`.</dd>
+
+  <dt>`?` (question mark)</dt>
+  <dd>Matches <strong>exactly one character</strong> in a path segment.</dd>
+  <dd>Example: `file?.txt` matches `file1.txt` and `fileA.txt` but <strong>not</strong> `file10.txt`.</dd>
+
+  <dt>`[abc]` (character class)</dt>
+  <dd>Matches <strong>any single character</strong> inside the brackets.</dd>
+  <dd>Example: `file[123].txt` matches `file1.txt`, `file2.txt`, and `file3.txt`, but <strong>not</strong> `file4.txt` or `file12.txt`.</dd>
+
+  <dt>`[a-z]` (character range)</dt>
+  <dd>Matches <strong>any single character</strong> within the specified range.</dd>
+  <dd>Example: `file[a-c].txt` matches `filea.txt`, `fileb.txt`, and `filec.txt`.</dd>
+
+  <dt>`{a,b,c}` (brace expansion)</dt>
+  <dd>Matches <strong>any of the comma-separated patterns</strong>.</dd>
+  <dd>Example: `*.{jpg,png,gif}` matches `image.jpg`, `image.png`, and `image.gif`.</dd>
+</dl>
+
+This distinction is important when excluding specific directories or files while vendoring.
+
+#### Example: Excluding a Subdirectory
+
+Consider the following configuration:
+
+```yaml
+included_paths:
+  - "**/demo-library/**"
+excluded_paths:
+  - "**/demo-library/**/stargazers/**"
+```
+
+How it works:
+- The `included_paths` rule `**/demo-library/**` ensures all files inside `demo-library` (at any depth) are vendored.
+- The `excluded_paths` rule `**/demo-library/**/stargazers/**` prevents any files inside `stargazers` subdirectories from being vendored.
+
+This means:
+- All files within `demo-library` except those inside any `stargazers` subdirectory are vendored.
+- Any other files outside `stargazers` are unaffected by this exclusion.
+
+#### Example: A Non-Recursive Pattern That Doesn't Work
+
+```yaml
+included_paths:
+  - "**/demo-library/*"
+excluded_paths:
+  - "**/demo-library/**/stargazers/**"
+```
+
+In this case:
+- `**/demo-library/*` only matches immediate children of `demo-library`, not nested files or subdirectories.
+- This means `stargazers/` itself could be matched, but its contents might not be explicitly excluded.
+- To correctly capture all subdirectories and files while still excluding stargazers, use `**/demo-library/**/*`.
+
+Using `{...}` for Multiple Extensions or Patterns
+
+Curly braces `{...}` allow for expanding multiple patterns into separate glob matches. This is useful when selecting multiple file types or directories within a single glob pattern.
+
+#### Example: Matching Multiple File Extensions
+
+```yaml
+included_paths:
+  - "**/demo-library/**/*.{tf,md}"
+```
+
+This is equivalent to writing:
+
+```yaml
+included_paths:
+  - "**/demo-library/**/*.tf"
+  - "**/demo-library/**/*.md"
+```
+
+The `{tf,md}` part expands to both `*.tf` and `*.md`, making the rule more concise.
+
+#### Example: Excluding Multiple Directories
+
+```yaml
+excluded_paths:
+  - "**/demo-library/**/{stargazers,archive}/**"
+```
+
+This excludes both:
+- `**/demo-library/**/stargazers/**`
+- `**/demo-library/**/archive/**`
+
+Using `{...}` here prevents the need to write two separate exclusion rules.
+
+## Key Takeaways
+
+1. Use `**/` for recursive matching to include everything inside a directory.
+2. Use `*` for single-segment matches, which won't include deeper subdirectories.
+3. Use `{...}` to match multiple extensions or directories within a single pattern.
+4. Exclusion rules must match nested paths explicitly when trying to exclude deep directories.
+
+By carefully combining `included_paths`, `excluded_paths`, and `{...}` expansion, you can precisely control which files are vendored while ensuring unwanted directories are omitted.

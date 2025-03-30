@@ -1,110 +1,262 @@
 package downloader
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/hashicorp/go-getter"
 )
 
-// CustomGitHubDetector Intercepts GitHub URLs and transforms them
-// into something like git::https://<token>@github.com/...
-// so we can do a git-based clone with a token.
-type CustomGitHubDetector struct {
-	AtmosConfig *schema.AtmosConfiguration
-}
-
-// Predefined errors for better reuse and static analysis.
 var (
-	ErrInvalidGitHubURL = errors.New("invalid GitHub URL")
-	ErrURLEmpty         = errors.New("source URL is empty")
-	ErrFailedParseURL   = errors.New("failed to parse URL")
+	ErrInvalidURL = fmt.Errorf("invalid URL")
 )
 
-type EnvProvider func(key string) string
+const schemeSeparator = "://"
 
-// customGitHubDetector detects and modifies GitHub URLs.
-type customGitHubDetector struct {
-	AtmosConfig *schema.AtmosConfiguration
-	GetEnv      EnvProvider
+// CustomGitDetector intercepts Git URLs (for GitHub, Bitbucket, GitLab, etc.)
+// and transforms them into a proper URL for cloning, optionally injecting tokens.
+type CustomGitDetector struct {
+	atmosConfig *schema.AtmosConfiguration
+	source      string
 }
 
-// NewCustomGitHubDetector initializes a new detector with default dependencies.
-func NewCustomGitHubDetector(config *schema.AtmosConfiguration) *customGitHubDetector {
-	return &customGitHubDetector{
-		AtmosConfig: config,
-		GetEnv:      os.Getenv,
+func NewCustomGitDetector(atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
+	return &CustomGitDetector{
+		atmosConfig: atmosConfig,
+		source:      source,
 	}
 }
 
-// Detect checks if a URL is a GitHub repo and injects authentication if needed.
-func (d *customGitHubDetector) Detect(src, _ string) (string, bool, error) {
-	if src == "" {
-		return "", false, ErrURLEmpty
-	}
+// Detect implements the getter.Detector interface for go-getter v1.
+func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
+	log.Debug("CustomGitDetector.Detect called")
 
-	if !strings.Contains(src, "://") {
-		src = "https://" + src
-	}
-
-	parsedURL, err := url.Parse(src)
-	if err != nil {
-		log.Debug("Failed to parse URL", "source", src, "error", err)
-		return "", false, fmt.Errorf("failed to parse URL %q: %w", src, err)
-	}
-
-	if strings.ToLower(parsedURL.Host) != "github.com" {
-		log.Debug("Host is not 'github.com', skipping token injection", "host", parsedURL.Host)
+	if len(src) == 0 {
 		return "", false, nil
 	}
 
-	// Ensure the URL follows the /owner/repo format
-	parts := strings.SplitN(parsedURL.Path, "/", 4)
-	if len(parts) < 3 {
-		log.Debug("URL path doesn't look like /owner/repo", "url path", parsedURL.Path)
-		return "", false, ErrInvalidGitHubURL
+	// Ensure the URL has an explicit scheme.
+	src = d.ensureScheme(src)
+
+	// Parse the URL to extract the host and path.
+	parsedURL, err := url.Parse(src)
+	if err != nil {
+		maskedSrc, _ := maskBasicAuth(src)
+		log.Debug("Failed to parse URL", keyURL, maskedSrc, "error", err)
+		return "", false, ErrInvalidURL
 	}
 
-	// Get the authentication token
-	usedToken, tokenSource := d.getGitHubToken()
-	if usedToken != "" {
-		user := parsedURL.User.Username()
-		pass, _ := parsedURL.User.Password()
-
-		if user == "" && pass == "" {
-			log.Debug("Injecting token", "from", tokenSource, "to", src)
-
-			parsedURL.User = url.UserPassword("x-access-token", usedToken)
-		} else {
-			log.Debug("Credentials found in URL, skipping token injection")
-		}
+	// If no host is detected, this is likely a local file path.
+	// Skip custom processing so that go getter handles it as is.
+	if parsedURL.Host == "" {
+		log.Debug("No host detected in URL, skipping custom git detection", keyURL, src)
+		return "", false, nil
 	}
+
+	// Normalize the path.
+	d.normalizePath(parsedURL)
+
+	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
+	host := strings.ToLower(parsedURL.Host)
+	if host != hostGitHub && host != hostBitbucket && host != hostGitLab {
+		log.Debug("Skipping token injection for an unsupported host", "host", parsedURL.Host)
+		return "", false, nil
+	}
+
+	log.Debug("Reading config param", "InjectGithubToken", d.atmosConfig.Settings.InjectGithubToken)
+	// Inject token if available.
+	d.injectToken(parsedURL, host)
+
+	// Adjust subdirectory if needed.
+	d.adjustSubdir(parsedURL, d.source)
+
+	// Set "depth=1" for a shallow clone if not specified.
+	q := parsedURL.Query()
+	if _, exists := q["depth"]; !exists {
+		q.Set("depth", "1")
+	}
+	parsedURL.RawQuery = q.Encode()
 
 	finalURL := "git::" + parsedURL.String()
+	maskedFinal, err := maskBasicAuth(strings.TrimPrefix(finalURL, "git::"))
+	if err != nil {
+		log.Debug("Masking failed", "error", err)
+	} else {
+		log.Debug("Final transformation", "url", "git::"+maskedFinal)
+	}
 
 	return finalURL, true, nil
 }
 
-// getGitHubToken selects the appropriate GitHub token based on the configuration.
-func (d *customGitHubDetector) getGitHubToken() (string, string) {
-	atmosGitHubToken := d.GetEnv("ATMOS_GITHUB_TOKEN")
-	gitHubToken := d.GetEnv("GITHUB_TOKEN")
+const (
+	// Named constants for regex match indices.
+	matchIndexUser   = 1
+	matchIndexHost   = 3
+	matchIndexPath   = 4
+	matchIndexSuffix = 5
+	matchIndexExtra  = 6
 
-	if atmosGitHubToken != "" {
-		log.Debug("Using ATMOS_GITHUB_TOKEN")
-		return atmosGitHubToken, "ATMOS_GITHUB_TOKEN"
+	keyURL = "url"
+
+	hostGitHub    = "github.com"
+	hostGitLab    = "gitlab.com"
+	hostBitbucket = "bitbucket.org"
+)
+
+const GitPrefix = "git::"
+
+// ensureScheme checks for an explicit scheme and rewrites SCP-style URLs if needed.
+// Also removes any existing "git::" prefix (required for the dry-run mode to operate correctly).
+func (d *CustomGitDetector) ensureScheme(src string) string {
+	// Strip any existing "git::" prefix
+	src = strings.TrimPrefix(src, GitPrefix)
+
+	if !strings.Contains(src, schemeSeparator) {
+		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
+			maskedOld, _ := maskBasicAuth(src)
+			maskedNew, _ := maskBasicAuth(newSrc)
+			log.Debug("Rewriting SCP-style SSH URL", "old_url", maskedOld, "new_url", maskedNew)
+			return newSrc
+		}
+		src = "https://" + src
+		maskedSrc, _ := maskBasicAuth(src)
+		log.Debug("Defaulting to https scheme", keyURL, maskedSrc)
 	}
+	return src
+}
 
-	if d.AtmosConfig.Settings.InjectGithubToken && gitHubToken != "" {
-		log.Debug("Using GITHUB_TOKEN (InjectGithubToken=true)")
-		return gitHubToken, "GITHUB_TOKEN"
+func rewriteSCPURL(src string) (string, bool) {
+	scpPattern := regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
+	if scpPattern.MatchString(src) {
+		matches := scpPattern.FindStringSubmatch(src)
+		newSrc := "ssh://"
+		user := matches[matchIndexUser] // This includes the "@" if present.
+		host := matches[matchIndexHost]
+		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git) for known hosts.
+		if user == "" && (strings.EqualFold(host, hostGitHub) ||
+			strings.EqualFold(host, hostGitLab) ||
+			strings.EqualFold(host, hostBitbucket)) {
+			user = "git@"
+		}
+		newSrc += user + host + "/" + matches[matchIndexPath]
+		if matches[matchIndexSuffix] != "" {
+			newSrc += matches[matchIndexSuffix]
+		}
+		if matches[matchIndexExtra] != "" {
+			newSrc += matches[matchIndexExtra]
+		}
+		return newSrc, true
 	}
+	return "", false
+}
 
-	log.Debug("No valid GitHub token found for injection")
+// normalizePath converts the URL path to use forward slashes.
+func (d *CustomGitDetector) normalizePath(parsedURL *url.URL) {
+	unescapedPath, err := url.PathUnescape(parsedURL.Path)
+	if err == nil {
+		parsedURL.Path = filepath.ToSlash(unescapedPath)
+	} else {
+		parsedURL.Path = filepath.ToSlash(parsedURL.Path)
+	}
+}
 
-	return "", ""
+// injectToken injects a token into the URL if available.
+func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
+	token, tokenSource := d.resolveToken(host)
+	if token != "" {
+		defaultUsername := getDefaultUsername(host)
+		parsedURL.User = url.UserPassword(defaultUsername, token)
+		maskedURL, _ := maskBasicAuth(parsedURL.String())
+		log.Debug("Injected token", "env", tokenSource, keyURL, maskedURL)
+	} else {
+		log.Debug("No token found for injection")
+	}
+}
+
+// resolveToken returns the token and its source based on the host.
+func (d *CustomGitDetector) resolveToken(host string) (string, string) {
+	var token, tokenSource string
+	switch host {
+	case hostGitHub:
+		if d.atmosConfig.Settings.InjectGithubToken {
+			tokenSource = "ATMOS_GITHUB_TOKEN"
+			token = os.Getenv(tokenSource)
+			if token == "" {
+				tokenSource = "GITHUB_TOKEN"
+				token = os.Getenv(tokenSource)
+			}
+		} else {
+			tokenSource = "GITHUB_TOKEN"
+			token = os.Getenv(tokenSource)
+		}
+	case hostBitbucket:
+		tokenSource = "ATMOS_BITBUCKET_TOKEN"
+		token = os.Getenv(tokenSource)
+		if token == "" {
+			tokenSource = "BITBUCKET_TOKEN"
+			token = os.Getenv(tokenSource)
+		}
+	case hostGitLab:
+		tokenSource = "ATMOS_GITLAB_TOKEN"
+		token = os.Getenv(tokenSource)
+		if token == "" {
+			tokenSource = "GITLAB_TOKEN"
+			token = os.Getenv(tokenSource)
+		}
+	}
+	return token, tokenSource
+}
+
+// getDefaultUsername returns the default username for token injection based on the host.
+func getDefaultUsername(host string) string {
+	switch host {
+	case hostGitHub:
+		return "x-access-token"
+	case hostGitLab:
+		return "oauth2"
+	case hostBitbucket:
+		defaultUsername := os.Getenv("ATMOS_BITBUCKET_USERNAME")
+		if defaultUsername == "" {
+			defaultUsername = os.Getenv("BITBUCKET_USERNAME")
+			if defaultUsername == "" {
+				return "x-token-auth"
+			}
+		}
+		return defaultUsername
+	default:
+		return "x-access-token"
+	}
+}
+
+// adjustSubdir appends "//." to the path if no subdirectory is specified.
+func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
+	normalizedSource := filepath.ToSlash(source)
+	if normalizedSource != "" && !strings.Contains(normalizedSource, "//") {
+		parts := strings.SplitN(parsedURL.Path, "/", 4)
+		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
+			maskedSrc, _ := maskBasicAuth(source)
+			log.Debug("Detected top-level repo with no subdir: appending '//.'", keyURL, maskedSrc)
+			parsedURL.Path += "//."
+		}
+	}
+}
+
+// RegisterCustomDetectors prepends the custom detector so it runs before the built-in ones.
+// Any code that calls go-getter should invoke this.
+func RegisterCustomDetectors(atmosConfig *schema.AtmosConfiguration, source string) {
+	detectorsMutex.Lock()
+	defer detectorsMutex.Unlock()
+
+	getter.Detectors = append(
+		[]getter.Detector{
+			&CustomGitDetector{atmosConfig: atmosConfig, source: source},
+		},
+		getter.Detectors...,
+	)
 }
