@@ -1,97 +1,97 @@
 acme-platform-dev:
-    components:
-        terraform:
-            myapp:
-                atmos_component: myapp
-                atmos_manifest: orgs/acme/platform/dev
-                atmos_stack: acme-platform-dev
-                atmos_stack_file: orgs/acme/platform/dev
-                backend: {}
-                backend_type: ""
-                command: terraform
-                component: myapp
-                env: {}
-                hooks: {}
-                inheritance: []
-                metadata: {}
-                overrides: {}
-                providers: {}
-                remote_state_backend: {}
-                remote_state_backend_type: ""
-                settings: {}
-                stack: acme-platform-dev
-                vars:
-                    format: ""
-                    lang: se
-                    location: Stockholm
-                    namespace: acme
-                    options: "0"
-                    stage: dev
-                    tenant: platform
-                    units: m
-                workspace: acme-platform-dev
+  components:
+    terraform:
+      myapp:
+        atmos_component: myapp
+        atmos_manifest: orgs/acme/platform/dev
+        atmos_stack: acme-platform-dev
+        atmos_stack_file: orgs/acme/platform/dev
+        backend: {}
+        backend_type: ""
+        command: terraform
+        component: myapp
+        env: {}
+        hooks: {}
+        inheritance: []
+        metadata: {}
+        overrides: {}
+        providers: {}
+        remote_state_backend: {}
+        remote_state_backend_type: ""
+        settings: {}
+        stack: acme-platform-dev
+        vars:
+          format: ""
+          lang: se
+          location: Stockholm
+          namespace: acme
+          options: "0"
+          stage: dev
+          tenant: platform
+          units: m
+        workspace: acme-platform-dev
 acme-platform-prod:
-    components:
-        terraform:
-            myapp:
-                atmos_component: myapp
-                atmos_manifest: orgs/acme/platform/prod
-                atmos_stack: acme-platform-prod
-                atmos_stack_file: orgs/acme/platform/prod
-                backend: {}
-                backend_type: ""
-                command: terraform
-                component: myapp
-                env: {}
-                hooks: {}
-                inheritance: []
-                metadata: {}
-                overrides: {}
-                providers: {}
-                remote_state_backend: {}
-                remote_state_backend_type: ""
-                settings: {}
-                stack: acme-platform-prod
-                vars:
-                    format: ""
-                    lang: en
-                    location: Los Angeles
-                    namespace: acme
-                    options: "0"
-                    stage: prod
-                    tenant: platform
-                    units: m
-                workspace: acme-platform-prod
+  components:
+    terraform:
+      myapp:
+        atmos_component: myapp
+        atmos_manifest: orgs/acme/platform/prod
+        atmos_stack: acme-platform-prod
+        atmos_stack_file: orgs/acme/platform/prod
+        backend: {}
+        backend_type: ""
+        command: terraform
+        component: myapp
+        env: {}
+        hooks: {}
+        inheritance: []
+        metadata: {}
+        overrides: {}
+        providers: {}
+        remote_state_backend: {}
+        remote_state_backend_type: ""
+        settings: {}
+        stack: acme-platform-prod
+        vars:
+          format: ""
+          lang: en
+          location: Los Angeles
+          namespace: acme
+          options: "0"
+          stage: prod
+          tenant: platform
+          units: m
+        workspace: acme-platform-prod
 acme-platform-staging:
-    components:
-        terraform:
-            myapp:
-                atmos_component: myapp
-                atmos_manifest: orgs/acme/platform/staging
-                atmos_stack: acme-platform-staging
-                atmos_stack_file: orgs/acme/platform/staging
-                backend: {}
-                backend_type: ""
-                command: terraform
-                component: myapp
-                env: {}
-                hooks: {}
-                inheritance: []
-                metadata: {}
-                overrides: {}
-                providers: {}
-                remote_state_backend: {}
-                remote_state_backend_type: ""
-                settings: {}
-                stack: acme-platform-staging
-                vars:
-                    format: ""
-                    lang: en
-                    location: Los Angeles
-                    namespace: acme
-                    options: "0"
-                    stage: staging
-                    tenant: platform
-                    units: m
-                workspace: acme-platform-staging
+  components:
+    terraform:
+      myapp:
+        atmos_component: myapp
+        atmos_manifest: orgs/acme/platform/staging
+        atmos_stack: acme-platform-staging
+        atmos_stack_file: orgs/acme/platform/staging
+        backend: {}
+        backend_type: ""
+        command: terraform
+        component: myapp
+        env: {}
+        hooks: {}
+        inheritance: []
+        metadata: {}
+        overrides: {}
+        providers: {}
+        remote_state_backend: {}
+        remote_state_backend_type: ""
+        settings: {}
+        stack: acme-platform-staging
+        vars:
+          format: ""
+          lang: en
+          location: Los Angeles
+          namespace: acme
+          options: "0"
+          stage: staging
+          tenant: platform
+          units: m
+        workspace: acme-platform-staging
 
