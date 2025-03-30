@@ -132,7 +132,7 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	if err := os.WriteFile(testFile, jsonContent, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	config := fakeAtmosConfig(false)
+	config := fakeAtmosConfig()
 	result, err := NewGoGetterDownloader(&config).FetchAndAutoParse("file://" + testFile)
 	if err != nil {
 		t.Errorf("DownloadDetectFormatAndParseFile error: %v", err)
@@ -166,7 +166,7 @@ func TestGoGetterGet_File(t *testing.T) {
 	defer os.RemoveAll(destDir)
 	destFile := filepath.Join(destDir, "downloaded.txt")
 	srcURL := "file://" + srcFile
-	config := fakeAtmosConfig(false)
+	config := fakeAtmosConfig()
 	err = NewGoGetterDownloader(&config).Fetch(srcURL, destFile, ClientModeFile, 5*time.Second)
 	if err != nil {
 		t.Errorf("GoGetterGet failed: %v", err)

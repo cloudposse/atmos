@@ -15,7 +15,7 @@ var (
 	ErrUnsupportedURIScheme          = fmt.Errorf("unsupported URI scheme")
 	ErrInvalidOCIURIFormat           = fmt.Errorf("invalid OCI URI format")
 )
-var schemeSeparator string = "://"
+var schemeSeparator = "://"
 
 const MaxURISize = 2048
 

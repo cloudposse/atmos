@@ -11,10 +11,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func fakeAtmosConfig(injectGit bool) schema.AtmosConfiguration {
+func fakeAtmosConfig() schema.AtmosConfiguration {
 	return schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
-			InjectGithubToken: injectGit,
+			InjectGithubToken: false,
 		},
 	}
 }
@@ -60,7 +60,7 @@ func TestNormalizePath_ErrorHandling(t *testing.T) {
 
 func TestDetect_LocalFilePath(t *testing.T) {
 	// This tests the branch when the input is a local file path (no host).
-	config := fakeAtmosConfig(false)
+	config := fakeAtmosConfig()
 	detector := &CustomGitDetector{atmosConfig: &config, source: "/home/user/repo"}
 	localFile := "/home/user/repo/README.md"
 	result, ok, err := detector.Detect(localFile, "")
@@ -76,7 +76,7 @@ func TestDetect_LocalFilePath(t *testing.T) {
 }
 
 func TestEnsureScheme(t *testing.T) {
-	config := fakeAtmosConfig(false)
+	config := fakeAtmosConfig()
 	detector := &CustomGitDetector{atmosConfig: &config}
 	in := "https://example.com/repo.git"
 	out := detector.ensureScheme(in)
@@ -147,7 +147,7 @@ func TestAdjustSubdir(t *testing.T) {
 
 func TestDetect_UnsupportedHost(t *testing.T) {
 	// This tests the branch when the URL host is not supported (not GitHub, GitLab, or Bitbucket)
-	config := fakeAtmosConfig(false)
+	config := fakeAtmosConfig()
 	detector := &CustomGitDetector{atmosConfig: &config, source: "repo.git"}
 	unsupportedURL := "https://example.com/repo.git"
 	result, ok, err := detector.Detect(unsupportedURL, "")
