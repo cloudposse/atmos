@@ -13,6 +13,29 @@ import File from '@site/src/components/File'
     and assigning the file contents or individual values to the sections in Atmos stack manifests.
 </Intro>
 
+Atmos resolves the `!include` functions during the initial phase of YAML stack manifest processing.
+At this stage, it evaluates and substitutes the contents of included files, converting them into the appropriate data
+types (e.g., string, boolean, map, or list) before assigning them to the corresponding sections or attributes in the
+Atmos stack configurations.
+
+Key implications of this behavior:
+
+- The `!include` functions facilitate stack configuration reuse by enabling modularization of common configurations.
+  These configurations can reside in separate local or remote files and be referenced in multiple stack definitions,
+  promoting a [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) approach.
+
+- The functions preprocess YAML files before Atmos resolves stacks and components.
+  This enables configuration [Inheritance](/core-concepts/stacks/inheritance/) and deep-merging of stack parameters
+  after the `!include` directives are expanded.
+
+- When transitioning from plain Terraform/OpenTofu to Atmos, `!include` allows seamless reuse of existing variable
+  files (`varfiles`) by referencing them in the `vars` sections of Atmos components:
+
+  ```yaml
+    my-component:
+      vars: !include my-component.tfvars
+  ```
+
 ## Usage
 
 The `!include` function can be called with either one or two parameters:
