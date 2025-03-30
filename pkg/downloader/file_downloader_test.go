@@ -29,8 +29,8 @@ func TestFileDownloader_Fetch_Failure(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockFactory := NewMockClientFactory(ctrl)
-	expectedErr := ErrInvalidGitHubURL
-	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(nil, ErrInvalidGitHubURL)
+	expectedErr := ErrInvalidURL
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(nil, ErrInvalidURL)
 
 	fd := NewFileDownloader(mockFactory)
 	err := fd.Fetch("src", "dest", ClientModeFile, 10*time.Second)

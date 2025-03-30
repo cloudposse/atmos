@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
@@ -112,25 +114,68 @@ func TestRegisterCustomDetectors(t *testing.T) {
 	getter.Detectors = []getter.Detector{}
 
 	config := &schema.AtmosConfiguration{}
-	registerCustomDetectors(config)
+	registerCustomDetectors(config, "")
 
 	assert.Equal(t, 1, len(getter.Detectors))
 	// Can't assert type precisely without NewCustomGitHubDetector implementation
 	assert.NotNil(t, getter.Detectors[0])
 }
 
-func TestNewGoGetterDownloader(t *testing.T) {
-	// Save and restore original detectors
-	originalDetectors := getter.Detectors
-	defer func() {
-		getter.Detectors = originalDetectors
-	}()
+func TestDownloadDetectFormatAndParseFile(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "detectparse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+	testFile := filepath.Join(tempDir, "test.json")
+	jsonContent := []byte(`{"key": "value"}`)
+	if err := os.WriteFile(testFile, jsonContent, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := fakeAtmosConfig()
+	result, err := NewGoGetterDownloader(&config).FetchAndAutoParse("file://" + testFile)
+	if err != nil {
+		t.Errorf("DownloadDetectFormatAndParseFile error: %v", err)
+	}
+	resMap, ok := result.(map[string]any)
+	if !ok {
+		t.Errorf("Expected result to be a map, got %T", result)
+	} else if resMap["key"] != "value" {
+		t.Errorf("Expected key to be 'value', got %v", resMap["key"])
+	}
+}
 
-	getter.Detectors = []getter.Detector{}
-
-	config := &schema.AtmosConfiguration{}
-	downloader := NewGoGetterDownloader(config)
-
-	assert.NotNil(t, downloader)
-	assert.Equal(t, 1, len(getter.Detectors))
+func TestGoGetterGet_File(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping file copying test on Windows due to potential file system differences.")
+	}
+	srcDir, err := os.MkdirTemp("", "src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(srcDir)
+	srcFile := filepath.Join(srcDir, "test.txt")
+	content := []byte("hello world")
+	if err := os.WriteFile(srcFile, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	destDir, err := os.MkdirTemp("", "dest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(destDir)
+	destFile := filepath.Join(destDir, "downloaded.txt")
+	srcURL := "file://" + srcFile
+	config := fakeAtmosConfig()
+	err = NewGoGetterDownloader(&config).Fetch(srcURL, destFile, ClientModeFile, 5*time.Second)
+	if err != nil {
+		t.Errorf("GoGetterGet failed: %v", err)
+	}
+	data, err := os.ReadFile(destFile)
+	if err != nil {
+		t.Errorf("Error reading downloaded file: %v", err)
+	}
+	if string(data) != string(content) {
+		t.Errorf("Expected file content %s, got %s", content, data)
+	}
 }
