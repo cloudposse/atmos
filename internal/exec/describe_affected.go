@@ -271,7 +271,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	if a.Query == "" {
 		a.Logger.Trace("\nAffected components and stacks: \n")
 
-		err = printOrWriteToFile(a.Format, a.OutputFile, affected)
+		err = printOrWriteToFile(a.CLIConfig, a.Format, a.OutputFile, affected)
 		if err != nil {
 			return err
 		}
@@ -314,7 +314,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		err = printOrWriteToFile(a.Format, a.OutputFile, res)
+		err = printOrWriteToFile(atmosConfig, a.Format, a.OutputFile, res)
 		if err != nil {
 			return err
 		}

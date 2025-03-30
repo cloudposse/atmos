@@ -71,14 +71,14 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	if err != nil {
+		return err
+	}
+
 	var res any
 
 	if query != "" {
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-		if err != nil {
-			return err
-		}
-
 		res, err = u.EvaluateYqExpression(&atmosConfig, componentSection, query)
 		if err != nil {
 			return err
@@ -87,7 +87,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		res = componentSection
 	}
 
-	err = printOrWriteToFile(format, file, res)
+	err = printOrWriteToFile(atmosConfig, format, file, res)
 	if err != nil {
 		return err
 	}

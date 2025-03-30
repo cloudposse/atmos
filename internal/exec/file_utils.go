@@ -30,19 +30,30 @@ func closeFile(fileName string, file io.ReadCloser) {
 // printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
 // and prints the data to the console or to a file (if file is specified)
 func printOrWriteToFile(
+	atmosConfig schema.AtmosConfiguration,
 	format string,
 	file string,
 	data any,
 ) error {
 	switch format {
 	case "yaml":
+		indent := atmosConfig.Settings.Terminal.TabWidth
+		if indent <= 0 {
+			indent = 2
+		}
+		yamlOpts := []u.YAMLOptions{{Indent: indent}}
+
 		if file == "" {
-			err := u.PrintAsYAML(data)
+			err := u.PrintAsYAMLWithConfig(atmosConfig, data)
 			if err != nil {
 				return err
 			}
 		} else {
-			err := u.WriteToFileAsYAML(file, data, 0o644)
+			y, err := u.ConvertToYAML(data, yamlOpts...)
+			if err != nil {
+				return err
+			}
+			err = os.WriteFile(file, []byte(y), 0o644)
 			if err != nil {
 				return err
 			}

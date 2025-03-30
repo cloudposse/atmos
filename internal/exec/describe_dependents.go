@@ -76,7 +76,7 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		res = dependents
 	}
 
-	err = printOrWriteToFile(format, file, res)
+	err = printOrWriteToFile(atmosConfig, format, file, res)
 	if err != nil {
 		return err
 	}

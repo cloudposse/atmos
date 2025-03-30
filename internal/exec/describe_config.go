@@ -42,7 +42,7 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 		res = atmosConfig
 	}
 
-	err = printOrWriteToFile(format, "", res)
+	err = printOrWriteToFile(atmosConfig, format, "", res)
 	if err != nil {
 		return err
 	}

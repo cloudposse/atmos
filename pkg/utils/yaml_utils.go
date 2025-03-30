@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,13 +37,23 @@ var AtmosYamlTags = []string{
 
 // PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(data any) error {
-	y, err := ConvertToYAML(data)
+	atmosConfig := ExtractAtmosConfig(data)
+	return PrintAsYAMLWithConfig(atmosConfig, data)
+}
+
+// PrintAsYAMLWithConfig prints the provided value as YAML document to the console with custom configuration
+func PrintAsYAMLWithConfig(atmosConfig schema.AtmosConfiguration, data any) error {
+	indent := atmosConfig.Settings.Terminal.TabWidth
+	if indent <= 0 {
+		indent = 2
+	}
+
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
 
-	atmosConfig := ExtractAtmosConfig(data)
-	highlighted, err := HighlightCodeWithConfig(y, atmosConfig)
+	highlighted, err := HighlightCodeWithConfig(y, atmosConfig, "yaml")
 	if err != nil {
 		// Fallback to plain text if highlighting fails
 		PrintMessage(y)
@@ -58,7 +69,7 @@ func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	if err != nil {
 		return err
 	}
-	LogInfo(y)
+	fmt.Print(y)
 	return nil
 }
 
@@ -75,13 +86,29 @@ func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// ConvertToYAML converts the provided data to a YAML string
-func ConvertToYAML(data any) (string, error) {
-	y, err := yaml.Marshal(data)
-	if err != nil {
+// YAMLOptions contains options for YAML conversion.
+type YAMLOptions struct {
+	Indent int
+}
+
+// ConvertToYAML converts the provided data to a YAML string.
+func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+
+	if len(opts) > 0 {
+		indent := opts[0].Indent
+		if indent > 0 {
+			encoder.SetIndent(indent)
+		}
+	} else {
+		encoder.SetIndent(2)
+	}
+
+	if err := encoder.Encode(data); err != nil {
 		return "", err
 	}
-	return string(y), nil
+	return buf.String(), nil
 }
 
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
