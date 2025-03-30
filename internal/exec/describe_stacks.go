@@ -426,7 +426,7 @@ func ExecuteDescribeStacks(
 							// Add sections
 							for sectionName, section := range componentSection {
 								// Skip empty sections if includeEmpty is false
-								// pending Erik to check if this this should also remove empty strings e.g (vars: format: "")
+								// pending Erik to check if this should also remove empty strings e.g (vars: format: "")
 								if !includeEmpty {
 									if sectionMap, ok := section.(map[string]any); ok {
 										if len(sectionMap) == 0 {
