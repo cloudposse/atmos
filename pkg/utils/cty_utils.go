@@ -4,7 +4,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// CtyToGo converts cty.Value to Go types
+// CtyToGo converts cty.Value to Go types.
 func CtyToGo(value cty.Value) any {
 	switch {
 	case value.Type().IsObjectType(): // Handle maps

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,13 +22,20 @@ const (
 	AtmosYamlFuncInclude         = "!include"
 )
 
-var AtmosYamlTags = []string{
-	AtmosYamlFuncExec,
-	AtmosYamlFuncStore,
-	AtmosYamlFuncTemplate,
-	AtmosYamlFuncTerraformOutput,
-	AtmosYamlFuncEnv,
-}
+var (
+	AtmosYamlTags = []string{
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncEnv,
+	}
+
+	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
+	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
+	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
+	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
+)
 
 // PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(data any) error {
@@ -113,13 +121,13 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 			} else if partsLen == 1 {
 				includeFile = strings.TrimSpace(parts[0])
 			} else {
-				return fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s %s. The function accepts 1 or 2 arguments", tag, val)
+				return fmt.Errorf("%w: %s, stack manifest: %s", ErrIncludeYamlFunctionInvalidArguments, val, file)
 			}
 
 			// If absolute path is provided, check if the file exists
 			if filepath.IsAbs(includeFile) {
 				if !FileExists(includeFile) {
-					return fmt.Errorf("the function '%s %s' points to a file that does not exist", tag, val)
+					return fmt.Errorf("%w: %s, stack manifest: %s", ErrIncludeYamlFunctionInvalidFile, val, file)
 				}
 				localFile = includeFile
 			}
@@ -130,7 +138,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 				if FileExists(resolved) {
 					resolvedAbsolutePath, err := filepath.Abs(resolved)
 					if err != nil {
-						return fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
+						return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionInvalidAbsPath, val, file, err)
 					}
 					localFile = resolvedAbsolutePath
 				}
@@ -142,7 +150,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 				if FileExists(atmosManifestPath) {
 					atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
 					if err != nil {
-						return fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
+						return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionInvalidAbsPath, val, file, err)
 					}
 					localFile = atmosManifestAbsolutePath
 				}
@@ -180,7 +188,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 			var includedNode yaml.Node
 			err = yaml.Unmarshal([]byte(y), &includedNode)
 			if err != nil {
-				return fmt.Errorf("failed to parse !include %s in the file %s: %v", val, file, err)
+				return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
 			}
 
 			// Replace the current node with the decoded YAML node with the included content
