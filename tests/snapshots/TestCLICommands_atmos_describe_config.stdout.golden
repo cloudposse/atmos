@@ -116,6 +116,9 @@
     },
     "InjectGithubToken": true
   },
+  "describe": {
+    "settings": {}
+  },
   "vendor": {
     "base_path": ""
   },
