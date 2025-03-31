@@ -46,13 +46,14 @@ var (
 var logger *log.Logger
 
 type Expectation struct {
-	Stdout       []MatchPattern            `yaml:"stdout"`        // Expected stdout output
-	Stderr       []MatchPattern            `yaml:"stderr"`        // Expected stderr output
-	ExitCode     int                       `yaml:"exit_code"`     // Expected exit code
-	FileExists   []string                  `yaml:"file_exists"`   // Files to validate
-	FileContains map[string][]MatchPattern `yaml:"file_contains"` // File contents to validate (file to patterns map)
-	Diff         []string                  `yaml:"diff"`          // Acceptable differences in snapshot
-	Timeout      string                    `yaml:"timeout"`       // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
+	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
+	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output
+	ExitCode      int                       `yaml:"exit_code"`       // Expected exit code
+	FileExists    []string                  `yaml:"file_exists"`     // Files to validate
+	FileNotExists []string                  `yaml:"file_not_exists"` // Files that should not exist
+	FileContains  map[string][]MatchPattern `yaml:"file_contains"`   // File contents to validate (file to patterns map)
+	Diff          []string                  `yaml:"diff"`            // Acceptable differences in snapshot
+	Timeout       string                    `yaml:"timeout"`         // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
 }
 type TestCase struct {
 	Name        string            `yaml:"name"`        // Name of the test
@@ -687,6 +688,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
+	// Validate file not existence
+	if !verifyFileNotExists(t, tc.Expect.FileNotExists) {
+		t.Errorf("Description: %s", tc.Description)
+	}
+
 	// Validate file contents
 	if !verifyFileContains(t, tc.Expect.FileContains) {
 		t.Errorf("Description: %s", tc.Description)
@@ -789,6 +795,20 @@ func verifyFileExists(t *testing.T, files []string) bool {
 	for _, file := range files {
 		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Reason: Expected file does not exist: %q", file)
+			success = false
+		}
+	}
+	return success
+}
+
+func verifyFileNotExists(t *testing.T, files []string) bool {
+	success := true
+	for _, file := range files {
+		if _, err := os.Stat(file); err == nil {
+			t.Errorf("Reason: File %q exists but it should not.", file)
+			success = false
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Reason: Unexpected error checking file %q: %v", file, err)
 			success = false
 		}
 	}

@@ -7,7 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -50,10 +51,6 @@ func FindAllStackConfigsInPathsForStack(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				if atmosConfig.Logs.Level == u.LogLevelTrace {
-					y, _ := u.ConvertToYAML(atmosConfig)
-					return nil, nil, false, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
-				}
 				return nil, nil, false, err
 			}
 			// If there's no error but still no matches, we continue to the next path
@@ -145,10 +142,6 @@ func FindAllStackConfigsInPaths(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				if atmosConfig.Logs.Level == u.LogLevelTrace {
-					y, _ := u.ConvertToYAML(atmosConfig)
-					return nil, nil, fmt.Errorf("%v\n\n\nCLI config:\n\n%v", err, y)
-				}
 				return nil, nil, err
 			}
 			// If there's no error but still no matches, we continue to the next path
