@@ -266,3 +266,123 @@ func TestDescribeStacksWithVariousEmptyStacks(t *testing.T) {
 	assert.NotEmpty(t, emptyStacks, "Should find at least one empty stack")
 	assert.NotEmpty(t, nonEmptyStacks, "Should find at least one non-empty stack")
 }
+
+// Helper function to count sections across all stacks.
+func countSections(stacks map[string]any) int {
+	totalSections := 0
+	for _, stackContent := range stacks {
+		stack, ok := stackContent.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		components, ok := stack["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		terraform, ok := components["terraform"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		for _, component := range terraform {
+			compMap, ok := component.(map[string]any)
+			if !ok {
+				continue
+			}
+			totalSections += len(compMap)
+		}
+	}
+	return totalSections
+}
+
+// Helper function to count sections for a specific component in a stack.
+func countComponentSections(stackData map[string]any, stack, component string) int {
+	stackMap, ok := stackData[stack].(map[string]any)
+	if !ok {
+		return 0
+	}
+
+	components, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return 0
+	}
+
+	terraform, ok := components["terraform"].(map[string]any)
+	if !ok {
+		return 0
+	}
+
+	comp, ok := terraform[component].(map[string]any)
+	if !ok {
+		return 0
+	}
+
+	return len(comp)
+}
+
+// Helper function to setup test configuration.
+func setupEmptySectionFilteringTest(includeEmpty bool) (schema.AtmosConfiguration, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return atmosConfig, err
+	}
+
+	atmosConfig.Describe.Settings.IncludeEmpty = &includeEmpty
+	return atmosConfig, nil
+}
+
+// Test filtering empty sections at the stack level.
+func TestDescribeStacksWithEmptySectionFilteringAllStacks(t *testing.T) {
+	// Setup with includeEmpty = false
+	atmosConfigFiltered, err := setupEmptySectionFilteringTest(false)
+	assert.Nil(t, err)
+
+	stacksWithFilteredSections, err := ExecuteDescribeStacks(atmosConfigFiltered, "", nil, nil, nil, false, false)
+	assert.Nil(t, err)
+
+	atmosConfigAll, err := setupEmptySectionFilteringTest(true)
+	assert.Nil(t, err)
+
+	stacksWithAllSections, err := ExecuteDescribeStacks(atmosConfigAll, "", nil, nil, nil, false, false)
+	assert.Nil(t, err)
+
+	filteredSectionCount := countSections(stacksWithFilteredSections)
+	allSectionCount := countSections(stacksWithAllSections)
+
+	assert.LessOrEqual(t, filteredSectionCount, allSectionCount,
+		"When includeEmpty is false, there should be fewer or equal number of sections")
+}
+
+// Test filtering empty sections at the component level.
+func TestDescribeStacksWithEmptySectionFilteringComponent(t *testing.T) {
+	stack := "tenant1-ue2-dev"
+	component := "infra/vpc"
+
+	atmosConfigFiltered, err := setupEmptySectionFilteringTest(false)
+	assert.Nil(t, err)
+
+	filteredStack, err := ExecuteDescribeStacks(atmosConfigFiltered, stack, []string{component}, nil, nil, false, false)
+	assert.Nil(t, err)
+
+	atmosConfigAll, err := setupEmptySectionFilteringTest(true)
+	assert.Nil(t, err)
+
+	completeStack, err := ExecuteDescribeStacks(atmosConfigAll, stack, []string{component}, nil, nil, false, false)
+	assert.Nil(t, err)
+
+	filteredCompSections := countComponentSections(filteredStack, stack, component)
+	allCompSections := countComponentSections(completeStack, stack, component)
+
+	assert.LessOrEqual(t, filteredCompSections, allCompSections,
+		"When includeEmpty is false, the component should have fewer or equal sections")
+}
+
+// Test filtering empty sections at the stack and component levels.
+func TestDescribeStacksWithEmptySectionFiltering(t *testing.T) {
+	TestDescribeStacksWithEmptySectionFilteringAllStacks(t)
+	TestDescribeStacksWithEmptySectionFilteringComponent(t)
+}
