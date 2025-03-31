@@ -43,7 +43,17 @@ type (`string`, `boolean`, `map`, `list`, etc.) before being assigned to its pla
 
 ## Supported File Formats
 
-The `!include` function supports the following local file formats:
+With `!include` it's possible to import multiple different file formats into Atmos configurations. These formats include:
+- HCL (e.g. `.tfvars` files)
+- YAML
+- JSON
+- Text (if none of the preceding formats are matched, it's loaded as plain text)
+
+<Note>Atmos does not look at file extensions and determines the type of file from magic strings. That means that even if you have a `.txt` file with JSON, it will be decoded as JSON.</Note>
+
+## Supported Sources
+
+The `!include` function supports the following local file sources:
   - absolute paths (e.g., `/Users/me/Documents/vars.yaml`)
   - paths relative to the current Atmos manifest where the `!include` function is executed (e.g., `./vars.yaml`, `../config/vars.yaml`)
   - paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file (e.g., `stacks/catalog/vpc/defaults.yaml`)
@@ -83,7 +93,7 @@ This has several important implications:
 
 ### Example: Referencing Different TFVAR Files Per Environment
 
-For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is.
+For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is into your [Stacks](/core-concepts/stacks/).
 You can continue managing your root modules as you always have, while gaining Atmos features like stack inheritance,
 environment promotion, and deep merging.
 
@@ -93,7 +103,7 @@ Let's say you already have environment-specific `.tfvars` files like:
 - `config/staging.tfvars`
 - `config/prod.tfvars`
 
-You can keep using these files by referencing them in your stack configurations:
+You can keep using these files in Atmos by referencing them in your stack configurations:
 
 <File title="stacks/org/dev/app.yaml">
 ```yaml
@@ -123,8 +133,8 @@ components:
 </File>
 
 This pattern allows you to plug Atmos into your existing Terraform/OpenTofu root modules with minimal changes — no need to
-duplicate or reformat your varfiles. You also unlock additional capabilities like listing all your stacks, leveraging
-layered configurations, stack inheritance, and consistent promotion of settings across environments.
+duplicate or reformat your varfiles. You also unlock additional capabilities like [listing all your stacks](/cli/commands/list/stacks) and [components](/cli/commands/list/components), leveraging
+layered configurations, [stack inheritance with imports](/core-concepts/stacks/imports), and consistent promotion of settings across environments.
 
 ## Usage
 
