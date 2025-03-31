@@ -1,4 +1,3 @@
-// exec_helpers_test.go
 package exec
 
 import (
@@ -106,7 +105,6 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 }
 
 // TestProcessTmplWithDatasourcesGomplate tests that a static template is rendered correctly.
-// Here we use a simple template with no dynamic interpolation.
 func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	mergedData := map[string]interface{}{
 		// No variables to interpolate.
