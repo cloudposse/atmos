@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -32,7 +33,12 @@ var ValidateStacksCmd = &cobra.Command{
 func init() {
 	ValidateStacksCmd.DisableFlagParsing = false
 
-	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
-
+	config.DefaultConfigHandler.AddConfig(ValidateStacksCmd, config.ConfigOptions{
+		FlagName:     "schemas-atmos-manifest",
+		EnvVar:       "ATMOS_SCHEMAS_ATMOS_MANIFEST",
+		Description:  "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file",
+		Key:          "schemas.atmos.manifest",
+		DefaultValue: "",
+	})
 	validateCmd.AddCommand(ValidateStacksCmd)
 }

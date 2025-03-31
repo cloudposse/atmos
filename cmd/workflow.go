@@ -75,4 +75,11 @@ func workflowCommandConfig() {
 		Key:          "workflows.base_path",
 		DefaultValue: "",
 	})
+	config.DefaultConfigHandler.AddConfig(workflowCmd, config.ConfigOptions{
+		FlagName:     "workflows-base-path",
+		EnvVar:       "ATMOS_WORKFLOWS_BASE_PATH",
+		Description:  "Base path for workflows configurations.",
+		Key:          "workflows.base_path",
+		DefaultValue: "",
+	})
 }

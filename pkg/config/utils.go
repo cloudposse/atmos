@@ -188,38 +188,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	DefaultConfigHandler.BindEnv("stacks.excluded_paths", "ATMOS_STACKS_EXCLUDED_PATHS")
 	DefaultConfigHandler.BindEnv("stacks.name_pattern", "ATMOS_STACKS_NAME_PATTERN")
 	DefaultConfigHandler.BindEnv("stacks.name_template", "ATMOS_STACKS_NAME_TEMPLATE")
-
-	atmosManifestJsonSchemaPath := os.Getenv("ATMOS_SCHEMAS_ATMOS_MANIFEST")
-	if len(atmosManifestJsonSchemaPath) > 0 {
-		log.Debug("Set atmosConfig.Schemas[\"atmos\"] using env", "ATMOS_SCHEMAS_ATMOS_MANIFEST", atmosManifestJsonSchemaPath)
-		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
-			Manifest: atmosManifestJsonSchemaPath,
-		}
-	}
-
-	tfAppendUserAgent := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT")
-	if len(tfAppendUserAgent) > 0 {
-		log.Debug("Found ENV", "ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT", tfAppendUserAgent)
-		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
-	}
-
-	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
-	if len(listMergeStrategy) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_SETTINGS_LIST_MERGE_STRATEGY=%s", listMergeStrategy))
-		atmosConfig.Settings.ListMergeStrategy = listMergeStrategy
-	}
-
-	versionEnabled := os.Getenv("ATMOS_VERSION_CHECK_ENABLED")
-	if len(versionEnabled) > 0 {
-		u.LogDebug(fmt.Sprintf("Found ENV var ATMOS_VERSION_CHECK_ENABLED=%s", versionEnabled))
-		enabled, err := strconv.ParseBool(versionEnabled)
-		if err != nil {
-			u.LogWarning(fmt.Sprintf("Invalid boolean value '%s' for ATMOS_VERSION_CHECK_ENABLED; using default.", versionEnabled))
-		} else {
-			atmosConfig.Version.Check.Enabled = enabled
-		}
-	}
-
+	DefaultConfigHandler.BindEnv("version.check.enabled", "ATMOS_VERSION_CHECK_ENABLED")
 	return nil
 }
 

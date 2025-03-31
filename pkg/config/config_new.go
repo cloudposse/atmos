@@ -63,6 +63,8 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts ConfigOptions) error 
 		flagSet.Int(flagName, defaultValue.(int), opts.Description)
 	case bool:
 		flagSet.Bool(flagName, defaultValue.(bool), opts.Description)
+	case []string:
+		flagSet.StringSlice(flagName, defaultValue.([]string), opts.Description)
 	default:
 		return fmt.Errorf("unsupported type for key %s", key)
 	}

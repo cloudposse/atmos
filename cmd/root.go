@@ -217,7 +217,20 @@ func init() {
 		Description:  "Base path for stacks configurations.",
 		DefaultValue: "",
 	})
-
+	config.DefaultConfigHandler.AddConfig(RootCmd, cfg.ConfigOptions{
+		FlagName:     "stacks-base-path",
+		EnvVar:       "ATMOS_STACKS_BASE_PATH",
+		Key:          "stacks.base_path",
+		Description:  "Base path for stacks configurations.",
+		DefaultValue: "",
+	})
+	config.DefaultConfigHandler.AddConfig(RootCmd, cfg.ConfigOptions{
+		FlagName:     "settings-list-merge-strategy",
+		EnvVar:       "ATMOS_SETTINGS_LIST_MERGE_STRATEGY",
+		Key:          "settings.list_merge_strategy",
+		Description:  "Specifies the merge strategy for lists in settings files. Supported values are `append`, `merge` and `replace`.",
+		DefaultValue: "replace",
+	})
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

@@ -35,6 +35,13 @@ func init() {
 		Key:          "components.helmfile.base_path",
 		DefaultValue: "",
 	})
+	config.DefaultConfigHandler.AddConfig(helmfileCmd, config.ConfigOptions{
+		FlagName:     "helmfile-base-path",
+		EnvVar:       "ATMOS_COMPONENTS_HELMFILE_BASE_PATH",
+		Description:  "Specifies the directory where Helmfile commands are executed.",
+		Key:          "components.helmfile.base_path",
+		DefaultValue: "",
+	})
 
 	AddStackCompletion(helmfileCmd)
 	helmfileCommandConfig()

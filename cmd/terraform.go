@@ -13,6 +13,7 @@ import (
 	terrerrors "github.com/cloudposse/atmos/pkg/errors"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // terraformCmd represents the base command for all terraform sub-commands
@@ -28,6 +29,13 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	terraformCmd.DisableFlagParsing = true
 	terraformCmd.PersistentFlags().Bool("", false, doubleDashHint)
+	addTerraformCommandConfig()
+	AddStackCompletion(terraformCmd)
+	attachTerraformCommands(terraformCmd)
+	RootCmd.AddCommand(terraformCmd)
+}
+
+func addTerraformCommandConfig() {
 	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
 		FlagName:     "terraform-command",
 		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_COMMAND",
@@ -37,6 +45,13 @@ func init() {
 	})
 	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
 		FlagName:     "terraform-dir",
+		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_BASE_PATH",
+		Description:  "Specifies the directory where Terraform commands are executed.",
+		Key:          "components.terraform.base_path",
+		DefaultValue: "",
+	})
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		FlagName:     "terraform-base-path",
 		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_BASE_PATH",
 		Description:  "Specifies the directory where Terraform commands are executed.",
 		Key:          "components.terraform.base_path",
@@ -65,10 +80,37 @@ func init() {
 		Description:  "Automatically generate a backend file for Terraform commands",
 		DefaultValue: false,
 	})
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:         "components.terraform.append_user_agent",
+		FlagName:    "append-user-agent",
+		EnvVar:      "ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT",
+		Description: fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: `Atmos/%s (Cloud Posse; +https://atmos.tools)`. This flag works with almost all commands.", version.Version),
+	})
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:          "components.terraform.skip_init",
+		FlagName:     "skip-init",
+		Description:  "Skip running `terraform init` before executing terraform commands",
+		DefaultValue: false,
+	})
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:          "components.terraform.process_templates",
+		FlagName:     "process-templates",
+		Description:  "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands",
+		DefaultValue: true,
+	})
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:          "components.terraform.process_functions",
+		FlagName:     "process-functions",
+		Description:  "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands",
+		DefaultValue: true,
+	})
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:          "components.terraform.skip",
+		FlagName:     "skip",
+		Description:  "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands",
+		DefaultValue: []string{},
+	})
 
-	AddStackCompletion(terraformCmd)
-	attachTerraformCommands(terraformCmd)
-	RootCmd.AddCommand(terraformCmd)
 }
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
