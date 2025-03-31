@@ -7,6 +7,7 @@ description: Download local or remote files from different sources, and assign t
 
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
+import Note from "@site/src/components/Note"
 
 <Intro>
     The `!include` Atmos YAML function allows downloading local or remote files from different sources,
@@ -44,12 +45,15 @@ type (`string`, `boolean`, `map`, `list`, etc.) before being assigned to its pla
 ## Supported File Formats
 
 With `!include` it's possible to import multiple different file formats into Atmos configurations. These formats include:
-- HCL (e.g. `.tfvars` files)
+- HCL (e.g., `.tfvars` files)
 - YAML
 - JSON
 - Text (if none of the preceding formats are matched, it's loaded as plain text)
 
-<Note>Atmos does not look at file extensions and determines the type of file from magic strings. That means that even if you have a `.txt` file with JSON, it will be decoded as JSON.</Note>
+<Note>
+    Atmos does not look at file extensions and determines the type of file from the file content.
+    That means that even if you have a `.txt` file with JSON, it will be decoded as JSON.
+</Note>
 
 ## Supported Sources
 
@@ -72,6 +76,9 @@ To download remote files from different sources, the `!include` function uses [`
 - `oci` - Open Container Initiative (OCI) images
 - `scp` - Secure Copy Protocol for SSH-based transfers
 - `sftp` - SSH File Transfer Protocol
+- GitHub URLs, such as `github.com/cloudposse/atmos`, are automatically changed to Git protocol over HTTP
+- GitLab URLs are automatically changed to Git protocol over HTTP
+- BitBucket URLs are automatically changed to a Git or Mercurial protocol using the BitBucket API
 
 ## Key Benefits of `!include`
 
@@ -133,8 +140,9 @@ components:
 </File>
 
 This pattern allows you to plug Atmos into your existing Terraform/OpenTofu root modules with minimal changes — no need to
-duplicate or reformat your varfiles. You also unlock additional capabilities like [listing all your stacks](/cli/commands/list/stacks) and [components](/cli/commands/list/components), leveraging
-layered configurations, [stack inheritance with imports](/core-concepts/stacks/imports), and consistent promotion of settings across environments.
+duplicate or reformat your varfiles. You also unlock additional capabilities like [listing all your stacks](/cli/commands/list/stacks)
+and [components](/cli/commands/list/components), leveraging layered configurations, [stack inheritance with imports](/core-concepts/stacks/imports),
+and consistent promotion of settings across environments.
 
 ## Usage
 
@@ -160,6 +168,135 @@ The `!include` function can be called with either one or two parameters:
     <dt>`yq-expression`</dt>
     <dd>(Optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the file</dd>
 </dl>
+
+## Remote Includes
+
+Atmos uses [`go-getter`](https://github.com/hashicorp/go-getter)
+(used by [Terraform](https://www.terraform.io/) for downloading modules) to download remote files from different sources.
+
+### Downloading from OCI Registries
+
+The following example shows how to include a file from a public AWS ECR registry:
+
+  ```yaml
+    components:
+      terraform:
+        my-component:
+          vars: !include oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/my-component.tfvars
+  ```
+
+### Downloading from SSH
+
+Atmos supports SSH for accessing non-public Git repositories, which is convenient for local development. Atmos will use any installed SSH keys automatically.
+
+:::tip
+In automated systems like GitHub Actions, we recommend sticking with the `https://` scheme. Atmos will automatically inject the `GITHUB_TOKEN`.
+:::
+
+There are two primary ways to specify an SSH source.
+
+#### SCP-style Sources
+
+Atmos supports traditional SCP-style sources, which use a colon to separate the host from the repository, like this:
+
+```shell
+git::git@github.com:org/repo.git
+```
+
+Atmos rewrites this URL to the following format:
+
+```shell
+git::ssh://git@github.com:org/repo.git
+```
+
+If no username is supplied and the host is `github.com`, Atmos automatically injects the default username `git`.
+
+#### Explicit SSH Sources
+
+When the `ssh://` scheme is explicitly specified, the URL is used as provided, and no rewriting occurs.
+
+For example:
+
+```shell
+git::ssh://git@github.com:org/repo.git
+```
+
+#### Important Notes
+
+- The following URL is **invalid** because `go-getter` misinterprets `github.com:` as a URL scheme (like `http:` or `git:`), causing a parsing error:
+```shell
+github.com:org/repo.git
+```
+
+- When a URL has no scheme, Atmos defaults to **HTTPS** and injects credentials if available.
+```shell
+github.com/org/repo.git
+```
+
+### Git over HTTPS Downloading
+
+Atmos supports remote files downloading using **Git over HTTPS**.
+
+For example:
+
+```
+github.com/org/repo.git
+```
+
+is automatically resolved as:
+
+```
+git::https://github.com/org/repo.git
+```
+
+### Authentication & Token Usage for HTTPS
+
+Atmos prioritizes authentication credentials based on predefined environment variables. The priority order for each provider is:
+
+#### GitHub
+<dl>
+    <dt>`ATMOS_GITHUB_TOKEN`</dt>
+    <dd>Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits.</dd>
+
+    <dt>`GITHUB_TOKEN`</dt>
+    <dd>Used as a fallback if `ATMOS_GITHUB_TOKEN` is not set.</dd>
+</dl>
+
+**Default Username for HTTPS:** `x-access-token`
+
+#### Bitbucket
+<dl>
+    <dt>`ATMOS_BITBUCKET_TOKEN`</dt>
+    <dd>Bitbucket app password for API requests; used to avoid rate limits. When both `ATMOS_BITBUCKET_TOKEN` and `BITBUCKET_TOKEN` are defined, the former prevails.</dd>
+
+    <dt>`BITBUCKET_TOKEN`</dt>
+    <dd>Used as a fallback when `ATMOS_BITBUCKET_TOKEN` is not set.</dd>
+
+    <dt>`ATMOS_BITBUCKET_USERNAME`</dt>
+    <dd>Bitbucket username for authentication. Takes precedence over `BITBUCKET_USERNAME`.</dd>
+
+    <dt>`BITBUCKET_USERNAME`</dt>
+    <dd>Used as a fallback when `ATMOS_BITBUCKET_USERNAME` is not set. Bitbucket requires a valid username and does not accept dummy values like `x-access-token`.</dd>
+</dl>
+
+#### GitLab
+<dl>
+    <dt>`ATMOS_GITLAB_TOKEN`</dt>
+    <dd>Personal Access Token (PAT) for GitLab authentication. Takes precedence over `GITLAB_TOKEN`.</dd>
+
+    <dt>`GITLAB_TOKEN`</dt>
+    <dd>Used as a fallback if `ATMOS_GITLAB_TOKEN` is not set.</dd>
+</dl>
+
+**Default Username for HTTPS:** `"oauth2"`
+
+### How HTTPS URLs Are Resolved
+
+When resolving Git sources, Atmos follows these rules:
+
+1. If a **full HTTPS URL** is provided (`git::https://github.com/...`), it is used as-is. No token data is injected, even if environment variables are set.
+2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`, and if a token is set, it is injected into the URL.
+3. If a **username and repository name** are provided in SCP format (`git@github.com:org/repo.git`), it is rewritten as an SSH URL.
 
 ## Examples
 
