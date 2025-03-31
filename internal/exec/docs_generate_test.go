@@ -42,7 +42,7 @@ func TestGetTerraformSource(t *testing.T) {
 
 	// Create a valid subdirectory.
 	validDir := filepath.Join(baseDir, "valid")
-	if err := os.Mkdir(validDir, 0755); err != nil {
+	if err := os.Mkdir(validDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,7 +94,7 @@ func TestFindSingleFileInDir(t *testing.T) {
 	}
 	defer os.RemoveAll(oneFileDir)
 	filePath := filepath.Join(oneFileDir, "file.txt")
-	if err := os.WriteFile(filePath, []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, err := findSingleFileInDir(oneFileDir)
@@ -113,10 +113,10 @@ func TestFindSingleFileInDir(t *testing.T) {
 	defer os.RemoveAll(multiDir)
 	f1 := filepath.Join(multiDir, "file1.txt")
 	f2 := filepath.Join(multiDir, "file2.txt")
-	if err := os.WriteFile(f1, []byte("one"), 0644); err != nil {
+	if err := os.WriteFile(f1, []byte("one"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(f2, []byte("two"), 0644); err != nil {
+	if err := os.WriteFile(f2, []byte("two"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err = findSingleFileInDir(multiDir)
