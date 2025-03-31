@@ -37,8 +37,8 @@ All other files are returned unchanged, allowing you, for example, to include te
 [Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests.
 
 Atmos resolves the `!include` functions during the initial loading of YAML files from the local filesystem or remote sources,
-injecting the contents of the referenced files directly into the current location. This applies to all Atmos configurations,
-including CLI and stack configs. Included data (JSON, YAML, HCL, or text) is parsed and converted into the appropriate
+injecting the contents of the referenced files directly into the current location. This applies to all stack configs.
+Included data (JSON, YAML, HCL, or text) is parsed and converted into the appropriate
 type (`string`, `boolean`, `map`, `list`, etc.) before being assigned to its place in the configuration.
 
 ## Supported File Formats
@@ -122,7 +122,7 @@ components:
 ```
 </File>
 
-This pattern allows you to plug Atmos into your existing Terraform root modules with minimal changes — no need to
+This pattern allows you to plug Atmos into your existing Terraform/OpenTofu root modules with minimal changes — no need to
 duplicate or reformat your varfiles. You also unlock additional capabilities like listing all your stacks, leveraging
 layered configurations, stack inheritance, and consistent promotion of settings across environments.
 
