@@ -25,6 +25,19 @@ import (
 
 const DefaultDirPerm os.FileMode = 0o700
 
+// TemplateRenderer is an interface for rendering templates.
+type TemplateRenderer interface {
+	Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error)
+}
+
+// defaultTemplateRenderer is the production implementation of TemplateRenderer.
+type defaultTemplateRenderer struct{}
+
+// Render delegates rendering to the existing ProcessTmplWithDatasourcesGomplate function.
+func (d defaultTemplateRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
+	return ProcessTmplWithDatasourcesGomplate(tmplName, tmplValue, mergedData, ignoreMissing)
+}
+
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate readme' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
@@ -56,8 +69,8 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 		log.Debug("No 'docs.generate.readme.template' defined, generating minimal readme.")
 	}
 
-	// Generate a single README in the targetDir.
-	return generateReadme(&rootConfig, targetDir, &docsGenerate)
+	// Generate a single README in the targetDir using the default renderer.
+	return generateReadme(&rootConfig, targetDir, &docsGenerate, defaultTemplateRenderer{})
 }
 
 // mergeInputs merges all YAML inputs defined in docsGenerate.Input.
@@ -134,12 +147,13 @@ func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.
 	return "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
 }
 
-// generateSingleReadme merges data from docsGenerate.Input, runs terraform-docs if needed,
-// and writes out a final README.
+// generateReadme merges data from docsGenerate.Input, runs terraform-docs if needed,
+// renders the final README using the provided renderer, and writes out the file.
 func generateReadme(
 	atmosConfig *schema.AtmosConfiguration,
 	dir string,
 	docsGenerate *schema.DocsGenerateReadme,
+	renderer TemplateRenderer,
 ) error {
 	// 1) Merge YAML inputs.
 	mergedData, err := mergeInputs(atmosConfig, dir, docsGenerate)
@@ -155,8 +169,8 @@ func generateReadme(
 	// 3) Fetch the template.
 	chosenTemplate := fetchTemplate(atmosConfig, docsGenerate, dir)
 
-	// 4) Render final README with gomplate.
-	rendered, err := ProcessTmplWithDatasourcesGomplate("docs-generate", chosenTemplate, mergedData, true)
+	// 4) Render final README using the injected renderer.
+	rendered, err := renderer.Render("docs-generate", chosenTemplate, mergedData, true)
 	if err != nil {
 		return fmt.Errorf("failed to render template with datasources: %w", err)
 	}
@@ -226,7 +240,7 @@ func runTerraformDocs(dir string, settings *schema.TerraformDocsReadmeSettings) 
 
 	var formatter Formatter
 
-	// Assign the correct formatter based on settings.Format
+	// Assign the correct formatter based on settings.Format.
 	switch settings.Format {
 	case "markdown table":
 		formatter = tfdocsFormat.NewMarkdownTable(tfdocsPrint.DefaultConfig())
@@ -240,7 +254,7 @@ func runTerraformDocs(dir string, settings *schema.TerraformDocsReadmeSettings) 
 		formatter = tfdocsFormat.NewMarkdownTable(tfdocsPrint.DefaultConfig())
 	}
 
-	// Generate content and return it
+	// Generate content and return it.
 	if err := formatter.Generate(module); err != nil {
 		return "", err
 	}
@@ -263,7 +277,7 @@ func downloadSource(
 	if err != nil {
 		return "", "", fmt.Errorf("%w: %v", ErrCreateTempDir, err)
 	}
-	// Ensure directory permissions are restricted
+	// Ensure directory permissions are restricted.
 	if err := os.Chmod(tempDir, DefaultDirPerm); err != nil {
 		return "", "", fmt.Errorf("%w: %v", ErrSetTempDirPermissions, err)
 	}
@@ -282,12 +296,7 @@ func downloadSource(
 	return downloadedPath, tempDir, nil
 }
 
-// go-getter is used to download files as per provided path by user and the function below is a check that user provided a link to a file or a single file in folder.
-// Not a folder with multiple files, i.e. as of right now we dont have a logic to take just one relevant template or yml file from the folder downloaded.
-// So this is why an extra check.
-// To be decided later: this could be removed
-// later to introdce simpler logic (like trust users to provide a single file, etc).
-
+// findSingleFileInDir walks the given directory and returns the path of a single file if found.
 func findSingleFileInDir(dir string) (string, error) {
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, werr error) error {
