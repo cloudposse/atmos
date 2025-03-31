@@ -8,7 +8,7 @@ Usage:
 
 Flags:
 
-        --config stringSlice                  Path to the configuration file
+        --config stringSlice                  Paths to the configuration files
                                               (default
                                               [.editorconfig,.editorconfig-checker.json,.ecrc])
 
