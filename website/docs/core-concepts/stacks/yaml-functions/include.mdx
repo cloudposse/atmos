@@ -13,28 +13,61 @@ import File from '@site/src/components/File'
     and assigning the file contents or individual values to the sections in Atmos stack manifests.
 </Intro>
 
-Atmos resolves the `!include` functions during the initial phase of YAML stack manifest processing.
-At this stage, it evaluates and substitutes the contents of included files, converting them into the appropriate data
-types (e.g., string, boolean, map, or list) before assigning them to the corresponding sections or attributes in the
-Atmos stack configurations.
+Atmos resolves `!include` functions during the initial loading of YAML files from the local filesystem or remote sources, injecting the contents of the referenced files directly into the current location. This applies to all Atmos configurations, including CLI and stack configs. Included data (JSON, YAML, HCL, or text) is parsed and converted into the appropriate type (`string`, `boolean`, `map`, `list`, etc.) before being assigned to its place in the configuration.
 
-Key implications of this behavior:
+## Key Benefits of `!include`
 
-- The `!include` functions facilitate stack configuration reuse by enabling modularization of common configurations.
-  These configurations can reside in separate local or remote files and be referenced in multiple stack definitions,
-  promoting a [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) approach.
+The `!include` directive enables modular, reusable configuration patterns across all Atmos YAML files—both CLI and stack configurations. This has several important implications:
 
-- The functions preprocess YAML files before Atmos resolves stacks and components.
-  This enables configuration [Inheritance](/core-concepts/stacks/inheritance/) and deep-merging of stack parameters
-  after the `!include` directives are expanded.
+- **Modularization & Reuse**  
+  `!include` supports a [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) approach by allowing shared configuration fragments to be stored in local or remote files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
 
-- When transitioning from plain Terraform/OpenTofu to Atmos, `!include` allows seamless reuse of existing variable
-  files (`varfiles`) by referencing them in the `vars` sections of Atmos components:
+- **Preprocessing for Inheritance**  
+  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-merging behaviors using fully expanded configuration data.
 
-  ```yaml
-    my-component:
-      vars: !include my-component.tfvars
-  ```
+- **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**  
+  If you're already managing your root modules using `.tfvars` files—for example, separate files for `dev`, `staging`, and `prod`—you can reference them directly in Atmos using `!include`. This makes it easy to adopt Atmos without having to translate all variables into Atmos stacks.
+
+### Example: Referencing Different TFVAR Files Per Environment
+
+For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is. You can continue managing your root modules as you always have, while gaining Atmos features like stack inheritance, environment promotion, and deep merges.
+
+Let's say you already have environment-specific `.tfvars` files like:
+
+- `config/dev.tfvars`
+- `config/staging.tfvars`
+- `config/prod.tfvars`
+
+You can keep using these files by referencing them in your stack configurations:
+
+<File title="stacks/org/dev/app.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars: !include config/dev.tfvars
+```
+</File>
+
+<File title="stacks/org/staging/app.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars: !include config/staging.tfvars
+```
+</File>
+
+<File title="stacks/org/prod/app.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars: !include config/prod.tfvars
+```
+</File>
+
+This pattern allows you to plug Atmos into your existing Terraform root modules with minimal changes—no need to duplicate or reformat your varfiles. You also unlock additional capabilities like listing all your stacks, leveraging layered configurations, stack inheritance, and consistent promotion of settings across environments.
 
 ## Usage
 
