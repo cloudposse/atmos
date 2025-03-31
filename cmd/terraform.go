@@ -103,7 +103,6 @@ func addTerraformCommandConfig() {
 		Description:  "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands",
 		DefaultValue: []string{},
 	})
-
 }
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {

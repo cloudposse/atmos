@@ -268,7 +268,6 @@ Arguments:
 
 // attachTerraformCommands attaches static Terraform commands to a provided parent command
 func attachTerraformCommands(parentCmd *cobra.Command) {
-
 	commands := getTerraformCommands()
 
 	for _, cmd := range commands {

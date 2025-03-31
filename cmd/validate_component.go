@@ -65,5 +65,4 @@ func validateComponentCommandConfig() {
 		Key:          "schemas.opa.base_path",
 		DefaultValue: "",
 	})
-
 }
