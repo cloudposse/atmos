@@ -13,24 +13,79 @@ import File from '@site/src/components/File'
     and assigning the file contents or individual values to the sections in Atmos stack manifests.
 </Intro>
 
-Atmos resolves `!include` functions during the initial loading of YAML files from the local filesystem or remote sources, injecting the contents of the referenced files directly into the current location. This applies to all Atmos configurations, including CLI and stack configs. Included data (JSON, YAML, HCL, or text) is parsed and converted into the appropriate type (`string`, `boolean`, `map`, `list`, etc.) before being assigned to its place in the configuration.
+## Description
+
+The YAML standard provides [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), that allow you
+to reuse and reference pieces of your YAML file, making it more efficient and reducing duplication.
+
+Atmos supports YAML anchors and aliases, but the biggest limitation is that they are only available within the file in
+which they are defined. You cannot reuse anchors across different files.
+
+The `!include` Atmos YAML function overcomes this limitation by allowing you to include the content or individual values
+from different local and remote sources. The `!include` function also provides the following features:
+
+- Supports local files with absolute and relative paths.
+
+- Supports the remote protocols provided by the [`go-getter`](https://github.com/hashicorp/go-getter) library.
+
+- Allows you to use [YQ](https://mikefarah.gitbook.io/yq) expressions to query and filter the content of the files to retrieve individual values.
+
+- Automatically detects the format of the files regardless of the file extensions. It supports files in JSON, YAML
+and [HCL](https://github.com/hashicorp/hcl) (`tfvars`) formats, and automatically converts them into correct
+YAML structures (simple and complex types like maps and lists are supported).
+All other files are returned unchanged, allowing you, for example, to include text and
+[Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests.
+
+Atmos resolves the `!include` functions during the initial loading of YAML files from the local filesystem or remote sources,
+injecting the contents of the referenced files directly into the current location. This applies to all Atmos configurations,
+including CLI and stack configs. Included data (JSON, YAML, HCL, or text) is parsed and converted into the appropriate
+type (`string`, `boolean`, `map`, `list`, etc.) before being assigned to its place in the configuration.
+
+## Supported File Formats
+
+The `!include` function supports the following local file formats:
+  - absolute paths (e.g., `/Users/me/Documents/vars.yaml`)
+  - paths relative to the current Atmos manifest where the `!include` function is executed (e.g., `./vars.yaml`, `../config/vars.yaml`)
+  - paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file (e.g., `stacks/catalog/vpc/defaults.yaml`)
+
+To download remote files from different sources, the `!include` function uses [`go-getter`](https://github.com/hashicorp/go-getter)
+(used by [Terraform](https://www.terraform.io/) for downloading modules) and supports the following protocols:
+
+- `tar` - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
+- `zip` - Zip files
+- `http` - HTTP URLs
+- `https` - HTTPS URLs
+- `git` - Git repositories, which can be accessed via HTTPS or SSH
+- `hg` - Mercurial repositories, accessed via HTTP/S or SSH
+- `s3` - Amazon S3 bucket URLs
+- `gcs` - Google Cloud Storage URLs
+- `oci` - Open Container Initiative (OCI) images
+- `scp` - Secure Copy Protocol for SSH-based transfers
+- `sftp` - SSH File Transfer Protocol
 
 ## Key Benefits of `!include`
 
-The `!include` directive enables modular, reusable configuration patterns across all Atmos YAML files—both CLI and stack configurations. This has several important implications:
+The `!include` directive enables modular, reusable configuration patterns across all Atmos YAML files — both CLI and stack configurations.
+This has several important implications:
 
 - **Modularization & Reuse**  
-  `!include` supports a [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) approach by allowing shared configuration fragments to be stored in local or remote files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
+  `!include` supports a [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) approach by allowing shared configuration fragments to be stored in local or remote
+   files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
 
 - **Preprocessing for Inheritance**  
-  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-merging behaviors using fully expanded configuration data.
+  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-mergin
+  behaviors using fully expanded configuration data.
 
 - **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**  
-  If you're already managing your root modules using `.tfvars` files—for example, separate files for `dev`, `staging`, and `prod`—you can reference them directly in Atmos using `!include`. This makes it easy to adopt Atmos without having to translate all variables into Atmos stacks.
+  If you're already managing your root modules using `.tfvars` files — for example, separate files for `dev`, `staging`,
+  and `prod` — you can reference them directly in Atmos using `!include`. This makes it easy to adopt Atmos without
+  having to translate all variables into Atmos stacks.
 
 ### Example: Referencing Different TFVAR Files Per Environment
 
-For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is. You can continue managing your root modules as you always have, while gaining Atmos features like stack inheritance, environment promotion, and deep merges.
+For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is.
+You can continue managing your root modules as you always have, while gaining Atmos features like stack inheritance,
+environment promotion, and deep merging.
 
 Let's say you already have environment-specific `.tfvars` files like:
 
@@ -67,7 +122,9 @@ components:
 ```
 </File>
 
-This pattern allows you to plug Atmos into your existing Terraform root modules with minimal changes—no need to duplicate or reformat your varfiles. You also unlock additional capabilities like listing all your stacks, leveraging layered configurations, stack inheritance, and consistent promotion of settings across environments.
+This pattern allows you to plug Atmos into your existing Terraform root modules with minimal changes — no need to
+duplicate or reformat your varfiles. You also unlock additional capabilities like listing all your stacks, leveraging
+layered configurations, stack inheritance, and consistent promotion of settings across environments.
 
 ## Usage
 
@@ -136,7 +193,7 @@ components:
 import: !include config/import.yaml
 
 # Download the remote file using `go-getter` and assign the `components.terraform.component-1.settings` section
-# from the file to the `settings` section` in the current stack
+# from the file to the `settings` section in the current stack
 settings: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
 
 components:
@@ -159,57 +216,6 @@ components:
       vars: !include config/vars.yaml
 ```
 </File>
-
-## Description
-
-The YAML standard provides [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), that allow you
-to reuse and reference pieces of your YAML file, making it more efficient and reducing duplication.
-
-Atmos supports YAML anchors and aliases, but the biggest limitation is that they are only available within the file in
-which they are defined. You cannot reuse anchors across different files.
-
-The `!include` Atmos YAML function overcomes this limitation by allowing you to include the content or individual values
-from different local and remote sources. The `!include` function also provides the following features:
-
-- Supports local files with absolute and relative paths.
-
-- Supports the remote protocols provided by the [`go-getter`](https://github.com/hashicorp/go-getter) library.
-
-- Allows you to use [YQ](https://mikefarah.gitbook.io/yq) expressions to query and filter the content of the files to retrieve individual values.
-
-- Automatically detects the format of the files regardless of the file extensions. It supports files in JSON, YAML
-  and [HCL](https://github.com/hashicorp/hcl) (`tfvars`) formats, and automatically converts them into correct
-  YAML structures (simple and complex types like maps and lists are supported).
-  All other files are returned unchanged, allowing you, for example, to include text and
-  [Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests.
-
-## Supported File Protocols
-
-The `!include` function supports the following local file paths:
-  - absolute paths (e.g., `/Users/me/Documents/values.yaml`)
-  - paths relative to the current Atmos manifest where the `!include` function is executed (e.g., `./values.yaml`, `../config/values.yaml`)
-  - paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file (e.g., `stacks/catalog/vpc/defaults.yaml`)
-
-To download remote files from different sources, the `!include` function uses [`go-getter`](https://github.com/hashicorp/go-getter)
-(used by [Terraform](https://www.terraform.io/) for downloading modules) and supports the following protocols:
-
-- `tar` - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
-- `zip` - Zip files
-- `http` - HTTP URLs
-- `https` - HTTPS URLs
-- `git` - Git repositories, which can be accessed via HTTPS or SSH
-- `hg` - Mercurial repositories, accessed via HTTP/S or SSH
-- `s3` - Amazon S3 bucket URLs
-- `gcs` - Google Cloud Storage URLs
-- `oci` - Open Container Initiative (OCI) images
-- `scp` - Secure Copy Protocol for SSH-based transfers
-- `sftp` - SSH File Transfer Protocol
-
-:::tip
-You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!include` YAML function parameters.
-Atmos processes the templates first, and then executes the `!include` function, allowing you to provide the parameters to
-the function dynamically.
-:::
 
 ## Using YQ Expressions to retrieve individual values from files
 
