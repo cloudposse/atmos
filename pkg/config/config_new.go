@@ -150,3 +150,12 @@ func (c *ConfigHandler) GetBool(key string) bool {
 func (c *ConfigHandler) SetDefault(key string, value any) {
 	c.v.SetDefault(key, value)
 }
+
+func (c *ConfigHandler) processEnvVars() {
+	c.v.BindEnv("stacks.included_paths", "ATMOS_STACKS_INCLUDED_PATHS")
+	c.v.BindEnv("stacks.excluded_paths", "ATMOS_STACKS_EXCLUDED_PATHS")
+	c.v.BindEnv("stacks.name_pattern", "ATMOS_STACKS_NAME_PATTERN")
+	c.v.BindEnv("stacks.name_template", "ATMOS_STACKS_NAME_TEMPLATE")
+	c.v.BindEnv("version.check.enabled", "ATMOS_VERSION_CHECK_ENABLED")
+	return
+}

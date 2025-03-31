@@ -58,13 +58,6 @@ func addTerraformCommandConfig() {
 		DefaultValue: "",
 	})
 	config.DefaultConfigHandler.BindEnv("components.terraform.apply_auto_approve", "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE")
-	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
-		Key:          "components.terraform.deploy_run_init",
-		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT",
-		FlagName:     "deploy-run-init",
-		Description:  "Run `terraform init` before running `terraform apply`",
-		DefaultValue: false,
-	})
 
 	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
 		Key:          "components.terraform.init_run_config",

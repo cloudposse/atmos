@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/spf13/cobra"
 )
@@ -296,7 +298,13 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 var commandMaps = map[string]func(cmd *cobra.Command){
 	"deploy": func(cmd *cobra.Command) {
-		cmd.PersistentFlags().Bool("deploy-run-init", false, "If set atmos will run `terraform init` before executing the command")
+		config.DefaultConfigHandler.AddConfig(cmd, cfg.ConfigOptions{
+			Key:          "components.terraform.deploy_run_init",
+			EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT",
+			FlagName:     "deploy-run-init",
+			Description:  "Run `terraform init` before running `terraform apply`",
+			DefaultValue: false,
+		})
 		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
 		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
 	},
