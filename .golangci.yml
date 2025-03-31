@@ -50,7 +50,7 @@ linters-settings:
     # Forbid specific function calls
     forbid:
       - p: "os\\.Getenv"
-        msg: "Use viper in config package instead of os.Getenv"
+        msg: "Use `viper.BindEnv` for new environment variables instead of `os.Getenv`"
 
   funlen:
     lines: 60 # Maximum number of lines per function
