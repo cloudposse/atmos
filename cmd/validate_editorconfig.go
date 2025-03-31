@@ -179,7 +179,7 @@ func checkVersion(config config.Config) error {
 
 // addPersistentFlags adds flags to the root command
 func addPersistentFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringSliceVar(&configFilePaths, "config", defaultConfigFileNames, "Path to the configuration file")
+	cmd.PersistentFlags().StringSliceVar(&configFilePaths, "config", defaultConfigFileNames, "Paths to the configuration files")
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
 	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "creates an initial configuration")
 
