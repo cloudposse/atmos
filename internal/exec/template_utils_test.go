@@ -10,7 +10,6 @@ import (
 
 // TestCreateTempDirectory verifies that a temporary directory is created with the expected permissions.
 func TestCreateTempDirectory(t *testing.T) {
-
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission check on Windows")
 	}
