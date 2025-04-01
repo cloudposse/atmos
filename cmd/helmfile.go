@@ -54,7 +54,6 @@ func helmfileCommandConfig() {
 	config.DefaultConfigHandler.BindEnv("components.helmfile.kubeconfig_path", "ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH")
 	config.DefaultConfigHandler.BindEnv("components.helmfile.helm_aws_profile_pattern", "ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN")
 	config.DefaultConfigHandler.BindEnv("components.helmfile.cluster_name_pattern", "ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN")
-
 }
 
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
