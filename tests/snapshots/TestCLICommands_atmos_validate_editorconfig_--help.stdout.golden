@@ -44,7 +44,7 @@ Flags:
         --ignore-defaults                     Ignore default excludes (default
                                               false)
 
-        --init                                creates an initial configuration
+        --init                                Create an initial configuration
                                               (default false)
 
         --no-color                            Don't print colors (default
