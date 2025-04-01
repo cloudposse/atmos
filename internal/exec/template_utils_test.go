@@ -111,6 +111,7 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 
 // TestProcessTmplWithDatasourcesGomplate tests that a static template is rendered correctly.
 func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
+	// Test case 1: Static content with no interpolation
 	mergedData := map[string]interface{}{
 		// No variables to interpolate.
 	}
@@ -122,5 +123,35 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	// For a static template with no interpolation, the output should equal the template.
 	if result != tmpl {
 		t.Errorf("Expected result to be %q, got %q", tmpl, result)
+	}
+
+	// Test case 2: Template with variable interpolation
+	mergedData = map[string]interface{}{
+		"name": "Atmos",
+	}
+	tmpl = "Hello {{ .name }}!"
+	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	if err != nil {
+		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
+	}
+	expected := "Hello Atmos!"
+	if result != expected {
+		t.Errorf("Expected result to be %q, got %q", expected, result)
+	}
+
+	// Test case 3: Nested variable access
+	mergedData = map[string]interface{}{
+		"config": map[string]interface{}{
+			"version": "1.0.0",
+		},
+	}
+	tmpl = "Version: {{ .config.version }}"
+	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	if err != nil {
+		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
+	}
+	expected = "Version: 1.0.0"
+	if result != expected {
+		t.Errorf("Expected result to be %q, got %q", expected, result)
 	}
 }
