@@ -129,7 +129,8 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	mergedData = map[string]interface{}{
 		"name": "Atmos",
 	}
-	tmpl = "Hello {{ .name }}!"
+	tmpl = " {{- $data := (ds \"config\") -}}\n\nHello {{ $data.name | default \"Project Title\" }}!"
+
 	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
@@ -145,7 +146,8 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 			"version": "1.0.0",
 		},
 	}
-	tmpl = "Version: {{ .config.version }}"
+	tmpl = "{{- $data := (ds \"config\") -}}\n\nVersion: {{ $data.config.version }}"
+
 	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
