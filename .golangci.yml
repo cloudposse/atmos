@@ -46,6 +46,12 @@ linters-settings:
   dupl:
     threshold: 150 # Tokens count to trigger issue.
 
+  forbidigo:
+    # Forbid specific function calls
+    forbid:
+      - p: "os\\.Getenv"
+        msg: "Use `viper.BindEnv` for new environment variables instead of `os.Getenv`"
+
   funlen:
     lines: 60 # Maximum number of lines per function
     statements: 40 # Maximum number of statements per function

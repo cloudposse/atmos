@@ -8,7 +8,9 @@ Usage:
 
 Flags:
 
-        --config string                       Path to the configuration file
+        --config stringSlice                  Paths to the configuration files
+                                              (default
+                                              [.editorconfig,.editorconfig-checker.json,.ecrc])
 
         --disable-end-of-line                 Disable end-of-line check (default
                                               false)
@@ -42,7 +44,7 @@ Flags:
         --ignore-defaults                     Ignore default excludes (default
                                               false)
 
-        --init                                creates an initial configuration
+        --init                                Create an initial configuration
                                               (default false)
 
         --no-color                            Don't print colors (default
