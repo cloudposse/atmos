@@ -41,7 +41,7 @@ func New() (*ConfigHandler, error) {
 }
 
 // AddConfig adds a configuration parameter to both Cobra and Viper with options
-func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts ConfigOptions) error {
+func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts ConfigOptions) {
 	key := opts.Key
 	defaultValue := opts.DefaultValue
 	// Set default value in Viper
@@ -66,12 +66,12 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts ConfigOptions) error 
 	case []string:
 		flagSet.StringSlice(flagName, defaultValue.([]string), opts.Description)
 	default:
-		return fmt.Errorf("unsupported type for key %s", key)
+		panic(fmt.Errorf("unsupported type for key %s", key))
 	}
 
 	// Bind the flag to Viper
 	if err := c.v.BindPFlag(key, flagSet.Lookup(flagName)); err != nil {
-		return fmt.Errorf("failed to bind %s: %w", key, err)
+		panic(fmt.Errorf("failed to bind %s: %w", key, err))
 	}
 
 	// Handle environment variable binding
@@ -85,7 +85,7 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts ConfigOptions) error 
 		}
 	}
 
-	return nil
+	return
 }
 
 // load reads and merges the configuration
