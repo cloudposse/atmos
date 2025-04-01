@@ -196,7 +196,6 @@ func init() {
 		Key:          "logs.level",
 		DefaultValue: "Info",
 	})
-	// RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	config.DefaultConfigHandler.AddConfig(RootCmd, cfg.ConfigOptions{
 		FlagName:     "logs-file",
 		DefaultValue: "/dev/stderr",

@@ -63,7 +63,7 @@ func init() {
 	workflowCmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
 	AddStackCompletion(workflowCmd)
 	workflowCmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
-
+	workflowCommandConfig()
 	RootCmd.AddCommand(workflowCmd)
 }
 

@@ -13,13 +13,13 @@ import (
 
 var DefaultConfigHandler, err = New()
 
-// ConfigHandler holds the application's configuration
+// ConfigHandler holds the application's configuration.
 type ConfigHandler struct {
 	atmosConfig *schema.AtmosConfiguration
 	v           *viper.Viper
 }
 
-// ConfigOptions defines options for adding a configuration parameter
+// ConfigOptions defines options for adding a configuration parameter.
 type ConfigOptions struct {
 	FlagName     string      // Custom flag name (optional)
 	EnvVar       string      // Custom environment variable (optional)
@@ -28,7 +28,7 @@ type ConfigOptions struct {
 	DefaultValue interface{} // Default value of the data in atmosConfiguration
 }
 
-// New creates a new Config instance with initialized Viper
+// New creates a new Config instance with initialized Viper.
 func New() (*ConfigHandler, error) {
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -40,7 +40,7 @@ func New() (*ConfigHandler, error) {
 	return configHandler, configHandler.load()
 }
 
-// AddConfig adds a configuration parameter to both Cobra and Viper with options
+// AddConfig adds a configuration parameter to both Cobra and Viper with options.
 func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts ConfigOptions) {
 	key := opts.Key
 	defaultValue := opts.DefaultValue
@@ -56,31 +56,27 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts ConfigOptions) {
 	// Register flag with Cobra
 	flagSet := cmd.PersistentFlags()
 
-	switch defaultValue.(type) {
+	switch v := defaultValue.(type) {
 	case string:
-		flagSet.String(flagName, defaultValue.(string), opts.Description)
+		flagSet.String(flagName, v, opts.Description)
 	case int:
-		flagSet.Int(flagName, defaultValue.(int), opts.Description)
+		flagSet.Int(flagName, v, opts.Description)
 	case bool:
-		flagSet.Bool(flagName, defaultValue.(bool), opts.Description)
+		flagSet.Bool(flagName, v, opts.Description)
 	case []string:
-		flagSet.StringSlice(flagName, defaultValue.([]string), opts.Description)
+		flagSet.StringSlice(flagName, v, opts.Description)
 	default:
-		panic(fmt.Errorf("unsupported type for key %s", key))
+		panic(fmt.Sprintf("unsupported type for key %s", key))
 	}
 
 	// Bind the flag to Viper
 	if err := c.v.BindPFlag(key, flagSet.Lookup(flagName)); err != nil {
-		panic(fmt.Errorf("failed to bind %s: %w", key, err))
+		panic(fmt.Sprintf("failed to bind %s: %w", key, err))
 	}
 
 	// Handle environment variable binding
 	if opts.EnvVar != "" {
 		if err := c.v.BindEnv(key, opts.EnvVar); err != nil {
-			panic(err)
-		}
-	} else {
-		if err := c.v.BindEnv(key); err != nil {
 			panic(err)
 		}
 	}
@@ -107,10 +103,7 @@ func (c *ConfigHandler) load() error {
 			c.atmosConfig.CliConfigPath = absPath
 		}
 	}
-	// TODO: This is copy paste need to set this in the right place
-	// We want the editorconfig color by default to be true
-	c.atmosConfig.Validate.EditorConfig.Color = true
-
+	c.processEnvVars()
 	viper.AutomaticEnv()
 
 	// Unmarshal into AtmosConfiguration struct
