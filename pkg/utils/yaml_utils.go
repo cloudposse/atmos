@@ -38,19 +38,6 @@ var (
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
 )
 
-var (
-	AtmosYamlTags = []string{
-		AtmosYamlFuncExec,
-		AtmosYamlFuncStore,
-		AtmosYamlFuncTemplate,
-		AtmosYamlFuncTerraformOutput,
-		AtmosYamlFuncEnv,
-		AtmosYamlFuncInclude,
-	}
-
-	ErrNilAtmosConfig = errors.New("atmosConfig cannot be nil")
-)
-
 // PrintAsYAML prints the provided value as YAML document to the console.
 func PrintAsYAML(data any) error {
 	atmosConfig := ExtractAtmosConfig(data)
@@ -60,7 +47,7 @@ func PrintAsYAML(data any) error {
 // PrintAsYAMLWithConfig prints the provided value as YAML document to the console with custom configuration.
 func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if atmosConfig == nil {
-		return ErrNilAtmosConfig
+		return errors.New("atmosConfig cannot be nil")
 	}
 
 	indent := atmosConfig.Settings.Terminal.TabWidth
@@ -86,7 +73,7 @@ func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) err
 // PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor.
 func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if atmosConfig == nil {
-		return ErrNilAtmosConfig
+		return errors.New("atmosConfig cannot be nil")
 	}
 
 	y, err := ConvertToYAML(data)
@@ -267,7 +254,7 @@ func UnmarshalYAML[T any](input string) (T, error) {
 // UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type
 func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, error) {
 	if atmosConfig == nil {
-		return *new(T), ErrNilAtmosConfig
+		return *new(T), errors.New("atmosConfig cannot be nil")
 	}
 
 	var zeroValue T
