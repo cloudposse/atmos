@@ -108,7 +108,7 @@ settings:
         c: component-1-c
 `
 
-	actual, err := ConvertToYAML(manifest)
+	actual, err := ConvertToYAML(manifest, YAMLOptions{Indent: 4})
 	assert.Nil(t, err)
 	assert.Equal(t, expected, actual)
 }
