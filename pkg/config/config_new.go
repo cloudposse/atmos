@@ -76,9 +76,7 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts *ConfigOptions) {
 
 	// Handle environment variable binding
 	if opts.EnvVar != "" {
-		if err := c.v.BindEnv(key, opts.EnvVar); err != nil {
-			panic(err)
-		}
+		c.BindEnv(key, opts.EnvVar)
 	}
 }
 
@@ -119,7 +117,9 @@ func (c *ConfigHandler) Get() *schema.AtmosConfiguration {
 }
 
 func (c *ConfigHandler) BindEnv(key ...string) {
-	c.v.BindEnv(key...)
+	if err := c.v.BindEnv(key...); err != nil {
+		panic(err)
+	}
 }
 
 // GetString retrieves a string value from the config.
