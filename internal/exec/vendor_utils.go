@@ -280,7 +280,7 @@ func processAtmosVendorSource(sources []schema.AtmosVendorSource, component stri
 			return nil, err
 		}
 		if !useLocalFileSystem {
-			err = ValidateURI(uri)
+			err = u.ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
 					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", sources[indexSource].Component, err)
