@@ -2,7 +2,7 @@
 title: "!include"
 sidebar_position: 6
 sidebar_label: "!include"
-description: Download local or remote files from different sources, and assign the file contents or individual values to Atmos stack manifests
+description: Download local or remote files from different sources, and insert their contents or specific values directly into sections of your stack manifests
 ---
 
 import Intro from '@site/src/components/Intro'
@@ -10,11 +10,9 @@ import File from '@site/src/components/File'
 import Note from "@site/src/components/Note"
 
 <Intro>
-    The `!include` Atmos YAML function allows downloading local or remote files from different sources,
-    and assigning the file contents or individual values to the sections in Atmos stack manifests.
+    The `!include` function lets you load files — either local or remote — and insert their contents or specific values
+    directly into sections of your stack manifests.
 </Intro>
-
-## Description
 
 The YAML standard provides [anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), that allow you
 to reuse and reference pieces of your YAML file, making it more efficient and reducing duplication.
@@ -173,17 +171,6 @@ The `!include` function can be called with either one or two parameters:
 
 Atmos uses [`go-getter`](https://github.com/hashicorp/go-getter)
 (used by [Terraform](https://www.terraform.io/) for downloading modules) to download remote files from different sources.
-
-### Downloading from OCI Registries
-
-The following example shows how to include a file from a public AWS ECR registry:
-
-  ```yaml
-    components:
-      terraform:
-        my-component:
-          vars: !include oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/my-component.tfvars
-  ```
 
 ### Downloading from SSH
 
