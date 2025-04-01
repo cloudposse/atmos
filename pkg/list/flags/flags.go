@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Error format strings.
 const (
+	// ErrFmtWrapErr is uses to format error strings.
 	ErrFmtWrapErr = "%w: %v"
 )
 
