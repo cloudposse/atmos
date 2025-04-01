@@ -33,7 +33,7 @@ var ValidateStacksCmd = &cobra.Command{
 func init() {
 	ValidateStacksCmd.DisableFlagParsing = false
 
-	config.DefaultConfigHandler.AddConfig(ValidateStacksCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(ValidateStacksCmd, &config.ConfigOptions{
 		FlagName:     "schemas-atmos-manifest",
 		EnvVar:       "ATMOS_SCHEMAS_ATMOS_MANIFEST",
 		Description:  "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file",

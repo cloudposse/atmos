@@ -63,19 +63,19 @@ func init() {
 	workflowCmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
 	AddStackCompletion(workflowCmd)
 	workflowCmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
-
+	workflowCommandConfig()
 	RootCmd.AddCommand(workflowCmd)
 }
 
 func workflowCommandConfig() {
-	config.DefaultConfigHandler.AddConfig(workflowCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(workflowCmd, &config.ConfigOptions{
 		FlagName:     "workflows-dir",
 		EnvVar:       "ATMOS_WORKFLOWS_BASE_PATH",
 		Description:  "Base path for workflows configurations.",
 		Key:          "workflows.base_path",
 		DefaultValue: "",
 	})
-	config.DefaultConfigHandler.AddConfig(workflowCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(workflowCmd, &config.ConfigOptions{
 		FlagName:     "workflows-base-path",
 		EnvVar:       "ATMOS_WORKFLOWS_BASE_PATH",
 		Description:  "Base path for workflows configurations.",

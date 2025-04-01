@@ -297,7 +297,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 var commandMaps = map[string]func(cmd *cobra.Command){
 	"deploy": func(cmd *cobra.Command) {
-		config.DefaultConfigHandler.AddConfig(cmd, cfg.ConfigOptions{
+		config.DefaultConfigHandler.AddConfig(cmd, &cfg.ConfigOptions{
 			Key:          "components.terraform.deploy_run_init",
 			EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT",
 			FlagName:     "deploy-run-init",

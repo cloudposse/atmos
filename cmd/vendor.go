@@ -15,7 +15,7 @@ var vendorCmd = &cobra.Command{
 }
 
 func init() {
-	config.DefaultConfigHandler.AddConfig(vendorCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(vendorCmd, &config.ConfigOptions{
 		FlagName:     "vendor-base-path",
 		EnvVar:       "ATMOS_VENDOR_BASE_PATH",
 		Description:  "Base path for vendored dependencies.",

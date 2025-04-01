@@ -51,14 +51,14 @@ func init() {
 }
 
 func validateComponentCommandConfig() {
-	config.DefaultConfigHandler.AddConfig(validateComponentCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(validateComponentCmd, &config.ConfigOptions{
 		FlagName:     "schemas-jsonschema-dir",
 		EnvVar:       "ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH",
 		Description:  "Base path for JSON Schema files.",
 		Key:          "schemas.jsonschema.base_path",
 		DefaultValue: "",
 	})
-	config.DefaultConfigHandler.AddConfig(validateComponentCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(validateComponentCmd, &config.ConfigOptions{
 		FlagName:     "schemas-opa-dir",
 		EnvVar:       "ATMOS_SCHEMAS_OPA_BASE_PATH",
 		Description:  "Base path for OPA policy files.",

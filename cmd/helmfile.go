@@ -21,21 +21,21 @@ func init() {
 	// https://github.com/spf13/cobra/issues/739
 	helmfileCmd.DisableFlagParsing = true
 	helmfileCmd.PersistentFlags().Bool("", false, doubleDashHint)
-	config.DefaultConfigHandler.AddConfig(helmfileCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(helmfileCmd, &config.ConfigOptions{
 		FlagName:     "helmfile-command",
 		EnvVar:       "ATMOS_COMPONENTS_HELMFILE_COMMAND",
 		Description:  "Specifies the executable to be called by `atmos` when running Helmfile commands.",
 		Key:          "components.helmfile.command",
 		DefaultValue: "helmfile",
 	})
-	config.DefaultConfigHandler.AddConfig(helmfileCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(helmfileCmd, &config.ConfigOptions{
 		FlagName:     "helmfile-dir",
 		EnvVar:       "ATMOS_COMPONENTS_HELMFILE_BASE_PATH",
 		Description:  "Specifies the directory where Helmfile commands are executed.",
 		Key:          "components.helmfile.base_path",
 		DefaultValue: "",
 	})
-	config.DefaultConfigHandler.AddConfig(helmfileCmd, config.ConfigOptions{
+	config.DefaultConfigHandler.AddConfig(helmfileCmd, &config.ConfigOptions{
 		FlagName:     "helmfile-base-path",
 		EnvVar:       "ATMOS_COMPONENTS_HELMFILE_BASE_PATH",
 		Description:  "Specifies the directory where Helmfile commands are executed.",
