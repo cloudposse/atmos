@@ -1,4 +1,4 @@
-package exec
+package utils
 
 import (
 	"net/url"
@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var originalDetectors = getter.Detectors
@@ -270,7 +271,7 @@ func TestNormalizePath_ErrorHandling(t *testing.T) {
 func TestDetect_LocalFilePath(t *testing.T) {
 	// This tests the branch when the input is a local file path (no host).
 	config := fakeAtmosConfig(false)
-	detector := &CustomGitDetector{AtmosConfig: config, source: "/home/user/repo"}
+	detector := &CustomGitDetector{AtmosConfig: config, Source: "/home/user/repo"}
 	localFile := "/home/user/repo/README.md"
 	result, ok, err := detector.Detect(localFile, "")
 	if err != nil {
@@ -287,7 +288,7 @@ func TestDetect_LocalFilePath(t *testing.T) {
 func TestDetect_UnsupportedHost(t *testing.T) {
 	// This tests the branch when the URL host is not supported (not GitHub, GitLab, or Bitbucket)
 	config := fakeAtmosConfig(false)
-	detector := &CustomGitDetector{AtmosConfig: config, source: "repo.git"}
+	detector := &CustomGitDetector{AtmosConfig: config, Source: "repo.git"}
 	unsupportedURL := "https://example.com/repo.git"
 	result, ok, err := detector.Detect(unsupportedURL, "")
 	if err != nil {

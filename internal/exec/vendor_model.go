@@ -359,7 +359,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 	switch p.pkgType {
 	case pkgTypeRemote:
 		// Use go-getter to download remote packages
-		if err := GoGetterGet(*atmosConfig, p.uri, *tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+		if err := u.GoGetterGet(*atmosConfig, p.uri, *tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package: %w", err)
 		}
 
@@ -393,7 +393,7 @@ func handleDryRunInstall(p *pkgAtmosVendor, atmosConfig *schema.AtmosConfigurati
 
 	if needsCustomDetection(p.uri) {
 		log.Debug("Custom detection required for URI", "uri", p.uri)
-		detector := &CustomGitDetector{AtmosConfig: *atmosConfig, source: ""}
+		detector := &u.CustomGitDetector{AtmosConfig: *atmosConfig, Source: ""}
 		_, _, err := detector.Detect(p.uri, "")
 		if err != nil {
 			return installedPkgMsg{
@@ -412,7 +412,7 @@ func handleDryRunInstall(p *pkgAtmosVendor, atmosConfig *schema.AtmosConfigurati
 	}
 }
 
-// Thie is a replica of getForce method from go getter library, had to make it as it is not exported.
+// This is a replica of getForce method from go getter library, had to make it as it is not exported.
 // The idea is to call Detect method in dry run only for those links where go getter does this.
 // Otherwise, Detect is run for every link being vendored which isn't correct.
 func needsCustomDetection(src string) bool {
