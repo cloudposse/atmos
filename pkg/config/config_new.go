@@ -77,11 +77,11 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts ConfigOptions) error 
 	// Handle environment variable binding
 	if opts.EnvVar != "" {
 		if err := c.v.BindEnv(key, opts.EnvVar); err != nil {
-			return fmt.Errorf("failed to bind custom env var %s for %s: %w", opts.EnvVar, key, err)
+			panic(err)
 		}
 	} else {
 		if err := c.v.BindEnv(key); err != nil {
-			return fmt.Errorf("failed to bind default env var for %s: %w", key, err)
+			panic(err)
 		}
 	}
 

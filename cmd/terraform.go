@@ -103,7 +103,13 @@ func addTerraformCommandConfig() {
 		Description:  "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands",
 		DefaultValue: []string{},
 	})
-
+	config.DefaultConfigHandler.AddConfig(terraformCmd, cfg.ConfigOptions{
+		Key:          "components.terraform.init.pass_vars",
+		FlagName:     "init-pass-vars",
+		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS",
+		Description:  "Pass the generated varfile to `terraform init` using the `--var-file` flag. [OpenTofu supports passing a varfile to `init`](https://opentofu.org/docs/cli/commands/init/#general-options) to dynamically configure backends",
+		DefaultValue: false,
+	})
 }
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
