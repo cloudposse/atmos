@@ -181,7 +181,7 @@ func checkVersion(config config.Config) error {
 func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringSliceVar(&configFilePaths, "config", defaultConfigFileNames, "Paths to the configuration files")
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
-	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "creates an initial configuration")
+	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "Create an initial configuration")
 
 	cmd.PersistentFlags().BoolVar(&cliConfig.IgnoreDefaults, "ignore-defaults", false, "Ignore default excludes")
 	cmd.PersistentFlags().BoolVar(&cliConfig.DryRun, "dry-run", false, "Show which files would be checked")
