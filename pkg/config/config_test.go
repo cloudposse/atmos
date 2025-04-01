@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -237,4 +238,44 @@ func changeWorkingDir(t *testing.T, dir string) {
 
 	err = os.Chdir(dir)
 	require.NoError(t, err, "Failed to change working directory")
+}
+
+func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
+	tempDir := t.TempDir() // Empty directory, no config file
+
+	v := viper.New()
+	err := mergeConfig(v, tempDir, true)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Config File \"atmos\" Not Found")
+}
+
+func TestMergeConfig_MultipleConfigFilesMerge(t *testing.T) {
+	tempDir := t.TempDir()
+	content := `
+base_path: ./
+vendor:  
+  base_path: "./test-vendor.yaml"
+logs:
+  file: /dev/stderr
+  level: Debug`
+	createConfigFile(t, tempDir, "atmos.yaml", content)
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err := mergeConfig(v, tempDir, false)
+	assert.NoError(t, err)
+	assert.Equal(t, "./", v.GetString("base_path"))
+	content2 := `
+base_path: ./test
+vendor:  
+  base_path: "./test2-vendor.yaml"
+`
+	tempDir2 := t.TempDir()
+	createConfigFile(t, tempDir2, "atmos.yml", content2)
+	err = mergeConfig(v, tempDir2, false)
+	assert.NoError(t, err)
+	assert.Equal(t, "./test", v.GetString("base_path"))
+	assert.Equal(t, "./test2-vendor.yaml", v.GetString("vendor.base_path"))
+	assert.Equal(t, "Debug", v.GetString("logs.level"))
+	assert.Equal(t, filepath.Join(tempDir2, "atmos.yml"), v.ConfigFileUsed())
 }
