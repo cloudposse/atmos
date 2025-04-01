@@ -8,10 +8,6 @@ Usage:
 
 Flags:
 
-        --config stringSlice                  Paths to the configuration files
-                                              (default
-                                              [.editorconfig,.editorconfig-checker.json,.ecrc])
-
         --disable-end-of-line                 Disable end-of-line check (default
                                               false)
 
@@ -57,6 +53,8 @@ Flags:
 Global Flags:
 
         --base-path string           Base path for Atmos project
+
+        --config stringSlice         Paths to configuration file (default [])
 
         --config-path stringSlice    Path to configuration directory (default
                                      [])
