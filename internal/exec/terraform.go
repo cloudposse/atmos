@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -127,7 +128,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Print component variables and write to file
 	// Don't process variables when executing `terraform workspace` commands
 	if info.SubCommand != "workspace" {
-		u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+		log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack)
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
 			if err != nil {
@@ -155,8 +156,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
 			}
 
-			u.LogDebug("Writing the variables to file:")
-			u.LogDebug(varFilePath)
+			log.Debug("Writing the variables to file:", "file", varFilePath)
 
 			if !info.DryRun {
 				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
@@ -176,7 +176,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		     - Default values in the configuration file: these have the lowest priority
 		*/
 		if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
-			u.LogDebug("\nCLI variables (will override the variables defined in the stack manifests):")
+			log.Debug("\nCLI variables (will override the variables defined in the stack manifests):")
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, cliVars)
 				if err != nil {
@@ -226,7 +226,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	for _, envVar := range os.Environ() {
 		if strings.HasPrefix(envVar, "TF_") {
 			varName := strings.SplitN(envVar, "=", 2)[0]
-			u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
+			log.Warn(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
 		}
 	}
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
@@ -251,9 +251,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
-		u.LogDebug("\nUsing ENV vars:")
+		log.Debug("\nUsing ENV vars:")
 		for _, v := range info.ComponentEnvList {
-			u.LogDebug(v)
+			log.Debug(v)
 		}
 	}
 
