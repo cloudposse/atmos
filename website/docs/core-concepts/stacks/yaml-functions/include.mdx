@@ -20,7 +20,7 @@ to reuse and reference pieces of your YAML file, making it more efficient and re
 Atmos supports YAML anchors and aliases, but the biggest limitation is that they are only available within the file in
 which they are defined. You cannot reuse anchors across different files.
 
-The `!include` Atmos YAML function overcomes this limitation by allowing you to include the content or individual values
+The `!include` Atmos YAML function overcomes this limitation by allowing you to include the content or specific values
 from different local and remote sources. The `!include` function also provides the following features:
 
 - Supports local files with absolute and relative paths.
@@ -36,7 +36,7 @@ All other files are returned unchanged, allowing you, for example, to include te
 [Markdown](https://www.markdownguide.org/) files as strings in Atmos manifests.
 
 Atmos resolves the `!include` functions during the initial loading of YAML files from the local filesystem or remote sources,
-injecting the contents of the referenced files directly into the current location. This applies to all stack configs.
+injecting the contents of the referenced files directly into the current location.
 Included data (JSON, YAML, HCL, or text) is parsed and converted into the appropriate
 type (`string`, `boolean`, `map`, `list`, etc.) before being assigned to its place in the configuration.
 
@@ -55,32 +55,60 @@ With `!include` it's possible to import multiple different file formats into Atm
 
 ## Supported Sources
 
+### Local Sources
+
 The `!include` function supports the following local file sources:
-  - absolute paths (e.g., `/Users/me/Documents/vars.yaml`)
-  - paths relative to the current Atmos manifest where the `!include` function is executed (e.g., `./vars.yaml`, `../config/vars.yaml`)
-  - paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file (e.g., `stacks/catalog/vpc/defaults.yaml`)
+  - Absolute paths
+    ```yaml
+    vars: !include /Users/me/Documents/vars.yaml
+    ```
 
-To download remote files from different sources, the `!include` function uses [`go-getter`](https://github.com/hashicorp/go-getter)
-(used by [Terraform](https://www.terraform.io/) for downloading modules) and supports the following protocols:
+  - Paths relative to the current Atmos manifest (where the `!include` function is executed)
+    ```yaml
+    vars: !include ../config/vars.yaml
+    ```
 
-- `tar` - Tar files, potentially compressed (tar.gz, tar.bz2, etc.)
-- `zip` - Zip files
-- `http` - HTTP URLs
-- `https` - HTTPS URLs
-- `git` - Git repositories, which can be accessed via HTTPS or SSH
-- `hg` - Mercurial repositories, accessed via HTTP/S or SSH
-- `s3` - Amazon S3 bucket URLs
-- `gcs` - Google Cloud Storage URLs
-- `oci` - Open Container Initiative (OCI) images
-- `scp` - Secure Copy Protocol for SSH-based transfers
-- `sftp` - SSH File Transfer Protocol
-- GitHub URLs, such as `github.com/cloudposse/atmos`, are automatically changed to Git protocol over HTTP
-- GitLab URLs are automatically changed to Git protocol over HTTP
-- BitBucket URLs are automatically changed to a Git or Mercurial protocol using the BitBucket API
+  - Paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file
+    ```yaml
+    vars: !include stacks/catalog/vpc/vars.yaml
+    ```
+
+### Remote Sources
+
+To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/go-getter)
+(used by [Terraform](https://www.terraform.io/) for downloading modules) and supports the following protocols to download a single file:
+
+- **http/https** - the file must be publicly accessible (not inside a private repository)
+  ```yaml
+  vars: !include https://raw.githubusercontent.com/org/repo/main/path/to/vars.yaml
+  ```
+
+- **s3** (Amazon S3) - requires the correct AWS permissions and credentials configured
+  ```yaml
+  vars: !include s3::https://my-bucket.s3.amazonaws.com/path/to/vars.yaml
+  ```
+
+- **gcs** (Google Cloud Storage) - requires valid Google Cloud credentials
+  ```yaml
+  vars: !include gcs::gs://my-bucket/path/to/vars.yaml
+  ```
+
+- **scp/sftp** (SSH-based File Transfer) - requires SSH access to the remote server
+   ```yaml
+   vars: !include scp://user@remote-server:/path/to/vars.yaml
+   settings: !include sftp://user@remote-server:/path/to/settings.yaml
+   ```
+
+- **oci** (Open Container Initiative)
+  ```yaml
+  vars: !include oci://ghcr.io/my-org/my-image:path/to/vars.yaml
+  ```
+  - The file must be exposed as part of the OCI image and exist as a layer in the image (not hidden inside layers)
+  - The registry must support OCI artifact downloads (e.g., AWS ECR, Docker Hub, GHCR, GCR)
 
 ## Key Benefits of `!include`
 
-The `!include` directive enables modular, reusable configuration patterns across all Atmos YAML files — both CLI and stack configurations.
+The `!include` directive enables modular, reusable configuration patterns across all Atmos YAML files.
 This has several important implications:
 
 - **Modularization & Reuse**  
@@ -88,7 +116,7 @@ This has several important implications:
    files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
 
 - **Preprocessing for Inheritance**  
-  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-mergin
+  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-merging
   behaviors using fully expanded configuration data.
 
 - **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**  
@@ -100,7 +128,7 @@ This has several important implications:
 
 For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is into your [Stacks](/core-concepts/stacks/).
 You can continue managing your root modules as you always have, while gaining Atmos features like stack inheritance,
-environment promotion, and deep merging.
+environment promotion, and deep-merging.
 
 Let's say you already have environment-specific `.tfvars` files like:
 
@@ -147,11 +175,11 @@ and consistent promotion of settings across environments.
 The `!include` function can be called with either one or two parameters:
 
 ```yaml
-  # Download the file and assign its content to the variable
+  # Download the file and inject the content directly into the current location in the YAML
   !include <file-path>
 
   # Download the file, filter the content using the YQ expression,
-  # and assign the result to the variable
+  # and inject the result directly into the current location in the YAML
   !include <file-path> <yq-expression>
 ```
 
@@ -166,190 +194,6 @@ The `!include` function can be called with either one or two parameters:
     <dt>`yq-expression`</dt>
     <dd>(Optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the file</dd>
 </dl>
-
-## Remote Includes
-
-Atmos uses [`go-getter`](https://github.com/hashicorp/go-getter)
-(used by [Terraform](https://www.terraform.io/) for downloading modules) to download remote files from different sources.
-
-### Downloading from SSH
-
-Atmos supports SSH for accessing non-public Git repositories, which is convenient for local development. Atmos will use any installed SSH keys automatically.
-
-:::tip
-In automated systems like GitHub Actions, we recommend sticking with the `https://` scheme. Atmos will automatically inject the `GITHUB_TOKEN`.
-:::
-
-There are two primary ways to specify an SSH source.
-
-#### SCP-style Sources
-
-Atmos supports traditional SCP-style sources, which use a colon to separate the host from the repository, like this:
-
-```shell
-git::git@github.com:org/repo.git
-```
-
-Atmos rewrites this URL to the following format:
-
-```shell
-git::ssh://git@github.com:org/repo.git
-```
-
-If no username is supplied and the host is `github.com`, Atmos automatically injects the default username `git`.
-
-#### Explicit SSH Sources
-
-When the `ssh://` scheme is explicitly specified, the URL is used as provided, and no rewriting occurs.
-
-For example:
-
-```shell
-git::ssh://git@github.com:org/repo.git
-```
-
-#### Important Notes
-
-- The following URL is **invalid** because `go-getter` misinterprets `github.com:` as a URL scheme (like `http:` or `git:`), causing a parsing error:
-```shell
-github.com:org/repo.git
-```
-
-- When a URL has no scheme, Atmos defaults to **HTTPS** and injects credentials if available.
-```shell
-github.com/org/repo.git
-```
-
-### Git over HTTPS Downloading
-
-Atmos supports remote files downloading using **Git over HTTPS**.
-
-For example:
-
-```
-github.com/org/repo.git
-```
-
-is automatically resolved as:
-
-```
-git::https://github.com/org/repo.git
-```
-
-### Authentication & Token Usage for HTTPS
-
-Atmos prioritizes authentication credentials based on predefined environment variables. The priority order for each provider is:
-
-#### GitHub
-<dl>
-    <dt>`ATMOS_GITHUB_TOKEN`</dt>
-    <dd>Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits.</dd>
-
-    <dt>`GITHUB_TOKEN`</dt>
-    <dd>Used as a fallback if `ATMOS_GITHUB_TOKEN` is not set.</dd>
-</dl>
-
-**Default Username for HTTPS:** `x-access-token`
-
-#### Bitbucket
-<dl>
-    <dt>`ATMOS_BITBUCKET_TOKEN`</dt>
-    <dd>Bitbucket app password for API requests; used to avoid rate limits. When both `ATMOS_BITBUCKET_TOKEN` and `BITBUCKET_TOKEN` are defined, the former prevails.</dd>
-
-    <dt>`BITBUCKET_TOKEN`</dt>
-    <dd>Used as a fallback when `ATMOS_BITBUCKET_TOKEN` is not set.</dd>
-
-    <dt>`ATMOS_BITBUCKET_USERNAME`</dt>
-    <dd>Bitbucket username for authentication. Takes precedence over `BITBUCKET_USERNAME`.</dd>
-
-    <dt>`BITBUCKET_USERNAME`</dt>
-    <dd>Used as a fallback when `ATMOS_BITBUCKET_USERNAME` is not set. Bitbucket requires a valid username and does not accept dummy values like `x-access-token`.</dd>
-</dl>
-
-#### GitLab
-<dl>
-    <dt>`ATMOS_GITLAB_TOKEN`</dt>
-    <dd>Personal Access Token (PAT) for GitLab authentication. Takes precedence over `GITLAB_TOKEN`.</dd>
-
-    <dt>`GITLAB_TOKEN`</dt>
-    <dd>Used as a fallback if `ATMOS_GITLAB_TOKEN` is not set.</dd>
-</dl>
-
-**Default Username for HTTPS:** `"oauth2"`
-
-### How HTTPS URLs Are Resolved
-
-When resolving Git sources, Atmos follows these rules:
-
-1. If a **full HTTPS URL** is provided (`git::https://github.com/...`), it is used as-is. No token data is injected, even if environment variables are set.
-2. If a **repository name** is provided without a scheme (`github.com/org/repo.git`), it defaults to `https://`, and if a token is set, it is injected into the URL.
-3. If a **username and repository name** are provided in SCP format (`git@github.com:org/repo.git`), it is rewritten as an SSH URL.
-
-## Examples
-
-<File title="stack.yaml">
-```yaml
-components:
-  terraform:
-    my-component:
-      vars:
-        # Include a local file with the path relative to the current Atmos manifest
-        values: !include ./values.yaml
-        # Include a local file with the path relative to the current Atmos manifest and query the `vars.ipv4_primary_cidr_block` value from the file using YQ
-        ipv4_primary_cidr_block: !include ./vpc_config.yaml .vars.ipv4_primary_cidr_block
-        # Include a local file relative to the `base_path` setting in `atmos.yaml`
-        vpc_defaults: !include stacks/catalog/vpc/defaults.yaml
-        # Include a local file in HCL format with Terraform variables
-        hcl_values: !include ./values.hcl
-        # Include a local file in HCL format with Terraform variables
-        tfvars_values: !include ../components/terraform/vpc/vpc.tfvars
-        # Include a local Markdown file
-        description: !include ./description.md
-        # Include a local text file
-        text: !include a.txt
-        # Include a local text file with spaces in the file name
-        text2: !include '"my config.txt"'
-        # Include a local text file on Windows with spaces in the file name, and get the `config.tests` value from the file
-        tests: !include '"~/My Documents/dev/tests.yaml" .config.tests'
-        # Download and include a remote YAML file using HTTPS protocol, and query the `vars` section from the file
-        region_values: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
-        # Download and include a remote JSON file and query the `api` section from the file
-        allowed_ips: !include https://api.github.com/meta .api
-      settings:
-        config:
-          # Include a local JSON file and query the `user_id` variable from the file
-          user_id: !include ./user_config.json .user_id
-```
-</File>
-
-<File title="stack.yaml">
-```yaml
-import: !include config/import.yaml
-
-# Download the remote file using `go-getter` and assign the `components.terraform.component-1.settings` section
-# from the file to the `settings` section in the current stack
-settings: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
-
-components:
-  terraform:
-    component-1:
-      vars:
-        # The `config` folder is relative to the `base_path` setting in `atmos.yaml`
-        string_var: !include config/vars.json .string_var
-        boolean_var: !include config/vars.yaml .boolean_var
-        list_var: !include config/vars.tfvars .list_var
-        map_var: !include config/vars.tfvars .map_var
-
-    component-2:
-      vars: !include config/vars.tfvars
-
-    component-3:
-      vars: !include config/vars.json
-
-    component-4:
-      vars: !include config/vars.yaml
-```
-</File>
 
 ## Using YQ Expressions to retrieve individual values from files
 
@@ -395,3 +239,66 @@ On macOS and Linux:
     values: !include './values.yaml "<yq-expression-with-spaces>"'
     description: !include '"component description.md"'
 ```
+
+## Examples
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    my-component:
+      vars:
+        # Include a local file with the path relative to the current Atmos manifest
+        values: !include ./values.yaml
+        # Include a local file with the path relative to the current Atmos manifest and query the `vars.ipv4_primary_cidr_block` value from the file using YQ
+        ipv4_primary_cidr_block: !include ./vpc_config.yaml .vars.ipv4_primary_cidr_block
+        # Include a local file relative to the `base_path` setting in `atmos.yaml`
+        vpc_defaults: !include stacks/catalog/vpc/defaults.yaml
+        # Include a local file in HCL format
+        hcl_values: !include ./values.hcl
+        # Include a local varfile in HCL format
+        tfvars_values: !include ../components/terraform/vpc/vpc.tfvars
+        # Include a local Markdown file
+        description: !include ./description.md
+        # Include a local text file
+        text: !include a.txt
+        # Include a local text file with spaces in the file name
+        text2: !include '"my config.txt"'
+        # Include a local text file on Windows with spaces in the file name, and get the `config.tests` value from the file
+        tests: !include '"~/My Documents/dev/tests.yaml" .config.tests'
+        # Download and include a remote YAML file using HTTPS protocol, and query the `vars` section from the file
+        region_values: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        # Download and include a remote JSON file and query the `api` section from the file
+        allowed_ips: !include https://api.github.com/meta .api
+```
+</File>
+
+<File title="stack.yaml">
+```yaml
+# The `config` folder is relative to the `base_path` setting in `atmos.yaml`
+import: !include config/import.yaml
+
+# Download the remote file using `go-getter` and assign the `components.terraform.component-1.settings` section
+# from the file to the `settings` section in the current stack
+settings: !include https://raw.githubusercontent.com/cloudposse/atmos/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
+
+components:
+  terraform:
+    component-1:
+      vars:
+        # The `config` folder is relative to the `base_path` setting in `atmos.yaml`
+        string_var: !include config/vars.json .string_var
+        boolean_var: !include config/vars.yaml .boolean_var
+        list_var: !include config/vars.tfvars .list_var
+        map_var: !include config/vars.tfvars .map_var
+
+    component-2:
+      vars: !include config/vars.tfvars
+
+    component-3:
+      vars: !include config/vars.json
+
+    component-4:
+      vars: !include config/vars.yaml
+```
+</File>

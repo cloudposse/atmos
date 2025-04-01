@@ -1,10 +1,11 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
+# The `config` folder is relative to the `base_path` setting in `atmos.yaml`
 import: !include config/import.yaml
 
 # Download the remote file using `go-getter` and assign the `components.terraform.component-1.settings` section
 # from the file to the `settings` section` in the current stack
-settings: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
+settings: !include https://raw.githubusercontent.com/cloudposse/atmos/main/tests/fixtures/scenarios/stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
 
 components:
   terraform:
