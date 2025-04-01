@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	// Atmos YAML functions
+	// Atmos YAML functions.
 	AtmosYamlFuncExec            = "!exec"
 	AtmosYamlFuncStore           = "!store"
 	AtmosYamlFuncTemplate        = "!template"
@@ -36,6 +36,7 @@ var (
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
+	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
 )
 
 // PrintAsYAML prints the provided value as YAML document to the console.
@@ -47,7 +48,7 @@ func PrintAsYAML(data any) error {
 // PrintAsYAMLWithConfig prints the provided value as YAML document to the console with custom configuration.
 func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if atmosConfig == nil {
-		return errors.New("atmosConfig cannot be nil")
+		return ErrNilAtmosConfig
 	}
 
 	indent := atmosConfig.Settings.Terminal.TabWidth
@@ -73,7 +74,7 @@ func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) err
 // PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor.
 func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if atmosConfig == nil {
-		return errors.New("atmosConfig cannot be nil")
+		return ErrNilAtmosConfig
 	}
 
 	y, err := ConvertToYAML(data)
@@ -246,15 +247,15 @@ func getValueWithTag(n *yaml.Node) string {
 	return strings.TrimSpace(tag + " " + val)
 }
 
-// UnmarshalYAML unmarshals YAML into a Go type
+// UnmarshalYAML unmarshals YAML into a Go type.
 func UnmarshalYAML[T any](input string) (T, error) {
 	return UnmarshalYAMLFromFile[T](&schema.AtmosConfiguration{}, input, "")
 }
 
-// UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type
+// UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type.
 func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, error) {
 	if atmosConfig == nil {
-		return *new(T), errors.New("atmosConfig cannot be nil")
+		return *new(T), ErrNilAtmosConfig
 	}
 
 	var zeroValue T
@@ -279,7 +280,7 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 	return data, nil
 }
 
-// IsYAML checks if data is in YAML format
+// IsYAML checks if data is in YAML format.
 func IsYAML(data string) bool {
 	if strings.TrimSpace(data) == "" {
 		return false
