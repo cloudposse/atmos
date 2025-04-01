@@ -1,6 +1,6 @@
 // https://github.com/hashicorp/go-getter
 
-package exec
+package utils
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"github.com/hashicorp/go-getter"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const schemeSeparator = "://"
@@ -73,7 +72,7 @@ func IsValidScheme(scheme string) bool {
 // and transforms them into a proper URL for cloning, optionally injecting tokens.
 type CustomGitDetector struct {
 	AtmosConfig schema.AtmosConfiguration
-	source      string
+	Source      string
 }
 
 // Detect implements the getter.Detector interface for go-getter v1.
@@ -90,7 +89,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	// Parse the URL to extract the host and path.
 	parsedURL, err := url.Parse(src)
 	if err != nil {
-		maskedSrc, _ := u.MaskBasicAuth(src)
+		maskedSrc, _ := MaskBasicAuth(src)
 		log.Debug("Failed to parse URL", keyURL, maskedSrc, "error", err)
 		return "", false, fmt.Errorf("failed to parse URL %q: %w", maskedSrc, err)
 	}
@@ -117,7 +116,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	d.injectToken(parsedURL, host)
 
 	// Adjust subdirectory if needed.
-	d.adjustSubdir(parsedURL, d.source)
+	d.adjustSubdir(parsedURL, d.Source)
 
 	// Set "depth=1" for a shallow clone if not specified.
 	q := parsedURL.Query()
@@ -127,7 +126,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	parsedURL.RawQuery = q.Encode()
 
 	finalURL := "git::" + parsedURL.String()
-	maskedFinal, err := u.MaskBasicAuth(strings.TrimPrefix(finalURL, "git::"))
+	maskedFinal, err := MaskBasicAuth(strings.TrimPrefix(finalURL, "git::"))
 	if err != nil {
 		log.Debug("Masking failed", "error", err)
 	} else {
@@ -162,13 +161,13 @@ func (d *CustomGitDetector) ensureScheme(src string) string {
 
 	if !strings.Contains(src, schemeSeparator) {
 		if newSrc, rewritten := rewriteSCPURL(src); rewritten {
-			maskedOld, _ := u.MaskBasicAuth(src)
-			maskedNew, _ := u.MaskBasicAuth(newSrc)
+			maskedOld, _ := MaskBasicAuth(src)
+			maskedNew, _ := MaskBasicAuth(newSrc)
 			log.Debug("Rewriting SCP-style SSH URL", "old_url", maskedOld, "new_url", maskedNew)
 			return newSrc
 		}
 		src = "https://" + src
-		maskedSrc, _ := u.MaskBasicAuth(src)
+		maskedSrc, _ := MaskBasicAuth(src)
 		log.Debug("Defaulting to https scheme", keyURL, maskedSrc)
 	}
 	return src
@@ -215,14 +214,14 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 	if token != "" {
 		defaultUsername := getDefaultUsername(host)
 		parsedURL.User = url.UserPassword(defaultUsername, token)
-		maskedURL, _ := u.MaskBasicAuth(parsedURL.String())
+		maskedURL, _ := MaskBasicAuth(parsedURL.String())
 		log.Debug("Injected token", "env", tokenSource, keyURL, maskedURL)
 	} else {
 		log.Debug("No token found for injection")
 	}
 }
 
-// resolveToken returns the token and its source based on the host.
+// resolveToken returns the token and its Source based on the host.
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	var token, tokenSource string
 	switch host {
@@ -283,7 +282,7 @@ func (d *CustomGitDetector) adjustSubdir(parsedURL *url.URL, source string) {
 	if normalizedSource != "" && !strings.Contains(normalizedSource, "//") {
 		parts := strings.SplitN(parsedURL.Path, "/", 4)
 		if strings.HasSuffix(parsedURL.Path, ".git") || len(parts) == 3 {
-			maskedSrc, _ := u.MaskBasicAuth(source)
+			maskedSrc, _ := MaskBasicAuth(source)
 			log.Debug("Detected top-level repo with no subdir: appending '//.'", keyURL, maskedSrc)
 			parsedURL.Path += "//."
 		}
@@ -298,7 +297,7 @@ func RegisterCustomDetectors(atmosConfig schema.AtmosConfiguration, source strin
 
 	getter.Detectors = append(
 		[]getter.Detector{
-			&CustomGitDetector{AtmosConfig: atmosConfig, source: source},
+			&CustomGitDetector{AtmosConfig: atmosConfig, Source: source},
 		},
 		getter.Detectors...,
 	)
@@ -383,7 +382,7 @@ func DownloadDetectFormatAndParseFile(atmosConfig *schema.AtmosConfiguration, fi
 		return nil, fmt.Errorf("failed to download the file '%s': %w", file, err)
 	}
 
-	res, err := u.DetectFormatAndParseFile(f)
+	res, err := DetectFormatAndParseFile(f)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file '%s': %w", file, err)
 	}

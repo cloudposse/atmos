@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,20 +20,22 @@ const (
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
 	AtmosYamlFuncEnv             = "!env"
 	AtmosYamlFuncInclude         = "!include"
-
-	// For internal use by Atmos when processing the `!include` function
-	AtmosYamlFuncIncludeLocalFile = "!include-local-file"
-	AtmosYamlFuncIncludeGoGetter  = "!include-go-getter"
 )
 
-var AtmosYamlTags = []string{
-	AtmosYamlFuncExec,
-	AtmosYamlFuncStore,
-	AtmosYamlFuncTemplate,
-	AtmosYamlFuncTerraformOutput,
-	AtmosYamlFuncEnv,
-	AtmosYamlFuncInclude,
-}
+var (
+	AtmosYamlTags = []string{
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncEnv,
+	}
+
+	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
+	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
+	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
+	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
+)
 
 // PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(data any) error {
@@ -91,87 +94,121 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 	for i := 0; i < len(node.Content); i++ {
 		n := node.Content[i]
+		tag := strings.TrimSpace(n.Tag)
+		val := strings.TrimSpace(n.Value)
 
-		if SliceContainsString(AtmosYamlTags, n.Tag) {
-			val, err := getValueWithTag(atmosConfig, n, file)
+		if SliceContainsString(AtmosYamlTags, tag) {
+			n.Value = getValueWithTag(n)
+		}
+
+		// Handle the !include tag
+		if tag == AtmosYamlFuncInclude {
+			var includeFile string
+			var includeQuery string
+			var res any
+			var localFile string
+
+			parts, err := SplitStringByDelimiter(val, ' ')
 			if err != nil {
 				return err
 			}
-			n.Value = val
+
+			partsLen := len(parts)
+
+			if partsLen == 2 {
+				includeFile = strings.TrimSpace(parts[0])
+				includeQuery = strings.TrimSpace(parts[1])
+			} else if partsLen == 1 {
+				includeFile = strings.TrimSpace(parts[0])
+			} else {
+				return fmt.Errorf("%w: %s, stack manifest: %s", ErrIncludeYamlFunctionInvalidArguments, val, file)
+			}
+
+			// If absolute path is provided, check if the file exists
+			if filepath.IsAbs(includeFile) {
+				if !FileExists(includeFile) {
+					return fmt.Errorf("%w: %s, stack manifest: %s", ErrIncludeYamlFunctionInvalidFile, val, file)
+				}
+				localFile = includeFile
+			}
+
+			// Detect relative paths (relative to the manifest file) and convert to absolute paths
+			if localFile == "" {
+				resolved := ResolveRelativePath(includeFile, file)
+				if FileExists(resolved) {
+					resolvedAbsolutePath, err := filepath.Abs(resolved)
+					if err != nil {
+						return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionInvalidAbsPath, val, file, err)
+					}
+					localFile = resolvedAbsolutePath
+				}
+			}
+
+			// Check if the `!include` function points to an Atmos stack manifest relative to the `base_path` defined in `atmos.yaml`
+			if localFile == "" {
+				atmosManifestPath := filepath.Join(atmosConfig.BasePath, includeFile)
+				if FileExists(atmosManifestPath) {
+					atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
+					if err != nil {
+						return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionInvalidAbsPath, val, file, err)
+					}
+					localFile = atmosManifestAbsolutePath
+				}
+			}
+
+			// Process local file
+			if localFile != "" {
+				res, err = DetectFormatAndParseFile(localFile)
+				if err != nil {
+					return err
+				}
+			} else {
+				// Process remote file with `go-getter`
+				res, err = DownloadDetectFormatAndParseFile(atmosConfig, includeFile)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Evaluate the YQ expression if provided
+			if includeQuery != "" {
+				res, err = EvaluateYqExpression(atmosConfig, res, includeQuery)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Convert the Go structure to YAML
+			y, err := ConvertToYAML(res)
+			if err != nil {
+				return err
+			}
+
+			// Decode the YAML content into a YAML node
+			var includedNode yaml.Node
+			err = yaml.Unmarshal([]byte(y), &includedNode)
+			if err != nil {
+				return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+			}
+
+			// Replace the current node with the decoded YAML node with the included content
+			*n = includedNode
 		}
 
-		if err := processCustomTags(atmosConfig, n, file); err != nil {
-			return err
+		// Recursively process the child nodes
+		if len(n.Content) > 0 {
+			if err := processCustomTags(atmosConfig, n, file); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func getNodeValue(tag string, f string, q string) string {
-	t := tag + "-local-file \"" + f + "\""
-	if q == "" {
-		return strings.TrimSpace(t)
-	}
-	return strings.TrimSpace(t + " \"" + q + "\"")
-}
-
-func getValueWithTag(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) (string, error) {
+func getValueWithTag(n *yaml.Node) string {
 	tag := strings.TrimSpace(n.Tag)
 	val := strings.TrimSpace(n.Value)
-
-	if tag == AtmosYamlFuncInclude {
-		var f string
-		q := ""
-
-		parts, err := SplitStringByDelimiter(val, ' ')
-		if err != nil {
-			return "", err
-		}
-
-		partsLen := len(parts)
-
-		if partsLen == 2 {
-			f = strings.TrimSpace(parts[0])
-			q = strings.TrimSpace(parts[1])
-		} else if partsLen == 1 {
-			f = strings.TrimSpace(parts[0])
-		} else {
-			err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s %s. The function accepts 1 or 2 arguments", tag, val)
-			return "", err
-		}
-
-		// If absolute path is provided, check if the file exists
-		if filepath.IsAbs(f) {
-			if !FileExists(f) {
-				return "", fmt.Errorf("the function '%s %s' points to a file that does not exist", tag, val)
-			}
-			return getNodeValue(tag, f, q), nil
-		}
-
-		// Detect relative paths (relative to the manifest file) and convert to absolute paths
-		resolved := ResolveRelativePath(f, file)
-		if FileExists(resolved) {
-			resolvedAbsolutePath, err := filepath.Abs(resolved)
-			if err != nil {
-				return "", fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
-			}
-			return getNodeValue(tag, resolvedAbsolutePath, q), nil
-		}
-
-		// Check if the `!include` function points to an Atmos stack manifest relative to the `base_path` defined in `atmos.yaml`
-		atmosManifestPath := filepath.Join(atmosConfig.BasePath, f)
-		if FileExists(atmosManifestPath) {
-			atmosManifestAbsolutePath, err := filepath.Abs(atmosManifestPath)
-			if err != nil {
-				return "", fmt.Errorf("error converting the file path to an ansolute path in the function '%s %s': %v", tag, val, err)
-			}
-			return getNodeValue(tag, atmosManifestAbsolutePath, q), nil
-		}
-
-		return strings.TrimSpace(tag + "-go-getter " + f + " " + q), nil
-	}
-
-	return strings.TrimSpace(tag + " " + val), nil
+	return strings.TrimSpace(tag + " " + val)
 }
 
 // UnmarshalYAML unmarshals YAML into a Go type
