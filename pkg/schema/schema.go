@@ -210,6 +210,10 @@ type AtmosSettings struct {
 	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
 	InjectGithubToken bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
+	GithubToken       string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
+	BitbucketToken    string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
+	BitbucketUsername string           `yaml:"bitbucket_username,omitempty" mapstructure:"bitbucket_username"`
+	GitlabToken       string           `yaml:"gitlab_token,omitempty" mapstructure:"gitlab_token"`
 }
 
 type Docs struct {

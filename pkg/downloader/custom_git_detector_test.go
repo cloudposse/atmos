@@ -108,18 +108,18 @@ func TestNormalizePath(t *testing.T) {
 }
 
 func TestGetDefaultUsername(t *testing.T) {
-	if un := getDefaultUsername(hostGitHub); un != "x-access-token" {
+	detector := CustomGitDetector{atmosConfig: &schema.AtmosConfiguration{}}
+	if un := detector.getDefaultUsername(hostGitHub); un != "x-access-token" {
 		t.Errorf("Expected x-access-token for GitHub, got %s", un)
 	}
-	if un := getDefaultUsername(hostGitLab); un != "oauth2" {
+	if un := detector.getDefaultUsername(hostGitLab); un != "oauth2" {
 		t.Errorf("Expected oauth2 for GitLab, got %s", un)
 	}
-	os.Setenv("BITBUCKET_USERNAME", "bbUser")
-	defer os.Unsetenv("BITBUCKET_USERNAME")
-	if un := getDefaultUsername(hostBitbucket); un != "bbUser" {
+	detector.atmosConfig.Settings.BitbucketUsername = "bbUser"
+	if un := detector.getDefaultUsername(hostBitbucket); un != "bbUser" {
 		t.Errorf("Expected bbUser for Bitbucket, got %s", un)
 	}
-	if un := getDefaultUsername("unknown.com"); un != "x-access-token" {
+	if un := detector.getDefaultUsername("unknown.com"); un != "x-access-token" {
 		t.Errorf("Expected default x-access-token for unknown host, got %s", un)
 	}
 }

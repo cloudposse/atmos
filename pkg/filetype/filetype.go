@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// IsYAML checks if data is in YAML format
+// IsYAML checks if data is in YAML format.
 func IsYAML(data string) bool {
 	if strings.TrimSpace(data) == "" {
 		return false
@@ -27,7 +27,7 @@ func IsYAML(data string) bool {
 	return isMap || isSlice
 }
 
-// IsHCL checks if data is in HCL format
+// IsHCL checks if data is in HCL format.
 func IsHCL(data string) bool {
 	if strings.TrimSpace(data) == "" {
 		return false
@@ -37,7 +37,7 @@ func IsHCL(data string) bool {
 	return hcl.Unmarshal([]byte(data), &hclData) == nil
 }
 
-// IsJSON checks if data is in JSON format
+// IsJSON checks if data is in JSON format.
 func IsJSON(data string) bool {
 	if strings.TrimSpace(data) == "" {
 		return false
