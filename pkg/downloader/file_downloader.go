@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/google/uuid"
 	"github.com/hashicorp/hcl"
 	"gopkg.in/yaml.v2"
@@ -67,17 +67,17 @@ func (fd *fileDownloader) detectFormatAndParse(filename string) (any, error) {
 
 	data := string(d)
 	switch {
-	case utils.IsJSON(data):
+	case filetype.IsJSON(data):
 		err = json.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
-	case utils.IsHCL(data):
+	case filetype.IsHCL(data):
 		err = hcl.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
-	case utils.IsYAML(data):
+	case filetype.IsYAML(data):
 		err = yaml.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err

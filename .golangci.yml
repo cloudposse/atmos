@@ -46,6 +46,12 @@ linters-settings:
   dupl:
     threshold: 150 # Tokens count to trigger issue.
 
+  forbidigo:
+    # Forbid specific function calls
+    forbid:
+      - p: "os\\.Getenv"
+        msg: "Use `viper.BindEnv` for new environment variables instead of `os.Getenv`"
+
   funlen:
     lines: 60 # Maximum number of lines per function
     statements: 40 # Maximum number of statements per function
@@ -60,14 +66,6 @@ linters-settings:
   gosec:
     excludes:
       - G101 # Look for hard coded credentials
-
-  gofmt:
-    # Simplify code: gofmt -s
-    simplify: true
-    # Define indentation
-    rewrite-rules:
-      - pattern: "interface{}"
-        replacement: "any"
 
   cyclop:
     # Maximum function complexity
@@ -200,6 +198,7 @@ issues:
         - errcheck
         - funlen
         - gci
+        - gocognit
         - gosec
         - revive
 

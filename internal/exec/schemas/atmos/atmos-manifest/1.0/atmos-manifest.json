@@ -16,6 +16,9 @@
     "vars": {
       "$ref": "#/definitions/vars"
     },
+    "hooks": {
+      "$ref": "#/definitions/hooks"
+    },
     "env": {
       "$ref": "#/definitions/env"
     },
@@ -71,6 +74,11 @@
         },
         {
           "required": [
+            "hooks"
+          ]
+        },
+        {
+          "required": [
             "env"
           ]
         },
@@ -94,656 +102,989 @@
   ],
   "definitions": {
     "import": {
-      "type": "array",
+      "title": "import",
       "description": "Import section",
-      "items": {
-        "oneOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "path": {
-                "type": "string"
-              },
-              "skip_templates_processing": {
-                "type": "boolean"
-              },
-              "ignore_missing_template_values": {
-                "type": "boolean"
-              },
-              "skip_if_missing": {
-                "type": "boolean"
-              },
-              "context": {
-                "type": "object",
-                "additionalProperties": true
-              }
-            },
-            "required": [
-              "path"
-            ]
-          }
-        ]
-      }
-    },
-    "components": {
-      "type": "object",
-      "description": "Components section",
-      "additionalProperties": false,
-      "properties": {
-        "terraform": {
-          "$ref": "#/definitions/terraform_components"
-        },
-        "helmfile": {
-          "$ref": "#/definitions/helmfile_components"
-        }
-      },
-      "required": [],
-      "title": "components"
-    },
-    "terraform": {
-      "type": "object",
-      "description": "Terraform section",
-      "additionalProperties": false,
-      "properties": {
-        "vars": {
-          "$ref": "#/definitions/vars"
-        },
-        "env": {
-          "$ref": "#/definitions/env"
-        },
-        "settings": {
-          "$ref": "#/definitions/settings"
-        },
-        "command": {
-          "$ref": "#/definitions/command"
-        },
-        "backend_type": {
-          "$ref": "#/definitions/backend_type"
-        },
-        "backend": {
-          "$ref": "#/definitions/backend"
-        },
-        "remote_state_backend_type": {
-          "$ref": "#/definitions/remote_state_backend_type"
-        },
-        "remote_state_backend": {
-          "$ref": "#/definitions/remote_state_backend"
-        },
-        "overrides": {
-          "$ref": "#/definitions/overrides"
-        },
-        "providers": {
-          "$ref": "#/definitions/providers"
-        }
-      },
-      "required": [],
-      "title": "terraform"
-    },
-    "terraform_components": {
-      "type": "object",
-      "description": "Terraform components section",
-      "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
-          "$ref": "#/definitions/terraform_component_manifest"
-        }
-      },
-      "additionalProperties": false,
-      "title": "terraform_components"
-    },
-    "terraform_component_manifest": {
-      "type": "object",
-      "description": "Terraform component manifest",
-      "additionalProperties": false,
-      "properties": {
-        "metadata": {
-          "$ref": "#/definitions/metadata"
-        },
-        "component": {
-          "$ref": "#/definitions/component"
-        },
-        "vars": {
-          "$ref": "#/definitions/vars"
-        },
-        "env": {
-          "$ref": "#/definitions/env"
-        },
-        "settings": {
-          "$ref": "#/definitions/settings"
-        },
-        "command": {
-          "$ref": "#/definitions/command"
-        },
-        "backend_type": {
-          "$ref": "#/definitions/backend_type"
-        },
-        "backend": {
-          "$ref": "#/definitions/backend"
-        },
-        "remote_state_backend_type": {
-          "$ref": "#/definitions/remote_state_backend_type"
-        },
-        "remote_state_backend": {
-          "$ref": "#/definitions/remote_state_backend"
-        },
-        "providers": {
-          "$ref": "#/definitions/providers"
-        },
-        "hooks": {
-          "$ref": "#/definitions/hooks"
-        }
-      },
-      "required": [],
-      "title": "terraform_component_manifest"
-    },
-    "helmfile": {
-      "type": "object",
-      "description": "Helmfile section",
-      "additionalProperties": false,
-      "properties": {
-        "vars": {
-          "$ref": "#/definitions/vars"
-        },
-        "env": {
-          "$ref": "#/definitions/env"
-        },
-        "settings": {
-          "$ref": "#/definitions/settings"
-        },
-        "command": {
-          "$ref": "#/definitions/command"
-        },
-        "overrides": {
-          "$ref": "#/definitions/overrides"
-        }
-      },
-      "required": [],
-      "title": "helmfile"
-    },
-    "helmfile_components": {
-      "type": "object",
-      "description": "Helmfile components section",
-      "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
-          "$ref": "#/definitions/helmfile_component_manifest"
-        }
-      },
-      "additionalProperties": false,
-      "title": "helmfile_components"
-    },
-    "helmfile_component_manifest": {
-      "type": "object",
-      "description": "Helmfile component manifest",
-      "additionalProperties": false,
-      "properties": {
-        "metadata": {
-          "$ref": "#/definitions/metadata"
-        },
-        "component": {
-          "$ref": "#/definitions/component"
-        },
-        "vars": {
-          "$ref": "#/definitions/vars"
-        },
-        "env": {
-          "$ref": "#/definitions/env"
-        },
-        "settings": {
-          "$ref": "#/definitions/settings"
-        },
-        "command": {
-          "$ref": "#/definitions/command"
-        }
-      },
-      "required": [],
-      "title": "helmfile_component_manifest"
-    },
-    "command": {
-      "type": "string",
-      "description": "Command to execute",
-      "title": "command"
-    },
-    "component": {
-      "type": "string",
-      "description": "Component section",
-      "title": "component"
-    },
-    "metadata": {
-      "type": "object",
-      "description": "Metadata section",
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": [
-            "abstract",
-            "real"
-          ]
-        },
-        "enabled": {
-          "type": "boolean",
-          "description": "Flag to enable or disable the component"
-        },
-        "component": {
-          "type": "string",
-          "description": "Terraform/OpenTofu/Helmfile component"
-        },
-        "inherits": {
-          "type": "array",
-          "description": "A list of Atmos components that the current component inherits from",
-          "uniqueItems": true,
-          "items": {
-            "type": "string"
-          }
-        },
-        "terraform_workspace": {
-          "type": "string",
-          "description": "Terraform workspace"
-        },
-        "terraform_workspace_pattern": {
-          "type": "string",
-          "description": "Terraform workspace pattern"
-        },
-        "custom": {
-          "type": "object",
-          "description": "Custom configuration per component, not inherited by derived components",
-          "additionalProperties": true,
-          "title": "custom"
-        },
-        "locked": {
-          "type": "boolean",
-          "description": "Flag to lock the component and prevent modifications while allowing read operations"
-        }
-      },
-      "required": [],
-      "title": "metadata"
-    },
-    "settings": {
-      "type": "object",
-      "description": "Settings section",
-      "additionalProperties": true,
-      "properties": {
-        "validation": {
-          "$ref": "#/definitions/validation"
-        },
-        "depends_on": {
-          "$ref": "#/definitions/depends_on"
-        },
-        "spacelift": {
-          "$ref": "#/definitions/spacelift"
-        },
-        "atlantis": {
-          "$ref": "#/definitions/atlantis"
-        },
-        "templates": {
-          "$ref": "#/definitions/templates"
-        }
-      },
-      "required": [],
-      "title": "settings"
-    },
-    "validation": {
-      "type": "object",
-      "description": "Validation section",
-      "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
-          "$ref": "#/definitions/validation_manifest"
-        }
-      },
-      "additionalProperties": false,
-      "title": "validation"
-    },
-    "validation_manifest": {
-      "type": "object",
-      "description": "Validation manifest",
-      "properties": {
-        "schema_type": {
-          "type": "string",
-          "enum": [
-            "jsonschema",
-            "opa"
-          ]
-        },
-        "schema_path": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "disabled": {
-          "type": "boolean"
-        },
-        "timeout": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "module_paths": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string"
-          },
-          "description": "List of paths to validation modules"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "schema_type",
-        "schema_path"
-      ],
-      "title": "validation_manifest"
-    },
-    "vars": {
-      "type": "object",
-      "description": "Vars section",
-      "additionalProperties": true,
-      "title": "vars"
-    },
-    "env": {
-      "type": "object",
-      "description": "Env section",
-      "additionalProperties": true,
-      "required": [],
-      "title": "env"
-    },
-    "backend_type": {
-      "type": "string",
-      "enum": [
-        "local",
-        "s3",
-        "remote",
-        "vault",
-        "static",
-        "azurerm",
-        "gcs",
-        "cloud"
-      ],
-      "description": "Backend type",
-      "title": "backend_type"
-    },
-    "backend": {
-      "$ref": "#/definitions/backend_manifest",
-      "title": "backend"
-    },
-    "remote_state_backend_type": {
-      "type": "string",
-      "enum": [
-        "local",
-        "s3",
-        "remote",
-        "vault",
-        "static",
-        "azurerm",
-        "gcs",
-        "cloud"
-      ],
-      "description": "Remote state backend type",
-      "title": "remote_state_backend_type"
-    },
-    "remote_state_backend": {
-      "$ref": "#/definitions/backend_manifest",
-      "title": "remote_state_backend"
-    },
-    "backend_manifest": {
-      "type": "object",
-      "description": "Backend manifest",
-      "additionalProperties": false,
-      "properties": {
-        "local": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "s3": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "remote": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "vault": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "static": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "azurerm": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "gcs": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "cloud": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      },
-      "required": [],
-      "title": "backend"
-    },
-    "overrides": {
-      "type": "object",
-      "description": "Overrides section",
-      "additionalProperties": false,
-      "properties": {
-        "command": {
-          "$ref": "#/definitions/command"
-        },
-        "vars": {
-          "$ref": "#/definitions/vars"
-        },
-        "env": {
-          "$ref": "#/definitions/env"
-        },
-        "settings": {
-          "$ref": "#/definitions/settings"
-        },
-        "providers": {
-          "$ref": "#/definitions/providers"
-        }
-      },
-      "required": [],
-      "title": "overrides"
-    },
-    "depends_on": {
-      "type": "object",
-      "description": "Depends_on section",
-      "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
-          "$ref": "#/definitions/depends_on_manifest"
-        }
-      },
-      "additionalProperties": false,
-      "title": "depends_on"
-    },
-    "depends_on_manifest": {
-      "type": "object",
-      "description": "Depends_on manifest",
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "tenant": {
-          "type": "string"
-        },
-        "environment": {
-          "type": "string"
-        },
-        "stage": {
-          "type": "string"
-        },
-        "component": {
-          "type": "string"
-        },
-        "file": {
-          "type": "string"
-        },
-        "folder": {
-          "type": "string"
-        }
-      },
       "oneOf": [
         {
-          "required": [
-            "component"
-          ]
+          "type": "string",
+          "pattern": "^!include"
         },
         {
-          "required": [
-            "file"
-          ]
-        },
-        {
-          "required": [
-            "folder"
-          ]
-        }
-      ],
-      "additionalProperties": false,
-      "title": "depends_on_manifest"
-    },
-    "spacelift": {
-      "type": "object",
-      "description": "Spacelift section",
-      "additionalProperties": true,
-      "properties": {
-        "workspace_enabled": {
-          "type": "boolean"
-        },
-        "stack_destructor_enabled": {
-          "type": "boolean"
-        },
-        "protect_from_deletion": {
-          "type": "boolean"
-        },
-        "autodeploy": {
-          "type": "boolean"
-        },
-        "terraform_version": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "string"
-            }
-          ]
-        }
-      },
-      "required": [],
-      "title": "spacelift"
-    },
-    "atlantis": {
-      "type": "object",
-      "description": "Atlantis section",
-      "additionalProperties": false,
-      "properties": {
-        "config_template_name": {
-          "type": "string"
-        },
-        "config_template": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "project_template_name": {
-          "type": "string"
-        },
-        "project_template": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "workflow_templates": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      },
-      "required": [],
-      "title": "atlantis"
-    },
-    "workflows": {
-      "type": "object",
-      "description": "Workflows section",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        }
-      },
-      "patternProperties": {
-        "^[\/a-zA-Z0-9-_{}. ]+$": {
-          "$ref": "#/definitions/workflow_manifest"
-        }
-      },
-      "additionalProperties": false,
-      "title": "workflows"
-    },
-    "workflow_manifest": {
-      "type": "object",
-      "description": "Atmos workflow manifest",
-      "additionalProperties": false,
-      "properties": {
-        "description": {
-          "type": "string"
-        },
-        "stack": {
-          "type": "string"
-        },
-        "steps": {
           "type": "array",
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "name": {
+            "oneOf": [
+              {
                 "type": "string"
               },
-              "command": {
-                "type": "string"
-              },
-              "stack": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "skip_templates_processing": {
+                    "type": "boolean"
+                  },
+                  "ignore_missing_template_values": {
+                    "type": "boolean"
+                  },
+                  "skip_if_missing": {
+                    "type": "boolean"
+                  },
+                  "context": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "path"
+                ]
               }
-            },
-            "required": [
-              "command"
             ]
           }
         }
-      },
-      "required": [
-        "steps"
-      ],
-      "title": "workflow_manifest"
+      ]
+    },
+    "components": {
+      "title": "components",
+      "description": "Components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "terraform": {
+              "$ref": "#/definitions/terraform_components"
+            },
+            "helmfile": {
+              "$ref": "#/definitions/helmfile_components"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "terraform": {
+      "title": "terraform",
+      "description": "Terraform section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "backend_type": {
+              "$ref": "#/definitions/backend_type"
+            },
+            "backend": {
+              "$ref": "#/definitions/backend"
+            },
+            "remote_state_backend_type": {
+              "$ref": "#/definitions/remote_state_backend_type"
+            },
+            "remote_state_backend": {
+              "$ref": "#/definitions/remote_state_backend"
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
+            },
+            "providers": {
+              "$ref": "#/definitions/providers"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "terraform_components": {
+      "title": "terraform_components",
+      "description": "Terraform components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/terraform_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "terraform_component_manifest": {
+      "title": "terraform_component_manifest",
+      "description": "Terraform component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "backend_type": {
+              "$ref": "#/definitions/backend_type"
+            },
+            "backend": {
+              "$ref": "#/definitions/backend"
+            },
+            "remote_state_backend_type": {
+              "$ref": "#/definitions/remote_state_backend_type"
+            },
+            "remote_state_backend": {
+              "$ref": "#/definitions/remote_state_backend"
+            },
+            "providers": {
+              "$ref": "#/definitions/providers"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helmfile": {
+      "title": "helmfile",
+      "description": "Helmfile section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helmfile_components": {
+      "title": "helmfile_components",
+      "description": "Helmfile components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/helmfile_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "helmfile_component_manifest": {
+      "title": "helmfile_component_manifest",
+      "description": "Helmfile component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "command": {
+      "title": "command",
+      "description": "Command to execute",
+      "type": "string"
+    },
+    "component": {
+      "title": "component",
+      "description": "Component section",
+      "type": "string"
+    },
+    "metadata": {
+      "title": "metadata",
+      "description": "Metadata section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "abstract",
+                "real"
+              ]
+            },
+            "enabled": {
+              "type": "boolean",
+              "description": "Flag to enable or disable the component"
+            },
+            "component": {
+              "type": "string",
+              "description": "Terraform/OpenTofu/Helmfile component"
+            },
+            "inherits": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "array",
+                  "description": "A list of Atmos components that the current component inherits from",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "terraform_workspace": {
+              "type": "string",
+              "description": "Terraform workspace"
+            },
+            "terraform_workspace_pattern": {
+              "type": "string",
+              "description": "Terraform workspace pattern"
+            },
+            "custom": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "description": "Custom configuration per component, not inherited by derived components",
+                  "additionalProperties": true,
+                  "title": "custom"
+                }
+              ]
+            },
+            "locked": {
+              "type": "boolean",
+              "description": "Flag to lock the component and prevent modifications while allowing read operations"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "settings": {
+      "title": "settings",
+      "description": "Settings section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "validation": {
+              "$ref": "#/definitions/validation"
+            },
+            "depends_on": {
+              "$ref": "#/definitions/depends_on"
+            },
+            "spacelift": {
+              "$ref": "#/definitions/spacelift"
+            },
+            "atlantis": {
+              "$ref": "#/definitions/atlantis"
+            },
+            "templates": {
+              "$ref": "#/definitions/templates"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "validation": {
+      "title": "validation",
+      "description": "Validation section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/validation_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "validation_manifest": {
+      "title": "validation_manifest",
+      "description": "Validation manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_type": {
+              "type": "string",
+              "enum": [
+                "jsonschema",
+                "opa"
+              ]
+            },
+            "schema_path": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "disabled": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "module_paths": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              },
+              "description": "List of paths to validation modules"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "schema_type",
+            "schema_path"
+          ]
+        }
+      ]
+    },
+    "vars": {
+      "title": "vars",
+      "description": "Vars section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "env": {
+      "title": "env",
+      "description": "Env section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "backend_type": {
+      "title": "backend_type",
+      "description": "Backend type",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "local",
+            "s3",
+            "remote",
+            "vault",
+            "static",
+            "azurerm",
+            "gcs",
+            "cloud"
+          ]
+        }
+      ]
+    },
+    "backend": {
+      "title": "backend",
+      "description": "Backend section",
+      "$ref": "#/definitions/backend_manifest"
+    },
+    "remote_state_backend_type": {
+      "title": "remote_state_backend_type",
+      "description": "Remote state backend type",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "local",
+            "s3",
+            "remote",
+            "vault",
+            "static",
+            "azurerm",
+            "gcs",
+            "cloud"
+          ]
+        }
+      ]
+    },
+    "remote_state_backend": {
+      "title": "remote_state_backend",
+      "description": "Remote state backend section",
+      "$ref": "#/definitions/backend_manifest"
+    },
+    "backend_manifest": {
+      "title": "backend",
+      "description": "Backend manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "local": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "s3": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "remote": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "vault": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "static": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "azurerm": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "gcs": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "cloud": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "overrides": {
+      "title": "overrides",
+      "description": "Overrides section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "$ref": "#/definitions/command"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "providers": {
+              "$ref": "#/definitions/providers"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "depends_on": {
+      "title": "depends_on",
+      "description": "Depends_on section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/depends_on_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "depends_on_manifest": {
+      "title": "depends_on_manifest",
+      "description": "Depends_on manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "tenant": {
+              "type": "string"
+            },
+            "environment": {
+              "type": "string"
+            },
+            "stage": {
+              "type": "string"
+            },
+            "component": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "folder": {
+              "type": "string"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "component"
+              ]
+            },
+            {
+              "required": [
+                "file"
+              ]
+            },
+            {
+              "required": [
+                "folder"
+              ]
+            }
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "spacelift": {
+      "title": "spacelift",
+      "description": "Spacelift section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "workspace_enabled": {
+              "type": "boolean"
+            },
+            "stack_destructor_enabled": {
+              "type": "boolean"
+            },
+            "protect_from_deletion": {
+              "type": "boolean"
+            },
+            "autodeploy": {
+              "type": "boolean"
+            },
+            "terraform_version": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "atlantis": {
+      "title": "atlantis",
+      "description": "Atlantis section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "config_template_name": {
+              "type": "string"
+            },
+            "config_template": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "project_template_name": {
+              "type": "string"
+            },
+            "project_template": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            },
+            "workflow_templates": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "workflows": {
+      "title": "workflows",
+      "description": "Workflows section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/workflow_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "workflow_manifest": {
+      "title": "workflow_manifest",
+      "description": "Workflow manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "string"
+            },
+            "steps": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "command": {
+                        "type": "string"
+                      },
+                      "stack": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "command"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "steps"
+          ]
+        }
+      ]
     },
     "providers": {
-      "type": "object",
+      "title": "providers",
       "description": "Providers section",
-      "additionalProperties": true,
-      "title": "providers"
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
     },
     "templates": {
-      "type": "object",
+      "title": "templates",
       "description": "Templates section",
-      "additionalProperties": true,
-      "title": "templates"
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
     },
     "hooks": {
-      "type": "object",
+      "title": "hooks",
       "description": "Hooks section",
-      "additionalProperties": true,
-      "title": "hooks"
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
     }
   }
 }

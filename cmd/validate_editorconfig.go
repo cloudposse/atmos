@@ -24,7 +24,7 @@ var (
 	initEditorConfig       bool
 	currentConfig          *config.Config
 	cliConfig              config.Config
-	configFilePath         string
+	configFilePaths        []string
 	tmpExclude             string
 	format                 string
 )
@@ -50,10 +50,10 @@ func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
 	configPaths := []string{}
-	if configFilePath == "" {
-		configPaths = append(configPaths, defaultConfigFileNames[:]...)
+	if len(configFilePaths) == 0 {
+		configPaths = append(configPaths, defaultConfigFileNames...)
 	} else {
-		configPaths = append(configPaths, configFilePath)
+		configPaths = append(configPaths, configFilePaths...)
 	}
 
 	currentConfig = config.NewConfig(configPaths)
@@ -75,8 +75,8 @@ func initializeConfig(cmd *cobra.Command) {
 }
 
 func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConfiguration) {
-	if !cmd.Flags().Changed("config") && atmosConfig.Validate.EditorConfig.ConfigFilePath != "" {
-		configFilePath = atmosConfig.Validate.EditorConfig.ConfigFilePath
+	if !cmd.Flags().Changed("config") && len(atmosConfig.Validate.EditorConfig.ConfigFilePaths) > 0 {
+		configFilePaths = atmosConfig.Validate.EditorConfig.ConfigFilePaths
 	}
 	if !cmd.Flags().Changed("exclude") && len(atmosConfig.Validate.EditorConfig.Exclude) > 0 {
 		tmpExclude = strings.Join(atmosConfig.Validate.EditorConfig.Exclude, ",")
@@ -179,9 +179,9 @@ func checkVersion(config config.Config) error {
 
 // addPersistentFlags adds flags to the root command
 func addPersistentFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringVar(&configFilePath, "config", "", "Path to the configuration file")
+	cmd.PersistentFlags().StringSliceVar(&configFilePaths, "config", defaultConfigFileNames, "Paths to the configuration files")
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
-	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "creates an initial configuration")
+	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "Create an initial configuration")
 
 	cmd.PersistentFlags().BoolVar(&cliConfig.IgnoreDefaults, "ignore-defaults", false, "Ignore default excludes")
 	cmd.PersistentFlags().BoolVar(&cliConfig.DryRun, "dry-run", false, "Show which files would be checked")

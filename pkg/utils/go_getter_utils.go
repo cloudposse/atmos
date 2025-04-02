@@ -1,6 +1,6 @@
 // https://github.com/hashicorp/go-getter
 
-package exec
+package utils
 
 import (
 	"fmt"
