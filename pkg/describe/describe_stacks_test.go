@@ -309,17 +309,19 @@ func countComponentSections(stackData map[string]any, stack, component string) i
 		return 0
 	}
 
-	terraform, ok := components["terraform"].(map[string]any)
-	if !ok {
-		return 0
+	if terraform, ok := components["terraform"].(map[string]any); ok {
+		if comp, ok := terraform[component].(map[string]any); ok {
+			return len(comp)
+		}
 	}
 
-	comp, ok := terraform[component].(map[string]any)
-	if !ok {
-		return 0
+	if helmfile, ok := components["helmfile"].(map[string]any); ok {
+		if comp, ok := helmfile[component].(map[string]any); ok {
+			return len(comp)
+		}
 	}
 
-	return len(comp)
+	return 0
 }
 
 // Helper function to setup test configuration.
