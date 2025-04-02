@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/go-getter"
 
 	log "github.com/charmbracelet/log"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const DefaultDirPerm os.FileMode = 0o700
@@ -284,7 +285,7 @@ func downloadSource(
 
 	log.Debug("Downloading source", "source", pathOrURL, "tempDir", tempDir)
 
-	err = GoGetterGet(*atmosConfig, pathOrURL, tempDir, getter.ClientModeAny, 10*time.Minute)
+	err = u.GoGetterGet(*atmosConfig, pathOrURL, tempDir, getter.ClientModeAny, 10*time.Minute)
 	if err != nil {
 		return "", tempDir, fmt.Errorf("%w: %s: %v", ErrDownloadPackage, pathOrURL, err)
 	}
