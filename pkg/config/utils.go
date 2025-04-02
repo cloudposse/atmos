@@ -398,7 +398,8 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 
 	if len(atmosConfig.Logs.Level) > 0 {
 		if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-			return err
+			//nolint:all // The reason to escape this is because it is expected to fail fast with FATA prefix for invalid log levels
+			log.Fatal(err)
 		}
 	}
 

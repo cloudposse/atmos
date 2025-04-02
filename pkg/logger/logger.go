@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // LogLevel represents the verbosity level for logging.
@@ -329,13 +330,8 @@ func PrintTips(tips []string) {
 		return
 	}
 
-	var output io.Writer = os.Stderr
-	if color.Error != nil {
-		output = color.Error
-	}
-
 	for i, tip := range tips {
-		fmt.Fprintf(output, "  %s %s\n",
+		u.PrintfMessageToTUI("  %s %s\n",
 			theme.Colors.Info.Sprintf("%d.", i+1),
 			tip)
 	}
