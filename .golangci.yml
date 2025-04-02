@@ -67,14 +67,6 @@ linters-settings:
     excludes:
       - G101 # Look for hard coded credentials
 
-  gofmt:
-    # Simplify code: gofmt -s
-    simplify: true
-    # Define indentation
-    rewrite-rules:
-      - pattern: "interface{}"
-        replacement: "any"
-
   cyclop:
     # Maximum function complexity
     max-complexity: 15
@@ -206,6 +198,7 @@ issues:
         - errcheck
         - funlen
         - gci
+        - gocognit
         - gosec
         - revive
 
