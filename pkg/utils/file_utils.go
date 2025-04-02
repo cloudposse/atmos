@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -10,9 +11,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/hashicorp/hcl"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"gopkg.in/yaml.v3"
 )
+
+var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
 
 // IsDirectory checks if the path is a directory
 func IsDirectory(path string) (bool, error) {
@@ -302,22 +305,51 @@ func DetectFormatAndParseFile(filename string) (any, error) {
 
 	data := string(d)
 
-	if IsHCL(data) {
-		err = hcl.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-	} else if IsJSON(data) {
+	switch {
+	case IsJSON(data):
 		err = json.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
-	} else if IsYAML(data) {
+
+	case IsHCL(data):
+		parser := hclparse.NewParser()
+		file, diags := parser.ParseHCL(d, filename)
+		if diags != nil && diags.HasErrors() {
+			return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
+		}
+		if file == nil {
+			return nil, fmt.Errorf("%w, file: %s, file parsing returned nil", ErrFailedToProcessHclFile, filename)
+		}
+
+		// Extract all attributes from the file body
+		attributes, diags := file.Body.JustAttributes()
+		if diags != nil && diags.HasErrors() {
+			return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
+		}
+
+		// Map to store the parsed attribute values
+		result := make(map[string]any)
+
+		// Evaluate each attribute and store it in the result map
+		for name, attr := range attributes {
+			ctyValue, diags := attr.Expr.Value(nil)
+			if diags != nil && diags.HasErrors() {
+				return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
+			}
+
+			// Convert cty.Value to appropriate Go type
+			result[name] = CtyToGo(ctyValue)
+		}
+		v = result
+
+	case IsYAML(data):
 		err = yaml.Unmarshal(d, &v)
 		if err != nil {
 			return nil, err
 		}
-	} else {
+
+	default:
 		v = data
 	}
 
