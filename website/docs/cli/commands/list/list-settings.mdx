@@ -1,0 +1,104 @@
+---
+title: "atmos list settings"
+id: "list-settings"
+---
+
+# atmos list settings
+
+The `atmos list settings` command displays component settings across all stacks.
+
+## Usage
+
+```shell
+atmos list settings [flags]
+```
+
+## Description
+
+The `atmos list settings` command helps you inspect component settings across different stacks. It provides a tabular view where:
+
+- Each column represents a stack (e.g., dev-ue1, staging-ue1, prod-ue1)
+- Each row represents a key in the component's settings
+- Cells contain the settings values for each key in each stack (only scalars at this time)
+
+The command is particularly useful for:
+- Comparing component settings across different environments
+- Verifying settings are configured correctly in each stack
+- Understanding component configuration patterns across your infrastructure
+
+## Flags
+
+<dl>
+  <dt>`--query string`</dt>
+  <dd>Dot-notation path query to filter settings (e.g., `.settings.templates`). Uses a simplified path syntax, not full JMESPath.</dd>
+  <dt>`--max-columns int`</dt>
+  <dd>Maximum number of columns to display (default: `50`)</dd>
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dt>`--delimiter string`</dt>
+  <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
+  <dt>`--stack string`</dt>
+  <dd>Filter by stack by wildcard pattern (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)</dd>
+</dl>
+
+## Examples
+
+List all settings:
+```shell
+atmos list settings
+```
+
+List settings for specific stacks:
+```shell
+# List settings for dev stacks
+atmos list settings --stack '*-dev-*'
+
+# List settings for production stacks
+atmos list settings --stack 'prod-*'
+```
+
+List specific settings using path queries:
+```shell
+# Query template settings
+atmos list settings --query '.settings.templates'
+
+# Query validation settings
+atmos list settings --query '.settings.validation'
+
+# Query specific template configurations
+atmos list settings --query '.settings.templates.gomplate'
+```
+
+Output in different formats:
+```shell
+# JSON format for machine processing
+atmos list settings --format json
+
+# YAML format for configuration files
+atmos list settings --format yaml
+
+# CSV format for spreadsheet compatibility
+atmos list settings --format csv
+
+# TSV format with tab delimiters
+atmos list settings --format tsv
+```
+
+## Example Output
+
+```shell
+> atmos list settings
+┌──────────────┬──────────────┬──────────────┬──────────────┐
+│              │   dev-ue1    │  staging-ue1 │   prod-ue1   │
+├──────────────┼──────────────┼──────────────┼──────────────┤
+│ templates    │ {...}        │ {...}        │ {...}        │
+│ validation   │ {...}        │ {...}        │ {...}        │
+└──────────────┴──────────────┴──────────────┴──────────────┘
+```
+
+
+:::tip
+- For wide tables, try using more specific queries or reduce the number of stacks
+- Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
+- Settings are typically found under component configurations
+:::

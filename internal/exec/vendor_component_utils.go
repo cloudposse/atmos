@@ -388,7 +388,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 		if dryRun {
 			if needsCustomDetection(p.uri) {
 				log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.uri)
-				detector := &CustomGitDetector{AtmosConfig: *atmosConfig, source: ""}
+				detector := &u.CustomGitDetector{AtmosConfig: *atmosConfig, Source: ""}
 				_, _, err := detector.Detect(p.uri, "")
 				if err != nil {
 					return installedPkgMsg{
@@ -455,7 +455,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		if err := GoGetterGet(*atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+		if err := u.GoGetterGet(*atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %w", p.name, err)
 		}
 
@@ -511,7 +511,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		if err = GoGetterGet(*atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
+		if err = u.GoGetterGet(*atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %w", p.name, err)
 		}
 
