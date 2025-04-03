@@ -31,7 +31,7 @@ settings:
         # To Do: template can be a remote URL/github, using this local for testing
         template:  "./README.md.gotmpl"
         # The final README
-        output: "README.md"
+        output: "./README.md"
         terraform:
           source: terraform/
           enabled: true
