@@ -24,7 +24,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const DefaultDirPerm os.FileMode = 0o700
+const DefaultReadmeOutput = "./README.md"
 
 // TemplateRenderer is an interface for rendering templates.
 type TemplateRenderer interface {
@@ -149,26 +149,26 @@ func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.
 }
 
 // generateReadme merges data from docsGenerate.Input, runs terraform-docs if needed,
-// renders the final README using the provided renderer, and writes out the file.
+// renders the final README using the provided renderer, and writes writes README using resolvePath
 func generateReadme(
 	atmosConfig *schema.AtmosConfiguration,
-	dir string,
+	baseDir string,
 	docsGenerate *schema.DocsGenerateReadme,
 	renderer TemplateRenderer,
 ) error {
 	// 1) Merge YAML inputs.
-	mergedData, err := mergeInputs(atmosConfig, dir, docsGenerate)
+	mergedData, err := mergeInputs(atmosConfig, baseDir, docsGenerate)
 	if err != nil {
 		return fmt.Errorf("failed to merge input YAMLs: %w", err)
 	}
 
 	// 2) Generate terraform docs if enabled.
-	if err := applyTerraformDocs(dir, docsGenerate, mergedData); err != nil {
+	if err := applyTerraformDocs(baseDir, docsGenerate, mergedData); err != nil {
 		return err
 	}
 
 	// 3) Fetch the template.
-	chosenTemplate := fetchTemplate(atmosConfig, docsGenerate, dir)
+	chosenTemplate := fetchTemplate(atmosConfig, docsGenerate, baseDir)
 
 	// 4) Render final README using the injected renderer.
 	rendered, err := renderer.Render("docs-generate", chosenTemplate, mergedData, true)
@@ -176,13 +176,16 @@ func generateReadme(
 		return fmt.Errorf("failed to render template with datasources: %w", err)
 	}
 
-	// 5) Write final README (default filename "README.md" if not specified).
+	// 5) Resolve and write final README.
 	outputFile := docsGenerate.Output
 	if outputFile == "" {
-		outputFile = "README.md"
+		outputFile = DefaultReadmeOutput
 	}
-	outputPath := filepath.Join(dir, outputFile)
-	if err = os.WriteFile(outputPath, []byte(rendered), 0o644); err != nil {
+	outputPath, err := resolvePath(outputFile, baseDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve output path %s: %w", outputFile, err)
+	}
+	if err = os.WriteFile(outputPath, []byte(rendered), tempFilePermissions); err != nil {
 		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
 	}
 
@@ -269,9 +272,12 @@ func downloadSource(
 	pathOrURL string,
 	baseDir string,
 ) (localPath string, temDir string, err error) {
-	// If the path is not absolute and not a remote URL, join it with the base directory.
-	if !filepath.IsAbs(pathOrURL) && !isLikelyRemote(pathOrURL) {
-		pathOrURL = filepath.Join(baseDir, pathOrURL)
+	// If path is not remote, resolve it.
+	if !isRemoteSource(pathOrURL) {
+		pathOrURL, err = resolvePath(pathOrURL, baseDir)
+		if err != nil {
+			return "", "", fmt.Errorf("%w: %s", ErrPathResolution, err)
+		}
 	}
 	log.Debug("Downloading source", "source", pathOrURL, "baseDir", baseDir)
 	tempDir, err := os.MkdirTemp("", "atmos-docs-*")
@@ -279,7 +285,7 @@ func downloadSource(
 		return "", "", fmt.Errorf("%w: %v", ErrCreateTempDir, err)
 	}
 	// Ensure directory permissions are restricted.
-	if err := os.Chmod(tempDir, DefaultDirPerm); err != nil {
+	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
 		return "", "", fmt.Errorf("%w: %v", ErrSetTempDirPermissions, err)
 	}
 
@@ -289,37 +295,10 @@ func downloadSource(
 	if err != nil {
 		return "", tempDir, fmt.Errorf("%w: %s: %v", ErrDownloadPackage, pathOrURL, err)
 	}
-	downloadedPath, err := findSingleFileInDir(tempDir)
-	if err != nil {
-		return "", tempDir, fmt.Errorf("go-getter: %w", err)
-	}
+	fileName := filepath.Base(pathOrURL)
+	downloadedPath := filepath.Join(tempDir, fileName)
 
 	return downloadedPath, tempDir, nil
-}
-
-// findSingleFileInDir walks the given directory and returns the path of a single file if found.
-func findSingleFileInDir(dir string) (string, error) {
-	var files []string
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, werr error) error {
-		if werr != nil {
-			return werr
-		}
-		if !info.IsDir() {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-
-	if len(files) == 0 {
-		return "", fmt.Errorf("%w: %s", ErrNoFilesFound, dir)
-	}
-	if len(files) > 1 {
-		return "", fmt.Errorf("%w: %s (found %d)", ErrMultipleFilesFound, dir, len(files))
-	}
-	return files[0], nil
 }
 
 // isLikelyRemote does a quick check if a path looks remote.
@@ -331,4 +310,25 @@ func isRemoteSource(s string) bool {
 		}
 	}
 	return false
+}
+
+// - Explicit relative (./ or ../) relative to cwd
+// - Implicit relative paths first against baseDir, then cwd
+func resolvePath(path string, baseDir string) (string, error) {
+	if path == "" {
+		return "", ErrEmptyPath
+	}
+
+	if !filepath.IsAbs(path) && !strings.HasPrefix(path, "./") && !strings.HasPrefix(path, "../") {
+		// Implicit relative path: resolve first against baseDir
+		path = filepath.Join(baseDir, path)
+	}
+
+	// Finally, resolve against cwd
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", ErrPathResolution, err)
+	}
+
+	return absPath, nil
 }

@@ -22,4 +22,6 @@ var (
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
+	ErrEmptyPath                             = errors.New("path is empty, expected a valid file path")
+	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 )

@@ -25,7 +25,7 @@ func TestIsLikelyRemote(t *testing.T) {
 		{"C:\\path\\to\\file", false},
 	}
 	for _, tt := range tests {
-		if got := isLikelyRemote(tt.input); got != tt.expected {
+		if got := isRemoteSource(tt.input); got != tt.expected {
 			t.Errorf("isLikelyRemote(%q) = %v; want %v", tt.input, got, tt.expected)
 		}
 	}
@@ -71,57 +71,6 @@ func TestGetTerraformSource(t *testing.T) {
 	}
 	if got != baseDir {
 		t.Errorf("Expected %q, got %q", baseDir, got)
-	}
-}
-
-// TestFindSingleFileInDir tests three cases: no files, one file, and multiple files.
-func TestFindSingleFileInDir(t *testing.T) {
-	// Case: No files.
-	emptyDir, err := os.MkdirTemp("", "test-findSingleFileNoFiles")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(emptyDir)
-	_, err = findSingleFileInDir(emptyDir)
-	if err == nil {
-		t.Errorf("Expected error for no files, got nil")
-	}
-
-	// Case: One file.
-	oneFileDir, err := os.MkdirTemp("", "test-findSingleFileOneFile")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(oneFileDir)
-	filePath := filepath.Join(oneFileDir, "file.txt")
-	if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got, err := findSingleFileInDir(oneFileDir)
-	if err != nil {
-		t.Errorf("Expected no error for one file, got %v", err)
-	}
-	if got != filePath {
-		t.Errorf("Expected %q, got %q", filePath, got)
-	}
-
-	// Case: Multiple files.
-	multiDir, err := os.MkdirTemp("", "test-findSingleFileMultipleFiles")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(multiDir)
-	f1 := filepath.Join(multiDir, "file1.txt")
-	f2 := filepath.Join(multiDir, "file2.txt")
-	if err := os.WriteFile(f1, []byte("one"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(f2, []byte("two"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err = findSingleFileInDir(multiDir)
-	if err == nil {
-		t.Errorf("Expected error for multiple files, got nil")
 	}
 }
 
@@ -225,15 +174,17 @@ func TestApplyTerraformDocs_Disabled(t *testing.T) {
 	}
 }
 
-// stubRenderer is a simple implementation of TemplateRenderer that returns a fixed string.
-type stubRenderer struct{}
+// mockRenderer is a mock implementation of TemplateRenderer for testing.
+// It uses dependency injection to replace the real renderer and returns
+// a simplified string incorporating test data from `mergedData`.
+type mockRenderer struct{}
 
-func (s stubRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
+func (s mockRenderer) Render(tmplName, tmplValue string, mergedData map[string]interface{}, ignoreMissing bool) (string, error) {
 	// For testing, we simply return a string that includes a value from mergedData.
 	if name, ok := mergedData["name"].(string); ok {
-		return "stub rendered for " + name, nil
+		return "mock rendered for " + name, nil
 	}
-	return "stub rendered", nil
+	return "mock rendered", nil
 }
 
 func TestGenerateReadme_WithInjectedRenderer(t *testing.T) {
@@ -278,7 +229,7 @@ func TestGenerateReadme_WithInjectedRenderer(t *testing.T) {
 	}
 
 	// Call generateReadme with our injected stubRenderer.
-	err = generateReadme(&atmosConfig, targetDir, &atmosConfig.Settings.Docs.Generate.Readme, stubRenderer{})
+	err = generateReadme(&atmosConfig, targetDir, &atmosConfig.Settings.Docs.Generate.Readme, mockRenderer{})
 	if err != nil {
 		t.Fatalf("generateReadme failed: %v", err)
 	}
@@ -287,7 +238,7 @@ func TestGenerateReadme_WithInjectedRenderer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read generated README: %v", err)
 	}
-	expected := "stub rendered for TestProject"
+	expected := "mock rendered for TestProject"
 	if !strings.Contains(string(data), expected) {
 		t.Errorf("Expected output to contain %q, got %q", expected, string(data))
 	}
