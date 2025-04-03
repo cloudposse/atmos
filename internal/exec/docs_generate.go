@@ -265,8 +265,7 @@ func runTerraformDocs(dir string, settings *schema.TerraformDocsReadmeSettings) 
 	return formatter.Content(), nil
 }
 
-// downloadSource calls the go-getter,
-// then returns the single file path if exactly one file is found, or an error otherwise.
+// downloadSource calls the go-getter and returns file path.
 func downloadSource(
 	atmosConfig *schema.AtmosConfiguration,
 	pathOrURL string,
