@@ -27,7 +27,7 @@ the base path location of the components, and so forth.
 
 ## Configuration File (`atmos.yaml`)
 The --config flag allows you to specify a relative or absolute path to a valid configuration file. Only the configuration files specified by this flag will be loaded.
-The --config-path flag designates a directory containing Atmos configuration files (atmos.yaml, .atmos.yaml,atmos.yml, .atmos.yml). Only files from the specified directory will be loaded.
+The --config-path flag designates a directory containing Atmos configuration files. files name should be (atmos.yaml, .atmos.yaml,atmos.yml, .atmos.yml). Only files from the specified directory will be loaded.
 You can use both --config and --config-path multiple times in a single command. Configurations will be deep-merged in the order provided, 
 with the first specified config having the lowest priority and the last one having the highest. This allows later configurations to override settings from earlier ones.
 For example, to load multiple configuration files, you would run:
