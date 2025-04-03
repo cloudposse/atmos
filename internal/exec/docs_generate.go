@@ -323,7 +323,7 @@ func findSingleFileInDir(dir string) (string, error) {
 }
 
 // isLikelyRemote does a quick check if a path looks remote.
-func isLikelyRemote(s string) bool {
+func isRemoteSource(s string) bool {
 	prefixes := []string{"http://", "https://", "git::", "github.com/", "git@"}
 	for _, p := range prefixes {
 		if strings.HasPrefix(s, p) {
