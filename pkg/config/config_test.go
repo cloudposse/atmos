@@ -279,3 +279,12 @@ vendor:
 	assert.Equal(t, "Debug", v.GetString("logs.level"))
 	assert.Equal(t, filepath.Join(tempDir2, "atmos.yml"), v.ConfigFileUsed())
 }
+func TestMergeDefaultConfig(t *testing.T) {
+	v := viper.New()
+
+	err := mergeDefaultConfig(v)
+	assert.Error(t, err, "cannot decode configuration: unable to determine config type")
+	v.SetConfigType("yaml")
+	err = mergeDefaultConfig(v)
+	assert.NoError(t, err, "should not return error if config type is yaml")
+}
