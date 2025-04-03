@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 func TestProcessTagStore(t *testing.T) {
@@ -54,45 +55,46 @@ func TestProcessTagStore(t *testing.T) {
 		},
 		{
 			name:         "basic lookup cross-stack",
-			input:        "!store redis dev vpc cidr",
+			input:        "!store redis vpc dev cidr",
 			currentStack: "prod",
 			expected:     "10.0.0.0/16",
 		},
 		{
 			name:         "lookup with default value without quotes",
-			input:        "!store redis staging vpc cidr | default 172.20.0.0/16",
+			input:        "!store redis vpc staging cidr | default 172.20.0.0/16",
 			currentStack: "dev",
 			expected:     "172.20.0.0/16",
 		},
 		{
 			name:         "lookup with default value with single quotes",
-			input:        "!store redis staging vpc cidr | default '172.20.0.0/16'",
+			input:        "!store redis vpc staging cidr | default '172.20.0.0/16'",
 			currentStack: "dev",
 			expected:     "172.20.0.0/16",
 		},
 		{
 			name:         "lookup with default value with double quotes",
-			input:        "!store redis staging vpc cidr | default \"172.20.0.0/16\"",
+			input:        "!store redis vpc staging cidr | default \"172.20.0.0/16\"",
 			currentStack: "dev",
 			expected:     "172.20.0.0/16",
 		},
 		{
 			name:         "lookup with invalid default format",
-			input:        "!store redis staging vpc cidr | default",
+			input:        "!store redis vpc staging cidr | default",
 			currentStack: "dev",
-			expected:     "invalid default value format in: redis staging vpc cidr | default",
+			expected:     "invalid default value format in: redis vpc staging cidr | default",
 		},
 		{
 			name:         "lookup with extra parameters after default",
-			input:        "!store redis staging vpc cidr | default 172.20.0.0/16 extra",
+			input:        "!store redis vpc staging cidr | default 172.20.0.0/16 extra",
 			currentStack: "dev",
-			expected:     "invalid default value format in: redis staging vpc cidr | default 172.20.0.0/16 extra",
+			expected:     "invalid default value format in: redis vpc staging cidr | default 172.20.0.0/16 extra",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := processTagStore(atmosConfig, tt.input, tt.currentStack)
+			t.Logf("%s: %v", tt.input, result)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
