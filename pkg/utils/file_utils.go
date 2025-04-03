@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -10,10 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/cloudposse/atmos/pkg/filetype"
-	"github.com/hashicorp/hcl/v2/hclparse"
-	"gopkg.in/yaml.v3"
 )
 
 var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
@@ -291,68 +286,4 @@ func GetLineEnding() string {
 		return "\r\n"
 	}
 	return "\n"
-}
-
-// DetectFormatAndParseFile detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
-// For all other formats, it just reads the file and returns the content as a string
-func DetectFormatAndParseFile(filename string) (any, error) {
-	var v any
-	var err error
-
-	d, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	data := string(d)
-
-	switch {
-	case filetype.IsJSON(data):
-		err = json.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-
-	case filetype.IsHCL(data):
-		parser := hclparse.NewParser()
-		file, diags := parser.ParseHCL(d, filename)
-		if diags != nil && diags.HasErrors() {
-			return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
-		}
-		if file == nil {
-			return nil, fmt.Errorf("%w, file: %s, file parsing returned nil", ErrFailedToProcessHclFile, filename)
-		}
-
-		// Extract all attributes from the file body
-		attributes, diags := file.Body.JustAttributes()
-		if diags != nil && diags.HasErrors() {
-			return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
-		}
-
-		// Map to store the parsed attribute values
-		result := make(map[string]any)
-
-		// Evaluate each attribute and store it in the result map
-		for name, attr := range attributes {
-			ctyValue, diags := attr.Expr.Value(nil)
-			if diags != nil && diags.HasErrors() {
-				return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
-			}
-
-			// Convert cty.Value to appropriate Go type
-			result[name] = CtyToGo(ctyValue)
-		}
-		v = result
-
-	case filetype.IsYAML(data):
-		err = yaml.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-
-	default:
-		v = data
-	}
-
-	return v, nil
 }

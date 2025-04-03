@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -159,7 +160,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 			// Process local file
 			if localFile != "" {
-				res, err = DetectFormatAndParseFile(localFile)
+				res, err = filetype.DetectFormatAndParseFile(localFile)
 				if err != nil {
 					return err
 				}
