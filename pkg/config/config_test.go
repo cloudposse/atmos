@@ -279,6 +279,7 @@ vendor:
 	assert.Equal(t, "Debug", v.GetString("logs.level"))
 	assert.Equal(t, filepath.Join(tempDir2, "atmos.yml"), v.ConfigFileUsed())
 }
+
 func TestMergeDefaultConfig(t *testing.T) {
 	v := viper.New()
 
