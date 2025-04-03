@@ -70,6 +70,7 @@ func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 	}
 	assert.Equal(t, atmosConfig.Logs.Level, "Debug", "Logs level should be Debug")
 	assert.Equal(t, atmosConfig.Logs.File, "/dev/stderr", "Logs file should be /dev/stderr")
+	assert.Equal(t, atmosConfig.CliConfigPath, connectPaths([]string{filepath.Dir(atmosConfigFilePath), tmpDir2}), "CliConfigPath should be the concatenation of config files and directories")
 }
 
 func TestLoadConfigFromCLIArgs(t *testing.T) {
@@ -142,6 +143,41 @@ logs:
 			require.NoError(t, err, "Valid config should not return error")
 			assert.Equal(t, tc.expectedLevel, cfg.Logs.Level, "Unexpected log level configuration")
 			assert.Equal(t, "/dev/stderr", cfg.Logs.File, "Unexpected log file configuration")
+		})
+	}
+}
+func TestConnectPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		paths    []string
+		expected string
+	}{
+		{
+			name:     "Single path",
+			paths:    []string{"C:\\Program Files"},
+			expected: "C:\\Program Files",
+		},
+		{
+			name:     "Multiple paths",
+			paths:    []string{"C:\\Program Files", "D:\\Games", "E:\\Projects"},
+			expected: "C:\\Program Files;D:\\Games;E:\\Projects;", // trailing semicolon present
+		},
+		{
+			name:     "Empty slice",
+			paths:    []string{},
+			expected: "",
+		},
+		{
+			name:     "Multiple empty paths",
+			paths:    []string{"", "", ""},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := connectPaths(tt.paths)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

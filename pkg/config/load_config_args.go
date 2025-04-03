@@ -32,7 +32,9 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 		if err := mergeFiles(v, configFilesArgs); err != nil {
 			return err
 		}
-		configPaths = append(configPaths, configFilesArgs...)
+		for _, configFilePath := range configFilesArgs {
+			configPaths = append(configPaths, filepath.Dir(configFilePath))
+		}
 	}
 
 	// Merge config from --config-path directories
@@ -150,6 +152,9 @@ func connectPaths(paths []string) string {
 	}
 	var result string
 	for _, path := range paths {
+		if path == "" {
+			continue
+		}
 		result += path + ";"
 	}
 	return result
