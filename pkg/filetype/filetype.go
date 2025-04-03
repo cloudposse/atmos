@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/hashicorp/hcl"
@@ -56,12 +55,12 @@ func IsJSON(data string) bool {
 
 // DetectFormatAndParseFile detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
 // For all other formats, it just reads the file and returns the content as a string
-func DetectFormatAndParseFile(filename string) (any, error) {
+func DetectFormatAndParseFile(readFileFunc func(string) ([]byte, error), filename string) (any, error) {
 	var v any
 
 	var err error
 
-	d, err := os.ReadFile(filename)
+	d, err := readFileFunc(filename)
 	if err != nil {
 		return nil, err
 	}

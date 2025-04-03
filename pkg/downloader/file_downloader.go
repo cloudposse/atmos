@@ -49,5 +49,5 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
 	}
 
-	return filetype.DetectFormatAndParseFile(filePath)
+	return filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
 }

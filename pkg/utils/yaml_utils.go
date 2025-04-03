@@ -160,7 +160,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 			// Process local file
 			if localFile != "" {
-				res, err = filetype.DetectFormatAndParseFile(localFile)
+				res, err = filetype.DetectFormatAndParseFile(os.ReadFile, localFile)
 				if err != nil {
 					return err
 				}
