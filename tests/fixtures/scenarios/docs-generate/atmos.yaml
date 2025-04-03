@@ -1,6 +1,5 @@
 # atmos.yaml (minimal version for docs generate tests)
 
-base_path: ""  
 
 # Stacks config must exist but can be minimal:
 stacks:
