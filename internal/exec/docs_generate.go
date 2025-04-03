@@ -312,8 +312,8 @@ func isRemoteSource(s string) bool {
 	return false
 }
 
-// - Explicit relative (./ or ../) relative to cwd
-// - Implicit relative paths first against baseDir, then cwd
+// - Explicit relative (./ or ../) relative to cwd.
+// - Implicit relative paths first against baseDir, then cwd.
 func resolvePath(path string, baseDir string) (string, error) {
 	if path == "" {
 		return "", ErrEmptyPath
