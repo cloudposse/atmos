@@ -114,7 +114,11 @@
       "link": {},
       "link_text": {}
     },
-    "InjectGithubToken": true
+    "InjectGithubToken": true,
+    "GithubToken": "",
+    "BitbucketToken": "",
+    "BitbucketUsername": "",
+    "GitlabToken": ""
   },
   "vendor": {
     "base_path": ""
