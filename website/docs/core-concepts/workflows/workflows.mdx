@@ -113,11 +113,11 @@ workflows:
 
   workflow-1:
     description: "Description of Workflow #1"
-    steps: [ ]
+    steps: []
 
   workflow-2:
     description: "Description of Workflow #2"
-    steps: [ ]
+    steps: []
 ```
 
 Each workflow file must have the `workflows:` top-level section with a map of workflow definitions.
@@ -371,7 +371,7 @@ The Atmos stack used by the workflow commands of type `atmos` can be specified i
   atmos workflow my-workflow -f workflow1 -s tenant1-ue2-dev
   ```
 
-## Workflow Failure Handling and Resume
+## Workflow Failure Handling and Resuming
 
 When a workflow step fails, Atmos will:
 1. Display which step failed
