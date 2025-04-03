@@ -89,9 +89,12 @@ Global Flags:
 
         --base-path string           Base path for Atmos project
 
-        --config stringSlice         Paths to configuration file (default [])
+        --config stringSlice         Paths to configuration files
+                                     (comma-separated or repeated flag) (default
+                                     [])
 
-        --config-path stringSlice    Path to configuration directory (default
+        --config-path stringSlice    Paths to configuration directories
+                                     (comma-separated or repeated flag) (default
                                      [])
 
         --logs-file string           The file to write Atmos logs to. Logs can
