@@ -22,6 +22,7 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
+	t.Log(startingDir, "initial working directory")
 
 	defer func() {
 		// Change back to the original working directory after the test
@@ -35,6 +36,11 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
+	startingDir, err = os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+	t.Log(startingDir, "current working directory")
 
 	// set info for ExecuteTerraform
 	info := schema.ConfigAndStacksInfo{
