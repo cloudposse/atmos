@@ -17,6 +17,7 @@ import (
 	cp "github.com/otiai10/copy"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -359,7 +360,8 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 	switch p.pkgType {
 	case pkgTypeRemote:
 		// Use go-getter to download remote packages
-		if err := u.GoGetterGet(*atmosConfig, p.uri, *tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+
+		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, *tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package: %w", err)
 		}
 
@@ -393,7 +395,7 @@ func handleDryRunInstall(p *pkgAtmosVendor, atmosConfig *schema.AtmosConfigurati
 
 	if needsCustomDetection(p.uri) {
 		log.Debug("Custom detection required for URI", "uri", p.uri)
-		detector := &u.CustomGitDetector{AtmosConfig: *atmosConfig, Source: ""}
+		detector := downloader.NewCustomGitDetector(atmosConfig, "")
 		_, _, err := detector.Detect(p.uri, "")
 		if err != nil {
 			return installedPkgMsg{

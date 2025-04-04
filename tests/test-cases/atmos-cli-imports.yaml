@@ -13,6 +13,8 @@ tests:
       - "yaml"
     expect:
       exit_code: 0
+      diff:
+        - "github_token"
   - name: atmos_describe_configuration
     snapshot: true
     enabled: true
@@ -26,3 +28,5 @@ tests:
       - "yaml"
     expect:
       exit_code: 0
+      diff:
+        - "github_token"
