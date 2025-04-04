@@ -79,3 +79,73 @@ tests:
         - "Opening default browser to 'https://atmos.tools'."
       stderr:
         - "^$"
+
+  - name: atmos docs readme found
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos docs command executes and renders documentation."
+    workdir: "fixtures/scenarios/core/"
+    command: "atmos"
+    args:
+      - "docs"
+      - "bucket"
+    expect:
+      diff: []
+      exit_code: 0
+      stdout:
+        - "Example Terraform Weather Component"
+      stderr:
+        - "^$"
+
+  - name: atmos docs no component 1
+    enabled: true
+    snapshot: false
+    description: "Ensure atmos docs command executes with error component not found due to file descriptor."
+    workdir: "fixtures/scenarios/core/"
+    command: "atmos"
+    args:
+      - "--logs-level"
+      - "Debug"
+      - "docs"
+      - "bucket3"
+    expect:
+      diff: []
+      exit_code: 1
+      stdout:
+        - "DEBU processStoreConfig atmosConfig.StoresConfig=map\\[\\]\n$"
+      stderr:
+        - "component not found"
+
+  - name: atmos docs no component 2
+    enabled: true
+    snapshot: false
+    description: "Ensure atmos docs command executes with error component not found due to file descriptor."
+    workdir: "fixtures/scenarios/core/"
+    command: "atmos"
+    args:
+      - "--logs-level"
+      - "Debug"
+      - "docs"
+      - "bucket6"
+    expect:
+      diff: []
+      exit_code: 1
+      stdout:
+        - "no such file or directory"
+      stderr:
+        - "component not found"
+
+  - name: atmos docs no documentation
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos docs command executes with error documentation not found."
+    workdir: "fixtures/scenarios/core/"
+    command: "atmos"
+    args:
+      - "docs"
+      - "bucket2"
+    expect:
+      diff: []
+      exit_code: 1
+      stderr:
+        - "documentation is missing for the component bucket2. Consider adding a README.md to provide more context and details"

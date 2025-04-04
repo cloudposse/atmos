@@ -1,0 +1,22 @@
+services:
+  localstack:
+    container_name: localstack
+    image: localstack/localstack:1.4.0
+    ports:
+      - "0.0.0.0:4566:4566"            # LocalStack Gateway
+      - "0.0.0.0:4510-4559:4510-4559"  # external services port range
+    networks:
+      - localstack
+    environment:
+      - SERVICES=s3, iam, lambda, dynamodb, sts, account, ec2
+      - DEBUG=0
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_ACCESS_KEY_ID="test"
+      - AWS_SECRET_ACCESS_KEY="test"
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+networks:
+  localstack:
+    driver: bridge
