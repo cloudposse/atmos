@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    component-1:
+      metadata:
+        type: abstract
+      vars:
+        foo: component-1-foo
+        bar: component-1-bar
+        baz: component-1-baz
+      providers:
+        aws:
+          assume_role:
+            role_arn: "Base IAM Role ARN"
+
+    component-2:
+      metadata:
+        component: mock
+        inherits:
+          - component-1
+      vars:
+        foo: component-2-foo
+      providers:
+        aws:
+          assume_role:
+            role_arn: "IAM Role ARN"
