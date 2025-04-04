@@ -10,6 +10,16 @@ import (
 type AtmosSectionMapType = map[string]any
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
+// DescribeSettings contains settings for the describe command output
+type DescribeSettings struct {
+	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
+}
+
+// Describe contains configuration for the describe command.
+type Describe struct {
+	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+}
+
 type AtmosConfiguration struct {
 	BasePath                      string                 `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components                    Components             `yaml:"components" json:"components" mapstructure:"components"`
@@ -22,6 +32,7 @@ type AtmosConfiguration struct {
 	Schemas                       map[string]interface{} `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates              `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Settings                      AtmosSettings          `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Describe                      Describe               `yaml:"describe,omitempty" json:"describe,omitempty" mapstructure:"describe"`
 	StoresConfig                  store.StoresConfig     `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor                 `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool                   `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
@@ -192,6 +203,7 @@ type Terminal struct {
 	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
+	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 }
 
 type SyntaxHighlighting struct {

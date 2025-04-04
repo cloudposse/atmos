@@ -1,168 +1,168 @@
 base_path: ./
 components:
-    terraform:
-        base_path: components/terraform
-        apply_auto_approve: true
-        append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
-        deploy_run_init: true
-        init_run_reconfigure: true
-        auto_generate_backend_file: false
-        command: terraform
-        shell:
-            prompt: ""
-        init:
-            pass_vars: false
-    helmfile:
-        base_path: components/helmfile
-        use_eks: true
-        kubeconfig_path: /dev/shm
-        helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
-        cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
-        command: ""
+  terraform:
+    base_path: components/terraform
+    apply_auto_approve: true
+    append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+    command: terraform
+    shell:
+      prompt: ""
+    init:
+      pass_vars: false
+  helmfile:
+    base_path: components/helmfile
+    use_eks: true
+    kubeconfig_path: /dev/shm
+    helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
+    cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+    command: ""
 stacks:
-    base_path: stacks
-    included_paths:
-        - deploy/**/*
-    excluded_paths:
-        - '**/_defaults.yaml'
-    name_pattern: '{dev}'
-    name_template: ""
+  base_path: stacks
+  included_paths:
+    - deploy/**/*
+  excluded_paths:
+    - '**/_defaults.yaml'
+  name_pattern: '{dev}'
+  name_template: ""
 workflows:
-    base_path: stacks/workflows
-    list:
-        format: ""
-        columns: []
+  base_path: stacks/workflows
+  list:
+    format: ""
+    columns: []
 logs:
-    file: /dev/stderr
-    level: Debug
+  file: /dev/stderr
+  level: Debug
 commands:
-    - name: test
-      description: Run all tests
-      env: []
-      arguments: []
-      flags: []
-      component_config:
-        component: ""
-        stack: ""
-      steps:
-        - atmos describe config
-      commands: []
-      verbose: false
+  - name: test
+    description: Run all tests
+    env: []
+    arguments: []
+    flags: []
+    component_config:
+      component: ""
+      stack: ""
+    steps:
+      - atmos describe config
+    commands: []
+    verbose: false
 integrations:
-    atlantis:
-        path: atlantis.yaml
-        config_templates:
-            config-1:
-                version: 3
-                automerge: true
-                delete_source_branch_on_merge: true
-                parallel_plan: true
-                parallel_apply: true
-                allowed_regexp_prefixes:
-                    - dev/
-                    - staging/
-                    - prod/
-        project_templates:
-            project-1:
-                name: '{tenant}-{environment}-{stage}-{component}'
-                workspace: '{workspace}'
-                dir: '{component-path}'
-                terraform_version: v1.2
-                delete_source_branch_on_merge: true
-                autoplan:
-                    enabled: true
-                    when_modified:
-                        - '**/*.tf'
-                        - varfiles/$PROJECT_NAME.tfvars.json
-                apply_requirements:
-                    - approved
-        workflow_templates:
-            workflow-1:
-                apply:
-                    steps:
-                        - run: terraform apply $PLANFILE
-                plan:
-                    steps:
-                        - run: terraform init -input=false
-                        - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
-                        - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
-    github:
-        gitops:
-            infracost-enabled: false
-            opentofu-version: 1.8.4
-            terraform-version: 1.9.8
+  atlantis:
+    path: atlantis.yaml
+    config_templates:
+      config-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+    project_templates:
+      project-1:
+        name: '{tenant}-{environment}-{stage}-{component}'
+        workspace: '{workspace}'
+        dir: '{component-path}'
+        terraform_version: v1.2
+        delete_source_branch_on_merge: true
+        autoplan:
+          enabled: true
+          when_modified:
+            - '**/*.tf'
+            - varfiles/$PROJECT_NAME.tfvars.json
+        apply_requirements:
+          - approved
+    workflow_templates:
+      workflow-1:
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+        plan:
+          steps:
+            - run: terraform init -input=false
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+  github:
+    gitops:
+      infracost-enabled: false
+      opentofu-version: 1.8.4
+      terraform-version: 1.9.8
 schemas:
-    jsonschema:
-        base_path: stacks/schemas/jsonschema
-    opa:
-        base_path: stacks/schemas/opa
+  jsonschema:
+    base_path: stacks/schemas/jsonschema
+  opa:
+    base_path: stacks/schemas/opa
 templates:
-    settings:
-        enabled: true
-        sprig:
-            enabled: true
-        gomplate:
-            enabled: true
-            timeout: 5
-            datasources: {}
-        evaluations: 1
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      timeout: 5
+      datasources: {}
+    evaluations: 1
 settings:
-    list_merge_strategy: replace
-    terminal:
-        max_width: 120
-        pager: true
-        colors: true
-        unicode: true
-        syntax_highlighting:
-            enabled: true
-            lexer: ""
-            formatter: terminal
-            theme: dracula
-            pager: false
-            line_numbers: true
-            wrap: false
-    markdown:
-        document:
-            color: ${colors.text}
-        heading:
-            color: ${colors.primary}
-            bold: true
-        strong:
-            color: ${colors.secondary}
-            bold: true
-        emph:
-            color: ${colors.muted}
-            italic: true
-        code_block:
-            color: ${colors.secondary}
-            margin: 1
-        link:
-            color: ${colors.primary}
-            underline: true
-    inject_github_token: true
+  list_merge_strategy: replace
+  terminal:
+    max_width: 120
+    pager: true
+    colors: true
+    unicode: true
+    syntax_highlighting:
+      enabled: true
+      lexer: ""
+      formatter: terminal
+      theme: dracula
+      pager: false
+      line_numbers: true
+      wrap: false
+  markdown:
+    document:
+      color: ${colors.text}
+    heading:
+      color: ${colors.primary}
+      bold: true
+    strong:
+      color: ${colors.secondary}
+      bold: true
+    emph:
+      color: ${colors.muted}
+      italic: true
+    code_block:
+      color: ${colors.secondary}
+      margin: 1
+    link:
+      color: ${colors.primary}
+      underline: true
+  inject_github_token: true
 vendor:
-    base_path: ./vendor.yaml
+  base_path: ./vendor.yaml
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks
 includeStackAbsolutePaths:
-    - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks/deploy/**/*
+  - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks/deploy/**/*
 excludeStackAbsolutePaths:
-    - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks/**/_defaults.yaml
+  - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks/**/_defaults.yaml
 terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/components/helmfile
 default: false
 version:
-    check:
-        enabled: true
-        timeout: 1000
-        frequency: 1h
+  check:
+    enabled: true
+    timeout: 1000
+    frequency: 1h
 validate:
-    editorconfig:
-        format: default
-        color: true
+  editorconfig:
+    format: default
+    color: true
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 import:
-    - https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml
-    - configs.d/**/*
-    - ./logs.yaml
+  - https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml
+  - configs.d/**/*
+  - ./logs.yaml
 
