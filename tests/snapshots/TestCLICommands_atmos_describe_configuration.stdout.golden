@@ -50,7 +50,7 @@ settings:
         pagination: false
         generate:
             readme:
-                output: README.md
+                output: ./README.md
     inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks

@@ -257,17 +257,6 @@ func IsGolangTemplate(str string) (bool, error) {
 	return isGoTemplate, nil
 }
 
-// Setup ignore missing template values.
-func setupIgnoreMissingTemplateValues(ignoreMissing bool) func() {
-	// The check below is to enable ignore missing template values.
-	// If `ignoreMissingTemplateValues` is true, missing template keys are ignored.
-	if ignoreMissing {
-		os.Setenv("GOMPLATE_MISSINGKEY", "default")
-		return func() { os.Unsetenv("GOMPLATE_MISSINGKEY") }
-	}
-	return func() {}
-}
-
 // Create temporary directory.
 func createTempDirectory() (string, error) {
 	// Create a temporary directory for the temporary files.
@@ -358,9 +347,6 @@ func ProcessTmplWithDatasourcesGomplate(
 	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
-	cleanup := setupIgnoreMissingTemplateValues(ignoreMissingTemplateValues)
-	defer cleanup()
-
 	tempDir, err := createTempDirectory()
 	if err != nil {
 		return "", err

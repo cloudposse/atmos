@@ -37,7 +37,7 @@ settings:
         pagination: false
         generate:
             readme:
-                output: README.md
+                output: ./README.md
     inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks

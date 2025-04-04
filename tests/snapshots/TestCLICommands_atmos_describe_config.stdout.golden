@@ -85,7 +85,7 @@
       "pagination": false,
       "generate": {
         "readme": {
-          "output": "README.md",
+          "output": "./README.md",
           "terraform": {}
         }
       }

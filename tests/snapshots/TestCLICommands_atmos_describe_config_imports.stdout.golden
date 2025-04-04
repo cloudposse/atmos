@@ -126,7 +126,7 @@ settings:
         pagination: false
         generate:
             readme:
-                output: README.md
+                output: ./README.md
     markdown:
         document:
             color: ${colors.text}

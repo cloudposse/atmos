@@ -148,8 +148,7 @@ func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.
 	return "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
 }
 
-// generateReadme merges data from docsGenerate.Input, runs terraform-docs if needed,
-// renders the final README using the provided renderer, and writes writes README using resolvePath
+// generateReadme merges docs inputs, optionally runs terraform-docs, renders, and writes the README.
 func generateReadme(
 	atmosConfig *schema.AtmosConfiguration,
 	baseDir string,
