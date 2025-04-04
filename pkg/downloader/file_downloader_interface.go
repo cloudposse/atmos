@@ -15,6 +15,9 @@ type FileDownloader interface {
 
 	// FetchAndAutoParse downloads a remote file, detects its format, and parses it
 	FetchAndAutoParse(src string) (any, error)
+
+	// FetchData fetches content from a given source and returns it as a byte slice
+	FetchData(src string) ([]byte, error)
 }
 
 // ClientFactory abstracts the creation of a downloader client for better testability

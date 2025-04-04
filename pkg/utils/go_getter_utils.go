@@ -49,7 +49,7 @@ func ValidateURI(uri string) error {
 	return nil
 }
 
-// IsValidScheme checks if the URL scheme is valid
+// IsValidScheme checks if the URL scheme is valid.
 func IsValidScheme(scheme string) bool {
 	validSchemes := map[string]bool{
 		"http":       true,
