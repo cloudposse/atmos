@@ -329,9 +329,6 @@ func writeOuterTopLevelFile(tempDir string, fileURL string) (*url.URL, error) {
 	}
 
 	topLevelFileURL := toFileScheme(tmpName2)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert top-level temp file path to file URL: %w", err)
-	}
 
 	finalTopLevelFileURL, err := fixWindowsFileScheme(topLevelFileURL)
 	if err != nil {
