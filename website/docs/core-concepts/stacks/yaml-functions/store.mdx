@@ -111,7 +111,8 @@ For example, you have a `tgw` component that requires the `vpc_id` key from the 
 :::note Using the `.stack` or `.atmos_stack` template identifiers to specify the stack is the same as calling the
 `!store` function with two parameters without specifying the current stack, but without using `Go` templates. If you
 need to get a value from the store from a component in the current stack, using the `!store` function with two
-parameters is preferred because it has a simpler syntax and executes faster. :::
+parameters is preferred because it has a simpler syntax and executes faster.
+:::
 
 ### Use a Format Function
 
@@ -127,9 +128,9 @@ This is convenient when you want to override some identifiers in the stack name:
 ```
 
 <dl>
-  <dt>`<component`</dt>
+  <dt><code>&lt;component&gt;</code></dt>
   <dd>Placeholder for an actual component name (e.g. `vpc`)</dd>
-  <dt>`<key>`</dt>
+  <dt><code>&lt;key&gt;</code></dt>
   <dd>Placeholder for an actual key (e.g. `subnet_ids`)</dd>
 </dl>
 
