@@ -30,7 +30,11 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		return nil, fmt.Errorf("failed to find a match for the import2 '%s' ('%s' + '%s')", pattern, base, cleanPattern)
+		dir, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get working directory: %w", err)
+		}
+		return nil, fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s'), %s - workding directory", pattern, base, cleanPattern, dir)
 	}
 
 	var fullMatches []string

@@ -469,5 +469,5 @@ func SearchConfigFile(configPath string, atmosConfig schema.AtmosConfiguration) 
 		}
 	}
 
-	return "", fmt.Errorf("failed to find a match for the import1 '%s' ('%s' + '%s')", configPath, dir, base)
+	return "", fmt.Errorf("failed to find a match for the import '%s' ('%s' + '%s')", configPath, dir, base)
 }
