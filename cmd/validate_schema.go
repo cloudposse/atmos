@@ -45,7 +45,7 @@ var ValidateSchemaCmd = &cobra.Command{
 }
 
 func init() {
-	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "If you want to provide schema from external")
+	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Provide an external validation schema")
 	ValidateSchemaCmd.PersistentFlags().String("file", "", "file to be validated")
 	validateCmd.AddCommand(ValidateSchemaCmd)
 }
