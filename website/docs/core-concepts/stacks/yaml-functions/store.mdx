@@ -22,10 +22,10 @@ The `!store` function can be called with either two or three parameters, and opt
   !store <store_name> <component> <key>
 
   # Get the `key` from the store of a `component` in a different stack
-  !store <store_name> <component> <stack> <key>
+  !store <store_name> <stack> <component> <key>
 
   # Get the `key` from the store of a `component` in a different stack, with a default value
-  !store <store_name> <component> <stack> <key> | default <default_value>
+  !store <store_name> <stack> <component> <key> | default <default_value>
 ```
 
 ## Arguments
@@ -34,11 +34,11 @@ The `!store` function can be called with either two or three parameters, and opt
   <dt>`store_name`</dt>
   <dd>The name of the store to read from (as defined in the `atmos.yaml` file)</dd>
 
-  <dt>`component`</dt>
-  <dd>Atmos component name</dd>
-
   <dt>`stack`</dt>
   <dd>(optional) Atmos stack name</dd>
+
+  <dt>`component`</dt>
+  <dd>Atmos component name</dd>
 
   <dt>`key`</dt>
   <dd>The key to read from the store</dd>
@@ -64,8 +64,8 @@ components:
       vars:
         vpc_config:
           security_group_id: !store prod/ssm security-group/lambda id
-          security_group_id2: !store prod/ssm security-group/lambda2 {{ .stack }} id
-          security_group_id3: !store prod/ssm security-group/lambda3 {{ .atmos_stack }} id
+          security_group_id2: !store prod/ssm {{ .stack }} security-group/lambda2 id
+          security_group_id3: !store prod/ssm {{ .atmos_stack }} security-group/lambda3 id
 ```
 </File>
 
@@ -85,7 +85,7 @@ For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires 
     terraform:
       tgw:
         vars:
-          vpc_id: !store prod/ssm vpc plat-ue2-prod vpc_id
+          vpc_id: !store prod/ssm plat-ue2-prod vpc vpc_id
 ```
 
 ### Reference the Current Stack Name
@@ -94,8 +94,8 @@ Use the `.stack` (or `.atmos_stack`) template identifier to specify the same sta
 (for which the `!store` function is executed):
 
 ```yaml
-  !store <store_name> <component> {{ .stack }} <key>
-  !store <store_name> <component> {{ .atmos_stack }} <key>
+  !store <store_name> {{ .stack }} <component> <key>
+  !store <store_name> {{ .atmos_stack }} <component> <key>
 ```
 
 For example, you have a `tgw` component that requires the `vpc_id` key from the store for the `vpc` component in the same stack:
@@ -105,7 +105,7 @@ For example, you have a `tgw` component that requires the `vpc_id` key from the 
     terraform:
       tgw:
         vars:
-          vpc_id: !store prod/ssm vpc {{ .stack }} vpc_id
+          vpc_id: !store prod/ssm {{ .stack }} vpc vpc_id
 ```
 
 :::note Using the `.stack` or `.atmos_stack` template identifiers to specify the stack is the same as calling the
@@ -120,11 +120,11 @@ Use the `printf` template function to construct stack names using static strings
 This is convenient when you want to override some identifiers in the stack name:
 
 ```yaml
-  !store <store_name> <component> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <key>
+  !store <store_name> {{ printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage }} <component> <key>
 
-  !store <store_name> <component> {{ printf "plat-%s-prod" .vars.environment }} <key>
+  !store <store_name> {{ printf "plat-%s-prod" .vars.environment }} <component> <key>
 
-  !store <store_name> <component> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <key>
+  !store <store_name> {{ printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account }} <component> <key>
 ```
 
 <dl>
@@ -144,7 +144,7 @@ tenant `net` (instead of `plat`):
     terraform:
       tgw:
         vars:
-          vpc_id: !store prod/ssm vpc {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc_id
+          vpc_id: !store prod/ssm {{ printf "net-%s-%s" .vars.environment .vars.stage }} vpc vpc_id
 ```
 
 :::tip Important
@@ -156,8 +156,9 @@ tenant `net` (instead of `plat`):
 
 ## Considerations
 
- - Using `!store` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
-- When using `!store` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced remote states.
+- Using `!store` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
+- When using `!store` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced stores.
    If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 - Be mindful of disaster recovery (DR) implications when using it across regions.
-- Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not yet be available and the `!store` function call will fail.
+- Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not
+  yet be available and the `!store` function call will fail unless you provide a default value with `|default`.
