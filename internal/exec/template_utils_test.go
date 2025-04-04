@@ -29,10 +29,10 @@ func TestCreateTempDirectory(t *testing.T) {
 		t.Errorf("Expected a directory, got a file")
 	}
 
-	// Check that the permissions are exactlytempDirPermissions.
+	// Check that the permissions are exactlydefaultDirPermissions.
 	mode := info.Mode().Perm()
-	if mode != tempDirPermissions {
-		t.Errorf("Expected mode %o, got %o", tempDirPermissions, mode)
+	if mode != defaultDirPermissions {
+		t.Errorf("Expected mode %o, got %o", defaultDirPermissions, mode)
 	}
 }
 

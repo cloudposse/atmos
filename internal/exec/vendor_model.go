@@ -25,11 +25,10 @@ import (
 type pkgType int
 
 const (
-	tempDirPermissions          = 0o700
-	tempFilePermissions         = 0o644
-	progressBarWidth            = 30
-	maxWidth                    = 120
-	pkgTypeRemote       pkgType = iota
+	tempDirPermissions         = 0o700
+	progressBarWidth           = 30
+	maxWidth                   = 120
+	pkgTypeRemote      pkgType = iota
 	pkgTypeOci
 	pkgTypeLocal
 )

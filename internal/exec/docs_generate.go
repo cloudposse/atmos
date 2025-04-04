@@ -26,7 +26,7 @@ import (
 
 const (
 	defaultReadmeOutput    = "./README.md"
-	defaultDirPermissions  = 0o70
+	defaultDirPermissions  = 0o700
 	defaultFilePermissions = 0o644
 )
 
