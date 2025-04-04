@@ -3,7 +3,6 @@ package downloader
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -167,7 +166,7 @@ func (d *CustomGitDetector) normalizePath(parsedURL *url.URL) {
 func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 	token, tokenSource := d.resolveToken(host)
 	if token != "" {
-		defaultUsername := getDefaultUsername(host)
+		defaultUsername := d.getDefaultUsername(host)
 		parsedURL.User = url.UserPassword(defaultUsername, token)
 		maskedURL, _ := maskBasicAuth(parsedURL.String())
 		log.Debug("Injected token", "env", tokenSource, keyURL, maskedURL)
@@ -178,52 +177,28 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 
 // resolveToken returns the token and its source based on the host.
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
-	var token, tokenSource string
 	switch host {
 	case hostGitHub:
-		if d.atmosConfig.Settings.InjectGithubToken {
-			tokenSource = "ATMOS_GITHUB_TOKEN"
-			token = os.Getenv(tokenSource)
-			if token == "" {
-				tokenSource = "GITHUB_TOKEN"
-				token = os.Getenv(tokenSource)
-			}
-		} else {
-			tokenSource = "GITHUB_TOKEN"
-			token = os.Getenv(tokenSource)
-		}
+		return d.atmosConfig.Settings.GithubToken, "GITHUB_TOKEN"
 	case hostBitbucket:
-		tokenSource = "ATMOS_BITBUCKET_TOKEN"
-		token = os.Getenv(tokenSource)
-		if token == "" {
-			tokenSource = "BITBUCKET_TOKEN"
-			token = os.Getenv(tokenSource)
-		}
+		return d.atmosConfig.Settings.BitbucketToken, "BITBUCKET_TOKEN"
 	case hostGitLab:
-		tokenSource = "ATMOS_GITLAB_TOKEN"
-		token = os.Getenv(tokenSource)
-		if token == "" {
-			tokenSource = "GITLAB_TOKEN"
-			token = os.Getenv(tokenSource)
-		}
+		return d.atmosConfig.Settings.GitlabToken, "GITLAB_TOKEN"
 	}
-	return token, tokenSource
+	return "", ""
 }
 
 // getDefaultUsername returns the default username for token injection based on the host.
-func getDefaultUsername(host string) string {
+func (d *CustomGitDetector) getDefaultUsername(host string) string {
 	switch host {
 	case hostGitHub:
 		return "x-access-token"
 	case hostGitLab:
 		return "oauth2"
 	case hostBitbucket:
-		defaultUsername := os.Getenv("ATMOS_BITBUCKET_USERNAME")
+		defaultUsername := d.atmosConfig.Settings.BitbucketUsername
 		if defaultUsername == "" {
-			defaultUsername = os.Getenv("BITBUCKET_USERNAME")
-			if defaultUsername == "" {
-				return "x-token-auth"
-			}
+			return "x-token-auth"
 		}
 		return defaultUsername
 	default:

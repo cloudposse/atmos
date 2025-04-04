@@ -18,6 +18,12 @@ import (
 // render is the global markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
+// Variable declarations for functions that might be mocked in tests.
+var (
+	// PrintErrorMarkdownAndExitFn is a variable that holds the function reference for testing.
+	PrintErrorMarkdownAndExitFn = printErrorMarkdownAndExitImpl
+)
+
 // PrintErrorMarkdown prints an error message in Markdown format.
 func PrintErrorMarkdown(title string, err error, suggestion string) {
 	if err == nil {
@@ -61,8 +67,8 @@ func PrintfErrorMarkdown(format string, a ...interface{}) {
 	LogError(err)
 }
 
-// PrintErrorMarkdownAndExit prints an error message in Markdown format and exist with the exit code 1.
-func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
+// printErrorMarkdownAndExitImpl is the implementation of PrintErrorMarkdownAndExit.
+func printErrorMarkdownAndExitImpl(title string, err error, suggestion string) {
 	PrintErrorMarkdown(title, err, suggestion)
 
 	// Find the executed command's exit code from the error
@@ -75,6 +81,11 @@ func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
 	// Exiting here makes it difficult to test.
 	// revive:disable-next-line:deep-exit
 	os.Exit(1)
+}
+
+// PrintErrorMarkdownAndExit prints an error message in Markdown format and exits with the exit code 1.
+func PrintErrorMarkdownAndExit(title string, err error, suggestion string) {
+	PrintErrorMarkdownAndExitFn(title, err, suggestion)
 }
 
 // PrintInvalidUsageErrorAndExit prints a message about the incorrect command usage and exist with the exit code 1.

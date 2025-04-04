@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -9,10 +9,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/hashicorp/hcl"
-	"gopkg.in/yaml.v3"
 )
+
+var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
 
 // IsDirectory checks if the path is a directory
 func IsDirectory(path string) (bool, error) {
@@ -287,39 +286,4 @@ func GetLineEnding() string {
 		return "\r\n"
 	}
 	return "\n"
-}
-
-// DetectFormatAndParseFile detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type
-// For all other formats, it just reads the file and returns the content as a string
-func DetectFormatAndParseFile(filename string) (any, error) {
-	var v any
-	var err error
-
-	d, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	data := string(d)
-
-	if IsHCL(data) {
-		err = hcl.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-	} else if IsJSON(data) {
-		err = json.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-	} else if IsYAML(data) {
-		err = yaml.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		v = data
-	}
-
-	return v, nil
 }

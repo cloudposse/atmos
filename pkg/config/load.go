@@ -58,6 +58,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			atmosConfig.CliConfigPath = absPath
 		}
 	}
+	setEnv(v)
 	// We want the editorconfig color by default to be true
 	atmosConfig.Validate.EditorConfig.Color = true
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
@@ -67,6 +68,19 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 	return atmosConfig, nil
+}
+
+func setEnv(v *viper.Viper) {
+	bindEnv(v, "settings.github_token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+	bindEnv(v, "settings.bitbucket_token", "ATMOS_BITBUCKET_TOKEN", "BITBUCKET_TOKEN")
+	bindEnv(v, "settings.bitbucket_username", "ATMOS_BITBUCKET_USERNAME", "BITBUCKET_USERNAME")
+	bindEnv(v, "settings.gitlab_token", "ATMOS_GITLAB_TOKEN", "GITLAB_TOKEN")
+}
+
+func bindEnv(v *viper.Viper, key ...string) {
+	if err := v.BindEnv(key...); err != nil {
+		panic(err)
+	}
 }
 
 // setDefaultConfiguration set default configuration for the viper instance.

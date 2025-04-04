@@ -2,16 +2,13 @@ package downloader
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/google/uuid"
-	"github.com/hashicorp/hcl"
-	"gopkg.in/yaml.v2"
 )
 
 // fileDownloader handles downloading files and directories from various sources
@@ -52,7 +49,7 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
 	}
 
-	return fd.detectFormatAndParse(filePath)
+	return filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
 }
 
 // FetchData fetches content from a given source and returns it as a byte slice.
@@ -64,39 +61,4 @@ func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 	}
 
 	return fd.fileReader(filePath)
-}
-
-func (fd *fileDownloader) detectFormatAndParse(filename string) (any, error) {
-	var v any
-
-	var err error
-
-	d, err := fd.fileReader(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	data := string(d)
-
-	switch {
-	case utils.IsJSON(data):
-		err = json.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-	case utils.IsHCL(data):
-		err = hcl.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-	case utils.IsYAML(data):
-		err = yaml.Unmarshal(d, &v)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		v = data
-	}
-
-	return v, nil
 }
