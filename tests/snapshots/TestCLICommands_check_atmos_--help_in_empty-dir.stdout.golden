@@ -15,6 +15,7 @@ Available Commands:
   completion                     Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
   describe                       Show details about Atmos configurations and components
   docs                           Open Atmos documentation or display component-specific docs
+  generate                       Generic generation commands (e.g. docs, scaffolding, etc.)
   helmfile                       Manage Helmfile-based Kubernetes deployments
   help                           Display help information for Atmos commands
   list                           List available stacks and components

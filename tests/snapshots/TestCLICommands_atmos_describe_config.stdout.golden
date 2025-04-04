@@ -82,7 +82,13 @@
     },
     "docs": {
       "max_width": 0,
-      "pagination": false
+      "pagination": false,
+      "generate": {
+        "readme": {
+          "output": "./README.md",
+          "terraform": {}
+        }
+      }
     },
     "markdown": {
       "document": {},
