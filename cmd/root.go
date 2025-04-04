@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -79,22 +78,7 @@ var RootCmd = &cobra.Command{
 	},
 }
 
-func setupLogger(atmosConfig *schema.AtmosConfiguration) {
-	switch atmosConfig.Logs.Level {
-	case "Trace":
-		log.SetLevel(log.DebugLevel)
-	case "Debug":
-		log.SetLevel(log.DebugLevel)
-	case "Info":
-		log.SetLevel(log.InfoLevel)
-	case "Warning":
-		log.SetLevel(log.WarnLevel)
-	case "Off":
-		log.SetLevel(math.MaxInt32)
-	default:
-		log.SetLevel(log.InfoLevel)
-	}
-
+func setupLogger(atmosConfig *schema.AtmosConfiguration) error {
 	var output io.Writer
 
 	switch atmosConfig.Logs.File {
@@ -113,12 +97,27 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		output = logFile
 	}
 
-	log.SetOutput(output)
-	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		//nolint:all // The reason to escape this is because it is expected to fail fast. The reason for ignoring all is because we also get a lint error to execute defer logFile.Close() before this but that is not required
+	options := &log.Options{
+		ReportTimestamp: false,
+	}
+	atmosLogger := logger.NewAtmosLogger(
+		output,
+		options,
+	)
+
+	// Set the level based on configuration and validate it.
+	if err := logger.SetAtmosLogLevel(atmosLogger, atmosConfig.Logs.Level); err != nil {
+		//nolint:all // The reason to escape this is because it is expected to fail fast with FATA prefix for invalid log levels
 		log.Fatal(err)
 	}
-	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
+
+	// This is for compatibility with existing code will be removed in future versions.
+	log.SetDefault(atmosLogger.Logger)
+
+	// Log the configuration.
+	atmosLogger.Debug("Set", "logs-level", atmosLogger.GetLevel(), "logs-file", atmosConfig.Logs.File)
+
+	return nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
