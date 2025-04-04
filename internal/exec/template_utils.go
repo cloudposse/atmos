@@ -265,7 +265,7 @@ func createTempDirectory() (string, error) {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	// Ensure directory permissions are restricted.
-	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
+	if err := os.Chmod(tempDir, defaultDirPermissions); err != nil {
 		return "", fmt.Errorf("failed to set temp directory permissions: %w", err)
 	}
 	return tempDir, nil

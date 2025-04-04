@@ -24,7 +24,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const DefaultReadmeOutput = "./README.md"
+const (
+	defaultReadmeOutput    = "./README.md"
+	defaultDirPermissions  = 0o70
+	defaultFilePermissions = 0o644
+)
 
 // TemplateRenderer is an interface for rendering templates.
 type TemplateRenderer interface {
@@ -178,13 +182,13 @@ func generateReadme(
 	// 5) Resolve and write final README.
 	outputFile := docsGenerate.Output
 	if outputFile == "" {
-		outputFile = DefaultReadmeOutput
+		outputFile = defaultReadmeOutput
 	}
 	outputPath, err := resolvePath(outputFile, baseDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve output path %s: %w", outputFile, err)
 	}
-	if err = os.WriteFile(outputPath, []byte(rendered), tempFilePermissions); err != nil {
+	if err = os.WriteFile(outputPath, []byte(rendered), defaultFilePermissions); err != nil {
 		return fmt.Errorf("failed to write output %s: %w", outputPath, err)
 	}
 
@@ -283,7 +287,7 @@ func downloadSource(
 		return "", "", fmt.Errorf("%w: %v", ErrCreateTempDir, err)
 	}
 	// Ensure directory permissions are restricted.
-	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
+	if err := os.Chmod(tempDir, defaultDirPermissions); err != nil {
 		return "", "", fmt.Errorf("%w: %v", ErrSetTempDirPermissions, err)
 	}
 
