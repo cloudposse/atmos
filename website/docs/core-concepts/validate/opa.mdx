@@ -63,7 +63,7 @@ atmos validate component vpc -s plat-ue2-dev --timeout 15
 
 ### Configure Component Validation
 
-In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
+In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
 section:
 
 <File title="atmos.yaml">
@@ -78,16 +78,16 @@ schemas:
 ```
 </File>
 
-In the component [manifest](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
+In the component [manifest](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
 the `settings.validation` section:
 
 <EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml" />
 
-Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego):
+Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego):
 
 <EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego" />
 
-Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego):
+Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego):
 
 <EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
 
