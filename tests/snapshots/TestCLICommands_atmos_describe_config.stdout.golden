@@ -8,7 +8,7 @@
       "deploy_run_init": true,
       "init_run_reconfigure": true,
       "auto_generate_backend_file": false,
-      "command": "",
+      "command": "terraform",
       "shell": {
         "prompt": ""
       },
@@ -22,7 +22,7 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
-      "command": ""
+      "command": "helmfile"
     }
   },
   "stacks": {
@@ -50,6 +50,11 @@
   "integrations": {
     "atlantis": {}
   },
+  "schemas": {
+    "atmos": {},
+    "jsonschema": {},
+    "opa": {}
+  },
   "templates": {
     "settings": {
       "enabled": false,
@@ -64,7 +69,7 @@
     }
   },
   "settings": {
-    "list_merge_strategy": "",
+    "list_merge_strategy": "replace",
     "terminal": {
       "max_width": 0,
       "pager": false,
@@ -114,7 +119,7 @@
       "link": {},
       "link_text": {}
     },
-    "InjectGithubToken": true
+    "InjectGithubToken": false
   },
   "vendor": {
     "base_path": ""

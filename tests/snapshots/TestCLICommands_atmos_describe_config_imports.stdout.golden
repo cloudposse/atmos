@@ -18,7 +18,7 @@ components:
         kubeconfig_path: /dev/shm
         helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
         cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
-        command: ""
+        command: helmfile
 stacks:
     base_path: stacks
     included_paths:
@@ -92,6 +92,7 @@ integrations:
             opentofu-version: 1.8.4
             terraform-version: 1.9.8
 schemas:
+    atmos: {}
     jsonschema:
         base_path: stacks/schemas/jsonschema
     opa:
@@ -139,7 +140,6 @@ settings:
         link:
             color: ${colors.primary}
             underline: true
-    inject_github_token: true
 vendor:
     base_path: ./vendor.yaml
 initialized: true

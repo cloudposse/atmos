@@ -1,1 +1,1 @@
-FATA Invalid log level `XTrace`. Valid options are: [Trace Debug Info Warning Off]
+ERRO Invalid log level `XTrace`. Valid options are: [Trace Debug Info Warning Off]
