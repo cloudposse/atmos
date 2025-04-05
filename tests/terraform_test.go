@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/cmd"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
