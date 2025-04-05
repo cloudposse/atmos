@@ -7,7 +7,7 @@ components:
         deploy_run_init: true
         init_run_reconfigure: true
         auto_generate_backend_file: false
-        command: ""
+        command: terraform
         shell:
             prompt: ""
         init:
@@ -18,7 +18,7 @@ components:
         kubeconfig_path: ""
         helm_aws_profile_pattern: ""
         cluster_name_pattern: ""
-        command: ""
+        command: helmfile
 stacks:
     base_path: stacks
     included_paths:
@@ -30,9 +30,12 @@ stacks:
 logs:
     file: /dev/stderr
     level: Info
+schemas:
+    atmos: {}
+    jsonschema: {}
+    opa: {}
 settings:
-    list_merge_strategy: ""
-    inject_github_token: true
+    list_merge_strategy: replace
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks
 includeStackAbsolutePaths:

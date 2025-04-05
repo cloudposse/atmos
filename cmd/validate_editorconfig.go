@@ -9,6 +9,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/files"
@@ -201,4 +202,5 @@ func init() {
 	addPersistentFlags(editorConfigCmd)
 	// Add command
 	validateCmd.AddCommand(editorConfigCmd)
+	cfg.DefaultConfigHandler.SetDefault("validate.editorconfig.color", true)
 }
