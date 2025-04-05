@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -52,12 +51,10 @@ func initializeConfig(cmd *cobra.Command) {
 
 	configPaths := []string{}
 	if cmd.Flags().Changed("config") {
-		configFiles, err := cmd.Flags().GetStringSlice("config")
-		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+		config := cmd.Flags().Lookup("config")
+		if config != nil {
+			configFilePaths = strings.Split(config.Value.String(), ",")
 		}
-		configFilePaths = configFiles
 	}
 	if len(configFilePaths) == 0 {
 		configPaths = append(configPaths, defaultConfigFileNames...)
