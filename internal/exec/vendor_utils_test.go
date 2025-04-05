@@ -99,7 +99,8 @@ func TestExecuteVendorPull(t *testing.T) {
 	// Define the work directory and change to it
 	workDir := "../../tests/fixtures/scenarios/vendor"
 	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+		dir, _ := os.Getwd()
+		t.Fatalf("Failed to change directory to currentDir %q to %q: %v", dir, workDir, err)
 	}
 	// set vendor pull command
 	cmd := cobra.Command{}
