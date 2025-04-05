@@ -15,7 +15,15 @@ components:
       providers:
         aws:
           assume_role:
-            role_arn: "Base IAM Role ARN"
+            role_arn: "Base component IAM Role ARN"
+        context:
+          enabled: true
+          delimiter: "-"
+          property_order:
+            - product
+            - region
+            - environment
+            - name
 
     component-2:
       metadata:
@@ -27,4 +35,4 @@ components:
       providers:
         aws:
           assume_role:
-            role_arn: "IAM Role ARN"
+            role_arn: "Derived component IAM Role ARN"
