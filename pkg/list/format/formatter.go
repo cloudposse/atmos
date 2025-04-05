@@ -17,10 +17,11 @@ const (
 
 // FormatOptions contains options for formatting output.
 type FormatOptions struct {
-	MaxColumns int
-	Delimiter  string
-	TTY        bool
-	Format     Format
+	MaxColumns    int
+	Delimiter     string
+	TTY           bool
+	Format        Format
+	CustomHeaders []string
 }
 
 // Formatter defines the interface for formatting output.

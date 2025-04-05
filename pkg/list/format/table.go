@@ -70,7 +70,13 @@ func extractValueKeys(data map[string]interface{}, stackKeys []string) []string 
 }
 
 // createHeader creates the table header.
-func createHeader(stackKeys []string) []string {
+func createHeader(stackKeys []string, customHeaders []string) []string {
+	// If custom headers are provided, use them
+	if len(customHeaders) > 0 {
+		return customHeaders
+	}
+
+	// Otherwise, use the default header format
 	header := []string{"Key"}
 	return append(header, stackKeys...)
 }
@@ -206,7 +212,7 @@ func (f *TableFormatter) Format(data map[string]interface{}, options FormatOptio
 			ErrTableTooWide.Error(), estimatedWidth, terminalWidth)
 	}
 
-	header := createHeader(stackKeys)
+	header := createHeader(stackKeys, options.CustomHeaders)
 	rows := createRows(data, valueKeys, stackKeys)
 
 	return createStyledTable(header, rows), nil
