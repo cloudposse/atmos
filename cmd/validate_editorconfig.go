@@ -50,6 +50,13 @@ func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
 	configPaths := []string{}
+	if cmd.Flags().Changed("config") {
+		configFiles, err := cmd.Flags().GetStringSlice("config")
+		if err != nil {
+			u.LogErrorAndExit(err)
+		}
+		configFilePaths = configFiles
+	}
 	if len(configFilePaths) == 0 {
 		configPaths = append(configPaths, defaultConfigFileNames...)
 	} else {
