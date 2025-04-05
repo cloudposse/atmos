@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -440,4 +441,67 @@ func TestProcessYAMLConfigFileInvalidHelmfileOverridesSection(t *testing.T) {
 	)
 
 	assert.Error(t, err)
+}
+
+func TestProcessStackConfigProviderSection(t *testing.T) {
+	basePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-providers-section")
+	stacksBasePath := filepath.Join(basePath, "stacks")
+	manifest := filepath.Join(stacksBasePath, "deploy", "nonprod.yaml")
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	deepMergedStackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFile(
+		atmosConfig,
+		stacksBasePath,
+		manifest,
+		map[string]map[string]any{},
+		nil,
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	assert.Nil(t, err)
+
+	config, err := ProcessStackConfig(
+		atmosConfig,
+		stacksBasePath,
+		filepath.Join(basePath, "components", "terraform"),
+		filepath.Join(basePath, "components", "helmfile"),
+		"nonprod",
+		deepMergedStackConfig,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		importsConfig,
+		true,
+	)
+	assert.Nil(t, err)
+
+	providers, err := u.EvaluateYqExpression(&atmosConfig, config, ".components.terraform.component-2.providers")
+	assert.Nil(t, err)
+
+	awsProvider, err := u.EvaluateYqExpression(&atmosConfig, providers, ".aws")
+	assert.Nil(t, err)
+
+	contextProvider, err := u.EvaluateYqExpression(&atmosConfig, providers, ".context")
+	assert.Nil(t, err)
+
+	awsProviderRoleArn, err := u.EvaluateYqExpression(&atmosConfig, awsProvider, ".assume_role.role_arn")
+	assert.Nil(t, err)
+	assert.Equal(t, "Derived component IAM Role ARN", awsProviderRoleArn)
+
+	contextProviderPropertyOrder0, err := u.EvaluateYqExpression(&atmosConfig, contextProvider, ".property_order[0]")
+	assert.Nil(t, err)
+	assert.Equal(t, "product", contextProviderPropertyOrder0)
 }
