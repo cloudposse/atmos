@@ -443,10 +443,10 @@ func TestProcessYAMLConfigFileInvalidHelmfileOverridesSection(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestProcessStackConfig(t *testing.T) {
-	basePath := "../../tests/fixtures/scenarios/atmos-providers-section/stacks"
+func TestProcessStackConfigProviderSection(t *testing.T) {
+	basePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-providers-section")
 	stacksBasePath := filepath.Join(basePath, "stacks")
-	manifest := filepath.Join(basePath, "deploy", "nonprod.yaml")
+	manifest := filepath.Join(stacksBasePath, "deploy", "nonprod.yaml")
 
 	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{
