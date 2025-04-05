@@ -198,6 +198,7 @@ func init() {
 	})
 	config.DefaultConfigHandler.AddConfig(RootCmd, &cfg.ConfigOptions{
 		FlagName:     "logs-file",
+		EnvVar:       "ATMOS_LOGS_FILE",
 		DefaultValue: "/dev/stderr",
 		Description:  "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`",
 		Key:          "logs.file",
