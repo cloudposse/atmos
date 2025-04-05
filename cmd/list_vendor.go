@@ -65,7 +65,7 @@ var listVendorCmd = &cobra.Command{
 		}
 
 		// Call list vendor function
-		output, err := l.FilterAndListVendor(atmosConfig, options)
+		output, err := l.FilterAndListVendor(&atmosConfig, options)
 		if err != nil {
 			log.Error("Error listing vendor configurations", "error", err)
 			cmd.PrintErrln(fmt.Errorf("error listing vendor configurations: %w", err))

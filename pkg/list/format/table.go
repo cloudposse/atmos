@@ -291,3 +291,20 @@ func calculateEstimatedTableWidth(data map[string]interface{}, valueKeys, stackK
 
 	return totalWidth
 }
+
+// CalculateSimpleTableWidth estimates the width of a table based on column names.
+// This is a simpler version of calculateEstimatedTableWidth for cases where only column names are available.
+func CalculateSimpleTableWidth(columnNames []string) int {
+	width := TableColumnPadding * len(columnNames)
+
+	// Add width of each column
+	for _, name := range columnNames {
+		colWidth := limitWidth(len(name))
+		width += colWidth
+	}
+
+	// Add safety margin
+	width += 5
+
+	return width
+}

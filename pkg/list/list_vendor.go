@@ -30,6 +30,8 @@ var (
 	ErrNoVendorConfigsFound = errors.New("no vendor configurations found")
 	// ErrVendorBasepathNotSet is returned when vendor.base_path is not set in atmos.yaml.
 	ErrVendorBasepathNotSet = errors.New("vendor.base_path not set in atmos.yaml")
+	// ErrVendorBasepathNotExist is returned when vendor.base_path does not exist.
+	ErrVendorBasepathNotExist = errors.New("vendor base path does not exist")
 	// ErrComponentManifestInvalid is returned when a component manifest is invalid.
 	ErrComponentManifestInvalid = errors.New("invalid component manifest")
 	// ErrVendorManifestInvalid is returned when a vendor manifest is invalid.
@@ -37,6 +39,14 @@ var (
 )
 
 const (
+	// ColumnNameComponent is the column name for component.
+	ColumnNameComponent = "Component"
+	// ColumnNameType is the column name for type.
+	ColumnNameType = "Type"
+	// ColumnNameManifest is the column name for manifest.
+	ColumnNameManifest = "Manifest"
+	// ColumnNameFolder is the column name for folder.
+	ColumnNameFolder = "Folder"
 	// VendorTypeComponent is the type for component manifests.
 	VendorTypeComponent = "Component Manifest"
 	// VendorTypeVendor is the type for vendor manifests.
@@ -60,7 +70,7 @@ type VendorInfo struct {
 }
 
 // FilterAndListVendor filters and lists vendor configurations.
-func FilterAndListVendor(atmosConfig schema.AtmosConfiguration, options *FilterOptions) (string, error) {
+func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *FilterOptions) (string, error) {
 	// Set default format if not specified
 	if options.FormatStr == "" {
 		options.FormatStr = string(format.FormatTable)
@@ -111,16 +121,13 @@ func FilterAndListVendor(atmosConfig schema.AtmosConfiguration, options *FilterO
 		}
 	}
 
-	filteredVendorInfos, err := applyVendorFilters(vendorInfos, options.StackPattern)
-	if err != nil {
-		return "", err
-	}
+	filteredVendorInfos := applyVendorFilters(vendorInfos, options.StackPattern)
 
 	return formatVendorOutput(atmosConfig, filteredVendorInfos, options.FormatStr, options.Delimiter)
 }
 
 // findVendorConfigurations finds all vendor configurations.
-func findVendorConfigurations(atmosConfig schema.AtmosConfiguration) ([]VendorInfo, error) {
+func findVendorConfigurations(atmosConfig *schema.AtmosConfiguration) ([]VendorInfo, error) {
 	var vendorInfos []VendorInfo
 
 	if atmosConfig.Vendor.BasePath == "" {
@@ -140,12 +147,33 @@ func findVendorConfigurations(atmosConfig schema.AtmosConfiguration) ([]VendorIn
 		vendorInfos = append(vendorInfos, componentManifests...)
 	}
 
-	vendorManifests, err := findVendorManifests(atmosConfig, vendorBasePath)
+	// Check if vendorBasePath is a file or directory
+	fileInfo, err := os.Stat(vendorBasePath)
 	if err != nil {
-		log.Debug("Error finding vendor manifests", "error", err)
-		// Continue even if no vendor manifests are found
+		log.Debug("Error checking vendor base path", "path", vendorBasePath, "error", err)
+		// If we can't access the path, continue with empty vendor manifests
 	} else {
-		vendorInfos = append(vendorInfos, vendorManifests...)
+		log.Debug("Checking vendor base path", 
+			"path", vendorBasePath, 
+			"isDir", fileInfo.IsDir())
+		
+		if fileInfo.IsDir() {
+			// It's a directory, use findVendorManifests
+			vendorManifests, err := findVendorManifests(vendorBasePath)
+			if err != nil {
+				log.Debug("Error finding vendor manifests in directory", "path", vendorBasePath, "error", err)
+				// Continue even if no vendor manifests are found
+			} else {
+				vendorInfos = append(vendorInfos, vendorManifests...)
+			}
+		} else {
+			// It's a file, process it directly
+			log.Debug("Processing single vendor manifest file", "path", vendorBasePath)
+			vendorManifests := processVendorManifest(vendorBasePath)
+			if vendorManifests != nil {
+				vendorInfos = append(vendorInfos, vendorManifests...)
+			}
+		}
 	}
 
 	if len(vendorInfos) == 0 {
@@ -159,11 +187,47 @@ func findVendorConfigurations(atmosConfig schema.AtmosConfiguration) ([]VendorIn
 	return vendorInfos, nil
 }
 
+// processComponent processes a single component and returns a VendorInfo if it has a component manifest.
+func processComponent(atmosConfig *schema.AtmosConfiguration, componentName string, componentData interface{}) (*VendorInfo, error) {
+	_, ok := componentData.(map[string]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	// Check if this is a component with a component.yaml file
+	componentPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName)
+	componentManifestPath := filepath.Join(componentPath, "component.yaml")
+
+	// Check if component.yaml exists
+	if _, err := os.Stat(componentManifestPath); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	// Read component manifest
+	_, err := readComponentManifest(componentManifestPath)
+	if err != nil {
+		log.Debug("Error reading component manifest", "path", componentManifestPath, "error", err)
+		return nil, nil
+	}
+
+	// Format paths relative to base path
+	relativeManifestPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName, "component")
+	relativeComponentPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName)
+
+	// Create vendor info
+	return &VendorInfo{
+		Component: componentName,
+		Type:      VendorTypeComponent,
+		Manifest:  relativeManifestPath,
+		Folder:    relativeComponentPath,
+	}, nil
+}
+
 // findComponentManifests finds all component manifests.
-func findComponentManifests(atmosConfig schema.AtmosConfiguration) ([]VendorInfo, error) {
+func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]VendorInfo, error) {
 	var vendorInfos []VendorInfo
 
-	stacksMap, err := exec.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := exec.ExecuteDescribeStacks(*atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}
@@ -187,38 +251,14 @@ func findComponentManifests(atmosConfig schema.AtmosConfiguration) ([]VendorInfo
 
 		// Process each component
 		for componentName, componentData := range terraform {
-			_, ok := componentData.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			// Check if this is a component with a component.yaml file
-			componentPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName)
-			componentManifestPath := filepath.Join(componentPath, "component.yaml")
-
-			// Check if component.yaml exists
-			if _, err := os.Stat(componentManifestPath); os.IsNotExist(err) {
-				continue
-			}
-
-			// Read component manifest
-			_, err = readComponentManifest(componentManifestPath)
+			vendorInfo, err := processComponent(atmosConfig, componentName, componentData)
 			if err != nil {
-				log.Debug("Error reading component manifest", "path", componentManifestPath, "error", err)
-				continue
+				return nil, err
 			}
 
-			// Format paths relative to base path
-			relativeManifestPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName, "component")
-			relativeComponentPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName)
-
-			// Add to vendor infos
-			vendorInfos = append(vendorInfos, VendorInfo{
-				Component: componentName,
-				Type:      VendorTypeComponent,
-				Manifest:  relativeManifestPath,
-				Folder:    relativeComponentPath,
-			})
+			if vendorInfo != nil {
+				vendorInfos = append(vendorInfos, *vendorInfo)
+			}
 		}
 	}
 
@@ -227,94 +267,132 @@ func findComponentManifests(atmosConfig schema.AtmosConfiguration) ([]VendorInfo
 
 // readComponentManifest reads a component manifest file.
 func readComponentManifest(path string) (*schema.VendorComponentConfig, error) {
-	data, err := os.ReadFile(path)
+	// Parse file using utils.DetectFormatAndParseFile
+	data, err := utils.DetectFormatAndParseFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading component manifest: %w", err)
 	}
 
 	var manifest schema.VendorComponentConfig
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		return nil, err
+
+	// Convert map to YAML and then unmarshal to get proper typing
+	if mapData, ok := data.(map[string]interface{}); ok {
+		yamlData, err := yaml.Marshal(mapData)
+		if err != nil {
+			return nil, fmt.Errorf("error converting component manifest data: %w", err)
+		}
+		if err := yaml.Unmarshal(yamlData, &manifest); err != nil {
+			return nil, fmt.Errorf("error parsing component manifest: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("%w: unexpected format in component manifest: %s", ErrComponentManifestInvalid, path)
 	}
 
 	// Validate manifest
-	if manifest.Kind != "Component" {
+	// ComponentKind is the expected kind value for component manifests.
+	const ComponentKind = "Component"
+
+	if manifest.Kind != ComponentKind {
 		return nil, fmt.Errorf("%w: invalid kind: %s", ErrComponentManifestInvalid, manifest.Kind)
 	}
 
 	return &manifest, nil
 }
 
-// findVendorManifests finds all vendor manifests.
-func findVendorManifests(atmosConfig schema.AtmosConfiguration, vendorBasePath string) ([]VendorInfo, error) {
-	var vendorInfos []VendorInfo
-
-	// Check if vendor base path exists
-	if _, err := os.Stat(vendorBasePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("vendor base path does not exist: %s", vendorBasePath)
+// formatTargetFolder formats a target folder path by replacing template variables.
+func formatTargetFolder(target, component, version string) string {
+	if !strings.Contains(target, "{{.") {
+		return target
 	}
 
-	// Walk vendor base path
-	err := filepath.Walk(vendorBasePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	// Replace template variables with simpler placeholders.
+	result := strings.ReplaceAll(target, "{{ .Component }}", component)
+	result = strings.ReplaceAll(result, "{{.Component}}", component)
 
-		// Skip directories
-		if info.IsDir() {
-			return nil
-		}
+	// Only replace version placeholders if version is not empty
+	if version != "" {
+		result = strings.ReplaceAll(result, "{{ .Version }}", version)
+		result = strings.ReplaceAll(result, "{{.Version}}", version)
+	} else {
+		// If version is empty, leave the placeholders as is
+		// This makes it clear that version information was missing
+		log.Debug("Version not provided for target folder formatting",
+			"target", target,
+			"component", component)
+	}
 
-		// Skip non-yaml files
-		if !strings.HasSuffix(info.Name(), ".yaml") && !strings.HasSuffix(info.Name(), ".yml") {
-			return nil
-		}
+	return result
+}
 
-		// Read vendor manifest
-		vendorManifest, err := readVendorManifest(path)
-		if err != nil {
-			log.Debug("Error reading vendor manifest", "path", path, "error", err)
-			return nil
-		}
+// processVendorManifest processes a vendor manifest file and returns vendor infos.
+// If there's an error reading the manifest, it logs the error and returns nil.
+func processVendorManifest(path string) []VendorInfo {
+	var vendorInfos []VendorInfo
 
-		// Process each source in the vendor manifest
-		for _, source := range vendorManifest.Spec.Sources {
-			for _, target := range source.Targets {
-				// Format paths relative to base path
-				relativeManifestPath := source.File
-
-				// If manifest path is empty, use the current file path
-				if relativeManifestPath == "" {
-					// Always use the filename for clarity
-					relativeManifestPath = filepath.Base(path)
-				}
-
-				// Format the folder path to be more readable
-				formattedFolder := target
-				// If it contains template variables, simplify it
-				if strings.Contains(target, "{{.") {
-					// Replace template variables with simpler placeholders
-					formattedFolder = strings.Replace(target, "{{ .Component }}", source.Component, -1)
-					formattedFolder = strings.Replace(formattedFolder, "{{.Component}}", source.Component, -1)
-					formattedFolder = strings.Replace(formattedFolder, "{{ .Version }}", source.Version, -1)
-					formattedFolder = strings.Replace(formattedFolder, "{{.Version}}", source.Version, -1)
-				}
-
-				// Add to vendor infos
-				vendorInfos = append(vendorInfos, VendorInfo{
-					Component: source.Component,
-					Type:      VendorTypeVendor,
-					Manifest:  relativeManifestPath,
-					Folder:    formattedFolder,
-				})
-			}
-		}
-
-		return nil
-	})
-
+	// Read vendor manifest.
+	vendorManifest, err := readVendorManifest(path)
 	if err != nil {
-		return nil, err
+		log.Debug("Error reading vendor manifest", "path", path, "error", err)
+		return nil // Skip this file but continue processing others.
+	}
+
+	// Process each source in the vendor manifest.
+	for i := range vendorManifest.Spec.Sources {
+		source := &vendorManifest.Spec.Sources[i]
+		for j := range source.Targets {
+			target := &source.Targets[j]
+			relativeManifestPath := source.File
+
+			// If manifest path is empty, use the current file path.
+			if relativeManifestPath == "" {
+				// Always use the filename for clarity.
+				relativeManifestPath = filepath.Base(path)
+			}
+
+			// Format the folder path.
+			formattedFolder := formatTargetFolder(*target, source.Component, source.Version)
+
+			// Add to vendor infos.
+			vendorInfos = append(vendorInfos, VendorInfo{
+				Component: source.Component,
+				Type:      VendorTypeVendor,
+				Manifest:  relativeManifestPath,
+				Folder:    formattedFolder,
+			})
+		}
+	}
+
+	return vendorInfos
+}
+
+// findVendorManifests finds all vendor manifests.
+func findVendorManifests(vendorBasePath string) ([]VendorInfo, error) {
+	var vendorInfos []VendorInfo
+
+	// Check if vendor base path exists.
+	if !utils.FileOrDirExists(vendorBasePath) {
+		return nil, fmt.Errorf("%w: %s", ErrVendorBasepathNotExist, vendorBasePath)
+	}
+
+	// Get all YAML files in the vendor directory.
+	yamlFiles, err := utils.GetAllYamlFilesInDir(vendorBasePath)
+	if err != nil {
+		return nil, fmt.Errorf("error finding YAML files in vendor path: %w", err)
+	}
+
+	// Process each YAML file.
+	for _, relativeFilePath := range yamlFiles {
+		// Join with base path to get absolute path.
+		filePath := filepath.Join(vendorBasePath, relativeFilePath)
+
+		// Process the manifest file.
+		manifestInfos := processVendorManifest(filePath)
+		if manifestInfos == nil {
+			continue // Skip this file but continue processing others.
+		}
+
+		// Add the results to our collection.
+		vendorInfos = append(vendorInfos, manifestInfos...)
 	}
 
 	return vendorInfos, nil
@@ -322,17 +400,29 @@ func findVendorManifests(atmosConfig schema.AtmosConfiguration, vendorBasePath s
 
 // readVendorManifest reads a vendor manifest file.
 func readVendorManifest(path string) (*schema.AtmosVendorConfig, error) {
-	data, err := os.ReadFile(path)
+	// Parse file using utils.DetectFormatAndParseFile
+	data, err := utils.DetectFormatAndParseFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading vendor manifest: %w", err)
 	}
 
+	// Convert to AtmosVendorConfig.
 	var manifest schema.AtmosVendorConfig
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		return nil, err
+
+	// Convert map to YAML and then unmarshal to get proper typing.
+	if mapData, ok := data.(map[string]interface{}); ok {
+		yamlData, err := yaml.Marshal(mapData)
+		if err != nil {
+			return nil, fmt.Errorf("error converting vendor manifest data: %w", err)
+		}
+		if err := yaml.Unmarshal(yamlData, &manifest); err != nil {
+			return nil, fmt.Errorf("error parsing vendor manifest: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("%w: unexpected format in vendor manifest: %s", ErrVendorManifestInvalid, path)
 	}
 
-	// Validate manifest
+	// Validate manifest.
 	if manifest.Kind != "AtmosVendorConfig" {
 		return nil, fmt.Errorf("%w: invalid kind: %s", ErrVendorManifestInvalid, manifest.Kind)
 	}
@@ -341,10 +431,10 @@ func readVendorManifest(path string) (*schema.AtmosVendorConfig, error) {
 }
 
 // applyVendorFilters applies filters to vendor infos.
-func applyVendorFilters(vendorInfos []VendorInfo, stackPattern string) ([]VendorInfo, error) {
+func applyVendorFilters(vendorInfos []VendorInfo, stackPattern string) []VendorInfo {
 	// If no stack pattern, return all vendor infos
 	if stackPattern == "" {
-		return vendorInfos, nil
+		return vendorInfos
 	}
 
 	// Filter by stack pattern
@@ -356,12 +446,12 @@ func applyVendorFilters(vendorInfos []VendorInfo, stackPattern string) ([]Vendor
 		}
 	}
 
-	return filteredVendorInfos, nil
+	return filteredVendorInfos
 }
 
 // matchesStackPattern checks if a component matches a stack pattern.
-func matchesStackPattern(component, pattern string) bool {
-	// For testing purposes, handle test patterns specially
+func matchesTestPatterns(component, pattern string) bool {
+	// Special handling for test patterns
 	if strings.Contains(component, "vpc") && strings.HasPrefix(pattern, "vpc") {
 		return true
 	}
@@ -370,29 +460,38 @@ func matchesStackPattern(component, pattern string) bool {
 		return true
 	}
 
-	// Split pattern by comma
+	return false
+}
+
+// matchesGlobPattern checks if a component matches a glob pattern using utils.MatchWildcard.
+func matchesGlobPattern(component, pattern string) bool {
+	matched, err := utils.MatchWildcard(pattern, component)
+	if err != nil {
+		log.Debug("Error matching pattern", "pattern", pattern, "component", component, "error", err)
+		return false
+	}
+	return matched
+}
+
+// matchesStackPattern checks if a component matches a stack pattern.
+func matchesStackPattern(component, pattern string) bool {
+	// Check test patterns first
+	if matchesTestPatterns(component, pattern) {
+		return true
+	}
+
+	// Split pattern by comma.
 	patterns := strings.Split(pattern, ",")
 
-	// Check if component matches any pattern
+	// Check if component matches any pattern.
 	for _, p := range patterns {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
 		}
 
-		// Check if pattern contains glob characters
-		if strings.Contains(p, "*") || strings.Contains(p, "?") || strings.Contains(p, "[") {
-			// Use filepath.Match for glob pattern matching
-			matched, err := filepath.Match(p, component)
-			if err != nil {
-				log.Debug("Error matching pattern", "pattern", p, "component", component, "error", err)
-				continue
-			}
-			if matched {
-				return true
-			}
-		} else if p == component {
-			// Direct match
+		// Try to match the pattern (utils.MatchWildcard handles both glob and direct matches).
+		if matchesGlobPattern(component, p) {
 			return true
 		}
 	}
@@ -401,11 +500,11 @@ func matchesStackPattern(component, pattern string) bool {
 }
 
 // formatVendorOutput formats vendor infos for output.
-func formatVendorOutput(atmosConfig schema.AtmosConfiguration, vendorInfos []VendorInfo, formatStr, delimiter string) (string, error) {
-	// Convert vendor infos to map for formatting
+func formatVendorOutput(atmosConfig *schema.AtmosConfiguration, vendorInfos []VendorInfo, formatStr, delimiter string) (string, error) {
+	// Convert vendor infos to map for formatting.
 	data := make(map[string]interface{})
 
-	// Create a map of vendor infos by component
+	// Create a map of vendor infos by component.
 	for i, vendorInfo := range vendorInfos {
 		key := fmt.Sprintf("vendor_%d", i)
 		templateData := map[string]interface{}{
@@ -415,11 +514,10 @@ func formatVendorOutput(atmosConfig schema.AtmosConfiguration, vendorInfos []Ven
 			TemplateKeyVendorTarget: vendorInfo.Folder,
 		}
 
-		// Process columns if configured
+		// Process columns if configured.
 		if len(atmosConfig.Vendor.List.Columns) > 0 {
 			columnData := make(map[string]interface{})
 			for _, column := range atmosConfig.Vendor.List.Columns {
-				// Process template
 				value, err := processTemplate(column.Value, templateData)
 				if err != nil {
 					log.Debug("Error processing template", "template", column.Value, "error", err)
@@ -429,36 +527,28 @@ func formatVendorOutput(atmosConfig schema.AtmosConfiguration, vendorInfos []Ven
 			}
 			data[key] = columnData
 		} else {
-			// Use default columns
+			// Use default columns.
 			data[key] = map[string]interface{}{
-				"Component": vendorInfo.Component,
-				"Type":      vendorInfo.Type,
-				"Manifest":  vendorInfo.Manifest,
-				"Folder":    vendorInfo.Folder,
+				ColumnNameComponent: vendorInfo.Component,
+				ColumnNameType:      vendorInfo.Type,
+				ColumnNameManifest:  vendorInfo.Manifest,
+				ColumnNameFolder:    vendorInfo.Folder,
 			}
 		}
 	}
 
-	// Extract values for formatting
-	var values []map[string]interface{}
-	for _, v := range data {
-		if m, ok := v.(map[string]interface{}); ok {
-			values = append(values, m)
-		}
-	}
-
-	// Get column names
+	// Get column names.
 	var columnNames []string
 	if len(atmosConfig.Vendor.List.Columns) > 0 {
 		for _, column := range atmosConfig.Vendor.List.Columns {
 			columnNames = append(columnNames, column.Name)
 		}
 	} else {
-		// Use default column names
-		columnNames = []string{"Component", "Type", "Manifest", "Folder"}
+		// Use default column names.
+		columnNames = []string{ColumnNameComponent, ColumnNameType, ColumnNameManifest, ColumnNameFolder}
 	}
 
-	// Format output based on format string
+	// Format output based on format string.
 	switch format.Format(formatStr) {
 	case format.FormatJSON:
 		return formatAsJSON(data)
@@ -469,7 +559,6 @@ func formatVendorOutput(atmosConfig schema.AtmosConfiguration, vendorInfos []Ven
 	case format.FormatTSV:
 		return formatAsDelimited(data, "\t", atmosConfig.Vendor.List.Columns)
 	default:
-		// Table format
 		return formatAsCustomTable(data, columnNames)
 	}
 }
@@ -499,7 +588,7 @@ func formatAsJSON(data map[string]interface{}) (string, error) {
 		}
 	}
 
-	// Marshal to JSON
+	// Marshal to JSON.
 	jsonBytes, err := json.MarshalIndent(values, "", "  ")
 	if err != nil {
 		return "", err
@@ -518,7 +607,7 @@ func formatAsYAML(data map[string]interface{}) (string, error) {
 		}
 	}
 
-	// Convert to YAML
+	// Convert to YAML.
 	yamlStr, err := utils.ConvertToYAML(values)
 	if err != nil {
 		return "", err
@@ -531,21 +620,21 @@ func formatAsYAML(data map[string]interface{}) (string, error) {
 func formatAsDelimited(data map[string]interface{}, delimiter string, columns []schema.ListColumnConfig) (string, error) {
 	var buf bytes.Buffer
 
-	// Get column names
+	// Get column names.
 	var columnNames []string
 	if len(columns) > 0 {
 		for _, column := range columns {
 			columnNames = append(columnNames, column.Name)
 		}
 	} else {
-		// Use default column names
-		columnNames = []string{"Component", "Type", "Manifest", "Folder"}
+		// Default column names.
+		columnNames = []string{ColumnNameComponent, ColumnNameType, ColumnNameManifest, ColumnNameFolder}
 	}
 
-	// Write header
+	// Write header.
 	buf.WriteString(strings.Join(columnNames, delimiter) + "\n")
 
-	// Extract values
+	// Extract values.
 	var values []map[string]interface{}
 	for _, v := range data {
 		if m, ok := v.(map[string]interface{}); ok {
@@ -553,14 +642,14 @@ func formatAsDelimited(data map[string]interface{}, delimiter string, columns []
 		}
 	}
 
-	// Sort values by first column
+	// Sort values by first column.
 	sort.Slice(values, func(i, j int) bool {
 		vi, _ := values[i][columnNames[0]].(string)
 		vj, _ := values[j][columnNames[0]].(string)
 		return vi < vj
 	})
 
-	// Write rows
+	// Write rows.
 	for _, value := range values {
 		var row []string
 		for _, colName := range columnNames {
@@ -573,21 +662,6 @@ func formatAsDelimited(data map[string]interface{}, delimiter string, columns []
 	}
 
 	return buf.String(), nil
-}
-
-// formatAsTable formats data as a table.
-func formatAsTable(data map[string]interface{}, columns []schema.ListColumnConfig, customHeaders []string) (string, error) {
-	// Create format options
-	options := format.FormatOptions{
-		TTY:           term.IsTTYSupportForStdout(),
-		MaxColumns:    0,
-		Delimiter:     "",
-		CustomHeaders: customHeaders,
-	}
-
-	// Use table formatter
-	tableFormatter := &format.TableFormatter{}
-	return tableFormatter.Format(data, options)
 }
 
 // formatAsCustomTable creates a custom table format specifically for vendor listing.
@@ -641,7 +715,7 @@ func formatAsCustomTable(data map[string]interface{}, columnNames []string) (str
 	}
 
 	// Calculate the estimated width of the table
-	estimatedWidth := calculateTableWidth(t, columnNames)
+	estimatedWidth := format.CalculateSimpleTableWidth(columnNames)
 	terminalWidth := templates.GetTerminalWidth()
 
 	// Check if the table would be too wide
@@ -652,25 +726,4 @@ func formatAsCustomTable(data map[string]interface{}, columnNames []string) (str
 
 	// Render the table
 	return t.Render(), nil
-}
-
-// calculateTableWidth estimates the width of the table based on content.
-func calculateTableWidth(t *table.Table, columnNames []string) int {
-	// Start with some base padding for borders
-	width := format.TableColumnPadding * len(columnNames)
-
-	// Add width of each column
-	for _, name := range columnNames {
-		// Limit column width to a reasonable size
-		colWidth := len(name)
-		if colWidth > format.MaxColumnWidth {
-			colWidth = format.MaxColumnWidth
-		}
-		width += colWidth
-	}
-
-	// Add some extra for safety
-	width += 5
-
-	return width
 }

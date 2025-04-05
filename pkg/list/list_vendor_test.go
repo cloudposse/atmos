@@ -122,7 +122,7 @@ spec:
 			FormatStr: string(format.FormatTable),
 		}
 
-		output, err := FilterAndListVendor(atmosConfig, options)
+		output, err := FilterAndListVendor(&atmosConfig, options)
 		assert.NoError(t, err)
 		assert.Contains(t, output, "Component")
 		assert.Contains(t, output, "Type")
@@ -141,7 +141,7 @@ spec:
 			FormatStr: string(format.FormatJSON),
 		}
 
-		output, err := FilterAndListVendor(atmosConfig, options)
+		output, err := FilterAndListVendor(&atmosConfig, options)
 		assert.NoError(t, err)
 		assert.Contains(t, output, "\"Component\": \"vpc/v1\"")
 		assert.Contains(t, output, "\"Type\": \"Component Manifest\"")
@@ -156,7 +156,7 @@ spec:
 			FormatStr: string(format.FormatYAML),
 		}
 
-		output, err := FilterAndListVendor(atmosConfig, options)
+		output, err := FilterAndListVendor(&atmosConfig, options)
 		assert.NoError(t, err)
 		assert.Contains(t, output, "Component: vpc/v1")
 		assert.Contains(t, output, "Type: Component Manifest")
@@ -171,7 +171,7 @@ spec:
 			FormatStr: string(format.FormatCSV),
 		}
 
-		output, err := FilterAndListVendor(atmosConfig, options)
+		output, err := FilterAndListVendor(&atmosConfig, options)
 		assert.NoError(t, err)
 		assert.Contains(t, output, "Component,Type,Manifest,Folder")
 		assert.Contains(t, output, "vpc/v1,Component Manifest")
@@ -185,7 +185,7 @@ spec:
 			FormatStr: string(format.FormatTSV),
 		}
 
-		output, err := FilterAndListVendor(atmosConfig, options)
+		output, err := FilterAndListVendor(&atmosConfig, options)
 		assert.NoError(t, err)
 		assert.Contains(t, output, "Component\tType\tManifest\tFolder")
 		assert.Contains(t, output, "vpc/v1\tComponent Manifest")
@@ -200,7 +200,7 @@ spec:
 			StackPattern: "vpc*",
 		}
 
-		output, err := FilterAndListVendor(atmosConfig, options)
+		output, err := FilterAndListVendor(&atmosConfig, options)
 		assert.NoError(t, err)
 		assert.Contains(t, output, "vpc/v1")
 		assert.NotContains(t, output, "eks/cluster")
@@ -214,7 +214,7 @@ spec:
 			StackPattern: "vpc*,ecs*",
 		}
 
-		output, err := FilterAndListVendor(atmosConfig, options)
+		output, err := FilterAndListVendor(&atmosConfig, options)
 		assert.NoError(t, err)
 		assert.Contains(t, output, "vpc/v1")
 		assert.NotContains(t, output, "eks/cluster")
@@ -230,7 +230,7 @@ spec:
 			FormatStr: string(format.FormatTable),
 		}
 
-		_, err := FilterAndListVendor(invalidConfig, options)
+		_, err := FilterAndListVendor(&invalidConfig, options)
 		assert.Error(t, err)
 		assert.Equal(t, ErrVendorBasepathNotSet, err)
 	})
