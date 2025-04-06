@@ -53,14 +53,13 @@ logs:
 		assertions     func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error)
 		processStacks  bool
 	}
-	// currentWorkDir, _ := os.Getwd()
+
 	testCases := []testCase{
 		{
 			name:           "invalid config file name. Should fallback to default configuration",
 			configFileName: "config.yaml",
 			configContent:  configContent,
 			setup: func(t *testing.T, dir string, tc testCase) {
-				// createConfigFile(t, dir, "invalid_config.yaml", tc.configContent)
 				changeWorkingDir(t, dir)
 				DefaultConfigHandler, _ = New()
 			},
