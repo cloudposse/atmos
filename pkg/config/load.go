@@ -48,8 +48,6 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			atmosConfig.CliConfigPath = absPath
 		}
 	}
-	// We want the editorconfig color by default to be true
-	atmosConfig.Validate.EditorConfig.Color = true
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig)
@@ -67,6 +65,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Info")
+	v.SetDefault("validate.editorconfig.color", true)
 }
 
 // loadConfigSources delegates reading configs from each source,

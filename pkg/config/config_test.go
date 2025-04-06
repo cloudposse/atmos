@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,7 @@ func TestInitCliConfig(t *testing.T) {
 	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_LOGS_LEVEL")
 	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
-
+	log.SetLevel(log.DebugLevel)
 	configContent := `
 base_path: ./
 components:
@@ -52,8 +53,27 @@ logs:
 		assertions     func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error)
 		processStacks  bool
 	}
-
+	// currentWorkDir, _ := os.Getwd()
 	testCases := []testCase{
+		{
+			name:           "invalid config file name. Should fallback to default configuration",
+			configFileName: "config.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				// createConfigFile(t, dir, "invalid_config.yaml", tc.configContent)
+				changeWorkingDir(t, dir)
+				DefaultConfigHandler, _ = New()
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				// check if the atmos config path is set to empty
+				assert.Equal(t, "", cfg.CliConfigPath)
+				// check if the base path is set correctly from the default value
+				assert.Equal(t, ".", cfg.BasePath)
+				// check if the apply auto approve is set correctly from the default value
+				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
+			},
+		},
 		{
 			name:           "valid configuration file name atmos.yaml extension yaml",
 			configFileName: "atmos.yaml",
@@ -61,6 +81,7 @@ logs:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
+				DefaultConfigHandler, _ = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -85,6 +106,7 @@ logs:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
+				DefaultConfigHandler, _ = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -99,27 +121,10 @@ logs:
 			},
 		},
 		{
-			name:           "invalid config file name. Should fallback to default configuration",
-			configFileName: "config.yaml",
-			configContent:  configContent,
-			setup: func(t *testing.T, dir string, tc testCase) {
-				createConfigFile(t, dir, tc.configFileName, tc.configContent)
-				changeWorkingDir(t, dir)
-			},
-			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
-				require.NoError(t, err)
-				// check if the atmos config path is set to empty
-				assert.Equal(t, "", cfg.CliConfigPath)
-				// check if the base path is set correctly from the default value
-				assert.Equal(t, ".", cfg.BasePath)
-				// check if the apply auto approve is set correctly from the default value
-				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
-			},
-		},
-		{
 			name: "valid process Stacks",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../examples/demo-stacks")
+				DefaultConfigHandler, _ = New()
 			},
 			processStacks: true,
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
@@ -129,19 +134,6 @@ logs:
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
-			},
-		},
-		{
-			name:           "invalid process Stacks,should return error",
-			configFileName: "atmos.yaml",
-			configContent:  configContent,
-			setup: func(t *testing.T, dir string, tc testCase) {
-				createConfigFile(t, dir, tc.configFileName, tc.configContent)
-				changeWorkingDir(t, dir)
-			},
-			processStacks: true,
-			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
-				require.Error(t, err)
 			},
 		},
 		{
@@ -155,6 +147,7 @@ logs:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
+				DefaultConfigHandler, _ = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -165,6 +158,7 @@ logs:
 			name: "valid import .atmos.d",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-configuration")
+				DefaultConfigHandler, _ = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -180,6 +174,7 @@ logs:
 			name: "valid import custom",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports")
+				DefaultConfigHandler, _ = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -189,6 +184,20 @@ logs:
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
 				assert.Equal(t, "Debug", cfg.Logs.Level)
+			},
+		},
+		{
+			name:           "invalid process Stacks,should return error",
+			configFileName: "atmos.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+				DefaultConfigHandler, _ = New()
+			},
+			processStacks: true,
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.Error(t, err)
 			},
 		},
 	}
@@ -238,6 +247,7 @@ func changeWorkingDir(t *testing.T, dir string) {
 
 	err = os.Chdir(dir)
 	require.NoError(t, err, "Failed to change working directory")
+	t.Log("Changed working directory to", dir)
 }
 
 func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
