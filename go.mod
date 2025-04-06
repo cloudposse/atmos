@@ -62,7 +62,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	github.com/zclconf/go-cty v1.16.2
-	golang.org/x/oauth2 v0.28.0
+	golang.org/x/oauth2 v0.29.0
 	golang.org/x/term v0.30.0
 	golang.org/x/text v0.23.0
 	google.golang.org/api v0.228.0
