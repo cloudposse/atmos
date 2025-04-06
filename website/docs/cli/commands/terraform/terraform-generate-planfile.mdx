@@ -1,0 +1,95 @@
+---
+title: atmos terraform generate planfile
+sidebar_label: generate planfile
+sidebar_class_name: command
+id: generate-planfile
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note purpose
+Use this command to generate a planfile for an Atmos terraform [component](/core-concepts/components) in a [stack](/core-concepts/stacks).
+:::
+
+<Screengrab title="atmos terraform generate planfile --help" slug="atmos-terraform-generate-varfile--help" />
+
+## Usage
+
+Execute the `terraform generate planfile` command like this:
+
+```shell
+atmos terraform generate planfile <component> -s <stack> [options]
+```
+
+This command generates a planfile for an Atmos terraform component in a stack.
+
+:::tip
+Run `atmos terraform generate planfile --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos terraform generate planfile component1 -s plat-ue2-dev
+atmos terraform generate planfile component1 -s plat-ue2-prod --format=json
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Dry run.
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --dry-run=true
+        ```
+    </dd>
+
+    <dt>`--process-templates` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable Go template processing in Atmos stack manifests when executing terraform commands.
+
+        If the flag is not passed, template processing is enabled by default.
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --process-templates=false
+        ```
+    </dd>
+
+    <dt>`--process-functions` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable YAML functions processing in Atmos stack manifests<br/>when executing terraform commands.
+
+        If the flag is not passed, YAML function processing is enabled by default.
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --process-functions=false
+        ```
+    </dd>
+
+    <dt>`--skip` <em>(optional)</em></dt>
+    <dd>
+        Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing terraform commands.
+
+        To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --skip=eval --skip=include
+        atmos terraform generate planfile <component> -s <stack> --skip=terraform.output,include
+        ```
+    </dd>
+</dl>

@@ -32,6 +32,7 @@ atmos terraform deploy --help
 atmos terraform generate --help
 atmos terraform generate backend --help
 atmos terraform generate backends --help
+atmos terraform generate planfile --help
 atmos terraform generate varfile --help
 atmos terraform generate varfiles --help
 atmos terraform shell --help
