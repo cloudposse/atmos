@@ -11,6 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/pkg/errors"
+	"github.com/samber/lo"
+)
+
+var (
+	ErrParseStacks               = errors.New("could not parse stacks")
+	ErrParseComponents           = errors.New("could not parse components")
+	ErrParseTerraformComponents  = errors.New("could not parse Terraform components")
+	ErrParseComponentsAttributes = errors.New("could not parse component attributes")
 )
 
 type ObjectInfo struct {
@@ -385,6 +394,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	if info.SubCommand != "clean" {
 		return nil
 	}
+
 	cleanPath := componentPath
 	if info.ComponentFromArg != "" && info.StackFromArg == "" {
 		if info.Context.BaseComponent == "" {
@@ -406,12 +416,23 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 
 	force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
 	filesToClear := initializeFilesToClear(info, atmosConfig)
-	folders, err := CollectDirectoryObjects(cleanPath, filesToClear)
+	var FilterComponents []string
+	if info.ComponentFromArg != "" {
+		FilterComponents = append(FilterComponents, info.ComponentFromArg)
+	}
+	stacksMap, err := ExecuteDescribeStacks(
+		atmosConfig, info.StackFromArg,
+		FilterComponents,
+		nil, nil, false, false, false, false, nil)
+	if err != nil {
+		return fmt.Errorf("error executing describe stacks: %v", err)
+	}
+	allComponentsRelativePaths := getAllStacksComponentsPaths(stacksMap)
+	folders, err := CollectComponentsDirectoryObjects(atmosConfig.TerraformDirAbsolutePath, allComponentsRelativePaths, filesToClear)
 	if err != nil {
 		u.LogTrace(fmt.Errorf("error collecting folders and files: %v", err).Error())
 		return err
 	}
-
 	if info.Component != "" && info.Stack != "" {
 		stackFolders, err := getStackTerraformStateFolder(cleanPath, info.Stack, atmosConfig)
 		if err != nil {
@@ -478,4 +499,149 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 
 	return nil
+}
+
+// getAllStacksComponentsPaths retrieves all components relatives paths to base Terraform directory from the stacks map.
+func getAllStacksComponentsPaths(stacksMap map[string]any) []string {
+	var allComponentsPaths []string
+	for _, stackData := range stacksMap {
+		componentsPath, err := getComponentsPaths(stackData)
+		if err != nil {
+			continue // Skip invalid components path.
+		}
+		allComponentsPaths = append(allComponentsPaths, componentsPath...)
+	}
+	return allComponentsPaths
+}
+func getComponentsPaths(stackData any) ([]string, error) {
+	stackMap, ok := stackData.(map[string]any)
+	if !ok {
+		return nil, ErrParseStacks
+	}
+
+	componentsMap, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return nil, ErrParseComponents
+	}
+
+	terraformComponents, ok := componentsMap["terraform"].(map[string]any)
+	if !ok {
+		return nil, ErrParseTerraformComponents
+	}
+	keys := lo.Keys(terraformComponents)
+	var componentPaths []string
+	for _, key := range keys {
+		components, ok := terraformComponents[key].(map[string]any)
+		if !ok {
+			return nil, ErrParseTerraformComponents
+		}
+		// component attributes reference to relative path
+		componentPath, ok := components["component"].(string)
+		if !ok {
+			return nil, ErrParseComponentsAttributes
+		}
+		componentPaths = append(componentPaths, componentPath)
+	}
+
+	return componentPaths, nil
+}
+func CollectComponentsDirectoryObjects(terraformDirAbsolutePath string, allComponentsRelativePaths []string, filesToClear []string) ([]Directory, error) {
+	var allFolders []Directory
+	for _, path := range allComponentsRelativePaths {
+		componentPath := filepath.Join(terraformDirAbsolutePath, path)
+		folders, err := CollectComponentObjects(terraformDirAbsolutePath, componentPath, filesToClear)
+		if err != nil {
+			u.LogTrace(fmt.Errorf("error collecting folders and files: %v", err).Error())
+			return nil, err
+		}
+		allFolders = append(allFolders, folders...)
+	}
+	return allFolders, nil
+}
+
+func CollectComponentObjects(terraformDirAbsolutePath string, componentPath string, patterns []string) ([]Directory, error) {
+	if err := validateInputPath(terraformDirAbsolutePath); err != nil {
+		return nil, err
+	}
+
+	baseFolder, err := createFolder(terraformDirAbsolutePath, componentPath, filepath.Base(componentPath))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := collectFilesInFolder(baseFolder, componentPath, patterns); err != nil {
+		return nil, err
+	}
+	var folders []Directory
+	if len(baseFolder.Files) > 0 {
+		folders = append(folders, *baseFolder)
+	}
+
+	return folders, nil
+}
+
+func validateInputPath(path string) error {
+	if path == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("path %s does not exist", path)
+	}
+	return nil
+}
+
+func createFolder(rootPath, folderPath, folderName string) (*Directory, error) {
+	relativePath, err := filepath.Rel(rootPath, folderPath)
+	if err != nil {
+		return nil, fmt.Errorf("error determining relative path for folder %s: %v", folderPath, err)
+	}
+
+	return &Directory{
+		Name:         folderName,
+		FullPath:     folderPath,
+		RelativePath: relativePath,
+		Files:        []ObjectInfo{},
+	}, nil
+}
+
+func collectFilesInFolder(folder *Directory, folderPath string, patterns []string) error {
+	for _, pat := range patterns {
+		matchedFiles, err := filepath.Glob(filepath.Join(folderPath, pat))
+		if err != nil {
+			return fmt.Errorf("error matching pattern %s in folder %s: %v", pat, folderPath, err)
+		}
+
+		for _, matchedFile := range matchedFiles {
+			fileInfo, err := createFileInfo(folder.FullPath, matchedFile)
+			if err != nil {
+				return err
+			}
+			if fileInfo != nil {
+				folder.Files = append(folder.Files, *fileInfo)
+			}
+		}
+	}
+	return nil
+}
+
+func createFileInfo(rootPath, filePath string) (*ObjectInfo, error) {
+	relativePath, err := filepath.Rel(rootPath, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error determining relative path for %s: %v", filePath, err)
+	}
+
+	info, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		return nil, nil // Skip if the file doesn't exist
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error stating file %s: %v", filePath, err)
+	}
+
+	return &ObjectInfo{
+		FullPath:     filePath,
+		RelativePath: relativePath,
+		Name:         filepath.Base(filePath),
+		IsDir:        info.IsDir(),
+	}, nil
 }
