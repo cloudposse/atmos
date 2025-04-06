@@ -140,6 +140,7 @@ settings:
         link:
             color: ${colors.primary}
             underline: true
+    inject_github_token: true
 vendor:
     base_path: ./vendor.yaml
 initialized: true

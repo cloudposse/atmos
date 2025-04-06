@@ -119,7 +119,7 @@
       "link": {},
       "link_text": {}
     },
-    "InjectGithubToken": false
+    "InjectGithubToken": true
   },
   "vendor": {
     "base_path": ""

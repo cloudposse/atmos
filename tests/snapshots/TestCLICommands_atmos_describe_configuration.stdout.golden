@@ -49,6 +49,7 @@ schemas:
     opa: {}
 settings:
     list_merge_strategy: replace
+    inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks
 includeStackAbsolutePaths:
