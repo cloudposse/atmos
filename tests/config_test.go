@@ -1,16 +1,16 @@
-package config
+package tests
 
 import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestFindAllStackConfigsInPaths(t *testing.T) {
-	stacksPath := "../../tests/fixtures/scenarios/atmos-overrides-section"
+func TestFindAllStackConfigsInPathsForStack(t *testing.T) {
+	stacksPath := "./fixtures/scenarios/stack-templates-2"
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
@@ -27,17 +27,15 @@ func TestFindAllStackConfigsInPaths(t *testing.T) {
 	}()
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	assert.NoError(t, err)
-
-	_, relativePaths, err := FindAllStackConfigsInPaths(
+	atmosConfig.BasePath = stacksPath
+	_, relativePaths, _, err := config.FindAllStackConfigsInPathsForStack(
 		atmosConfig,
+		"nonprod",
 		atmosConfig.IncludeStackAbsolutePaths,
 		atmosConfig.ExcludeStackAbsolutePaths,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "deploy/dev.yaml", relativePaths[0])
-	assert.Equal(t, "deploy/prod.yaml", relativePaths[1])
-	assert.Equal(t, "deploy/sandbox.yaml", relativePaths[2])
-	assert.Equal(t, "deploy/staging.yaml", relativePaths[3])
+	assert.Equal(t, "deploy/nonprod.yaml", relativePaths[0])
 }
