@@ -137,7 +137,7 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 	}()
 
 	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
+	workDir := "./fixtures/scenarios/stack-templates-2"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
