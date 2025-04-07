@@ -24,25 +24,25 @@ func TestFilterAndListVendor(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	vendorDir := filepath.Join(tempDir, "vendor.d")
-	err = os.Mkdir(vendorDir, 0755)
+	err = os.Mkdir(vendorDir, 0o755)
 	if err != nil {
 		t.Fatalf("Error creating vendor dir: %v", err)
 	}
 
 	componentsDir := filepath.Join(tempDir, "components")
-	err = os.Mkdir(componentsDir, 0755)
+	err = os.Mkdir(componentsDir, 0o755)
 	if err != nil {
 		t.Fatalf("Error creating components dir: %v", err)
 	}
 
 	terraformDir := filepath.Join(componentsDir, "terraform")
-	err = os.Mkdir(terraformDir, 0755)
+	err = os.Mkdir(terraformDir, 0o755)
 	if err != nil {
 		t.Fatalf("Error creating terraform dir: %v", err)
 	}
 
 	vpcDir := filepath.Join(terraformDir, "vpc/v1")
-	err = os.MkdirAll(vpcDir, 0755)
+	err = os.MkdirAll(vpcDir, 0o755)
 	if err != nil {
 		t.Fatalf("Error creating vpc dir: %v", err)
 	}
@@ -58,7 +58,7 @@ spec:
     uri: github.com/cloudposse/terraform-aws-vpc
     version: 1.0.0
 `
-	err = os.WriteFile(filepath.Join(vpcDir, "component.yaml"), []byte(componentYaml), 0644)
+	err = os.WriteFile(filepath.Join(vpcDir, "component.yaml"), []byte(componentYaml), 0o644)
 	if err != nil {
 		t.Fatalf("Error writing component.yaml: %v", err)
 	}
@@ -83,7 +83,7 @@ spec:
       targets:
         - components/terraform/ecs/cluster
 `
-	err = os.WriteFile(filepath.Join(vendorDir, "vendor.yaml"), []byte(vendorYaml), 0644)
+	err = os.WriteFile(filepath.Join(vendorDir, "vendor.yaml"), []byte(vendorYaml), 0o644)
 	if err != nil {
 		t.Fatalf("Error writing vendor.yaml: %v", err)
 	}
@@ -247,13 +247,13 @@ func createNestedDirsWithFile(t *testing.T, basePath string, depth int, filename
 	for i := 0; i < depth; i++ {
 		currentPath = filepath.Join(currentPath, fmt.Sprintf("d%d", i+1))
 	}
-	err := os.MkdirAll(currentPath, 0755)
+	err := os.MkdirAll(currentPath, 0o755)
 	require.NoError(t, err, "Failed to create nested directories")
 
 	finalPath := currentPath
 	if filename != "" {
 		filePath := filepath.Join(currentPath, filename)
-		writeErr := os.WriteFile(filePath, []byte("metadata:\n  name: test-component"), 0644)
+		writeErr := os.WriteFile(filePath, []byte("metadata:\n  name: test-component"), 0o644)
 		require.NoError(t, writeErr, "Failed to create file in nested directory")
 		finalPath = filePath
 	}
@@ -264,7 +264,7 @@ func createNestedDirsWithFile(t *testing.T, basePath string, depth int, filename
 func createDummyManifest(t *testing.T, path string) {
 	t.Helper()
 	content := "metadata:\n  name: test-component\nvars:\n  region: us-east-1"
-	err := os.WriteFile(path, []byte(content), 0644)
+	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err, "Failed to write dummy manifest file")
 }
 
@@ -353,7 +353,7 @@ func TestFindComponentManifestInComponent(t *testing.T) {
 		{
 			name: "ManifestIsDirectory",
 			setup: func(t *testing.T, tempDir string) string {
-				err := os.Mkdir(filepath.Join(tempDir, "component.yaml"), 0755)
+				err := os.Mkdir(filepath.Join(tempDir, "component.yaml"), 0o755)
 				require.NoError(t, err)
 				return ""
 			},
@@ -422,7 +422,7 @@ vars:
   key1: value1
   key2: 123
 `,
-			perms:       0644,
+			perms:       0o644,
 			expectError: false,
 			expectData: &schema.ComponentManifest{
 				Kind:     "Component",
@@ -433,7 +433,7 @@ vars:
 		{
 			name:        "InvalidYAML",
 			content:     "metadata: { name: test",
-			perms:       0644,
+			perms:       0o644,
 			expectError: true,
 			errorType:   errors.New("invalid component manifest: unexpected format"), // Check for error message
 		},
@@ -442,14 +442,14 @@ vars:
 			setup: func(t *testing.T, tempDir string) string {
 				return filepath.Join(tempDir, "nonexistent.yaml") // Don't create it
 			},
-			perms:       0644,
+			perms:       0o644,
 			expectError: true,
 			errorType:   os.ErrNotExist,
 		},
 		{
 			name:        "EmptyFile",
 			content:     "",
-			perms:       0644,
+			perms:       0o644,
 			expectError: true,
 			errorType:   errors.New("unexpected format in component manifest"),
 		},
