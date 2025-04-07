@@ -7,7 +7,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// terraformGeneratePlanfileCmd generates planfile for a terraform component
+// terraformGeneratePlanfileCmd generates planfile for a terraform component.
 var terraformGeneratePlanfileCmd = &cobra.Command{
 	Use:                "planfile",
 	Short:              "Generate a planfile for a Terraform component",
@@ -19,7 +19,7 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		err := e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
+		err := e.ExecuteTerraformGeneratePlanfileCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
