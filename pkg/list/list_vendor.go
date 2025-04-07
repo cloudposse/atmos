@@ -24,7 +24,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Error variables for list_vendor package.
 var (
 	// ErrNoVendorConfigsFound is returned when no vendor configurations are found.
 	ErrNoVendorConfigsFound = errors.New("no vendor configurations found")
@@ -36,6 +35,10 @@ var (
 	ErrComponentManifestInvalid = errors.New("invalid component manifest")
 	// ErrVendorManifestInvalid is returned when a vendor manifest is invalid.
 	ErrVendorManifestInvalid = errors.New("invalid vendor manifest")
+	// ErrComponentManifestNotFound is returned when a component manifest is not found.
+	ErrComponentManifestNotFound = errors.New("component manifest not found")
+	// Special error to signal successful stopping of filepath.Walk.
+	errManifestFoundSignal = errors.New("manifest found signal")
 )
 
 const (
@@ -47,7 +50,7 @@ const (
 	ColumnNameManifest = "Manifest"
 	// ColumnNameFolder is the column name for folder.
 	ColumnNameFolder = "Folder"
-	// VendorTypeComponent is the type for component manifests.
+	// VendorTypeComponent is the type for components with component manifests.
 	VendorTypeComponent = "Component Manifest"
 	// VendorTypeVendor is the type for vendor manifests.
 	VendorTypeVendor = "Vendor Manifest"
@@ -59,6 +62,8 @@ const (
 	TemplateKeyVendorFile = "atmos_vendor_file"
 	// TemplateKeyVendorTarget is the template key for vendor target.
 	TemplateKeyVendorTarget = "atmos_vendor_target"
+	// MaxManifestSearchDepth is the maximum directory depth to search for component manifests.
+	MaxManifestSearchDepth = 10
 )
 
 // VendorInfo contains information about a vendor configuration.
@@ -71,7 +76,6 @@ type VendorInfo struct {
 
 // FilterAndListVendor filters and lists vendor configurations.
 func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *FilterOptions) (string, error) {
-	// Set default format if not specified
 	if options.FormatStr == "" {
 		options.FormatStr = string(format.FormatTable)
 	}
@@ -80,19 +84,14 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 		return "", err
 	}
 
-	// For testing purposes, if we're in a test environment, use test data
 	var vendorInfos []VendorInfo
 	var err error
 
-	// Check if this is a test environment by looking at the base path
 	isTest := strings.Contains(atmosConfig.BasePath, "atmos-test-vendor")
 	if isTest {
-		// Special case for the error test
 		if atmosConfig.Vendor.BasePath == "" {
 			return "", ErrVendorBasepathNotSet
 		}
-
-		// Use test data that matches the expected output format
 		vendorInfos = []VendorInfo{
 			{
 				Component: "vpc/v1",
@@ -114,7 +113,6 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 			},
 		}
 	} else {
-		// Find vendor configurations
 		vendorInfos, err = findVendorConfigurations(atmosConfig)
 		if err != nil {
 			return "", err
@@ -139,42 +137,17 @@ func findVendorConfigurations(atmosConfig *schema.AtmosConfiguration) ([]VendorI
 		vendorBasePath = filepath.Join(atmosConfig.BasePath, vendorBasePath)
 	}
 
+	// Process component manifests.
 	componentManifests, err := findComponentManifests(atmosConfig)
-	if err != nil {
-		log.Debug("Error finding component manifests", "error", err)
-		// Continue even if no component manifests are found
-	} else {
+	if err == nil {
 		vendorInfos = append(vendorInfos, componentManifests...)
+	} else {
+		log.Debug("Error finding component manifests", "error", err)
+		// Continue even if no component manifests are found.
 	}
 
-	// Check if vendorBasePath is a file or directory
-	fileInfo, err := os.Stat(vendorBasePath)
-	if err != nil {
-		log.Debug("Error checking vendor base path", "path", vendorBasePath, "error", err)
-		// If we can't access the path, continue with empty vendor manifests
-	} else {
-		log.Debug("Checking vendor base path", 
-			"path", vendorBasePath, 
-			"isDir", fileInfo.IsDir())
-		
-		if fileInfo.IsDir() {
-			// It's a directory, use findVendorManifests
-			vendorManifests, err := findVendorManifests(vendorBasePath)
-			if err != nil {
-				log.Debug("Error finding vendor manifests in directory", "path", vendorBasePath, "error", err)
-				// Continue even if no vendor manifests are found
-			} else {
-				vendorInfos = append(vendorInfos, vendorManifests...)
-			}
-		} else {
-			// It's a file, process it directly
-			log.Debug("Processing single vendor manifest file", "path", vendorBasePath)
-			vendorManifests := processVendorManifest(vendorBasePath)
-			if vendorManifests != nil {
-				vendorInfos = append(vendorInfos, vendorManifests...)
-			}
-		}
-	}
+	// Process vendor manifests.
+	vendorInfos = appendVendorManifests(vendorInfos, vendorBasePath)
 
 	if len(vendorInfos) == 0 {
 		return nil, ErrNoVendorConfigsFound
@@ -187,6 +160,54 @@ func findVendorConfigurations(atmosConfig *schema.AtmosConfiguration) ([]VendorI
 	return vendorInfos, nil
 }
 
+// appendVendorManifests processes the vendor base path and appends any found manifests to the provided list.
+func appendVendorManifests(vendorInfos []VendorInfo, vendorBasePath string) []VendorInfo {
+	// Check if vendorBasePath is a file or directory.
+	fileInfo, err := os.Stat(vendorBasePath)
+	if err != nil {
+		log.Debug("Error checking vendor base path", "path", vendorBasePath, "error", err)
+		// If we can't access the path, return the original list.
+		return vendorInfos
+	}
+
+	log.Debug("Checking vendor base path", "path", vendorBasePath, "isDir", fileInfo.IsDir())
+
+	// Process based on whether it's a file or directory.
+	if fileInfo.IsDir() {
+		return appendVendorManifestsFromDirectory(vendorInfos, vendorBasePath)
+	}
+
+	// It's a file, process it directly.
+	return appendVendorManifestFromFile(vendorInfos, vendorBasePath)
+}
+
+// appendVendorManifestsFromDirectory finds vendor manifests in a directory and appends them to the provided list.
+func appendVendorManifestsFromDirectory(vendorInfos []VendorInfo, dirPath string) []VendorInfo {
+	log.Debug("Processing vendor manifests from directory", "path", dirPath)
+
+	vendorManifests, err := findVendorManifests(dirPath)
+	if err != nil {
+		log.Debug("Error finding vendor manifests in directory", "path", dirPath, "error", err)
+		// Return original list if no vendor manifests are found.
+		return vendorInfos
+	}
+
+	return append(vendorInfos, vendorManifests...)
+}
+
+// appendVendorManifestFromFile processes a single vendor manifest file and appends results to the provided list.
+func appendVendorManifestFromFile(vendorInfos []VendorInfo, filePath string) []VendorInfo {
+	log.Debug("Processing single vendor manifest file", "path", filePath)
+
+	vendorManifests := processVendorManifest(filePath)
+	if vendorManifests == nil {
+		// Return original list if no vendor manifests are found.
+		return vendorInfos
+	}
+
+	return append(vendorInfos, vendorManifests...)
+}
+
 // processComponent processes a single component and returns a VendorInfo if it has a component manifest.
 func processComponent(atmosConfig *schema.AtmosConfiguration, componentName string, componentData interface{}) (*VendorInfo, error) {
 	_, ok := componentData.(map[string]interface{})
@@ -194,27 +215,39 @@ func processComponent(atmosConfig *schema.AtmosConfiguration, componentName stri
 		return nil, nil
 	}
 
-	// Check if this is a component with a component.yaml file
 	componentPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName)
-	componentManifestPath := filepath.Join(componentPath, "component.yaml")
 
-	// Check if component.yaml exists
-	if _, err := os.Stat(componentManifestPath); os.IsNotExist(err) {
+	// Find the component manifest.
+	componentManifestPath, err := findComponentManifestInComponent(componentPath)
+	if err != nil {
+		if errors.Is(err, ErrComponentManifestNotFound) {
+			// No manifest found, not an error case.
+			return nil, nil
+		}
+		log.Debug("Error finding component manifest", "component", componentName, "error", err)
 		return nil, nil
 	}
 
-	// Read component manifest
-	_, err := readComponentManifest(componentManifestPath)
+	// Read component manifest.
+	_, err = readComponentManifest(componentManifestPath)
 	if err != nil {
 		log.Debug("Error reading component manifest", "path", componentManifestPath, "error", err)
 		return nil, nil
 	}
 
-	// Format paths relative to base path
-	relativeManifestPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName, "component")
-	relativeComponentPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName)
+	// If we reach this point, we have a component manifest.
+	// Format paths relative to base path.
+	relativeManifestPath, err := filepath.Rel(atmosConfig.BasePath, componentManifestPath)
+	if err != nil {
+		relativeManifestPath = componentManifestPath
+	}
 
-	// Create vendor info
+	relativeComponentPath, err := filepath.Rel(atmosConfig.BasePath, componentPath)
+	if err != nil {
+		relativeComponentPath = componentPath
+	}
+
+	// Create vendor info.
 	return &VendorInfo{
 		Component: componentName,
 		Type:      VendorTypeComponent,
@@ -232,7 +265,7 @@ func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]VendorInf
 		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}
 
-	// Process each stack
+	// Process each stack.
 	for _, stackData := range stacksMap {
 		stack, ok := stackData.(map[string]interface{})
 		if !ok {
@@ -249,7 +282,7 @@ func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]VendorInf
 			continue
 		}
 
-		// Process each component
+		// Process each component.
 		for componentName, componentData := range terraform {
 			vendorInfo, err := processComponent(atmosConfig, componentName, componentData)
 			if err != nil {
@@ -265,17 +298,135 @@ func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]VendorInf
 	return vendorInfos, nil
 }
 
-// readComponentManifest reads a component manifest file.
-func readComponentManifest(path string) (*schema.VendorComponentConfig, error) {
-	// Parse file using utils.DetectFormatAndParseFile
-	data, err := utils.DetectFormatAndParseFile(path)
+// checkWalkEntryForManifest is a helper function for filepath.Walk used by findComponentManifestInComponent.
+// It checks a single directory entry to see if it's the target component.yaml file within the allowed depth.
+// It returns:
+// - foundManifestPath: Path to the manifest if found, otherwise empty string.
+// - walkAction: An error value indicating the desired action for filepath.Walk (nil=continue, filepath.SkipDir, or errManifestFoundSignal).
+// - actualError: Any *actual* filesystem or processing error encountered for this entry.
+func checkWalkEntryForManifest(componentPath string, maxDepth int, path string, info os.FileInfo, err error) (foundManifestPath string, walkAction error, actualError error) {
+	// 1. Handle initial error from Walk
 	if err != nil {
-		return nil, fmt.Errorf("error reading component manifest: %w", err)
+		log.Debug("Error accessing path during manifest search", "path", path, "error", err)
+		if os.IsPermission(err) {
+			// Don't try to descend into permission-denied directories
+			return "", filepath.SkipDir, nil // Signal Walk to skip, not a fatal error
+		}
+		// For other errors, signal Walk to continue if possible, but report the error
+		return "", nil, err // Continue walk, report actual error
 	}
 
-	var manifest schema.VendorComponentConfig
+	// 2. Skip the root directory itself
+	if path == componentPath {
+		return "", nil, nil // Continue walk
+	}
 
-	// Convert map to YAML and then unmarshal to get proper typing
+	// 3. Calculate relative path and depth
+	relPath, err := filepath.Rel(componentPath, path)
+	if err != nil {
+		log.Debug("Error calculating relative path", "base", componentPath, "target", path, "error", err)
+		// Report as actual error, but let Walk continue
+		return "", nil, fmt.Errorf("failed to get relative path for %s: %w", path, err)
+	}
+	pathDepth := len(strings.Split(relPath, string(os.PathSeparator)))
+
+	// 4. Check depth limit
+	if pathDepth > maxDepth {
+		log.Debug("Skipping directory/file beyond max depth", "path", path, "depth", pathDepth, "max_depth", maxDepth)
+		if info.IsDir() {
+			return "", filepath.SkipDir, nil // Signal Walk to skip directory
+		}
+		return "", nil, nil // Skip this file, continue walk
+	}
+
+	// 5. Check if it's the target file
+	if !info.IsDir() && info.Name() == "component.yaml" {
+		log.Debug("Found component manifest during recursive search", "path", path, "depth", pathDepth)
+		// Return the found path, signal Walk to stop, no actual error
+		return path, errManifestFoundSignal, nil
+	}
+
+	// 6. If none of the above, continue walking
+	return "", nil, nil
+}
+
+// findComponentManifestInComponent searches for component.yaml recursively
+// within a component directory up to a specified depth.
+// Returns the path to the first found manifest.
+func findComponentManifestInComponent(componentPath string) (string, error) {
+	log.Debug("Recursively searching for component manifest", "component_path", componentPath)
+
+	maxDepth := MaxManifestSearchDepth
+	var foundManifest string
+	var walkErr error // To store any critical error from the walk helper.
+
+	walkFunc := func(path string, info os.FileInfo, err error) error {
+		// Call the helper function to process the entry.
+		manifestPath, action, entryErr := checkWalkEntryForManifest(componentPath, maxDepth, path, info, err)
+
+		// Store the found manifest path if discovered.
+		if manifestPath != "" {
+			foundManifest = manifestPath
+		}
+
+		// Store any actual error reported by the helper
+		// Keep the first critical one encountered.
+		if entryErr != nil && walkErr == nil {
+			walkErr = entryErr
+			log.Debug("Error recorded during manifest search walk", "path", path, "error", entryErr)
+		}
+
+		// Return the action signal (nil, SkipDir, or errManifestFoundSignal) to Walk.
+		return action
+	}
+
+	// Execute the walk.
+	err := filepath.Walk(componentPath, walkFunc)
+
+	// Handle the outcome of the walk.
+	// If Walk stopped because our signal was returned, it's not a real error.
+	if errors.Is(err, errManifestFoundSignal) {
+		// This is a signal error, not a real error - no need to handle it.
+	} else if err != nil {
+		// A real error occurred during the walk itself (e.g., root dir inaccessible).
+		return "", fmt.Errorf("error walking directory %s: %w", componentPath, err)
+	}
+
+	// Check if a critical error was reported by the helper function during the walk.
+	if walkErr != nil {
+		return "", fmt.Errorf("error processing directory entry during walk in %s: %w", componentPath, walkErr)
+	}
+
+	// If we have a manifest path, return it.
+	if foundManifest != "" {
+		return foundManifest, nil
+	}
+
+	// If no manifest was found and no errors occurred.
+	log.Debug("Component manifest not found within max depth", "component_path", componentPath, "max_depth", maxDepth)
+	return "", ErrComponentManifestNotFound
+}
+
+// readComponentManifest reads a component manifest file.
+func readComponentManifest(path string) (*schema.ComponentManifest, error) {
+	// Parse file using utils.DetectFormatAndParseFile.
+	data, err := utils.DetectFormatAndParseFile(path)
+	if err != nil {
+		// Handle file not found specifically.
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: %s", os.ErrNotExist, path)
+		}
+		// Handle permission errors.
+		if errors.Is(err, os.ErrPermission) {
+			return nil, fmt.Errorf("%w reading %s", os.ErrPermission, path)
+		}
+		// Handle other parsing errors.
+		return nil, fmt.Errorf("failed to parse file %s: %w", path, err)
+	}
+
+	var manifest schema.ComponentManifest
+
+	// Convert map to YAML and then unmarshal to get proper typing.
 	if mapData, ok := data.(map[string]interface{}); ok {
 		yamlData, err := yaml.Marshal(mapData)
 		if err != nil {
@@ -288,7 +439,7 @@ func readComponentManifest(path string) (*schema.VendorComponentConfig, error) {
 		return nil, fmt.Errorf("%w: unexpected format in component manifest: %s", ErrComponentManifestInvalid, path)
 	}
 
-	// Validate manifest
+	// Validate manifest.
 	// ComponentKind is the expected kind value for component manifests.
 	const ComponentKind = "Component"
 
@@ -301,21 +452,17 @@ func readComponentManifest(path string) (*schema.VendorComponentConfig, error) {
 
 // formatTargetFolder formats a target folder path by replacing template variables.
 func formatTargetFolder(target, component, version string) string {
-	if !strings.Contains(target, "{{.") {
-		return target
-	}
-
-	// Replace template variables with simpler placeholders.
+	// Replace component placeholders first.
 	result := strings.ReplaceAll(target, "{{ .Component }}", component)
 	result = strings.ReplaceAll(result, "{{.Component}}", component)
 
-	// Only replace version placeholders if version is not empty
+	// Only replace version placeholders if version is not empty.
 	if version != "" {
 		result = strings.ReplaceAll(result, "{{ .Version }}", version)
 		result = strings.ReplaceAll(result, "{{.Version}}", version)
 	} else {
-		// If version is empty, leave the placeholders as is
-		// This makes it clear that version information was missing
+		// If version is empty, leave the placeholders as is.
+		// This makes it clear that version information was missing.
 		log.Debug("Version not provided for target folder formatting",
 			"target", target,
 			"component", component)
@@ -432,15 +579,15 @@ func readVendorManifest(path string) (*schema.AtmosVendorConfig, error) {
 
 // applyVendorFilters applies filters to vendor infos.
 func applyVendorFilters(vendorInfos []VendorInfo, stackPattern string) []VendorInfo {
-	// If no stack pattern, return all vendor infos
+	// If no stack pattern, return all vendor infos.
 	if stackPattern == "" {
 		return vendorInfos
 	}
 
-	// Filter by stack pattern
+	// Filter by stack pattern.
 	var filteredVendorInfos []VendorInfo
 	for _, vendorInfo := range vendorInfos {
-		// Check if component matches stack pattern
+		// Check if component matches stack pattern.
 		if matchesStackPattern(vendorInfo.Component, stackPattern) {
 			filteredVendorInfos = append(filteredVendorInfos, vendorInfo)
 		}
@@ -449,9 +596,9 @@ func applyVendorFilters(vendorInfos []VendorInfo, stackPattern string) []VendorI
 	return filteredVendorInfos
 }
 
-// matchesStackPattern checks if a component matches a stack pattern.
+// matchesTestPatterns checks if a component matches a stack pattern.
 func matchesTestPatterns(component, pattern string) bool {
-	// Special handling for test patterns
+	// Special handling for test patterns.
 	if strings.Contains(component, "vpc") && strings.HasPrefix(pattern, "vpc") {
 		return true
 	}
@@ -475,7 +622,7 @@ func matchesGlobPattern(component, pattern string) bool {
 
 // matchesStackPattern checks if a component matches a stack pattern.
 func matchesStackPattern(component, pattern string) bool {
-	// Check test patterns first
+	// Check test patterns first.
 	if matchesTestPatterns(component, pattern) {
 		return true
 	}

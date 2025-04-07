@@ -1,6 +1,9 @@
 package list
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestFilterAndListVendor tests the vendor listing functionality
@@ -234,4 +238,342 @@ spec:
 		assert.Error(t, err)
 		assert.Equal(t, ErrVendorBasepathNotSet, err)
 	})
+}
+
+// Helper function to create nested directories and optionally a file at the deepest level.
+func createNestedDirsWithFile(t *testing.T, basePath string, depth int, filename string) string {
+	t.Helper()
+	currentPath := basePath
+	for i := 0; i < depth; i++ {
+		currentPath = filepath.Join(currentPath, fmt.Sprintf("d%d", i+1))
+	}
+	err := os.MkdirAll(currentPath, 0755)
+	require.NoError(t, err, "Failed to create nested directories")
+
+	finalPath := currentPath
+	if filename != "" {
+		filePath := filepath.Join(currentPath, filename)
+		writeErr := os.WriteFile(filePath, []byte("metadata:\n  name: test-component"), 0644)
+		require.NoError(t, writeErr, "Failed to create file in nested directory")
+		finalPath = filePath
+	}
+	return finalPath
+}
+
+// Helper function to create a dummy manifest file.
+func createDummyManifest(t *testing.T, path string) {
+	t.Helper()
+	content := "metadata:\n  name: test-component\nvars:\n  region: us-east-1"
+	err := os.WriteFile(path, []byte(content), 0644)
+	require.NoError(t, err, "Failed to write dummy manifest file")
+}
+
+// Helper function to create a test file with specific content and permissions.
+func createTestFile(t *testing.T, path string, content string, perms fs.FileMode) {
+	t.Helper()
+	err := os.WriteFile(path, []byte(content), perms)
+	require.NoError(t, err, "Failed to create test file")
+	// Ensure permissions are set correctly (WriteFile might be affected by umask).
+	err = os.Chmod(path, perms)
+	require.NoError(t, err, "Failed to set file permissions")
+}
+
+// TestFindComponentManifestInComponent tests the recursive search logic.
+func TestFindComponentManifestInComponent(t *testing.T) {
+	maxDepth := 10 // Must match the value in findComponentManifestInComponent
+
+	testCases := []struct {
+		name          string
+		setup         func(t *testing.T, tempDir string) string // Returns expected path or empty
+		componentPath func(t *testing.T, tempDir string) string // Returns path to search
+		expectError   error
+	}{
+		{
+			name: "ManifestAtRoot",
+			setup: func(t *testing.T, tempDir string) string {
+				expectedPath := filepath.Join(tempDir, "component.yaml")
+				createDummyManifest(t, expectedPath)
+				return expectedPath
+			},
+			componentPath: func(t *testing.T, tempDir string) string { return tempDir },
+			expectError:   nil,
+		},
+		{
+			name: "ManifestOneLevelDeep",
+			setup: func(t *testing.T, tempDir string) string {
+				expectedPath := createNestedDirsWithFile(t, tempDir, 1, "component.yaml")
+				return expectedPath
+			},
+			componentPath: func(t *testing.T, tempDir string) string { return tempDir },
+			expectError:   nil,
+		},
+		{
+			name: "ManifestFiveLevelsDeep",
+			setup: func(t *testing.T, tempDir string) string {
+				expectedPath := createNestedDirsWithFile(t, tempDir, 5, "component.yaml")
+				return expectedPath
+			},
+			componentPath: func(t *testing.T, tempDir string) string { return tempDir },
+			expectError:   nil,
+		},
+		{
+			name: "ManifestAtMaxDepth",
+			setup: func(t *testing.T, tempDir string) string {
+				expectedPath := createNestedDirsWithFile(t, tempDir, maxDepth, "component.yaml")
+				return expectedPath
+			},
+			componentPath: func(t *testing.T, tempDir string) string { return tempDir },
+			expectError:   nil,
+		},
+		{
+			name: "ManifestDeeperThanMaxDepth",
+			setup: func(t *testing.T, tempDir string) string {
+				_ = createNestedDirsWithFile(t, tempDir, maxDepth+1, "component.yaml")
+				return "" // Expected path is empty string
+			},
+			componentPath: func(t *testing.T, tempDir string) string { return tempDir },
+			expectError:   ErrComponentManifestNotFound,
+		},
+		{
+			name: "NoManifestFound",
+			setup: func(t *testing.T, tempDir string) string {
+				_ = createNestedDirsWithFile(t, tempDir, 2, "someotherfile.txt")
+				return ""
+			},
+			componentPath: func(t *testing.T, tempDir string) string { return tempDir },
+			expectError:   ErrComponentManifestNotFound,
+		},
+		{
+			name:          "NonExistentComponentPath",
+			setup:         func(t *testing.T, tempDir string) string { return "" },
+			componentPath: func(t *testing.T, tempDir string) string { return filepath.Join(tempDir, "does_not_exist") },
+			// Expect a specific type of error, typically fs.ErrNotExist wrapped
+			expectError: fs.ErrNotExist,
+		},
+		{
+			name: "ManifestIsDirectory",
+			setup: func(t *testing.T, tempDir string) string {
+				err := os.Mkdir(filepath.Join(tempDir, "component.yaml"), 0755)
+				require.NoError(t, err)
+				return ""
+			},
+			componentPath: func(t *testing.T, tempDir string) string { return tempDir },
+			expectError:   ErrComponentManifestNotFound,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			expectedPath := tc.setup(t, tempDir)
+			componentPath := tc.componentPath(t, tempDir)
+
+			// Ensure paths are absolute for consistency
+			if expectedPath != "" {
+				absExpectedPath, err := filepath.Abs(expectedPath)
+				require.NoError(t, err)
+				expectedPath = absExpectedPath
+			}
+			absComponentPath, err := filepath.Abs(componentPath)
+			// For the non-existent path case, Abs will return an error, skip it
+			if err == nil {
+				componentPath = absComponentPath
+			}
+
+			actualPath, err := findComponentManifestInComponent(componentPath)
+
+			if tc.expectError != nil {
+				assert.Error(t, err)
+				// Use errors.Is for checking wrapped standard errors like fs.ErrNotExist
+				if errors.Is(tc.expectError, fs.ErrNotExist) {
+					assert.True(t, errors.Is(err, fs.ErrNotExist), "Expected fs.ErrNotExist, got: %v", err)
+				} else {
+					assert.Equal(t, tc.expectError, err)
+				}
+				assert.Empty(t, actualPath)
+			} else {
+				assert.NoError(t, err)
+				// Normalize paths for comparison (e.g., clean, make absolute)
+				assert.Equal(t, expectedPath, actualPath)
+			}
+		})
+	}
+}
+
+// TestReadComponentManifest tests reading and parsing component.yaml.
+func TestReadComponentManifest(t *testing.T) {
+	testCases := []struct {
+		name        string
+		setup       func(t *testing.T, tempDir string) string // returns path to file
+		content     string
+		perms       fs.FileMode
+		expectError bool
+		errorType   error // Specific error type to check if expectError is true
+		expectData  *schema.ComponentManifest
+	}{
+		{
+			name: "ValidManifest",
+			content: `
+kind: Component
+metadata:
+  name: test-comp
+  description: A description
+vars:
+  key1: value1
+  key2: 123
+`,
+			perms:       0644,
+			expectError: false,
+			expectData: &schema.ComponentManifest{
+				Kind:     "Component",
+				Metadata: map[string]any{"name": "test-comp", "description": "A description"},
+				Vars:     map[string]any{"key1": "value1", "key2": 123},
+			},
+		},
+		{
+			name:        "InvalidYAML",
+			content:     "metadata: { name: test",
+			perms:       0644,
+			expectError: true,
+			errorType:   errors.New("invalid component manifest: unexpected format"), // Check for error message
+		},
+		{
+			name: "FileNotFound",
+			setup: func(t *testing.T, tempDir string) string {
+				return filepath.Join(tempDir, "nonexistent.yaml") // Don't create it
+			},
+			perms:       0644,
+			expectError: true,
+			errorType:   os.ErrNotExist,
+		},
+		{
+			name:        "EmptyFile",
+			content:     "",
+			perms:       0644,
+			expectError: true,
+			errorType:   errors.New("unexpected format in component manifest"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			var filePath string
+			if tc.setup != nil {
+				filePath = tc.setup(t, tempDir)
+			} else {
+				filePath = filepath.Join(tempDir, "test_component.yaml")
+				createTestFile(t, filePath, tc.content, tc.perms)
+			}
+
+			data, err := readComponentManifest(filePath)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorType != nil {
+					if errors.Is(tc.errorType, os.ErrNotExist) || errors.Is(tc.errorType, os.ErrPermission) {
+						assert.True(t, errors.Is(err, tc.errorType), "Expected error type %T, got: %v", tc.errorType, err)
+					} else {
+						// For other error messages, just check that the error message contains the expected text
+						assert.Contains(t, err.Error(), tc.errorType.Error(), "Expected error message containing '%s', got: %v", tc.errorType.Error(), err)
+					}
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectData, data)
+			}
+		})
+	}
+}
+
+// TestFormatTargetFolder tests placeholder replacement.
+func TestFormatTargetFolder(t *testing.T) {
+	testCases := []struct {
+		name      string
+		target    string
+		component string
+		version   string
+		expected  string
+	}{
+		{"ReplaceBoth", "path/{{ .Component }}/{{ .Version }}", "comp", "v1", "path/comp/v1"},
+		{"ReplaceBothSpaceless", "path/{{.Component}}/{{.Version}}", "comp", "v1", "path/comp/v1"},
+		{"ReplaceComponentOnly", "path/{{ .Component }}/fixed", "comp", "v1", "path/comp/fixed"},
+		{"ReplaceVersionOnly", "path/fixed/{{ .Version }}", "comp", "v1", "path/fixed/v1"},
+		{"VersionEmpty", "path/{{ .Component }}/{{ .Version }}", "comp", "", "path/comp/{{ .Version }}"},
+		{"VersionEmptySpaceless", "path/{{.Component}}/{{.Version}}", "comp", "", "path/comp/{{.Version}}"},
+		{"NoPlaceholders", "path/fixed/fixed", "comp", "v1", "path/fixed/fixed"},
+		{"EmptyTarget", "", "comp", "v1", ""},
+		{"OnlyComponentPlaceholder", "{{ .Component }}", "comp", "v1", "comp"},
+		{"OnlyVersionPlaceholder", "{{ .Version }}", "comp", "v1", "v1"},
+		{"OnlyVersionPlaceholderEmptyVersion", "{{ .Version }}", "comp", "", "{{ .Version }}"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := formatTargetFolder(tc.target, tc.component, tc.version)
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}
+
+// TestApplyVendorFilters tests the filtering logic.
+func TestApplyVendorFilters(t *testing.T) {
+	initialInfos := []VendorInfo{
+		{Component: "vpc", Type: "terraform", Folder: "components/terraform/vpc"},
+		{Component: "eks", Type: "helmfile", Folder: "components/helmfile/eks"},
+		{Component: "rds", Type: "terraform", Folder: "components/terraform/rds"},
+		{Component: "app", Type: "helmfile", Folder: "components/helmfile/app"},
+		{Component: "ecs", Type: "terraform", Folder: "components/terraform/ecs"},
+	}
+
+	testCases := []struct {
+		name     string
+		options  FilterOptions
+		input    []VendorInfo
+		expected []VendorInfo
+	}{
+		{
+			name:     "NoFilters",
+			options:  FilterOptions{},
+			input:    initialInfos,
+			expected: initialInfos,
+		},
+		{
+			name:     "FilterComponentExactMatch",
+			options:  FilterOptions{StackPattern: "vpc"},
+			input:    initialInfos,
+			expected: []VendorInfo{initialInfos[0]},
+		},
+		{
+			name:     "FilterComponentNoMatch",
+			options:  FilterOptions{StackPattern: "nomatch"},
+			input:    initialInfos,
+			expected: []VendorInfo{},
+		},
+		{
+			name:     "FilterMultiplePatterns",
+			options:  FilterOptions{StackPattern: "vpc,eks"},
+			input:    initialInfos,
+			expected: []VendorInfo{initialInfos[0], initialInfos[1]},
+		},
+		{
+			name:     "FilterSpecialCaseEcs",
+			options:  FilterOptions{StackPattern: "ecs"},
+			input:    initialInfos,
+			expected: []VendorInfo{initialInfos[4]},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := applyVendorFilters(tc.input, tc.options.StackPattern)
+
+			// For the empty slice case, check length instead of direct equality
+			if len(tc.expected) == 0 {
+				assert.Empty(t, actual, "Expected empty result")
+			} else {
+				assert.Equal(t, tc.expected, actual)
+			}
+		})
+	}
 }
