@@ -71,10 +71,18 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 }
 
 func setEnv(v *viper.Viper) {
-	bindEnv(v, "settings.github_token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
-	bindEnv(v, "settings.bitbucket_token", "ATMOS_BITBUCKET_TOKEN", "BITBUCKET_TOKEN")
-	bindEnv(v, "settings.bitbucket_username", "ATMOS_BITBUCKET_USERNAME", "BITBUCKET_USERNAME")
-	bindEnv(v, "settings.gitlab_token", "ATMOS_GITLAB_TOKEN", "GITLAB_TOKEN")
+	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
+	bindEnv(v, "settings.inject_github_token", "INJECT_GITHUB_TOKEN")
+	bindEnv(v, "settings.atmos_github_token", "ATMOS_GITHUB_TOKEN")
+
+	bindEnv(v, "settings.bitbucket_token", "BITBUCKET_TOKEN")
+	bindEnv(v, "settings.atmos_bitbucket_token", "ATMOS_BITBUCKET_TOKEN")
+	bindEnv(v, "settings.inject_bitbucket_token", "INJECT_BITBUCKET_TOKEN")
+	bindEnv(v, "settings.bitbucket_username", "BITBUCKET_USERNAME")
+
+	bindEnv(v, "settings.gitlab_token", "GITLAB_TOKEN")
+	bindEnv(v, "settings.inject_gitlab_token", "INJECT_GITLAB_TOKEN")
+	bindEnv(v, "settings.atmos_gitlab_token", "ATMOS_GITLAB_TOKEN")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {

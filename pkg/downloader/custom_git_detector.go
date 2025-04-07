@@ -179,10 +179,19 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	switch host {
 	case hostGitHub:
+		if d.atmosConfig.Settings.InjectGithubToken {
+			return d.atmosConfig.Settings.AtmosGithubToken, "ATMOS_GITHUB_TOKEN"
+		}
 		return d.atmosConfig.Settings.GithubToken, "GITHUB_TOKEN"
 	case hostBitbucket:
+		if d.atmosConfig.Settings.InjectBitbucketToken {
+			return d.atmosConfig.Settings.AtmosBitbucketToken, "ATMOS_BITBUCKET_TOKEN"
+		}
 		return d.atmosConfig.Settings.BitbucketToken, "BITBUCKET_TOKEN"
 	case hostGitLab:
+		if d.atmosConfig.Settings.InjectGitlabToken {
+			return d.atmosConfig.Settings.AtmosGitlabToken, "ATMOS_GITLAB_TOKEN"
+		}
 		return d.atmosConfig.Settings.GitlabToken, "GITLAB_TOKEN"
 	}
 	return "", ""

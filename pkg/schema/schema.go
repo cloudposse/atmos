@@ -205,15 +205,20 @@ type SyntaxHighlighting struct {
 }
 
 type AtmosSettings struct {
-	ListMergeStrategy string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
-	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
-	InjectGithubToken bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
-	GithubToken       string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
-	BitbucketToken    string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
-	BitbucketUsername string           `yaml:"bitbucket_username,omitempty" mapstructure:"bitbucket_username"`
-	GitlabToken       string           `yaml:"gitlab_token,omitempty" mapstructure:"gitlab_token"`
+	ListMergeStrategy    string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal             Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
+	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
+	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
+	AtmosGithubToken     string           `yaml:"atmos_github_token,omitempty" mapstructure:"atmos_github_token"`
+	InjectBitbucketToken bool             `yaml:"inject_bitbucket_token,omitempty" mapstructure:"inject_bitbucket_token"`
+	BitbucketToken       string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
+	AtmosBitbucketToken  string           `yaml:"atmos_bitbucket_token,omitempty" mapstructure:"atmos_bitbucket_token"`
+	BitbucketUsername    string           `yaml:"bitbucket_username,omitempty" mapstructure:"bitbucket_username"`
+	InjectGitlabToken    bool             `yaml:"inject_gitlab_token,omitempty" mapstructure:"inject_gitlab_token"`
+	AtmosGitlabToken     string           `yaml:"atmos_gitlab_token,omitempty" mapstructure:"atmos_gitlab_token"`
+	GitlabToken          string           `yaml:"gitlab_token,omitempty" mapstructure:"gitlab_token"`
 }
 
 type Docs struct {
