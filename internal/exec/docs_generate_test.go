@@ -10,8 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestIsLikelyRemote verifies that isLikelyRemote returns expected booleans.
-func TestIsLikelyRemote(t *testing.T) {
+// TestIsRemoteSource verifies that IsRemoteSource returns expected booleans.
+func TestIsRemoteSource(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected bool
@@ -26,7 +26,7 @@ func TestIsLikelyRemote(t *testing.T) {
 	}
 	for _, tt := range tests {
 		if got := isRemoteSource(tt.input); got != tt.expected {
-			t.Errorf("isLikelyRemote(%q) = %v; want %v", tt.input, got, tt.expected)
+			t.Errorf("IsRemoteSource(%q) = %v; want %v", tt.input, got, tt.expected)
 		}
 	}
 }

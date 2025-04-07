@@ -9,7 +9,11 @@ import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
 
-Use this command to generate a README.md from one or more input sources defined at `docs.generate.readme` section of `atmos.yaml`. 
+Use this command to generate a README.md from one or more input sources.  
+
+<Screengrab title="atmos docs generate readme --help" slug="atmos-docs-generate-readme--help" />
+
+The sources are defined at `docs.generate.readme` section of `atmos.yaml`.
 
     ```yaml
     docs:
@@ -36,7 +40,7 @@ Use this command to generate a README.md from one or more input sources defined 
 
     ```
 
-The command combines all local or remote YAML files specified at `source` and generates README.md at the `output` folder. In case the template contains `terraform_docs` key, e.g.  
+The command combines all local or remote YAML files specified at `input` and template file then generates README.md at the `output` folder. In case the template contains `terraform_docs` key, e.g.  
 
     ```yaml
 {{- $data := (ds "config") -}}
@@ -60,13 +64,36 @@ This command also aliases to “atmos generate docs”.
 
 :::
 
-<Screengrab title="atmos docs generate readme --help" slug="atmos-docs-generate-readme--help" />
-
 ## Usage
 
 ```shell
 atmos docs generate readme
 
 ``` 
+## Supported Sources for README.yaml and template
 
-:::
+### Local Sources
+
+The `!include` function supports the following local file sources:
+  - Absolute paths
+    ```yaml
+    input: - /Users/me/Documents/README.yaml
+    template: /Users/me/Documents/README.md.gotmpl
+    ```
+
+  - Paths relative to the current working directory
+    ```yaml
+    input: - ./README.yaml
+    template: ./README.md.gotmpl
+    ```
+
+  - Paths relative to the `base_dir` defined in `atmos.yaml` CLI config file (then resolved as relative to cwd)
+    ```yaml
+    input: - terraform/README.yaml
+    template: terraform/README.md.gotmpl
+    ```
+
+### Remote Sources
+
+To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/go-getter)
+(used by [Terraform](https://www.terraform.io/) for downloading modules)
