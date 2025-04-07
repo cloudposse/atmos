@@ -37,14 +37,14 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 // It checks that the function executes the `atmos vendor pull`
 // and that the vendor components are correctly pulled.
 // The function also verifies that the state files are existing and deleted after the vendor pull command is executed.
-func TestExecuteVendorPull2(t *testing.T) {
-	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+func TestExecuteVendorPull(t *testing.T) {
+	if _, exist := os.LookupEnv("ATMOS_CLI_CONFIG_PATH"); exist {
 		err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 		if err != nil {
 			t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
 		}
 	}
-	if os.Getenv("ATMOS_BASE_PATH") != "" {
+	if _, exist := os.LookupEnv("ATMOS_BASE_PATH"); exist {
 		err := os.Unsetenv("ATMOS_BASE_PATH")
 		if err != nil {
 			t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
