@@ -53,7 +53,7 @@ func TestCLITerraformClean(t *testing.T) {
 	// Force clean everything
 	runTerraformCleanCommand(t, binaryPath, "--force")
 	// Clean everything
-	runTerraformCleanCommand(t, binaryPath)
+	runTerraformCleanCommand(t, binaryPath, "--all")
 	// Clean specific component
 	runTerraformCleanCommand(t, binaryPath, "station")
 	// Clean component with stack
