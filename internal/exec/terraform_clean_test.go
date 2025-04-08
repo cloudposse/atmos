@@ -10,18 +10,16 @@ import (
 
 // test ExecuteTerraform clean command.
 func TestCLITerraformClean(t *testing.T) {
-	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
-		err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		if err != nil {
-			t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-		}
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
 	}
-	if os.Getenv("ATMOS_BASE_PATH") != "" {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
-		if err != nil {
-			t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-		}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
 	}
+
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -82,6 +80,7 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 	for _, file := range files {
 		fileAbs, err := os.Stat(file)
 		if err == nil {
+			t.Logf("File %s exists", fileAbs.Name())
 			return false, fileAbs.Name()
 		}
 	}

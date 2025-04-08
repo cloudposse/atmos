@@ -8,10 +8,10 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/jfrog/jfrog-client-go/utils/log"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
@@ -21,6 +21,14 @@ var (
 	ErrParseComponents           = errors.New("could not parse components")
 	ErrParseTerraformComponents  = errors.New("could not parse Terraform components")
 	ErrParseComponentsAttributes = errors.New("could not parse component attributes")
+	ErrDescribeStack             = errors.New("error describe stacks")
+	ErrEmptyPath                 = errors.New("path cannot be empty")
+	ErrPathNotExist              = errors.New("path not exist")
+	ErrFileStat                  = errors.New("error get file stat")
+	ErrMatchPattern              = errors.New("error matching pattern")
+	ErrReadDir                   = errors.New("error reading directory")
+	ErrFailedFoundStack          = errors.New("failed to find stack folders")
+	ErrCollectFiles              = errors.New("failed to collect files")
 )
 
 type ObjectInfo struct {
@@ -47,7 +55,7 @@ func findFoldersNamesWithPrefix(root, prefix string, atmosConfig schema.AtmosCon
 	// First, read the directories at the root level (level 1)
 	level1Dirs, err := os.ReadDir(root)
 	if err != nil {
-		return nil, fmt.Errorf("error reading root directory %s: %w", root, err)
+		return nil, fmt.Errorf("%w path %s: error %v", ErrReadDir, root, err)
 	}
 
 	for _, dir := range level1Dirs {
@@ -81,7 +89,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 		return nil, fmt.Errorf("path cannot be empty")
 	}
 	if _, err := os.Stat(basePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("path %s does not exist", basePath)
+		return nil, fmt.Errorf("%w %s", ErrPathNotExist, basePath)
 	}
 	var folders []Directory
 
@@ -95,7 +103,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 		if os.IsNotExist(err) {
 			return nil, nil // Skip if the file doesn't exist
 		} else if err != nil {
-			return nil, fmt.Errorf("error stating file %s: %v", filePath, err)
+			return nil, fmt.Errorf("%w,path %s error %v", ErrFileStat, filePath, err)
 		}
 
 		return &ObjectInfo{
@@ -126,7 +134,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 		for _, pat := range patterns {
 			matchedFiles, err := filepath.Glob(filepath.Join(folderPath, pat))
 			if err != nil {
-				return fmt.Errorf("error matching pattern %s in folder %s: %v", pat, folderPath, err)
+				return fmt.Errorf("%w %s in folder %s: %v", ErrMatchPattern, pat, folderPath, err)
 			}
 
 			// Add matched files to folder
@@ -194,7 +202,7 @@ func getStackTerraformStateFolder(componentPath string, stack string, atmosConfi
 	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
 	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack, atmosConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find stack folders: %w", err)
+		return nil, fmt.Errorf("%w : %v", ErrFailedFoundStack, err)
 	}
 	var stackTfStateFolders []Directory
 	for _, folderName := range tfStateFolderNames {
@@ -205,7 +213,7 @@ func getStackTerraformStateFolder(componentPath string, stack string, atmosConfi
 		}
 		directories, err := CollectDirectoryObjects(tfStateFolderPath, []string{"*.tfstate", "*.tfstate.backup"})
 		if err != nil {
-			return nil, fmt.Errorf("failed to collect files in %s: %w", tfStateFolderPath, err)
+			return nil, fmt.Errorf("%w in %s: %v", ErrCollectFiles, tfStateFolderPath, err)
 		}
 		for i := range directories {
 			if directories[i].Files != nil {
@@ -430,12 +438,12 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		FilterComponents,
 		nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return fmt.Errorf("error executing describe stacks: %v", err)
+		return fmt.Errorf("%w: %s", ErrDescribeStack, err)
 	}
 	allComponentsRelativePaths := getAllStacksComponentsPaths(stacksMap)
 	folders, err := CollectComponentsDirectoryObjects(atmosConfig.TerraformDirAbsolutePath, allComponentsRelativePaths, filesToClear)
 	if err != nil {
-		u.LogTrace(fmt.Errorf("error collecting folders and files: %v", err).Error())
+		log.Debug("error collecting folders and files", "error", err)
 		return err
 	}
 	if info.Component != "" && info.Stack != "" {
@@ -558,7 +566,7 @@ func CollectComponentsDirectoryObjects(terraformDirAbsolutePath string, allCompo
 		componentPath := filepath.Join(terraformDirAbsolutePath, path)
 		folders, err := CollectComponentObjects(terraformDirAbsolutePath, componentPath, filesToClear)
 		if err != nil {
-			u.LogTrace(fmt.Errorf("error collecting folders and files: %v", err).Error())
+			log.Debug("collecting folders and files", "error", err)
 			return nil, err
 		}
 		allFolders = append(allFolders, folders...)
@@ -589,10 +597,11 @@ func CollectComponentObjects(terraformDirAbsolutePath string, componentPath stri
 
 func validateInputPath(path string) error {
 	if path == "" {
-		return fmt.Errorf("path cannot be empty")
+		return ErrEmptyPath
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return fmt.Errorf("path %s does not exist", path)
+		return fmt.Errorf("%w %s", ErrPathNotExist, path)
+
 	}
 	return nil
 }
