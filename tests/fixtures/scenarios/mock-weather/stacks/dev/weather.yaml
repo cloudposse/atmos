@@ -1,0 +1,14 @@
+import:
+  - ../catalog/weather
+
+components:
+  terraform:
+    weather:
+      metadata:
+        component: weather-mock
+        environment: dev
+      backend:
+        type: local
+      vars:
+        stage: dev
+        location: "New York"

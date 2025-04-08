@@ -1,0 +1,22 @@
+components:
+  terraform:
+    base_path: "../../components/terraform"
+    apply:
+      auto_approve: true
+    clean:
+      auto_approve: true
+    deploy_run_init: true
+    init_run_reconfigure: true
+    command: terraform
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/templates/**/*"
+  name_pattern: "{environment}-{component}"
+
+logs:
+  file: "/dev/stderr"
+  level: "Info"

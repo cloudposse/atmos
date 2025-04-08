@@ -1,0 +1,15 @@
+components:
+  terraform:
+    weather:
+      metadata:
+        component: weather-mock
+      backend:
+        type: local
+      settings:
+        component: weather-mock
+      vars:
+        location: "Los Angeles"
+        options: "0T"
+        format: "v2"
+        lang: "en"
+        units: "m"

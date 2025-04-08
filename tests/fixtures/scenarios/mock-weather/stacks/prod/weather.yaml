@@ -1,0 +1,14 @@
+import:
+  - catalog/weather
+
+components:
+  terraform:
+    weather:
+      metadata:
+        component: weather-mock
+        environment: prod
+      backend:
+        type: local
+      vars:
+        stage: prod
+        location: "San Francisco"
