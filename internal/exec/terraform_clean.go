@@ -97,7 +97,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	addFileInfo := func(filePath string) (*ObjectInfo, error) {
 		relativePath, err := filepath.Rel(basePath, filePath)
 		if err != nil {
-			return nil, fmt.Errorf("error determining relative path for %s: %v", filePath, err)
+			return nil, fmt.Errorf("%w  %s: %v", ErrDeterminingRelativePath, filePath, err)
 		}
 		info, err := os.Stat(filePath)
 		if os.IsNotExist(err) {
