@@ -10,7 +10,6 @@ require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/arsham/figurine v1.3.0
-	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.13
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.66
@@ -64,8 +63,8 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/zclconf/go-cty v1.16.2
 	golang.org/x/oauth2 v0.29.0
-	golang.org/x/term v0.30.0
-	golang.org/x/text v0.23.0
+	golang.org/x/term v0.31.0
+	golang.org/x/text v0.24.0
 	google.golang.org/api v0.228.0
 	google.golang.org/grpc v1.71.1
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
@@ -312,8 +311,8 @@ require (
 	golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c // indirect
 	golang.org/x/mod v0.23.0 // indirect
 	golang.org/x/net v0.37.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
