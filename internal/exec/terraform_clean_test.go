@@ -76,8 +76,8 @@ func TestCLITerraformClean(t *testing.T) {
 	if !success {
 		t.Fatalf("File %s should not exist", file)
 	}
-
 }
+
 func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 	for _, file := range files {
 		fileAbs, err := os.Stat(file)
@@ -86,5 +86,4 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 		}
 	}
 	return true, ""
-
 }

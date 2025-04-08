@@ -34,7 +34,6 @@ func TestCLITerraformClean(t *testing.T) {
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
-
 }
 
 // runTerraformApply runs the terraform apply command for a given environment.

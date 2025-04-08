@@ -518,6 +518,7 @@ func getAllStacksComponentsPaths(stacksMap map[string]any) []string {
 	}
 	return allComponentsPaths
 }
+
 func getComponentsPaths(stackData any) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
@@ -550,6 +551,7 @@ func getComponentsPaths(stackData any) ([]string, error) {
 
 	return componentPaths, nil
 }
+
 func CollectComponentsDirectoryObjects(terraformDirAbsolutePath string, allComponentsRelativePaths []string, filesToClear []string) ([]Directory, error) {
 	var allFolders []Directory
 	for _, path := range allComponentsRelativePaths {
