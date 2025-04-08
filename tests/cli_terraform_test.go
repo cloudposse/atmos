@@ -58,7 +58,7 @@ func TestCLITerraformClean(t *testing.T) {
 	// Clean specific component
 	runTerraformCleanCommand(t, binaryPath, "station")
 	// Clean component with stack
-	runTerraformCleanCommand(t, binaryPath, "station", "-s", "dev")
+	runTerraformCleanCommand(t, binaryPath, "station", "--stack", "dev")
 
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
@@ -156,14 +156,21 @@ func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string)
 }
 
 func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
+	// Log the input arguments for debugging
+	t.Logf("runTerraformCleanCommand called with args: %v", args)
+
 	// Check if args contains a component name (non-flag argument)
 	hasComponent := false
 	hasAllFlag := false
 
-	for _, arg := range args {
+	// Process each argument individually
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		// Check if this is a component name (non-flag argument)
 		if !strings.HasPrefix(arg, "-") {
 			hasComponent = true
 		}
+		// Check if this is the --all flag
 		if arg == "--all" {
 			hasAllFlag = true
 		}
@@ -172,8 +179,8 @@ func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
 	// Construct command arguments
 	cmdArgs := []string{"terraform", "clean"}
 
-	// Add --all flag if no component is specified and --all flag is not already present
-	if !hasComponent && !hasAllFlag && len(args) > 0 {
+	// Always add --all flag if no component is specified and --all flag is not already present
+	if !hasComponent && !hasAllFlag {
 		cmdArgs = append(cmdArgs, "--all")
 	}
 
