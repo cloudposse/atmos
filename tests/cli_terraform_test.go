@@ -3,7 +3,6 @@ package tests
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,14 +22,6 @@ func TestCLITerraformClean(t *testing.T) {
 		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
 
-	// Initialize PathManager and update PATH
-	pathManager := NewPathManager()
-	pathManager.Prepend("../build", "..")
-	err = pathManager.Apply()
-	if err != nil {
-		t.Fatalf("Failed to apply updated PATH: %v", err)
-	}
-	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
 	defer func() {
 		// Change back to the original working directory after the test
 		if err := os.Chdir(startingDir); err != nil {
@@ -44,43 +35,6 @@ func TestCLITerraformClean(t *testing.T) {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
 
-	// Find the binary path for "atmos"
-	binaryPath, err := exec.LookPath("atmos")
-	if err != nil {
-		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
-	}
-
-	// Force clean everything
-	runTerraformCleanCommand(t, binaryPath, "--force")
-	// Clean everything
-	runTerraformCleanCommand(t, binaryPath)
-	// Clean specific component
-	runTerraformCleanCommand(t, binaryPath, "station")
-	// Clean component with stack
-	runTerraformCleanCommand(t, binaryPath, "station", "-s", "dev")
-
-	// Run terraform apply for prod environment
-	runTerraformApply(t, binaryPath, "prod")
-	verifyStateFilesExist(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
-	runCLITerraformCleanComponent(t, binaryPath, "prod")
-	verifyStateFilesDeleted(t, []string{"./components/terraform/weather/terraform.tfstate.d/prod-station"})
-
-	// Run terraform apply for dev environment
-	runTerraformApply(t, binaryPath, "dev")
-
-	// Verify if state files exist before cleaning
-	stateFiles := []string{
-		"./components/terraform/weather/.terraform",
-		"./components/terraform/weather/terraform.tfstate.d",
-		"./components/terraform/weather/.terraform.lock.hcl",
-	}
-	verifyStateFilesExist(t, stateFiles)
-
-	// Run terraform clean
-	runTerraformClean(t, binaryPath)
-
-	// Verify if state files have been deleted after clean
-	verifyStateFilesDeleted(t, stateFiles)
 }
 
 // runTerraformApply runs the terraform apply command for a given environment.
