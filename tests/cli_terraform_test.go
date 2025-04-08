@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -53,7 +54,7 @@ func TestCLITerraformClean(t *testing.T) {
 	// Force clean everything
 	runTerraformCleanCommand(t, binaryPath, "--force")
 	// Clean everything
-	runTerraformCleanCommand(t, binaryPath, "--all")
+	runTerraformCleanCommand(t, binaryPath)
 	// Clean specific component
 	runTerraformCleanCommand(t, binaryPath, "station")
 	// Clean component with stack
@@ -155,7 +156,34 @@ func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string)
 }
 
 func runTerraformCleanCommand(t *testing.T, binaryPath string, args ...string) {
-	cmdArgs := append([]string{"terraform", "clean"}, args...)
+	// Check if args contains a component name (non-flag argument)
+	hasComponent := false
+	hasAllFlag := false
+
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			hasComponent = true
+		}
+		if arg == "--all" {
+			hasAllFlag = true
+		}
+	}
+
+	// Construct command arguments
+	cmdArgs := []string{"terraform", "clean"}
+
+	// Add --all flag if no component is specified and --all flag is not already present
+	if !hasComponent && !hasAllFlag && len(args) > 0 {
+		cmdArgs = append(cmdArgs, "--all")
+	}
+
+	// Add other arguments
+	cmdArgs = append(cmdArgs, args...)
+
+	// Log the command for debugging
+	t.Logf("Running terraform clean command: %s %s", binaryPath, strings.Join(cmdArgs, " "))
+
+	// Execute command
 	cmd := exec.Command(binaryPath, cmdArgs...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
