@@ -61,18 +61,18 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
-	verifyStateFilesExist(t, []string{"./components/terraform/weather-mock/terraform.tfstate.d/prod-station"})
+	verifyStateFilesExist(t, []string{filepath.Join("components", "terraform", "weather-mock", "terraform.tfstate.d", "prod-station")})
 	runCLITerraformCleanComponent(t, binaryPath, "prod")
-	verifyStateFilesDeleted(t, []string{"./components/terraform/weather-mock/terraform.tfstate.d/prod-station"})
+	verifyStateFilesDeleted(t, []string{filepath.Join("components", "terraform", "weather-mock", "terraform.tfstate.d", "prod-station")})
 
 	// Run terraform apply for dev environment
 	runTerraformApply(t, binaryPath, "dev")
 
 	// Verify if state files exist before cleaning
 	stateFiles := []string{
-		"./components/terraform/weather-mock/.terraform",
-		"./components/terraform/weather-mock/terraform.tfstate.d",
-		"./components/terraform/weather-mock/.terraform.lock.hcl",
+		filepath.Join("components", "terraform", "weather-mock", ".terraform"),
+		filepath.Join("components", "terraform", "weather-mock", "terraform.tfstate.d"),
+		filepath.Join("components", "terraform", "weather-mock", ".terraform.lock.hcl"),
 	}
 	verifyStateFilesExist(t, stateFiles)
 
