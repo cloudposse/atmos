@@ -601,7 +601,6 @@ func validateInputPath(path string) error {
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return fmt.Errorf("%w %s", ErrPathNotExist, path)
-
 	}
 	return nil
 }
