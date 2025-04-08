@@ -39,6 +39,15 @@ spec:
         - demo
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
+        
+    - component: "weather-mock"
+      source: "git::https://github.com/cloudposse/atmos.git//examples/demo-library/weather?ref={{.Version}}"
+      version: "main"
+      tags:
+        - git
+        - demo
+      targets:
+        - "components/terraform/{{ .Component }}"
     - component: "myapp2"
       source: "../../../fixtures/components/terraform/myapp" # required for test URI contain path traversal
       tags:
