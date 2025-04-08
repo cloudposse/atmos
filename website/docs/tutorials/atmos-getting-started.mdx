@@ -136,27 +136,27 @@ That is where `atmos` workflows come in. Workflows enable you to describe the or
 components so that you can quickly invoke multiple components via one command. Let's look at an example in our `/stacks/example.yaml` file:
 
 ```yaml
-vars: { }
+vars: {}
 
 terraform:
-  vars: { }
+  vars: {}
 
 helmfile:
-  vars: { }
+  vars: {}
 
 components:
   terraform:
     fetch-location:
-      vars: { }
+      vars: {}
 
     fetch-weather:
-      vars: { }
+      vars: {}
 
     output-results:
       vars:
         print_users_weather_enabled: true
 
-  helmfile: { }
+  helmfile: {}
 
 workflows:
   deploy-all:
