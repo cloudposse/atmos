@@ -3,10 +3,7 @@ base_path: "./"
 components:
   terraform:
     base_path: "components/terraform"
-    apply:
-      auto_approve: true
-    clean:
-      auto_approve: true
+    apply_auto_approve: true
     deploy_run_init: true
     init_run_reconfigure: true
     command: terraform
