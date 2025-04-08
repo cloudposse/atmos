@@ -108,8 +108,8 @@ func (c *ConfigHandler) load() error {
 		return err
 	}
 	c.atmosConfig.ProcessSchemas()
-
-	return nil
+	// Process stores config
+	return processStoreConfig(c.atmosConfig)
 }
 
 // Get returns the populated AtmosConfiguration.
