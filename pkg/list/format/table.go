@@ -16,10 +16,11 @@ import (
 
 // Constants for table formatting.
 const (
-	MaxColumnWidth     = 60 // Maximum width for a column.
-	TableColumnPadding = 3  // Padding for table columns.
-	DefaultKeyWidth    = 15 // Default base width for keys.
-	KeyValue           = "value"
+	MaxColumnWidth        = 60 // Maximum width for a column.
+	TableColumnPadding    = 3  // Padding for table columns.
+	DefaultKeyWidth       = 15 // Default base width for keys.
+	TableWidthSafetyMargin = 5  // Extra buffer added to table width calculations.
+	KeyValue              = "value"
 )
 
 // Error variables for table formatting.
@@ -304,7 +305,7 @@ func CalculateSimpleTableWidth(columnNames []string) int {
 	}
 
 	// Add safety margin
-	width += 5
+	width += TableWidthSafetyMargin
 
 	return width
 }
