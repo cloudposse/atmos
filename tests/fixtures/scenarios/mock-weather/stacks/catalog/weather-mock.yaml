@@ -1,0 +1,11 @@
+terraform:
+  backend:
+    s3:
+      workspace_key_prefix: "weather-mock"
+
+components:
+  terraform:
+    weather-mock:
+      vars:
+        enabled: true
+        region: us-east-2
