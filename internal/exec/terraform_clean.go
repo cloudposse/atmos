@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/jfrog/jfrog-client-go/utils/log"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
@@ -306,14 +307,18 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig schema.
 	var errors []error
 	for _, folder := range folders {
 		for _, file := range folder.Files {
-			path := filepath.ToSlash(filepath.Join(relativePath, file.Name))
+			fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
+			if err != nil {
+				log.Debug(fmt.Errorf("failed to get relative path for %s: %w", file.FullPath, err))
+				fileRel = filepath.Join(relativePath, file.Name)
+			}
 			if file.IsDir {
-				if err := DeletePathTerraform(file.FullPath, path+"/"); err != nil {
-					errors = append(errors, fmt.Errorf("failed to delete %s: %w", path, err))
+				if err := DeletePathTerraform(file.FullPath, fileRel+"/"); err != nil {
+					errors = append(errors, fmt.Errorf("failed to delete %s: %w", fileRel, err))
 				}
 			} else {
-				if err := DeletePathTerraform(file.FullPath, path); err != nil {
-					errors = append(errors, fmt.Errorf("failed to delete %s: %w", path, err))
+				if err := DeletePathTerraform(file.FullPath, fileRel); err != nil {
+					errors = append(errors, fmt.Errorf("failed to delete %s: %w", fileRel, err))
 				}
 			}
 		}
