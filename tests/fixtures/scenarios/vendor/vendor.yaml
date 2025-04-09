@@ -40,12 +40,11 @@ spec:
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
         
-    - component: "weather-mock"
-      source: "git::https://github.com/cloudposse/atmos.git//examples/demo-library/weather?ref={{.Version}}"
-      version: "main"
+    - component: "mock"
+      source: "../../../fixtures/components/terraform/mock"
       tags:
-        - git
-        - demo
+        - local
+        - test
       targets:
         - "components/terraform/{{ .Component }}"
     - component: "myapp2"
