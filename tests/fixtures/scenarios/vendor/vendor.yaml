@@ -39,7 +39,6 @@ spec:
         - demo
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
-        
     - component: "myapp2"
       source: "../../../fixtures/components/terraform/myapp" # required for test URI contain path traversal
       tags:
