@@ -1,7 +1,0 @@
-terraform:
-  weather-mock:
-    vars:
-      enabled: true
-      region: us-east-2
-      stage: prod
-      location: "Los Angeles"
