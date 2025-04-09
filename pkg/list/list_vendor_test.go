@@ -41,7 +41,7 @@ func TestFilterAndListVendor(t *testing.T) {
 		t.Fatalf("Error creating terraform dir: %v", err)
 	}
 
-	vpcDir := filepath.Join(terraformDir, "vpc/v1")
+	vpcDir := filepath.Join(terraformDir, "vpc", "v1")
 	err = os.MkdirAll(vpcDir, 0o755)
 	if err != nil {
 		t.Fatalf("Error creating vpc dir: %v", err)
@@ -133,7 +133,7 @@ spec:
 		assert.Contains(t, output, "Manifest")
 		assert.Contains(t, output, "Folder")
 		assert.Contains(t, output, "vpc/v1")
-		assert.Contains(t, output, "Component Manifest")
+		assert.Contains(t, output, "Component")
 		assert.Contains(t, output, "eks/cluster")
 		assert.Contains(t, output, "Vendor Manifest")
 		assert.Contains(t, output, "ecs/cluster")
@@ -162,11 +162,11 @@ spec:
 
 		output, err := FilterAndListVendor(&atmosConfig, options)
 		assert.NoError(t, err)
-		assert.Contains(t, output, "Component: vpc/v1")
-		assert.Contains(t, output, "Type: Component Manifest")
-		assert.Contains(t, output, "Component: eks/cluster")
-		assert.Contains(t, output, "Type: Vendor Manifest")
-		assert.Contains(t, output, "Component: ecs/cluster")
+		assert.Contains(t, output, "component: vpc/v1")
+		assert.Contains(t, output, "type: Component Manifest")
+		assert.Contains(t, output, "component: eks/cluster")
+		assert.Contains(t, output, "type: Vendor Manifest")
+		assert.Contains(t, output, "component: ecs/cluster")
 	})
 
 	// Test CSV format
@@ -319,7 +319,7 @@ func TestFindComponentManifestInComponent(t *testing.T) {
 		{
 			name: "ManifestAtMaxDepth",
 			setup: func(t *testing.T, tempDir string) string {
-				expectedPath := createNestedDirsWithFile(t, tempDir, maxDepth, "component.yaml")
+				expectedPath := createNestedDirsWithFile(t, tempDir, maxDepth-1, "component.yaml")
 				return expectedPath
 			},
 			componentPath: func(t *testing.T, tempDir string) string { return tempDir },

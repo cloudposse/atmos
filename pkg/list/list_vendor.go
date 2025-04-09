@@ -1,24 +1,16 @@
 package list
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/template"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/internal/tui/templates"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -209,10 +201,10 @@ func appendVendorManifestFromFile(vendorInfos []VendorInfo, filePath string) []V
 }
 
 // processComponent processes a single component and returns a VendorInfo if it has a component manifest.
-func processComponent(atmosConfig *schema.AtmosConfiguration, componentName string, componentData interface{}) (*VendorInfo, error) {
+func processComponent(atmosConfig *schema.AtmosConfiguration, componentName string, componentData interface{}) *VendorInfo {
 	_, ok := componentData.(map[string]interface{})
 	if !ok {
-		return nil, nil
+		return nil
 	}
 
 	componentPath := filepath.Join(atmosConfig.Components.Terraform.BasePath, componentName)
@@ -222,17 +214,17 @@ func processComponent(atmosConfig *schema.AtmosConfiguration, componentName stri
 	if err != nil {
 		if errors.Is(err, ErrComponentManifestNotFound) {
 			// No manifest found, not an error case.
-			return nil, nil
+			return nil
 		}
 		log.Debug("Error finding component manifest", "component", componentName, "error", err)
-		return nil, nil
+		return nil
 	}
 
 	// Read component manifest.
 	_, err = readComponentManifest(componentManifestPath)
 	if err != nil {
 		log.Debug("Error reading component manifest", "path", componentManifestPath, "error", err)
-		return nil, nil
+		return nil
 	}
 
 	// If we reach this point, we have a component manifest.
@@ -253,7 +245,7 @@ func processComponent(atmosConfig *schema.AtmosConfiguration, componentName stri
 		Type:      VendorTypeComponent,
 		Manifest:  relativeManifestPath,
 		Folder:    relativeComponentPath,
-	}, nil
+	}
 }
 
 // findComponentManifests finds all component manifests.
@@ -284,10 +276,7 @@ func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]VendorInf
 
 		// Process each component.
 		for componentName, componentData := range terraform {
-			vendorInfo, err := processComponent(atmosConfig, componentName, componentData)
-			if err != nil {
-				return nil, err
-			}
+			vendorInfo := processComponent(atmosConfig, componentName, componentData)
 
 			if vendorInfo != nil {
 				vendorInfos = append(vendorInfos, *vendorInfo)
@@ -427,16 +416,18 @@ func readComponentManifest(path string) (*schema.ComponentManifest, error) {
 	var manifest schema.ComponentManifest
 
 	// Convert map to YAML and then unmarshal to get proper typing.
-	if mapData, ok := data.(map[string]interface{}); ok {
-		yamlData, err := yaml.Marshal(mapData)
-		if err != nil {
-			return nil, fmt.Errorf("error converting component manifest data: %w", err)
-		}
-		if err := yaml.Unmarshal(yamlData, &manifest); err != nil {
-			return nil, fmt.Errorf("error parsing component manifest: %w", err)
-		}
-	} else {
+	mapData, ok := data.(map[string]interface{})
+	if !ok {
 		return nil, fmt.Errorf("%w: unexpected format in component manifest: %s", ErrComponentManifestInvalid, path)
+	}
+
+	yamlData, err := yaml.Marshal(mapData)
+	if err != nil {
+		return nil, fmt.Errorf("error converting component manifest data: %w", err)
+	}
+
+	if err := yaml.Unmarshal(yamlData, &manifest); err != nil {
+		return nil, fmt.Errorf("error parsing component manifest: %w", err)
 	}
 
 	// Validate manifest.
@@ -557,16 +548,18 @@ func readVendorManifest(path string) (*schema.AtmosVendorConfig, error) {
 	var manifest schema.AtmosVendorConfig
 
 	// Convert map to YAML and then unmarshal to get proper typing.
-	if mapData, ok := data.(map[string]interface{}); ok {
-		yamlData, err := yaml.Marshal(mapData)
-		if err != nil {
-			return nil, fmt.Errorf("error converting vendor manifest data: %w", err)
-		}
-		if err := yaml.Unmarshal(yamlData, &manifest); err != nil {
-			return nil, fmt.Errorf("error parsing vendor manifest: %w", err)
-		}
-	} else {
+	mapData, ok := data.(map[string]interface{})
+	if !ok {
 		return nil, fmt.Errorf("%w: unexpected format in vendor manifest: %s", ErrVendorManifestInvalid, path)
+	}
+
+	yamlData, err := yaml.Marshal(mapData)
+	if err != nil {
+		return nil, fmt.Errorf("error converting vendor manifest data: %w", err)
+	}
+
+	if err := yaml.Unmarshal(yamlData, &manifest); err != nil {
+		return nil, fmt.Errorf("error parsing vendor manifest: %w", err)
 	}
 
 	// Validate manifest.
@@ -644,233 +637,4 @@ func matchesStackPattern(component, pattern string) bool {
 	}
 
 	return false
-}
-
-// formatVendorOutput formats vendor infos for output.
-func formatVendorOutput(atmosConfig *schema.AtmosConfiguration, vendorInfos []VendorInfo, formatStr string) (string, error) {
-	// Convert vendor infos to map for formatting.
-	data := make(map[string]interface{})
-
-	// Create a map of vendor infos by component.
-	for i, vendorInfo := range vendorInfos {
-		key := fmt.Sprintf("vendor_%d", i)
-		templateData := map[string]interface{}{
-			TemplateKeyComponent:    vendorInfo.Component,
-			TemplateKeyVendorType:   vendorInfo.Type,
-			TemplateKeyVendorFile:   vendorInfo.Manifest,
-			TemplateKeyVendorTarget: vendorInfo.Folder,
-		}
-
-		// Process columns if configured.
-		if len(atmosConfig.Vendor.List.Columns) > 0 {
-			columnData := make(map[string]interface{})
-			for _, column := range atmosConfig.Vendor.List.Columns {
-				value, err := processTemplate(column.Value, templateData)
-				if err != nil {
-					log.Debug("Error processing template", "template", column.Value, "error", err)
-					value = fmt.Sprintf("Error: %s", err)
-				}
-				columnData[column.Name] = value
-			}
-			data[key] = columnData
-		} else {
-			// Use default columns.
-			data[key] = map[string]interface{}{
-				ColumnNameComponent: vendorInfo.Component,
-				ColumnNameType:      vendorInfo.Type,
-				ColumnNameManifest:  vendorInfo.Manifest,
-				ColumnNameFolder:    vendorInfo.Folder,
-			}
-		}
-	}
-
-	// Get column names.
-	var columnNames []string
-	if len(atmosConfig.Vendor.List.Columns) > 0 {
-		for _, column := range atmosConfig.Vendor.List.Columns {
-			columnNames = append(columnNames, column.Name)
-		}
-	} else {
-		// Use default column names.
-		columnNames = []string{ColumnNameComponent, ColumnNameType, ColumnNameManifest, ColumnNameFolder}
-	}
-
-	// Format output based on format string.
-	switch format.Format(formatStr) {
-	case format.FormatJSON:
-		return formatAsJSON(data)
-	case format.FormatYAML:
-		return formatAsYAML(data)
-	case format.FormatCSV:
-		return formatAsDelimited(data, ",", atmosConfig.Vendor.List.Columns)
-	case format.FormatTSV:
-		return formatAsDelimited(data, "\t", atmosConfig.Vendor.List.Columns)
-	default:
-		return formatAsCustomTable(data, columnNames)
-	}
-}
-
-// processTemplate processes a template string with the given data.
-func processTemplate(templateStr string, data map[string]interface{}) (string, error) {
-	tmpl, err := template.New("column").Parse(templateStr)
-	if err != nil {
-		return "", err
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
-}
-
-// formatAsJSON formats data as JSON.
-func formatAsJSON(data map[string]interface{}) (string, error) {
-	// Extract values
-	var values []map[string]interface{}
-	for _, v := range data {
-		if m, ok := v.(map[string]interface{}); ok {
-			values = append(values, m)
-		}
-	}
-
-	// Marshal to JSON.
-	jsonBytes, err := json.MarshalIndent(values, "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	return string(jsonBytes), nil
-}
-
-// formatAsYAML formats data as YAML.
-func formatAsYAML(data map[string]interface{}) (string, error) {
-	// Extract values
-	var values []map[string]interface{}
-	for _, v := range data {
-		if m, ok := v.(map[string]interface{}); ok {
-			values = append(values, m)
-		}
-	}
-
-	// Convert to YAML.
-	yamlStr, err := utils.ConvertToYAML(values)
-	if err != nil {
-		return "", err
-	}
-
-	return yamlStr, nil
-}
-
-// formatAsDelimited formats data as a delimited string (CSV, TSV).
-func formatAsDelimited(data map[string]interface{}, delimiter string, columns []schema.ListColumnConfig) (string, error) {
-	var buf bytes.Buffer
-
-	// Get column names.
-	var columnNames []string
-	if len(columns) > 0 {
-		for _, column := range columns {
-			columnNames = append(columnNames, column.Name)
-		}
-	} else {
-		// Default column names.
-		columnNames = []string{ColumnNameComponent, ColumnNameType, ColumnNameManifest, ColumnNameFolder}
-	}
-
-	// Write header.
-	buf.WriteString(strings.Join(columnNames, delimiter) + "\n")
-
-	// Extract values.
-	var values []map[string]interface{}
-	for _, v := range data {
-		if m, ok := v.(map[string]interface{}); ok {
-			values = append(values, m)
-		}
-	}
-
-	// Sort values by first column.
-	sort.Slice(values, func(i, j int) bool {
-		vi, _ := values[i][columnNames[0]].(string)
-		vj, _ := values[j][columnNames[0]].(string)
-		return vi < vj
-	})
-
-	// Write rows.
-	for _, value := range values {
-		var row []string
-		for _, colName := range columnNames {
-			val, _ := value[colName].(string)
-			// Escape delimiter in values
-			val = strings.ReplaceAll(val, delimiter, "\\"+delimiter)
-			row = append(row, val)
-		}
-		buf.WriteString(strings.Join(row, delimiter) + "\n")
-	}
-
-	return buf.String(), nil
-}
-
-// formatAsCustomTable creates a custom table format specifically for vendor listing.
-func formatAsCustomTable(data map[string]interface{}, columnNames []string) (string, error) {
-	// Check if terminal supports TTY
-	isTTY := term.IsTTYSupportForStdout()
-
-	// Create a new table
-	t := table.New()
-
-	// Set the headers
-	t.Headers(columnNames...)
-
-	// Add rows for each vendor
-	for _, vendorData := range data {
-		if vendorMap, ok := vendorData.(map[string]interface{}); ok {
-			// Create a row for this vendor
-			row := make([]string, len(columnNames))
-
-			// Fill in the row values based on column names
-			for i, colName := range columnNames {
-				if val, ok := vendorMap[colName]; ok {
-					row[i] = fmt.Sprintf("%v", val)
-				} else {
-					row[i] = ""
-				}
-			}
-
-			// Add the row to the table
-			t.Row(row...)
-		}
-	}
-
-	// Apply styling if TTY is supported
-	if isTTY {
-		// Set border style
-		borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))
-		t.BorderStyle(borderStyle)
-
-		// Set styling for headers and data
-		t.StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-			if row == -1 { // -1 is the header row in the Charmbracelet table library
-				return style.
-					Foreground(lipgloss.Color(theme.ColorGreen)).
-					Bold(true).
-					Align(lipgloss.Center)
-			}
-			return style.Inherit(theme.Styles.Description)
-		})
-	}
-
-	// Calculate the estimated width of the table
-	estimatedWidth := format.CalculateSimpleTableWidth(columnNames)
-	terminalWidth := templates.GetTerminalWidth()
-
-	// Check if the table would be too wide
-	if estimatedWidth > terminalWidth {
-		return "", errors.Errorf("%s (width: %d > %d).\n\nSuggestions:\n- Use --stack to select specific stacks (examples: --stack 'plat-ue2-dev')\n- Use --query to select specific settings (example: --query '.vpc.validation')\n- Use --format json or --format yaml for complete data viewing",
-			format.ErrTableTooWide.Error(), estimatedWidth, terminalWidth)
-	}
-
-	// Render the table
-	return t.Render(), nil
 }

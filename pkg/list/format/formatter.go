@@ -13,6 +13,7 @@ const (
 	FormatYAML  Format = "yaml"
 	FormatCSV   Format = "csv"
 	FormatTSV   Format = "tsv"
+	FormatTemplate Format = "template"
 )
 
 // FormatOptions contains options for formatting output.
