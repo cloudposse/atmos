@@ -469,21 +469,29 @@ vars:
 			data, err := readComponentManifest(filePath)
 
 			if tc.expectError {
-				assert.Error(t, err)
-				if tc.errorType != nil {
-					if errors.Is(tc.errorType, os.ErrNotExist) || errors.Is(tc.errorType, os.ErrPermission) {
-						assert.True(t, errors.Is(err, tc.errorType), "Expected error type %T, got: %v", tc.errorType, err)
-					} else {
-						// For other error messages, just check that the error message contains the expected text
-						assert.Contains(t, err.Error(), tc.errorType.Error(), "Expected error message containing '%s', got: %v", tc.errorType.Error(), err)
-					}
-				}
+				assertExpectedError(t, err, tc.errorType)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectData, data)
 			}
 		})
 	}
+}
+
+// assertExpectedError validates that an error matches the expected error type or message.
+func assertExpectedError(t *testing.T, err, expectedError error) {
+	assert.Error(t, err)
+	if expectedError == nil {
+		return
+	}
+
+	if errors.Is(expectedError, os.ErrNotExist) || errors.Is(expectedError, os.ErrPermission) {
+		assert.True(t, errors.Is(err, expectedError), "Expected error type %T, got: %v", expectedError, err)
+		return
+	}
+
+	// For other error messages, just check that the error message contains the expected text
+	assert.Contains(t, err.Error(), expectedError.Error(), "Expected error message containing '%s', got: %v", expectedError.Error(), err)
 }
 
 // TestFormatTargetFolder tests placeholder replacement.
