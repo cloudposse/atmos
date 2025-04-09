@@ -69,8 +69,6 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Run terraform clean
 	runTerraformClean(t, binaryPath)
-
-	// Skip verification of state files for the mock component
 }
 
 // runTerraformApply runs the terraform apply command for a given environment.
