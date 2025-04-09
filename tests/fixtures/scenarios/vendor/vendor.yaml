@@ -40,13 +40,6 @@ spec:
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
         
-    - component: "mock"
-      source: "../../../fixtures/components/terraform/mock"
-      tags:
-        - local
-        - test
-      targets:
-        - "components/terraform/{{ .Component }}"
     - component: "myapp2"
       source: "../../../fixtures/components/terraform/myapp" # required for test URI contain path traversal
       tags:
