@@ -121,7 +121,7 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 
 	filteredVendorInfos := applyVendorFilters(vendorInfos, options.StackPattern)
 
-	return formatVendorOutput(atmosConfig, filteredVendorInfos, options.FormatStr, options.Delimiter)
+	return formatVendorOutput(atmosConfig, filteredVendorInfos, options.FormatStr)
 }
 
 // findVendorConfigurations finds all vendor configurations.
@@ -647,7 +647,7 @@ func matchesStackPattern(component, pattern string) bool {
 }
 
 // formatVendorOutput formats vendor infos for output.
-func formatVendorOutput(atmosConfig *schema.AtmosConfiguration, vendorInfos []VendorInfo, formatStr, delimiter string) (string, error) {
+func formatVendorOutput(atmosConfig *schema.AtmosConfiguration, vendorInfos []VendorInfo, formatStr string) (string, error) {
 	// Convert vendor infos to map for formatting.
 	data := make(map[string]interface{})
 
