@@ -194,12 +194,6 @@ func formatAsCustomTable(data map[string]interface{}, columnNames []string) (str
 		width = DefaultTerminalWidth
 	}
 
-	// Calculate column widths.
-	colWidth := width / len(columnNames)
-	if colWidth > MaxColumnWidth {
-		colWidth = MaxColumnWidth
-	}
-
 	// Create table with lipgloss.
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
