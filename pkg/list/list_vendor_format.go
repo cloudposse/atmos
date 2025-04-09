@@ -3,6 +3,7 @@ package list
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"text/template"
@@ -16,8 +17,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	// NewLine is the newline character.
+	NewLine = "\n"
+	// DefaultTerminalWidth is the default terminal width.
+	DefaultTerminalWidth = 80
+	// MaxColumnWidth is the maximum width for a column.
+	MaxColumnWidth = 30
+)
+
+var (
+	// ErrUnsupportedFormat is returned when an unsupported format is specified.
+	ErrUnsupportedFormat = errors.New("unsupported format")
+	// ErrInvalidVendorData is returned when vendor data is invalid.
+	ErrInvalidVendorData = errors.New("invalid vendor data")
+)
+
 // formatVendorOutput formats vendor infos for output.
-func formatVendorOutput(atmosConfig *schema.AtmosConfiguration, vendorInfos []VendorInfo, formatStr string) (string, error) {
+func formatVendorOutput(vendorInfos []VendorInfo, formatStr string) (string, error) {
 	if len(vendorInfos) == 0 {
 		return "No vendor configurations found", nil
 	}
@@ -39,12 +56,12 @@ func formatVendorOutput(atmosConfig *schema.AtmosConfiguration, vendorInfos []Ve
 		return formatAsDelimited(data, "\t", []schema.ListColumnConfig{})
 	case format.FormatTemplate:
 		// Use a default template for vendor output
-		defaultTemplate := "{{range .vendor}}{{.Component}},{{.Type}},{{.Manifest}},{{.Folder}}\n{{end}}"
+		defaultTemplate := "{{range .vendor}}{{.Component}},{{.Type}},{{.Manifest}},{{.Folder}}" + NewLine + "{{end}}"
 		return processTemplate(defaultTemplate, data)
 	case format.FormatTable:
 		return formatAsCustomTable(data, []string{ColumnNameComponent, ColumnNameType, ColumnNameManifest, ColumnNameFolder})
 	default:
-		return "", fmt.Errorf("unsupported format: %s", formatStr)
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedFormat, formatStr)
 	}
 }
 
@@ -88,11 +105,40 @@ func formatAsYAML(data map[string]interface{}) (string, error) {
 
 	// Add newline at end.
 	yamlStr := string(yamlBytes)
-	if !strings.HasSuffix(yamlStr, "\n") {
-		yamlStr += "\n"
+	if !strings.HasSuffix(yamlStr, NewLine) {
+		yamlStr += NewLine
 	}
 
 	return yamlStr, nil
+}
+
+// getColumnNames returns the column names for the delimited output.
+func getColumnNames(columns []schema.ListColumnConfig) []string {
+	if len(columns) == 0 {
+		return []string{ColumnNameComponent, ColumnNameType, ColumnNameManifest, ColumnNameFolder}
+	}
+
+	var columnNames []string
+	for _, col := range columns {
+		columnNames = append(columnNames, col.Name)
+	}
+	return columnNames
+}
+
+// getRowValue returns the value for a specific column in a vendor info.
+func getRowValue(info VendorInfo, colName string) string {
+	switch colName {
+	case ColumnNameComponent:
+		return info.Component
+	case ColumnNameType:
+		return info.Type
+	case ColumnNameManifest:
+		return info.Manifest
+	case ColumnNameFolder:
+		return info.Folder
+	default:
+		return ""
+	}
 }
 
 // formatAsDelimited formats data as a delimited string (CSV, TSV).
@@ -100,41 +146,23 @@ func formatAsDelimited(data map[string]interface{}, delimiter string, columns []
 	// Get vendor infos.
 	vendorInfos, ok := data["vendor"].([]VendorInfo)
 	if !ok {
-		return "", fmt.Errorf("invalid vendor data")
+		return "", ErrInvalidVendorData
 	}
 
-	// If no columns are configured, use default columns.
-	var columnNames []string
-	if len(columns) == 0 {
-		columnNames = []string{ColumnNameComponent, ColumnNameType, ColumnNameManifest, ColumnNameFolder}
-	} else {
-		for _, col := range columns {
-			columnNames = append(columnNames, col.Name)
-		}
-	}
+	// Get column names.
+	columnNames := getColumnNames(columns)
 
 	// Build header.
 	var sb strings.Builder
-	sb.WriteString(strings.Join(columnNames, delimiter) + "\n")
+	sb.WriteString(strings.Join(columnNames, delimiter) + NewLine)
 
 	// Build rows.
 	for _, info := range vendorInfos {
 		var row []string
 		for _, colName := range columnNames {
-			switch colName {
-			case ColumnNameComponent:
-				row = append(row, info.Component)
-			case ColumnNameType:
-				row = append(row, info.Type)
-			case ColumnNameManifest:
-				row = append(row, info.Manifest)
-			case ColumnNameFolder:
-				row = append(row, info.Folder)
-			default:
-				row = append(row, "")
-			}
+			row = append(row, getRowValue(info, colName))
 		}
-		sb.WriteString(strings.Join(row, delimiter) + "\n")
+		sb.WriteString(strings.Join(row, delimiter) + NewLine)
 	}
 
 	return sb.String(), nil
@@ -145,7 +173,7 @@ func formatAsCustomTable(data map[string]interface{}, columnNames []string) (str
 	// Get vendor infos.
 	vendorInfos, ok := data["vendor"].([]VendorInfo)
 	if !ok {
-		return "", fmt.Errorf("invalid vendor data")
+		return "", ErrInvalidVendorData
 	}
 
 	// Create rows.
@@ -163,13 +191,13 @@ func formatAsCustomTable(data map[string]interface{}, columnNames []string) (str
 	// Create table.
 	width := templates.GetTerminalWidth()
 	if width <= 0 {
-		width = 80
+		width = DefaultTerminalWidth
 	}
 
 	// Calculate column widths.
 	colWidth := width / len(columnNames)
-	if colWidth > 30 {
-		colWidth = 30
+	if colWidth > MaxColumnWidth {
+		colWidth = MaxColumnWidth
 	}
 
 	// Create table with lipgloss.

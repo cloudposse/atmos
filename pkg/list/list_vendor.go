@@ -113,7 +113,7 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 
 	filteredVendorInfos := applyVendorFilters(vendorInfos, options.StackPattern)
 
-	return formatVendorOutput(atmosConfig, filteredVendorInfos, options.FormatStr)
+	return formatVendorOutput(filteredVendorInfos, options.FormatStr)
 }
 
 // findVendorConfigurations finds all vendor configurations.
