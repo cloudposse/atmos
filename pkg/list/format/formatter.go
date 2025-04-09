@@ -8,11 +8,11 @@ import (
 type Format string
 
 const (
-	FormatTable Format = "table"
-	FormatJSON  Format = "json"
-	FormatYAML  Format = "yaml"
-	FormatCSV   Format = "csv"
-	FormatTSV   Format = "tsv"
+	FormatTable    Format = "table"
+	FormatJSON     Format = "json"
+	FormatYAML     Format = "yaml"
+	FormatCSV      Format = "csv"
+	FormatTSV      Format = "tsv"
 	FormatTemplate Format = "template"
 )
 
