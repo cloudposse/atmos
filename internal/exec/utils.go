@@ -187,7 +187,8 @@ func ProcessComponentConfig(
 	return nil
 }
 
-// ProcessCommandLineArgs processes command-line args
+// ProcessCommandLineArgs processes command-line args.
+// Deprecated: use config.DefaultHandler.AddConfig instead.
 func ProcessCommandLineArgs(
 	componentType string,
 	cmd *cobra.Command,
