@@ -132,5 +132,5 @@ func TestSchemaExtractor_Failure(t *testing.T) {
 	v := &yamlSchemaValidator{}
 	// Execute the method
 	_, err := v.getSchemaSourceFromYAML([]byte(`{}`))
-	assert.Error(t, err, ErrSchemaNotFound)
+	assert.ErrorIs(t, err, ErrSchemaNotFound)
 }

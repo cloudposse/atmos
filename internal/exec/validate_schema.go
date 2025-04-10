@@ -24,7 +24,7 @@ func (e ErrInvalidPattern) Error() string {
 type atmosValidatorExecuter struct {
 	validator      validator.Validator
 	fileDownloader downloader.FileDownloader
-	fileMatcher    filematch.FileMatcherInterface
+	fileMatcher    filematch.FileMatcher
 	atmosConfig    *schema.AtmosConfiguration
 }
 
@@ -39,52 +39,76 @@ func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosVal
 }
 
 func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
-	validationSchemaWithFiles := make(map[string][]string)
-	for k := range av.atmosConfig.Schemas {
-		if sourceKey != "" && sourceKey != k {
-			continue
-		}
-		// We ignore these because in backward compatibility they are structured different.
-		if k == "cue" || k == "opa" || k == "jsonschema" {
-			continue
-		}
-		log.Debug("Collecting", "schemaName", k)
-		value := av.atmosConfig.GetSchemaRegistry(k)
-		if sourceKey != "" && customSchema != "" {
-			value.Schema = customSchema
-		}
-		if k == "atmos" && value.Schema == "" && value.Manifest == "" {
-			value.Schema = "atmos://schema/atmos/manifest/1.0"
-		}
-		if k == "atmos" && value.Schema == "" && value.Manifest != "" {
-			value.Schema = value.Manifest
-		}
-		if value.Schema == "" {
-			continue
-		}
-		if k == "atmos" && len(value.Matches) == 0 {
-			value.Matches = []string{"atmos.yaml", "atmos.yml"}
-		}
+	validationSchemaWithFiles, err := av.buildValidationSchema(sourceKey, customSchema)
+	if err != nil {
+		return err
+	}
 
-		files, err := av.fileMatcher.MatchFiles(value.Matches)
-		if err != nil {
-			return err
-		}
-		log.Debug("Files matched", "schema", value.Schema, "matcher", value.Matches, "filesMatched", files)
-		validationSchemaWithFiles[value.Schema] = files
+	totalErrCount, err := av.validateSchemas(validationSchemaWithFiles)
+	if err != nil {
+		return err
 	}
-	totalErrCount := uint(0)
-	for k := range validationSchemaWithFiles {
-		errCount, err := av.printValidation(k, validationSchemaWithFiles[k])
-		if err != nil {
-			return err
-		}
-		totalErrCount += errCount
-	}
+
 	if totalErrCount > 0 {
 		return ErrInvalidYAML
 	}
 	return nil
+}
+
+func (av *atmosValidatorExecuter) buildValidationSchema(sourceKey, customSchema string) (map[string][]string, error) {
+	validationSchemaWithFiles := make(map[string][]string)
+	for k := range av.atmosConfig.Schemas {
+		if av.shouldSkipSchema(k, sourceKey) {
+			continue
+		}
+
+		schemaValue := av.prepareSchemaValue(k, sourceKey, customSchema)
+		if schemaValue.Schema == "" {
+			continue
+		}
+
+		files, err := av.fileMatcher.MatchFiles(schemaValue.Matches)
+		if err != nil {
+			return nil, err
+		}
+		log.Debug("Files matched", "schema", schemaValue.Schema, "matcher", schemaValue.Matches, "filesMatched", files)
+		validationSchemaWithFiles[schemaValue.Schema] = files
+	}
+	return validationSchemaWithFiles, nil
+}
+
+func (av *atmosValidatorExecuter) shouldSkipSchema(k, sourceKey string) bool {
+	return (sourceKey != "" && sourceKey != k) || k == "cue" || k == "opa" || k == "jsonschema"
+}
+
+func (av *atmosValidatorExecuter) prepareSchemaValue(k, sourceKey, customSchema string) schema.SchemaRegistry {
+	value := av.atmosConfig.GetSchemaRegistry(k)
+	if sourceKey != "" && customSchema != "" {
+		value.Schema = customSchema
+	}
+	if k == "atmos" {
+		if value.Schema == "" && value.Manifest == "" {
+			value.Schema = "atmos://schema/atmos/manifest/1.0"
+		} else if value.Schema == "" && value.Manifest != "" {
+			value.Schema = value.Manifest
+		}
+		if len(value.Matches) == 0 {
+			value.Matches = []string{"atmos.yaml", "atmos.yml"}
+		}
+	}
+	return value
+}
+
+func (av *atmosValidatorExecuter) validateSchemas(schemas map[string][]string) (uint, error) {
+	totalErrCount := uint(0)
+	for k, files := range schemas {
+		errCount, err := av.printValidation(k, files)
+		if err != nil {
+			return 0, err
+		}
+		totalErrCount += errCount
+	}
+	return totalErrCount, nil
 }
 
 func (av *atmosValidatorExecuter) printValidation(schema string, files []string) (uint, error) {

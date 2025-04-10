@@ -32,7 +32,8 @@ var ValidateSchemaCmd = &cobra.Command{
 		}
 
 		if key == "" && schema != "" {
-			log.Fatal("key not provided for the schema to be used")
+			log.Error("key not provided for the schema to be used")
+			utils.OsExit(1)
 		}
 
 		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {

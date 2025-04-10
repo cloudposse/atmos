@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 func setupTestFixtures(baseDir string) error {
@@ -26,7 +26,7 @@ func setupTestFixtures(baseDir string) error {
 
 	// Files in root
 	files := map[string][]string{
-		filepath.Join(baseDir): {
+		baseDir: {
 			"file1.txt",
 			"file2.txt",
 		},
@@ -94,7 +94,7 @@ func TestMatchFiles(t *testing.T) {
 		},
 		{
 			name:     "nested directory with wildcard",
-			patterns: []string{"subdirectory" + string(os.PathSeparator) + "*.log"},
+			patterns: []string{filepath.Join("subdirectory", "*.log")},
 			want: []string{
 				filepath.Join(tempDir, "subdirectory", "error.log"),
 				filepath.Join(tempDir, "subdirectory", "access.log"),

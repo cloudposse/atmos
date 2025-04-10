@@ -23,6 +23,6 @@ type compiledGlob interface {
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
-type FileMatcherInterface interface {
+type FileMatcher interface {
 	MatchFiles([]string) ([]string, error)
 }

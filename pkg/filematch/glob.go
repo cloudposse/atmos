@@ -50,7 +50,7 @@ func (c *defaultGlobCompiler) expandBraces(pattern string) []string {
 	return expanded
 }
 
-// defaultGlob now holds multiple compiled globs
+// defaultGlob now holds multiple compiled globs.
 type defaultGlob struct {
 	globs []glob.Glob
 }

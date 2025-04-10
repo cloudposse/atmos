@@ -27,13 +27,25 @@ func TestFileFetcher(t *testing.T) {
 			if err := tmpFile.Close(); err != nil {
 				t.Fatalf("Failed to close temp file: %v", err)
 			}
+
+			// Test the FileFetcher
+			fetcher := fileFetcher{}
+			data, err := fetcher.FetchData(tmpFile.Name())
+			if err != nil {
+				t.Fatalf("Failed to fetch data: %v", err)
+			}
+
+			// Verify the data matches what we wrote
+			if string(data) != string(expectedData) {
+				t.Fatalf("Expected data %q, got %q", expectedData, data)
+			}
 		})
 		t.Run("should return error when failed to read file", func(t *testing.T) {
 			// Now test the FileFetcher
 			fetcher := fileFetcher{}
 			_, err := fetcher.FetchData("nonexistentfile")
 			if err == nil {
-				t.Fatalf("Expected no error, got %v", err)
+				t.Fatalf("Expected an error, got nil")
 			}
 		})
 	})

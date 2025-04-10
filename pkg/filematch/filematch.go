@@ -86,7 +86,7 @@ func extractBasePathAndGlob(pattern string) (string, string) {
 		}
 	}
 	if runtime.GOOS == "windows" && len(parts) > 0 && strings.HasSuffix(parts[0], ":") {
-		parts[0] = parts[0] + string(os.PathSeparator)
+		parts[0] += string(os.PathSeparator)
 	}
 	// Extract the base path (everything before the glob starts)
 	basePath := filepath.Join(parts[:globStartIndex]...)
@@ -107,7 +107,7 @@ func extractBasePathAndGlob(pattern string) (string, string) {
 	return basePath, globPattern
 }
 
-// Convenience function for default usage
+// Convenience function for default usage.
 func NewGlobMatcher() *matcher {
 	fs := newDefaultFileSystem()
 	globC := NewDefaultGlobCompiler()

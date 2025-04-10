@@ -51,7 +51,7 @@ func (d *dataFetcher) getDataFetcher(source string) (Fetcher, error) {
 	case strings.HasPrefix(source, "atmos://"):
 		return atmosFetcher{}, nil
 	case strings.Contains(source, "{") && strings.Contains(source, "}"):
-		return inlineFetcher{}, nil
+		return inlineJsonFetcher{}, nil
 	default:
 		if _, err := os.Stat(source); err == nil {
 			return fileFetcher{}, nil

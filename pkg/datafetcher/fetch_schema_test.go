@@ -68,4 +68,15 @@ func TestGetDataFetcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
+
+	// Test inline JSON fetcher
+	_, err = dataFetcher.GetData(`{"key": "value"}`)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	// Test unsupported source
+	_, err = dataFetcher.GetData("unsupported://source")
+	if !errors.Is(err, ErrUnsupportedSource) {
+		t.Fatalf("Expected unsupported source error, got %v", err)
+	}
 }
