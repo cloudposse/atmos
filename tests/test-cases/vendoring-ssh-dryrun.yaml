@@ -53,8 +53,10 @@ tests:
     env:
       ATMOS_GITHUB_TOKEN: "supersecret"
       ATMOS_GITLAB_TOKEN: "gitlabsecret"
+      ATMOS_INJECT_GITLAB_TOKEN: "true"
       ATMOS_BITBUCKET_TOKEN: "bitbucketsecret"
       ATMOS_BITBUCKET_USERNAME: "bitbucketusername"
+      ATMOS_INJECT_BITBUCKET_TOKEN: "true"
     expect:
       diff: []
     stdout:
