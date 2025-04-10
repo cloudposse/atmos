@@ -37,6 +37,14 @@ Global Flags:
                                                  stacks and workflows
                                                  configurations.
 
+        --config stringSlice                     Paths to configuration files
+                                                 (comma-separated or repeated
+                                                 flag) (default [])
+
+        --config-path stringSlice                Paths to configuration
+                                                 directories (comma-separated or
+                                                 repeated flag) (default [])
+
         --init-pass-vars                         Pass the generated varfile to
                                                  terraform init using the
                                                  --var-file flag. OpenTofu

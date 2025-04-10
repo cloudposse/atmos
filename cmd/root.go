@@ -189,6 +189,7 @@ func init() {
 
 	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
 		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
+
 	config.DefaultConfigHandler.AddConfig(RootCmd, &cfg.ConfigOptions{
 		FlagName:     "logs-level",
 		EnvVar:       "ATMOS_LOGS_LEVEL",
@@ -231,6 +232,19 @@ func init() {
 		Description:  "Specifies the merge strategy for lists in settings files. Supported values are `append`, `merge` and `replace`.",
 		DefaultValue: "replace",
 	})
+	config.DefaultConfigHandler.AddConfig(RootCmd, &cfg.ConfigOptions{
+		FlagName:     "config",
+		Key:          "config",
+		Description:  "Paths to configuration files (comma-separated or repeated flag)",
+		DefaultValue: []string{},
+	})
+	config.DefaultConfigHandler.AddConfig(RootCmd, &cfg.ConfigOptions{
+		FlagName:     "config-path",
+		Key:          "config_path",
+		Description:  "Paths to configuration directories (comma-separated or repeated flag)",
+		DefaultValue: []string{},
+	})
+
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {

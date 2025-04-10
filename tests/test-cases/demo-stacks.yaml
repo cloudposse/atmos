@@ -96,7 +96,8 @@ tests:
       - "-f"
       - "yaml"
     expect:
-      diff: []
+      diff:
+        - "github_token"
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       stderr:
@@ -115,6 +116,7 @@ tests:
     expect:
       diff:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
+        - "GithubToken"
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stderr:

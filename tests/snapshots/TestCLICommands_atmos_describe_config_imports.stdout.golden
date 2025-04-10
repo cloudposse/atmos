@@ -1,3 +1,5 @@
+config: []
+config_paths: []
 base_path: ./
 components:
     terraform:

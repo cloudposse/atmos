@@ -1,10 +1,13 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
 DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/vendor-pulls-ssh/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/vendor-pulls-ssh/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/vendor-pulls-ssh/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/vendor-pulls-ssh/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/vendor-pulls-ssh/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/vendor-pulls-ssh/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 INFO Vendoring from 'vendor.yaml'
 WARN No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
 DEBU Downloading and installing package package=terraform-null-label-cred

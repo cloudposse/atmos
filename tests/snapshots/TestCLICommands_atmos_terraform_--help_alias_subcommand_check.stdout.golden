@@ -123,6 +123,14 @@ Global Flags:
                                                  stacks and workflows
                                                  configurations.
 
+        --config stringSlice                     Paths to configuration files
+                                                 (comma-separated or repeated
+                                                 flag) (default [])
+
+        --config-path stringSlice                Paths to configuration
+                                                 directories (comma-separated or
+                                                 repeated flag) (default [])
+
         --logs-file string                       The file to write Atmos logs
                                                  to. Logs can be written to any
                                                  file or any standard file

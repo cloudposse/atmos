@@ -1,4 +1,6 @@
 {
+  "config": [],
+  "config_paths": null,
   "base_path": "./",
   "components": {
     "terraform": {
@@ -119,7 +121,16 @@
       "link": {},
       "link_text": {}
     },
-    "InjectGithubToken": true
+    "InjectGithubToken": true,
+    "GithubToken": "",
+    "AtmosGithubToken": "",
+    "InjectBitbucketToken": false,
+    "BitbucketToken": "",
+    "AtmosBitbucketToken": "",
+    "BitbucketUsername": "",
+    "InjectGitlabToken": false,
+    "AtmosGitlabToken": "",
+    "GitlabToken": ""
   },
   "vendor": {
     "base_path": ""

@@ -51,6 +51,12 @@ func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
 	configPaths := []string{}
+	if cmd.Flags().Changed("config") {
+		config := cmd.Flags().Lookup("config")
+		if config != nil {
+			configFilePaths = strings.Split(config.Value.String(), ",")
+		}
+	}
 	if len(configFilePaths) == 0 {
 		configPaths = append(configPaths, defaultConfigFileNames...)
 	} else {
@@ -180,7 +186,6 @@ func checkVersion(config config.Config) error {
 
 // addPersistentFlags adds flags to the root command
 func addPersistentFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringSliceVar(&configFilePaths, "config", defaultConfigFileNames, "Paths to the configuration files")
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
 	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "Create an initial configuration")
 

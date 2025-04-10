@@ -83,6 +83,7 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts *ConfigOptions) {
 // load reads and merges the configuration.
 func (c *ConfigHandler) load() error {
 	setDefaultConfiguration(c.v)
+	setEnv(c.v)
 	// Read config file if exists (non-blocking)
 	if err := loadConfigSources(c.v, ""); err != nil {
 		return err
