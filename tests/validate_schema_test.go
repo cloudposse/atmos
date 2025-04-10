@@ -13,7 +13,6 @@ import (
 )
 
 func TestCliValidateSchema(t *testing.T) {
-
 	startingDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get the current working directory: %v", err)
