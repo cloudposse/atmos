@@ -116,8 +116,13 @@
     },
     "InjectGithubToken": true,
     "GithubToken": "",
+    "AtmosGithubToken": "",
+    "InjectBitbucketToken": false,
     "BitbucketToken": "",
+    "AtmosBitbucketToken": "",
     "BitbucketUsername": "",
+    "InjectGitlabToken": false,
+    "AtmosGitlabToken": "",
     "GitlabToken": ""
   },
   "vendor": {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
 	"github.com/cloudposse/atmos/pkg/schema"

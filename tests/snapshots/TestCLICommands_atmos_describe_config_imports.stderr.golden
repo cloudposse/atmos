@@ -1,6 +1,6 @@
 DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
-DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
@@ -8,8 +8,8 @@ DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scen
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/tools/terraform.yaml
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/logs.yaml
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
-DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
-DEBU Failed to find atmos config file path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU merged config from import import=https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml file_path=/atmos-import/atmos-import.yaml
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/commands.yaml
 DEBU merged config from import import=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/**/* file_path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/configs.d/vendor.yaml
