@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -1206,7 +1207,7 @@ func getCliVars(args []string) (map[string]any, error) {
 				varName := parts[0]
 				part2 := parts[1]
 				var varValue any
-				if u.IsJSON(part2) {
+				if filetype.IsJSON(part2) {
 					v, err := u.ConvertFromJSON(part2)
 					if err != nil {
 						return nil, err
