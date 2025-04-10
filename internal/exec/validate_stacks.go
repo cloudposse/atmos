@@ -12,11 +12,11 @@ import (
 	"time"
 
 	log "github.com/charmbracelet/log"
-	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -408,7 +408,7 @@ func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, erro
 
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 
-	if err = u.GoGetterGet(*atmosConfig, manifestURL, atmosManifestJsonSchemaFilePath, getter.ClientModeFile, time.Second*30); err != nil {
+	if err = downloader.NewGoGetterDownloader(atmosConfig).Fetch(manifestURL, atmosManifestJsonSchemaFilePath, downloader.ClientModeFile, 30*time.Second); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
 
