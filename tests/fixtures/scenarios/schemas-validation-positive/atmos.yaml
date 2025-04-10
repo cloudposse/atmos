@@ -1,0 +1,21 @@
+schemas:
+  schemaFromFile:
+    schema: ./manifest.json
+    matches:
+      - config.yaml
+  schemaFromInternet:
+    schema: https://json.schemastore.org/bower.json
+    matches:
+      - bower.yaml
+  schemaFromInline:
+    schema: |
+      {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "age": { "type": "integer" }
+        },
+        "required": ["name"]
+      }
+    matches:
+      - inline.yaml

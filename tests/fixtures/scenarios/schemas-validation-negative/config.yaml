@@ -1,0 +1,6 @@
+name: "MyApp"
+version: "1.0.0"
+enabled: true
+settings:
+  timeout: 30
+  debug: false

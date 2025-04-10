@@ -58,13 +58,16 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(sourceKey string
 
 func (av *atmosValidatorExecuter) buildValidationSchema(sourceKey, customSchema string) (map[string][]string, error) {
 	validationSchemaWithFiles := make(map[string][]string)
+	log.Debug("Building validation schema with files", "sourceKey", sourceKey, "customSchema", customSchema, "schemas", av.atmosConfig.Schemas)
 	for k := range av.atmosConfig.Schemas {
 		if av.shouldSkipSchema(k, sourceKey) {
+			log.Debug("Skipping schema", "key", k, "sourceKey", sourceKey)
 			continue
 		}
 
 		schemaValue := av.prepareSchemaValue(k, sourceKey, customSchema)
 		if schemaValue.Schema == "" {
+			log.Debug("Skipping schema with empty schema", "key", k, "sourceKey", sourceKey, "schemaValue", schemaValue)
 			continue
 		}
 
@@ -75,6 +78,7 @@ func (av *atmosValidatorExecuter) buildValidationSchema(sourceKey, customSchema 
 		log.Debug("Files matched", "schema", schemaValue.Schema, "matcher", schemaValue.Matches, "filesMatched", files)
 		validationSchemaWithFiles[schemaValue.Schema] = files
 	}
+	log.Debug("Validation schema with files", "validationSchemaWithFiles", validationSchemaWithFiles)
 	return validationSchemaWithFiles, nil
 }
 
@@ -87,16 +91,17 @@ func (av *atmosValidatorExecuter) prepareSchemaValue(k, sourceKey, customSchema 
 	if sourceKey != "" && customSchema != "" {
 		value.Schema = customSchema
 	}
-	if k == "atmos" {
-		if value.Schema == "" && value.Manifest == "" {
-			value.Schema = "atmos://schema/atmos/manifest/1.0"
-		} else if value.Schema == "" && value.Manifest != "" {
-			value.Schema = value.Manifest
-		}
-		if len(value.Matches) == 0 {
-			value.Matches = []string{"atmos.yaml", "atmos.yml"}
-		}
+	if value.Schema == "" && value.Manifest == "" {
+		value.Schema = "atmos://schema/atmos/manifest/1.0"
+	} else if value.Schema == "" && value.Manifest != "" {
+		value.Schema = value.Manifest
+	} else if customSchema != "" {
+		value.Schema = customSchema
 	}
+	if len(value.Matches) == 0 && sourceKey == "atmos" {
+		value.Matches = []string{"atmos.yaml", "atmos.yml"}
+	}
+
 	return value
 }
 

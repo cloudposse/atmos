@@ -27,8 +27,8 @@ var ValidateSchemaCmd = &cobra.Command{
 			key = args[0] // Use provided argument
 		}
 
-		if cmd.Flags().Changed("schema") {
-			schema, _ = cmd.Flags().GetString("schema")
+		if cmd.Flags().Changed("schemas-atmos-manifest") {
+			schema, _ = cmd.Flags().GetString("schemas-atmos-manifest")
 		}
 
 		if key == "" && schema != "" {
@@ -46,7 +46,7 @@ var ValidateSchemaCmd = &cobra.Command{
 }
 
 func init() {
-	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Provide an external validation schema")
+	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
 	ValidateSchemaCmd.PersistentFlags().String("file", "", "file to be validated")
 	validateCmd.AddCommand(ValidateSchemaCmd)
 }

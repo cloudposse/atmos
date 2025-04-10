@@ -1,14 +1,14 @@
 schemas:
   schemaFromFile:
-    manifest: ./manifest.json
+    schema: ./manifest.json
     matches:
       - config.yaml
   schemaFromInternet:
-    manifest: https://json.schemastore.org/bower.json
+    schema: https://json.schemastore.org/bower.json
     matches:
       - bower.yaml
   schemaFromInline:
-    manifest: |
+    schema: |
       {
         "type": "object",
         "properties": {
