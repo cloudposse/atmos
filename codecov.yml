@@ -10,6 +10,7 @@ coverage:
         base: auto
   ignore:
     - "**/mock_*.go"  # Adjust this pattern based on your project structure
+    - "mock_*.go"  # Adjust this pattern based on your project structure
 
 comment:
   layout: "reach,diff,flags,tree"  # Display different coverage views
