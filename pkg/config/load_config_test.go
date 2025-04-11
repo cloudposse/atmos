@@ -13,6 +13,8 @@ import (
 // test configuration with flags --config and --config-path with multiple files and directories merge.
 func TestLoadConfigFromCLIArgsMultipleMerge(t *testing.T) {
 	// create tmp folder
+	t.Log(os.Getenv("ATMOS_LOGS_LEVEL"))
+	os.Unsetenv("ATMOS_LOGS_LEVEL")
 	tmpDir, err := os.MkdirTemp("", "atmos-config-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
