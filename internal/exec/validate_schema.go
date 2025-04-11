@@ -91,11 +91,12 @@ func (av *atmosValidatorExecutor) prepareSchemaValue(k, sourceKey, customSchema 
 	if sourceKey != "" && customSchema != "" {
 		value.Schema = customSchema
 	}
-	if value.Schema == "" && value.Manifest == "" {
-		value.Schema = "atmos://schema/atmos/manifest/1.0"
-	} else if value.Schema == "" && value.Manifest != "" {
+	switch {
+	case value.Schema == "" && value.Manifest == "":
+		value.Schema = fmt.Sprintf("atmos://schema/%s/manifest/1.0", k)
+	case value.Schema == "" && value.Manifest != "":
 		value.Schema = value.Manifest
-	} else if customSchema != "" {
+	case customSchema != "":
 		value.Schema = customSchema
 	}
 	if len(value.Matches) == 0 && sourceKey == "atmos" {
