@@ -61,7 +61,7 @@ logs:
 			configContent:  configContent,
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, dir)
-				DefaultConfigHandler, _ = New()
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -80,7 +80,7 @@ logs:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
-				DefaultConfigHandler, _ = New()
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -105,7 +105,7 @@ logs:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
-				DefaultConfigHandler, _ = New()
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -123,7 +123,7 @@ logs:
 			name: "valid process Stacks",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../examples/demo-stacks")
-				DefaultConfigHandler, _ = New()
+				DefaultConfigHandler = New()
 			},
 			processStacks: true,
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
@@ -146,7 +146,7 @@ logs:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
-				DefaultConfigHandler, _ = New()
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -157,7 +157,7 @@ logs:
 			name: "valid import .atmos.d",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-configuration")
-				DefaultConfigHandler, _ = New()
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -173,7 +173,7 @@ logs:
 			name: "valid import custom",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports")
-				DefaultConfigHandler, _ = New()
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -192,7 +192,7 @@ logs:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
-				DefaultConfigHandler, _ = New()
+				DefaultConfigHandler = New()
 			},
 			processStacks: true,
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {

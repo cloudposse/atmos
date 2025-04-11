@@ -23,16 +23,13 @@ import (
 //
 //nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-	if err := DefaultConfigHandler.load(); err != nil {
+	if err := DefaultConfigHandler.load(configAndStacksInfo.AtmosCliConfigPath); err != nil {
 		return schema.AtmosConfiguration{}, err
 	}
-
 	atmosConfig := *DefaultConfigHandler.atmosConfig
+	fmt.Println("Loading Atmos configuration...", atmosConfig.Config, atmosConfig.ConfigPaths)
 
 	// processAtmosConfigs(&configAndStacksInfo)
-	if err != nil {
-		return atmosConfig, err
-	}
 	// Process the base path specified in the Terraform provider (which calls into the atmos code)
 	// This overrides all other atmos base path configs (`atmos.yaml`, ENV var `ATMOS_BASE_PATH`)
 	if configAndStacksInfo.AtmosBasePath != "" {
@@ -45,7 +42,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Check config
-	err = checkConfig(atmosConfig, processStacks)
+	err := checkConfig(atmosConfig, processStacks)
 	if err != nil {
 		return atmosConfig, err
 	}

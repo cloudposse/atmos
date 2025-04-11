@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var DefaultConfigHandler, err = New()
+var DefaultConfigHandler = New()
 
 // ConfigHandler holds the application's configuration.
 type ConfigHandler struct {
@@ -29,7 +29,7 @@ type ConfigOptions struct {
 }
 
 // New creates a new Config instance with initialized Viper.
-func New() (*ConfigHandler, error) {
+func New() *ConfigHandler {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
@@ -37,7 +37,7 @@ func New() (*ConfigHandler, error) {
 		v:           v,
 		atmosConfig: &schema.AtmosConfiguration{},
 	}
-	return configHandler, configHandler.load()
+	return configHandler
 }
 
 // AddConfig adds a configuration parameter to both Cobra and Viper with options.
@@ -81,11 +81,11 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts *ConfigOptions) {
 }
 
 // load reads and merges the configuration.
-func (c *ConfigHandler) load() error {
+func (c *ConfigHandler) load(atmosConfigPath string) error {
 	setDefaultConfiguration(c.v)
 	setEnv(c.v)
 	// Read config file if exists (non-blocking)
-	if err := loadConfigSources(c.v, ""); err != nil {
+	if err := loadConfigSources(c.v, atmosConfigPath); err != nil {
 		return err
 	}
 	if c.v.ConfigFileUsed() != "" {
