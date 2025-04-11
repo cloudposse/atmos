@@ -32,9 +32,9 @@ func TestCliValidateSchema(t *testing.T) {
 	}
 
 	// Create a pipe to capture stdout to check if terraform is executed correctly
-	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
-	os.Stdout = w
+	os.Stderr = w
 	os.Args = []string{"atmos", "validate", "schema"}
 	err = cmd.Execute()
 	if err != nil {
@@ -43,7 +43,7 @@ func TestCliValidateSchema(t *testing.T) {
 	// Restore stdout
 	err = w.Close()
 	assert.NoError(t, err)
-	os.Stdout = oldStdout
+	os.Stderr = oldStderr
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -54,7 +54,7 @@ func TestCliValidateSchema(t *testing.T) {
 	output := buf.String()
 	fmt.Println(output)
 	// Check the output
-	if output != "" {
+	if strings.Contains(output, "ERRO") {
 		t.Errorf("should have no validation errors, but got: %s", output)
 	}
 }
@@ -80,16 +80,9 @@ func TestCliValidateSchemaNegative(t *testing.T) {
 	}
 
 	// Create a pipe to capture stdout to check if terraform is executed correctly
-	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
-	os.Stdout = w
-	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-	}
-	// Restore stdout
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
+	os.Stderr = w
 	exitCalled := false
 	utils.OsExit = func(code int) {
 		exitCalled = true
@@ -100,6 +93,13 @@ func TestCliValidateSchemaNegative(t *testing.T) {
 	utils.PrintErrorMarkdownAndExitFn = func(title string, err error, suggestion string) {}
 	os.Args = []string{"atmos", "validate", "schema"}
 	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+	// Restore stdout
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stderr = oldStderr
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -113,7 +113,7 @@ func TestCliValidateSchemaNegative(t *testing.T) {
 		t.Errorf("Expected OsExit to be called, but it wasn't")
 	}
 	// Check the output
-	if strings.Contains(output, "name is required") {
-		t.Errorf("should have no validation errors, but got: %s", output)
+	if !strings.Contains(output, "name is required") {
+		t.Errorf("should have validation errors, but got: %s", output)
 	}
 }

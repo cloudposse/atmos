@@ -22,16 +22,16 @@ func (e ErrInvalidPattern) Error() string {
 	return fmt.Sprintf("invalid pattern %q: %v", e.Pattern, e.err)
 }
 
-type atmosValidatorExecuter struct {
+type atmosValidatorExecutor struct {
 	validator      validator.Validator
 	fileDownloader downloader.FileDownloader
 	fileMatcher    filematch.FileMatcher
 	atmosConfig    *schema.AtmosConfiguration
 }
 
-func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosValidatorExecuter {
+func NewAtmosValidatorExecutor(atmosConfig *schema.AtmosConfiguration) *atmosValidatorExecutor {
 	fileDownloader := downloader.NewGoGetterDownloader(atmosConfig)
-	return &atmosValidatorExecuter{
+	return &atmosValidatorExecutor{
 		validator:      validator.NewYAMLSchemaValidator(atmosConfig),
 		fileDownloader: fileDownloader,
 		fileMatcher:    filematch.NewGlobMatcher(),
@@ -39,7 +39,7 @@ func NewAtmosValidatorExecuter(atmosConfig *schema.AtmosConfiguration) *atmosVal
 	}
 }
 
-func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
+func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
 	validationSchemaWithFiles, err := av.buildValidationSchema(sourceKey, customSchema)
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func (av *atmosValidatorExecuter) ExecuteAtmosValidateSchemaCmd(sourceKey string
 	return nil
 }
 
-func (av *atmosValidatorExecuter) buildValidationSchema(sourceKey, customSchema string) (map[string][]string, error) {
+func (av *atmosValidatorExecutor) buildValidationSchema(sourceKey, customSchema string) (map[string][]string, error) {
 	validationSchemaWithFiles := make(map[string][]string)
 	log.Debug("Building validation schema with files", "sourceKey", sourceKey, "customSchema", customSchema, "schemas", av.atmosConfig.Schemas)
 	for k := range av.atmosConfig.Schemas {
@@ -82,11 +82,11 @@ func (av *atmosValidatorExecuter) buildValidationSchema(sourceKey, customSchema 
 	return validationSchemaWithFiles, nil
 }
 
-func (av *atmosValidatorExecuter) shouldSkipSchema(k, sourceKey string) bool {
+func (av *atmosValidatorExecutor) shouldSkipSchema(k, sourceKey string) bool {
 	return (sourceKey != "" && sourceKey != k) || k == "cue" || k == "opa" || k == "jsonschema"
 }
 
-func (av *atmosValidatorExecuter) prepareSchemaValue(k, sourceKey, customSchema string) schema.SchemaRegistry {
+func (av *atmosValidatorExecutor) prepareSchemaValue(k, sourceKey, customSchema string) schema.SchemaRegistry {
 	value := av.atmosConfig.GetSchemaRegistry(k)
 	if sourceKey != "" && customSchema != "" {
 		value.Schema = customSchema
@@ -105,7 +105,7 @@ func (av *atmosValidatorExecuter) prepareSchemaValue(k, sourceKey, customSchema 
 	return value
 }
 
-func (av *atmosValidatorExecuter) validateSchemas(schemas map[string][]string) (uint, error) {
+func (av *atmosValidatorExecutor) validateSchemas(schemas map[string][]string) (uint, error) {
 	totalErrCount := uint(0)
 	for k, files := range schemas {
 		errCount, err := av.printValidation(k, files)
@@ -117,7 +117,7 @@ func (av *atmosValidatorExecuter) validateSchemas(schemas map[string][]string) (
 	return totalErrCount, nil
 }
 
-func (av *atmosValidatorExecuter) printValidation(schema string, files []string) (uint, error) {
+func (av *atmosValidatorExecutor) printValidation(schema string, files []string) (uint, error) {
 	count := uint(0)
 	for _, file := range files {
 		log.Debug("validating", "schema", schema, "file", file)

@@ -134,7 +134,7 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			mockFileMatcher := filematch.NewMockFileMatcherInterface(ctrl)
 			tt.mockSetup(mockValidator, mockFileDownloader, mockFileMatcher)
 
-			av := &atmosValidatorExecuter{
+			av := &atmosValidatorExecutor{
 				validator:      mockValidator,
 				fileDownloader: mockFileDownloader,
 				fileMatcher:    mockFileMatcher,

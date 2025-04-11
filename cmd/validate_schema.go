@@ -36,7 +36,7 @@ var ValidateSchemaCmd = &cobra.Command{
 			utils.OsExit(1)
 		}
 
-		if err := exec.NewAtmosValidatorExecuter(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
+		if err := exec.NewAtmosValidatorExecutor(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
 			if errors.Is(err, exec.ErrInvalidYAML) {
 				utils.OsExit(1)
 			}
