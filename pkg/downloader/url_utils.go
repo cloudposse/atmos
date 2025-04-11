@@ -1,4 +1,4 @@
-package utils
+package downloader
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 
 const MaskedSecret = "xxx"
 
-func MaskBasicAuth(rawURL string) (string, error) {
+func maskBasicAuth(rawURL string) (string, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse URL: %w", err)

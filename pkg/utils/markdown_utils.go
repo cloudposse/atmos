@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime/debug"
 
-	log "github.com/charmbracelet/log"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
@@ -48,10 +46,6 @@ func PrintErrorMarkdown(title string, err error, suggestion string) {
 	if printErr != nil {
 		LogError(printErr)
 		LogError(err)
-	}
-	// Print stack trace
-	if log.GetLevel() == log.DebugLevel {
-		debug.PrintStack()
 	}
 }
 
