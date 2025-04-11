@@ -23,11 +23,10 @@ import (
 //
 //nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-	if err := DefaultConfigHandler.load(configAndStacksInfo.AtmosCliConfigPath); err != nil {
+	if err := DefaultConfigHandler.load(configAndStacksInfo); err != nil {
 		return schema.AtmosConfiguration{}, err
 	}
 	atmosConfig := *DefaultConfigHandler.atmosConfig
-	fmt.Println("Loading Atmos configuration...", atmosConfig.Config, atmosConfig.ConfigPaths)
 
 	// processAtmosConfigs(&configAndStacksInfo)
 	// Process the base path specified in the Terraform provider (which calls into the atmos code)

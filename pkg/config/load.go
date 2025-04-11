@@ -229,15 +229,7 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	if len(atmosCliConfigPath) == 0 {
 		return nil
 	}
-	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
-	switch err.(type) {
-	case viper.ConfigFileNotFoundError:
-		log.Debug("config not found", "file", atmosCliConfigPath)
-	default:
-		return err
-	}
-
-	return nil
+	return mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
 }
 
 // mergeConfig merge config from a specified path directory and process imports. Return error if config file does not exist.
