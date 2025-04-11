@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 )
 
 func TestProcessTagStore(t *testing.T) {

@@ -18,7 +18,7 @@ The `!store` YAML function allows reading the values from a remote [store](/core
 The `!store` function can be called with either two, three, four or five parameters, and optionally a default value:
 
 ```yaml
-  !store <store_name> <stack> <component> <key> <yq-expression> | <default_value>
+  !store <store_name> <stack> <component> <key> <yq-expression> | default <default_value>
 ```
 
 Examples:
@@ -39,7 +39,7 @@ Examples:
   !store <store_name> <stack> <component> <key> <yq-expression>
 
   # Get the `key` from the store of a `component` in a different stack, with a default value
-  !store <store_name> <stack> <component> <key> | <default_value>
+  !store <store_name> <stack> <component> <key> | default <default_value>
 ```
 
 ## Arguments

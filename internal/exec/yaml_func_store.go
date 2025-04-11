@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -15,6 +15,7 @@ type params struct {
 	stack        string
 	component    string
 	key          string
+	query        string
 	defaultValue *string
 }
 
@@ -23,7 +24,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		log.Fatal(err)
 	}
 
 	// Split the input on the pipe symbol to separate the store parameters and default value
@@ -45,8 +46,8 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	// Process the main store part
 	storeParts := strings.Fields(storePart)
 	partsLength := len(storeParts)
-	if partsLength != 3 && partsLength != 4 {
-		return fmt.Sprintf("invalid Atmos Store YAML function execution:: %s\ninvalid parameters: store_name, {stack}, component, key", input)
+	if partsLength != 3 && partsLength != 4 && partsLength != 5 {
+		return fmt.Sprintf("invalid Atmos Store YAML function execution:: %s\ninvalid parameters: store_name, {stack}, component, key, {yq-expression}", input)
 	}
 
 	retParams := params{
@@ -54,7 +55,12 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		defaultValue: defaultValue,
 	}
 
-	if partsLength == 4 {
+	if partsLength == 5 {
+		retParams.stack = strings.TrimSpace(storeParts[1])
+		retParams.component = strings.TrimSpace(storeParts[2])
+		retParams.key = strings.TrimSpace(storeParts[3])
+		retParams.query = strings.TrimSpace(storeParts[4])
+	} else if partsLength == 4 {
 		retParams.stack = strings.TrimSpace(storeParts[1])
 		retParams.component = strings.TrimSpace(storeParts[2])
 		retParams.key = strings.TrimSpace(storeParts[3])
@@ -68,7 +74,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	store := atmosConfig.Stores[retParams.storeName]
 
 	if store == nil {
-		u.LogErrorAndExit(fmt.Errorf("invalid Atmos Store YAML function execution:: %s\nstore '%s' not found", input, retParams.storeName))
+		log.Fatal(fmt.Errorf("invalid Atmos Store YAML function execution:: %s\nstore '%s' not found", input, retParams.storeName))
 	}
 
 	// Retrieve the value from the store
@@ -77,8 +83,20 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		u.LogErrorAndExit(fmt.Errorf("failed to get key: %s", err))
+		log.Fatal(fmt.Errorf("failed to get key: %s", err))
 	}
 
-	return value
+	// Execute the YQ expression
+	var res any
+
+	if retParams.query != "" {
+		res, err = u.EvaluateYqExpression(&atmosConfig, value, retParams.query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = value
+	}
+
+	return res
 }
