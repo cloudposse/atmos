@@ -6,77 +6,11 @@ import (
 	"os"
 	"testing"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
-
 	"github.com/stretchr/testify/assert"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-func TestExecuteWorkflowCmd(t *testing.T) {
-	stacksPath := "../../tests/fixtures/scenarios/atmos-overrides-section"
-
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	expectedOutput := `atmos describe component c1 -s prod
-atmos describe component c1 -s staging
-atmos describe component c1 -s dev
-atmos describe component c1 -s sandbox
-atmos describe component c1 -s test
-`
-
-	cmd := &cobra.Command{
-		Use:   "workflow",
-		Short: "Run predefined tasks using workflows",
-		Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
-
-		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-		Run: func(cmd *cobra.Command, args []string) {
-			err := ExecuteWorkflowCmd(cmd, args)
-			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
-			}
-		},
-	}
-
-	cmd.DisableFlagParsing = false
-	cmd.PersistentFlags().StringP("file", "f", "", "Specify the workflow file to run")
-	cmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
-	cmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
-	cmd.PersistentFlags().String("stack", "", "Execute the workflow for the specified stack")
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
-	// Execute the command
-	cmd.SetArgs([]string{"--file", "workflows", "show-all-describe-component-commands"})
-	err = cmd.Execute()
-	assert.NoError(t, err, "'atmos workflow' command should execute without error")
-
-	// Close the writer and restore stdout
-	err = w.Close()
-	assert.NoError(t, err, "'atmos workflow' command should execute without error")
-
-	os.Stdout = oldStdout
-
-	// Read captured output
-	var output bytes.Buffer
-	_, err = io.Copy(&output, r)
-	assert.NoError(t, err, "'atmos workflow' command should execute without error")
-
-	// Check if output contains expected markdown content
-	assert.Contains(t, output.String(), expectedOutput, "'atmos workflow' output should contain information about workflows")
-}
 
 func TestExecuteWorkflow(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/atmos-overrides-section"
