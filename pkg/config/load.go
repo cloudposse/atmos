@@ -24,59 +24,6 @@ const MaximumImportLvL = 10
 
 var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
 
-// * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
-// * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
-// * Home directory (~/.atmos).
-// * Current working directory.
-// * ENV vars.
-// * Command-line arguments.
-func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-	v := viper.New()
-	var atmosConfig schema.AtmosConfiguration
-	v.SetConfigType("yaml")
-	v.SetTypeByDefaultValue(true)
-	setDefaultConfiguration(v)
-	// Load embed atmos.yaml
-	if err := loadEmbeddedConfig(v); err != nil {
-		return atmosConfig, err
-	}
-	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
-		err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
-		if err != nil {
-			return atmosConfig, err
-		}
-		return atmosConfig, nil
-	}
-
-	// Load configuration from different sources.
-	if err := loadConfigSources(v, configAndStacksInfo.AtmosCliConfigPath); err != nil {
-		return atmosConfig, err
-	}
-	if v.ConfigFileUsed() != "" {
-		// get dir of atmosConfigFilePath
-		atmosConfigDir := filepath.Dir(v.ConfigFileUsed())
-		atmosConfig.CliConfigPath = atmosConfigDir
-		// Set the CLI config path in the atmosConfig struct
-		if !filepath.IsAbs(atmosConfig.CliConfigPath) {
-			absPath, err := filepath.Abs(atmosConfig.CliConfigPath)
-			if err != nil {
-				return atmosConfig, err
-			}
-			atmosConfig.CliConfigPath = absPath
-		}
-	}
-	setEnv(v)
-	// We want the editorconfig color by default to be true
-	atmosConfig.Validate.EditorConfig.Color = true
-	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
-	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
-	err := v.Unmarshal(&atmosConfig)
-	if err != nil {
-		return atmosConfig, err
-	}
-	return atmosConfig, nil
-}
-
 func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")

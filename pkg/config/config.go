@@ -111,20 +111,6 @@ func parseFlags() map[string]string {
 	return flags
 }
 
-func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-	atmosConfig, err := LoadConfig(configAndStacksInfo)
-	if err != nil {
-		return atmosConfig, err
-	}
-	atmosConfig.ProcessSchemas()
-	// Process stores config
-	err = processStoreConfig(&atmosConfig)
-	if err != nil {
-		return atmosConfig, err
-	}
-	return atmosConfig, nil
-}
-
 // atmosConfigAbsolutePaths converts paths to absolute paths.
 func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// Convert stacks base path to absolute path
