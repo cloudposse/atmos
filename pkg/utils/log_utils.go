@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime/debug"
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -62,10 +61,6 @@ func LogErrorAndExit(err error) {
 func LogError(err error) {
 	if err != nil {
 		log.Error(err)
-		// Print stack trace
-		if log.GetLevel() == log.DebugLevel {
-			debug.PrintStack()
-		}
 	}
 }
 
