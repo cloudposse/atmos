@@ -15,7 +15,8 @@ The `!store` YAML function allows reading the values from a remote [store](/core
 
 ## Usage
 
-The `!store` function can be called with either two, three, four or five parameters, and optionally a default value:
+The `!store` function can be called with either two, three, or four parameters, and optionally a default value and
+a [YQ](https://mikefarah.gitbook.io/yq) query expression:
 
 ```yaml
   !store <store_name> <stack> <component> <key> | default <default-value> | query <yq-expression>
@@ -70,6 +71,30 @@ You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) i
 Atmos processes the templates first, and then executes the `!store` function, allowing you to provide the parameters to
 the function dynamically.
 :::
+
+## Using YQ Expressions to retrieve individual values
+
+To retrieve individual values from complex types such as maps and lists, or do any kind of filtering or querying,
+you can utilize [YQ](https://mikefarah.gitbook.io/yq) expressions.
+
+For example:
+
+- Retrieve the first item from a list
+
+```yaml
+subnet_id1: !store <store_name> <stack> <component> <key> | query .private_subnet_ids[0]
+```
+
+- Read a key from a map
+
+```yaml
+username: !store <store_name> <stack> <component> <key> | query .config_map.username
+```
+
+For more details, review the following docs:
+
+- [YQ Guide](https://mikefarah.gitbook.io/yq)
+- [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
 
 ## Examples
 
