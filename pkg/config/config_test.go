@@ -3,14 +3,106 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAddConfig_AllTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		key          string
+		defaultValue interface{}
+		flagValue    string
+		envVar       string
+		envValue     string
+		expected     interface{}
+	}{
+		{
+			name:         "string flag",
+			key:          "app.name",
+			defaultValue: "default-app",
+			flagValue:    "cli-app",
+			envVar:       "APP_NAME_ENV",
+			envValue:     "env-app",
+			expected:     "cli-app",
+		},
+		{
+			name:         "int flag",
+			key:          "app.port",
+			defaultValue: 8080,
+			flagValue:    "9090",
+			envVar:       "APP_PORT_ENV",
+			envValue:     "7070",
+			expected:     9090,
+		},
+		{
+			name:         "bool flag",
+			key:          "app.debug",
+			defaultValue: false,
+			flagValue:    "true",
+			envVar:       "APP_DEBUG_ENV",
+			envValue:     "true",
+			expected:     true,
+		},
+		{
+			name:         "string slice flag",
+			key:          "app.tags",
+			defaultValue: []string{"dev"},
+			flagValue:    "prod,staging",
+			envVar:       "APP_TAGS_ENV",
+			envValue:     "qa,uat",
+			expected:     []string{"prod", "staging"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			cmd := &cobra.Command{Use: "test"}
+			handler := &ConfigHandler{v: v}
+
+			// Set env var
+			if tt.envVar != "" {
+				os.Setenv(tt.envVar, tt.envValue)
+				defer os.Unsetenv(tt.envVar)
+			}
+
+			opts := &ConfigOptions{
+				Key:          tt.key,
+				DefaultValue: tt.defaultValue,
+				Description:  "test",
+				EnvVar:       tt.envVar,
+			}
+
+			handler.AddConfig(cmd, opts)
+
+			// CLI flag
+			flagName := strings.ReplaceAll(tt.key, ".", "-")
+			cmd.SetArgs([]string{"--" + flagName + "=" + tt.flagValue})
+			cmd.Execute()
+
+			switch expected := tt.expected.(type) {
+			case string:
+				assert.Equal(t, expected, v.GetString(tt.key))
+			case int:
+				assert.Equal(t, expected, v.GetInt(tt.key))
+			case bool:
+				assert.Equal(t, expected, v.GetBool(tt.key))
+			case []string:
+				assert.Equal(t, expected, v.GetStringSlice(tt.key))
+			default:
+				t.Fatalf("unsupported type in test")
+			}
+		})
+	}
+}
 
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.
 // It should also check that the base path and atmos Config File Path are correctly set and directory.
