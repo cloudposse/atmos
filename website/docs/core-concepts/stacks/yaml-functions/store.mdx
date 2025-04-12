@@ -18,10 +18,10 @@ The `!store` YAML function allows reading the values from a remote [store](/core
 The `!store` function can be called with either two, three, four or five parameters, and optionally a default value:
 
 ```yaml
-  !store <store_name> <stack> <component> <key> <yq-expression> | default <default_value>
+  !store <store_name> <stack> <component> <key> | default <default-value> | query <yq-expression>
 ```
 
-Examples:
+Usage examples:
 
 ```yaml
   # Get the `key` from the store of a `component` in the current stack
@@ -29,17 +29,17 @@ Examples:
 
   # Get the `key` from the store of a `component` in the current stack,
   # and retrieve an individual value from the result using the YQ expression
-  !store <store_name> <component> <key> <yq-expression>
+  !store <store_name> <component> <key> | query <yq-expression>
 
   # Get the `key` from the store of a `component` in a different stack
   !store <store_name> <stack> <component> <key>
 
   # Get the `key` from the store of a `component` in a different stack,
   # and retrieve an individual value from the result using the YQ expression
-  !store <store_name> <stack> <component> <key> <yq-expression>
+  !store <store_name> <stack> <component> <key> | query <yq-expression>
 
   # Get the `key` from the store of a `component` in a different stack, with a default value
-  !store <store_name> <stack> <component> <key> | default <default_value>
+  !store <store_name> <stack> <component> <key> | default <default-value>
 ```
 
 ## Arguments
@@ -57,11 +57,11 @@ Examples:
   <dt>`key`</dt>
   <dd>The key to read from the store</dd>
 
+  <dt>`default-value`</dt>
+  <dd>(optional) The default value to return if the key is not found in the store</dd>
+
   <dt>`yq-expression`</dt>
   <dd>(optional) [YQ](https://mikefarah.gitbook.io/yq) expression to retrieve individual values from the result</dd>
-
-  <dt>`default_value`</dt>
-  <dd>(optional) The default value to return if the key is not found in the store</dd>
 </dl>
 
 
@@ -83,6 +83,7 @@ components:
           security_group_id: !store prod/ssm security-group/lambda id
           security_group_id2: !store prod/ssm {{ .stack }} security-group/lambda2 id
           security_group_id3: !store prod/ssm {{ .atmos_stack }} security-group/lambda3 id
+        kms_key_arn: !store prod/ssm kms config | query .arn
 ```
 </File>
 
