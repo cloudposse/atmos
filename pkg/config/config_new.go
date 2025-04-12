@@ -81,7 +81,7 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts *ConfigOptions) {
 }
 
 // load reads and merges the configuration.
-func (c *ConfigHandler) load(configAndStacksInfo schema.ConfigAndStacksInfo) error {
+func (c *ConfigHandler) load(configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	setDefaultConfiguration(c.v)
 	setEnv(c.v)
 	// Read config file if exists (non-blocking)
@@ -89,7 +89,7 @@ func (c *ConfigHandler) load(configAndStacksInfo schema.ConfigAndStacksInfo) err
 		return err
 	}
 	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
-		err := loadConfigFromCLIArgs(c.v, &configAndStacksInfo, c.atmosConfig)
+		err := loadConfigFromCLIArgs(c.v, configAndStacksInfo, c.atmosConfig)
 		if err != nil {
 			return err
 		}

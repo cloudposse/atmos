@@ -23,7 +23,7 @@ import (
 //
 //nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-	if err := DefaultConfigHandler.load(configAndStacksInfo); err != nil {
+	if err := DefaultConfigHandler.load(&configAndStacksInfo); err != nil {
 		return schema.AtmosConfiguration{}, err
 	}
 	atmosConfig := *DefaultConfigHandler.atmosConfig
