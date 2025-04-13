@@ -9,6 +9,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -398,8 +399,7 @@ func findComponentManifestInComponent(componentPath string) (string, error) {
 
 // readComponentManifest reads a component manifest file.
 func readComponentManifest(path string) (*schema.ComponentManifest, error) {
-	// Parse file using utils.DetectFormatAndParseFile.
-	data, err := utils.DetectFormatAndParseFile(path)
+	data, err := filetype.DetectFormatAndParseFile(os.ReadFile, path)
 	if err != nil {
 		// Handle file not found specifically.
 		if errors.Is(err, os.ErrNotExist) {
@@ -538,8 +538,7 @@ func findVendorManifests(vendorBasePath string) ([]VendorInfo, error) {
 
 // readVendorManifest reads a vendor manifest file.
 func readVendorManifest(path string) (*schema.AtmosVendorConfig, error) {
-	// Parse file using utils.DetectFormatAndParseFile
-	data, err := utils.DetectFormatAndParseFile(path)
+	data, err := filetype.DetectFormatAndParseFile(os.ReadFile, path)
 	if err != nil {
 		return nil, fmt.Errorf("error reading vendor manifest: %w", err)
 	}
