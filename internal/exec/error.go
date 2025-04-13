@@ -19,4 +19,6 @@ var (
 	ErrFailedToInitializeTUIModelWithDetails = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
+	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrInvalidYamlFunc                       = errors.New("invalid YAML function")
 )

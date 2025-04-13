@@ -1,19 +1,15 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 
 	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	storeFuncSyncMap            = sync.Map{}
-	invalidTemplateFuncMsg      = "invalid template function"
-	ErrInvalidTemplateFuncStore = errors.New(invalidTemplateFuncMsg)
-)
+var storeFuncSyncMap = sync.Map{}
 
 func storeFunc(
 	atmosConfig *schema.AtmosConfiguration,
@@ -38,13 +34,13 @@ func storeFunc(
 	store := atmosConfig.Stores[storeName]
 
 	if store == nil {
-		return nil, fmt.Errorf("%w: %s\nstore '%s' not found", ErrInvalidTemplateFuncStore, functionName, storeName)
+		return nil, fmt.Errorf("%w: %s\nstore '%s' not found", ErrInvalidTemplateFunc, functionName, storeName)
 	}
 
 	// Retrieve the value from the store
 	value, err := store.Get(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s\nfailed to get key: %s\nerror: %v", ErrInvalidTemplateFuncStore, functionName, key, err)
+		return nil, fmt.Errorf("%w: %s\nfailed to get key: %s\nerror: %v", ErrInvalidTemplateFunc, functionName, key, err)
 	}
 
 	// Cache the result
