@@ -21,7 +21,8 @@ type params struct {
 }
 
 var (
-	ErrInvalidYamlFuncStore = errors.New("invalid YAML function")
+	invalidYamlFuncMsg      = "invalid YAML function"
+	ErrInvalidYamlFuncStore = errors.New(invalidYamlFuncMsg)
 )
 
 func processTagStore(atmosConfig schema.AtmosConfiguration, input string, currentStack string) any {
@@ -36,6 +37,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	parts := strings.Split(str, "|")
 	storePart := strings.TrimSpace(parts[0])
 
+	// Default value and query
 	var defaultValue *string
 	var query string
 	if len(parts) > 1 {
@@ -45,7 +47,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 			if len(pipeParts) != 2 {
 				e := fmt.Errorf("%w: %s", ErrInvalidYamlFuncStore, input)
 				log.Error(e)
-				return fmt.Sprintf("invalid YAML function: %s", input)
+				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 			}
 			v1 := strings.Trim(pipeParts[0], `"'`) // Remove surrounding quotes if present
 			v2 := strings.Trim(pipeParts[1], `"'`) // Remove surrounding quotes if present
@@ -57,7 +59,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 			default:
 				e := fmt.Errorf("%w: %s", ErrInvalidYamlFuncStore, input)
 				log.Error(e)
-				return fmt.Sprintf("invalid YAML function: %s", input)
+				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 			}
 		}
 	}
@@ -68,7 +70,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	if partsLength != 3 && partsLength != 4 {
 		e := fmt.Errorf("%w: %s", ErrInvalidYamlFuncStore, input)
 		log.Error(e)
-		return fmt.Sprintf("invalid YAML function: %s", input)
+		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 	}
 
 	retParams := params{
@@ -103,7 +105,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		log.Fatal(fmt.Errorf("%w: %s\nfailed to get key: %s\nerror: %v", ErrInvalidYamlFuncStore, input, retParams.key, err))
 	}
 
-	// Execute the YQ expression
+	// Execute the YQ expression if provided
 	var res any
 
 	if retParams.query != "" {

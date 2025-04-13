@@ -46,5 +46,5 @@ func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error
 }
 
 func (f AtmosFuncs) Store(store string, stack string, component string, key string) (any, error) {
-	return storeFunc(f.atmosConfig, f.configAndStacksInfo, component, stack)
+	return storeFunc(f.atmosConfig, store, stack, component, key)
 }
