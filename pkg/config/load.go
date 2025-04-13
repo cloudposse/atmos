@@ -12,6 +12,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -392,13 +393,16 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 	if node.Tag == "" {
 		return
 	}
-	allowedDirectives := []string{AtmosYamlFuncEnv}
+	allowedDirectives := []string{u.AtmosYamlFuncEnv}
 
 	for _, directive := range allowedDirectives {
 		if node.Tag == directive {
 			arg := node.Value
-			if directive == AtmosYamlFuncEnv {
-				envValue := os.Getenv(arg)
+			if directive == u.AtmosYamlFuncEnv {
+				envValue, err := u.ProcessTagEnv(arg)
+				if err != nil {
+					log.Fatal(err)
+				}
 				if envValue != "" {
 					node.Value = envValue
 				}

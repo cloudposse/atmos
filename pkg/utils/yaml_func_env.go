@@ -1,35 +1,30 @@
-package exec
+package utils
 
 import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func processTagEnv(
-	atmosConfig schema.AtmosConfiguration,
+func ProcessTagEnv(
 	input string,
-	currentStack string,
-) any {
-	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
+) (string, error) {
+	LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
-	str, err := getStringAfterTag(input, config.AtmosYamlFuncEnv)
+	str, err := getStringAfterTag(input, AtmosYamlFuncEnv)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		return "", err
 	}
 
 	var envVarName string
 	envVarDefault := ""
 	var envVarExists bool
 
-	parts, err := u.SplitStringByDelimiter(str, ' ')
+	parts, err := SplitStringByDelimiter(str, ' ')
 	if err != nil {
 		e := fmt.Errorf("error executing the YAML function: %s\n%v", input, err)
-		u.LogErrorAndExit(e)
+		return "", e
+
 	}
 
 	partsLen := len(parts)
@@ -41,18 +36,30 @@ func processTagEnv(
 		envVarName = strings.TrimSpace(parts[0])
 	} else {
 		err = fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s. The function accepts 1 or 2 arguments", input)
-		u.LogErrorAndExit(err)
+		return "", err
 	}
 
 	res, envVarExists := os.LookupEnv(envVarName)
 
 	if envVarExists {
-		return res
+		return res, nil
 	}
 
 	if envVarDefault != "" {
-		return envVarDefault
+		return envVarDefault, nil
 	}
 
-	return nil
+	return "", nil
+}
+
+func getStringAfterTag(input string, tag string) (string, error) {
+	str := strings.TrimPrefix(input, tag)
+	str = strings.TrimSpace(str)
+
+	if str == "" {
+		err := fmt.Errorf("invalid Atmos YAML function: %s", input)
+		return "", err
+	}
+
+	return str, nil
 }

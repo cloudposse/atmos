@@ -89,11 +89,5 @@ const (
 	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
 	AtmosProDefaultEndpoint    = "api"
 
-	// Atmos YAML functions
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncEnv             = "!env"
-
 	TerraformDefaultWorkspace = "default"
 )
