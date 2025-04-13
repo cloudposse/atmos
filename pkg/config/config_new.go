@@ -25,7 +25,7 @@ type ConfigOptions struct {
 	EnvVar       string      // Custom environment variable (optional)
 	Description  string      // Flag description
 	Key          string      // Key of the data in atmosConfiguration
-	DefaultValue interface{} // Default value of the data in atmosConfiguration
+	DefaultValue any // Default value of the data in atmosConfiguration
 }
 
 // New creates a new Config instance with initialized Viper.
