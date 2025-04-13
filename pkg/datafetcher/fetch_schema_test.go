@@ -11,19 +11,25 @@ import (
 func TestAtmosFetcher(t *testing.T) {
 	// Test AtmosFetcher with valid key
 	tests := []struct {
-		name   string
-		source string
-		err    error
+		name                string
+		source              string
+		dataShouldBePresent bool
+		err                 error
 	}{
-		{"Valid key should work", "atmos://schema/atmos/manifest/1.0", nil},
-		{"Invalid key should not work", "atmos://unknown", ErrAtmosSchemaNotFound},
+		{"Valid key should work", "atmos://schema/atmos/manifest/1.0", true, nil},
+		{"Invalid key should not work", "atmos://unknown", false, ErrAtmosSchemaNotFound},
 	}
 	for _, tt := range tests {
 		t.Run(tt.source, func(t *testing.T) {
 			fetcher := &atmosFetcher{}
-			_, err := fetcher.FetchData(tt.source)
+			data, err := fetcher.FetchData(tt.source)
 			if !errors.Is(err, tt.err) {
 				t.Errorf("Expected error %v, got %v", tt.err, err)
+			}
+			if tt.dataShouldBePresent {
+				if len(data) == 0 {
+					t.Errorf("Expected data to be present, got empty data")
+				}
 			}
 		})
 	}
