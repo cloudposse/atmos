@@ -37,7 +37,7 @@ schemas:
 	assert.Equal(t, []string{"hello", "world"}, schemas.Matches)
 }
 
-// TestGetSchemaRegistry tests the GetSchemaRegistry method
+// TestGetSchemaRegistry tests the GetSchemaRegistry method.
 func TestGetSchemaRegistry(t *testing.T) {
 	config := AtmosConfiguration{
 		Schemas: map[string]interface{}{
@@ -63,7 +63,7 @@ func TestGetSchemaRegistry(t *testing.T) {
 	assert.Equal(t, SchemaRegistry{}, schema, "Should return empty schema for non-existent key")
 }
 
-// TestGetResourcePath tests the GetResourcePath method
+// TestGetResourcePath tests the GetResourcePath method.
 func TestGetResourcePath(t *testing.T) {
 	config := AtmosConfiguration{
 		Schemas: map[string]interface{}{
@@ -85,7 +85,7 @@ func TestGetResourcePath(t *testing.T) {
 	assert.Equal(t, ResourcePath{}, path, "Should return empty resource path for non-existent key")
 }
 
-// TestProcessSchemas tests the ProcessSchemas method
+// TestProcessSchemas tests the ProcessSchemas method.
 func TestProcessSchemas(t *testing.T) {
 	config := AtmosConfiguration{
 		Schemas: map[string]interface{}{
@@ -121,7 +121,7 @@ func TestProcessSchemas(t *testing.T) {
 	assert.Equal(t, []string{"pattern1", "pattern2"}, custom.Matches, "custom matches should match")
 }
 
-// TestProcessSchemasWithInvalidData tests ProcessSchemas with invalid schema data
+// TestProcessSchemasWithInvalidData tests ProcessSchemas with invalid schema data.
 func TestProcessSchemasWithInvalidData(t *testing.T) {
 	config := AtmosConfiguration{
 		Schemas: map[string]interface{}{
@@ -142,7 +142,7 @@ func TestProcessSchemasWithInvalidData(t *testing.T) {
 	assert.False(t, ok, "custom should not be SchemaRegistry due to invalid data")
 }
 
-// TestProcessSchemasWithEmptySchemas tests ProcessSchemas with empty schemas
+// TestProcessSchemasWithEmptySchemas tests ProcessSchemas with empty schemas.
 func TestProcessSchemasWithEmptySchemas(t *testing.T) {
 	config := AtmosConfiguration{
 		Schemas: map[string]interface{}{},
