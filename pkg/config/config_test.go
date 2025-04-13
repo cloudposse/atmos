@@ -145,7 +145,7 @@ logs:
 			},
 		},
 		{
-			name:           "environment variable interpolation",
+			name:           "environment variable interpolation YAML function env (AtmosYamlFuncEnv)",
 			configFileName: "atmos.yaml",
 			configContent:  `base_path: !env TEST_ATMOS_BASE_PATH`,
 			envSetup: func(t *testing.T) func() {
@@ -159,6 +159,19 @@ logs:
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
 				assert.Equal(t, "env/test/path", cfg.BasePath)
+			},
+		},
+		{
+			name:           "shell command execution YAML function exec (AtmosYamlFuncExec)",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !exec echo Hello, World!`,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "Hello, World!\n", cfg.BasePath) // echo adds a newline to the output
 			},
 		},
 		{

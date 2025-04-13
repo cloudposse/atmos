@@ -393,7 +393,7 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 	if node.Tag == "" {
 		return
 	}
-	allowedDirectives := []string{u.AtmosYamlFuncEnv}
+	allowedDirectives := []string{u.AtmosYamlFuncEnv, u.AtmosYamlFuncExec}
 
 	for _, directive := range allowedDirectives {
 		if node.Tag == directive {
@@ -405,6 +405,13 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 				}
 				if envValue != "" {
 					node.Value = envValue
+				}
+				v.Set(currentPath, node.Value) // Store the value to Viper
+			}
+			if directive == u.AtmosYamlFuncExec {
+				execValue := u.ProcessTagExec(arg)
+				if execValue != nil {
+					node.Value = execValue.(string)
 				}
 				v.Set(currentPath, node.Value) // Store the value to Viper
 			}

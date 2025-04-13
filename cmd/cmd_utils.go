@@ -400,7 +400,7 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := e.ExecuteShellAndReturnOutput(atmosConfig, valCommand, valCommandName, ".", nil, false)
+				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, ".", nil, false)
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
