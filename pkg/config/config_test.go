@@ -390,3 +390,23 @@ func TestMergeDefaultConfig(t *testing.T) {
 	err = mergeDefaultConfig(v)
 	assert.NoError(t, err, "should not return error if config type is yaml")
 }
+
+func TestGetString(t *testing.T) {
+	DefaultConfigHandler.SetDefault("test_key", "test_value")
+	value := DefaultConfigHandler.GetString("test_key")
+	assert.Equal(t, "test_value", value, "should return the correct value for the key")
+
+	DefaultConfigHandler.SetDefault("test_key", 3)
+	valueInt := DefaultConfigHandler.GetInt("test_key")
+	assert.Equal(t, 3, valueInt, "should return the correct value for the key")
+
+	DefaultConfigHandler.SetDefault("test_key", true)
+	valueBool := DefaultConfigHandler.GetBool("test_key")
+	assert.Equal(t, true, valueBool, "should return the correct value for the key")
+
+	DefaultConfigHandler.BindEnv("test_key_env", "TEST_KEY_ENV")
+	os.Setenv("TEST_KEY_ENV", "env_value")
+	valueEnv := DefaultConfigHandler.GetString("test_key_env")
+	assert.Equal(t, "env_value", valueEnv, "should return the correct value for the key from environment variable")
+	os.Unsetenv("TEST_KEY_ENV")
+}
