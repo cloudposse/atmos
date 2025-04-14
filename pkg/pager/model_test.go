@@ -41,11 +41,11 @@ func TestModel_Update(t *testing.T) {
 		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
 		updatedModel, cmd := m.Update(msg)
 
-		assert.True(t, updatedModel.(model).ready, "Model should be ready")
-		assert.Equal(t, 80, updatedModel.(model).viewport.Width, "Viewport width should be set")
-		assert.Equal(t, 18, updatedModel.(model).viewport.Height, "Viewport height should account for header and footer")
-		assert.Equal(t, 3, updatedModel.(model).viewport.YPosition, "YPosition should be header height")
-		assert.Contains(t, updatedModel.(model).viewport.View(), "test content", "Content should be set")
+		assert.True(t, updatedModel.(*model).ready, "Model should be ready")
+		assert.Equal(t, 80, updatedModel.(*model).viewport.Width, "Viewport width should be set")
+		assert.Equal(t, 18, updatedModel.(*model).viewport.Height, "Viewport height should account for header and footer")
+		assert.Equal(t, 3, updatedModel.(*model).viewport.YPosition, "YPosition should be header height")
+		assert.Contains(t, updatedModel.(*model).viewport.View(), "test content", "Content should be set")
 		assert.Nil(t, cmd, "No additional command expected")
 	})
 
@@ -57,9 +57,9 @@ func TestModel_Update(t *testing.T) {
 		msg := tea.WindowSizeMsg{Width: 120, Height: 30}
 		updatedModel, cmd := m.Update(msg)
 
-		assert.True(t, updatedModel.(model).ready, "Model should remain ready")
-		assert.Equal(t, 120, updatedModel.(model).viewport.Width, "Viewport width should be updated")
-		assert.Equal(t, 24, updatedModel.(model).viewport.Height, "Viewport height should be updated")
+		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
+		assert.Equal(t, 120, updatedModel.(*model).viewport.Width, "Viewport width should be updated")
+		assert.Equal(t, 24, updatedModel.(*model).viewport.Height, "Viewport height should be updated")
 		assert.Nil(t, cmd, "No additional command expected")
 	})
 
@@ -72,8 +72,8 @@ func TestModel_Update(t *testing.T) {
 		msg := tea.KeyMsg{Type: tea.KeyDown}
 		updatedModel, cmd := m.Update(msg)
 
-		assert.True(t, updatedModel.(model).ready, "Model should remain ready")
-		assert.NotNil(t, updatedModel.(model).viewport, "Viewport should still exist")
+		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
+		assert.NotNil(t, updatedModel.(*model).viewport, "Viewport should still exist")
 		if cmd != nil {
 			assert.NotNil(t, cmd, "Viewport may return a command")
 		}
@@ -116,7 +116,6 @@ func TestModel_headerView(t *testing.T) {
 		assert.Contains(t, header, "Test", "Header should contain title")
 		assert.Contains(t, header, strings.Repeat("─", lineLength), "Header should contain line")
 	})
-
 }
 
 func TestModel_footerView(t *testing.T) {
