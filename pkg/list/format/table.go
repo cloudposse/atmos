@@ -16,11 +16,10 @@ import (
 
 // Constants for table formatting.
 const (
-	MaxColumnWidth         = 60 // Maximum width for a column.
-	TableColumnPadding     = 3  // Padding for table columns.
-	DefaultKeyWidth        = 15 // Default base width for keys.
-	TableWidthSafetyMargin = 5  // Extra buffer added to table width calculations.
-	KeyValue               = "value"
+	MaxColumnWidth     = 60 // Maximum width for a column.
+	TableColumnPadding = 3  // Padding for table columns.
+	DefaultKeyWidth    = 15 // Default base width for keys.
+	KeyValue           = "value"
 )
 
 // Error variables for table formatting.
@@ -291,21 +290,4 @@ func calculateEstimatedTableWidth(data map[string]interface{}, valueKeys, stackK
 	}
 
 	return totalWidth
-}
-
-// CalculateSimpleTableWidth estimates the width of a table based on column names.
-// This is a simpler version of calculateEstimatedTableWidth for cases where only column names are available.
-func CalculateSimpleTableWidth(columnNames []string) int {
-	width := TableColumnPadding * len(columnNames)
-
-	// Add width of each column
-	for _, name := range columnNames {
-		colWidth := limitWidth(len(name))
-		width += colWidth
-	}
-
-	// Add safety margin
-	width += TableWidthSafetyMargin
-
-	return width
 }
