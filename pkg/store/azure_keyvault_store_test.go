@@ -329,8 +329,9 @@ func TestKeyVaultStore_Get(t *testing.T) {
 			component: "app",
 			key:       "config",
 			mockFn: func() {
-				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config", mock.Anything).
-					Return(azsecrets.GetSecretResponse{Value: stringPtr("test-value")}, nil)
+				value := "test-value"
+				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config", "", mock.Anything).
+					Return(azsecrets.GetSecretResponse{Value: &value}, nil)
 			},
 			want:    "test-value",
 			wantErr: false,
@@ -447,11 +448,14 @@ func TestKeyVaultStore_List(t *testing.T) {
 			stack:     "dev",
 			component: "app",
 			mockFn: func() {
-				// Mock the pager response
 				pager := &mockPager{
 					pages: []azsecrets.SecretProperties{
-						{ID: stringPtr("prefix-dev-app-secret1")},
-						{ID: stringPtr("prefix-dev-app-secret2")},
+						{
+							ID: stringPtr("prefix-dev-app-secret1"),
+						},
+						{
+							ID: stringPtr("prefix-dev-app-secret2"),
+						},
 					},
 				}
 				mockClient.On("ListSecrets", mock.Anything).Return(pager)

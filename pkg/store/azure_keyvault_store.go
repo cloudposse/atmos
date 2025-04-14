@@ -190,11 +190,14 @@ func (s *KeyVaultStore) List(stack string, component string) ([]string, error) {
 			return nil, fmt.Errorf("failed to list secrets: %w", err)
 		}
 
-		if page.ID != nil && strings.HasPrefix(*page.ID, prefix) {
-			// Extract just the key name from the full secret path
-			key := strings.TrimPrefix(*page.ID, prefix+"-")
-			if key != "" {
-				keys = append(keys, key)
+		if page.ID != nil {
+			name := *page.ID
+			if strings.HasPrefix(name, prefix) {
+				// Extract just the key name from the full secret path
+				key := strings.TrimPrefix(name, prefix+"-")
+				if key != "" {
+					keys = append(keys, key)
+				}
 			}
 		}
 	}
