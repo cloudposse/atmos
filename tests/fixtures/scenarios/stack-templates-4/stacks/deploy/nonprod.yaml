@@ -9,7 +9,7 @@ components:
       vars:
         # Use the static (hardcoded) stack name `prod`
         cidr: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
-        # Using the template variable `.stack` allows specifying the current stack name `nonprod` w/o hardcoding it
+        # Using the template identifier `.stack` allows specifying the current stack name `nonprod` w/o hardcoding it
         c_d: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
         # Use the Atmos section `.vars.stage` for the stack name
         c_e: '{{ (atmos.Store "redis" .vars.stage "c2" "map").c.e }}'

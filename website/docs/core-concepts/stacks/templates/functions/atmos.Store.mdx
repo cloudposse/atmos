@@ -46,49 +46,52 @@ The `stack` argument is the second argument of the `atmos.Store` function, and i
 
 ### Hardcoded Stack Name
 
-Hardcoded stack name. Use it if you want to get an output from a component from a different (well-known and static) stack. For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` output from the `vpc` component from the stack `plat-ue2-prod`:
+Use it if you want to get a value from the store for a component from a different (well-known and static) stack.
+For example, you have a `tgw` component in a stack `plat-ue2-dev` that requires the `vpc_id` key from the `vpc` component from the stack `plat-ue2-prod`:
 
 ```yaml title="plat-ue2-dev"
   components:
     terraform:
       tgw:
         vars:
-          vpc_id: '{{ (atmos.Store "vpc" "plat-ue2-prod").outputs.vpc_id }}'
+          vpc_id: '{{ atmos.Store "prod/ssm" "plat-ue2-prod" "vpc" "vpc_id" }}'
 ```
 
 ### Reference the Current Stack Name
 
-Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component is in (for which the `atmos.Store` function is executed):
+Use the `.stack` (or `.atmos_stack`) template identifier to specify the same stack as the current component is in
+(for which the `atmos.Store` function is executed):
 
 ```yaml
-  {{ (atmos.Store "<component>" .stack).<section>.<attribute> }}
-  {{ (atmos.Store "<component>" .atmos_stack).<section>.<attribute> }}
+  '{{ atmos.Store "<store_name>" {{ .stack }} "<component>" "<key>" }}'
+  '{{ atmos.Store "<store_name>" {{ .atmos_stack }} "<component>" "<key>" }}'
 ```
 
-For example, you have a `tgw` component that requires the `vpc_id` output from the `vpc` component in the same stack:
+For example, you have a `tgw` component that requires the `vpc_id` key from the store for the `vpc` component in the same stack:
 
 ```yaml
   components:
     terraform:
       tgw:
         vars:
-          vpc_id: '{{ (atmos.Store "vpc" .stack).outputs.vpc_id }}'
+          vpc_id: '{{ atmos.Store "prod/ssm" {{ .stack }} "vpc" "vpc_id" }}'
 ```
 
 ### Use a Format Function
 
-Use the `printf` template function to construct stack names using static strings and dynamic identifiers. This is convenient when you want to override some identifiers in the stack name:
+Use the `printf` template function to construct stack names using static strings and dynamic identifiers.
+This is convenient when you want to override some identifiers in the stack name:
 
 ```yaml
-  {{ (atmos.Store "<component>" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage)).<section>.<attribute> }}
+  '{{ atmos.Store "<store_name>" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage) <component> <key> }}'
 
-  {{ (atmos.Store "<component>" (printf "plat-%s-prod" .vars.environment)).<section>.<attribute> }}
+  '{{ atmos.Store "<store_name>" (printf "plat-%s-prod" .vars.environment) <component> <key> }}'
 
-  {{ (atmos.Store "<component>" (printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account)).<section>.<attribute> }}
+  '{{ atmos.Store "<store_name>" (printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account) <component> <key> }}'
 ```
 
 For example, you have a `tgw` component deployed in the stack `plat-ue2-dev`. The `tgw` component requires the
-`vpc_id` output from the `vpc` component from the same environment (`ue2`) and same stage (`dev`), but from a different
+`vpc_id` key from the store for the `vpc` component from the same environment (`ue2`) and same stage (`dev`), but from a different
 tenant `net` (instead of `plat`):
 
 ```yaml title="plat-ue2-dev"
@@ -96,11 +99,11 @@ tenant `net` (instead of `plat`):
     terraform:
       tgw:
         vars:
-          vpc_id: '{{ (atmos.Store "vpc" (printf "net-%s-%s" .vars.environment .vars.stage)).outputs.vpc_id }}'
+          vpc_id: '{{ atmos.Store "prod/ssm" (printf "net-%s-%s" .vars.environment .vars.stage) "vpc" "vpc_id" }}'
 ```
 
 :::tip Important
-    By using the `printf "%s-%s-%s"` function, you are constructing stack names using the stack context variables/identifiers.
+By using the `printf "%s-%s-%s"` function, you are constructing stack names using the stack context variables/identifiers.
 
     For more information on Atmos stack names and how to define them, refer to `stacks.name_pattern` and `stacks.name_template`
     sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
@@ -122,7 +125,7 @@ components:
       vars:
         # Use the static (hardcoded) stack name `prod`
         cidr: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
-        # Using the template variable `.stack` allows specifying the current stack name `nonprod` w/o hardcoding it
+        # Using the template identifier `.stack` allows specifying the current stack name `nonprod` w/o hardcoding it
         c_d: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
         # Use the Atmos section `.vars.stage` for the stack name
         c_e: '{{ (atmos.Store "redis" .vars.stage "c2" "map").c.e }}'
@@ -142,9 +145,9 @@ components:
 ## Caching the result of `atmos.Store` function
 
 Atmos caches (in memory) the results of `atmos.Store` template function execution.
-If you call the function for the same component in a stack more than once, the first call will produce the result
+If you call the function for the same store, stack, component and key more than once, the first call will produce the result
 and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
-`atmos.Store` function for the same component in a stack in multiple places in Atmos stack manifests.
+`atmos.Store` function for the same store, stack, component and key in multiple places in Atmos stack manifests.
 It will speed up the function execution and stack processing.
 
 For example:
@@ -156,15 +159,24 @@ components:
     test2:
       vars:
         tags:
-          test: '{{ (atmos.Store "test" .stack).outputs.id }}'
-          test2: '{{ (atmos.Store "test" .stack).outputs.id }}'
-          test3: '{{ (atmos.Store "test" .stack).outputs.id }}'
+          test: '{{ atmos.Store "prod/ssm" {{ .stack }} "vpc" "vpc_id" }}'
+          test2: '{{ atmos.Store "prod/ssm" {{ .stack }} "vpc" "vpc_id" }}'
+          test3: '{{ atmos.Store "prod/ssm" {{ .stack }} "vpc" "vpc_id" }}'
 ```
 </File>
 
-In the example, the `test2` Atmos component uses the outputs (remote state) of the `test` Atmos component from the same stack.
-The template function `{{ atmos.Store "test" .stack }}` is executed three times (once for each tag).
+In the example, the `atmos.Store` template function is executed three times (once for each tag) for the same store, stack, component and key.
 
-After the first execution, Atmos caches the result in memory (all the component sections, including the `outputs`),
-and reuses it in the next two calls to the function. The caching makes the stack processing about three times faster in this
-particular example. In a production environment where many components are used, the speedup can be even more significant.
+After the first execution, Atmos caches the result in memory,
+and reuses it in the next two calls to the function. The caching makes the stack processing faster.
+
+## Considerations
+
+- Using `atmos.Store` with secrets can expose sensitive data to standard output (stdout) in any commands that describe stacks or components.
+- When using `atmos.Store` with [`atmos describe affected`](/cli/commands/describe/affected), Atmos requires access to all referenced stores.
+If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
+- Be mindful of disaster recovery (DR) implications when using it across regions.
+- Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not
+yet be available and the `atmos.Store` function call will fail (will return the string `<no value>`) unless you provide a default value
+using the `Go` template `or` or `if-else` expressions, the [Sprig `default` function](https://masterminds.github.io/sprig/defaults.html),
+or the [Gomplate `default` function](https://docs.gomplate.ca/functions/conv/#convdefault).
