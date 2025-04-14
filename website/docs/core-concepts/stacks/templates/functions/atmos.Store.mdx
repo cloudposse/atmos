@@ -74,7 +74,7 @@ For example, you have a `tgw` component that requires the `vpc_id` key from the 
     terraform:
       tgw:
         vars:
-          vpc_id: '{{ atmos.Store "prod/ssm" {{ .stack }} "vpc" "vpc_id" }}'
+          vpc_id: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
 ```
 
 ### Use a Format Function
@@ -159,9 +159,9 @@ components:
     test2:
       vars:
         tags:
-          test: '{{ atmos.Store "prod/ssm" {{ .stack }} "vpc" "vpc_id" }}'
-          test2: '{{ atmos.Store "prod/ssm" {{ .stack }} "vpc" "vpc_id" }}'
-          test3: '{{ atmos.Store "prod/ssm" {{ .stack }} "vpc" "vpc_id" }}'
+          test: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
+          test2: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
+          test3: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
 ```
 </File>
 
