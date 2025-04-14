@@ -9,6 +9,7 @@ components:
       vars:
         cidr: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
         c_d: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
+        # The `!template` YAML function converts a JSON-encoded string into a map
         c: !template '{{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }}'
         lambda_environment:
           # Example of using the `atmos.Store` template function in a multi-line string

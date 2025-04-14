@@ -150,5 +150,34 @@ func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
 	)
 
 	assert.NoError(t, err)
-	u.PrintAsYAML(res)
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	vars, err := u.EvaluateYqExpression(&atmosConfig, res, ".vars")
+	assert.NoError(t, err)
+
+	varsYAML, err := u.ConvertToYAML(vars)
+	assert.NoError(t, err)
+
+	expected := `
+c:
+    d: d3
+    e: e4
+c_d: d3
+cidr: 172.16.0.0/16
+lambda_environment:
+    ENGINE_CONFIG_JSON: |
+        {
+          "vpc_cidr": 172.16.0.0/16,
+          "c": {"d":"d3","e":"e4"},
+          "c_e": e4
+        }
+stage: nonprod
+`
+
+	assert.Equal(t, expected, "\n"+varsYAML)
 }
