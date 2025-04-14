@@ -21,7 +21,7 @@ import (
 //   - Each YAML file is converted to JSON and validated against the schema.
 //
 // This command ensures that configuration files conform to expected structures and helps
-// catch errors early in the development or deployment process
+// catch errors early in the development or deployment process.
 var ValidateSchemaCmd = &cobra.Command{
 	Use:   "schema",
 	Short: "Validate YAML files against JSON schemas defined in atmos.yaml",
