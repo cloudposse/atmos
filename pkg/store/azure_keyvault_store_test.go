@@ -31,7 +31,7 @@ func (m *MockKeyVaultClient) DeleteSecret(ctx context.Context, name string, opti
 	return args.Get(0).(azsecrets.DeleteSecretResponse), args.Error(1)
 }
 
-func (m *MockKeyVaultClient) NewListSecretsPager(options *azsecrets.ListSecretsOptions) *runtime.Pager[azsecrets.SecretProperties] {
+func (m *MockKeyVaultClient) ListSecrets(options *azsecrets.ListSecretsOptions) *runtime.Pager[azsecrets.SecretProperties] {
 	args := m.Called(options)
 	return args.Get(0).(*runtime.Pager[azsecrets.SecretProperties])
 }
@@ -329,8 +329,9 @@ func TestKeyVaultStore_Get(t *testing.T) {
 			component: "app",
 			key:       "config",
 			mockFn: func() {
+				value := "test-value"
 				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config", "", mock.Anything).
-					Return(azsecrets.GetSecretResponse{Value: "test-value"}, nil)
+					Return(azsecrets.GetSecretResponse{Properties: &azsecrets.SecretProperties{Value: &value}}, nil)
 			},
 			want:    "test-value",
 			wantErr: false,
@@ -450,14 +451,18 @@ func TestKeyVaultStore_List(t *testing.T) {
 				pager := &mockPager{
 					pages: []azsecrets.SecretProperties{
 						{
-							Name: "prefix-dev-app-secret1",
+							Properties: &azsecrets.SecretProperties{
+								Name: stringPtr("prefix-dev-app-secret1"),
+							},
 						},
 						{
-							Name: "prefix-dev-app-secret2",
+							Properties: &azsecrets.SecretProperties{
+								Name: stringPtr("prefix-dev-app-secret2"),
+							},
 						},
 					},
 				}
-				mockClient.On("NewListSecretsPager", mock.Anything).Return(pager)
+				mockClient.On("ListSecrets", mock.Anything).Return(pager)
 			},
 			want:    []string{"secret1", "secret2"},
 			wantErr: false,
