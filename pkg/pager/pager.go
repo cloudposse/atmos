@@ -21,7 +21,7 @@ func New(title, content string) *pageCreator {
 
 func (p *pageCreator) Run() error {
 	if _, err := tea.NewProgram(
-		model{
+		&model{
 			title:    p.title,
 			content:  p.content,
 			ready:    p.ready,
