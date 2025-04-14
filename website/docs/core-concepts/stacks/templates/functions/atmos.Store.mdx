@@ -17,7 +17,10 @@ The `atmos.Store` template function allows reading the values from a remote [sto
 The `atmos.Store` template function accepts four parameters:
 
 ```yaml
+# Read a simple value (string, number, boolean) from the store
 foo: '{{ atmos.Store "<store_name>" "<stack>" "<component>" "<key>" }}'
+
+# Read a complex object (e.g. map) from the store and get an individual value (attribute) from the result
 bar: '{{ (atmos.Store "<store_name>" "<stack>" "<component>" "<key>").<attribute> }}'
 ```
 
@@ -83,11 +86,11 @@ Use the `printf` template function to construct stack names using static strings
 This is convenient when you want to override some identifiers in the stack name:
 
 ```yaml
-{{ atmos.Store "<store_name>" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage) <component> <key> }}
+{{ atmos.Store "<store_name>" (printf "%s-%s-%s" .vars.tenant .vars.environment .vars.stage) "<component>" "<key>" }}
 
-{{ atmos.Store "<store_name>" (printf "plat-%s-prod" .vars.environment) <component> <key> }}
+{{ atmos.Store "<store_name>" (printf "plat-%s-prod" .vars.environment) "<component>" "<key>" }}
 
-{{ atmos.Store "<store_name>" (printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account) <component> <key> }}
+{{ atmos.Store "<store_name>" (printf "%s-%s-%s" .settings.context.tenant .settings.context.region .settings.context.account) "<component>" "<key>" }}
 ```
 
 For example, you have a `tgw` component deployed in the stack `plat-ue2-dev`. The `tgw` component requires the
@@ -105,8 +108,8 @@ tenant `net` (instead of `plat`):
 :::tip Important
 By using the `printf "%s-%s-%s"` function, you are constructing stack names using the stack context variables/identifiers.
 
-    For more information on Atmos stack names and how to define them, refer to `stacks.name_pattern` and `stacks.name_template`
-    sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
+For more information on Atmos stack names and how to define them, refer to `stacks.name_pattern` and `stacks.name_template`
+sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
 :::
 
 ## Examples
