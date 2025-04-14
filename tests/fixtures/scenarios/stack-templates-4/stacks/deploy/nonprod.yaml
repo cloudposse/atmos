@@ -11,6 +11,7 @@ components:
         c_d: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
         c: !template '{{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }}'
         lambda_environment:
+          # Example of using the `atmos.Store` template function in a multi-line string
           ENGINE_CONFIG_JSON: >
             {
               "vpc_cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" }},
