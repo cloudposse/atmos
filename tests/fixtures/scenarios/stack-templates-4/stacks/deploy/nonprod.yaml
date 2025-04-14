@@ -13,7 +13,7 @@ components:
         lambda_environment:
           ENGINE_CONFIG_JSON: >
             {
-              "vpc_cidr": "{{ atmos.Store "redis" "prod" "vpc" "cidr" }}",
-              "c": "{{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }}",
-              "c_e": "{{ (atmos.Store "redis" .stack "c2" "map").c.e }}"
+              "vpc_cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" }},
+              "c": {{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }},
+              "c_e": {{ (atmos.Store "redis" .stack "c2" "map").c.e }}
             }
