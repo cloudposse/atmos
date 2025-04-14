@@ -84,8 +84,8 @@ func (c *ConfigHandler) AddConfig(cmd *cobra.Command, opts *ConfigOptions) {
 func (c *ConfigHandler) load(configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	setDefaultConfiguration(c.v)
 	setEnv(c.v)
-	// Read config file if exists (non-blocking)
-	if err := loadConfigSources(c.v, configAndStacksInfo.AtmosCliConfigPath); err != nil {
+	// Load embed atmos.yaml
+	if err := loadEmbeddedConfig(c.v); err != nil {
 		return err
 	}
 	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
@@ -94,6 +94,9 @@ func (c *ConfigHandler) load(configAndStacksInfo *schema.ConfigAndStacksInfo) er
 			return err
 		}
 		return nil
+	}
+	if err := loadConfigSources(c.v, configAndStacksInfo.AtmosCliConfigPath); err != nil {
+		return err
 	}
 
 	if c.v.ConfigFileUsed() != "" {
