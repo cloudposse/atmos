@@ -14,11 +14,11 @@ func processTagTerraformOutput(
 	input string,
 	currentStack string,
 ) any {
-	u.LogTrace(atmosConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
+	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
 	str, err := getStringAfterTag(input, config.AtmosYamlFuncTerraformOutput)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	var component string
@@ -38,11 +38,11 @@ func processTagTerraformOutput(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		u.LogTrace(atmosConfig, fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
+		u.LogTrace(fmt.Sprintf("Atmos YAML function `%s` is called with two parameters 'component' and 'output'. "+
 			"Using the current stack '%s' as the 'stack' parameter", input, currentStack))
 	} else {
 		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	value := GetTerraformOutput(&atmosConfig, stack, component, output, false)

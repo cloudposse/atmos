@@ -15,11 +15,11 @@ func processTagEnv(
 	input string,
 	currentStack string,
 ) any {
-	u.LogTrace(atmosConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
+	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
 	str, err := getStringAfterTag(input, config.AtmosYamlFuncEnv)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	var envVarName string
@@ -29,7 +29,7 @@ func processTagEnv(
 	parts, err := u.SplitStringByDelimiter(str, ' ')
 	if err != nil {
 		e := fmt.Errorf("error executing the YAML function: %s\n%v", input, err)
-		u.LogErrorAndExit(atmosConfig, e)
+		u.LogErrorAndExit(e)
 	}
 
 	partsLen := len(parts)
@@ -41,7 +41,7 @@ func processTagEnv(
 		envVarName = strings.TrimSpace(parts[0])
 	} else {
 		err = fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s. The function accepts 1 or 2 arguments", input)
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	res, envVarExists := os.LookupEnv(envVarName)

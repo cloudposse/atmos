@@ -1,20 +1,16 @@
 package exec
 
 import (
-	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"sync"
 
-	"github.com/cloudposse/atmos/pkg/schema"
+	log "github.com/charmbracelet/log"
 	"github.com/hairyhenderson/gomplate/v3/data"
 )
 
-var (
-	gomplateDatasourceFuncSyncMap = sync.Map{}
-)
+var gomplateDatasourceFuncSyncMap = sync.Map{}
 
-func gomplateDatasourceFunc(atmosConfig schema.AtmosConfiguration, alias string, gomplateData *data.Data, args ...string) (any, error) {
-	u.LogTrace(atmosConfig, fmt.Sprintf("atmos.GomplateDatasource(): processing datasource alias '%s'", alias))
+func gomplateDatasourceFunc(alias string, gomplateData *data.Data, args ...string) (any, error) {
+	log.Debug("atmos.GomplateDatasource(): processing datasource", "alias", alias)
 
 	// If the result for the alias already exists in the cache, return it
 	existingResult, found := gomplateDatasourceFuncSyncMap.Load(alias)
@@ -30,7 +26,7 @@ func gomplateDatasourceFunc(atmosConfig schema.AtmosConfiguration, alias string,
 	// Cache the result
 	gomplateDatasourceFuncSyncMap.Store(alias, result)
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("atmos.GomplateDatasource(): processed datasource alias '%s'.\nResult: '%v'", alias, result))
+	log.Debug("atmos.GomplateDatasource(): processed datasource", "alias", alias, "result", result)
 
 	return result, nil
 }

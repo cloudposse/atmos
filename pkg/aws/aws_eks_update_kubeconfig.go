@@ -10,9 +10,8 @@ import (
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconfigContext) error {
 	err := e.ExecuteAwsEksUpdateKubeconfig(kubeconfigContext)
-
 	if err != nil {
-		u.LogError(schema.AtmosConfiguration{}, err)
+		u.LogError(err)
 		return err
 	}
 

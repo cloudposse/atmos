@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"fmt"
+	"log"
 	"os"
 
+	h "github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -11,28 +15,43 @@ func getTerraformCommands() []*cobra.Command {
 	// List of Terraform commands
 	return []*cobra.Command{
 		{
-			Use:     "plan",
-			Short:   "Show changes required by the current configuration",
-			Long:    "Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.",
-			Example: "atmos terraform plan <component> -s <stack>",
+			Use:   "plan",
+			Short: "Show changes required by the current configuration",
+			Long:  "Generate an execution plan, which shows what actions Terraform will take to reach the desired state of the configuration.",
 			Annotations: map[string]string{
 				"nativeCommand": "true",
 			},
 		},
 		{
-			Use:     "apply",
-			Short:   "Apply changes to infrastructure",
-			Long:    "Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.",
-			Example: "atmos terraform apply <component> -s <stack>",
+			Use:   "plan-diff",
+			Short: "Compare two Terraform plans and show the differences",
+			Long: `The 'atmos terraform plan-diff' command compares two Terraform plans and shows the differences between them.
+
+It takes an original plan file (--orig) and optionally a new plan file (--new). If the new plan file is not provided,
+it will generate one by running 'terraform plan' with the current configuration.
+
+The command shows differences in variables, resources, and outputs between the two plans.
+
+Example usage:
+  atmos terraform plan-diff myapp -s dev --orig=orig.plan
+  atmos terraform plan-diff myapp -s dev --orig=orig.plan --new=new.plan`,
+		},
+		{
+			Use:   "apply",
+			Short: "Apply changes to infrastructure",
+			Long:  "Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.",
 			Annotations: map[string]string{
 				"nativeCommand": "true",
+			},
+			PostRunE: func(cmd *cobra.Command, args []string) error {
+				return runHooks(h.AfterTerraformApply, cmd, args)
 			},
 		},
 		{
 			Use:   "workspace",
 			Short: "Manage Terraform workspaces",
 			Long: `The 'atmos terraform workspace' command initializes Terraform for the current configuration, selects the specified workspace, and creates it if it does not already exist.
-			
+
 It runs the following sequence of Terraform commands:
 1. 'terraform init -reconfigure' to initialize the working directory.
 2. 'terraform workspace select' to switch to the specified workspace.
@@ -57,6 +76,9 @@ Common use cases:
 			Use:   "deploy",
 			Short: "Deploy the specified infrastructure using Terraform",
 			Long:  `Deploys infrastructure by running the Terraform apply command with automatic approval. This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
+			PostRunE: func(cmd *cobra.Command, args []string) error {
+				return runHooks(h.AfterTerraformApply, cmd, args)
+			},
 		},
 		{
 			Use:   "shell",
@@ -151,12 +173,12 @@ Common use cases:
 			Use:   "import",
 			Short: "Import existing infrastructure into Terraform state.",
 			Long: `The 'atmos terraform import' command imports existing infrastructure resources into Terraform's state.
-			
+
 Before executing the command, it searches for the 'region' variable in the specified component and stack configuration.
 If the 'region' variable is found, it sets the 'AWS_REGION' environment variable with the corresponding value before executing the import command.
-	
+
 The import command runs: 'terraform import [ADDRESS] [ID]'
-	
+
 Arguments:
 - ADDRESS: The Terraform address of the resource to import.
 - ID: The ID of the resource to import.`,
@@ -246,8 +268,11 @@ Arguments:
 
 // attachTerraformCommands attaches static Terraform commands to a provided parent command
 func attachTerraformCommands(parentCmd *cobra.Command) {
-	parentCmd.PersistentFlags().String("append-user-agent", "", "Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: 'Atmos/%s (Cloud Posse; +https://atmos.tools)'. This flag works with almost all commands.")
-	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running 'terraform init' before executing the command")
+	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: `Atmos/%s (Cloud Posse; +https://atmos.tools)`. This flag works with almost all commands.", version.Version))
+	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running `terraform init` before executing terraform commands")
+	parentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
+	parentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
+	parentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands")
 
 	commands := getTerraformCommands()
 
@@ -257,6 +282,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		if setFlags, ok := commandMaps[cmd.Use]; ok {
 			setFlags(cmd)
 		}
+		cmd.ValidArgsFunction = ComponentsArgCompletion
 		cmd.Run = func(cmd_ *cobra.Command, args []string) {
 			// Because we disable flag parsing we require manual handle help Request
 			handleHelpRequest(cmd, args)
@@ -264,7 +290,12 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 				args = os.Args[2:]
 			}
 
-			terraformRun(parentCmd, cmd_, args)
+			err := terraformRun(parentCmd, cmd_, args)
+			if err != nil {
+				// Let the main function handle errors like ErrPlanHasDiff
+				// by simply propagating them without exiting here
+				return
+			}
 		}
 		parentCmd.AddCommand(cmd)
 	}
@@ -284,5 +315,14 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 		cmd.PersistentFlags().Bool("everything", false, "If set atmos will also delete the Terraform state files and directories for the component.")
 		cmd.PersistentFlags().Bool("force", false, "Forcefully delete Terraform state files and directories without interaction")
 		cmd.PersistentFlags().Bool("skip-lock-file", false, "Skip deleting the `.terraform.lock.hcl` file")
+	},
+	"plan-diff": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().String("orig", "", "Path to the original Terraform plan file (required)")
+		cmd.PersistentFlags().String("new", "", "Path to the new Terraform plan file (optional)")
+		err := cmd.MarkPersistentFlagRequired("orig")
+		if err != nil {
+			//nolint:revive // intentional exit for initialization error
+			log.Fatalf("Error marking 'orig' flag as required: %v", err)
+		}
 	},
 }

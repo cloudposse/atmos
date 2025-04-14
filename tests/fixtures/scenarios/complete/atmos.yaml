@@ -243,7 +243,8 @@ commands:
         > /dev/null
       - chmod 600 ${KUBECONFIG}
       - echo ${KUBECONFIG}
-
+  - name: "invalidCommand"
+    description: "This is an invalid command that neither has steps or sub command"
 # Integrations
 integrations:
   # Atlantis integration

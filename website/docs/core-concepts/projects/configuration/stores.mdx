@@ -15,9 +15,10 @@ script.
 
 Currently, the following stores are supported:
 
-- [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
 - [Artifactory](https://jfrog.com/artifactory/)
-- [Azure Key Vault](https://azure.microsoft.com/en-us/products/key-vault)
+- [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
+- [Google Secret Manager](https://cloud.google.com/secret-manager)
+- [Redis](https://redis.io/)
 </Intro>
 
 Atmos stores are configured in the `atmos.yaml` file and available to use in stacks via the
@@ -70,6 +71,12 @@ stores:
 
   <dt>`stores.[store_name].options.url (required)`</dt>
   <dd>The URL of the Artifactory instance.</dd>
+
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
 </dl>
 
 #### Authentication
@@ -77,9 +84,10 @@ stores:
 The Artifactory store supports using an access token for authentication. The access token can be set directly in the
 `atmos.yaml` or via the `JFROG_ACCESS_TOKEN` or `ARTIFACTORY_ACCESS_TOKEN` environment variables.
 
-NOTE: It is not recommended to set the access token in plain text in `atmos.yaml` as it is not secure. Specifying the
-access token via config is allowed so that you can support the use case where you have multiple Artifactory stores
-in `atmos.yaml` and you need to specify different access tokens for each. In this case, you can use the `!env`
+It is also possible to specify the access token as `anonymous` to use the anonymous user to access the Artifactory
+repository if the repository is configured to allow anonymous access.
+
+**NOTE:** Storing sensitive access tokens in plain text in `atmos.yaml` is not secure and should be avoided. However, it's recommended for the `anonymous` use case or when managing multiple Artifactory stores with different access tokens. In such cases, use [`!env`](/core-concepts/stacks/yaml-functions/env) function to reference tokens securely.
 YAML function to set the access token from an environment variable.
 
 ### AWS SSM Parameter Store
@@ -90,6 +98,8 @@ stores:
     type: aws-ssm-parameter-store
     options:
       region: us-east-2
+      read_role_arn: "arn:aws:iam::123456789012:role/ssm-read-role"  # Optional role ARN for read operations
+      write_role_arn: "arn:aws:iam::123456789012:role/ssm-write-role"  # Optional role ARN for write operations
 ```
 
 <dl>
@@ -103,31 +113,49 @@ stores:
   <dd>A map of options specific to the store type. For AWS SSM Parameter Store, the following options are supported:</dd>
 
   <dt>`stores.[store_name].options.prefix (optional)`</dt>
-  <dd>A prefix path that will be added to all keys stored or retreived from SSM Parameter Store. For example if the prefix
+  <dd>A prefix path that will be added to all keys stored or retrieved from SSM Parameter Store. For example if the prefix
   is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
   would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
 
   <dt>`stores.[store_name].options.region (required)`</dt>
   <dd>The AWS region to use for the SSM Parameter Store.</dd>
+
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
+
+  <dt>`stores.[store_name].options.read_role_arn (optional)`</dt>
+  <dd>The ARN of an IAM role to assume for read operations. If specified, this role will be assumed before performing any read operations.</dd>
+
+  <dt>`stores.[store_name].options.write_role_arn (optional)`</dt>
+  <dd>The ARN of an IAM role to assume for write operations. If specified, this role will be assumed before performing any write operations.</dd>
 </dl>
 
 #### Authentication
 
 The AWS SSM Parameter Store supports the standard AWS methods for authentication and the `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables.
+`AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` environment variables. Additionally, if `read_role_arn` or `write_role_arn`
+is specified, the store will assume that role before performing the respective operations.
 
-### Azure Key Vault
-
-Azure Key Vault store allows you to store and retrieve secrets using Azure Key Vault. This implementation uses Azure SDK's DefaultAzureCredential for authentication, which supports multiple authentication methods.
+### Google Secret Manager
 
 ```yaml
 stores:
-  prod/keyvault:
-    type: azure-key-vault
+  dev/gsm:
+    type: google-secret-manager
     options:
-      vault_url: https://your-vault.vault.azure.net/
-      prefix: myapp
-      stack_delimiter: "-"
+      project_id: my-project-id
+      prefix: atmos/dev
+      credentials: !env GOOGLE_CREDENTIALS_JSON  # Optional: JSON credentials string
+
+  prod/gsm:
+    type: gsm  # Alias for google-secret-manager
+    options:
+      project_id: my-prod-project
+      prefix: atmos/prod
+      # Uses Application Default Credentials
 ```
 
 <dl>
@@ -135,101 +163,95 @@ stores:
   <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
 
   <dt>`stores.[store_name].type`</dt>
-  <dd>Must be set to `azure-key-vault`</dd>
+  <dd>Must be set to either `google-secret-manager` or its alias `gsm`</dd>
 
   <dt>`stores.[store_name].options`</dt>
-  <dd>A map of options specific to the store type. For Azure Key Vault, the following options are supported:</dd>
+  <dd>A map of options specific to the store type. For Google Secret Manager, the following options are supported:</dd>
 
-  <dt>`stores.[store_name].options.vault_url (required)`</dt>
-  <dd>The URL of your Azure Key Vault instance.</dd>
+  <dt>`stores.[store_name].options.project_id (required)`</dt>
+  <dd>The Google Cloud project ID where the secrets are stored.</dd>
 
   <dt>`stores.[store_name].options.prefix (optional)`</dt>
-  <dd>A prefix that will be added to all keys stored in Key Vault. Useful for organizing secrets by application or environment.</dd>
+  <dd>A prefix path that will be added to all keys stored or retrieved from Secret Manager. For example if the prefix
+  is `atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
+
+  <dt>`stores.[store_name].options.credentials (optional)`</dt>
+  <dd>A JSON string containing Google service account credentials. If not provided, Application Default Credentials will be used.</dd>
 
   <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
-  <dd>The delimiter to use when constructing the key name from stack components. Defaults to "-".</dd>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
 </dl>
 
 #### Authentication
 
-The Azure Key Vault store uses DefaultAzureCredential for authentication, which supports multiple authentication methods in the following order:
+Google Secret Manager supports multiple authentication methods:
 
-1. Environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)
-2. Managed Identity
-3. Azure CLI credentials
-4. Visual Studio Code credentials
-5. Azure PowerShell credentials
+1. **Application Default Credentials (ADC)**: If no credentials are specified, the store will use ADC which can be set up by:
+   - Running `gcloud auth application-default login` for local development
+   - Using service account attached to GCP resources (like GCE instances)
+   - Setting the `GOOGLE_APPLICATION_CREDENTIALS` environment variable pointing to a service account key file
 
-For local development, using Azure CLI credentials is recommended:
+2. **Direct Credentials**: You can provide service account credentials directly in the configuration using the `credentials` option.
+   This is not recommended for production use. Instead, use the `!env` function to read credentials from an environment variable:
+   ```yaml
+   credentials: !env GOOGLE_CREDENTIALS_JSON
+   ```
 
-```bash
-az login
-```
+3. **Workload Identity**: When running in GCP, you can use Workload Identity which automatically handles authentication
+   between GCP services.
 
-For production environments, using Managed Identity or service principal credentials (environment variables) is recommended.
+### Redis
 
-#### Usage Examples
-
-1. Basic usage storing a database password:
 ```yaml
-components:
-  terraform:
-    database:
-      vars:
-        admin_password: !store keyvault/prod database admin_password
+stores:
+  dev/redis:
+    type: redis
+    options:
+      url: redis://localhost:6379
+
+  stage/redis:
+    type: redis
+    options:
+      url: !env ATMOS_STAGE_REDIS_URL
+
+  prod/redis:
+    type: redis
+    # The ATMOS_REDIS_URL environment variable will be used if no URL is specified in the options
 ```
 
-2. Using with component outputs:
-```yaml
-components:
-  terraform:
-    database:
-      after:
-        - command: atmos store set
-          name: keyvault/prod
-          outputs:
-            db_host: database_hostname
-            db_port: database_port
-```
+<dl>
+  <dt>`stores.[store_name]`</dt>
+  <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
 
-#### Key Name Construction
+  <dt>`stores.[store_name].type`</dt>
+  <dd>Must be set to `redis`</dd>
 
-The Azure Key Vault store constructs secret names using the following format:
-```
-{prefix}-{stack}-{component}-{key}
-```
+  <dt>`stores.[store_name].options`</dt>
+  <dd>A map of options specific to the store type. For Redis, the following options are supported:</dd>
 
-For example, with these parameters:
-- prefix: "myapp"
-- stack: "prod-us-west"
-- component: "database/postgres"
-- key: "password"
+  <dt>`stores.[store_name].options.prefix (optional)`</dt>
+  <dd>A prefix path that will be added to all keys stored or retreived from Redis. For example if the prefix
+  is `/atmos/infra-live/`, and if the stack is `plat-us2-dev`, the component is `vpc`, and the key is `vpc_id`, the full path
+  would be `/atmos/infra-live/plat-us2-dev/vpc/vpc_id`.</dd>
 
-The resulting Key Vault secret name would be:
-```
-myapp-prod-us-west-database-postgres-password
-```
+  <dt>`stores.[store_name].options.url`</dt>
+  <dd>
+    The URL of the Redis instance. This is optional and the `ATMOS_REDIS_URL` environment variable will be used if no
+    URL is specified in the options.
+  </dd>
 
-Note: Azure Key Vault secret names:
-- Can only contain alphanumeric characters and dashes
-- Are case-insensitive
-- Must be 1-127 characters long
+  <dt>`stores.[store_name].options.stack_delimiter (optional)`</dt>
+  <dd>
+    The delimiter that atmos is using to delimit stacks in the key path. This defaults to `-`. This is used to build the
+    key path for the store.
+  </dd>
+</dl>
 
-The store automatically:
-- Converts all characters to lowercase
-- Replaces invalid characters with dashes
-- Trims leading and trailing dashes
+#### Authentication
 
-#### Error Handling
-
-The store provides detailed error messages for common scenarios:
-
-- Missing or invalid credentials:
-```
-failed to set secret 'myapp-dev-component-key': access denied. Please check your Azure credentials and permissions
-```
-
-- Non-existent secret:
-```
-secret 'myapp-dev-component-key' not found
-```
+The Redis store supports authentication via the URL in options or via the `ATMOS_REDIS_URL` environment variable. The
+URL format is described in the Redis [docs](https://redis.github.io/lettuce/user-guide/connecting-redis/).

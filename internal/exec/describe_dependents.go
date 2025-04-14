@@ -2,9 +2,10 @@ package exec
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"reflect"
 	"strings"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -90,17 +91,16 @@ func ExecuteDescribeDependents(
 	stack string,
 	includeSettings bool,
 ) ([]schema.Dependent, error) {
-
 	dependents := []schema.Dependent{}
 	var ok bool
 
 	// Get all stacks with all components
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true)
+	providedComponentSection, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		return nil, err
 	}

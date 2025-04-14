@@ -1,15 +1,13 @@
 package list
 
 import (
-	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/samber/lo"
 )
 
 // FilterAndListStacks filters stacks by the given component
-func FilterAndListStacks(stacksMap map[string]any, component string) (string, error) {
+func FilterAndListStacks(stacksMap map[string]any, component string) ([]string, error) {
 	if component != "" {
 		// Filter stacks by component
 		filteredStacks := []string{}
@@ -32,14 +30,14 @@ func FilterAndListStacks(stacksMap map[string]any, component string) (string, er
 		}
 
 		if len(filteredStacks) == 0 {
-			return fmt.Sprintf("No stacks found for component '%s'"+"\n", component), nil
+			return nil, nil
 		}
 		sort.Strings(filteredStacks)
-		return strings.Join(filteredStacks, "\n") + "\n", nil
+		return filteredStacks, nil
 	}
 
 	// List all stacks
 	stacks := lo.Keys(stacksMap)
 	sort.Strings(stacks)
-	return strings.Join(stacks, "\n") + "\n", nil
+	return stacks, nil
 }

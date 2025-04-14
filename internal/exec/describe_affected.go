@@ -33,6 +33,9 @@ type DescribeAffectedCmdArgs struct {
 	Upload                      bool
 	Stack                       string
 	Query                       string
+	ProcessTemplates            bool
+	ProcessYamlFunctions        bool
+	Skip                        []string
 }
 
 func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
@@ -159,6 +162,21 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		return DescribeAffectedCmdArgs{}, err
 	}
 
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
 	result := DescribeAffectedCmdArgs{
 		CLIConfig:                   atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
@@ -177,6 +195,9 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 		Upload:                      upload,
 		Stack:                       stack,
 		Query:                       query,
+		ProcessTemplates:            processTemplates,
+		ProcessYamlFunctions:        processYamlFunctions,
+		Skip:                        skip,
 	}
 
 	return result, nil
@@ -201,6 +222,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	} else if a.CloneTargetRef {
 		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefClone(
@@ -213,6 +237,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	} else {
 		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRefCheckout(
@@ -223,6 +250,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
 		)
 	}
 

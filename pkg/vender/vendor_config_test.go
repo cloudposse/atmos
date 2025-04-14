@@ -4,7 +4,6 @@ package vender
 
 import (
 	"os"
-
 	"path/filepath"
 	"testing"
 
@@ -30,7 +29,7 @@ func TestVendorConfigScenarios(t *testing.T) {
 
 	// Setup test component directory
 	componentPath := filepath.Join(testDir, "components", "terraform", "myapp")
-	err := os.MkdirAll(componentPath, 0755)
+	err := os.MkdirAll(componentPath, 0o755)
 	assert.Nil(t, err)
 
 	// Test Case 1: vendor.yaml exists and component is defined in it
@@ -49,11 +48,11 @@ spec:
         - "**/*.tf"
 `
 		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
-		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0644)
+		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0o644)
 		assert.Nil(t, err)
 
 		// Test vendoring with component flag
-		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(atmosConfig, vendorYamlPath, true)
+		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
 		assert.True(t, exists)
 		assert.NotEmpty(t, configFile)
@@ -86,11 +85,11 @@ spec:
     version: 0.25.0
 `
 		componentYamlPath := filepath.Join(componentPath, "component.yaml")
-		err := os.WriteFile(componentYamlPath, []byte(componentYaml), 0644)
+		err := os.WriteFile(componentYamlPath, []byte(componentYaml), 0o644)
 		assert.Nil(t, err)
 
 		// Test component vendoring
-		componentConfig, compPath, err := e.ReadAndProcessComponentVendorConfigFile(atmosConfig, "myapp", "terraform")
+		componentConfig, compPath, err := e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "myapp", "terraform")
 		assert.Nil(t, err)
 		assert.NotNil(t, componentConfig)
 		assert.Equal(t, componentPath, compPath)
@@ -104,12 +103,12 @@ spec:
 	t.Run("no vendor.yaml or component.yaml", func(t *testing.T) {
 		// Test vendoring with component flag
 		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
-		_, exists, _, err := e.ReadAndProcessVendorConfigFile(atmosConfig, vendorYamlPath, true)
+		_, exists, _, err := e.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
 		assert.False(t, exists)
 
 		// Test component vendoring
-		_, _, err = e.ReadAndProcessComponentVendorConfigFile(atmosConfig, "myapp", "terraform")
+		_, _, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "myapp", "terraform")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "does not exist")
 	})
@@ -128,11 +127,11 @@ spec:
       version: 0.25.0
 `
 		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
-		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0644)
+		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0o644)
 		assert.Nil(t, err)
 
 		// Test vendoring without component flag
-		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(atmosConfig, vendorYamlPath, true)
+		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
 		assert.True(t, exists)
 		assert.NotEmpty(t, configFile)

@@ -24,6 +24,21 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return err
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		return err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
@@ -40,7 +55,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true)
+	info, err = ProcessStacks(atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		return err
 	}
@@ -58,7 +73,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	u.LogDebug(atmosConfig, "Component backend config:\n\n")
+	u.LogDebug("Component backend config:\n\n")
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err = u.PrintAsJSONToFileDescriptor(atmosConfig, componentBackendConfig)
@@ -75,7 +90,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Write backend config to file
-	var backendFilePath = filepath.Join(
+	backendFilePath := filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Terraform.BasePath,
 		info.ComponentFolderPrefix,
@@ -83,11 +98,11 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		"backend.tf.json",
 	)
 
-	u.LogDebug(atmosConfig, "\nWriting the backend config to file:")
-	u.LogDebug(atmosConfig, backendFilePath)
+	u.LogDebug("\nWriting the backend config to file:")
+	u.LogDebug(backendFilePath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0644)
+		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0o644)
 		if err != nil {
 			return err
 		}

@@ -1,0 +1,23 @@
+tests:
+  - name: double dash should work
+    enabled: true
+    description: "Validate atmos custom command greet runs with argument provided."
+    workdir: "fixtures/scenarios/custom-command"
+    command: "atmos"
+    args:
+      - "echo"
+      - "Name"
+      - "--"
+      - "-this"
+      - "--is"
+      - "trailing"
+      - "-"
+      - "arg"
+    expect:
+      diff: []
+      stdout:
+        - "Cobra Args: \\[Name\\]"
+        - "Trailing Args: \\[-this --is trailing - arg\\]"
+      stderr:
+        - "^$"
+      exit_code: 0

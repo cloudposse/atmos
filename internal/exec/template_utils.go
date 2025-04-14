@@ -31,7 +31,7 @@ func ProcessTmpl(
 	ctx := context.TODO()
 
 	// Add Gomplate, Sprig and Atmos template functions
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(schema.AtmosConfiguration{}, ctx, &d))
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), sprig.FuncMap(), FuncMap(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -62,7 +62,8 @@ func ProcessTmpl(
 
 // ProcessTmplWithDatasources parses and executes Go templates with datasources
 func ProcessTmplWithDatasources(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	settingsSection schema.Settings,
 	tmplName string,
 	tmplValue string,
@@ -70,11 +71,11 @@ func ProcessTmplWithDatasources(
 	ignoreMissingTemplateValues bool,
 ) (string, error) {
 	if !atmosConfig.Templates.Settings.Enabled {
-		u.LogTrace(atmosConfig, fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabled in 'atmos.yaml'", tmplName))
+		u.LogTrace(fmt.Sprintf("ProcessTmplWithDatasources: not processing template '%s' since templating is disabled in 'atmos.yaml'", tmplName))
 		return tmplValue, nil
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processing template '%s'", tmplName))
+	u.LogTrace(fmt.Sprintf("ProcessTmplWithDatasources(): processing template '%s'", tmplName))
 
 	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
 	var cliConfigTemplateSettingsMap map[string]any
@@ -91,7 +92,7 @@ func ProcessTmplWithDatasources(
 		return "", err
 	}
 
-	templateSettingsMerged, err := merge.Merge(atmosConfig, []map[string]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
+	templateSettingsMerged, err := merge.Merge(*atmosConfig, []map[string]any{cliConfigTemplateSettingsMap, stackManifestTemplateSettingsMap})
 	if err != nil {
 		return "", err
 	}
@@ -109,7 +110,7 @@ func ProcessTmplWithDatasources(
 	result := tmplValue
 
 	for i := 0; i < evaluations; i++ {
-		u.LogTrace(atmosConfig, fmt.Sprintf("ProcessTmplWithDatasources(): template '%s' - evaluation %d", tmplName, i+1))
+		u.LogTrace(fmt.Sprintf("ProcessTmplWithDatasources(): template '%s' - evaluation %d", tmplName, i+1))
 
 		d := data.Data{}
 
@@ -145,7 +146,7 @@ func ProcessTmplWithDatasources(
 		}
 
 		// Atmos functions
-		funcs = lo.Assign(funcs, FuncMap(atmosConfig, context.TODO(), &d))
+		funcs = lo.Assign(funcs, FuncMap(atmosConfig, configAndStacksInfo, context.TODO(), &d))
 
 		// Process and add environment variables
 		for k, v := range templateSettings.Env {
@@ -229,7 +230,7 @@ func ProcessTmplWithDatasources(
 		}
 	}
 
-	u.LogTrace(atmosConfig, fmt.Sprintf("ProcessTmplWithDatasources(): processed template '%s'", tmplName))
+	u.LogTrace(fmt.Sprintf("ProcessTmplWithDatasources(): processed template '%s'", tmplName))
 
 	return result, nil
 }

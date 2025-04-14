@@ -108,6 +108,11 @@ atmos describe affected --include-settings=true
 atmos describe affected --stack=plat-ue2-prod
 atmos describe affected --upload=true
 atmos describe affected --query <yq-expression>
+atmos describe affected --process-templates=false
+atmos describe affected --process-functions=false
+atmos describe affected --skip=terraform.output
+atmos describe affected --skip=terraform.output --skip=include
+atmos describe affected --skip=include,eval
 ```
 
 # Example Output
@@ -212,6 +217,9 @@ Affected components and stacks:
 | `--include-settings`               | Include the `settings` section for each affected component.<br/>`atmos describe affected --include-settings=true`                                                                                                                                                                                                                                                                                            | no       |
 | `--upload`                         | Upload the affected components and stacks to a specified HTTP endpoint.<br/><br/>`atmos describe affected --upload=true`<br/><br/>Atmos will perform an HTTP POST request<br/>to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,<br/>where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,<br/>and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable. | no       |
 | `--query`                          | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe affected --query=<yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                                                                                                                                                     | no       |
+| `--process-templates`              | Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe affected --process-templates=false`                                                                                                                                                                            |          | no       |
+| `--process-functions`              | Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe affected --process-functions=false`                                                                                                                                                                      |          | no       |
+| `--skip`                           | Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe affected --skip=terraform.output --skip=include`<br/>`atmos describe affected --skip=terraform.output,include`                                                  |          | no       |
 
 ## Output
 

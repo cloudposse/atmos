@@ -61,7 +61,7 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		}
 	}
 
-	return "", fmt.Errorf("Error: Invalid log level '%s'. Valid options are: %v", logLevel, validLevels)
+	return "", fmt.Errorf("Invalid log level `%s`. Valid options are: %v", logLevel, validLevels)
 }
 
 func (l *Logger) log(logColor *color.Color, message string) {
@@ -77,7 +77,7 @@ func (l *Logger) log(logColor *color.Color, message string) {
 				color.Red("%s\n", err)
 			}
 		} else {
-			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+			f, err := os.OpenFile(l.File, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
 			if err != nil {
 				color.Red("%s\n", err)
 				return

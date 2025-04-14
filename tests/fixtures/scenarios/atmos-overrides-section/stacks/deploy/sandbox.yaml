@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: sandbox
+
+import:
+  - teams/team1
+  - teams/team2

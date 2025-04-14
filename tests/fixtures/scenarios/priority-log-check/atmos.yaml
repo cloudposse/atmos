@@ -1,0 +1,8 @@
+logs:
+  level: Info
+  file: /dev/stderr
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"

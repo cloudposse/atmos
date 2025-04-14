@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -23,7 +22,7 @@ var ValidateStacksCmd = &cobra.Command{
 
 		err := e.ExecuteValidateStacksCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
 		u.PrintMessageInColor("all stacks validated successfully\n", theme.Colors.Success)
@@ -33,7 +32,7 @@ var ValidateStacksCmd = &cobra.Command{
 func init() {
 	ValidateStacksCmd.DisableFlagParsing = false
 
-	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "atmos validate stacks --schemas-atmos-manifest <path-to-atmos-json-schema>")
+	ValidateStacksCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
 
 	validateCmd.AddCommand(ValidateStacksCmd)
 }

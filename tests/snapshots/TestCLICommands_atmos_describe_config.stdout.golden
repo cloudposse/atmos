@@ -11,6 +11,9 @@
       "command": "",
       "shell": {
         "prompt": ""
+      },
+      "init": {
+        "pass_vars": false
       }
     },
     "helmfile": {
@@ -34,7 +37,11 @@
     "name_template": ""
   },
   "workflows": {
-    "base_path": ""
+    "base_path": "",
+    "list": {
+      "format": "",
+      "columns": null
+    }
   },
   "logs": {
     "file": "/dev/stderr",
@@ -42,12 +49,6 @@
   },
   "integrations": {
     "atlantis": {}
-  },
-  "schemas": {
-    "jsonschema": {},
-    "cue": {},
-    "opa": {},
-    "atmos": {}
   },
   "templates": {
     "settings": {
@@ -113,21 +114,30 @@
       "link": {},
       "link_text": {}
     },
-    "InjectGithubToken": true
+    "InjectGithubToken": true,
+    "GithubToken": "",
+    "AtmosGithubToken": "",
+    "InjectBitbucketToken": false,
+    "BitbucketToken": "",
+    "AtmosBitbucketToken": "",
+    "BitbucketUsername": "",
+    "InjectGitlabToken": false,
+    "AtmosGitlabToken": "",
+    "GitlabToken": ""
   },
   "vendor": {
     "base_path": ""
   },
   "initialized": true,
-  "stacksBaseAbsolutePath": "/Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/stacks",
+  "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
-    "/Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/stacks/deploy/**/*"
+    "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"
   ],
   "excludeStackAbsolutePaths": [
-    "/Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/stacks/**/_defaults.yaml"
+    "/absolute/path/to/repo/examples/demo-stacks/stacks/**/_defaults.yaml"
   ],
-  "terraformDirAbsolutePath": "/Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks/components/terraform",
-  "helmfileDirAbsolutePath": "/Users/erik/Dev/cloudposse/tools/atmos/examples/demo-stacks",
+  "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
+  "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "Check": {
@@ -140,5 +150,7 @@
     "editorconfig": {
       "color": true
     }
-  }
+  },
+  "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks",
+  "import": null
 }

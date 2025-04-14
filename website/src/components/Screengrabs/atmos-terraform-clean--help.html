@@ -8,7 +8,7 @@
 
 
 'atmos terraform clean' command deletes the following folders and files from the component's directory:
-
+ - delete all the Terraform state files and directories for all components and stacks
  - '.terraform' folder
  - folder that the 'TF_DATA_DIR' ENV var points to
  - '.terraform.lock.hcl' file
@@ -17,7 +17,7 @@
  - generated 'backend.tf.json' file
 
 Usage: atmos terraform clean &lt;component&gt; -s &lt;stack&gt; &lt;flags&gt;
-Use '--everything' flag to delete all the files and folders mentioned above. '--force' to delete the files without confirmation.
+Use '--force' to delete the files without confirmation.
 Use '--skip-lock-file' flag to skip deleting the lock file.
 
 For more details refer to https://atmos.tools/cli/commands/terraform/clean

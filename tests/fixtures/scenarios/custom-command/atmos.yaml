@@ -1,0 +1,23 @@
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+# # Use positional arguments with default values
+- name: echo
+  description: "Displays a args before and after double dash."
+  arguments:
+    - name: name
+      description: >-
+          Enter your string as an argument
+      required: true
+      default: before double dash
+  steps:
+    - "echo Cobra Args: [{{ .Arguments.name }}]"
+    - "echo Trailing Args: [{{ .TrailingArgs }}]"

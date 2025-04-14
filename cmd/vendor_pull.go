@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -22,17 +21,19 @@ var vendorPullCmd = &cobra.Command{
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
-			u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }
 
 func init() {
-	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component: atmos vendor pull --component <component>")
-	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack: atmos vendor pull --stack <stack>")
-	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "atmos vendor pull --component <component> --type=terraform|helmfile")
-	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "atmos vendor pull --component <component> --dry-run")
-	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags: atmos vendor pull --tags=dev,test")
-	vendorPullCmd.PersistentFlags().Bool("everything", false, "Vendor all components: atmos vendor pull --everything")
+	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
+	vendorPullCmd.RegisterFlagCompletionFunc("component", ComponentsArgCompletion)
+	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
+	AddStackCompletion(vendorPullCmd)
+	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "The type of the vendor (terraform or helmfile).")
+	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
+	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
+	vendorPullCmd.PersistentFlags().Bool("everything", false, "Vendor all components")
 	vendorCmd.AddCommand(vendorPullCmd)
 }

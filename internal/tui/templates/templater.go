@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -71,6 +73,28 @@ func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.
 	return filtered
 }
 
+func renderHelpMarkdown(cmd *cobra.Command) string {
+	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	if err != nil {
+		return ""
+	}
+	commandPath := cmd.CommandPath()
+	if cmd.HasSubCommands() {
+		commandPath += " [subcommand]"
+	}
+	help := fmt.Sprintf("Use `%s --help` for more information about a command.", commandPath)
+	var data string
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		data, err = render.Render(help)
+	} else {
+		data, err = render.RenderAscii(help)
+	}
+	if err == nil {
+		return data
+	}
+	return ""
+}
+
 func isNativeCommandsAvailable(cmds []*cobra.Command) bool {
 	for _, cmd := range cmds {
 		if cmd.Annotations["nativeCommand"] == "true" {
@@ -82,6 +106,27 @@ func isNativeCommandsAvailable(cmds []*cobra.Command) bool {
 
 func isAliasesPresent(cmds []*cobra.Command) bool {
 	return len(filterCommands(cmds, true)) > 0
+}
+
+func headingStyle(s string) string {
+	if theme.Styles.Help.Headings != nil {
+		ch := theme.Styles.Help.Headings
+		return ch.Sprint(s)
+	}
+	return s
+}
+
+func renderMarkdown(example string) string {
+	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	if err != nil {
+		return ""
+	}
+
+	data, err := render.Render(example)
+	if err == nil {
+		return data
+	}
+	return ""
 }
 
 // formatCommands formats a slice of cobra commands with proper styling
@@ -113,9 +158,10 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				continue
 			}
 		case "subcommandAliases":
-			if cmd.Annotations["nativeCommand"] == "true" {
-				continue
-			}
+			// if cmd.Annotations["nativeCommand"] == "true" {
+			// 	continue
+			// }
+
 			if cmd.IsAvailableCommand() || cmd.Name() == "help" {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
@@ -167,16 +213,16 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	}
 	t := &Templater{
 		UsageTemplate: GenerateFromBaseTemplate([]HelpTemplateSections{
+			LongDescription,
 			Usage,
 			Aliases,
-			Examples,
 			AvailableCommands,
 			NativeCommands,
 			SubCommandAliases,
 			Flags,
 			GlobalFlags,
 			AdditionalHelpTopics,
-			DoubleDashHelp,
+			Examples,
 			Footer,
 		}),
 	}
@@ -185,6 +231,10 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cobra.AddTemplateFunc("isAliasesPresent", isAliasesPresent)
 	cobra.AddTemplateFunc("isNativeCommandsAvailable", isNativeCommandsAvailable)
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
+	cobra.AddTemplateFunc("renderMarkdown", renderMarkdown)
+	cobra.AddTemplateFunc("renderHelpMarkdown", renderHelpMarkdown)
+	cobra.AddTemplateFunc("HeadingStyle", headingStyle)
+
 	return nil
 }
 
@@ -217,9 +267,18 @@ func WrappedFlagUsages(f *pflag.FlagSet) string {
 
 	printer.maxFlagLen = calculateMaxFlagLength(f)
 
+	var doubleDashFlag *pflag.Flag
 	f.VisitAll(func(flag *pflag.Flag) {
+		// We want double dash hint at the last
+		if flag.Name == "" {
+			doubleDashFlag = flag
+			return
+		}
 		printer.PrintHelpFlag(flag)
 	})
+	if doubleDashFlag != nil {
+		printer.PrintHelpFlag(doubleDashFlag)
+	}
 
 	return builder.String()
 }

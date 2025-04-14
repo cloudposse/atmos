@@ -23,6 +23,21 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return err
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		return err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
@@ -39,7 +54,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true)
+	info, err = ProcessStacks(atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		return err
 	}
@@ -59,7 +74,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Print the component variables
-	u.LogDebug(atmosConfig, fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+	u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
@@ -69,11 +84,11 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Write the variables to file
-	u.LogDebug(atmosConfig, "Writing the variables to file:")
-	u.LogDebug(atmosConfig, varFilePath)
+	u.LogDebug("Writing the variables to file:")
+	u.LogDebug(varFilePath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0644)
+		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
 		if err != nil {
 			return err
 		}

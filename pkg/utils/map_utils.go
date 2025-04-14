@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/samber/lo"
@@ -34,7 +35,15 @@ func SortMapByKeysAndValuesUniq(m map[string][]string) map[string][]string {
 	return res
 }
 
-func MapOfInterfacesToMapOfStrings(input map[any]any) map[string]any {
+// MapOfInterfacesToMapOfStrings converts map[string]any to map[string]string
+func MapOfInterfacesToMapOfStrings(input map[string]any) map[string]string {
+	return lo.MapEntries(input, func(key string, value any) (string, string) {
+		return key, fmt.Sprintf("%v", value)
+	})
+}
+
+// MapOfInterfaceKeysToMapOfStringKeys converts map[any]any to map[string]any
+func MapOfInterfaceKeysToMapOfStringKeys(input map[any]any) map[string]any {
 	converted := make(map[string]any, len(input))
 	for key, value := range input {
 		strKey, ok := key.(string)

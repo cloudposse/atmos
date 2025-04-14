@@ -14,17 +14,16 @@ func processTagExec(
 	input string,
 	currentStack string,
 ) any {
-	u.LogTrace(atmosConfig, fmt.Sprintf("Executing Atmos YAML function: %s", input))
+	u.LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
 
 	str, err := getStringAfterTag(input, config.AtmosYamlFuncExec)
-
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	res, err := ExecuteShellAndReturnOutput(atmosConfig, str, input, ".", nil, false)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.LogErrorAndExit(err)
 	}
 
 	var decoded any

@@ -1,6 +1,0 @@
-{
-    "yaml.customTags": [
-        "!not scalar"
-    ],
-    "[mdx]": { "editor.defaultFormatter": null, "editor.formatOnSave": false },
-}

@@ -1,0 +1,34 @@
+tests:
+  - name: completion for component should be suggested
+    enabled: true
+    snapshot: true
+    description: "Test tab completions for component"
+    workdir: "fixtures/scenarios/completions"
+    command: "atmos"
+    args:
+      - "__completeNoDesc"
+      - "terraform"
+      - "plan"
+      - "\"\""
+    expect:
+      diff: []
+      stdout:
+        - "station"
+      exit_code: 0
+  - name: completion for stacks should be suggested
+    enabled: true
+    snapshot: true
+    description: "Test tab completions for stacks"
+    workdir: "fixtures/scenarios/completions"
+    command: "atmos"
+    args:
+      - "__completeNoDesc"
+      - "terraform"
+      - "plan"
+      - "station"
+      - "--stack"
+    expect:
+      diff: []
+      stdout:
+        - "dev"
+      exit_code: 0

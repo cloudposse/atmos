@@ -2,11 +2,10 @@ package utils
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"strings"
-
-	"encoding/json"
 
 	"github.com/alecthomas/chroma"
 	"github.com/alecthomas/chroma/formatters"

@@ -19,7 +19,8 @@ var helmfileCmd = &cobra.Command{
 func init() {
 	// https://github.com/spf13/cobra/issues/739
 	helmfileCmd.DisableFlagParsing = true
-	helmfileCmd.PersistentFlags().StringP("stack", "s", "", "atmos helmfile <helmfile_command> <component> -s <stack>")
+	helmfileCmd.PersistentFlags().Bool("", false, doubleDashHint)
+	AddStackCompletion(helmfileCmd)
 	RootCmd.AddCommand(helmfileCmd)
 }
 
@@ -30,6 +31,6 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
 	err := e.ExecuteHelmfile(info)
 	if err != nil {
-		u.LogErrorAndExit(atmosConfig, err)
+		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 }
