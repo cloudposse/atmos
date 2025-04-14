@@ -6,7 +6,6 @@ description: Read a value from a store
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
-import Terminal from '@site/src/components/Terminal'
 
 <Intro>
 The `atmos.Store` template function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores)
@@ -15,10 +14,11 @@ The `atmos.Store` template function allows reading the values from a remote [sto
 
 ## Usage
 
-The `atmos.Store` template function is called with four parameters:
+The `atmos.Store` template function accepts four parameters:
 
 ```yaml
-foo: '{{ (atmos.Store "<store_name>" "<stack>" "<component>" "<key>").<attribute> }}'
+foo: '{{ atmos.Store "<store_name>" "<stack>" "<component>" "<key>" }}'
+bar: '{{ (atmos.Store "<store_name>" "<stack>" "<component>" "<key>").<attribute> }}'
 ```
 
 ## Arguments
@@ -108,50 +108,34 @@ tenant `net` (instead of `plat`):
 
 ## Examples
 
-The following configurations show different ways of using the `atmos.Store` template function to read values from
-different Atmos sections directly in Atmos stack manifests, including the outputs of other
-(already provisioned) components.
+The following configuration shows different ways of using the `atmos.Store` template function to read values from
+a Redis store:
 
 <File>
 ```yaml
-# Global `settings` section
-# It will be added and deep-merged to the `settings` section of all components
-settings:
-  test: true
+vars:
+  stage: nonprod
 
 components:
   terraform:
-    test:
-      metadata:
-        # Point to the Terraform/OpenTofu component
-        component: "test"
+    component-1:
       vars:
-        name: "test"
-
-    test1:
-      metadata:
-        # Point to the Terraform/OpenTofu component
-        component: "test1"
-      vars:
-        name: "test1"
-
-    test2:
-      metadata:
-        # Point to the Terraform/OpenTofu component
-        component: "test2"
-      vars:
-        name: "test2"
-        # Use the `atmos.Store` function to get the outputs of the Atmos component `test1`
-        # The `test1` component must be already provisioned and its outputs stored in the Terraform/OpenTofu state
-        # Atmos will execute `terraform output` on the `test1` component in the same stack to read its outputs
-        test1_id: '{{ (atmos.Store "test1" .stack).outputs.test1_id }}'
-        tags:
-          # Get the `settings.test` field from the `test` component in the same stack
-          test: '{{ (atmos.Store "test" .stack).settings.test }}'
-          # Get the `metadata.component` field from the `test` component in the same stack
-          test_terraform_component: '{{ (atmos.Store "test" .stack).metadata.component }}'
-          # Get the `vars.name` field from the `test1` component in the same stack
-          test1_name: '{{ (atmos.Store "test1" .stack).vars.name }}'
+        # Use the static (hardcoded) stack name `prod`
+        cidr: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
+        # Using the template variable `.stack` allows specifying the current stack name `nonprod` w/o hardcoding it
+        c_d: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
+        # Use the Atmos section `.vars.stage` for the stack name
+        c_e: '{{ (atmos.Store "redis" .vars.stage "c2" "map").c.e }}'
+        # The `!template` YAML function converts the JSON-encoded string into a map
+        c: !template '{{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }}'
+        lambda_environment:
+          # Example of using the `atmos.Store` template function in a multi-line string
+          ENGINE_CONFIG_JSON: |
+            {
+              "vpc_cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" }},
+              "c": {{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }},
+              "c_e": {{ (atmos.Store "redis" .stack "c2" "map").c.e }}
+            }
 ```
 </File>
 
