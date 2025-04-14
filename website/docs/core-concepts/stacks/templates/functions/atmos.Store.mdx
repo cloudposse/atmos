@@ -6,6 +6,7 @@ description: Read a value from a store
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
 
 <Intro>
 The `atmos.Store` template function allows reading the values from a remote [store](/core-concepts/projects/configuration/stores)
@@ -117,6 +118,46 @@ sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
 The following configuration shows different ways of using the `atmos.Store` template function to read values from
 a Redis store:
 
+### Configure the Redis Store in `atmos.yaml`
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# `Go` templates in Atmos manifests
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
+stores:
+  redis:
+    type: redis
+    # The ATMOS_REDIS_URL environment variable will be used if
+    # no URL is specified in the options
+```
+</File>
+
+### Configure Atmos Stack and Component
+
 <File>
 ```yaml
 vars:
@@ -144,6 +185,28 @@ components:
             }
 ```
 </File>
+
+### Get Values from the Store and Assign to Component Variables
+
+<Terminal title="atmos describe component component-1 -s nonprod">
+```yaml
+vars:
+  c:
+    d: d3
+    e: e4
+  c_d: d3
+  c_e: e4
+  cidr: 172.16.0.0/16
+  lambda_environment:
+    ENGINE_CONFIG_JSON: |
+      {
+        "vpc_cidr": 172.16.0.0/16,
+        "c": {"d":"d3","e":"e4"},
+        "c_e": e4
+      }
+  stage: nonprod
+```
+</Terminal>
 
 ## Caching the result of `atmos.Store` function
 
