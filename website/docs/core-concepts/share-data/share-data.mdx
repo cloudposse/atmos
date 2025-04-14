@@ -102,14 +102,14 @@ For more advanced examples, check out the `!terraform.output` YAML function docu
 The `atmos.Store` template function can read data from a remote store such as SSM Parameter Store, Artifactory, or Redis.
 
 For example, we can read the `vpc_id` output of the `vpc` component in the current stack from the SSM Parameter Store
-configured in `atmos.yaml` as `ssm/prod` simply by doing:
+configured in `atmos.yaml` as `ssm` simply by doing:
 
 ```yaml
 components:
   terraform:
     cluster:
       vars:
-        vpc_id: '{{ atmos.Store "ssm/prod" .stack "vpc" "vpc_id" }}'
+        vpc_id: '{{ atmos.Store "ssm" .stack "vpc" "vpc_id" }}'
 ```
 
 To access the configuration of a component in a different stack, you can specify the stack name as the second argument.
@@ -120,7 +120,7 @@ components:
   terraform:
     cluster:
       vars:
-        vpc_id: '{{ atmos.Store "ssm/prod" "staging" "vpc" "vpc_id" }}'
+        vpc_id: '{{ atmos.Store "ssm" "staging" "vpc" "vpc_id" }}'
 ```
 
 <ActionCard>
