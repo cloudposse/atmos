@@ -7,13 +7,17 @@ components:
   terraform:
     component-1:
       vars:
+        # Use the static (hardcoded) stack name `prod`
         cidr: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
+        # Using the template variable `.stack` allows specifying the current stack name `nonprod` w/o hardcoding it
         c_d: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
-        # The `!template` YAML function converts a JSON-encoded string into a map
+        # Use the Atmos section `.vars.stage` for the stack name
+        c_e: '{{ (atmos.Store "redis" .vars.stage "c2" "map").c.e }}'
+        # The `!template` YAML function converts the JSON-encoded string into a map
         c: !template '{{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }}'
         lambda_environment:
           # Example of using the `atmos.Store` template function in a multi-line string
-          ENGINE_CONFIG_JSON: >
+          ENGINE_CONFIG_JSON: |
             {
               "vpc_cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" }},
               "c": {{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }},

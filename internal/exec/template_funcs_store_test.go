@@ -168,6 +168,7 @@ c:
     d: d3
     e: e4
 c_d: d3
+c_e: e4
 cidr: 172.16.0.0/16
 lambda_environment:
     ENGINE_CONFIG_JSON: |
