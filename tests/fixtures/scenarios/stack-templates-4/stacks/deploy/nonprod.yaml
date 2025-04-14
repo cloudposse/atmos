@@ -10,8 +10,8 @@ components:
         foo: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
         bar: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
         lambda_environment:
-          ENGINE_CONFIG: >
+          ENGINE_CONFIG_JSON: >
             {
-              "foo": "{{ atmos.Store "redis" "prod" "vpc" "cidr" }}"
-              "bar": "{{ (atmos.Store "redis" .stack "c2" "map").c.e }}"
+              "vpc_cidr": "{{ atmos.Store "redis" "prod" "vpc" "cidr" }}"
+              "c_e": "{{ (atmos.Store "redis" .stack "c2" "map").c.e }}"
             }
