@@ -208,9 +208,13 @@ vars:
 ```
 </Terminal>
 
+## Using `atmos.Store` function in YAML multi-line strings
+
 ## Caching the result of `atmos.Store` function
 
-Atmos caches (in memory) the results of `atmos.Store` template function execution.
+Atmos caches (in memory) the results of `atmos.Store` template functions when executing any Atmos command that processes stacks
+(e.g. `atmos describe component` or `atmos terraform apply`).
+
 If you call the function for the same store, stack, component and key more than once, the first call will produce the result
 and cache it, and all the consecutive calls will just use the cached data. This is useful when you use the
 `atmos.Store` function for the same store, stack, component and key in multiple places in Atmos stack manifests.
