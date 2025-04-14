@@ -31,9 +31,9 @@ func (m *MockKeyVaultClient) DeleteSecret(ctx context.Context, name string, opti
 	return args.Get(0).(azsecrets.DeleteSecretResponse), args.Error(1)
 }
 
-func (m *MockKeyVaultClient) NewListSecretsPager(options *azsecrets.ListSecretsOptions) *runtime.Pager[azsecrets.ListSecretsResponse] {
+func (m *MockKeyVaultClient) ListSecrets(options *azsecrets.ListSecretsOptions) *runtime.Pager[azsecrets.SecretProperties] {
 	args := m.Called(options)
-	return args.Get(0).(*runtime.Pager[azsecrets.ListSecretsResponse])
+	return args.Get(0).(*runtime.Pager[azsecrets.SecretProperties])
 }
 
 func TestNewKeyVaultStore(t *testing.T) {
@@ -449,16 +449,12 @@ func TestKeyVaultStore_List(t *testing.T) {
 			mockFn: func() {
 				// Mock the pager response
 				pager := &mockPager{
-					pages: []azsecrets.ListSecretsResponse{
-						{
-							Value: []*azsecrets.SecretProperties{
-								{ID: stringPtr("prefix-dev-app-secret1")},
-								{ID: stringPtr("prefix-dev-app-secret2")},
-							},
-						},
+					pages: []azsecrets.SecretProperties{
+						{ID: stringPtr("prefix-dev-app-secret1")},
+						{ID: stringPtr("prefix-dev-app-secret2")},
 					},
 				}
-				mockClient.On("NewListSecretsPager", mock.Anything).Return(pager)
+				mockClient.On("ListSecrets", mock.Anything).Return(pager)
 			},
 			want:    []string{"secret1", "secret2"},
 			wantErr: false,
@@ -485,7 +481,7 @@ func TestKeyVaultStore_List(t *testing.T) {
 
 // Add a mock pager implementation for testing List operation
 type mockPager struct {
-	pages    []azsecrets.ListSecretsResponse
+	pages    []azsecrets.SecretProperties
 	current  int
 	finished bool
 }
@@ -494,10 +490,10 @@ func (p *mockPager) More() bool {
 	return !p.finished && p.current < len(p.pages)
 }
 
-func (p *mockPager) NextPage(context.Context) (azsecrets.ListSecretsResponse, error) {
+func (p *mockPager) NextPage(context.Context) (azsecrets.SecretProperties, error) {
 	if p.current >= len(p.pages) {
 		p.finished = true
-		return azsecrets.ListSecretsResponse{}, nil
+		return azsecrets.SecretProperties{}, nil
 	}
 	page := p.pages[p.current]
 	p.current++

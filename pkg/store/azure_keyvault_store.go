@@ -20,7 +20,7 @@ type KeyVaultClient interface {
 	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
 	DeleteSecret(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error)
-	NewListSecretsPager(options *azsecrets.ListSecretsOptions) *runtime.Pager[azsecrets.ListSecretsResponse]
+	ListSecrets(options *azsecrets.ListSecretsOptions) *runtime.Pager[azsecrets.SecretProperties]
 }
 
 // KeyVaultStore is an implementation of the Store interface for Azure Key Vault.
@@ -183,20 +183,18 @@ func (s *KeyVaultStore) List(stack string, component string) ([]string, error) {
 	prefix = strings.TrimSuffix(prefix, "-")
 
 	var keys []string
-	pager := s.client.NewListSecretsPager(nil)
+	pager := s.client.ListSecrets(nil)
 	for pager.More() {
 		page, err := pager.NextPage(context.Background())
 		if err != nil {
 			return nil, fmt.Errorf("failed to list secrets: %w", err)
 		}
 
-		for _, secret := range page.Value {
-			if secret.ID != nil && strings.HasPrefix(*secret.ID, prefix) {
-				// Extract just the key name from the full secret path
-				key := strings.TrimPrefix(*secret.ID, prefix+"-")
-				if key != "" {
-					keys = append(keys, key)
-				}
+		if page.ID != nil && strings.HasPrefix(*page.ID, prefix) {
+			// Extract just the key name from the full secret path
+			key := strings.TrimPrefix(*page.ID, prefix+"-")
+			if key != "" {
+				keys = append(keys, key)
 			}
 		}
 	}
