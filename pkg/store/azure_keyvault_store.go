@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
-	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets/runtime"
 )
 
 var invalidCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9-]`)
