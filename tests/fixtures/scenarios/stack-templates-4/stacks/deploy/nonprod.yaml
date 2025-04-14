@@ -7,8 +7,8 @@ components:
   terraform:
     component-1:
       vars:
-        foo: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
-        bar: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
+        cidr: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
+        c_d: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
         c: !template '{{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }}'
         lambda_environment:
           ENGINE_CONFIG_JSON: >
