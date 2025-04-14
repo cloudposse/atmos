@@ -1073,6 +1073,8 @@ func ProcessStackConfig(
 						baseComponentVars = baseComponentConfig.BaseComponentVars
 						baseComponentSettings = baseComponentConfig.BaseComponentSettings
 						baseComponentEnv = baseComponentConfig.BaseComponentEnv
+						baseComponentProviders = baseComponentConfig.BaseComponentProviders
+						baseComponentHooks = baseComponentConfig.BaseComponentHooks
 						baseComponentTerraformCommand = baseComponentConfig.BaseComponentCommand
 						baseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 						baseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection

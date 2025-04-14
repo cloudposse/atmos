@@ -55,7 +55,9 @@ atmos describe component c1 -s test
 	cmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
 	cmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
 	cmd.PersistentFlags().String("stack", "", "Execute the workflow for the specified stack")
-
+	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
+	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
+	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
 	// Execute the command
 	cmd.SetArgs([]string{"--file", "workflows", "show-all-describe-component-commands"})
 	err = cmd.Execute()
