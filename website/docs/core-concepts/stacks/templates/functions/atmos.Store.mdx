@@ -118,7 +118,7 @@ sections in [`atmos.yaml` CLI config file](/cli/configuration/#stacks)
 The following configuration shows different ways of using the `atmos.Store` template function to read values from
 a Redis store:
 
-### Configure the Redis Store in `atmos.yaml`
+### Configure the Redis store in `atmos.yaml`
 
 <File title="atmos.yaml">
 ```yaml
@@ -156,7 +156,7 @@ stores:
 ```
 </File>
 
-### Configure Atmos Stack and Component
+### Configure Atmos stack and component
 
 <File>
 ```yaml
@@ -186,7 +186,8 @@ components:
 ```
 </File>
 
-### Get Values from the Store and Assign to Component Variables
+Execute the `atmos describe component component-1 -s nonprod` command.
+It will read the values from the store and assign to the component variables:
 
 <Terminal title="atmos describe component component-1 -s nonprod">
 ```yaml
@@ -209,6 +210,31 @@ vars:
 </Terminal>
 
 ## Using `atmos.Store` function in YAML multi-line strings
+
+You can use the `atmos.Store` template function in [YAML multi-line strings](https://yaml-multiline.info/)
+at any position inside a string:
+
+<File>
+```yaml
+components:
+  terraform:
+    component-1:
+      vars:
+        lambda_environment:
+          ENGINE_CONFIG_JSON: |
+            {
+              "vpc_cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" }},
+              "c": {{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }},
+              "c_e": {{ (atmos.Store "redis" .stack "c2" "map").c.e }}
+            }
+```
+</File>
+
+This is one of the key reasons to prefer using the `atmos.Store` template function over the
+[`!store` YAML function](/core-concepts/stacks/yaml-functions/store).
+
+The `!store` YAML function is generally recommended for its simpler, more readable syntax, and it doesn't involve `Go`
+templates — which come with their own advantages and trade-offs.
 
 ## Caching the result of `atmos.Store` function
 
