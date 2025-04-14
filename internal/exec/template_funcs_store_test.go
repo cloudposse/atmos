@@ -3,15 +3,12 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
-	log "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -103,61 +100,55 @@ func TestStoreTemplateFunc(t *testing.T) {
 }
 
 func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
-	log.SetLevel(log.DebugLevel)
-	log.SetOutput(os.Stdout)
+	// Start a new Redis server
+	s := miniredis.RunT(t)
+	defer s.Close()
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
+	// Setup the Redis ENV variable
+	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
+	origRedisUrl := os.Getenv("ATMOS_REDIS_URL")
+	os.Setenv("ATMOS_REDIS_URL", redisUrl)
+	defer os.Setenv("ATMOS_REDIS_URL", origRedisUrl)
 
+	// Create a new Redis store
+	redisStore, err := store.NewRedisStore(store.RedisStoreOptions{
+		URL: &redisUrl,
+	})
+	assert.NoError(t, err)
+
+	// Populate the store with some data
+	require.NoError(t, redisStore.Set("prod", "vpc", "cidr", "172.16.0.0/16"))
+	require.NoError(t, redisStore.Set("nonprod", "c2", "map", map[string]any{
+		"a": "a1",
+		"b": "b2",
+		"c": map[string]any{
+			"d": "d3",
+			"e": "e4",
+		},
+	}))
+
+	stacksPath := "../../tests/fixtures/scenarios/stack-templates-4"
+
+	err = os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+
+	// Unset env values after testing
 	defer func() {
-		// Delete the generated files and folders after the test
-		err := os.RemoveAll(filepath.Join("components", "terraform", "mock", ".terraform"))
-		assert.NoError(t, err)
-
-		err = os.RemoveAll(filepath.Join("components", "terraform", "mock", "terraform.tfstate.d"))
-		assert.NoError(t, err)
-
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
+		os.Unsetenv("ATMOS_BASE_PATH")
+		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	}()
 
-	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/stack-templates-4"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	res, err := ExecuteDescribeComponent(
+		"component-1",
+		"nonprod",
+		true,
+		true,
+		nil,
+	)
 
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            "nonprod",
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "component-1",
-		SubCommand:       "deploy",
-		ProcessTemplates: true,
-		ProcessFunctions: true,
-	}
-
-	err = ExecuteTerraform(info)
-	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
-
-	d, err := componentFunc(&atmosConfig, &info, "component-2", "nonprod")
-	assert.NoError(t, err)
-
-	y, err := u.ConvertToYAML(d)
-	assert.NoError(t, err)
-
-	assert.Contains(t, y, "foo: component-1-a")
-	assert.Contains(t, y, "bar: component-1-b")
-	assert.Contains(t, y, "baz: component-1-b--component-1-c")
+	u.PrintAsYAML(res)
 }

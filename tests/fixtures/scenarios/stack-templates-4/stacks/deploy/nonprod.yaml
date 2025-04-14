@@ -6,22 +6,12 @@ vars:
 components:
   terraform:
     component-1:
-      metadata:
-        component: mock
-      settings:
-        config:
-          a: component-1-a
-          b: component-1-b
-          c: component-1-c
       vars:
-        foo: "{{ .settings.config.a }}"
-        bar: "{{ .settings.config.b }}"
-        baz: "{{ .settings.config.c }}"
-
-    component-2:
-      metadata:
-        component: mock
-      vars:
-        foo: '{{ (atmos.Component "component-1" .stack).outputs.foo }}'
-        bar: '{{ (atmos.Component "component-1" .stack).outputs.bar }}'
-        baz: '{{ (atmos.Component "component-1" .stack).outputs.bar }}--{{ (atmos.Component "component-1" .stack).outputs.baz }}'
+        foo: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
+        bar: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
+        lambda_environment:
+          ENGINE_CONFIG: >
+            {
+              "foo": "{{ atmos.Store "redis" "prod" "vpc" "cidr" }}"
+              "bar": "{{ (atmos.Store "redis" .stack "c2" "map").c.e }}"
+            }
