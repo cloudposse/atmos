@@ -330,7 +330,7 @@ func TestKeyVaultStore_Get(t *testing.T) {
 			key:       "config",
 			mockFn: func() {
 				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config", mock.Anything).
-					Return("test-value", nil)
+					Return(azsecrets.GetSecretResponse{Value: stringPtr("test-value")}, nil)
 			},
 			want:    "test-value",
 			wantErr: false,
