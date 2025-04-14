@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -16,17 +17,23 @@ type MockKeyVaultClient struct {
 }
 
 func (m *MockKeyVaultClient) SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error) {
-	args := m.Called(ctx, name, parameters)
-	return azsecrets.SetSecretResponse{}, args.Error(1)
+	args := m.Called(ctx, name, parameters, options)
+	return args.Get(0).(azsecrets.SetSecretResponse), args.Error(1)
 }
 
 func (m *MockKeyVaultClient) GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
-	args := m.Called(ctx, name)
-	if args.Get(0) == nil {
-		return azsecrets.GetSecretResponse{}, args.Error(1)
-	}
-	value := args.String(0)
-	return azsecrets.GetSecretResponse{Value: value}, args.Error(1)
+	args := m.Called(ctx, name, version, options)
+	return args.Get(0).(azsecrets.GetSecretResponse), args.Error(1)
+}
+
+func (m *MockKeyVaultClient) DeleteSecret(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
+	args := m.Called(ctx, name, options)
+	return args.Get(0).(azsecrets.DeleteSecretResponse), args.Error(1)
+}
+
+func (m *MockKeyVaultClient) NewListSecretsPager(options *azsecrets.ListSecretsOptions) *runtime.Pager[azsecrets.ListSecretsResponse] {
+	args := m.Called(options)
+	return args.Get(0).(*runtime.Pager[azsecrets.ListSecretsResponse])
 }
 
 func TestNewKeyVaultStore(t *testing.T) {
@@ -176,7 +183,7 @@ func TestKeyVaultStore_InputValidation(t *testing.T) {
 			value:     "test",
 			operation: "set",
 			mockFn: func() {
-				mockClient.On("SetSecret", mock.Anything, "prefix-dev-app-config", mock.Anything).
+				mockClient.On("SetSecret", mock.Anything, "prefix-dev-app-config", mock.Anything, mock.Anything).
 					Return(azsecrets.SetSecretResponse{}, nil)
 			},
 			wantError: false,
@@ -188,7 +195,7 @@ func TestKeyVaultStore_InputValidation(t *testing.T) {
 			key:       "config",
 			operation: "get",
 			mockFn: func() {
-				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config").
+				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config", mock.Anything).
 					Return("test-value", nil)
 			},
 			wantError: false,
@@ -200,7 +207,7 @@ func TestKeyVaultStore_InputValidation(t *testing.T) {
 			key:       "config",
 			operation: "get",
 			mockFn: func() {
-				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config").
+				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config", mock.Anything).
 					Return(nil, fmt.Errorf("secret not found"))
 			},
 			wantError: true,
@@ -256,7 +263,7 @@ func TestKeyVaultStore_Set(t *testing.T) {
 			value:     "test-value",
 			mockFn: func() {
 				params := azsecrets.SetSecretParameters{Value: stringPtr("test-value")}
-				mockClient.On("SetSecret", mock.Anything, "prefix-dev-app-config", params).
+				mockClient.On("SetSecret", mock.Anything, "prefix-dev-app-config", params, mock.Anything).
 					Return(azsecrets.SetSecretResponse{}, nil)
 			},
 			wantErr: false,
@@ -322,7 +329,7 @@ func TestKeyVaultStore_Get(t *testing.T) {
 			component: "app",
 			key:       "config",
 			mockFn: func() {
-				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config").
+				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-config", mock.Anything).
 					Return("test-value", nil)
 			},
 			want:    "test-value",
@@ -334,7 +341,7 @@ func TestKeyVaultStore_Get(t *testing.T) {
 			component: "app",
 			key:       "missing",
 			mockFn: func() {
-				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-missing").
+				mockClient.On("GetSecret", mock.Anything, "prefix-dev-app-missing", mock.Anything).
 					Return(nil, fmt.Errorf("secret not found"))
 			},
 			want:    nil,
@@ -358,6 +365,143 @@ func TestKeyVaultStore_Get(t *testing.T) {
 			mockClient.AssertExpectations(t)
 		})
 	}
+}
+
+func TestKeyVaultStore_Delete(t *testing.T) {
+	mockClient := new(MockKeyVaultClient)
+	delimiter := "-"
+	store := &KeyVaultStore{
+		client:         mockClient,
+		prefix:         "prefix",
+		stackDelimiter: &delimiter,
+	}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		mockFn    func()
+		wantErr   bool
+	}{
+		{
+			name:      "valid delete",
+			stack:     "dev",
+			component: "app",
+			key:       "config",
+			mockFn: func() {
+				mockClient.On("DeleteSecret", mock.Anything, "prefix-dev-app-config", mock.Anything).
+					Return(azsecrets.DeleteSecretResponse{}, nil)
+			},
+			wantErr: false,
+		},
+		{
+			name:      "not found",
+			stack:     "dev",
+			component: "app",
+			key:       "missing",
+			mockFn: func() {
+				mockClient.On("DeleteSecret", mock.Anything, "prefix-dev-app-missing", mock.Anything).
+					Return(azsecrets.DeleteSecretResponse{}, fmt.Errorf("secret not found"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient.ExpectedCalls = nil
+			mockClient.Calls = nil
+			tt.mockFn()
+
+			err := store.Delete(tt.stack, tt.component, tt.key)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestKeyVaultStore_List(t *testing.T) {
+	mockClient := new(MockKeyVaultClient)
+	delimiter := "-"
+	store := &KeyVaultStore{
+		client:         mockClient,
+		prefix:         "prefix",
+		stackDelimiter: &delimiter,
+	}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		mockFn    func()
+		want      []string
+		wantErr   bool
+	}{
+		{
+			name:      "valid list",
+			stack:     "dev",
+			component: "app",
+			mockFn: func() {
+				// Mock the pager response
+				pager := &mockPager{
+					pages: []azsecrets.ListSecretsResponse{
+						{
+							Value: []*azsecrets.SecretProperties{
+								{ID: stringPtr("prefix-dev-app-secret1")},
+								{ID: stringPtr("prefix-dev-app-secret2")},
+							},
+						},
+					},
+				}
+				mockClient.On("NewListSecretsPager", mock.Anything).Return(pager)
+			},
+			want:    []string{"secret1", "secret2"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient.ExpectedCalls = nil
+			mockClient.Calls = nil
+			tt.mockFn()
+
+			got, err := store.List(tt.stack, tt.component)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+// Add a mock pager implementation for testing List operation
+type mockPager struct {
+	pages    []azsecrets.ListSecretsResponse
+	current  int
+	finished bool
+}
+
+func (p *mockPager) More() bool {
+	return !p.finished && p.current < len(p.pages)
+}
+
+func (p *mockPager) NextPage(context.Context) (azsecrets.ListSecretsResponse, error) {
+	if p.current >= len(p.pages) {
+		p.finished = true
+		return azsecrets.ListSecretsResponse{}, nil
+	}
+	page := p.pages[p.current]
+	p.current++
+	return page, nil
 }
 
 func stringPtr(s string) *string {

@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets/runtime"
 )
 
 var invalidCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9-]`)
@@ -18,6 +19,8 @@ var invalidCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 type KeyVaultClient interface {
 	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
+	DeleteSecret(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error)
+	NewListSecretsPager(options *azsecrets.ListSecretsOptions) *runtime.Pager[azsecrets.ListSecretsResponse]
 }
 
 // KeyVaultStore is an implementation of the Store interface for Azure Key Vault.
@@ -143,4 +146,60 @@ func (s *KeyVaultStore) Get(stack string, component string, key string) (interfa
 	}
 
 	return resp.Value, nil
+}
+
+func (s *KeyVaultStore) Delete(stack string, component string, key string) error {
+	secretName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.client.DeleteSecret(context.Background(), secretName, nil)
+	if err != nil {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			switch respErr.StatusCode {
+			case 404:
+				return fmt.Errorf("secret '%s' not found: %w", secretName, err)
+			case 403:
+				return fmt.Errorf("failed to delete secret '%s': access denied. Please check your Azure credentials and permissions: %w", secretName, err)
+			}
+		}
+		return fmt.Errorf("failed to delete secret '%s': %w", secretName, err)
+	}
+
+	return nil
+}
+
+func (s *KeyVaultStore) List(stack string, component string) ([]string, error) {
+	if stack == "" || component == "" {
+		return nil, fmt.Errorf("stack and component cannot be empty")
+	}
+
+	prefix, err := s.getKey(stack, component, "")
+	if err != nil {
+		return nil, err
+	}
+	prefix = strings.TrimSuffix(prefix, "-")
+
+	var keys []string
+	pager := s.client.NewListSecretsPager(nil)
+	for pager.More() {
+		page, err := pager.NextPage(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("failed to list secrets: %w", err)
+		}
+
+		for _, secret := range page.Value {
+			if secret.ID != nil && strings.HasPrefix(*secret.ID, prefix) {
+				// Extract just the key name from the full secret path
+				key := strings.TrimPrefix(*secret.ID, prefix+"-")
+				if key != "" {
+					keys = append(keys, key)
+				}
+			}
+		}
+	}
+
+	return keys, nil
 }
