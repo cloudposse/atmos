@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 )
+
+var ErrMaxShellDepthExceeded = errors.New("ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion?")
 
 // MaxShellDepth is the maximum number of nested shell commands that can be executed .
 const MaxShellDepth = 10
@@ -107,8 +110,7 @@ func GetNextShellLevel() (int, error) {
 	shellVal++
 
 	if shellVal > MaxShellDepth {
-		return 0, fmt.Errorf("ATMOS_SHLVL (%d) exceeds maximum allowed depth (%d). Infinite recursion?",
-			shellVal, MaxShellDepth)
+		return 0, fmt.Errorf("%w: current=%d, max=%d", ErrMaxShellDepthExceeded, shellVal, MaxShellDepth)
 	}
 	return shellVal, nil
 }
