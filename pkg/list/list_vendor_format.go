@@ -3,6 +3,7 @@ package list
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -55,7 +56,16 @@ func prepareVendorHeaders(columns []schema.ListColumnConfig) []string {
 	return headers
 }
 
-// buildVendorDataMap converts the row slice to a map keyed by component name.
+// toLowerKeyMap returns a copy of the map with all keys lowercased.
+func toLowerKeyMap(m map[string]interface{}) map[string]interface{} {
+	newMap := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		newMap[strings.ToLower(k)] = v
+	}
+	return newMap
+}
+
+// buildVendorDataMap converts the row slice to a map keyed by component name, with lowercase keys for YAML/JSON.
 func buildVendorDataMap(rows []map[string]interface{}) map[string]interface{} {
 	data := make(map[string]interface{})
 	for i, row := range rows {
@@ -63,9 +73,37 @@ func buildVendorDataMap(rows []map[string]interface{}) map[string]interface{} {
 		if !ok || key == "" {
 			key = fmt.Sprintf("vendor_%d", i)
 		}
-		data[key] = row
+		data[key] = toLowerKeyMap(row)
 	}
 	return data
+}
+
+// buildVendorCSVTSV returns CSV/TSV output for vendor rows with proper header order and value rows.
+func buildVendorCSVTSV(headers []string, rows []map[string]interface{}, delimiter string) string {
+	var b strings.Builder
+	// Write header row
+	for i, h := range headers {
+		b.WriteString(h)
+		if i < len(headers)-1 {
+			b.WriteString(delimiter)
+		}
+	}
+	b.WriteString(NewLine)
+	// Write value rows
+	for _, row := range rows {
+		for i, h := range headers {
+			val := ""
+			if v, ok := row[h]; ok && v != nil {
+				val = fmt.Sprintf("%v", v)
+			}
+			b.WriteString(val)
+			if i < len(headers)-1 {
+				b.WriteString(delimiter)
+			}
+		}
+		b.WriteString(NewLine)
+	}
+	return b.String()
 }
 
 // renderVendorTableOutput formats a row-oriented vendor table for TTY.

@@ -102,6 +102,12 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 	if options.FormatStr == "table" && formatOpts.TTY {
 		return renderVendorTableOutput(customHeaders, rows), nil
 	}
+	if options.FormatStr == "csv" {
+		return buildVendorCSVTSV(customHeaders, rows, ","), nil
+	}
+	if options.FormatStr == "tsv" {
+		return buildVendorCSVTSV(customHeaders, rows, "\t"), nil
+	}
 
 	output, err := formatter.Format(data, formatOpts)
 	if err != nil {
