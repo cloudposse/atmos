@@ -5,26 +5,26 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type pageCreator struct {
-	title   string
-	content string
-	ready   bool
+type PageCreator interface {
+	Run(title, content string) error
 }
 
-func New(title, content string) *pageCreator {
+type pageCreator struct {
+	newTeaProgram func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
+}
+
+func New() PageCreator {
 	return &pageCreator{
-		title:   title,
-		content: content,
-		ready:   false,
+		newTeaProgram: tea.NewProgram,
 	}
 }
 
-func (p *pageCreator) Run() error {
-	if _, err := tea.NewProgram(
+func (p *pageCreator) Run(title, content string) error {
+	if _, err := p.newTeaProgram(
 		&model{
-			title:    p.title,
-			content:  p.content,
-			ready:    p.ready,
+			title:    title,
+			content:  content,
+			ready:    false,
 			viewport: viewport.New(0, 0),
 		},
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"

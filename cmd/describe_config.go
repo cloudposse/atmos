@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -14,11 +16,29 @@ var describeConfigCmd = &cobra.Command{
 	Long:               "This command displays the final, deep-merged CLI configuration after combining all relevant configuration files.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		err := e.ExecuteDescribeConfigCmd(cmd, args)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		flags := cmd.Flags()
+
+		format, err := flags.GetString("format")
+		if err != nil {
+			return err
+		}
+
+		query, err := flags.GetString("query")
+		if err != nil {
+			return err
+		}
+
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		if err != nil {
+			return err
+		}
+
+		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
 		if err != nil {
 			u.PrintErrorMarkdown("", err, "")
 		}
+		return nil
 	},
 }
 

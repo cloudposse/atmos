@@ -8,47 +8,45 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
-
-	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
+type ErrInvalidFormat struct {
+	format string
+}
+
+func (e ErrInvalidFormat) Error() string {
+	return fmt.Sprintf("invalid 'format': %s", e.format)
+}
+
+var ErrTTYNotSupported = fmt.Errorf("tty not supported for this command")
+
+type describeConfigExec struct {
+	atmosConfig        *schema.AtmosConfiguration
+	pageCreator        pager.PageCreator
+	printOrWriteToFile func(format string, file string, data any) error
+}
+
+func NewDescribeConfig(atmosConfig *schema.AtmosConfiguration) *describeConfigExec {
+	return &describeConfigExec{
+		atmosConfig:        atmosConfig,
+		pageCreator:        pager.New(),
+		printOrWriteToFile: printOrWriteToFile,
+	}
+}
+
 // ExecuteDescribeConfigCmd executes `describe config` command
-func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
-	flags := cmd.Flags()
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-
-	query, err := flags.GetString("query")
-	if err != nil {
-		return err
-	}
-
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(info, false)
-	if err != nil {
-		return err
-	}
-
+func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output string) error {
 	var res *schema.AtmosConfiguration
-
+	var err error
 	if query != "" {
-		res, err = u.EvaluateYqExpressionWithType[schema.AtmosConfiguration](&atmosConfig, atmosConfig, query)
+		res, err = u.EvaluateYqExpressionWithType[schema.AtmosConfiguration](d.atmosConfig, *d.atmosConfig, query)
 		if err != nil {
 			return err
 		}
 	} else {
-		res = &atmosConfig
+		res = d.atmosConfig
 	}
-
-	err = ViewConfig(format, res)
+	err = d.viewConfig(format, res)
 	if err != nil {
 		err = printOrWriteToFile(format, "", res)
 		if err != nil {
@@ -58,9 +56,7 @@ func ExecuteDescribeConfigCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-var ErrTTYNotSupported = fmt.Errorf("tty not supported for this command")
-
-func ViewConfig(format string, data *schema.AtmosConfiguration) error {
+func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfiguration) error {
 	if !term.IsTTYSupportForStdout() {
 		return ErrTTYNotSupported
 	}
@@ -79,10 +75,11 @@ func ViewConfig(format string, data *schema.AtmosConfiguration) error {
 			return err
 		}
 	default:
-		return fmt.Errorf("invalid 'format': %s", format)
+		return ErrInvalidFormat{
+			format,
+		}
 	}
-
-	if err := pager.New(title, content).Run(); err != nil {
+	if err := d.pageCreator.Run(title, content); err != nil {
 		return err
 	}
 	return nil
