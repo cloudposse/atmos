@@ -56,24 +56,30 @@ func prepareVendorHeaders(columns []schema.ListColumnConfig) []string {
 	return headers
 }
 
-// toLowerKeyMap returns a copy of the map with all keys lowercased.
-func toLowerKeyMap(m map[string]interface{}) map[string]interface{} {
+// mapKeys returns a copy of the map with keys mapped by the provided function.
+func mapKeys(m map[string]interface{}, fn func(string) string) map[string]interface{} {
 	newMap := make(map[string]interface{}, len(m))
 	for k, v := range m {
-		newMap[strings.ToLower(k)] = v
+		newMap[fn(k)] = v
 	}
 	return newMap
 }
 
-// buildVendorDataMap converts the row slice to a map keyed by component name, with lowercase keys for YAML/JSON.
-func buildVendorDataMap(rows []map[string]interface{}) map[string]interface{} {
+// buildVendorDataMap converts the row slice to a map keyed by component name.
+func buildVendorDataMap(rows []map[string]interface{}, capitalizeKeys bool) map[string]interface{} {
 	data := make(map[string]interface{})
+	var keyFn func(string) string
+	if capitalizeKeys {
+		keyFn = func(s string) string { return s }
+	} else {
+		keyFn = strings.ToLower
+	}
 	for i, row := range rows {
 		key, ok := row[ColumnNameComponent].(string)
 		if !ok || key == "" {
 			key = fmt.Sprintf("vendor_%d", i)
 		}
-		data[key] = toLowerKeyMap(row)
+		data[key] = mapKeys(row, keyFn)
 	}
 	return data
 }
