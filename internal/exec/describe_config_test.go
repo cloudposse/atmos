@@ -112,7 +112,6 @@ func TestDescribeConfig(t *testing.T) {
 	})
 
 	t.Run("ExecuteDescribeConfigCmd_WithQuery_EvalError", func(t *testing.T) {
-
 		dc := &describeConfigExec{
 			atmosConfig:           config,
 			IsTTYSupportForStdout: func() bool { return false },
