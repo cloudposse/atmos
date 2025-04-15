@@ -10,6 +10,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const describeConfigTitle = "Atmos Config"
+
 type ErrInvalidFormat struct {
 	format string
 }
@@ -21,20 +23,22 @@ func (e ErrInvalidFormat) Error() string {
 var ErrTTYNotSupported = fmt.Errorf("tty not supported for this command")
 
 type describeConfigExec struct {
-	atmosConfig        *schema.AtmosConfiguration
-	pageCreator        pager.PageCreator
-	printOrWriteToFile func(format string, file string, data any) error
+	atmosConfig           *schema.AtmosConfiguration
+	pageCreator           pager.PageCreator
+	printOrWriteToFile    func(format string, file string, data any) error
+	IsTTYSupportForStdout func() bool
 }
 
 func NewDescribeConfig(atmosConfig *schema.AtmosConfiguration) *describeConfigExec {
 	return &describeConfigExec{
-		atmosConfig:        atmosConfig,
-		pageCreator:        pager.New(),
-		printOrWriteToFile: printOrWriteToFile,
+		atmosConfig:           atmosConfig,
+		pageCreator:           pager.New(),
+		printOrWriteToFile:    printOrWriteToFile,
+		IsTTYSupportForStdout: term.IsTTYSupportForStdout,
 	}
 }
 
-// ExecuteDescribeConfigCmd executes `describe config` command
+// ExecuteDescribeConfigCmd executes `describe config` command.
 func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output string) error {
 	var res *schema.AtmosConfiguration
 	var err error
@@ -47,20 +51,26 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 		res = d.atmosConfig
 	}
 	err = d.viewConfig(format, res)
-	if err != nil {
-		err = printOrWriteToFile(format, "", res)
+
+	switch err.(type) {
+	case ErrInvalidFormat:
+		return err
+	case nil:
+	default:
+		fmt.Println(err)
+		err = d.printOrWriteToFile(format, output, res)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
 func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfiguration) error {
-	if !term.IsTTYSupportForStdout() {
+	if !d.IsTTYSupportForStdout() {
 		return ErrTTYNotSupported
 	}
-	title := "Atmos Config"
 	var content string
 	var err error
 	switch format {
@@ -79,7 +89,7 @@ func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfigu
 			format,
 		}
 	}
-	if err := d.pageCreator.Run(title, content); err != nil {
+	if err := d.pageCreator.Run(describeConfigTitle, content); err != nil {
 		return err
 	}
 	return nil

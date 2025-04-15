@@ -38,7 +38,7 @@ func PrintAsJSON(data any) error {
 func GetAtmosConfigJSON(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	j, err := ConvertToJSON(atmosConfig)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	var prettyJSON bytes.Buffer
@@ -48,11 +48,11 @@ func GetAtmosConfigJSON(atmosConfig *schema.AtmosConfiguration) (string, error) 
 	}
 
 	highlighted, err := HighlightCodeWithConfig(prettyJSON.String(), *atmosConfig)
-	if err != nil {
-		// Fallback to plain text if highlighting fails
-		return prettyJSON.String(), nil
+	if err == nil {
+		return highlighted, nil
 	}
-	return highlighted, nil
+	// Fallback to plain text if highlighting fails
+	return prettyJSON.String(), nil
 }
 
 // PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
