@@ -9,9 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// MockPrintOrWriteToFile is a mock for the printOrWriteToFile function
-type MockPrintOrWriteToFile func(format, file string, data any) error
-
 func TestErrInvalidFormat_Error(t *testing.T) {
 	err := ErrInvalidFormat{format: "invalid"}
 	assert.Equal(t, "invalid 'format': invalid", err.Error())
