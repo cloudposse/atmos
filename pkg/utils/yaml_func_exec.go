@@ -111,7 +111,7 @@ func GetNextShellLevel() (int, error) {
 	shellVal++
 
 	if shellVal > MaxShellDepth {
-		return 0, fmt.Errorf("%w: current=%d, max=%d", ErrMaxShellDepthExceeded, shellVal, MaxShellDepth)
+		return 0, fmt.Errorf("%w current=%d, max=%d", ErrMaxShellDepthExceeded, shellVal, MaxShellDepth)
 	}
 	return shellVal, nil
 }
