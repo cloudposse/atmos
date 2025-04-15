@@ -19,10 +19,13 @@ type params struct {
 	defaultValue *string
 }
 
-const invalidYamlFuncMsg = "invalid YAML function"
+const (
+	invalidYamlFuncMsg = "invalid YAML function"
+	function           = "function"
+)
 
 func processTagStore(atmosConfig schema.AtmosConfiguration, input string, currentStack string) any {
-	log.Debug("Executing Atmos YAML function", "function", input)
+	log.Debug("Executing Atmos YAML function", function, input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
 	if err != nil {
@@ -41,7 +44,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		for _, p := range parts[1:] {
 			pipeParts := strings.Fields(strings.TrimSpace(p))
 			if len(pipeParts) != 2 {
-				log.Error(invalidYamlFuncMsg, "function", input, "invalid number of parameters after the pipe", len(pipeParts))
+				log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters after the pipe", len(pipeParts))
 				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 			}
 			v1 := strings.Trim(pipeParts[0], `"'`) // Remove surrounding quotes if present
@@ -52,7 +55,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 			case "query":
 				query = v2
 			default:
-				log.Error(invalidYamlFuncMsg, "function", input, "invalid identifier after the pipe", v1)
+				log.Error(invalidYamlFuncMsg, function, input, "invalid identifier after the pipe", v1)
 				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 			}
 		}
@@ -62,7 +65,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	storeParts := strings.Fields(storePart)
 	partsLength := len(storeParts)
 	if partsLength != 3 && partsLength != 4 {
-		log.Error(invalidYamlFuncMsg, "function", input, "invalid number of parameters", partsLength)
+		log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters", partsLength)
 		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 	}
 
@@ -86,7 +89,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	store := atmosConfig.Stores[retParams.storeName]
 
 	if store == nil {
-		log.Fatal("store not found", "function", input, "store", retParams.storeName)
+		log.Fatal("store not found", function, input, "store", retParams.storeName)
 	}
 
 	// Retrieve the value from the store
@@ -95,7 +98,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		log.Fatal("failed to get key", "function", input, "key", retParams.key, "error", err)
+		log.Fatal("failed to get key", function, input, "key", retParams.key, "error", err)
 	}
 
 	// Execute the YQ expression if provided
