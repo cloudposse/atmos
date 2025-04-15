@@ -401,7 +401,8 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 			if directive == u.AtmosYamlFuncEnv {
 				envValue, err := u.ProcessTagEnv(arg)
 				if err != nil {
-					log.Fatal(err)
+					log.Debug("failed to process tag env", "arg", arg, "error", err)
+					continue
 				}
 				if envValue != "" {
 					node.Value = envValue
@@ -409,7 +410,11 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 				v.Set(currentPath, node.Value) // Store the value to Viper
 			}
 			if directive == u.AtmosYamlFuncExec {
-				execValue := u.ProcessTagExec(arg)
+				execValue, err := u.ProcessTagExec(arg)
+				if err != nil {
+					log.Debug("failed to process tag exec", "arg", arg, "error", err)
+					continue
+				}
 				if execValue != nil {
 					node.Value = execValue.(string)
 				}

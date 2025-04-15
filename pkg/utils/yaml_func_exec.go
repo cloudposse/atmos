@@ -21,24 +21,24 @@ const MaxShellDepth = 10
 
 func ProcessTagExec(
 	input string,
-) any {
+) (any, error) {
 	log.Info("Executing Atmos YAML function", "input", input)
 	str, err := getStringAfterTag(input, AtmosYamlFuncExec)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	res, err := ExecuteShellAndReturnOutput(str, input, ".", nil, false)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	var decoded any
 	if err = json.Unmarshal([]byte(res), &decoded); err != nil {
-		return res
+		return nil, err
 	}
 
-	return decoded
+	return decoded, nil
 }
 
 // ExecuteShellAndReturnOutput runs a shell script and capture its standard output .
