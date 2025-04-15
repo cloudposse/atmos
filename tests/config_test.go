@@ -76,7 +76,7 @@ func TestFindAllStackConfigsInPaths(t *testing.T) {
 }
 
 func TestValidateStacks(t *testing.T) {
-	basePath := "../../tests/fixtures/scenarios/atmos-overrides-section/stacks"
+	basePath := "./fixtures/scenarios/atmos-overrides-section/stacks"
 
 	basePathAbs, err := filepath.Abs(basePath)
 	assert.Nil(t, err)
