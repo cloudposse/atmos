@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -67,25 +68,56 @@ type VendorInfo struct {
 	Folder    string // Target folder
 }
 
-// FilterAndListVendor filters and lists vendor configurations.
+// FilterAndListVendor filters and lists vendor configurations using the internal formatter abstraction.
 func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *FilterOptions) (string, error) {
 	if options.FormatStr == "" {
 		options.FormatStr = string(format.FormatTable)
 	}
-
 	if err := format.ValidateFormat(options.FormatStr); err != nil {
 		return "", err
 	}
 
-	var vendorInfos []VendorInfo
-	var err error
+	vendorInfos, err := getVendorInfos(atmosConfig)
+	if err != nil {
+		return "", err
+	}
+	filteredVendorInfos := applyVendorFilters(vendorInfos, options.StackPattern)
 
+	columns := getVendorColumns(atmosConfig)
+	rows := buildVendorRows(filteredVendorInfos, columns)
+	customHeaders := prepareVendorHeaders(columns)
+	formatOpts := format.FormatOptions{
+		Format:        format.Format(options.FormatStr),
+		Delimiter:     options.Delimiter,
+		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
+		CustomHeaders: customHeaders,
+		MaxColumns:    0,
+	}
+	formatter, err := format.NewFormatter(format.Format(options.FormatStr))
+	if err != nil {
+		return "", err
+	}
+	data := buildVendorDataMap(rows)
+
+	if options.FormatStr == "table" && formatOpts.TTY {
+		return renderVendorTableOutput(customHeaders, rows), nil
+	}
+
+	output, err := formatter.Format(data, formatOpts)
+	if err != nil {
+		return "", err
+	}
+	return output, nil
+}
+
+// getVendorInfos retrieves vendor information, handling test and production modes.
+func getVendorInfos(atmosConfig *schema.AtmosConfiguration) ([]VendorInfo, error) {
 	isTest := strings.Contains(atmosConfig.BasePath, "atmos-test-vendor")
 	if isTest {
 		if atmosConfig.Vendor.BasePath == "" {
-			return "", ErrVendorBasepathNotSet
+			return nil, ErrVendorBasepathNotSet
 		}
-		vendorInfos = []VendorInfo{
+		return []VendorInfo{
 			{
 				Component: "vpc/v1",
 				Folder:    "components/terraform/vpc/v1",
@@ -104,17 +136,23 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 				Manifest:  "vendor.d/ecs",
 				Type:      VendorTypeVendor,
 			},
-		}
-	} else {
-		vendorInfos, err = findVendorConfigurations(atmosConfig)
-		if err != nil {
-			return "", err
+		}, nil
+	}
+	return findVendorConfigurations(atmosConfig)
+}
+
+// getVendorColumns determines which columns to use for the vendor list.
+func getVendorColumns(atmosConfig *schema.AtmosConfiguration) []schema.ListColumnConfig {
+	columns := atmosConfig.Vendor.List.Columns
+	if len(columns) == 0 {
+		columns = []schema.ListColumnConfig{
+			{Name: ColumnNameComponent, Value: "{{ .atmos_component }}"},
+			{Name: ColumnNameType, Value: "{{ .atmos_vendor_type }}"},
+			{Name: ColumnNameManifest, Value: "{{ .atmos_vendor_file }}"},
+			{Name: ColumnNameFolder, Value: "{{ .atmos_vendor_target }}"},
 		}
 	}
-
-	filteredVendorInfos := applyVendorFilters(vendorInfos, options.StackPattern)
-
-	return formatVendorOutput(filteredVendorInfos, options.FormatStr)
+	return columns
 }
 
 // findVendorConfigurations finds all vendor configurations.
