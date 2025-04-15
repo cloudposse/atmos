@@ -207,3 +207,8 @@ output:
   formats:
     - format: colored-line-number
       path: stderr
+
+exclude-rules:
+  - path: _test\.go$
+    linters:
+      - forbidigo
