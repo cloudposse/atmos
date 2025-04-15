@@ -58,7 +58,7 @@ func ExecuteShellAndReturnOutput(
 	if err != nil {
 		return "", err
 	}
-	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+	env = append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
 	log.Debug("Executing", "command", command)
 
@@ -66,7 +66,7 @@ func ExecuteShellAndReturnOutput(
 		return "", nil
 	}
 
-	err = ShellRunner(command, name, dir, updatedEnv, &b)
+	err = ShellRunner(command, name, dir, env, &b)
 	if err != nil {
 		return "", err
 	}
@@ -102,7 +102,8 @@ func GetNextShellLevel() (int, error) {
 	if atmosShellLvl != "" {
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			return 0, fmt.Errorf("invalid ATMOS_SHLVL value: %s", atmosShellLvl)
+			return 0, fmt.Errorf("ATMOS_SHLVL (%d) exceeds maximum allowed depth (%d). Infinite recursion?",
+				shellVal, MaxShellDepth)
 		}
 		shellVal = val
 	}
