@@ -212,7 +212,7 @@ vars:
 ## Using `atmos.Store` function in YAML multi-line strings
 
 You can use the `atmos.Store` template function in [YAML multi-line strings](https://yaml-multiline.info/)
-at any position inside a string:
+at any position inside a string. For example, to encode the results from the `atmos.Store` template function as JSON, we could do the following:
 
 <File>
 ```yaml
@@ -230,11 +230,12 @@ components:
 ```
 </File>
 
-This is one of the key reasons to prefer using the `atmos.Store` template function over the
+This is one advantage of using the `atmos.Store` template function over the
 [`!store` YAML function](/core-concepts/stacks/yaml-functions/store).
 
-The `!store` YAML function is generally recommended for its simpler, more readable syntax, and it doesn't involve `Go`
-templates — which come with their own advantages and trade-offs.
+:::tip
+The [`!store` YAML function](/core-concepts/stacks/yaml-functions/store) is generally preferred for its simpler, more readable syntax and for avoiding the complexity of `Go` templates. However, it is less flexible than the `{{ atmos.Store }}` template function. Template functions can reduce readability and are more prone to misuse, potentially resulting in malformed YAML.
+:::
 
 ## Caching the result of `atmos.Store` function
 
