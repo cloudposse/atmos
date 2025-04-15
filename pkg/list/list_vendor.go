@@ -68,24 +68,8 @@ type VendorInfo struct {
 	Folder    string // Target folder
 }
 
-// FilterAndListVendor filters and lists vendor configurations using the internal formatter abstraction.
-func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *FilterOptions) (string, error) {
-	if options.FormatStr == "" {
-		options.FormatStr = string(format.FormatTable)
-	}
-	if err := format.ValidateFormat(options.FormatStr); err != nil {
-		return "", err
-	}
-
-	vendorInfos, err := getVendorInfos(atmosConfig)
-	if err != nil {
-		return "", err
-	}
-	filteredVendorInfos := applyVendorFilters(vendorInfos, options.StackPattern)
-
-	columns := getVendorColumns(atmosConfig)
-	rows := buildVendorRows(filteredVendorInfos, columns)
-	customHeaders := prepareVendorHeaders(columns)
+// formatVendorOutput handles output formatting for vendor list based on options.FormatStr.
+func formatVendorOutput(rows []map[string]interface{}, customHeaders []string, options *FilterOptions) (string, error) {
 	formatOpts := format.FormatOptions{
 		Format:        format.Format(options.FormatStr),
 		Delimiter:     options.Delimiter,
@@ -108,13 +92,14 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 		data = buildVendorDataMap(rows, false)
 	}
 
-	if options.FormatStr == "table" && formatOpts.TTY {
-		return renderVendorTableOutput(customHeaders, rows), nil
-	}
-	if options.FormatStr == "csv" {
+	switch options.FormatStr {
+	case "table":
+		if formatOpts.TTY {
+			return renderVendorTableOutput(customHeaders, rows), nil
+		}
+	case "csv":
 		return buildVendorCSVTSV(customHeaders, rows, ","), nil
-	}
-	if options.FormatStr == "tsv" {
+	case "tsv":
 		return buildVendorCSVTSV(customHeaders, rows, "\t"), nil
 	}
 
@@ -123,6 +108,27 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 		return "", err
 	}
 	return output, nil
+}
+
+// FilterAndListVendor filters and lists vendor configurations using the internal formatter abstraction.
+func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *FilterOptions) (string, error) {
+	if options.FormatStr == "" {
+		options.FormatStr = string(format.FormatTable)
+	}
+	if err := format.ValidateFormat(options.FormatStr); err != nil {
+		return "", err
+	}
+
+	vendorInfos, err := getVendorInfos(atmosConfig)
+	if err != nil {
+		return "", err
+	}
+	filteredVendorInfos := applyVendorFilters(vendorInfos, options.StackPattern)
+
+	columns := getVendorColumns(atmosConfig)
+	rows := buildVendorRows(filteredVendorInfos, columns)
+	customHeaders := prepareVendorHeaders(columns)
+	return formatVendorOutput(rows, customHeaders, options)
 }
 
 // getVendorInfos retrieves vendor information, handling test and production modes.
