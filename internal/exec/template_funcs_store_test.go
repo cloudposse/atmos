@@ -76,12 +76,12 @@ func TestStoreTemplateFunc(t *testing.T) {
 			expectedErr: "invalid template function: atmos.Store(invalid, prod, vpc, cidr)",
 		},
 		{
-			name:        "Test invalid store key",
-			store:       "redis",
-			stack:       "prod",
-			component:   "vpc",
-			key:         "invalid",
-			expectedErr: "invalid template function: atmos.Store(redis, prod, vpc, invalid)",
+			name:      "Test invalid store key",
+			store:     "redis",
+			stack:     "prod",
+			component: "vpc",
+			key:       "invalid",
+			expected:  nil,
 		},
 	}
 

@@ -41,20 +41,18 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		for _, p := range parts[1:] {
 			pipeParts := strings.Fields(strings.TrimSpace(p))
 			if len(pipeParts) != 2 {
-				e := fmt.Errorf("%w: %s", ErrInvalidYamlFunc, input)
-				log.Error(e)
+				log.Error(invalidYamlFuncMsg, "function", input, "invalid number of parameters after the pipe", len(pipeParts))
 				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 			}
 			v1 := strings.Trim(pipeParts[0], `"'`) // Remove surrounding quotes if present
-			v2 := strings.Trim(pipeParts[1], `"'`) // Remove surrounding quotes if present
+			v2 := strings.Trim(pipeParts[1], `"'`)
 			switch v1 {
 			case "default":
 				defaultValue = &v2
 			case "query":
 				query = v2
 			default:
-				e := fmt.Errorf("%w: %s", ErrInvalidYamlFunc, input)
-				log.Error(e)
+				log.Error(invalidYamlFuncMsg, "function", input, "invalid identifier after the pipe", v1)
 				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 			}
 		}
@@ -64,8 +62,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	storeParts := strings.Fields(storePart)
 	partsLength := len(storeParts)
 	if partsLength != 3 && partsLength != 4 {
-		e := fmt.Errorf("%w: %s", ErrInvalidYamlFunc, input)
-		log.Error(e)
+		log.Error(invalidYamlFuncMsg, "function", input, "invalid number of parameters", partsLength)
 		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
 	}
 
@@ -89,7 +86,7 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 	store := atmosConfig.Stores[retParams.storeName]
 
 	if store == nil {
-		log.Fatal(fmt.Errorf("%w: %s\nstore '%s' not found", ErrInvalidYamlFunc, input, retParams.storeName))
+		log.Fatal("store not found", "function", input, "store", retParams.storeName)
 	}
 
 	// Retrieve the value from the store
@@ -98,19 +95,17 @@ func processTagStore(atmosConfig schema.AtmosConfiguration, input string, curren
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		log.Fatal(fmt.Errorf("%w: %s\nfailed to get key: %s\nerror: %v", ErrInvalidYamlFunc, input, retParams.key, err))
+		log.Fatal("failed to get key", "function", input, "key", retParams.key, "error", err)
 	}
 
 	// Execute the YQ expression if provided
-	var res any
+	res := value
 
 	if retParams.query != "" {
 		res, err = u.EvaluateYqExpression(&atmosConfig, value, retParams.query)
 		if err != nil {
 			log.Fatal(err)
 		}
-	} else {
-		res = value
 	}
 
 	return res

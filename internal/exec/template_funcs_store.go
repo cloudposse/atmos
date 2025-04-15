@@ -40,7 +40,7 @@ func storeFunc(
 	// Retrieve the value from the store
 	value, err := store.Get(stack, component, key)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s\nfailed to get key: %s\nerror: %v", ErrInvalidTemplateFunc, functionName, key, err)
+		value = nil
 	}
 
 	// Cache the result

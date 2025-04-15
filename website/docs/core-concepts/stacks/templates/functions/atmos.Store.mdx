@@ -19,10 +19,10 @@ The `atmos.Store` template function accepts four parameters:
 
 ```yaml
 # Read a simple value (string, number, boolean) from the store
-foo: '{{ atmos.Store "<store_name>" "<stack>" "<component>" "<key>" }}'
+var1: '{{ atmos.Store "<store_name>" "<stack>" "<component>" "<key>" }}'
 
 # Read a complex object (e.g. map) from the store and get an individual value (attribute) from the result
-bar: '{{ (atmos.Store "<store_name>" "<stack>" "<component>" "<key>").<attribute> }}'
+var2: '{{ (atmos.Store "<store_name>" "<stack>" "<component>" "<key>").<attribute> }}'
 ```
 
 ## Arguments
@@ -170,18 +170,18 @@ components:
         # Use the static (hardcoded) stack name `prod`
         cidr: '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}'
         # Using the template identifier `.stack` allows specifying the current stack name `nonprod` w/o hardcoding it
-        c_d: '{{ (atmos.Store "redis" .stack "c2" "map").c.d }}'
+        instance_count: '{{ (atmos.Store "redis" .stack "config" "config_map").instance_count }}'
         # Use the Atmos section `.vars.stage` for the stack name
-        c_e: '{{ (atmos.Store "redis" .vars.stage "c2" "map").c.e }}'
+        subnets_count: '{{ (atmos.Store "redis" .vars.stage "config" "config_map").vpc_config.subnets_count }}'
         # The `!template` YAML function converts the JSON-encoded string into a map
-        c: !template '{{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }}'
+        defaults: !template '{{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }}'
         lambda_environment:
           # Example of using the `atmos.Store` template function in a multi-line string
           ENGINE_CONFIG_JSON: |
             {
-              "vpc_cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" }},
-              "c": {{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }},
-              "c_e": {{ (atmos.Store "redis" .stack "c2" "map").c.e }}
+              "cidr": '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}',
+              "defaults": {{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }},
+              "subnets_count": {{ (atmos.Store "redis" .stack "config" "config_map").vpc_config.subnets_count }}
             }
 ```
 </File>
@@ -192,19 +192,19 @@ It will read the values from the store and assign to the component variables:
 <Terminal title="atmos describe component component-1 -s nonprod">
 ```yaml
 vars:
-  c:
-    d: d3
-    e: e4
-  c_d: d3
-  c_e: e4
   cidr: 172.16.0.0/16
+  defaults:
+    account_id: 987654321
+    team: networking
+  instance_count: 2
   lambda_environment:
     ENGINE_CONFIG_JSON: |
       {
-        "vpc_cidr": 172.16.0.0/16,
-        "c": {"d":"d3","e":"e4"},
-        "c_e": e4
+        "cidr": "172.16.0.0/16",
+        "defaults": {"account_id":987654321,"team":"networking"},
+        "subnets_count": 3
       }
+  subnets_count: 3
   stage: nonprod
 ```
 </Terminal>
@@ -223,9 +223,9 @@ components:
         lambda_environment:
           ENGINE_CONFIG_JSON: |
             {
-              "vpc_cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" }},
-              "c": {{ (atmos.Store "redis" .stack "c2" "map").c | toJSON }},
-              "c_e": {{ (atmos.Store "redis" .stack "c2" "map").c.e }}
+                "cidr": '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}',
+                "defaults": {{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }},
+                "subnets_count": {{ (atmos.Store "redis" .stack "config" "config_map").vpc_config.subnets_count }}
             }
 ```
 </File>
@@ -273,6 +273,6 @@ and reuses it in the next two calls to the function. The caching makes the stack
 If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 - Be mindful of disaster recovery (DR) implications when using it across regions.
 - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not
-yet be available and the `atmos.Store` function call will fail (will return the string `<no value>`) unless you provide a default value
+yet be available and the `atmos.Store` function call will fail unless you provide a default value
 using the `Go` template `or` or `if-else` expressions, the [Sprig `default` function](https://masterminds.github.io/sprig/defaults.html),
 or the [Gomplate `default` function](https://docs.gomplate.ca/functions/conv/#convdefault).
