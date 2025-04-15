@@ -86,7 +86,7 @@ func ExecuteShell(
 	if err != nil {
 		return err
 	}
-	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+	env = append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
 	log.Debug("Executing", "command", command)
 
@@ -94,7 +94,7 @@ func ExecuteShell(
 		return nil
 	}
 
-	return u.ShellRunner(command, name, dir, updatedEnv, os.Stdout)
+	return u.ShellRunner(command, name, dir, env, os.Stdout)
 }
 
 // execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
