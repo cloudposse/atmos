@@ -97,7 +97,16 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 	if err != nil {
 		return "", err
 	}
-	data := buildVendorDataMap(rows)
+
+	var data map[string]interface{}
+	switch options.FormatStr {
+	case "table":
+		data = buildVendorDataMap(rows, true)
+	case "json":
+		data = buildVendorDataMap(rows, true)
+	default:
+		data = buildVendorDataMap(rows, false)
+	}
 
 	if options.FormatStr == "table" && formatOpts.TTY {
 		return renderVendorTableOutput(customHeaders, rows), nil
