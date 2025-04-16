@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -103,7 +104,6 @@ func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
 	// Start a new Redis server
 	s := miniredis.RunT(t)
 	defer s.Close()
-
 	// Setup the Redis ENV variable
 	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
 	origRedisUrl := os.Getenv("ATMOS_REDIS_URL")
@@ -129,17 +129,16 @@ func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
 
 	stacksPath := "../../tests/fixtures/scenarios/stack-templates-4"
 
-	err = os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	currentWd, _ := os.Getwd()
+	os.Chdir(stacksPath)
+	defer os.Chdir(currentWd)
 
 	// Unset env values after testing
 	defer func() {
 		os.Unsetenv("ATMOS_BASE_PATH")
 		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	}()
+	config.DefaultConfigHandler = config.New()
 
 	res, err := ExecuteDescribeComponent(
 		"component-1",
