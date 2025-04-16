@@ -50,20 +50,18 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 	} else {
 		res = d.atmosConfig
 	}
-	err = d.viewConfig(format, res)
 
-	switch err.(type) {
-	case ErrInvalidFormat:
-		return err
-	case nil:
-	default:
-		err = d.printOrWriteToFile(format, output, res)
-		if err != nil {
+	if !d.atmosConfig.DisablePager {
+		err = d.viewConfig(format, res)
+		switch err.(type) {
+		case ErrInvalidFormat:
 			return err
+		case nil:
+			return nil
+		default:
 		}
 	}
-
-	return nil
+	return d.printOrWriteToFile(format, output, res)
 }
 
 func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfiguration) error {

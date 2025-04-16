@@ -34,6 +34,14 @@ var describeConfigCmd = &cobra.Command{
 			return err
 		}
 
+		if cmd.Flags().Changed("disable-pager") {
+			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
+			atmosConfig.DisablePager, err = cmd.Flags().GetBool("disable-pager")
+			if err != nil {
+				return err
+			}
+		}
+
 		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
 		if err != nil {
 			u.PrintErrorMarkdown("", err, "")
