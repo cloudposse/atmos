@@ -64,7 +64,7 @@ func ExecuteShellCommand(
 
 		cmd.Stderr = f
 	}
-	log.Debug("Executing", "command", command)
+	log.Debug("Executing", "command", cmd.String())
 
 	if dryRun {
 		return nil
