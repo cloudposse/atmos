@@ -57,7 +57,6 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 		return err
 	case nil:
 	default:
-		fmt.Println(err)
 		err = d.printOrWriteToFile(format, output, res)
 		if err != nil {
 			return err
