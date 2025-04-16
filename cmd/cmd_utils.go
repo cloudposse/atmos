@@ -404,7 +404,6 @@ func executeCustomCommand(
 				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, ".", nil, false)
 				if err != nil {
 					log.Fatal(err)
-
 				}
 				value = strings.TrimRight(res, "\r\n")
 			} else {
