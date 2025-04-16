@@ -37,10 +37,10 @@ func ProcessTagExec(
 	}
 
 	var decoded any
+	// on Unmarshal error return res as it .
 	if err = json.Unmarshal([]byte(res), &decoded); err != nil {
-		return nil, err
+		return res, nil
 	}
-
 	return decoded, nil
 }
 
