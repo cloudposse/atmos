@@ -18,6 +18,7 @@ import (
 )
 
 var ErrMaxShellDepthExceeded = errors.New("ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion?")
+var ErrConvertingShellLevel = errors.New("converting ATMOS_SHLVL to number error")
 
 // MaxShellDepth is the maximum number of nested shell commands that can be executed .
 const MaxShellDepth = 10
@@ -103,7 +104,7 @@ func GetNextShellLevel() (int, error) {
 	if atmosShellLvl != "" {
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			return 0, fmt.Errorf("%w current=%d, max=%d", ErrMaxShellDepthExceeded, shellVal, MaxShellDepth)
+			return 0, fmt.Errorf("%w: %w", ErrConvertingShellLevel, err)
 		}
 		shellVal = val
 	}
