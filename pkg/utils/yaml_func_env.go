@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")
+
 func ProcessTagEnv(
 	input string,
 ) (string, error) {
@@ -57,7 +59,7 @@ func getStringAfterTag(input string, tag string) (string, error) {
 	str = strings.TrimSpace(str)
 
 	if str == "" {
-		err := fmt.Errorf("invalid Atmos YAML function: %s", input)
+		err := fmt.Errorf("%w: %s", ErrInvalidAtmosYAMLFunction, input)
 		return "", err
 	}
 
