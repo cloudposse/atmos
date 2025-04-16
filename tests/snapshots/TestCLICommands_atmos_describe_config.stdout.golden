@@ -152,5 +152,6 @@
     }
   },
   "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks",
-  "import": null
+  "import": null,
+  "disable_pager": false
 }
