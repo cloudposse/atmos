@@ -17,8 +17,10 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-var ErrMaxShellDepthExceeded = errors.New("ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion?")
-var ErrConvertingShellLevel = errors.New("converting ATMOS_SHLVL to number error")
+var (
+	ErrMaxShellDepthExceeded = errors.New("ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion?")
+	ErrConvertingShellLevel  = errors.New("converting ATMOS_SHLVL to number error")
+)
 
 // MaxShellDepth is the maximum number of nested shell commands that can be executed .
 const MaxShellDepth = 10
