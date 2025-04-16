@@ -26,7 +26,8 @@ func TestModel_Update(t *testing.T) {
 			t.Run(key, func(t *testing.T) {
 				msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 				updatedModel, cmd := m.Update(msg)
-				assert.Equal(t, m, updatedModel, "Model should not change")
+				gotModel := updatedModel.(*model)
+				assert.Equal(t, m, *gotModel, "Model should not change")
 				assert.Equal(t, reflect.ValueOf(tea.Quit).Pointer(), reflect.ValueOf(cmd).Pointer(), "Command should be tea.Quit")
 			})
 		}
