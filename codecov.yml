@@ -8,6 +8,8 @@ coverage:
         target: 80% # Require at least 80% test coverage on new/changed lines
         threshold: 2% # Allow a small drop in coverage
         base: auto
+  ignore:
+    - "mock_*.go"  # Adjust this pattern based on your project structure
 
 comment:
   layout: "reach,diff,flags,tree"  # Display different coverage views

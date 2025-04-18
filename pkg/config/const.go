@@ -1,7 +1,9 @@
 package config
 
 const (
-	CliConfigFileName       = "atmos"
+	CliConfigFileName    = "atmos"
+	DotCliConfigFileName = ".atmos"
+
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
