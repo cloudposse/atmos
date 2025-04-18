@@ -23,7 +23,7 @@ import (
 	"github.com/go-git/go-git/v5"
 )
 
-// Define a constant for the dot string that appears multiple times
+// Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
 
 // ValidateConfig holds configuration options for Atmos validation.
