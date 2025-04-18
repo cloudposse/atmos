@@ -343,27 +343,6 @@ func execTerraformShellCommand(
 func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []string) []string {
 	envMap := make(map[string]string)
 
-	// Parse system environment variables
-	warnOnVars := []string{
-		"TF_CLI_ARGS",
-		"TF_VAR_",
-		"TF_CLI_ARGS_",
-		"TF_WORKSPACE",
-	}
-
-	for _, env := range os.Environ() {
-		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			// Check for variables that we should warn about
-			for _, warnVar := range warnOnVars {
-				if strings.HasPrefix(parts[0], warnVar) {
-					log.Warn("detected environment variable that may interfere with Atmos's control of Terraform",
-						"variable", parts[0])
-				}
-			}
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
 	// Merge with new, Atmos defined environment variables
 	for _, env := range componentEnvList {
 		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
