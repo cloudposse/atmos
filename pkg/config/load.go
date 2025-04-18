@@ -100,6 +100,10 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.gitlab_token", "GITLAB_TOKEN")
 	bindEnv(v, "settings.inject_gitlab_token", "ATMOS_INJECT_GITLAB_TOKEN")
 	bindEnv(v, "settings.atmos_gitlab_token", "ATMOS_GITLAB_TOKEN")
+
+	// Bind base path and CLI config path environment variables
+	bindEnv(v, "base_path", "ATMOS_BASE_PATH")
+	bindEnv(v, "cli_config_path", "ATMOS_CLI_CONFIG_PATH")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
