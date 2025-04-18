@@ -116,7 +116,7 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 			encoder.SetIndent(indent)
 		}
 	} else {
-		encoder.SetIndent(2)
+		encoder.SetIndent(4)
 	}
 
 	if err := encoder.Encode(data); err != nil {
