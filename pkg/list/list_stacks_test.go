@@ -18,7 +18,7 @@ func TestListStacks(t *testing.T) {
 	assert.Nil(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
-		nil, false, false, false, false, nil)
+		nil, false, true, true, false, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, "")
@@ -34,7 +34,7 @@ func TestListStacksWithComponent(t *testing.T) {
 	assert.Nil(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
-		nil, false, false, false, false, nil)
+		nil, false, true, true, false, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, "eks-blue/cluster")

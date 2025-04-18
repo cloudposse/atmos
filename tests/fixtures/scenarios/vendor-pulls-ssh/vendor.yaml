@@ -1,0 +1,24 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: demo-vendoring
+  description: Atmos vendoring manifest for Atmos demo component library
+spec:
+  imports: []
+  sources:
+    ## Implicit ssh vendoring (the schema isn't specified, so the custom detector is run for SCP URL parsing).
+    - component: "terraform-null-label-cred"
+      source: "git::git@github.com:cloudposse/terraform-null-label.git?ref={{.Version}}"
+      version: "0.25.0"
+      targets:
+        - "library/cred/{{ .Component }}"
+      tags:
+        - demo
+    ## Explicit ssh vednoring (the schema is explicitly spcified along with a username, no custom detector is invoked)
+    - component: "terraform-null-label-basic"
+      source: "git::ssh://git@github.com/cloudposse/terraform-null-label.git?ref={{ .Version }}"
+      version: "0.25.0"
+      targets:
+        - "library/basic/{{ .Component }}"
+      tags:
+        - demo

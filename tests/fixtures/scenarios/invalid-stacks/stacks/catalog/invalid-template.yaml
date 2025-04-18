@@ -1,0 +1,5 @@
+components:
+  terraform:
+    myapp:
+      vars:
+        location: {{ .not-exist }}

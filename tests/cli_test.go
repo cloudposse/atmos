@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -42,15 +43,17 @@ var (
 	addedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Green
 	removedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("160")) // Red
 )
+var logger *log.Logger
 
 type Expectation struct {
-	Stdout       []MatchPattern            `yaml:"stdout"`        // Expected stdout output
-	Stderr       []MatchPattern            `yaml:"stderr"`        // Expected stderr output
-	ExitCode     int                       `yaml:"exit_code"`     // Expected exit code
-	FileExists   []string                  `yaml:"file_exists"`   // Files to validate
-	FileContains map[string][]MatchPattern `yaml:"file_contains"` // File contents to validate (file to patterns map)
-	Diff         []string                  `yaml:"diff"`          // Acceptable differences in snapshot
-	Timeout      string                    `yaml:"timeout"`       // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
+	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
+	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output
+	ExitCode      int                       `yaml:"exit_code"`       // Expected exit code
+	FileExists    []string                  `yaml:"file_exists"`     // Files to validate
+	FileNotExists []string                  `yaml:"file_not_exists"` // Files that should not exist
+	FileContains  map[string][]MatchPattern `yaml:"file_contains"`   // File contents to validate (file to patterns map)
+	Diff          []string                  `yaml:"diff"`            // Acceptable differences in snapshot
+	Timeout       string                    `yaml:"timeout"`         // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
 }
 type TestCase struct {
 	Name        string            `yaml:"name"`        // Name of the test
@@ -165,6 +168,44 @@ type PathManager struct {
 	Prepended    []string
 }
 
+func init() {
+	// Initialize with default settings.
+	logger = log.NewWithOptions(os.Stdout, log.Options{
+		Level: log.InfoLevel,
+	})
+
+	// Ensure that Lipgloss uses terminal colors for tests
+	lipgloss.SetColorProfile(termenv.TrueColor)
+
+	styles := log.DefaultStyles()
+	styles.Levels[log.ErrorLevel] = lipgloss.NewStyle().
+		SetString("ERROR").
+		Padding(0, 0, 0, 0).
+		Background(lipgloss.Color("204")).
+		Foreground(lipgloss.Color("0"))
+	styles.Levels[log.FatalLevel] = lipgloss.NewStyle().
+		SetString("FATAL").
+		Padding(0, 0, 0, 0).
+		Background(lipgloss.Color("204")).
+		Foreground(lipgloss.Color("0"))
+	// Add a custom style for key `err`
+	styles.Keys["err"] = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))
+	styles.Values["err"] = lipgloss.NewStyle().Bold(true)
+	logger = log.New(os.Stderr)
+	logger.SetStyles(styles)
+	logger.SetColorProfile(termenv.TrueColor)
+	logger.Info("Smoke tests for atmos CLI starting")
+
+	// Initialize PathManager and update PATH
+	pathManager := NewPathManager()
+	pathManager.Prepend("../build", "..")
+	err := pathManager.Apply()
+	if err != nil {
+		logger.Fatal("Failed to apply updated PATH", "error", err)
+	}
+	logger.Info("Path Manager", "PATH", pathManager.GetPath())
+}
+
 // NewPathManager initializes a PathManager with the current PATH.
 func NewPathManager() *PathManager {
 	return &PathManager{
@@ -178,7 +219,7 @@ func (pm *PathManager) Prepend(dirs ...string) {
 	for _, dir := range dirs {
 		absPath, err := filepath.Abs(dir)
 		if err != nil {
-			fmt.Printf("Failed to resolve absolute path for %q: %v\n", dir, err)
+			logger.Fatal("Failed to resolve absolute path", "dir", dir, "error", err)
 			continue
 		}
 		pm.Prepended = append(pm.Prepended, absPath)
@@ -208,7 +249,24 @@ func isCIEnvironment() bool {
 
 // collapseExtraSlashes replaces multiple consecutive slashes with a single slash.
 func collapseExtraSlashes(s string) string {
-	return regexp.MustCompile("/+").ReplaceAllString(s, "/")
+	// Normalize the protocol to have exactly two slashes after http: or https:
+	protocolRegex := regexp.MustCompile(`(?i)(https?):/*`)
+	s = protocolRegex.ReplaceAllString(s, "$1://")
+
+	// Split into protocol and the rest of the URL
+	parts := regexp.MustCompile(`(?i)^(https?://)(.*)$`).FindStringSubmatch(s)
+	if len(parts) == 3 {
+		protocol := parts[1]
+		rest := parts[2]
+		// Collapse multiple slashes in the rest part
+		rest = regexp.MustCompile(`/+`).ReplaceAllString(rest, "/")
+		// Remove any leading slashes after the protocol to avoid triple slashes
+		rest = strings.TrimLeft(rest, "/")
+		return protocol + rest
+	}
+
+	// If no protocol, collapse all slashes
+	return regexp.MustCompile(`/+`).ReplaceAllString(s, "/")
 }
 
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
@@ -271,6 +329,15 @@ func sanitizeOutput(output string) (string, error) {
 		fixedRemainder := collapseExtraSlashes(groups[2])
 		return groups[1] + fixedRemainder
 	})
+
+	// 6. Handle URLs in the output to ensure they are normalized.
+	//    Use a regex to find URLs and collapse extra slashes while preserving the protocol.
+	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
+	result = urlRegex.ReplaceAllStringFunc(result, collapseExtraSlashes)
+
+	// 7. Remove the random number added to file name like `atmos-import-454656846`
+	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
+	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
 	return result, nil
 }
@@ -338,7 +405,7 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 
 	err = cmd.Wait()
 	if err != nil {
-		t.Logf("Command execution error: %v", err)
+		logger.Info("Command execution error", "err", err)
 	}
 
 	if readErr := <-done; readErr != nil {
@@ -389,18 +456,41 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func TestMain(m *testing.M) {
 	// Declare err in the function's scope
 	var err error
-
-	// Ensure that Lipgloss uses terminal colors for tests
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	var repoRoot string
 
 	// Capture the starting working directory
 	startingDir, err = os.Getwd()
 	if err != nil {
-		fmt.Printf("Failed to get the current working directory: %v\n", err)
-		os.Exit(1) // Exit with a non-zero code to indicate failure
+		logger.Fatal("failed to get the current working directory", err)
 	}
 
-	fmt.Printf("Starting directory: %s\n", startingDir)
+	// Find the root of the Git repository
+	repoRoot, err = findGitRepoRoot(startingDir)
+	if err != nil {
+		logger.Fatal("failed to locate git repository", "dir", startingDir)
+	}
+
+	// Check for the atmos binary
+	binaryPath, err := exec.LookPath("atmos")
+	if err != nil {
+		logger.Fatal("Binary not found", "command", "atmos", "PATH", os.Getenv("PATH"))
+	}
+
+	rel, err := filepath.Rel(repoRoot, binaryPath)
+	if err == nil && strings.HasPrefix(rel, "..") {
+		logger.Fatal("Discovered atmos binary outside of repository", "binary", binaryPath)
+	} else {
+		stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
+		if err != nil {
+			logger.Fatal("failed to check if rebuild is needed", "error", err)
+		}
+		if stale {
+			logger.Fatal("Rebuild needed", "binary", binaryPath)
+		}
+	}
+	logger.Info("Atmos binary for tests", "binary", binaryPath)
+
+	logger.Info("Starting directory", "dir", startingDir)
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
@@ -447,14 +537,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
-		t.Logf("skipping empty home dir on macOS in CI: %s", runtime.GOOS)
+		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
 	} else {
 		// Set environment variables for the test case
 		tc.Env["HOME"] = tempDir
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
 		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
-
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
 		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
@@ -484,7 +573,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 		// Clean the directory if enabled
 		if tc.Clean {
-			t.Logf("Cleaning directory: %q", tc.Workdir)
+			logger.Info("Cleaning directory", "workdir", tc.Workdir)
 			if err := cleanDirectory(t, absoluteWorkdir); err != nil {
 				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
 			}
@@ -497,13 +586,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
 	}
 
+	// Include the system PATH in the test environment
+	tc.Env["PATH"] = os.Getenv("PATH")
+
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
-	// Set environment variables
-	envVars := os.Environ()
+	// Set environment variables without inheriting from the current environment.
+	// This ensures an isolated test environment, preventing unintended side effects
+	// and improving reproducibility across different systems.
+	var envVars []string
 	for key, value := range tc.Env {
-		// t.Logf("Setting env: %s=%s", key, value)
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars
@@ -595,6 +688,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
+	// Validate file not existence
+	if !verifyFileNotExists(t, tc.Expect.FileNotExists) {
+		t.Errorf("Description: %s", tc.Description)
+	}
+
 	// Validate file contents
 	if !verifyFileContains(t, tc.Expect.FileContains) {
 		t.Errorf("Description: %s", tc.Description)
@@ -607,15 +705,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 }
 
 func TestCLICommands(t *testing.T) {
-	// Initialize PathManager and update PATH
-	pathManager := NewPathManager()
-	pathManager.Prepend("../build", "..")
-	err := pathManager.Apply()
-	if err != nil {
-		t.Fatalf("Failed to apply updated PATH: %v", err)
-	}
-	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
-
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
 	if err != nil {
@@ -624,13 +713,13 @@ func TestCLICommands(t *testing.T) {
 
 	for _, tc := range testSuite.Tests {
 		if !tc.Enabled {
-			t.Logf("Skipping disabled test: %s", tc.Name)
+			logger.Warn("Skipping disabled test", "test", tc.Name)
 			continue
 		}
 
 		// Check OS condition for skipping
 		if !verifyOS(t, []MatchPattern{tc.Skip.OS}) {
-			t.Logf("Skipping test due to OS condition: %s", tc.Name)
+			logger.Info("Skipping test due to OS condition", "test", tc.Name)
 			continue
 		}
 
@@ -649,7 +738,7 @@ func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
 		// Compile the regex pattern
 		re, err := regexp.Compile(pattern.Pattern)
 		if err != nil {
-			t.Logf("Invalid OS regex pattern: %q, error: %v", pattern.Pattern, err)
+			t.Errorf("Invalid OS regex pattern: %q, error: %v", pattern.Pattern, err)
 			success = false
 			continue
 		}
@@ -657,10 +746,10 @@ func verifyOS(t *testing.T, osPatterns []MatchPattern) bool {
 		// Check if the current OS matches the pattern
 		match := re.MatchString(currentOS)
 		if pattern.Negate && match {
-			t.Logf("Reason: OS %q matched negated pattern %q.", currentOS, pattern.Pattern)
+			logger.Info("Reason: OS matched negated pattern", "os", currentOS, "pattern", pattern.Pattern)
 			success = false
 		} else if !pattern.Negate && !match {
-			t.Logf("Reason: OS %q did not match pattern %q.", currentOS, pattern.Pattern)
+			logger.Info("Reason: OS did not match pattern", "os", currentOS, "pattern", pattern.Pattern)
 			success = false
 		}
 	}
@@ -706,6 +795,20 @@ func verifyFileExists(t *testing.T, files []string) bool {
 	for _, file := range files {
 		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Reason: Expected file does not exist: %q", file)
+			success = false
+		}
+	}
+	return success
+}
+
+func verifyFileNotExists(t *testing.T, files []string) bool {
+	success := true
+	for _, file := range files {
+		if _, err := os.Stat(file); err == nil {
+			t.Errorf("Reason: File %q exists but it should not.", file)
+			success = false
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Reason: Unexpected error checking file %q: %v", file, err)
 			success = false
 		}
 	}
@@ -944,6 +1047,48 @@ func cleanDirectory(t *testing.T, workdir string) error {
 	}
 
 	return nil
+}
+
+// checkIfRebuildNeeded runs `go list` to check if the binary is stale.
+func checkIfRebuildNeeded(binaryPath string, srcDir string) (bool, error) {
+	// Get binary modification time
+	binInfo, err := os.Stat(binaryPath)
+	if os.IsNotExist(err) {
+		return true, fmt.Errorf("binary not found: %s", binaryPath)
+	} else if err != nil {
+		return false, err
+	}
+	binModTime := binInfo.ModTime()
+
+	// Find latest Go source file modification time
+	var latestModTime time.Time
+	err = filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Ignore directories and non-Go files
+		if info.IsDir() || filepath.Ext(path) != ".go" {
+			return nil
+		}
+
+		// Ignore `_test.go` files
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		// Update latest modification time
+		if info.ModTime().After(latestModTime) {
+			latestModTime = info.ModTime()
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// Compare timestamps
+	return latestModTime.After(binModTime), nil
 }
 
 // findGitRepo finds the Git repository root

@@ -1,3 +1,18 @@
+# This is defined in the global hooks section to ensure that the hooks merging works correctly so that we can
+# use hooks defined in the global section in catalog and region/account default files.
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+
+# This is defined in the terraform hooks section to ensure that the hooks merging works correctly so that we can
+# use hooks defined in the global section in catalog and region/account default files.
+terraform:
+  hooks:
+    store-outputs:
+      command: store
+      name: testredis
+
 components:
   terraform:
     component1:
@@ -5,10 +20,6 @@ components:
         component: hook-and-store
       hooks:
         store-outputs:
-          events:
-            - after-terraform-apply
-          command: store
-          name: testredis
           outputs:
             random_id: .random
       vars:

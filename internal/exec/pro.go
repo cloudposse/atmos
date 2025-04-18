@@ -115,7 +115,6 @@ func parseUnlockCliArgs(cmd *cobra.Command, args []string) (ProUnlockCmdArgs, er
 	}
 
 	return result, nil
-
 }
 
 // ExecuteProLockCommand executes `atmos pro lock` command

@@ -1,0 +1,2 @@
+# See https://runs-on.com/configuration/repo-config/
+_extends: .github

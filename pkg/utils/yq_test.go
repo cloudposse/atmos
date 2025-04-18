@@ -53,8 +53,15 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, data)
 
+	// Test with nil atmosConfig to ensure it doesn't panic
 	yq := ".settings.test"
-	res, err := EvaluateYqExpression(atmosConfig, data, yq)
+	res, err := EvaluateYqExpression(nil, data, yq)
+	assert.Nil(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, true, res)
+
+	yq = ".settings.test"
+	res, err = EvaluateYqExpression(atmosConfig, data, yq)
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, true, res)
@@ -165,4 +172,55 @@ vars:
 	assert.Equal(t, false, res4)
 	err = PrintAsYAML(res4)
 	assert.Nil(t, err)
+}
+
+func TestEvaluateYqExpressionWithNilConfig(t *testing.T) {
+	input := `
+settings:
+  test: true
+  mode: test
+vars:
+  enabled: true
+  name: test
+`
+	data, err := UnmarshalYAML[map[string]any](input)
+	assert.Nil(t, err)
+	assert.NotNil(t, data)
+
+	// Test various expressions with nil atmosConfig
+	testCases := []struct {
+		name     string
+		yq       string
+		expected any
+	}{
+		{
+			name:     "get boolean value",
+			yq:       ".settings.test",
+			expected: true,
+		},
+		{
+			name:     "get string value",
+			yq:       ".settings.mode",
+			expected: "test",
+		},
+		{
+			name:     "modify boolean value",
+			yq:       ".vars.enabled = false | .vars.enabled",
+			expected: false,
+		},
+		{
+			name:     "add new field",
+			yq:       ".vars.new_field = \"new value\" | .vars.new_field",
+			expected: "new value",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := EvaluateYqExpression(nil, data, tc.yq)
+			assert.Nil(t, err)
+			assert.NotNil(t, res)
+			assert.Equal(t, tc.expected, res)
+		})
+	}
 }

@@ -3,8 +3,8 @@ package utils
 import (
 	"context"
 	"os"
-	"time"
 
+	log "github.com/charmbracelet/log"
 	"github.com/google/go-github/v59/github"
 	"golang.org/x/oauth2"
 )
@@ -26,25 +26,23 @@ func newGitHubClient(ctx context.Context) *github.Client {
 	return github.NewClient(tc)
 }
 
-// GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository
+// GetLatestGitHubRepoRelease returns the latest release tag for a GitHub repository.
 func GetLatestGitHubRepoRelease(owner string, repo string) (string, error) {
-	opt := &github.ListOptions{Page: 1, PerPage: 1}
+	log.Debug("Fetching latest release from Github API", "owner", owner, "repo", repo)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-	defer cancel()
-
+	// Create a new GitHub client with authentication if available
+	ctx := context.Background()
 	client := newGitHubClient(ctx)
 
-	releases, _, err := client.Repositories.ListReleases(ctx, owner, repo, opt)
+	// Get the latest release
+	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
 		return "", err
 	}
 
-	if len(releases) > 0 {
-		latestRelease := releases[0]
-		latestReleaseTag := *latestRelease.TagName
-		return latestReleaseTag, nil
+	if release == nil || release.TagName == nil {
+		return "", nil
 	}
 
-	return "", nil
+	return *release.TagName, nil
 }

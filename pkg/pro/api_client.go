@@ -174,7 +174,6 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 
 	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
-
 	if err != nil {
 		return UnlockStackResponse{}, fmt.Errorf("error unmarshaling JSON: %s", err)
 	}

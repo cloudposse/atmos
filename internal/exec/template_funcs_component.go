@@ -4,33 +4,38 @@ import (
 	"fmt"
 	"sync"
 
+	log "github.com/charmbracelet/log"
 	"github.com/samber/lo"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var componentFuncSyncMap = sync.Map{}
 
-func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stack string) (any, error) {
-	u.LogTrace(fmt.Sprintf("Executing template function 'atmos.Component(%s, %s)'", component, stack))
-
+func componentFunc(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	component string,
+	stack string,
+) (any, error) {
+	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+
+	log.Debug("Executing template function", "function", functionName)
 
 	// If the result for the component in the stack already exists in the cache, return it
 	existingSections, found := componentFuncSyncMap.Load(stackSlug)
 	if found && existingSections != nil {
-		if atmosConfig.Logs.Level == u.LogLevelTrace {
-			u.LogTrace(fmt.Sprintf("Found the result of the template function 'atmos.Component(%s, %s)' in the cache", component, stack))
+		log.Debug("Cache hit for template function", "function", functionName)
 
-			if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
-				u.LogTrace("'outputs' section:")
-				y, err2 := u.ConvertToYAML(outputsSection)
-				if err2 != nil {
-					u.LogError(err2)
-				} else {
-					u.LogTrace(y)
-				}
+		if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
+			y, err2 := u.ConvertToYAML(outputsSection)
+			if err2 != nil {
+				log.Error(err2)
+			} else {
+				log.Debug("Result of the template function", "function", functionName, "outputs", y)
 			}
 		}
 
@@ -42,41 +47,45 @@ func componentFunc(atmosConfig schema.AtmosConfiguration, component string, stac
 		return nil, err
 	}
 
+	// Process Terraform remote state
 	var terraformOutputs map[string]any
-
-	// Check if the component in the stack is configured with the 'static' remote state backend,
-	// in which case get the `output` from the static remote state instead of executing `terraform output`
-	remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
-	if err != nil {
-		return nil, err
-	}
-
-	if remoteStateBackendStaticTypeOutputs != nil {
-		terraformOutputs = remoteStateBackendStaticTypeOutputs
-	} else {
-		// Execute `terraform output`
-		terraformOutputs, err = execTerraformOutput(&atmosConfig, component, stack, sections)
+	if configAndStacksInfo.ComponentType == cfg.TerraformComponentType {
+		// Check if the component in the stack is configured with the 'static' remote state backend,
+		// in which case get the `output` from the static remote state instead of executing `terraform output`
+		remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	outputs := map[string]any{
-		"outputs": terraformOutputs,
-	}
+		if remoteStateBackendStaticTypeOutputs != nil {
+			// Return the static backend outputs
+			terraformOutputs = remoteStateBackendStaticTypeOutputs
+		} else {
+			// Execute `terraform output`
+			terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections)
+			if err != nil {
+				return nil, err
+			}
+		}
 
-	sections = lo.Assign(sections, outputs)
+		outputs := map[string]any{
+			"outputs": terraformOutputs,
+		}
+
+		sections = lo.Assign(sections, outputs)
+	}
 
 	// Cache the result
 	componentFuncSyncMap.Store(stackSlug, sections)
 
-	if atmosConfig.Logs.Level == u.LogLevelTrace {
-		u.LogTrace(fmt.Sprintf("Executed template function 'atmos.Component(%s, %s)'\n\n'outputs' section:", component, stack))
+	log.Debug("Executed template function", "function", functionName)
+
+	if configAndStacksInfo.ComponentType == cfg.TerraformComponentType {
 		y, err2 := u.ConvertToYAML(terraformOutputs)
 		if err2 != nil {
-			u.LogError(err2)
+			log.Error(err2)
 		} else {
-			u.LogTrace(y)
+			log.Debug("Result of the template function", "function", functionName, "outputs", y)
 		}
 	}
 

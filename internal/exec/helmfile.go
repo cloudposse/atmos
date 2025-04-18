@@ -240,7 +240,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	if atmosConfig.Components.Helmfile.UseEKS {
 		envVars = append(envVars, envVarsEKS...)
 	}
-
+	envVars = append(envVars, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
+	basePath, err := filepath.Abs(atmosConfig.BasePath)
+	if err != nil {
+		return err
+	}
+	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	u.LogTrace("Using ENV vars:")
 	for _, v := range envVars {
 		u.LogTrace(v)

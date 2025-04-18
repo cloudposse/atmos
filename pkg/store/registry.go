@@ -13,7 +13,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 		case "artifactory":
 			var opts ArtifactoryStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
-				return nil, fmt.Errorf("failed to parse Artifactory store options: %w", err)
+				return nil, fmt.Errorf("%w: %v", ErrParseArtifactoryOptions, err)
 			}
 
 			store, err := NewArtifactoryStore(opts)
@@ -25,7 +25,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 		case "aws-ssm-parameter-store":
 			var opts SSMStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
-				return nil, fmt.Errorf("failed to parse SSM store options: %w", err)
+				return nil, fmt.Errorf("%w: %v", ErrParseSSMOptions, err)
 			}
 
 			store, err := NewSSMStore(opts)
@@ -34,10 +34,22 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			}
 			registry[key] = store
 
+		case "google-secret-manager", "gsm":
+			var opts GSMStoreOptions
+			if err := parseOptions(storeConfig.Options, &opts); err != nil {
+				return nil, fmt.Errorf("failed to parse Google Secret Manager store options: %w", err)
+			}
+
+			store, err := NewGSMStore(opts)
+			if err != nil {
+				return nil, err
+			}
+			registry[key] = store
+
 		case "redis":
 			var opts RedisStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
-				return nil, fmt.Errorf("failed to parse Redis store options: %w", err)
+				return nil, fmt.Errorf("%w: %v", ErrParseRedisOptions, err)
 			}
 
 			store, err := NewRedisStore(opts)
@@ -47,7 +59,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 			registry[key] = store
 
 		default:
-			return nil, fmt.Errorf("store type %s not found", storeConfig.Type)
+			return nil, fmt.Errorf("%w: %s", ErrStoreTypeNotFound, storeConfig.Type)
 		}
 	}
 

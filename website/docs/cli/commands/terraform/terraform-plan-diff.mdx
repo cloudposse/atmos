@@ -1,0 +1,118 @@
+---
+title: atmos terraform plan-diff
+sidebar_label: plan-diff
+sidebar_class_name: command
+id: plan-diff
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# terraform plan-diff
+
+The `atmos terraform plan-diff` command compares two Terraform plans and shows the differences between them.
+
+It takes an original plan file (`--orig`) and optionally a new plan file (`--new`). If the new plan file is not provided, it will generate one by running `terraform plan` with the current configuration.
+
+The command shows differences in variables, resources, and outputs between the two plans.
+
+## Usage
+
+```shell
+atmos terraform plan-diff <component> -s <stack> --orig=<original-plan-file> [--new=<new-plan-file>] [options]
+```
+
+## Arguments
+
+| Argument    | Description                                          |
+| ----------- | ---------------------------------------------------- |
+| `component` | The name of the component to run the command against |
+
+## Flags
+
+| Flag          | Description                                                |
+| ------------- | ---------------------------------------------------------- |
+| `-s, --stack` | The stack name to use (required)                           |
+| `--orig`      | Path to the original Terraform plan file (required)        |
+| `--new`       | Path to the new Terraform plan file (optional)             |
+| `--skip-init` | Skip running `terraform init` before executing the command |
+
+You can also pass any additional flags and arguments that are supported by the `terraform plan` command when generating a new plan.
+
+## Examples
+
+### Compare an existing plan with a new plan generated with current configuration
+
+```shell
+atmos terraform plan-diff myapp -s dev --orig=orig.plan
+```
+
+### Compare two existing plan files
+
+```shell
+atmos terraform plan-diff myapp -s dev --orig=orig.plan --new=new.plan
+```
+
+## Output Format
+
+When there are no differences between the two plan files:
+
+```text
+The planfiles are identical
+```
+
+When there are differences between the two plan files:
+
+```text
+Diff Output
+=========
+
+Variables:
+----------
++ added_var: "new value"
+- removed_var: "old value"
+~ changed_var: "old value" => "new value"
+
+Resources:
+-----------
++ aws_s3_bucket.new_bucket
+- aws_instance.removed_instance
+~ aws_security_group.modified_group
+  ~ ingress.cidr_blocks: ["10.0.0.0/16"] => ["10.0.0.0/8"]
+  + egress.port: 443
+
+Outputs:
+--------
++ new_output: "value"
+- removed_output: "value"
+~ changed_output: "old" => "new"
+```
+
+## Exit Codes
+
+| Exit Code | Description                               |
+| --------- | ----------------------------------------- |
+| 0         | Success - no differences found            |
+| 1         | Error occurred during execution           |
+| 2         | Success - differences found between plans |
+
+## Use Cases
+
+The `plan-diff` command is useful for:
+
+1. **Validating changes**: Compare a previously saved plan with the current state to see what has changed.
+2. **Reviewing variable impacts**: See how changing variables affects the infrastructure plan.
+3. **CI/CD workflows**: Use the exit code to determine if changes are expected or unexpected.
+4. **Documentation**: Generate human-readable diffs for change management and approvals.
+
+## How It Works
+
+The command:
+
+1. Runs `terraform init` in the component directory
+2. If `--new` is not specified, runs a plan and captures the output
+3. Runs `terraform show -json` for each plan to get the JSON representation
+4. Sorts the JSON for consistent comparison
+5. Creates a diff between the two plans
+6. Handles sensitive values properly by displaying `(sensitive value)`
+7. Returns appropriate exit code based on whether differences were found

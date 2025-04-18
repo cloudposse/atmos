@@ -7,7 +7,7 @@ id: terraform
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos natively supports opinionated workflows for Terraform and [OpenTofu](/core-concepts/projects/configuration/opentofu).
+Atmos natively supports opinionated workflows for [Terraform](https://www.terraform.io/) and [OpenTofu](/core-concepts/projects/configuration/opentofu).
 It's compatible with every version of terraform and designed to work with multiple different versions of Terraform
 concurrently.
 </Intro>
@@ -40,10 +40,13 @@ components:
     auto_generate_backend_file: false
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT' ENV var, or '--append-user-agent' command-line argument
     append_user_agent: "Acme/1.0 (Build 1234; arm64)"
+    init:
+      # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS' ENV var, or '--init-pass-vars' command-line argument
+      pass_vars: false
 ```
 
 <dl>
-  <dt>components.terraform.apply_auto_approve</dt>
+  <dt>`components.terraform.apply_auto_approve`</dt>
   <dd>if set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without
   asking for confirmation when executing `terraform apply` command</dd>
 

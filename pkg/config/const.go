@@ -1,7 +1,9 @@
 package config
 
 const (
-	CliConfigFileName       = "atmos"
+	CliConfigFileName    = "atmos"
+	DotCliConfigFileName = ".atmos"
+
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
@@ -28,6 +30,7 @@ const (
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
 	AppendUserAgentFlag         = "--append-user-agent"
 	InitRunReconfigure          = "--init-run-reconfigure"
+	InitPassVars                = "--init-pass-vars"
 
 	FromPlanFlag       = "--from-plan"
 	PlanFileFlag       = "--planfile"
@@ -37,6 +40,9 @@ const (
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
+
+	TerraformComponentType = "terraform"
+	HelmfileComponentType  = "helmfile"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
@@ -70,6 +76,10 @@ const (
 
 	QueryFlag = "--query"
 
+	ProcessTemplatesFlag = "--process-templates"
+	ProcessFunctionsFlag = "--process-functions"
+	SkipFlag             = "--skip"
+
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro
@@ -84,4 +94,6 @@ const (
 	AtmosYamlFuncTemplate        = "!template"
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
 	AtmosYamlFuncEnv             = "!env"
+
+	TerraformDefaultWorkspace = "default"
 )

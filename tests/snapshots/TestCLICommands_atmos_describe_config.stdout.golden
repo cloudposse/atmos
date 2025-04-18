@@ -11,6 +11,9 @@
       "command": "",
       "shell": {
         "prompt": ""
+      },
+      "init": {
+        "pass_vars": false
       }
     },
     "helmfile": {
@@ -46,12 +49,6 @@
   },
   "integrations": {
     "atlantis": {}
-  },
-  "schemas": {
-    "jsonschema": {},
-    "cue": {},
-    "opa": {},
-    "atmos": {}
   },
   "templates": {
     "settings": {
@@ -117,7 +114,16 @@
       "link": {},
       "link_text": {}
     },
-    "InjectGithubToken": true
+    "InjectGithubToken": true,
+    "GithubToken": "",
+    "AtmosGithubToken": "",
+    "InjectBitbucketToken": false,
+    "BitbucketToken": "",
+    "AtmosBitbucketToken": "",
+    "BitbucketUsername": "",
+    "InjectGitlabToken": false,
+    "AtmosGitlabToken": "",
+    "GitlabToken": ""
   },
   "vendor": {
     "base_path": ""
@@ -144,5 +150,7 @@
     "editorconfig": {
       "color": true
     }
-  }
+  },
+  "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks",
+  "import": null
 }
