@@ -17,6 +17,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -214,7 +215,7 @@ func execTerraformShellCommand(
 		}
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			u.LogWarning(fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			log.Warn("Failed to parse ATMOS_SHLVL", "error", err)
 			return
 		}
 		// Prevent negative values
@@ -223,7 +224,7 @@ func execTerraformShellCommand(
 			newVal = 0
 		}
 		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
-			u.LogWarning(fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+			log.Warn("Failed to update ATMOS_SHLVL", "error", err)
 		}
 	}()
 
@@ -343,10 +344,21 @@ func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []stri
 	envMap := make(map[string]string)
 
 	// Parse system environment variables
+	warnOnVars := []string{
+		"TF_CLI_ARGS",
+		"TF_VAR_",
+		"TF_CLI_ARGS_",
+		"TF_WORKSPACE",
+	}
+
 	for _, env := range os.Environ() {
 		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			if strings.HasPrefix(parts[0], "TF_") {
-				u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", parts[0]))
+			// Check for variables that we should warn about
+			for _, warnVar := range warnOnVars {
+				if strings.HasPrefix(parts[0], warnVar) {
+					log.Warn("detected environment variable that may interfere with Atmos's control of Terraform",
+						"variable", parts[0])
+				}
 			}
 			envMap[parts[0]] = parts[1]
 		}

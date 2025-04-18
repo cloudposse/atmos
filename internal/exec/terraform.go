@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -222,13 +223,25 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Check for any Terraform environment variables that might conflict with Atmos
+	// Check for specific Terraform environment variables that might conflict with Atmos
+	warnOnVars := []string{
+		"TF_CLI_ARGS",
+		"TF_VAR_",
+		"TF_CLI_ARGS_",
+		"TF_WORKSPACE",
+	}
+
 	for _, envVar := range os.Environ() {
-		if strings.HasPrefix(envVar, "TF_") {
-			varName := strings.SplitN(envVar, "=", 2)[0]
-			u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
+		// Check for variables that we should warn about
+		for _, warnVar := range warnOnVars {
+			if strings.HasPrefix(envVar, warnVar) {
+				varName := strings.SplitN(envVar, "=", 2)[0]
+				log.Warn("detected environment variable that may interfere with Atmos's control of Terraform",
+					"variable", varName)
+			}
 		}
 	}
+
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
 	basePath, err := filepath.Abs(atmosConfig.BasePath)
 	if err != nil {
