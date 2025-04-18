@@ -35,10 +35,10 @@ components within the same stack or even across different stacks.
 
 ###  Function: `!store`
 
-The `!store` YAML function can read data from a remote store such as SSM Parameter Store or Artifactory.
+The `!store` YAML function can read data from a remote store such as SSM Parameter Store, Artifactory, or Redis.
 
 For example, we can read the `vpc_id` output of the `vpc` component in the current stack from the SSM Parameter Store
-configured in `atmos.yaml` as 'ssm/prod` simply by doing:
+configured in `atmos.yaml` as `ssm/prod` simply by doing:
 
 ```yaml
 components:
@@ -48,7 +48,7 @@ components:
         vpc_id: !store ssm/prod vpc vpc_id
 ```
 
-To access the configuration of a component in a different stack, you can specify the stack name as the third argument.
+To access the configuration of a component in a different stack, you can specify the stack name as the second argument.
 For example, here we're reading the `vpc_id` output of the `vpc` component in the `staging` stack:
 
 ```yaml
@@ -56,7 +56,7 @@ components:
   terraform:
     cluster:
       vars:
-        vpc_id: !store ssm/prod vpc staging vpc_id
+        vpc_id: !store ssm/prod staging vpc vpc_id
 ```
 
 <ActionCard>
@@ -97,6 +97,37 @@ For more advanced examples, check out the `!terraform.output` YAML function docu
 
 ## Using Template Functions
 
+###  Function: `atmos.Store`
+
+The `atmos.Store` template function can read data from a remote store such as SSM Parameter Store, Artifactory, or Redis.
+
+For example, we can read the `vpc_id` output of the `vpc` component in the current stack from the SSM Parameter Store
+configured in `atmos.yaml` as `ssm` simply by doing:
+
+```yaml
+components:
+  terraform:
+    cluster:
+      vars:
+        vpc_id: '{{ atmos.Store "ssm" .stack "vpc" "vpc_id" }}'
+```
+
+To access the configuration of a component in a different stack, you can specify the stack name as the second argument.
+For example, here we're reading the `vpc_id` output of the `vpc` component in the `staging` stack:
+
+```yaml
+components:
+  terraform:
+    cluster:
+      vars:
+        vpc_id: '{{ atmos.Store "ssm" "staging" "vpc" "vpc_id" }}'
+```
+
+<ActionCard>
+    For more advanced examples, check out the `atmos.Store` template function documentation.
+    <PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Store">Learn More</PrimaryCTA>
+</ActionCard>
+
 ###  Function: `atmos.Component`
 
 The `atmos.Component` template function can read all configurations of any Atmos component, including its outputs.
@@ -127,7 +158,6 @@ components:
 For more advanced examples, check out the `atmos.Component` function documentation.
 <PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Component">Learn More</PrimaryCTA>
 </ActionCard>
-
 
 ### Data Sources
 
