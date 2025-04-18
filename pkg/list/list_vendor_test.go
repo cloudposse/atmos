@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -276,6 +277,97 @@ func createTestFile(t *testing.T, path string, content string, perms fs.FileMode
 	// Ensure permissions are set correctly (WriteFile might be affected by umask).
 	err = os.Chmod(path, perms)
 	require.NoError(t, err, "Failed to set file permissions")
+}
+
+// TestBuildVendorDataMap covers all key logic and capitalizeKeys branches.
+func TestBuildVendorDataMap(t *testing.T) {
+	t.Run("Component key present, capitalizeKeys true", func(t *testing.T) {
+		rows := []map[string]interface{}{
+			{ColumnNameComponent: "foo", "X": 1},
+		}
+		result := buildVendorDataMap(rows, true)
+		assert.Contains(t, result, "foo")
+		m, ok := result["foo"].(map[string]interface{})
+		assert.True(t, ok)
+		assert.Contains(t, m, ColumnNameComponent)
+		assert.Contains(t, m, "X")
+	})
+	t.Run("Component key present, capitalizeKeys false", func(t *testing.T) {
+		rows := []map[string]interface{}{
+			{ColumnNameComponent: "FOO", "Y": 2},
+		}
+		result := buildVendorDataMap(rows, false)
+		assert.Contains(t, result, "FOO")
+		m, ok := result["FOO"].(map[string]interface{})
+		assert.True(t, ok)
+		assert.Contains(t, m, strings.ToLower(ColumnNameComponent))
+		assert.Contains(t, m, "y")
+	})
+	t.Run("Component key missing", func(t *testing.T) {
+		rows := []map[string]interface{}{
+			{"A": 1},
+		}
+		result := buildVendorDataMap(rows, true)
+		assert.Contains(t, result, "vendor_0")
+	})
+	t.Run("Component key empty string", func(t *testing.T) {
+		rows := []map[string]interface{}{
+			{ColumnNameComponent: "", "B": 2},
+		}
+		result := buildVendorDataMap(rows, true)
+		assert.Contains(t, result, "vendor_0")
+	})
+}
+
+// TestBuildVendorCSVTSV covers header/value logic, delimiters, and empty/missing fields.
+func TestBuildVendorCSVTSV(t *testing.T) {
+	headers := []string{"A", "B"}
+	rows := []map[string]interface{}{
+		{"A": "foo", "B": "bar"},
+		{"A": "baz"}, // missing B
+		{"B": "qux"}, // missing A
+	}
+	t.Run("CSV output", func(t *testing.T) {
+		csv := buildVendorCSVTSV(headers, rows, ",")
+		assert.Contains(t, csv, "A,B")
+		assert.Contains(t, csv, "foo,bar")
+		assert.Contains(t, csv, "baz,")
+		assert.Contains(t, csv, ",qux")
+	})
+	t.Run("TSV output", func(t *testing.T) {
+		tsv := buildVendorCSVTSV(headers, rows, "\t")
+		assert.Contains(t, tsv, "A\tB")
+		assert.Contains(t, tsv, "foo\tbar")
+		assert.Contains(t, tsv, "baz\t")
+		assert.Contains(t, tsv, "\tqux")
+	})
+	t.Run("Empty rows", func(t *testing.T) {
+		empty := buildVendorCSVTSV(headers, nil, ",")
+		assert.Contains(t, empty, "A,B\n")
+	})
+}
+
+// TestRenderVendorTableOutput covers empty/filled rows and missing fields.
+func TestRenderVendorTableOutput(t *testing.T) {
+	headers := []string{"A", "B"}
+	rows := []map[string]interface{}{
+		{"A": "foo", "B": "bar"},
+		{"A": "baz"}, // missing B
+		{"B": "qux"}, // missing A
+	}
+	output := renderVendorTableOutput(headers, rows)
+	assert.Contains(t, output, "A")
+	assert.Contains(t, output, "B")
+	assert.Contains(t, output, "foo")
+	assert.Contains(t, output, "bar")
+	assert.Contains(t, output, "baz")
+	assert.Contains(t, output, "qux")
+
+	t.Run("Empty rows", func(t *testing.T) {
+		empty := renderVendorTableOutput(headers, nil)
+		assert.Contains(t, empty, "A")
+		assert.Contains(t, empty, "B")
+	})
 }
 
 // TestFindComponentManifestInComponent tests the recursive search logic.
