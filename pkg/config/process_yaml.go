@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const valueKey = "arg"
+
 // PreprocessYAML processes the given YAML content, replacing specific directives
 // (such as !env) with their corresponding values .
 // It parses the YAML content into a tree structure, processes each node recursively,
@@ -99,31 +101,29 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 
 	switch {
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
-		arg := node.Value
-		envValue, err := u.ProcessTagEnv(arg)
+		envValue, err := u.ProcessTagEnv(fmt.Sprintf("%s %s", node.Tag, node.Value))
 		if err != nil {
-			log.Debug("failed to process", "tag", u.AtmosYamlFuncEnv, "arg", arg, "error", err)
-			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, arg, err)
+			log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
+			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
 		}
 		envValue = strings.TrimSpace(envValue)
 		if envValue == "" {
-			log.Warn("execute returned empty value", "function", u.AtmosYamlFuncEnv, "arg", arg)
+			log.Warn("execute returned empty value", "function", u.AtmosYamlFuncEnv, valueKey, node.Value)
 		}
 		node.Value = envValue
 		v.Set(currentPath, node.Value)
 		node.Tag = "" // Avoid re-processing  .
 
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
-		arg := node.Value
-		execValue, err := u.ProcessTagExec(arg)
+		execValue, err := u.ProcessTagExec(fmt.Sprintf("%s %s", node.Tag, node.Value))
 		if err != nil {
-			log.Debug("failed to process", "tag", u.AtmosYamlFuncExec, "arg", arg, "error", err)
-			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, arg, err)
+			log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
+			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, node.Value, err)
 		}
 		if execValue != nil {
 			node.Value = strings.TrimSpace(fmt.Sprintf("%v", execValue))
 		} else {
-			log.Warn("execute returned empty value", "function", u.AtmosYamlFuncExec, "arg", arg)
+			log.Warn("execute returned empty value", "function", node.Tag, valueKey, node.Value)
 			node.Value = ""
 		}
 		v.Set(currentPath, node.Value)
