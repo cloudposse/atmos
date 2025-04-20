@@ -18,14 +18,16 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	// ... rest of the test logic ...
 }
 
-	os.Args = []string{
-		"atmos",
-		"vendor",
-		"pull",
-	}
-	// Execute the command
-	err = cmd.Execute()
-	assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
+    originalArgs := os.Args
+    defer func() { os.Args = originalArgs }()
+    os.Args = []string{
+        "atmos",
+        "vendor",
+        "pull",
+    }
+    // Execute the command
+    err = cmd.Execute()
+    assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
 }
 
 // TestExecuteVendorPull tests the ExecuteVendorPullCommand function.
