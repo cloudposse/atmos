@@ -24,8 +24,10 @@ var embeddedConfigData []byte
 
 const MaximumImportLvL = 10
 
-var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
-var ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")
+var (
+	ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
+	ErrExecuteYamlFunctions   = errors.New("failed to execute yaml function")
+)
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
