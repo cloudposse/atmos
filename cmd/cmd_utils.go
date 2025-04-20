@@ -12,7 +12,6 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -691,11 +690,6 @@ func isGitRepository() bool {
 
 // verifyInsideGitRepo checks if we're in a git repo.
 func verifyInsideGitRepo() bool {
-	// Skip check if either env var is set
-	if viper.GetString("ATMOS_BASE_PATH") != "" || viper.GetString("ATMOS_CLI_CONFIG_PATH") != "" {
-		return true
-	}
-
 	// Check if we're in a git repo
 	if !isGitRepository() {
 		log.Warn("You're not inside a git repository. Atmos feels lonely outside - bring it home!\n")

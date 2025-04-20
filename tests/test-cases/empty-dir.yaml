@@ -47,34 +47,34 @@ tests:
     enabled: true
     snapshot: true
     description: "Test that atmos warns if not run inside of a git repo"
-    workdir: "/"
+    workdir: "/tmp"
     command: "atmos"
     args:
-      - version
+      - list
+      - stacks
     env:
       ATMOS_LOGS_LEVEL: Warning
     expect:
       diff: []
-      stdout:
-        - "You're not inside a git repository. Atmos feels lonely outside - bring it home!"
       stderr:
-        - "^$"
-      exit_code: 0
+        - ".*You're not inside a git repository. Atmos feels lonely outside - bring it home!.*"
+      exit_code: 1 # We expect a non-zero exit code because the tmp dir doesnt have an atmos config
 
   - name: atmos doesnt warns if in git repo
     enabled: true
     snapshot: true
-    description: "Test that atmos doesnt warns if run inside of a git repo"
-    workdir: "fixtures/scenarios/empty-dir"
+    description: "Test that atmos doesnt warns if run inside of a git repo with an atmos config"
+    workdir: "fixtures/scenarios/complete"
     command: "atmos"
     args:
-      - version
+      - list
+      - stacks
     env:
       ATMOS_LOGS_LEVEL: Warning
     expect:
       diff: []
       stdout:
-        - "^(?!.*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!).*$"
+        - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
       stderr:
         - "^$"
       exit_code: 0
