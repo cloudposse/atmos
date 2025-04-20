@@ -42,11 +42,12 @@ type pagerStatusMessage struct {
 var (
 	pagerHelpHeight int
 
-	// Logo
 	logo = statusBarHelpStyle(" \U0001F47D  ")
 
 	mintGreen = lipgloss.AdaptiveColor{Light: "#89F0CB", Dark: "#89F0CB"}
 	darkGreen = lipgloss.AdaptiveColor{Light: "#1C8760", Dark: "#1C8760"}
+	errorRed  = lipgloss.AdaptiveColor{Light: "#FF5555", Dark: "#FF5555"}
+	darkGray  = lipgloss.AdaptiveColor{Light: "#333333", Dark: "#333333"}
 
 	lineNumberFg = lipgloss.AdaptiveColor{Light: "#656565", Dark: "#7D7D7D"}
 
@@ -66,6 +67,10 @@ var (
 	statusBarMessageStyle = lipgloss.NewStyle().
 				Foreground(mintGreen).
 				Background(darkGreen).
+				Render
+	errorMessageStyle = lipgloss.NewStyle().
+				Foreground(errorRed).
+				Background(darkGray).
 				Render
 
 	statusBarMessageScrollPosStyle = lipgloss.NewStyle().
@@ -115,7 +120,7 @@ type model struct {
 	showHelp bool
 
 	state              pagerState
-	statusMessage      string
+	statusMessage      pagerStatusMessage
 	statusMessageTimer *time.Timer
 }
 
@@ -148,10 +153,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			// Copy using OSC 52
 			termenv.Copy(StripANSI(m.content))
-			// Copy using native system clipboard
-			_ = clipboard.WriteAll(StripANSI(m.content))
-			cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Copied contents", false}))
-
+			if err := clipboard.WriteAll(StripANSI(m.content)); err != nil {
+				cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Failed to copy to clipboard", true}))
+			} else {
+				cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Copied contents", false}))
+			}
 		case "?":
 			m.toggleHelp()
 		}
@@ -206,10 +212,12 @@ const (
 func (m *model) showStatusMessage(msg pagerStatusMessage) tea.Cmd {
 	// Show a success message to the user
 	m.state = pagerStateStatusMessage
-	m.statusMessage = msg.message
+	m.statusMessage = msg
+
 	if m.statusMessageTimer != nil {
 		m.statusMessageTimer.Stop()
 	}
+
 	m.statusMessageTimer = time.NewTimer(statusMessageTimeout)
 
 	return waitForStatusMessageTimeout(pagerContext, m.statusMessageTimer)
@@ -303,38 +311,27 @@ func (m model) statusBarView(b *strings.Builder) {
 	// Scroll percent
 	percent := math.Max(minPercent, math.Min(maxPercent, m.viewport.ScrollPercent()))
 	scrollPercent := fmt.Sprintf(" %3.f%% ", percent*percentToStringMagnitude)
-	if showStatusMessage {
+	var note, helpNote string
+	switch {
+	case showStatusMessage && m.statusMessage.isError:
+		note = errorMessageStyle(" " + m.statusMessage.message + " ")
+		helpNote = errorMessageStyle(" ? Help ")
+		scrollPercent = errorMessageStyle(scrollPercent)
+	case showStatusMessage:
 		scrollPercent = statusBarMessageScrollPosStyle(scrollPercent)
-	} else {
+		note = statusBarMessageStyle(" " + m.statusMessage.message + " ")
+		helpNote = statusBarMessageHelpStyle(" ? Help ")
+	default:
 		scrollPercent = statusBarNoteStyle(scrollPercent)
+		note = statusBarNoteStyle(" " + m.title + " ")
+		helpNote = statusBarHelpStyle(" ? Help ")
 	}
 
-	// Note
-	var note string
-	if showStatusMessage {
-		note = m.statusMessage
-	} else {
-		note = m.title
-	}
-	note = truncate.StringWithTail(" "+note+" ", uint(max(0, //nolint:gosec
+	note = truncate.StringWithTail(note, uint(max(0, //nolint:gosec
 		m.common.width-
 			ansi.PrintableRuneWidth(logo)-
 			ansi.PrintableRuneWidth(scrollPercent),
 	)), ellipsis)
-
-	if showStatusMessage {
-		note = statusBarMessageStyle(note)
-	} else {
-		note = statusBarNoteStyle(note)
-	}
-
-	// "Help" note
-	var helpNote string
-	if showStatusMessage {
-		helpNote = statusBarMessageHelpStyle(" ? Help ")
-	} else {
-		helpNote = statusBarHelpStyle(" ? Help ")
-	}
 
 	// Empty space
 	padding := max(0,
@@ -345,9 +342,12 @@ func (m model) statusBarView(b *strings.Builder) {
 			ansi.PrintableRuneWidth(helpNote),
 	)
 	emptySpace := strings.Repeat(" ", padding)
-	if showStatusMessage {
+	switch {
+	case showStatusMessage && m.statusMessage.isError:
+		emptySpace = errorMessageStyle(emptySpace)
+	case showStatusMessage:
 		emptySpace = statusBarMessageStyle(emptySpace)
-	} else {
+	default:
 		emptySpace = statusBarNoteStyle(emptySpace)
 	}
 
@@ -363,7 +363,7 @@ func (m model) statusBarView(b *strings.Builder) {
 	}
 }
 
-// Lightweight version of reflow's indent function.?
+// Lightweight version of reflow's indent function.
 func indent(s string, n int) string {
 	if n <= 0 || s == "" {
 		return s
