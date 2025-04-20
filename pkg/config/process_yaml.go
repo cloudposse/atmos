@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const valueKey = "arg"
+const valueKey = "value"
 
 // PreprocessYAML processes the given YAML content, replacing specific directives
 // (such as !env) with their corresponding values .
