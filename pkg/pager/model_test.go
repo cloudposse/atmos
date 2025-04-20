@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,8 +43,8 @@ func TestModel_Update(t *testing.T) {
 
 		assert.True(t, updatedModel.(*model).ready, "Model should be ready")
 		assert.Equal(t, 80, updatedModel.(*model).viewport.Width, "Viewport width should be set")
-		assert.Equal(t, 18, updatedModel.(*model).viewport.Height, "Viewport height should account for header and footer")
-		assert.Equal(t, 3, updatedModel.(*model).viewport.YPosition, "YPosition should be header height")
+		assert.Equal(t, 23, updatedModel.(*model).viewport.Height, "Viewport height should account for header and footer")
+		assert.Equal(t, 0, updatedModel.(*model).viewport.YPosition, "YPosition should be header height")
 		assert.Contains(t, updatedModel.(*model).viewport.View(), "test content", "Content should be set")
 		assert.Nil(t, cmd, "No additional command expected")
 	})
@@ -60,7 +59,7 @@ func TestModel_Update(t *testing.T) {
 
 		assert.True(t, updatedModel.(*model).ready, "Model should remain ready")
 		assert.Equal(t, 120, updatedModel.(*model).viewport.Width, "Viewport width should be updated")
-		assert.Equal(t, 24, updatedModel.(*model).viewport.Height, "Viewport height should be updated")
+		assert.Equal(t, 29, updatedModel.(*model).viewport.Height, "Viewport height should be updated")
 		assert.Nil(t, cmd, "No additional command expected")
 	})
 
@@ -95,27 +94,14 @@ func TestModel_View(t *testing.T) {
 			ready:    true,
 			title:    "Test Title",
 			viewport: vp,
+			common: commonModel{
+				width: 300,
+			},
 		}
 		output := m.View()
-
 		assert.Contains(t, output, "Test Title", "Output should contain title")
 		assert.Contains(t, output, "test content", "Output should contain viewport content")
 		assert.Contains(t, output, "%", "Output should contain scroll percentage")
-	})
-}
-
-func TestModel_headerView(t *testing.T) {
-	t.Run("NormalWidth", func(t *testing.T) {
-		m := model{
-			title:    "Test",
-			viewport: viewport.New(20, 10),
-		}
-		header := m.headerView()
-
-		expectedTitle := titleStyle.Render("Test")
-		lineLength := 20 - lipgloss.Width(expectedTitle)
-		assert.Contains(t, header, "Test", "Header should contain title")
-		assert.Contains(t, header, strings.Repeat("─", lineLength), "Header should contain line")
 	})
 }
 
@@ -130,11 +116,8 @@ func TestModel_footerView(t *testing.T) {
 		}
 		footer := m.footerView()
 
-		// ScrollPercent() should reflect ~50% (exact value depends on content height)
-		expectedInfo := infoStyle.Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
-		lineLength := 20 - lipgloss.Width(expectedInfo)
 		assert.Contains(t, footer, fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100), "Footer should contain scroll percentage")
-		assert.Contains(t, footer, strings.Repeat("─", lineLength), "Footer should contain line")
+		assert.Contains(t, footer, "? Help", "Footer should contain line")
 	})
 
 	t.Run("ZeroLineLength", func(t *testing.T) {
