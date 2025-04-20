@@ -15,19 +15,16 @@ func TestExecuteVendorPullCommand(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	// ... rest of the test logic ...
-}
-
-    originalArgs := os.Args
-    defer func() { os.Args = originalArgs }()
-    os.Args = []string{
-        "atmos",
-        "vendor",
-        "pull",
-    }
-    // Execute the command
-    err = cmd.Execute()
-    assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	os.Args = []string{
+		"atmos",
+		"vendor",
+		"pull",
+	}
+	// Execute the command
+	err := cmd.Execute()
+	assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
 }
 
 // TestExecuteVendorPull tests the ExecuteVendorPullCommand function.
