@@ -2,8 +2,6 @@ package exec
 
 import (
 	"errors"
-	"fmt"
-
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
@@ -71,27 +69,14 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 	if len(planFileNameFromArg) > 0 {
 		planFilePath = planFileNameFromArg
 	} else {
-		planFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
+		planFilePath = constructTerraformComponentPlanfilePath(atmosConfig, info)
 	}
 
-	// Print the component variables
-	log.Debug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+	log.Debug("Writing the planfile", "file", planFilePath)
 
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
-		if err != nil {
-			return err
-		}
-	}
-
-	log.Debug("Writing the variables to file:")
-	log.Debug(planFilePath)
-
-	if !info.DryRun {
-		err = u.WriteToFileAsJSON(planFilePath, info.ComponentVarsSection, 0o644)
-		if err != nil {
-			return err
-		}
+	err = u.WriteToFileAsJSON(planFilePath, info.ComponentVarsSection, 0o644)
+	if err != nil {
+		return err
 	}
 
 	return nil
