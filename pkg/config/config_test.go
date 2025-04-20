@@ -197,7 +197,7 @@ logs:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				assert.Equal(t, "Hello, World!\n", cfg.BasePath) // echo adds a newline to the output
+				assert.Equal(t, "Hello, World!", cfg.BasePath)
 			},
 		},
 		{

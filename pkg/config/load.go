@@ -406,37 +406,40 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	if node.Tag == "" {
 		return nil
 	}
-	allowedDirectives := []string{u.AtmosYamlFuncEnv, u.AtmosYamlFuncExec}
 
-	for _, directive := range allowedDirectives {
-		if node.Tag == directive {
-			arg := node.Value
-			if strings.HasPrefix(directive, u.AtmosYamlFuncEnv) {
-				envValue, err := u.ProcessTagEnv(arg)
-				if err != nil {
-					log.Debug("failed to process tag env", "arg", arg, "error", err)
-					return fmt.Errorf("%w !env %v error %v", ErrExecuteYamlFunctions, arg, err)
-				}
-				if envValue != "" {
-					node.Value = envValue
-				}
-				v.Set(currentPath, node.Value) // Store the value to Viper
-			}
-			if strings.HasPrefix(directive, u.AtmosYamlFuncExec) {
-				execValue, err := u.ProcessTagExec(arg)
-				if err != nil {
-					log.Debug("failed to process tag exec", "arg", arg, "error", err)
-					return fmt.Errorf("%w !env %v error %v", ErrExecuteYamlFunctions, arg, err)
-				}
-				if execValue != nil {
-					node.Value = execValue.(string)
-				}
-				v.Set(currentPath, node.Value) // Store the value to Viper
-			}
-			node.Tag = ""
-			break
+	switch {
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
+		arg := node.Value
+		envValue, err := u.ProcessTagEnv(arg)
+		if err != nil {
+			log.Debug("failed to process", "tag", u.AtmosYamlFuncEnv, "arg", arg, "error", err)
+			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, arg, err)
 		}
+		envValue = strings.TrimSpace(envValue)
+		if envValue == "" {
+			log.Warn("execute %v %v return empty value", u.AtmosYamlFuncEnv, arg)
+		}
+		node.Value = envValue
+		v.Set(currentPath, node.Value)
+		node.Tag = "" // Avoid re-processing  .
+
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
+		arg := node.Value
+		execValue, err := u.ProcessTagExec(arg)
+		if err != nil {
+			log.Debug("failed to process", "tag", u.AtmosYamlFuncExec, "arg", arg, "error", err)
+			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, arg, err)
+		}
+		if execValue != nil {
+			node.Value = strings.TrimSpace(fmt.Sprintf("%v", execValue))
+		} else {
+			log.Warn("execute %v %v return empty value", u.AtmosYamlFuncExec, arg)
+			node.Value = ""
+		}
+		v.Set(currentPath, node.Value)
+		node.Tag = "" // Avoid re-processing  .
 	}
+
 	return nil
 }
 
