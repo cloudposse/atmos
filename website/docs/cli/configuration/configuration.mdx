@@ -133,6 +133,18 @@ If Atmos does not find an `atmos.yaml` file and the default CLI config is used, 
 
 What follows are all the sections of the `atmos.yaml` configuration file.
 
+
+## YAML Functions
+
+Atmos extends standard YAML with several custom functions that can be used in stack manifests. These functions provide powerful tools for dynamic configuration:
+
+1. **`!env`** – Used to retrieve environment variables.  
+   See the [**`!env` documentation**](../../core-concepts/stacks/yaml-functions/env) for more details.
+
+2. **`!exec`** – Used to execute shell scripts and assign their output.  
+   See the [**`!exec` documentation**](../../core-concepts/stacks/yaml-functions/exec) for more details.
+
+
 ## Imports
 
 Additionally, Atmos supports `imports` of other CLI configurations. Use imports to break large Atmos CLI configurations into smaller ones, such as organized by top-level section. File imports are relative to the base path (if `import`  section is set in the config). All imports are processed at the time the configuration is loaded, and then deep-merged in order, so that the last file in the list supersedes settings in the preceding imports. For an example, see [`scenarios/demo-atmos-cli-imports`](https://github.com/cloudposse/atmos/tree/main/tests/fixtures/scenarios/atmos-cli-imports).
