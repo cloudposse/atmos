@@ -152,12 +152,12 @@ func (c *ConfigHandler) GetBool(key string) bool {
 
 // SetDefault exposes viper.SetDefault on the handler.
 func (c *ConfigHandler) SetDefault(key string, value any) {
-    c.v.SetDefault(key, value)
+	c.v.SetDefault(key, value)
 }
 
 // GetStringSlice retrieves a []string from the config.
 func (c *ConfigHandler) GetStringSlice(key string) []string {
-    return c.v.GetStringSlice(key)
+	return c.v.GetStringSlice(key)
 }
 
 func (c *ConfigHandler) processEnvVars() {
