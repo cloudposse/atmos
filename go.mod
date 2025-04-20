@@ -26,7 +26,7 @@ require (
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.2.1
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.18.0
-	github.com/go-git/go-git/v5 v5.15.0
+	github.com/go-git/go-git/v5 v5.16.0
 	github.com/gofrs/flock v0.12.1
 	github.com/golang/mock v1.6.0
 	github.com/google/go-containerregistry v0.20.3
