@@ -162,6 +162,32 @@ logs:
 			},
 		},
 		{
+			name:           "environment variable AtmosYamlFuncEnv return default value",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !env NOT_EXIST_VAR env/test/path`,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "env/test/path", cfg.BasePath)
+			},
+		},
+		{
+			name:           "environment variable AtmosYamlFuncEnv should return error",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !env `,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.Error(t, err)
+				require.ErrorAs(t, err, &ErrExecuteYamlFunctions)
+			},
+		},
+		{
 			name:           "shell command execution YAML function exec (AtmosYamlFuncExec)",
 			configFileName: "atmos.yaml",
 			configContent:  `base_path: !exec echo Hello, World!`,

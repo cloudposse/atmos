@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
@@ -24,6 +25,7 @@ var embeddedConfigData []byte
 const MaximumImportLvL = 10
 
 var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
+var ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
@@ -347,7 +349,9 @@ func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
 		log.Debug("failed to parse YAML", "error", err)
 		return err
 	}
-	processNode(&rootNode, v, "")
+	if err := processNode(&rootNode, v, ""); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -359,9 +363,9 @@ func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
 // - node: A pointer to the current YAML node being processed.
 // - v: A pointer to a Viper instance where processed values will be stored.
 // - currentPath: The hierarchical key path used to track nested YAML structures.
-func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
+func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node == nil {
-		return
+		return nil
 	}
 	// If this node is a key-value pair in a mapping
 	if node.Kind == yaml.MappingNode {
@@ -374,46 +378,53 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 				newPath = currentPath + "." + newPath
 			}
 
-			processNode(valueNode, v, newPath)
+			if err := processNode(valueNode, v, newPath); err != nil {
+				return err
+			}
 		}
 	}
 
 	// If it's a scalar node with a directive tag
 	if node.Kind == yaml.ScalarNode && node.Tag != "" {
-		processScalarNode(node, v, currentPath)
+		if err := processScalarNode(node, v, currentPath); err != nil {
+			return err
+		}
 	}
 
 	// Process children nodes (for sequences/lists)
 	for _, child := range node.Content {
-		processNode(child, v, currentPath)
+		if err := processNode(child, v, currentPath); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
+func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node.Tag == "" {
-		return
+		return nil
 	}
 	allowedDirectives := []string{u.AtmosYamlFuncEnv, u.AtmosYamlFuncExec}
 
 	for _, directive := range allowedDirectives {
 		if node.Tag == directive {
 			arg := node.Value
-			if directive == u.AtmosYamlFuncEnv {
+			if strings.HasPrefix(directive, u.AtmosYamlFuncEnv) {
 				envValue, err := u.ProcessTagEnv(arg)
 				if err != nil {
 					log.Debug("failed to process tag env", "arg", arg, "error", err)
-					continue
+					return fmt.Errorf("%w !env %v error %v", ErrExecuteYamlFunctions, arg, err)
 				}
 				if envValue != "" {
 					node.Value = envValue
 				}
 				v.Set(currentPath, node.Value) // Store the value to Viper
 			}
-			if directive == u.AtmosYamlFuncExec {
+			if strings.HasPrefix(directive, u.AtmosYamlFuncExec) {
 				execValue, err := u.ProcessTagExec(arg)
 				if err != nil {
 					log.Debug("failed to process tag exec", "arg", arg, "error", err)
-					continue
+					return fmt.Errorf("%w !env %v error %v", ErrExecuteYamlFunctions, arg, err)
 				}
 				if execValue != nil {
 					node.Value = execValue.(string)
@@ -424,6 +435,7 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
 			break
 		}
 	}
+	return nil
 }
 
 // mergeConfigFile merges a new configuration file with an existing config into Viper.
