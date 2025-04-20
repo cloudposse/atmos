@@ -201,6 +201,7 @@ issues:
         - gocognit
         - gosec
         - revive
+        - forbidigo
 
 output:
   sort-results: true
