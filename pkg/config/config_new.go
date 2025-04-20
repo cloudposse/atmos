@@ -113,7 +113,8 @@ func (c *ConfigHandler) load(configAndStacksInfo *schema.ConfigAndStacksInfo) er
 		}
 	}
 	c.processEnvVars()
-	viper.AutomaticEnv()
+	// automatically pick up matching environment variables for this handler
+	c.v.AutomaticEnv()
 
 	// Unmarshal into AtmosConfiguration struct
 	if err := c.v.Unmarshal(c.atmosConfig); err != nil {

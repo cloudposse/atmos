@@ -12,25 +12,22 @@ import (
 
 func TestExecuteVendorPullCommand(t *testing.T) {
 	stacksPath := "./fixtures/scenarios/vendor2"
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-	// Unset env values after testing
-	defer func() {
-		os.Unsetenv("ATMOS_BASE_PATH")
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	}()
+	// ... rest of the test logic ...
+}
 
-	os.Args = []string{
-		"atmos",
-		"vendor",
-		"pull",
-	}
-	// Execute the command
-	err = cmd.Execute()
-	assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
+    originalArgs := os.Args
+    defer func() { os.Args = originalArgs }()
+    os.Args = []string{
+        "atmos",
+        "vendor",
+        "pull",
+    }
+    // Execute the command
+    err = cmd.Execute()
+    assert.NoError(t, err, "'atmos vendor pull' command should execute without error")
 }
 
 // TestExecuteVendorPull tests the ExecuteVendorPullCommand function.
