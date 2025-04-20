@@ -107,7 +107,7 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		}
 		envValue = strings.TrimSpace(envValue)
 		if envValue == "" {
-			log.Warn("execute %v %v return empty value", u.AtmosYamlFuncEnv, arg)
+			log.Warn("execute returned empty value", "function", u.AtmosYamlFuncEnv, "arg", arg)
 		}
 		node.Value = envValue
 		v.Set(currentPath, node.Value)
@@ -123,7 +123,7 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		if execValue != nil {
 			node.Value = strings.TrimSpace(fmt.Sprintf("%v", execValue))
 		} else {
-			log.Warn("execute %v %v return empty value", u.AtmosYamlFuncExec, arg)
+			log.Warn("execute returned empty value", "function", u.AtmosYamlFuncExec, "arg", arg)
 			node.Value = ""
 		}
 		v.Set(currentPath, node.Value)
