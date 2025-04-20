@@ -305,7 +305,6 @@ func max(a, b int) int {
 }
 
 func (m model) statusBarView(b *strings.Builder) {
-
 	showStatusMessage := m.state == pagerStateStatusMessage
 
 	// Scroll percent
