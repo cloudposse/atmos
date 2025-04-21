@@ -1,36 +1,55 @@
 package exec
 
 import (
-	"github.com/cloudposse/atmos/pkg/schema"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
+	componentPath := filepath.Join(stacksPath, "components", "terraform", "mock")
+	component := "component-1"
+	stack := "nonprod"
+	info := schema.ConfigAndStacksInfo{}
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
 
 	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-	// Unset env values after testing
+
 	defer func() {
-		os.Unsetenv("ATMOS_BASE_PATH")
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		err := os.Unsetenv("ATMOS_BASE_PATH")
+		assert.NoError(t, err)
+		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		assert.NoError(t, err)
+
+		// Delete the generated files and folders after the test
+		err = os.RemoveAll(filepath.Join(componentPath, ".terraform"))
+		assert.NoError(t, err)
+
+		err = os.RemoveAll(filepath.Join(componentPath, "terraform.tfstate.d"))
+		assert.NoError(t, err)
+
+		err = os.Remove(fmt.Sprintf("%s/%s-%s.terraform.tfvars.json", componentPath, stack, component))
+		assert.NoError(t, err)
 	}()
 
 	err = ExecuteTerraformGeneratePlanfile(
-		"component-1",
-		"nonprod",
+		component,
+		stack,
 		"",
+		"json",
 		true,
 		true,
 		nil,
-		schema.ConfigAndStacksInfo{},
+		info,
 	)
-
 	assert.NoError(t, err)
 }

@@ -22,6 +22,16 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
+	file, err := flags.GetString("file")
+	if err != nil {
+		return err
+	}
+
+	format, err := flags.GetString("format")
+	if err != nil {
+		return err
+	}
+
 	processTemplates, err := flags.GetBool("process-templates")
 	if err != nil {
 		return err
@@ -44,7 +54,7 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	return ExecuteTerraformGeneratePlanfile(component, stack, "", processTemplates, processYamlFunctions, skip, info)
+	return ExecuteTerraformGeneratePlanfile(component, stack, file, format, processTemplates, processYamlFunctions, skip, info)
 }
 
 // ExecuteTerraformGeneratePlanfile executes `terraform generate planfile`.
@@ -52,6 +62,7 @@ func ExecuteTerraformGeneratePlanfile(
 	component string,
 	stack string,
 	file string,
+	format string,
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
@@ -78,6 +89,7 @@ func ExecuteTerraformGeneratePlanfile(
 	if err != nil {
 		return errors.Wrap(err, "error creating temporary directory")
 	}
+
 	defer func(path string) {
 		err := os.RemoveAll(path)
 		if err != nil {
@@ -105,7 +117,12 @@ func ExecuteTerraformGeneratePlanfile(
 
 	log.Debug("Writing the planfile", "file", planFilePath)
 
-	err = u.WriteToFileAsJSON(planFilePath, planJSON, 0o644)
+	j, err := u.ConvertFromJSON(planJSON)
+	if err != nil {
+		return errors.Wrap(err, "error converting JSON to map")
+	}
+
+	err = u.WriteToFileAsJSON(planFilePath, j, 0o644)
 	if err != nil {
 		return err
 	}
