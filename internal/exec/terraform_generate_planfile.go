@@ -1,22 +1,20 @@
 package exec
 
 import (
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"os"
+	"path/filepath"
 
 	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
 func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `component`")
-	}
-
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
@@ -46,6 +44,19 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
+	return ExecuteTerraformGeneratePlanfile(component, stack, "", processTemplates, processYamlFunctions, skip, info)
+}
+
+// ExecuteTerraformGeneratePlanfile executes `terraform generate planfile`.
+func ExecuteTerraformGeneratePlanfile(
+	component string,
+	stack string,
+	file string,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	info schema.ConfigAndStacksInfo,
+) error {
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
@@ -60,21 +71,7 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	var planFileNameFromArg string
-	var planFilePath string
-
-	planFileNameFromArg, err = flags.GetString("file")
-	if err != nil {
-		planFileNameFromArg = ""
-	}
-
-	componentWorkingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
-
-	if planFileNameFromArg != "" {
-		planFilePath = planFileNameFromArg
-	} else {
-		planFilePath = componentWorkingDir
-	}
+	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 
 	// Create a temporary directory for all temporary files
 	tmpDir, err := os.MkdirTemp("", "atmos-terraform-generate-planfile")
@@ -88,25 +85,27 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		}
 	}(tmpDir)
 
-	opts := PlanFileOptions{
-		ComponentPath: componentWorkingDir,
-		TmpDir:        tmpDir,
-	}
-
-	planFile, err := prepareNewPlanFile(&atmosConfig, &info, opts)
+	planFile, err := generateNewPlanFile(&atmosConfig, &info, componentPath, tmpDir)
 	if err != nil {
 		return err
 	}
 
 	// Get the JSON representation of the new plan
-	planJSON, err := getTerraformPlanJSON(&atmosConfig, &info, componentWorkingDir, planFile)
+	planJSON, err := getTerraformPlanJSON(&atmosConfig, &info, componentPath, planFile)
 	if err != nil {
 		return errors.Wrap(err, "error getting JSON for planfile")
 	}
 
+	var planFilePath string
+	if file != "" {
+		planFilePath = file
+	} else {
+		planFilePath = constructTerraformComponentPlanfilePath(atmosConfig, info) + ".json"
+	}
+
 	log.Debug("Writing the planfile", "file", planFilePath)
 
-	err = u.WriteToFileAsJSON(componentWorkingDir+".planfile.json", planJSON, 0o644)
+	err = u.WriteToFileAsJSON(planFilePath, planJSON, 0o644)
 	if err != nil {
 		return err
 	}
