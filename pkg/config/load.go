@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -16,10 +17,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+//go:embed atmos.yaml
+var embeddedConfigData []byte
+
 const MaximumImportLvL = 10
 
 var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
 
+// * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
 // * Home directory (~/.atmos).
 // * Current working directory.
@@ -31,8 +36,20 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	v.SetConfigType("yaml")
 	v.SetTypeByDefaultValue(true)
 	setDefaultConfiguration(v)
+	// Load embed atmos.yaml
+	if err := loadEmbeddedConfig(v); err != nil {
+		return atmosConfig, err
+	}
+	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
+		err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+		if err != nil {
+			return atmosConfig, err
+		}
+		return atmosConfig, nil
+	}
+
 	// Load configuration from different sources.
-	if err := loadConfigSources(v, configAndStacksInfo.AtmosCliConfigPath); err != nil {
+	if err := loadConfigSources(v, configAndStacksInfo); err != nil {
 		return atmosConfig, err
 	}
 	// If no config file is used, fall back to the default CLI config.
@@ -103,7 +120,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 
 // loadConfigSources delegates reading configs from each source,
 // returning early if any step in the chain fails.
-func loadConfigSources(v *viper.Viper, cliConfigPath string) error {
+func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if err := readSystemConfig(v); err != nil {
 		return err
 	}
@@ -120,7 +137,7 @@ func loadConfigSources(v *viper.Viper, cliConfigPath string) error {
 		return err
 	}
 
-	return readAtmosConfigCli(v, cliConfigPath)
+	return readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
 }
 
 // readSystemConfig load config from system dir .
@@ -136,7 +153,7 @@ func readSystemConfig(v *viper.Viper) error {
 	}
 
 	if len(configFilePath) > 0 {
-		err := mergeConfig(v, configFilePath, false)
+		err := mergeConfig(v, configFilePath, CliConfigFileName, false)
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
 			return nil
@@ -154,7 +171,7 @@ func readHomeConfig(v *viper.Viper) error {
 		return err
 	}
 	configFilePath := filepath.Join(home, ".atmos")
-	err = mergeConfig(v, configFilePath, true)
+	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -173,7 +190,7 @@ func readWorkDirConfig(v *viper.Viper) error {
 	if err != nil {
 		return err
 	}
-	err = mergeConfig(v, wd, true)
+	err = mergeConfig(v, wd, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -190,7 +207,7 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	if atmosPath == "" {
 		return nil
 	}
-	err := mergeConfig(v, atmosPath, true)
+	err := mergeConfig(v, atmosPath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -209,7 +226,7 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	if len(atmosCliConfigPath) == 0 {
 		return nil
 	}
-	err := mergeConfig(v, atmosCliConfigPath, true)
+	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
 	switch err.(type) {
 	case viper.ConfigFileNotFoundError:
 		log.Debug("config not found", "file", atmosCliConfigPath)
@@ -221,11 +238,11 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 }
 
 // mergeConfig merge config from a specified path directory and process imports. Return error if config file does not exist.
-func mergeConfig(v *viper.Viper, path string, processImports bool) error {
+func mergeConfig(v *viper.Viper, path string, fileName string, processImports bool) error {
 	// Create a temporary Viper instance to isolate this configuration load
 	tempViper := viper.New()
 	tempViper.AddConfigPath(path)
-	tempViper.SetConfigName(CliConfigFileName)
+	tempViper.SetConfigName(fileName)
 	tempViper.SetConfigType("yaml")
 	// Read configuration into temporary instance
 	if err := tempViper.ReadInConfig(); err != nil {
@@ -409,6 +426,19 @@ func mergeConfigFile(
 	err = preprocessAtmosYamlFunc(content, v)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// loadEmbeddedConfig loads the embedded atmos.yaml configuration.
+func loadEmbeddedConfig(v *viper.Viper) error {
+	// Create a reader from the embedded YAML data
+	reader := bytes.NewReader(embeddedConfigData)
+
+	// Merge the embedded configuration into Viper
+	if err := v.MergeConfig(reader); err != nil {
+		return fmt.Errorf("failed to merge embedded config: %w", err)
 	}
 
 	return nil
