@@ -6,8 +6,11 @@ import (
 	"path/filepath"
 
 	log "github.com/charmbracelet/log"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
+
+var ErrRelPath = errors.New("error determining relative path")
 
 // getAllStacksComponentsPaths retrieves all components relatives paths to base Terraform directory from the stacks map.
 func getAllStacksComponentsPaths(stacksMap map[string]any) []string {
@@ -137,7 +140,7 @@ func collectFilesInFolder(folder *Directory, folderPath string, patterns []strin
 func createFileInfo(rootPath, filePath string) (*ObjectInfo, error) {
 	relativePath, err := filepath.Rel(rootPath, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("error determining relative path for %s: %v", filePath, err)
+		return nil, fmt.Errorf("%w: %s error %v", ErrRelPath, filePath, err)
 	}
 
 	info, err := os.Stat(filePath)
