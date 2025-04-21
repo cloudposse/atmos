@@ -43,10 +43,10 @@ tests:
       diff: []
       exit_code: 0
 
-  - name: atmos warns if not in git repo
+  - name: atmos warns if not in git repo with no atmos config
     enabled: true
     snapshot: true
-    description: "Test that atmos warns if not run inside of a git repo"
+    description: "Test that atmos warns if not run inside of a git repo without an atmos config"
     workdir: "/"
     command: "atmos"
     args:
@@ -60,11 +60,50 @@ tests:
         - ".*You're not inside a git repository. Atmos feels lonely outside - bring it home!.*"
       exit_code: 1 # We expect a non-zero exit code because the dir doesnt have an atmos config
 
-  - name: atmos doesnt warns if in git repo
+  - name: atmos doesnt warn if not in git repo with atmos config
     enabled: true
     snapshot: true
-    description: "Test that atmos doesnt warns if run inside of a git repo with an atmos config"
+    description: "Test that atmos doesnt warn if not run inside of a git repo but has an atmos config"
+    workdir: "/"
+    command: "atmos"
+    args:
+      - list
+      - stacks
+    env:
+      ATMOS_LOGS_LEVEL: Warning
+      ATMOS_BASE_PATH: "fixtures/scenarios/complete"
+    expect:
+      diff: []
+      stdout:
+        - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos doesnt warn if in git repo with atmos config
+    enabled: true
+    snapshot: true
+    description: "Test that atmos doesnt warn if run inside of a git repo with an atmos config"
     workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - list
+      - stacks
+    env:
+      ATMOS_LOGS_LEVEL: Warning
+    expect:
+      diff: []
+      stdout:
+        - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos doesnt warn if in git repo with no atmos config
+    enabled: true
+    snapshot: true
+    description: "Test that atmos doesnt warn if run inside of a git repo with no atmos config"
+    workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
     args:
       - list
