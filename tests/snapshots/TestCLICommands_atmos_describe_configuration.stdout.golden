@@ -60,5 +60,4 @@ validate:
         color: true
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 import: []
-disable_pager: false
 
