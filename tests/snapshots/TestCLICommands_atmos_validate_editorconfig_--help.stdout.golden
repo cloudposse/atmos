@@ -95,7 +95,7 @@ Global Flags:
                                                  configurations.
 
         --stacks-dir string                      Base path for stacks
-                                                 configurations. (Depricated)
+                                                 configurations. (Deprecated)
 
 
 Use atmos validate editorconfig --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

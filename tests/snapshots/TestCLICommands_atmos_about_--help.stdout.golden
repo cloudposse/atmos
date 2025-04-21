@@ -56,7 +56,7 @@ Global Flags:
                                                  configurations.
 
         --stacks-dir string                      Base path for stacks
-                                                 configurations. (Depricated)
+                                                 configurations. (Deprecated)
 
 
 Examples:

@@ -67,7 +67,7 @@ Global Flags:
                                                  configurations.
 
         --stacks-dir string                      Base path for stacks
-                                                 configurations. (Depricated)
+                                                 configurations. (Deprecated)
 
         --                                       Use double dashes to separate
                                                  Atmos-specific options from
