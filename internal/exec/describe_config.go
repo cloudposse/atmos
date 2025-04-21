@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -59,6 +60,7 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 		case nil:
 			return nil
 		default:
+			log.Debug("Failed to use pager")
 		}
 	}
 	return d.printOrWriteToFile(format, output, res)

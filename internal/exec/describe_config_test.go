@@ -22,6 +22,11 @@ func TestDescribeConfig(t *testing.T) {
 				BasePath: "something",
 			},
 		},
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Pager: true,
+			},
+		},
 	}
 
 	t.Run("NewDescribeConfig", func(t *testing.T) {
@@ -38,7 +43,6 @@ func TestDescribeConfig(t *testing.T) {
 
 		mockPager := pager.NewMockPageCreator(ctrl)
 		mockPager.EXPECT().Run(describeConfigTitle, gomock.Any()).Return(nil)
-
 		dc := &describeConfigExec{
 			atmosConfig:           config,
 			pageCreator:           mockPager,
