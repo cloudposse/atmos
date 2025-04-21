@@ -49,8 +49,6 @@ var (
 	errorRed  = lipgloss.AdaptiveColor{Light: "#FF5555", Dark: "#FF5555"}
 	darkGray  = lipgloss.AdaptiveColor{Light: "#333333", Dark: "#333333"}
 
-	lineNumberFg = lipgloss.AdaptiveColor{Light: "#656565", Dark: "#7D7D7D"}
-
 	statusBarNoteFg = lipgloss.AdaptiveColor{Light: "#656565", Dark: "#7D7D7D"}
 	statusBarBg     = lipgloss.AdaptiveColor{Light: "#E6E6E6", Dark: "#242424"}
 
@@ -279,27 +277,27 @@ func (m *model) helpView() (s string) {
 		"esc     back to files",
 		"q       quit",
 	}
-
-	s += "\n"
-	s += "k/↑      up                  " + col1[0] + "\n"
-	s += "j/↓      down                " + col1[1] + "\n"
-	s += "b/pgup   page up             " + col1[2] + "\n"
-	s += "f/pgdn   page down           " + col1[3] + "\n"
-	s += "u        ½ page up           " + col1[4] + "\n"
+	nextLine := "\n"
+	s += nextLine
+	s += "k/↑      up                  " + col1[0] + nextLine
+	s += "j/↓      down                " + col1[1] + nextLine
+	s += "b/pgup   page up             " + col1[2] + nextLine
+	s += "f/pgdn   page down           " + col1[3] + nextLine
+	s += "u        ½ page up           " + col1[4] + nextLine
 	s += "d        ½ page down         "
 
 	s = indent(s, 2)
 
 	// Fill up empty cells with spaces for background coloring
 	if m.common.width > 0 {
-		lines := strings.Split(s, "\n")
+		lines := strings.Split(s, nextLine)
 		for i := 0; i < len(lines); i++ {
 			l := runewidth.StringWidth(lines[i])
 			n := max(m.common.width-l, 0)
 			lines[i] += strings.Repeat(" ", n)
 		}
 
-		s = strings.Join(lines, "\n")
+		s = strings.Join(lines, nextLine)
 	}
 
 	return helpViewStyle(s)
