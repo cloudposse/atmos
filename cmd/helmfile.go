@@ -31,7 +31,7 @@ func init() {
 	config.DefaultConfigHandler.AddConfig(helmfileCmd, &config.ConfigOptions{
 		FlagName:     "helmfile-dir",
 		EnvVar:       "ATMOS_COMPONENTS_HELMFILE_BASE_PATH",
-		Description:  "Specifies the directory where Helmfile commands are executed.",
+		Description:  "Specifies the directory where Helmfile commands are executed. (Deprecated: use `--helmfile-base-path` instead)",
 		Key:          "components.helmfile.base_path",
 		DefaultValue: "",
 	})

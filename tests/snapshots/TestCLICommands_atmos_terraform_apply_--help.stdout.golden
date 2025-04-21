@@ -116,7 +116,9 @@ Global Flags:
                                                  configurations.
 
         --stacks-dir string                      Base path for stacks
-                                                 configurations. (Deprecated)
+                                                 configurations. (Deprecated:
+                                                 use --stacks-base-path
+                                                 instead)
 
         --terraform-base-path string             Specifies the directory where
                                                  Terraform commands are
@@ -129,7 +131,9 @@ Global Flags:
 
         --terraform-dir string                   Specifies the directory where
                                                  Terraform commands are
-                                                 executed.
+                                                 executed. (Deprecated: use
+                                                 --terraform-base-path
+                                                 instead)
 
         --                                       Use double dashes to separate
                                                  Atmos-specific options from

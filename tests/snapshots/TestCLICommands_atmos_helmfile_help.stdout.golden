@@ -29,7 +29,8 @@ Flags:
                                        (default helmfile)
 
         --helmfile-dir string          Specifies the directory where Helmfile
-                                       commands are executed.
+                                       commands are executed. (Deprecated: use
+                                       --helmfile-base-path instead)
 
     -h, --help                         help for helmfile
 
@@ -87,7 +88,9 @@ Global Flags:
                                                  configurations.
 
         --stacks-dir string                      Base path for stacks
-                                                 configurations. (Deprecated)
+                                                 configurations. (Deprecated:
+                                                 use --stacks-base-path
+                                                 instead)
 
 
 Use atmos helmfile [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

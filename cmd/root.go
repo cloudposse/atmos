@@ -215,7 +215,7 @@ func init() {
 		FlagName:     "stacks-dir",
 		EnvVar:       "ATMOS_STACKS_BASE_PATH",
 		Key:          "stacks.base_path",
-		Description:  "Base path for stacks configurations. (Deprecated)",
+		Description:  "Base path for stacks configurations. (Deprecated: use `--stacks-base-path` instead)",
 		DefaultValue: "",
 	})
 	config.DefaultConfigHandler.AddConfig(RootCmd, &cfg.ConfigOptions{

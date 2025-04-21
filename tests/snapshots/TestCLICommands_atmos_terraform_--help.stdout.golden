@@ -105,7 +105,8 @@ Flags:
                                         (default terraform)
 
         --terraform-dir string          Specifies the directory where Terraform
-                                        commands are executed.
+                                        commands are executed. (Deprecated: use
+                                        --terraform-base-path instead)
 
         --                              Use double dashes to separate
                                         Atmos-specific options from native
@@ -157,7 +158,9 @@ Global Flags:
                                                  configurations.
 
         --stacks-dir string                      Base path for stacks
-                                                 configurations. (Deprecated)
+                                                 configurations. (Deprecated:
+                                                 use --stacks-base-path
+                                                 instead)
 
 
 Examples:

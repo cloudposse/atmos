@@ -64,7 +64,9 @@ Global Flags:
                                                  configurations.
 
         --stacks-dir string                      Base path for stacks
-                                                 configurations. (Deprecated)
+                                                 configurations. (Deprecated:
+                                                 use --stacks-base-path
+                                                 instead)
 
 
 Use atmos atlantis [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

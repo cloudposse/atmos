@@ -71,7 +71,7 @@ func workflowCommandConfig() {
 	config.DefaultConfigHandler.AddConfig(workflowCmd, &config.ConfigOptions{
 		FlagName:     "workflows-dir",
 		EnvVar:       "ATMOS_WORKFLOWS_BASE_PATH",
-		Description:  "Base path for workflows configurations. (Deprecated)",
+		Description:  "Base path for workflows configurations. (Deprecated: use `--workflows-base-path` instead)",
 		Key:          "workflows.base_path",
 		DefaultValue: "",
 	})

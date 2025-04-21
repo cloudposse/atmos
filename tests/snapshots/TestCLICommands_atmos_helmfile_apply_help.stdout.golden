@@ -36,6 +36,8 @@ Global Flags:
 
         --helmfile-dir string                    Specifies the directory where
                                                  Helmfile commands are executed.
+                                                 (Deprecated: use
+                                                 --helmfile-base-path instead)
 
         --logs-file string                       The file to write Atmos logs
                                                  to. Logs can be written to any
@@ -73,7 +75,9 @@ Global Flags:
                                                  configurations.
 
         --stacks-dir string                      Base path for stacks
-                                                 configurations. (Deprecated)
+                                                 configurations. (Deprecated:
+                                                 use --stacks-base-path
+                                                 instead)
 
         --                                       Use double dashes to separate
                                                  Atmos-specific options from

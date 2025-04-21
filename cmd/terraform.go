@@ -52,7 +52,7 @@ func addTerraformCommandSettings() {
 	config.DefaultConfigHandler.AddConfig(terraformCmd, &cfg.ConfigOptions{
 		FlagName:     "terraform-dir",
 		EnvVar:       "ATMOS_COMPONENTS_TERRAFORM_BASE_PATH",
-		Description:  "Specifies the directory where Terraform commands are executed.",
+		Description:  "Specifies the directory where Terraform commands are executed. (Deprecated: use `--terraform-base-path` instead)",
 		Key:          "components.terraform.base_path",
 		DefaultValue: "",
 	})
