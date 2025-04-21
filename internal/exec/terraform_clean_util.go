@@ -48,7 +48,7 @@ func getComponentsPaths(stackData any) ([]string, error) {
 		if !ok {
 			return nil, ErrParseTerraformComponents
 		}
-		// component attributes reference to relative path
+		// component attributes reference to relative path.
 		componentPath, ok := components["component"].(string)
 		if !ok {
 			return nil, ErrParseComponentsAttributes
