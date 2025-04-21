@@ -51,7 +51,7 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 		res = d.atmosConfig
 	}
 
-	if !d.atmosConfig.DisablePager {
+	if d.atmosConfig.Settings.Terminal.Pager {
 		err = d.viewConfig(format, res)
 		switch err.(type) {
 		case ErrInvalidFormat:
