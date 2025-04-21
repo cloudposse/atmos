@@ -28,7 +28,6 @@ var (
 	ErrReadDir                   = errors.New("error reading directory")
 	ErrFailedFoundStack          = errors.New("failed to find stack folders")
 	ErrCollectFiles              = errors.New("failed to collect files")
-	ErrDeterminingRelativePath   = errors.New("error determining relative path for folder")
 )
 
 type ObjectInfo struct {
@@ -97,7 +96,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	addFileInfo := func(filePath string) (*ObjectInfo, error) {
 		relativePath, err := filepath.Rel(basePath, filePath)
 		if err != nil {
-			return nil, fmt.Errorf("%w  %s: %v", ErrDeterminingRelativePath, filePath, err)
+			return nil, fmt.Errorf("%w  %s: %v", ErrRelPath, filePath, err)
 		}
 		info, err := os.Stat(filePath)
 		if os.IsNotExist(err) {
@@ -118,7 +117,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	createFolder := func(folderPath string, folderName string) (*Directory, error) {
 		relativePath, err := filepath.Rel(basePath, folderPath)
 		if err != nil {
-			return nil, fmt.Errorf("%w %s: %v", ErrDeterminingRelativePath, folderPath, err)
+			return nil, fmt.Errorf("%w %s: %v", ErrRelPath, folderPath, err)
 		}
 
 		return &Directory{

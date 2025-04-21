@@ -107,7 +107,7 @@ func validateInputPath(path string) error {
 func createFolder(rootPath, folderPath, folderName string) (*Directory, error) {
 	relativePath, err := filepath.Rel(rootPath, folderPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w %s: %v", ErrDeterminingRelativePath, folderPath, err)
+		return nil, fmt.Errorf("%w %s: %v", ErrRelPath, folderPath, err)
 	}
 
 	return &Directory{
