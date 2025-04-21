@@ -143,24 +143,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			return m, tea.Quit
-		case "home", "g":
-			m.viewport.GotoTop()
-		case "end", "G":
-			m.viewport.GotoBottom()
-		case "c":
-			// Copy using OSC 52
-			termenv.Copy(StripANSI(m.content))
-			if err := clipboard.WriteAll(StripANSI(m.content)); err != nil {
-				cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Failed to copy to clipboard", true}))
-			} else {
-				cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Copied contents", false}))
-			}
-		case "?":
-			m.toggleHelp()
-		}
+		return m.handleKeyPress(msg)
 
 	case statusMessageTimeoutMsg:
 		m.state = pagerStateBrowse
@@ -189,6 +172,37 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Handle keyboard and mouse events in the viewport
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
+}
+
+// handleKeyPress processes keyboard input and returns the updated model and command
+func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	switch msg.String() {
+	case "q", "esc", "ctrl+c":
+		return m, tea.Quit
+	case "home", "g":
+		m.viewport.GotoTop()
+	case "end", "G":
+		m.viewport.GotoBottom()
+	case "c":
+		// Copy using OSC 52
+		termenv.Copy(StripANSI(m.content))
+		if err := clipboard.WriteAll(StripANSI(m.content)); err != nil {
+			cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Failed to copy to clipboard", true}))
+		} else {
+			cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Copied contents", false}))
+		}
+	case "?":
+		m.toggleHelp()
+	}
+
+	// Handle keyboard and mouse events in the viewport
+	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
