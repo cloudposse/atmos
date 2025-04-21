@@ -295,3 +295,73 @@ func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
 		})
 	}
 }
+
+func TestReplaceContextTokens(t *testing.T) {
+	tests := []struct {
+		name     string
+		context  schema.Context
+		pattern  string
+		expected string
+	}{
+		{
+			name: "Replace all tokens",
+			context: schema.Context{
+				BaseComponent:      "base",
+				Component:          "app",
+				ComponentPath:      "path/to/app",
+				Namespace:          "ns",
+				Environment:        "prod",
+				Region:             "us-west-2",
+				Tenant:             "tenant1",
+				Stage:              "live",
+				Workspace:          "ws1",
+				TerraformWorkspace: "tfws1",
+				Attributes:         []interface{}{"attr1", "attr2"},
+			},
+			pattern:  "{namespace}/{environment}/{region}/{tenant}/{stage}/{workspace}/{terraform_workspace}/{base-component}/{component}/{component-path}/{attributes}",
+			expected: "ns/prod/us-west-2/tenant1/live/ws1/tfws1/base/app/path/to/app/attr1-attr2",
+		},
+		{
+			name: "Empty context fields",
+			context: schema.Context{
+				BaseComponent:      "",
+				Component:          "",
+				ComponentPath:      "",
+				Namespace:          "",
+				Environment:        "",
+				Region:             "",
+				Tenant:             "",
+				Stage:              "",
+				Workspace:          "",
+				TerraformWorkspace: "",
+				Attributes:         []interface{}{},
+			},
+			pattern:  "{namespace}/{environment}/{region}/{tenant}/{stage}/{workspace}/{terraform_workspace}/{base-component}/{component}/{component-path}/{attributes}",
+			expected: "//////////",
+		},
+		{
+			name: "Partial token replacement",
+			context: schema.Context{
+				Namespace:   "ns",
+				Environment: "dev",
+				Attributes:  []interface{}{"test"},
+			},
+			pattern:  "{namespace}/{environment}/static/{attributes}",
+			expected: "ns/dev/static/test",
+		},
+		{
+			name:     "No tokens in pattern",
+			context:  schema.Context{Namespace: "ns"},
+			pattern:  "static/pattern",
+			expected: "static/pattern",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ReplaceContextTokens(tt.context, tt.pattern)
+			if result != tt.expected {
+				t.Errorf("ReplaceContextTokens() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
