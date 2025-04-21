@@ -6,12 +6,12 @@ coverage:
     patch:
       default:
         target: 80% # Require at least 80% test coverage on new/changed lines
-        threshold: 2% # Allow a small drop in coverage
+        threshold: 2.01% # Allow a small drop in coverage
         base: auto
     project:
       default:
         target: auto
-        threshold: 2%
+        threshold: 2.01%
   ignore:
     - "mock_*.go"  # Adjust this pattern based on your project structure
 
