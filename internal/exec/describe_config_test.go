@@ -119,6 +119,6 @@ func TestDescribeConfig(t *testing.T) {
 
 		err := dc.ExecuteDescribeConfigCmd(".component.terraform[", "yaml", "")
 		assert.Error(t, err)
-		assert.Equal(t, "EvaluateYqExpression: failed to evaluate YQ expression '.component.terraform[': bad expression, could not find matching `]`", err.Error())
+		assert.Equal(t, "EvaluateYqExpressionWithType: failed to evaluate YQ expression '.component.terraform[': bad expression, could not find matching `]`", err.Error())
 	})
 }
