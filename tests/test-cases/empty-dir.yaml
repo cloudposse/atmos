@@ -62,7 +62,7 @@ tests:
       exit_code: 1 # We expect a non-zero exit code because the dir doesnt have an atmos config
 
   # We need to test from outside a git repo. 
-  # We also need to provide a static path to the atmos config that can we used both in CLI and locally.
+  # We also need to provide a static path to the atmos config that can we used both in GHA and locally.
   # To do so, we can change up 1 directory outside that atmos project and assume the project is named "atmos".
   - name: atmos doesnt warn if not in git repo with atmos config
     enabled: true
@@ -76,6 +76,7 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: Warning
       ATMOS_BASE_PATH: "./atmos/tests/fixtures/scenarios/complete"
+    # Atmos should pass and not include the git repo warning
     expect:
       diff: []
       stdout:
@@ -113,7 +114,7 @@ tests:
     args: []
     env:
       ATMOS_LOGS_LEVEL: Warning
-    # Atmos should fail, but not include the git repo warning
+    # Atmos should fail but not include the git repo warning
     expect:
       diff: []
       stderr:
