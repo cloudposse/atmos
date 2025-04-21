@@ -18,6 +18,7 @@ func getAllStacksComponentsPaths(stacksMap map[string]any) []string {
 	for _, stackData := range stacksMap {
 		componentsPath, err := getComponentsPaths(stackData)
 		if err != nil {
+			log.Warn("Skip invalid components path", "path", componentsPath)
 			continue // Skip invalid components path.
 		}
 		allComponentsPaths = append(allComponentsPaths, componentsPath...)
