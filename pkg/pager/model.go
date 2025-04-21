@@ -178,7 +178,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// handleKeyPress processes keyboard input and returns the updated model and command
+// handleKeyPress processes keyboard input and returns the updated model and command.
 func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -271,7 +271,7 @@ func (m *model) View() string {
 	return fmt.Sprintf("%s\n%s", m.viewport.View(), m.footerView())
 }
 
-func (m model) helpView() (s string) {
+func (m *model) helpView() (s string) {
 	col1 := []string{
 		"g/home  go to top",
 		"G/end   go to bottom",
@@ -318,7 +318,7 @@ func max(a, b int) int {
 	return b
 }
 
-func (m model) statusBarView(b *strings.Builder) {
+func (m *model) statusBarView(b *strings.Builder) {
 	showStatusMessage := m.state == pagerStateStatusMessage
 
 	// Scroll percent
