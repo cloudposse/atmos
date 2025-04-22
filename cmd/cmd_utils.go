@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/charmbracelet/log"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
@@ -19,7 +20,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
+	"github.com/go-git/go-git/v5"
 )
+
+// Define a constant for the dot string that appears multiple times.
+const currentDirPath = "."
 
 // ValidateConfig holds configuration options for Atmos validation.
 // CheckStack determines whether stack configuration validation should be performed.
@@ -180,7 +185,7 @@ func processCommandAliases(
 					}
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
-					err = e.ExecuteShell(atmosConfig, commandToRun, commandToRun, ".", nil, false)
+					err = e.ExecuteShell(atmosConfig, commandToRun, commandToRun, currentDirPath, nil, false)
 					if err != nil {
 						u.LogErrorAndExit(err)
 					}
@@ -400,7 +405,7 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := e.ExecuteShellAndReturnOutput(atmosConfig, valCommand, valCommandName, ".", nil, false)
+				res, err := e.ExecuteShellAndReturnOutput(atmosConfig, valCommand, valCommandName, currentDirPath, nil, false)
 				if err != nil {
 					u.LogErrorAndExit(err)
 				}
@@ -436,7 +441,7 @@ func executeCustomCommand(
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, ".", envVarsList, false)
+		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, currentDirPath, envVarsList, false)
 		if err != nil {
 			u.LogErrorAndExit(err)
 		}
@@ -522,6 +527,9 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	if err != nil {
 		u.LogErrorAndExit(err)
 	}
+
+	// Check if we're in a git repo. Warn if not.
+	verifyInsideGitRepo()
 
 	if atmosConfig.Default {
 		// If Atmos did not find an `atmos.yaml` config file and is using the default config
@@ -663,6 +671,31 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		u.LogErrorAndExit(err)
 	}
 	return info
+}
+
+// isGitRepository checks if the current directory is within a git repository.
+func isGitRepository() bool {
+	_, err := git.PlainOpenWithOptions(currentDirPath, &git.PlainOpenOptions{
+		DetectDotGit: true,
+	})
+	if err != nil {
+		if !errors.Is(err, git.ErrRepositoryNotExists) {
+			log.Debug("git check failed", "error", err)
+		}
+		return false
+	}
+
+	return true
+}
+
+// verifyInsideGitRepo checks if we're in a git repo.
+func verifyInsideGitRepo() bool {
+	// Check if we're in a git repo
+	if !isGitRepository() {
+		log.Warn("You're not inside a git repository. Atmos feels lonely outside - bring it home!\n")
+		return false
+	}
+	return true
 }
 
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
