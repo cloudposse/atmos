@@ -72,6 +72,7 @@ func ExecuteTerraformGeneratePlanfile(
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
+	info.NeedHelp = false
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {

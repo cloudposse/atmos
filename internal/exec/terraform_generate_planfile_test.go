@@ -43,9 +43,6 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 
 		err = os.Remove(fmt.Sprintf("%s/%s-%s.planfile.json", componentPath, stack, component))
 		assert.NoError(t, err)
-
-		err = os.Remove(fmt.Sprintf("%s/%s-%s.planfile.yaml", componentPath, stack, component))
-		assert.NoError(t, err)
 	}()
 
 	cmd := &cobra.Command{
@@ -74,7 +71,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 
 	// Execute the command
-	cmd.SetArgs([]string{component, "-s", stack})
+	cmd.SetArgs([]string{component, "-s", stack, "--format", "json"})
 	err = cmd.Execute()
 	assert.NoError(t, err, "'atmos terraform generate planfile' command should execute without error")
 }
