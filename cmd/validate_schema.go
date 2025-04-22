@@ -72,6 +72,5 @@ and are compliant with expected formats, reducing configuration drift and runtim
 
 func init() {
 	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
-	ValidateSchemaCmd.PersistentFlags().String("file", "", "file to be validated")
 	validateCmd.AddCommand(ValidateSchemaCmd)
 }
