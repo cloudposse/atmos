@@ -43,6 +43,22 @@ logs:
   file: /dev/stderr
   level: Info
 `
+	includeConfig := `
+base_path: "./"
+
+components: !include config/component.yaml
+
+logs:
+  file: "/dev/stderr"
+  level: Info`
+	componentContent := `
+terraform:
+  base_path: "components/terraform"
+  apply_auto_approve: true
+  append_user_agent: test !include config/component.yaml
+  deploy_run_init: true
+  init_run_reconfigure: true
+  auto_generate_backend_file: true`
 	type testCase struct {
 		name           string
 		configFileName string
@@ -197,7 +213,30 @@ logs:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				assert.Equal(t, "Hello, World!", cfg.BasePath)
+				assert.Equal(t, "Hello, World!\n", cfg.BasePath)
+			},
+		},
+		{
+			name:           "execution YAML function include (AtmosYamlFuncInclude)",
+			configFileName: "atmos.yaml",
+			configContent:  includeConfig,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				err := os.Mkdir(filepath.Join(dir, "config"), 0777)
+				if err != nil {
+					t.Fatal(err)
+				}
+				createConfigFile(t, filepath.Join(dir, "config"), "component.yaml", componentContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "test !include config/component.yaml", cfg.Components.Terraform.AppendUserAgent)
+				assert.Equal(t, true, cfg.Components.Terraform.ApplyAutoApprove)
+				assert.Equal(t, true, cfg.Components.Terraform.DeployRunInit)
+				assert.Equal(t, true, cfg.Components.Terraform.InitRunReconfigure)
+				assert.Equal(t, true, cfg.Components.Terraform.AutoGenerateBackendFile)
+				assert.Equal(t, "components/terraform", cfg.Components.Terraform.BasePath)
 			},
 		},
 		{

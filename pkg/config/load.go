@@ -261,6 +261,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	if err != nil {
 		return err
 	}
+
 	err = preprocessAtmosYamlFunc(content, v)
 	if err != nil {
 		return err
