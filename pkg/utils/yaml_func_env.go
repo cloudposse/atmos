@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/charmbracelet/log"
 )
 
 var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")
@@ -11,7 +13,7 @@ var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")
 func ProcessTagEnv(
 	input string,
 ) (string, error) {
-	LogTrace(fmt.Sprintf("Executing Atmos YAML function: %s", input))
+	log.Debug("Executing Atmos YAML function", "input", input)
 
 	str, err := getStringAfterTag(input, AtmosYamlFuncEnv)
 	if err != nil {

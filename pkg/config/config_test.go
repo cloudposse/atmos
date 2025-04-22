@@ -241,6 +241,42 @@ terraform:
 			},
 		},
 		{
+			name:           "execution YAML function !repo-root AtmosYamlFuncGitRoot return default value",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !repo-root /test/path`,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "/test/path", cfg.BasePath)
+			},
+		},
+		{
+			name:           "execution YAML function !repo-root AtmosYamlFuncGitRoot return root path",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !repo-root`,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-repo-root-yaml-function")
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				cwd, errDir := os.Getwd()
+				// expect dir four levels up of the current dir to resolve to the root of the git repo
+				fourLevelsUp := filepath.Join(cwd, "..", "..", "..", "..")
+
+				// Clean and get the absolute path
+				absPath, errPath := filepath.Abs(fourLevelsUp)
+				if errPath != nil {
+					require.NoError(t, err)
+				}
+				require.NoError(t, errDir)
+				require.NoError(t, err)
+				assert.Equal(t, absPath, cfg.BasePath)
+
+			},
+		},
+		{
 			name: "valid import .atmos.d",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-configuration")
