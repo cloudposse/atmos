@@ -8,7 +8,7 @@ description: Use this command to validate the schema of yaml files of the Atmos 
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note purpose
-Use this command to validate files against the rules defined in .editorconfig file.
+Use this command to validate files against the rules defined in your schema in atmos.yaml.
 :::
 
 <Screengrab title="atmos validate schema --help" slug="atmos-validate-schema--help" />
@@ -33,6 +33,19 @@ Run `atmos validate schema --help` to see all the available options
 atmos validate schema
 atmos validate schema <my_custom_key>
 ```
+
+## How to set my schema validators?
+
+You need to use the `schmeas` key in atmos config.
+
+```yaml
+schemas:
+    my_custom_key:
+        schema: !import https://www.jsonschema.com/example.json # json to be used for validation
+        matches:
+            - folder/*.yaml # pattern of the file to be validated
+```
+
 
 ## Flags
 
