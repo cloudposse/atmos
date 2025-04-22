@@ -106,6 +106,7 @@ func processChildren(children []*yaml.Node, v *viper.Viper, currentPath string, 
 	}
 	return nil
 }
+
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node.Tag == "" {
 		return nil
