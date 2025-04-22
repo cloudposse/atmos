@@ -11,7 +11,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const valueKey = "value"
+const (
+	valueKey    = "value"
+	functionKey = "function"
+)
 
 // PreprocessYAML processes the given YAML content, replacing specific directives
 // (such as !env) with their corresponding values .
@@ -101,55 +104,66 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 
 	switch {
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
-		envValue, err := u.ProcessTagEnv(fmt.Sprintf("%s %s", node.Tag, node.Value))
-		if err != nil {
-			log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
-			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
-		}
-		envValue = strings.TrimSpace(envValue)
-		if envValue == "" {
-			log.Warn("execute returned empty value", "function", u.AtmosYamlFuncEnv, valueKey, node.Value)
-		}
-		node.Value = envValue
-		v.Set(currentPath, node.Value)
-		node.Tag = "" // Avoid re-processing  .
-
+		return handleEnv(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
-		execValue, err := u.ProcessTagExec(fmt.Sprintf("%s %s", node.Tag, node.Value))
-		if err != nil {
-			log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
-			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, node.Value, err)
-		}
-		if execValue != nil {
-			v.Set(currentPath, execValue)
-		} else {
-			log.Warn("execute returned empty value", "function", node.Tag, valueKey, node.Value)
-		}
-
-		node.Tag = "" // Avoid re-processing  .
-
+		return handleExec(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
-
-		includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", "include_data", node.Tag, node.Value))
-		if err != nil {
-			log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
-			return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
-		}
-		if includeValue != nil {
-			data, ok := includeValue["include_data"]
-			if ok {
-				v.Set(currentPath, data)
-			} else {
-				log.Warn("invalid value returned from execute Yaml function",
-					"function", fmt.Sprintf("%s %s", node.Tag, node.Value),
-					"value", includeValue,
-				)
-			}
-		} else {
-			log.Warn("execute returned empty value", "function", node.Tag, valueKey, node.Value)
-		}
-		node.Tag = "" // Avoid re-processing  .
+		return handleInclude(node, v, currentPath)
 	}
 
+	return nil
+}
+
+func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	envValue, err := u.ProcessTagEnv(fmt.Sprintf("%s %s", node.Tag, node.Value))
+	if err != nil {
+		log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
+		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
+	}
+	envValue = strings.TrimSpace(envValue)
+	if envValue == "" {
+		log.Warn("execute returned empty value", functionKey, u.AtmosYamlFuncEnv, valueKey, node.Value)
+	}
+	node.Value = envValue
+	v.Set(currentPath, node.Value)
+	node.Tag = "" // Avoid re-processing
+	return nil
+}
+
+func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	execValue, err := u.ProcessTagExec(fmt.Sprintf("%s %s", node.Tag, node.Value))
+	if err != nil {
+		log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
+		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, node.Value, err)
+	}
+	if execValue != nil {
+		v.Set(currentPath, execValue)
+	} else {
+		log.Warn("execute returned empty value", functionKey, node.Tag, valueKey, node.Value)
+	}
+	node.Tag = "" // Avoid re-processing
+	return nil
+}
+
+func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", "include_data", node.Tag, node.Value))
+	if err != nil {
+		log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
+		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+	}
+	if includeValue != nil {
+		data, ok := includeValue["include_data"]
+		if ok {
+			v.Set(currentPath, data)
+		} else {
+			log.Warn("invalid value returned from execute Yaml function",
+				functionKey, fmt.Sprintf("%s %s", node.Tag, node.Value),
+				"value", includeValue,
+			)
+		}
+	} else {
+		log.Warn("execute returned empty value", functionKey, node.Tag, valueKey, node.Value)
+	}
+	node.Tag = "" // Avoid re-processing
 	return nil
 }

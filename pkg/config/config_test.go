@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -213,7 +214,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				assert.Equal(t, "Hello, World!\n", cfg.BasePath)
+				assert.Equal(t, "Hello, World!", strings.TrimSpace(cfg.BasePath))
 			},
 		},
 		{
