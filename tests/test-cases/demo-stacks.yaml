@@ -67,7 +67,7 @@ tests:
         - "^$"
       exit_code: 0
 
-  - name: atmos docs mock
+  - name: atmos docs myapp
     enabled: true
     snapshot: true
     description: "Validate atmos docs command outputs documentation for a specific component."
@@ -75,7 +75,7 @@ tests:
     command: "atmos"
     args:
       - "docs"
-      - "mock"
+      - "myapp"
     expect:
       diff: []
       stdout:

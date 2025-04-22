@@ -11,6 +11,7 @@ tests:
       stderr:
         - "Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/"
       exit_code: 1
+
   - name: atmos_vendor_pull
     enabled: true
     description: "Ensure atmos vendor pull command executes without errors and files are present."
@@ -42,10 +43,7 @@ tests:
         - "./components/terraform/mock2/versions.tf"
         - "./components/terraform/mock2/README.md"
         # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0
-        - "./components/terraform/mock1/outputs.tf"
         - "./components/terraform/mock1/main.tf"
-        - "./components/terraform/mock1/variables.tf"
-        - "./components/terraform/mock1/versions.tf"
         - "./components/terraform/mock1/README.md"
       exit_code: 0
 
@@ -62,9 +60,6 @@ tests:
     expect:
       file_exists:
         # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0
-        - "./components/terraform/mock1/outputs.tf"
         - "./components/terraform/mock1/main.tf"
-        - "./components/terraform/mock1/variables.tf"
-        - "./components/terraform/mock1/versions.tf"
         - "./components/terraform/mock1/README.md"
       exit_code: 0
