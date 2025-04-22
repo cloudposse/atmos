@@ -24,7 +24,7 @@ tests:
         - !not 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
 
-  - name: atmos vendor pull (no tty)
+  - name: atmos vendor pull no tty
     enabled: true
     snapshot: true
     tty: false

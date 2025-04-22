@@ -1,0 +1,44 @@
+DEBU Set logs-level=debug logs-file=/dev/stderr
+DEBU Atmos configuration not found path=/absolute/path/to/repo/examples/demo-vendoring/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Atmos configuration not found path=/absolute/path/to/repo/examples/demo-vendoring/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Atmos configuration not found path=/absolute/path/to/repo/examples/demo-vendoring/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Atmos configuration not found path=/absolute/path/to/repo/examples/demo-vendoring/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Atmos configuration not found path=/absolute/path/to/repo/examples/demo-vendoring/atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU Atmos configuration not found path=/absolute/path/to/repo/examples/demo-vendoring/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
+DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+INFO Vendoring from 'vendor.yaml'
+DEBU No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
+DEBU Downloading and installing package package=github/stargazers
+DEBU CustomGitDetector.Detect called
+DEBU Defaulting to https scheme url="https://github.com/cloudposse/atmos.git?ref=main"
+DEBU Reading config param InjectGithubToken=true
+DEBU No token found for injection
+DEBU Final transformation url="git::https://github.com/cloudposse/atmos.git?depth=1&ref=main"
+DEBU Removing symlink path=/tmp/getter2010095318/temp/website/examples
+DEBU Processing inclusion pattern pattern=**/*.tf source=/tmp/atmos-vendor147138018 finalTarget=components/terraform/github/stargazers/main
+DEBU Processing inclusion pattern pattern=**/*.tfvars source=/tmp/atmos-vendor147138018 finalTarget=components/terraform/github/stargazers/main
+DEBU Warning: error getting matches for pattern pattern=**/*.tfvars error="error getting glob matches for \"/tmp/atmos-vendor147138018/**/*.tfvars\": failed to find a match for the import '/tmp/atmos-vendor147138018/**/*.tfvars' ('/tmp/atmos-vendor147138018' + '**/*.tfvars')"
+DEBU Processing inclusion pattern pattern=**/*.md source=/tmp/atmos-vendor147138018 finalTarget=components/terraform/github/stargazers/main
+INFO ✓ github/stargazers (main)
+DEBU Downloading and installing package package=weather
+DEBU CustomGitDetector.Detect called
+DEBU Defaulting to https scheme url="https://github.com/cloudposse/atmos.git?ref=main"
+DEBU Reading config param InjectGithubToken=true
+DEBU No token found for injection
+DEBU Final transformation url="git::https://github.com/cloudposse/atmos.git?depth=1&ref=main"
+DEBU Removing symlink path=/tmp/getter2742234092/temp/website/examples
+DEBU No inclusion or exclusion patterns defined; using cp.Copy for fast copy
+INFO ✓ weather (main)
+DEBU Downloading and installing package package=ipinfo
+DEBU CustomGitDetector.Detect called
+DEBU Defaulting to https scheme url="https://github.com/cloudposse/atmos.git?ref=main"
+DEBU Reading config param InjectGithubToken=true
+DEBU No token found for injection
+DEBU Final transformation url="git::https://github.com/cloudposse/atmos.git?depth=1&ref=main"
+DEBU Removing symlink path=/tmp/getter1359777028/temp/website/examples
+DEBU No inclusion or exclusion patterns defined; using cp.Copy for fast copy
+INFO ✓ ipinfo (main)
+INFO Vendored 3 components.
+
