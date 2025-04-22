@@ -12,7 +12,11 @@ import (
 )
 
 const (
-	functionKey = "function"
+	functionKey       = "function"
+	tagValueFormat    = "%s %s"
+	errorFormat       = "%w %v %v error %v"
+	failedToProcess   = "failed to process"
+	emptyValueWarning = "execute returned empty value"
 )
 
 var ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")
@@ -102,7 +106,6 @@ func processChildren(children []*yaml.Node, v *viper.Viper, currentPath string, 
 	}
 	return nil
 }
-
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node.Tag == "" {
 		return nil
@@ -124,15 +127,15 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 
 // handleEnv processes a YAML node with an !env tag and sets the value in Viper, returns an error if the processing fails, warns if the value is empty.
 func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
-	strFunc := fmt.Sprintf("%s %s", node.Tag, node.Value)
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 	envValue, err := u.ProcessTagEnv(strFunc)
 	if err != nil {
-		log.Debug("failed to process", functionKey, strFunc, "error", err)
-		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
 	}
 	envValue = strings.TrimSpace(envValue)
 	if envValue == "" {
-		log.Warn("execute returned empty value", functionKey, strFunc)
+		log.Warn(emptyValueWarning, functionKey, strFunc)
 	}
 	// Set the value in Viper .
 	v.Set(currentPath, envValue)
@@ -143,17 +146,17 @@ func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
 
 // handleExec Process the !exec tag and set the value in Viper , returns an error if the processing fails, warns if the value is empty.
 func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
-	strFunc := fmt.Sprintf("%s %s", node.Tag, node.Value)
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 	execValue, err := u.ProcessTagExec(strFunc)
 	if err != nil {
-		log.Debug("failed to process", functionKey, strFunc, "error", err)
-		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, node.Value, err)
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, node.Value, err)
 	}
 	if execValue != nil {
 		// Set the value in Viper .
 		v.Set(currentPath, execValue)
 	} else {
-		log.Warn("execute returned empty value", functionKey, strFunc)
+		log.Warn(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
 	node.Value = ""
@@ -162,11 +165,11 @@ func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
 
 // handleInclude Process the !include tag and set the value in Viper , returns an error if the processing fails, warns if the value is empty.
 func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
-	strFunc := fmt.Sprintf("%s %s", node.Tag, node.Value)
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 	includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", "include_data", node.Tag, node.Value))
 	if err != nil {
-		log.Debug("failed to process", functionKey, strFunc, "error", err)
-		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
 	}
 	if includeValue != nil {
 		data, ok := includeValue["include_data"]
@@ -180,7 +183,7 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 			)
 		}
 	} else {
-		log.Warn("execute returned empty value", functionKey, strFunc)
+		log.Warn(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
 	node.Value = ""
@@ -189,15 +192,15 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 
 // handleGitRoot processes a YAML node with an !repo-root tag and sets the value in Viper, returns an error if the processing fails, warns if the value is empty.
 func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
-	strFunc := fmt.Sprintf("%s %s", node.Tag, node.Value)
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 	gitRootValue, err := u.ProcessTagGitRoot(strFunc)
 	if err != nil {
-		log.Debug("failed to process", functionKey, strFunc, "error", err)
-		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncGitRoot, node.Value, err)
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncGitRoot, node.Value, err)
 	}
 	gitRootValue = strings.TrimSpace(gitRootValue)
 	if gitRootValue == "" {
-		log.Warn("execute returned empty value", functionKey, strFunc)
+		log.Warn(emptyValueWarning, functionKey, strFunc)
 	}
 	// Set the value in Viper .
 	v.Set(currentPath, gitRootValue)
