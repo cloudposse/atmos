@@ -5,7 +5,6 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -58,12 +57,12 @@ and are compliant with expected formats, reducing configuration drift and runtim
 
 		if key == "" && schema != "" {
 			log.Error("key not provided for the schema to be used")
-			utils.OsExit(1)
+			u.OsExit(1)
 		}
 
 		if err := exec.NewAtmosValidatorExecutor(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
 			if errors.Is(err, exec.ErrInvalidYAML) {
-				utils.OsExit(1)
+				u.OsExit(1)
 			}
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
