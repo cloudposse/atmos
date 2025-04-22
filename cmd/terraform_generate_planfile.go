@@ -28,6 +28,8 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 
 func init() {
 	terraformGeneratePlanfileCmd.DisableFlagParsing = false
+	AddStackCompletion(terraformGeneratePlanfileCmd)
+
 	terraformGeneratePlanfileCmd.PersistentFlags().StringP("file", "f", "", "Planfile name")
 	terraformGeneratePlanfileCmd.PersistentFlags().String("format", "json", "Output format (json or yaml)")
 
@@ -35,8 +37,6 @@ func init() {
 	if err != nil {
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
-
-	AddStackCompletion(terraformGeneratePlanfileCmd)
 
 	terraformGenerateCmd.AddCommand(terraformGeneratePlanfileCmd)
 }
