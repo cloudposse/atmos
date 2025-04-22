@@ -69,6 +69,14 @@ func ExecuteTerraformGeneratePlanfile(
 	skip []string,
 	info schema.ConfigAndStacksInfo,
 ) error {
+	if format == "" {
+		format = "json"
+	}
+
+	if format != "json" && format != "yaml" {
+		return fmt.Errorf("invalid format '%s'. Supported formats are 'json' and 'yaml'", format)
+	}
+
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
@@ -110,13 +118,13 @@ func ExecuteTerraformGeneratePlanfile(
 		return errors.Wrap(err, "error getting JSON for planfile")
 	}
 
-	if format == "" {
-		format = "json"
-	}
-
 	var planFilePath string
 	if file != "" {
-		planFilePath = file
+		if filepath.IsAbs(file) {
+			planFilePath = file
+		} else {
+			planFilePath = filepath.Join(componentPath, file)
+		}
 	} else {
 		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
 	}
@@ -130,7 +138,7 @@ func ExecuteTerraformGeneratePlanfile(
 
 	if format == "json" {
 		err = u.WriteToFileAsJSON(planFilePath, d, 0o644)
-	} else if format == "yaml" {
+	} else {
 		err = u.WriteToFileAsYAML(planFilePath, d, 0o644)
 	}
 
