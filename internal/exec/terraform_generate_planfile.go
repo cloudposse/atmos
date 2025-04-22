@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -108,21 +109,30 @@ func ExecuteTerraformGeneratePlanfile(
 		return errors.Wrap(err, "error getting JSON for planfile")
 	}
 
+	if format == "" {
+		format = "json"
+	}
+
 	var planFilePath string
 	if file != "" {
 		planFilePath = file
 	} else {
-		planFilePath = constructTerraformComponentPlanfilePath(atmosConfig, info) + ".json"
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
 	}
 
 	log.Debug("Writing the planfile", "file", planFilePath)
 
-	j, err := u.ConvertFromJSON(planJSON)
+	d, err := u.ConvertFromJSON(planJSON)
 	if err != nil {
 		return errors.Wrap(err, "error converting JSON to map")
 	}
 
-	err = u.WriteToFileAsJSON(planFilePath, j, 0o644)
+	if format == "json" {
+		err = u.WriteToFileAsJSON(planFilePath, d, 0o644)
+	} else if format == "yaml" {
+		err = u.WriteToFileAsYAML(planFilePath, d, 0o644)
+	}
+
 	if err != nil {
 		return err
 	}

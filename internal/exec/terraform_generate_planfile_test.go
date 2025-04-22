@@ -52,4 +52,30 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 		info,
 	)
 	assert.NoError(t, err)
+
+	filePath := fmt.Sprintf("%s/%s-%s.planfile.json", componentPath, stack, component)
+	if _, err = os.Stat(filePath); os.IsNotExist(err) {
+		t.Errorf("Generated planfile does not exist: %s", filePath)
+	} else if err != nil {
+		t.Errorf("Error checking file: %v", err)
+	}
+
+	err = ExecuteTerraformGeneratePlanfile(
+		component,
+		stack,
+		"",
+		"yaml",
+		true,
+		true,
+		nil,
+		info,
+	)
+	assert.NoError(t, err)
+
+	filePath = fmt.Sprintf("%s/%s-%s.planfile.yaml", componentPath, stack, component)
+	if _, err = os.Stat(filePath); os.IsNotExist(err) {
+		t.Errorf("Generated planfile does not exist: %s", filePath)
+	} else if err != nil {
+		t.Errorf("Error checking file: %v", err)
+	}
 }
