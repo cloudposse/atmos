@@ -34,6 +34,8 @@ tests:
     args:
       - "vendor"
       - "pull"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
     expect:
       diff: []
       stderr:
