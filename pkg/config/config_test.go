@@ -273,7 +273,6 @@ terraform:
 				require.NoError(t, errDir)
 				require.NoError(t, err)
 				assert.Equal(t, absPath, cfg.BasePath)
-
 			},
 		},
 		{
