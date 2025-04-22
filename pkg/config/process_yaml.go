@@ -1,10 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strings"
-
-	"errors"
 
 	log "github.com/charmbracelet/log"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -16,9 +15,7 @@ const (
 	functionKey = "function"
 )
 
-var (
-	ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")
-)
+var ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")
 
 // PreprocessYAML processes the given YAML content, replacing specific directives
 // (such as !env) with their corresponding values .
