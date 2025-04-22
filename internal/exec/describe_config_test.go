@@ -24,7 +24,7 @@ func TestDescribeConfig(t *testing.T) {
 		},
 		Settings: schema.AtmosSettings{
 			Terminal: schema.Terminal{
-				Pager: true,
+				Pager: "less",
 			},
 		},
 	}

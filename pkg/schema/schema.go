@@ -194,7 +194,7 @@ type Terminal struct {
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 }
 
-func (t Terminal) IsPagerEnabled() bool {
+func (t *Terminal) IsPagerEnabled() bool {
 	return t.Pager == "" || t.Pager == "on" || t.Pager == "less" || t.Pager == "true" || t.Pager == "yes" || t.Pager == "y" || t.Pager != "0"
 }
 
