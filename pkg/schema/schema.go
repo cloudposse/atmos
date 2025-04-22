@@ -195,7 +195,7 @@ type Terminal struct {
 }
 
 func (t Terminal) IsPagerEnabled() bool {
-	return t.Pager == "" || t.Pager == "on" || t.Pager == "less" || t.Pager == "true" || t.Pager == "yes" || t.Pager == "y"
+	return t.Pager == "" || t.Pager == "on" || t.Pager == "less" || t.Pager == "true" || t.Pager == "yes" || t.Pager == "y" || t.Pager != "0"
 }
 
 type SyntaxHighlighting struct {
