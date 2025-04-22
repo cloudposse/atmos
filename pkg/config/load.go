@@ -101,7 +101,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.inject_gitlab_token", "ATMOS_INJECT_GITLAB_TOKEN")
 	bindEnv(v, "settings.atmos_gitlab_token", "ATMOS_GITLAB_TOKEN")
 
-	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER")
+	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {

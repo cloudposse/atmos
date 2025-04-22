@@ -36,7 +36,7 @@ var describeConfigCmd = &cobra.Command{
 
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
-			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetBool("pager")
+			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
 			if err != nil {
 				return err
 			}
