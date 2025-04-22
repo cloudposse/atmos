@@ -222,7 +222,7 @@ terraform:
 			configContent:  includeConfig,
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
-				err := os.Mkdir(filepath.Join(dir, "config"), 0777)
+				err := os.Mkdir(filepath.Join(dir, "config"), 0o777)
 				if err != nil {
 					t.Fatal(err)
 				}
