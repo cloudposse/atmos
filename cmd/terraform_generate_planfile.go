@@ -29,7 +29,8 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 func init() {
 	terraformGeneratePlanfileCmd.DisableFlagParsing = false
 	AddStackCompletion(terraformGeneratePlanfileCmd)
-	terraformGeneratePlanfileCmd.PersistentFlags().StringP("file", "f", "", "Path to the planfile to generate for the specified Terraform component in the given stack.")
+	terraformGeneratePlanfileCmd.PersistentFlags().StringP("file", "f", "", "Path to the planfile")
+	terraformGeneratePlanfileCmd.PersistentFlags().String("format", "json", "Output format (json or yaml)")
 
 	err := terraformGeneratePlanfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

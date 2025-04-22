@@ -39,6 +39,12 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 
 		err = os.Remove(fmt.Sprintf("%s/%s-%s.terraform.tfvars.json", componentPath, stack, component))
 		assert.NoError(t, err)
+
+		err = os.Remove(fmt.Sprintf("%s/%s-%s.planfile.json", componentPath, stack, component))
+		assert.NoError(t, err)
+
+		err = os.Remove(fmt.Sprintf("%s/%s-%s.planfile.yaml", componentPath, stack, component))
+		assert.NoError(t, err)
 	}()
 
 	err = ExecuteTerraformGeneratePlanfile(
