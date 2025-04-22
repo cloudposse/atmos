@@ -19,6 +19,27 @@ func TestPreprocessAtmosYamlFunc(t *testing.T) {
 		wantErr  bool
 	}{
 		{
+			name: "sequence of mappings with same key",
+			setup: func(t *testing.T) (string, func()) {
+				os.Setenv("TEST_SERVER_1_NAME", "a")
+				os.Setenv("TEST_SERVER_2_NAME", "b")
+				yamlContent := `
+servers:
+  - name: !env TEST_SERVER_1_NAME
+  - name: !env TEST_SERVER_2_NAME
+`
+				return yamlContent, func() {
+					os.Unsetenv("TEST_SERVER_1_NAME")
+					os.Unsetenv("TEST_SERVER_2_NAME")
+				}
+			},
+			expected: map[string]interface{}{
+				"servers[0].name": "a",
+				"servers[1].name": "b",
+			},
+			wantErr: false,
+		},
+		{
 			name: "process !env directive",
 			yamlStr: `
 key: !env TEST_ENV_VAR

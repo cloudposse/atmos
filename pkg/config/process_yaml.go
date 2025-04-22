@@ -65,10 +65,11 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		}
 	}
 
-	if err := processChildren(node.Content, v, currentPath); err != nil {
+	// Determine if parent is a sequence to correctly index children
+	parentIsSeq := node.Kind == yaml.SequenceNode
+	if err := processChildren(node.Content, v, currentPath, parentIsSeq); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -89,10 +90,10 @@ func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) err
 	return nil
 }
 
-func processChildren(children []*yaml.Node, v *viper.Viper, currentPath string) error {
+func processChildren(children []*yaml.Node, v *viper.Viper, currentPath string, parentIsSeq bool) error {
 	for idx, child := range children {
 		newPath := currentPath
-		if child.Kind == yaml.SequenceNode || child.Kind == yaml.ScalarNode {
+		if parentIsSeq {
 			newPath = fmt.Sprintf("%s[%d]", currentPath, idx)
 		}
 		if err := processNode(child, v, newPath); err != nil {
@@ -101,7 +102,6 @@ func processChildren(children []*yaml.Node, v *viper.Viper, currentPath string) 
 	}
 	return nil
 }
-
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node.Tag == "" {
 		return nil
