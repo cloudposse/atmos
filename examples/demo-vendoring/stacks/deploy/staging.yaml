@@ -8,5 +8,5 @@ components:
   terraform:
     myapp:
       vars:
-        location: Los Angeles
-        lang: en
+        foo: "staging value"
+        bar: "staging value"

@@ -8,5 +8,5 @@ components:
   terraform:
     myapp:
       vars:
-        location: Stockholm
-        lang: se
+        foo: "dev value"
+        bar: "dev value"
