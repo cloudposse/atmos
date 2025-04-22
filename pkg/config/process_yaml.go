@@ -88,8 +88,12 @@ func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) err
 }
 
 func processChildren(children []*yaml.Node, v *viper.Viper, currentPath string) error {
-	for _, child := range children {
-		if err := processNode(child, v, currentPath); err != nil {
+	for idx, child := range children {
+		newPath := currentPath
+		if child.Kind == yaml.SequenceNode || child.Kind == yaml.ScalarNode {
+			newPath = fmt.Sprintf("%s[%d]", currentPath, idx)
+		}
+		if err := processNode(child, v, newPath); err != nil {
 			return err
 		}
 	}
