@@ -23,7 +23,6 @@ const MaximumImportLvL = 10
 
 var (
 	ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
-	ErrExecuteYamlFunctions   = errors.New("failed to execute yaml function")
 )
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
