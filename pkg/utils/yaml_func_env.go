@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 )
 
 var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")
@@ -26,7 +26,7 @@ func ProcessTagEnv(
 
 	parts, err := SplitStringByDelimiter(str, ' ')
 	if err != nil {
-		e := fmt.Errorf("error executing the YAML function: %s\n%v", input, err)
+		e := fmt.Errorf("%w: %s", ErrInvalidAtmosYAMLFunction, input)
 		return "", e
 
 	}
@@ -39,7 +39,7 @@ func ProcessTagEnv(
 	} else if partsLen == 1 {
 		envVarName = strings.TrimSpace(parts[0])
 	} else {
-		err = fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s. The function accepts 1 or 2 arguments", input)
+		err = fmt.Errorf("%w: invalid number of arguments. The function accepts 1 or 2 arguments: %s", ErrInvalidAtmosYAMLFunction, input)
 		return "", err
 	}
 
