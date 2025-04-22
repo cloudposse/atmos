@@ -27,8 +27,13 @@ tests:
         - "./components/terraform/github/stargazers/main/providers.tf"
         - "./components/terraform/github/stargazers/main/variables.tf"
         - "./components/terraform/github/stargazers/main/versions.tf"
-        - "./components/terraform/mock/main/main.tf"
-        - "./components/terraform/mock/main/README.md"
+        # TODO
+        # Revert to "main" once the mock component is merged into the main branch
+        # https://github.com/cloudposse/atmos/pull/1213
+        #- "./components/terraform/mock/main/main.tf"
+        #- "./components/terraform/mock/main/README.md"
+        - "./components/terraform/mock/chore/replace-mock-component/main.tf"
+        - "./components/terraform/mock/chore/replace-mock-component/README.md"
         # All of the following use the mock component
         # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0
         - "./components/terraform/test-components/main/main.tf"

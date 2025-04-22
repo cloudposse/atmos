@@ -9,7 +9,12 @@ spec:
 
   sources:
     - component: "test globs"
-      source: "github.com/cloudposse/atmos.git"
+      source: "github.com/cloudposse/atmos.git?ref={{.Version}}"
+      # TODO
+      # Revert to "main" once the mock component is merged into the main branch
+      # https://github.com/cloudposse/atmos/pull/1213
+      #version: "main"
+      version: "chore/replace-mock-component"
       included_paths:
         - "**/{demo-library,demo-stacks}/**/*.{tf,md}"
       excluded_paths:
@@ -23,14 +28,23 @@ spec:
       source: "github.com/cloudposse/atmos.git//examples/demo-library?ref={{.Version}}"
       included_paths:
         - "/mock/*.md"
-      version: "main"
+      # TODO
+      # Revert to "main" once the mock component is merged into the main branch
+      # https://github.com/cloudposse/atmos/pull/1213
+      #version: "main"
+      version: "chore/replace-mock-component"
       targets:
         - "components/library/"
       tags:
         - demo
     
     - component: "test shallow globs and folder exclusion"
-      source: "github.com/cloudposse/atmos.git"
+      source: "github.com/cloudposse/atmos.git?ref={{.Version}}"
+      # TODO
+      # Revert to "main" once the mock component is merged into the main branch
+      # https://github.com/cloudposse/atmos/pull/1213
+      #version: "main"
+      version: "chore/replace-mock-component"
       included_paths:
         - "**/demo-localstack/*"
         - "**/demo-library/**"
