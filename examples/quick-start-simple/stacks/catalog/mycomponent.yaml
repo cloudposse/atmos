@@ -2,12 +2,10 @@
 
 components:
   terraform:
-    station:
+    mycomponent:
       metadata:
-        component: weather
+        component: mycomponent
       vars:
-        location: Los Angeles
-        lang: en
-        format: ''
-        options: '0'
-        units: m
+        foo: "default-foo"
+        bar: "default-bar"
+        baz: "default-baz"

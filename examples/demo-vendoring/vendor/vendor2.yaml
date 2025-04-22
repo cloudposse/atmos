@@ -7,7 +7,7 @@ metadata:
     This example demonstrates component sourcing from GitHub repositories with versioning.
 spec:
   sources:
-    - component: "weather"
+    - component: "mock"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
       version: "main"
       targets:

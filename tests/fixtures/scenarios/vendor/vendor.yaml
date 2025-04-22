@@ -31,7 +31,7 @@ spec:
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
 
-    - component: "weather"
+    - component: "mock"
       source: "git::https://github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
       version: "main"
       tags:

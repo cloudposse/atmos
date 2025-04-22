@@ -27,11 +27,8 @@ tests:
         - "./components/terraform/github/stargazers/main/providers.tf"
         - "./components/terraform/github/stargazers/main/variables.tf"
         - "./components/terraform/github/stargazers/main/versions.tf"
-        - "./components/terraform/weather/main/main.tf"
-        - "./components/terraform/weather/main/outputs.tf"
-        - "./components/terraform/weather/main/providers.tf"
-        - "./components/terraform/weather/main/variables.tf"
-        - "./components/terraform/weather/main/versions.tf"
+        - "./components/terraform/mock/main/main.tf"
+        - "./components/terraform/mock/main/README.md"
         # All of the following use the mock component
         # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0
         - "./components/terraform/test-components/main/main.tf"

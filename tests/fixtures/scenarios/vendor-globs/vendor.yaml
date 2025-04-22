@@ -22,7 +22,7 @@ spec:
     - component: "test globs without double stars upfront"
       source: "github.com/cloudposse/atmos.git//examples/demo-library?ref={{.Version}}"
       included_paths:
-        - "/weather/*.md"
+        - "/mock/*.md"
       version: "main"
       targets:
         - "components/library/"

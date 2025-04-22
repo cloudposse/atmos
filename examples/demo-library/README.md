@@ -19,9 +19,9 @@ These examples are somewhat contrived and selected mainly because they use remot
 
 The [`github/*`](github/) example components use the `http_provider` to anonymously query the GitHub API for information.
 
-### Weather
+### Mock
 
-The [`weather`](weather/) example component requests weather data from `wttr.in` based on the location provided.
+The [`mock`](mock/) example component is a basic placeholder used for testing.
 
 ### IP Info
 
