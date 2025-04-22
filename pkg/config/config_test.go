@@ -201,7 +201,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.Error(t, err)
-				require.ErrorAs(t, err, &ErrExecuteYamlFunctions)
+				require.ErrorIs(t, err, ErrExecuteYamlFunctions)
 			},
 		},
 		{

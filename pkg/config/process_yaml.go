@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	valueKey    = "value"
 	functionKey = "function"
 )
 
@@ -114,46 +113,56 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	return nil
 }
 
+// handleEnv processes a YAML node with an "env" tag and sets the value in Viper.
+// returns an error if the processing fails. warns if the value is empty.
 func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	envValue, err := u.ProcessTagEnv(fmt.Sprintf("%s %s", node.Tag, node.Value))
 	if err != nil {
-		log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
+		log.Debug("failed to process", functionKey, fmt.Sprintf("%s %s", node.Tag, node.Value), "error", err)
 		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
 	}
 	envValue = strings.TrimSpace(envValue)
 	if envValue == "" {
-		log.Warn("execute returned empty value", functionKey, u.AtmosYamlFuncEnv, valueKey, node.Value)
+		log.Warn("execute returned empty value", functionKey, fmt.Sprintf("%s %s", node.Tag, node.Value))
 	}
-	node.Value = envValue
-	v.Set(currentPath, node.Value)
-	node.Tag = "" // Avoid re-processing
+	// Set the value in Viper .
+	v.Set(currentPath, envValue)
+	node.Tag = "" // Avoid re-processing .
+	node.Value = ""
 	return nil
 }
 
+// handleExec Process the !exec tag and set the value in Viper .
+// returns an error if the processing fails. warns if the value is empty.
 func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	execValue, err := u.ProcessTagExec(fmt.Sprintf("%s %s", node.Tag, node.Value))
 	if err != nil {
-		log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
+		log.Debug("failed to process", functionKey, fmt.Sprintf("%s %s", node.Tag, node.Value), "error", err)
 		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, node.Value, err)
 	}
 	if execValue != nil {
+		// Set the value in Viper .
 		v.Set(currentPath, execValue)
 	} else {
-		log.Warn("execute returned empty value", functionKey, node.Tag, valueKey, node.Value)
+		log.Warn("execute returned empty value", functionKey, fmt.Sprintf("%s %s", node.Tag, node.Value))
 	}
 	node.Tag = "" // Avoid re-processing
+	node.Value = ""
 	return nil
 }
 
+// handleInclude Process the !include tag and set the value in Viper .
+// returns an error if the processing fails. warns if the value is empty.
 func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", "include_data", node.Tag, node.Value))
 	if err != nil {
-		log.Debug("failed to process", "tag", node.Tag, valueKey, node.Value, "error", err)
+		log.Debug("failed to process", "tag", fmt.Sprintf("%s %s", node.Tag, node.Value), "error", err)
 		return fmt.Errorf("%w %v %v error %v", ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
 	}
 	if includeValue != nil {
 		data, ok := includeValue["include_data"]
 		if ok {
+			// Set the value in Viper .
 			v.Set(currentPath, data)
 		} else {
 			log.Warn("invalid value returned from execute Yaml function",
@@ -162,8 +171,9 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 			)
 		}
 	} else {
-		log.Warn("execute returned empty value", functionKey, node.Tag, valueKey, node.Value)
+		log.Warn("execute returned empty value", functionKey, fmt.Sprintf("%s %s", node.Tag, node.Value))
 	}
 	node.Tag = "" // Avoid re-processing
+	node.Value = ""
 	return nil
 }
