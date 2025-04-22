@@ -23,7 +23,7 @@ spec:
         - "**/*.md"
 
     - component: "test-components"
-      source: "file:///../../../fixtures/components/terraform/myapp"
+      source: "file:///../../../fixtures/components/terraform/mock"
       version: "main"
       tags:
         - file
@@ -39,12 +39,12 @@ spec:
         - demo
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
-    - component: "myapp2"
-      source: "../../../fixtures/components/terraform/myapp" # required for test URI contain path traversal
+    - component: "mock2"
+      source: "../../../fixtures/components/terraform/mock" # required for test URI contain path traversal
       tags:
         - dir
       targets:
-        - "components/terraform/myapp2"
+        - "components/terraform/mock2"
       included_paths:
         - "**/*.tf"
         - "**/*.md"

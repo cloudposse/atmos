@@ -6,10 +6,10 @@ metadata:
 spec:
   imports: []
   sources:
-    - component: "myapp1"
-      source: "oci://ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/myapp:{{.Version}}"
+    - component: "mock1"
+      source: "oci://ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:{{.Version}}"
       version: "v0"
       tags:
         - oci
       targets:
-        - "components/terraform/myapp1"
+        - "components/terraform/mock1"
