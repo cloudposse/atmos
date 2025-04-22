@@ -37,12 +37,9 @@ tests:
         - "./components/terraform/weather/main/providers.tf"
         - "./components/terraform/weather/main/variables.tf"
         - "./components/terraform/weather/main/versions.tf"
-        - "./components/terraform/mock2/outputs.tf"
-        - "./components/terraform/mock2/main.tf"
-        - "./components/terraform/mock2/variables.tf"
-        - "./components/terraform/mock2/versions.tf"
-        - "./components/terraform/mock2/README.md"
         # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0
+        - "./components/terraform/mock2/main.tf"
+        - "./components/terraform/mock2/README.md"
         - "./components/terraform/mock1/main.tf"
         - "./components/terraform/mock1/README.md"
       exit_code: 0
