@@ -122,7 +122,6 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
 		return handleGitRoot(node, v, currentPath)
 	}
-
 	return nil
 }
 
@@ -141,7 +140,6 @@ func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	// Set the value in Viper .
 	v.Set(currentPath, envValue)
 	node.Tag = "" // Avoid re-processing .
-	node.Value = ""
 	return nil
 }
 
@@ -160,7 +158,6 @@ func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		log.Warn(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
-	node.Value = ""
 	return nil
 }
 
@@ -187,7 +184,6 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		log.Warn(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
-	node.Value = ""
 	return nil
 }
 
@@ -206,6 +202,5 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	// Set the value in Viper .
 	v.Set(currentPath, gitRootValue)
 	node.Tag = "" // Avoid re-processing .
-	node.Value = ""
 	return nil
 }
