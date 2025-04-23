@@ -67,7 +67,7 @@ tests:
         - "^$"
       exit_code: 0
 
-  - name: atmos docs myapp
+  - name: atmos docs mock
     enabled: true
     snapshot: true
     description: "Validate atmos docs command outputs documentation for a specific component."
@@ -75,11 +75,14 @@ tests:
     command: "atmos"
     args:
       - "docs"
-      - "myapp"
+      - "mock"
     expect:
       diff: []
       stdout:
-        - "Example Terraform Weather Component"
+        - "# Mock Component"
+        - "This is a mock Terraform component used exclusively for testing purposes\\. It provides a simple configuration with input"
+        - "variables and corresponding outputs, making it ideal for testing Atmos component functionality and behavior\\."
+        - "## Usage"
       stderr:
         - "^$"
       exit_code: 0

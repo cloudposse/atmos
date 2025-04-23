@@ -4,7 +4,7 @@ components:
   terraform:
     mycomponent:
       metadata:
-        component: mycomponent
+        component: mock
       vars:
         foo: "default-foo"
         bar: "default-bar"

@@ -1,0 +1,54 @@
+
+# Mock Component                                                                                                        
+                                                                                                                        
+This is a mock Terraform component used exclusively for testing purposes. It provides a simple configuration with input 
+variables and corresponding outputs, making it ideal for testing Atmos component functionality and behavior.            
+                                                                                                                        
+## Usage                                                                                                                
+                                                                                                                        
+This component is intended for testing only and should not be used in production environments. It is typically used in  
+conjunction with test fixtures and validation scenarios.                                                                
+                                                                                                                        
+Example stack usage                                                                                                     
+                                                                                                                        
+ components:                                                                                                            
+   terraform:                                                                                                           
+     mock:                                                                                                              
+       vars:                                                                                                            
+         foo: "default value"                                                                                           
+         bar: "default value"                                                                                           
+         baz: "default value"                                                                                           
+                                                                                                                        
+## Requirements                                                                                                         
+                                                                                                                        
+No requirements.                                                                                                        
+                                                                                                                        
+## Providers                                                                                                            
+                                                                                                                        
+No providers.                                                                                                           
+                                                                                                                        
+## Modules                                                                                                              
+                                                                                                                        
+No modules.                                                                                                             
+                                                                                                                        
+## Resources                                                                                                            
+                                                                                                                        
+No resources.                                                                                                           
+                                                                                                                        
+## Inputs                                                                                                               
+                                                                                                                        
+ Name                  │ Description           │ Type                  │ Default               │        Required        
+───────────────────────┼───────────────────────┼───────────────────────┼───────────────────────┼──────────────────────  
+  bar                  │ n/a                   │ string                │ "bar"                 │          no            
+  baz                  │ n/a                   │ string                │ "baz"                 │          no            
+  foo                  │ n/a                   │ string                │ "foo"                 │          no            
+                                                                                                                        
+## Outputs                                                                                                              
+                                                                                                                        
+ Name                                                      │ Description                                                
+───────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────  
+  bar                                                      │ n/a                                                        
+  baz                                                      │ n/a                                                        
+  foo                                                      │ n/a                                                        
+
+
