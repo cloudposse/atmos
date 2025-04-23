@@ -59,6 +59,6 @@ var (
 	// ErrDeleteParameter is returned when a parameter deletion fails.
 	ErrDeleteParameter = errors.New("failed to delete parameter")
 
-	// ErrListParameters is returned when listing parameters fails
+	// ErrListParameters is returned when listing parameters fails.
 	ErrListParameters = errors.New("failed to list parameters")
 )
