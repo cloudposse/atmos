@@ -38,22 +38,13 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 }
 
-func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
+func parseDescribeAffectedCliArgs(atmosConfig *schema.AtmosConfiguration, cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
+	logger, err := l.NewLoggerFromCliConfig(*atmosConfig)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	err = ValidateStacks(atmosConfig)
+	err = ValidateStacks(*atmosConfig)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
@@ -178,7 +169,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 
 	result := DescribeAffectedCmdArgs{
-		CLIConfig:                   atmosConfig,
+		CLIConfig:                   *atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
 		Format:                      format,
 		IncludeDependents:           includeDependents,
@@ -205,7 +196,17 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 // ExecuteDescribeAffectedCmd executes `describe affected` command
 func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
-	a, err := parseDescribeAffectedCliArgs(cmd, args)
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
+	if err != nil {
+		return err
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+
+	a, err := parseDescribeAffectedCliArgs(&atmosConfig, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -271,7 +272,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	if a.Query == "" {
 		a.Logger.Trace("\nAffected components and stacks: \n")
 
-		err = printOrWriteToFile(a.Format, a.OutputFile, affected)
+		err = printOrWriteToFile(&atmosConfig, a.Format, a.OutputFile, affected)
 		if err != nil {
 			return err
 		}
@@ -314,7 +315,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		err = printOrWriteToFile(a.Format, a.OutputFile, res)
+		err = printOrWriteToFile(&atmosConfig, a.Format, a.OutputFile, res)
 		if err != nil {
 			return err
 		}

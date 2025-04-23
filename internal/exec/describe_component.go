@@ -1,11 +1,14 @@
 package exec
 
 import (
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -72,13 +75,16 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	var res any
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	if err != nil {
+		return err
+	}
+
+	if cmd.Flags().Changed("pager") {
+		atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
+	}
 
 	if query != "" {
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-		if err != nil {
-			return err
-		}
-
 		res, err = u.EvaluateYqExpression(&atmosConfig, componentSection, query)
 		if err != nil {
 			return err
@@ -87,11 +93,51 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		res = componentSection
 	}
 
-	err = printOrWriteToFile(format, file, res)
+	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
+		err = viewConfig(&atmosConfig, component, format, res)
+		switch err.(type) {
+		case ErrInvalidFormat:
+			return err
+		case nil:
+			return nil
+		default:
+			log.Debug("Failed to use pager")
+		}
+	}
+
+	err = printOrWriteToFile(&atmosConfig, format, file, res)
 	if err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func viewConfig(atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {
+	if !term.IsTTYSupportForStdout() {
+		return ErrTTYNotSupported
+	}
+	var content string
+	var err error
+	switch format {
+	case "yaml":
+		content, err = u.GetHighlightedYAML(atmosConfig, data)
+		if err != nil {
+			return err
+		}
+	case "json":
+		content, err = u.GetHighlightedJSON(atmosConfig, data)
+		if err != nil {
+			return err
+		}
+	default:
+		return ErrInvalidFormat{
+			format,
+		}
+	}
+	if err := pager.New().Run(displayName, content); err != nil {
+		return err
+	}
 	return nil
 }
 
