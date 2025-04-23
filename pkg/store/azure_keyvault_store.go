@@ -48,13 +48,13 @@ func NewKeyVaultStore(options KeyVaultStoreOptions) (Store, error) {
 	// Create a credential using the default Azure credential chain
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Azure credential: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
 	// Create the Key Vault client
 	client, err := azsecrets.NewClient(options.VaultURL, cred, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Key Vault client: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
 	stackDelimiter := "-"
@@ -76,51 +76,32 @@ func NewKeyVaultStore(options KeyVaultStoreOptions) (Store, error) {
 }
 
 func (s *KeyVaultStore) getKey(stack string, component string, key string) (string, error) {
-	const maxSecretNameLength = 127
-
-	if stack == "" || component == "" || key == "" {
-		return "", fmt.Errorf("stack, component, and key cannot be empty")
+	if s.stackDelimiter == nil {
+		return "", ErrStackDelimiterNotSet
 	}
 
-	stackParts := strings.Split(stack, *s.stackDelimiter)
-	componentParts := strings.Split(component, "/")
-
-	parts := append([]string{s.prefix}, stackParts...)
-	parts = append(parts, componentParts...)
-	parts = append(parts, key)
-
-	// Azure Key Vault secret names can only contain alphanumeric characters and dashes
-	secretName := strings.ToLower(strings.Join(parts, "-"))
-	secretName = strings.Trim(secretName, "-")
-
-	if len(secretName) > maxSecretNameLength {
-		return "", fmt.Errorf(
-			"generated secret name exceeds Azure Key Vault's %d-character limit: %s (%d characters)",
-			maxSecretNameLength, secretName, len(secretName),
-		)
-	}
-
-	// Validate name follows Azure Key Vault naming rules
-	if match := regexp.MustCompile(`^[0-9]`).MatchString(secretName); match {
-		return "", fmt.Errorf("secret name cannot start with a number: %s", secretName)
-	}
-
-	if match := regexp.MustCompile(`[^a-z0-9-]`).MatchString(secretName); match {
-		return "", fmt.Errorf("secret name can only contain alphanumeric characters and hyphens: %s", secretName)
-	}
-
-	return secretName, nil
+	return getKey(s.prefix, *s.stackDelimiter, stack, component, key, "-")
 }
 
 func (s *KeyVaultStore) Set(stack string, component string, key string, value interface{}) error {
+	if stack == "" {
+		return ErrEmptyStack
+	}
+	if component == "" {
+		return ErrEmptyComponent
+	}
+	if key == "" {
+		return ErrEmptyKey
+	}
+
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return err
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
 	strValue, ok := value.(string)
 	if !ok {
-		return fmt.Errorf("value must be a string")
+		return ErrValueMustBeString
 	}
 
 	params := azsecrets.SetSecretParameters{
@@ -131,18 +112,28 @@ func (s *KeyVaultStore) Set(stack string, component string, key string, value in
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) && respErr.StatusCode == 403 {
-			return fmt.Errorf("failed to set secret '%s': access denied. Please check your Azure credentials and permissions: %w", secretName, err)
+			return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
 		}
-		return fmt.Errorf("failed to set secret '%s': %w", secretName, err)
+		return fmt.Errorf(errWrapFormat, ErrSetParameter, err)
 	}
 
 	return nil
 }
 
 func (s *KeyVaultStore) Get(stack string, component string, key string) (interface{}, error) {
+	if stack == "" {
+		return nil, ErrEmptyStack
+	}
+	if component == "" {
+		return nil, ErrEmptyComponent
+	}
+	if key == "" {
+		return nil, ErrEmptyKey
+	}
+
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
 	resp, err := s.client.GetSecret(context.Background(), secretName, "", nil)
@@ -151,21 +142,31 @@ func (s *KeyVaultStore) Get(stack string, component string, key string) (interfa
 		if errors.As(err, &respErr) {
 			switch respErr.StatusCode {
 			case 404:
-				return nil, fmt.Errorf("secret '%s' not found: %w", secretName, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
 			case 403:
-				return nil, fmt.Errorf("failed to get secret '%s': access denied. Please check your Azure credentials and permissions: %w", secretName, err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
 			}
 		}
-		return nil, fmt.Errorf("failed to get secret '%s': %w", secretName, err)
+		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
 	}
 
 	return resp.Value, nil
 }
 
 func (s *KeyVaultStore) Delete(stack string, component string, key string) error {
+	if stack == "" {
+		return ErrEmptyStack
+	}
+	if component == "" {
+		return ErrEmptyComponent
+	}
+	if key == "" {
+		return ErrEmptyKey
+	}
+
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
-		return err
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 
 	_, err = s.client.DeleteSecret(context.Background(), secretName, nil)
@@ -174,25 +175,28 @@ func (s *KeyVaultStore) Delete(stack string, component string, key string) error
 		if errors.As(err, &respErr) {
 			switch respErr.StatusCode {
 			case 404:
-				return fmt.Errorf("secret '%s' not found: %w", secretName, err)
+				return fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
 			case 403:
-				return fmt.Errorf("failed to delete secret '%s': access denied. Please check your Azure credentials and permissions: %w", secretName, err)
+				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
 			}
 		}
-		return fmt.Errorf("failed to delete secret '%s': %w", secretName, err)
+		return fmt.Errorf(errWrapFormat, ErrDeleteParameter, err)
 	}
 
 	return nil
 }
 
 func (s *KeyVaultStore) List(stack string, component string) ([]string, error) {
-	if stack == "" || component == "" {
-		return nil, fmt.Errorf("stack and component cannot be empty")
+	if stack == "" {
+		return nil, ErrEmptyStack
+	}
+	if component == "" {
+		return nil, ErrEmptyComponent
 	}
 
 	prefix, err := s.getKey(stack, component, "")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
 	}
 	prefix = strings.TrimSuffix(prefix, "-")
 
@@ -201,7 +205,7 @@ func (s *KeyVaultStore) List(stack string, component string) ([]string, error) {
 	for pager.More() {
 		page, err := pager.NextPage(context.Background())
 		if err != nil {
-			return nil, fmt.Errorf("failed to list secrets: %w", err)
+			return nil, fmt.Errorf(errWrapFormat, ErrListParameters, err)
 		}
 
 		for _, secret := range page.Value {
