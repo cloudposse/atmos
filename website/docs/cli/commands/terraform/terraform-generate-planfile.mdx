@@ -7,7 +7,7 @@ id: generate-planfile
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note purpose
-Use this command to generate a planfile for an Atmos terraform [component](/core-concepts/components) in a [stack](/core-concepts/stacks).
+Use this command to generate a planfile for an Atmos Terraform/OpenTofu [component](/core-concepts/components) in a [stack](/core-concepts/stacks).
 :::
 
 <Screengrab title="atmos terraform generate planfile --help" slug="atmos-terraform-generate-varfile--help" />
@@ -32,6 +32,9 @@ Run `atmos terraform generate planfile --help` to see all the available options
 atmos terraform generate planfile component1 -s plat-ue2-dev
 atmos terraform generate planfile component1 -s plat-ue2-prod --format=json
 atmos terraform generate planfile component1 -s plat-ue2-prod --format=yaml
+atmos terraform generate planfile <component> -s <stack> --file=planfile.json
+atmos terraform generate planfile <component> -s <stack> --format=yaml --file=planfiles/planfile.yaml
+atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Documents/atmos/infra/planfile.json
 ```
 
 ## Arguments
@@ -118,3 +121,15 @@ atmos terraform generate planfile component1 -s plat-ue2-prod --format=yaml
         ```
     </dd>
 </dl>
+
+## Validate Terraform/OpenTofu planfiles using Checkov
+
+You can generate a planfile for a component in a stack and validate it using [Checkov](https://www.checkov.io/).
+
+```shell
+atmos terraform generate planfile <component> -s <stack>
+checkov --file components/terraform/<component>/<stack>-<component>.planfile.json --framework terraform_plan
+```
+
+Refer to [Evaluate Checkov Policies on Terraform Plan](https://www.checkov.io/7.Scan%20Examples/Terraform%20Plan%20Scanning.html)
+for more information.
