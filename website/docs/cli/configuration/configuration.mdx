@@ -138,18 +138,31 @@ What follows are all the sections of the `atmos.yaml` configuration file.
 
 Atmos extends standard YAML with several custom functions that can be used in atmos configuration `atmos.yaml` file. These functions provide powerful tools for dynamic configuration:
 
-1. **`!env`** – Used to retrieve environment variables.  
-   See the [**`!env` documentation**](../../core-concepts/stacks/yaml-functions/env) for more details.
+<dl>
+  <dt>`!env`</dt>
+  <dd>
+    Used to retrieve environment variables. 
+    See the [`!env` documentation](/core-concepts/stacks/yaml-functions/env) for more details.
+  </dd>
 
-2. **`!exec`** – Used to execute shell scripts and assign their output.  
-   See the [**`!exec` documentation**](../../core-concepts/stacks/yaml-functions/exec) for more details.
+  <dt>`!exec`</dt>
+  <dd>
+    Used to execute shell scripts and assign their output. 
+    See the [`!exec` documentation](/core-concepts/stacks/yaml-functions/exec) for more details.
+  </dd>
 
-3. **`!include`** – Used to include other YAML files into the current configuration.  
-   See the [**`!include` documentation**](../../core-concepts/stacks/yaml-functions/include) for more details.
+  <dt>`!include`</dt>
+  <dd>
+    Used to include other YAML files into the current configuration. 
+    See the [`!include` documentation](/core-concepts/stacks/yaml-functions/include) for more details.
+  </dd>
 
-4. **`!repo-root`** – Used to retrieve the root directory of the Atmos repository. If the Git root is not found, it will return a default value if specified; otherwise, it returns an error.  
-   See the [**`!repo-root` documentation**](../../core-concepts/stacks/yaml-functions/repo-root) for more details.
-
+  <dt>`!repo-root`</dt>
+  <dd>
+    Used to retrieve the root directory of the Atmos repository. If the Git root is not found, it will return a default value if specified; otherwise, it returns an error. 
+    See the [`!repo-root` documentation](/core-concepts/stacks/yaml-functions/repo-root) for more details.
+  </dd>
+</dl>
 ## Imports
 
 Additionally, Atmos supports `imports` of other CLI configurations. Use imports to break large Atmos CLI configurations into smaller ones, such as organized by top-level section. File imports are relative to the base path (if `import`  section is set in the config). All imports are processed at the time the configuration is loaded, and then deep-merged in order, so that the last file in the list supersedes settings in the preceding imports. For an example, see [`scenarios/demo-atmos-cli-imports`](https://github.com/cloudposse/atmos/tree/main/tests/fixtures/scenarios/atmos-cli-imports).
