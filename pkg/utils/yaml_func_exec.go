@@ -21,6 +21,7 @@ import (
 var (
 	ErrMaxShellDepthExceeded = errors.New("ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion?")
 	ErrConvertingShellLevel  = errors.New("converting ATMOS_SHLVL to number error")
+	ErrBindingShellLevelEnv  = errors.New("binding ATMOS_SHLVL env var error")
 )
 
 // MaxShellDepth is the maximum number of nested shell commands that can be executed .
@@ -104,9 +105,12 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 func GetNextShellLevel() (int, error) {
 	// Create a new viper instance for this operation
 	v := viper.New()
-	v.BindEnv("atmos_shell_level", "ATMOS_SHLVL")
-	atmosShellLvl := v.GetString("atmos_shell_level")
+	if err := v.BindEnv("atmos_shell_level", "ATMOS_SHLVL"); err != nil {
+		return 0, fmt.Errorf("%w: %v", ErrBindingShellLevelEnv, err)
+	}
+
 	shellVal := 0
+	atmosShellLvl := v.GetString("atmos_shell_level")
 	if atmosShellLvl != "" {
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
