@@ -22,7 +22,7 @@ const (
 var ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")
 
 // PreprocessYAML processes the given YAML content, replacing specific directives
-// (such as !env) with their corresponding values .
+// (such as !env,!include,!exec,!repo-root) with their corresponding values.
 // It parses the YAML content into a tree structure, processes each node recursively,
 // and updates the provided Viper instance with resolved values.
 //

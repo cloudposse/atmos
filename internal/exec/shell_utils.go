@@ -178,7 +178,7 @@ func execTerraformShellCommand(
 	log.Debug("Starting a new interactive shell where you can execute all native Terraform commands (type 'exit' to go back)",
 		"component", component,
 		"stack", stack,
-		"workingDirector", workingDir,
+		"cwd", workingDir,
 		"TerraformWorkspace", workspaceName)
 
 	log.Debug("Setting the ENV vars in the shell")

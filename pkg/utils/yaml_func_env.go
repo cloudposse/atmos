@@ -28,17 +28,17 @@ func ProcessTagEnv(
 	if err != nil {
 		e := fmt.Errorf("%w: %s", ErrInvalidAtmosYAMLFunction, input)
 		return "", e
-
 	}
 
 	partsLen := len(parts)
 
-	if partsLen == 2 {
+	switch partsLen {
+	case 2:
 		envVarName = strings.TrimSpace(parts[0])
 		envVarDefault = strings.TrimSpace(parts[1])
-	} else if partsLen == 1 {
+	case 1:
 		envVarName = strings.TrimSpace(parts[0])
-	} else {
+	default:
 		err = fmt.Errorf("%w: invalid number of arguments. The function accepts 1 or 2 arguments: %s", ErrInvalidAtmosYAMLFunction, input)
 		return "", err
 	}
