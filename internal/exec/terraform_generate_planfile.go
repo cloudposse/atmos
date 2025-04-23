@@ -15,10 +15,11 @@ import (
 )
 
 var (
-	ErrInvalidFormat          = errors.New("invalid format")
-	ErrCreatingTempDirectory  = errors.New("error creating temporary directory")
-	ErrGettingJsonForPlanfile = errors.New("error getting JSON for planfile")
-	ErrConvertingJsonToGoType = errors.New("error converting JSON to Go type")
+	ErrInvalidFormat                      = errors.New("invalid format")
+	ErrCreatingTempDirectory              = errors.New("error creating temporary directory")
+	ErrCreatingIntermediateSubdirectories = errors.New("error creating intermediate subdirectories")
+	ErrGettingJsonForPlanfile             = errors.New("error getting JSON for planfile")
+	ErrConvertingJsonToGoType             = errors.New("error converting JSON to Go type")
 )
 
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
@@ -136,6 +137,11 @@ func ExecuteTerraformGeneratePlanfile(
 		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
 	}
 
+	err = u.EnsureDir(planFilePath)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrCreatingIntermediateSubdirectories, err)
+	}
+
 	log.Debug("Writing the planfile", "file", planFilePath)
 
 	d, err := u.ConvertFromJSON(planJSON)
@@ -143,10 +149,11 @@ func ExecuteTerraformGeneratePlanfile(
 		return fmt.Errorf("%w: %w", ErrConvertingJsonToGoType, err)
 	}
 
+	const fileMode = 0o644
 	if format == "json" {
-		err = u.WriteToFileAsJSON(planFilePath, d, 0o644)
+		err = u.WriteToFileAsJSON(planFilePath, d, fileMode)
 	} else {
-		err = u.WriteToFileAsYAML(planFilePath, d, 0o644)
+		err = u.WriteToFileAsYAML(planFilePath, d, fileMode)
 	}
 
 	if err != nil {

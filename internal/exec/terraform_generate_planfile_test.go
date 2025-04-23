@@ -120,6 +120,9 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 
 		err = os.Remove(fmt.Sprintf("%s/new-planfile.json", componentPath))
 		assert.NoError(t, err)
+
+		err = os.Remove(fmt.Sprintf("%s/planfiles/new-planfile.yaml", componentPath))
+		assert.NoError(t, err)
 	}()
 
 	err = ExecuteTerraformGeneratePlanfile(
@@ -173,6 +176,25 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	assert.NoError(t, err)
 
 	filePath = fmt.Sprintf("%s/new-planfile.json", componentPath)
+	if _, err = os.Stat(filePath); os.IsNotExist(err) {
+		t.Errorf("Generated planfile does not exist: %s", filePath)
+	} else if err != nil {
+		t.Errorf("Error checking file: %v", err)
+	}
+
+	err = ExecuteTerraformGeneratePlanfile(
+		component,
+		stack,
+		"planfiles/new-planfile.yaml",
+		"yaml",
+		true,
+		true,
+		nil,
+		info,
+	)
+	assert.NoError(t, err)
+
+	filePath = fmt.Sprintf("%s/planfiles/new-planfile.yaml", componentPath)
 	if _, err = os.Stat(filePath); os.IsNotExist(err) {
 		t.Errorf("Generated planfile does not exist: %s", filePath)
 	} else if err != nil {

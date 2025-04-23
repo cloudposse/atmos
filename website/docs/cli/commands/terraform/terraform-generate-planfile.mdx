@@ -64,15 +64,23 @@ atmos terraform generate planfile component1 -s plat-ue2-prod --format=yaml
     <dt>`--file` <em>(alias `-f`)</em> <em>(optional)</em></dt>
     <dd>
         Planfile name.
+        Supports absolute and relative paths.
 
-        If not specified, Atmos generates the planfile in the Terraform component directory with the name
+        If not provided, Atmos generates the planfile in the Terraform component directory with the name
         `<stack>-<component>.planfile.json` or `<stack>-<component>.planfile.yaml`, depending on the format specified
         with `--format` flag (`json` is default).
 
+        If an absolute path is provided, the file will be created in the specified directory:
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Documents/atmos/infra/planfile.json
+        ```
+
+        If a relative path is specified, the file will be created in the Terraform component directory:
+
         ```shell
         atmos terraform generate planfile <component> -s <stack> --file=planfile.json
-        atmos terraform generate planfile <component> -s <stack> --format=yaml --file=planfile.yaml
-        atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Documents/atmos/infra/planfile.json
+        atmos terraform generate planfile <component> -s <stack> --format=yaml --file=planfiles/planfile.yaml
         ```
     </dd>
 
