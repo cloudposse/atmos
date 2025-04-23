@@ -17,6 +17,9 @@ var (
 	ErrSetParameter   = errors.New("failed to set parameter")
 	ErrGetParameter   = errors.New("failed to get parameter")
 
+	// Azure Key Vault specific errors.
+	ErrVaultURLRequired = errors.New("vault_url is required in key vault store configuration")
+
 	// Redis specific errors.
 	ErrParseRedisURL   = errors.New("failed to parse redis url")
 	ErrMissingRedisURL = errors.New("either url must be set in options or ATMOS_REDIS_URL environment variable must be set")
@@ -53,7 +56,7 @@ var (
 	ErrSerializeJSON = errors.New("failed to serialize value to JSON")
 	ErrMarshalValue  = errors.New("failed to marshal value")
 
-	// ErrDeleteParameter is returned when a parameter deletion fails
+	// ErrDeleteParameter is returned when a parameter deletion fails.
 	ErrDeleteParameter = errors.New("failed to delete parameter")
 
 	// ErrListParameters is returned when listing parameters fails

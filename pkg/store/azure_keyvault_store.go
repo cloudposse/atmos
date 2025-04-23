@@ -4,21 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
 
-var invalidCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9-]`)
-
 const (
 	statusCodeNotFound  = 404
 	statusCodeForbidden = 403
 )
 
-// KeyVaultClient interface allows us to mock the Azure Key Vault client
+// KeyVaultClient interface allows us to mock the Azure Key Vault client.
 type KeyVaultClient interface {
 	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
@@ -43,7 +40,7 @@ var _ Store = (*KeyVaultStore)(nil)
 
 func NewKeyVaultStore(options KeyVaultStoreOptions) (Store, error) {
 	if options.VaultURL == "" {
-		return nil, fmt.Errorf("vault_url is required in key vault store configuration")
+		return nil, ErrVaultURLRequired
 	}
 
 	// Create a credential using the default Azure credential chain
