@@ -14,6 +14,13 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+var (
+	ErrInvalidFormat          = errors.New("invalid format")
+	ErrCreatingTempDirectory  = errors.New("error creating temporary directory")
+	ErrGettingJsonForPlanfile = errors.New("error getting JSON for planfile")
+	ErrConvertingJsonToGoType = errors.New("error converting JSON to Go type")
+)
+
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
 func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
@@ -74,7 +81,7 @@ func ExecuteTerraformGeneratePlanfile(
 	}
 
 	if format != "json" && format != "yaml" {
-		return fmt.Errorf("invalid format '%s'. Supported formats are 'json' and 'yaml'", format)
+		return fmt.Errorf("%w: %s. Supported formats are 'json' and 'yaml'", ErrInvalidFormat, format)
 	}
 
 	info.ComponentFromArg = component
@@ -97,7 +104,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Create a temporary directory for all temporary files
 	tmpDir, err := os.MkdirTemp("", "atmos-terraform-generate-planfile")
 	if err != nil {
-		return errors.Wrap(err, "error creating temporary directory")
+		return fmt.Errorf("%w: %w", ErrCreatingTempDirectory, err)
 	}
 
 	defer func(path string) {
@@ -115,7 +122,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Get the JSON representation of the new plan
 	planJSON, err := getTerraformPlanJSON(&atmosConfig, &info, componentPath, planFile)
 	if err != nil {
-		return errors.Wrap(err, "error getting JSON for planfile")
+		return fmt.Errorf("%w: %w", ErrGettingJsonForPlanfile, err)
 	}
 
 	var planFilePath string
@@ -133,7 +140,7 @@ func ExecuteTerraformGeneratePlanfile(
 
 	d, err := u.ConvertFromJSON(planJSON)
 	if err != nil {
-		return errors.Wrap(err, "error converting JSON to map")
+		return fmt.Errorf("%w: %w", ErrConvertingJsonToGoType, err)
 	}
 
 	if format == "json" {
