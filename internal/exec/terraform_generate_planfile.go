@@ -22,7 +22,7 @@ var (
 	ErrConvertingJsonToGoType             = errors.New("error converting JSON to Go type")
 )
 
-// PlanfileOptions holds the options for generating a Terraform planfile
+// PlanfileOptions holds the options for generating a Terraform planfile.
 type PlanfileOptions struct {
 	Component            string
 	Stack                string
@@ -84,20 +84,16 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		Skip:                 skip,
 	}
 
-	return ExecuteTerraformGeneratePlanfile(options, &info)
+	return ExecuteTerraformGeneratePlanfile(&options, &info)
 }
 
 // ExecuteTerraformGeneratePlanfile executes `terraform generate planfile`.
 func ExecuteTerraformGeneratePlanfile(
-	options PlanfileOptions,
+	options *PlanfileOptions,
 	info *schema.ConfigAndStacksInfo,
 ) error {
-	if options.Format == "" {
-		options.Format = "json"
-	}
-
-	if options.Format != "json" && options.Format != "yaml" {
-		return fmt.Errorf("%w: %s. Supported formats are 'json' and 'yaml'", ErrInvalidFormat, options.Format)
+	if err := validatePlanfileFormat(&options.Format); err != nil {
+		return err
 	}
 
 	info.ComponentFromArg = options.Component
@@ -124,7 +120,7 @@ func ExecuteTerraformGeneratePlanfile(
 	}
 
 	defer func(path string) {
-		err := os.RemoveAll(path)
+		err = os.RemoveAll(path)
 		if err != nil {
 			log.Warn("Error removing temporary directory", "path", path, "error", err)
 		}
@@ -141,39 +137,67 @@ func ExecuteTerraformGeneratePlanfile(
 		return fmt.Errorf(ErrWrappingFormat, ErrGettingJsonForPlanfile, err)
 	}
 
-	var planFilePath string
-	if options.File != "" {
-		if filepath.IsAbs(options.File) {
-			planFilePath = options.File
-		} else {
-			planFilePath = filepath.Join(componentPath, options.File)
-		}
-	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, *info), options.Format)
-	}
-
-	err = u.EnsureDir(planFilePath)
+	planFilePath, err := resolvePlanfilePath(componentPath, options.Format, options.File, info, &atmosConfig)
 	if err != nil {
-		return fmt.Errorf(ErrWrappingFormat, ErrCreatingIntermediateSubdirectories, err)
+		return err
 	}
 
 	log.Debug("Writing the planfile", "file", planFilePath)
 
-	d, err := u.ConvertFromJSON(planJSON)
-	if err != nil {
-		return fmt.Errorf(ErrWrappingFormat, ErrConvertingJsonToGoType, err)
-	}
-
-	const fileMode = 0o644
-	if options.Format == "json" {
-		err = u.WriteToFileAsJSON(planFilePath, d, fileMode)
-	} else {
-		err = u.WriteToFileAsYAML(planFilePath, d, fileMode)
-	}
-
+	err = writePlanfile(planFilePath, options.Format, planJSON)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// validatePlanfileFormat checks if the format is valid and sets default if empty.
+func validatePlanfileFormat(format *string) error {
+	if *format == "" {
+		*format = "json"
+	}
+
+	if *format != "json" && *format != "yaml" {
+		return fmt.Errorf("%w: %s. Supported formats are 'json' and 'yaml'", ErrInvalidFormat, *format)
+	}
+	return nil
+}
+
+// resolvePlanfilePath determines the final path for the planfile based on options.
+func resolvePlanfilePath(componentPath, format string, customFile string, info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (string, error) {
+	var planFilePath string
+	if customFile != "" {
+		if filepath.IsAbs(customFile) {
+			planFilePath = customFile
+		} else {
+			planFilePath = filepath.Join(componentPath, customFile)
+		}
+	} else {
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(*atmosConfig, *info), format)
+	}
+
+	err := u.EnsureDir(planFilePath)
+	if err != nil {
+		return "", fmt.Errorf(ErrWrappingFormat, ErrCreatingIntermediateSubdirectories, err)
+	}
+
+	return planFilePath, nil
+}
+
+// writePlanfile writes the planfile in the specified format.
+func writePlanfile(planFilePath, format string, planJSON string) error {
+	d, err := u.ConvertFromJSON(planJSON)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrConvertingJsonToGoType, err)
+	}
+
+	const fileMode = 0o644
+	if format == "json" {
+		err = u.WriteToFileAsJSON(planFilePath, d, fileMode)
+	} else {
+		err = u.WriteToFileAsYAML(planFilePath, d, fileMode)
+	}
+
+	return err
 }

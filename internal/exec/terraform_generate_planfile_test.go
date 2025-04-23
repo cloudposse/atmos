@@ -136,7 +136,7 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	}
 
 	err = ExecuteTerraformGeneratePlanfile(
-		options,
+		&options,
 		&info,
 	)
 	assert.NoError(t, err)
@@ -150,7 +150,7 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 
 	options.Format = "yaml"
 	err = ExecuteTerraformGeneratePlanfile(
-		options,
+		&options,
 		&info,
 	)
 	assert.NoError(t, err)
@@ -165,7 +165,7 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	options.Format = "json"
 	options.File = "new-planfile.json"
 	err = ExecuteTerraformGeneratePlanfile(
-		options,
+		&options,
 		&info,
 	)
 	assert.NoError(t, err)
@@ -180,7 +180,7 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	options.Format = "yaml"
 	options.File = "planfiles/new-planfile.yaml"
 	err = ExecuteTerraformGeneratePlanfile(
-		options,
+		&options,
 		&info,
 	)
 	assert.NoError(t, err)
@@ -224,7 +224,7 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 
 	options.Format = "invalid-format"
 	err = ExecuteTerraformGeneratePlanfile(
-		options,
+		&options,
 		&info,
 	)
 	assert.Error(t, err)
@@ -233,7 +233,7 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 	options.Format = "json"
 	options.Component = "invalid-component"
 	err = ExecuteTerraformGeneratePlanfile(
-		options,
+		&options,
 		&info,
 	)
 	assert.Error(t, err)
@@ -241,7 +241,7 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 	options.Component = component
 	options.Stack = "invalid-stack"
 	err = ExecuteTerraformGeneratePlanfile(
-		options,
+		&options,
 		&info,
 	)
 	assert.Error(t, err)
