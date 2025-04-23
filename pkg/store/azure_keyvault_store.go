@@ -76,6 +76,8 @@ func NewKeyVaultStore(options KeyVaultStoreOptions) (Store, error) {
 }
 
 func (s *KeyVaultStore) getKey(stack string, component string, key string) (string, error) {
+	const maxSecretNameLength = 127
+
 	if stack == "" || component == "" || key == "" {
 		return "", fmt.Errorf("stack, component, and key cannot be empty")
 	}
@@ -91,8 +93,20 @@ func (s *KeyVaultStore) getKey(stack string, component string, key string) (stri
 	secretName := strings.ToLower(strings.Join(parts, "-"))
 	secretName = strings.Trim(secretName, "-")
 
-	if len(secretName) > 127 {
-		return "", fmt.Errorf("generated secret name exceeds Azure Key Vault's 127-character limit: %s (%d characters)", secretName, len(secretName))
+	if len(secretName) > maxSecretNameLength {
+		return "", fmt.Errorf(
+			"generated secret name exceeds Azure Key Vault's %d-character limit: %s (%d characters)",
+			maxSecretNameLength, secretName, len(secretName),
+		)
+	}
+
+	// Validate name follows Azure Key Vault naming rules
+	if match := regexp.MustCompile(`^[0-9]`).MatchString(secretName); match {
+		return "", fmt.Errorf("secret name cannot start with a number: %s", secretName)
+	}
+
+	if match := regexp.MustCompile(`[^a-z0-9-]`).MatchString(secretName); match {
+		return "", fmt.Errorf("secret name can only contain alphanumeric characters and hyphens: %s", secretName)
 	}
 
 	return secretName, nil
