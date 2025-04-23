@@ -20,6 +20,7 @@ var (
 	ErrCreatingIntermediateSubdirectories = errors.New("error creating intermediate subdirectories")
 	ErrGettingJsonForPlanfile             = errors.New("error getting JSON for planfile")
 	ErrConvertingJsonToGoType             = errors.New("error converting JSON to Go type")
+	ErrNoComponent                        = errors.New("no component specified")
 )
 
 // PlanfileOptions holds the options for generating a Terraform planfile.
@@ -35,6 +36,10 @@ type PlanfileOptions struct {
 
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
 func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return ErrNoComponent
+	}
+
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
@@ -67,12 +72,12 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	component := args[0]
-
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
+
+	component := args[0]
 
 	options := PlanfileOptions{
 		Component:            component,

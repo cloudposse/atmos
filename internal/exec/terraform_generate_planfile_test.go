@@ -75,6 +75,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	err = cmd.Execute()
 	assert.NoError(t, err, "'atmos terraform generate planfile' command should execute without error")
 
+	// Check that the planfile was generated
 	filePath := fmt.Sprintf("%s/%s-%s.planfile.json", componentPath, stack, component)
 	if _, err = os.Stat(filePath); os.IsNotExist(err) {
 		t.Errorf("Generated planfile does not exist: %s", filePath)
