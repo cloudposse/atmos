@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	log "github.com/charmbracelet/log"
+	"github.com/spf13/viper"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -101,7 +102,10 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 
 // getNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded .
 func GetNextShellLevel() (int, error) {
-	atmosShellLvl := os.Getenv("ATMOS_SHLVL")
+	// Create a new viper instance for this operation
+	v := viper.New()
+	v.BindEnv("atmos_shell_level", "ATMOS_SHLVL")
+	atmosShellLvl := v.GetString("atmos_shell_level")
 	shellVal := 0
 	if atmosShellLvl != "" {
 		val, err := strconv.Atoi(atmosShellLvl)
