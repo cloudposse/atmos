@@ -22,6 +22,17 @@ var (
 	ErrConvertingJsonToGoType             = errors.New("error converting JSON to Go type")
 )
 
+// PlanfileOptions holds the options for generating a Terraform planfile
+type PlanfileOptions struct {
+	Component            string
+	Stack                string
+	Format               string
+	File                 string
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+}
+
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
 func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) error {
 	flags := cmd.Flags()
@@ -63,39 +74,43 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	return ExecuteTerraformGeneratePlanfile(component, stack, file, format, processTemplates, processYamlFunctions, skip, info)
+	options := PlanfileOptions{
+		Component:            component,
+		Stack:                stack,
+		Format:               format,
+		File:                 file,
+		ProcessTemplates:     processTemplates,
+		ProcessYamlFunctions: processYamlFunctions,
+		Skip:                 skip,
+	}
+
+	return ExecuteTerraformGeneratePlanfile(options, &info)
 }
 
 // ExecuteTerraformGeneratePlanfile executes `terraform generate planfile`.
 func ExecuteTerraformGeneratePlanfile(
-	component string,
-	stack string,
-	file string,
-	format string,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
-	info schema.ConfigAndStacksInfo,
+	options PlanfileOptions,
+	info *schema.ConfigAndStacksInfo,
 ) error {
-	if format == "" {
-		format = "json"
+	if options.Format == "" {
+		options.Format = "json"
 	}
 
-	if format != "json" && format != "yaml" {
-		return fmt.Errorf("%w: %s. Supported formats are 'json' and 'yaml'", ErrInvalidFormat, format)
+	if options.Format != "json" && options.Format != "yaml" {
+		return fmt.Errorf("%w: %s. Supported formats are 'json' and 'yaml'", ErrInvalidFormat, options.Format)
 	}
 
-	info.ComponentFromArg = component
-	info.Stack = stack
+	info.ComponentFromArg = options.Component
+	info.Stack = options.Stack
 	info.ComponentType = "terraform"
 	info.NeedHelp = false
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
+	*info, err = ProcessStacks(atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip)
 	if err != nil {
 		return err
 	}
@@ -105,7 +120,7 @@ func ExecuteTerraformGeneratePlanfile(
 	// Create a temporary directory for all temporary files
 	tmpDir, err := os.MkdirTemp("", "atmos-terraform-generate-planfile")
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrCreatingTempDirectory, err)
+		return fmt.Errorf(ErrWrappingFormat, ErrCreatingTempDirectory, err)
 	}
 
 	defer func(path string) {
@@ -115,42 +130,42 @@ func ExecuteTerraformGeneratePlanfile(
 		}
 	}(tmpDir)
 
-	planFile, err := generateNewPlanFile(&atmosConfig, &info, componentPath, tmpDir)
+	planFile, err := generateNewPlanFile(&atmosConfig, info, componentPath, tmpDir)
 	if err != nil {
 		return err
 	}
 
 	// Get the JSON representation of the new plan
-	planJSON, err := getTerraformPlanJSON(&atmosConfig, &info, componentPath, planFile)
+	planJSON, err := getTerraformPlanJSON(&atmosConfig, info, componentPath, planFile)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrGettingJsonForPlanfile, err)
+		return fmt.Errorf(ErrWrappingFormat, ErrGettingJsonForPlanfile, err)
 	}
 
 	var planFilePath string
-	if file != "" {
-		if filepath.IsAbs(file) {
-			planFilePath = file
+	if options.File != "" {
+		if filepath.IsAbs(options.File) {
+			planFilePath = options.File
 		} else {
-			planFilePath = filepath.Join(componentPath, file)
+			planFilePath = filepath.Join(componentPath, options.File)
 		}
 	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, *info), options.Format)
 	}
 
 	err = u.EnsureDir(planFilePath)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrCreatingIntermediateSubdirectories, err)
+		return fmt.Errorf(ErrWrappingFormat, ErrCreatingIntermediateSubdirectories, err)
 	}
 
 	log.Debug("Writing the planfile", "file", planFilePath)
 
 	d, err := u.ConvertFromJSON(planJSON)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrConvertingJsonToGoType, err)
+		return fmt.Errorf(ErrWrappingFormat, ErrConvertingJsonToGoType, err)
 	}
 
 	const fileMode = 0o644
-	if format == "json" {
+	if options.Format == "json" {
 		err = u.WriteToFileAsJSON(planFilePath, d, fileMode)
 	} else {
 		err = u.WriteToFileAsYAML(planFilePath, d, fileMode)

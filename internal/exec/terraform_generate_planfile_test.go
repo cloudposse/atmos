@@ -125,15 +125,19 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 
+	options := PlanfileOptions{
+		Component:            component,
+		Stack:                stack,
+		Format:               "json",
+		File:                 "",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+	}
+
 	err = ExecuteTerraformGeneratePlanfile(
-		component,
-		stack,
-		"",
-		"json",
-		true,
-		true,
-		nil,
-		info,
+		options,
+		&info,
 	)
 	assert.NoError(t, err)
 
@@ -144,15 +148,10 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 		t.Errorf("Error checking file: %v", err)
 	}
 
+	options.Format = "yaml"
 	err = ExecuteTerraformGeneratePlanfile(
-		component,
-		stack,
-		"",
-		"yaml",
-		true,
-		true,
-		nil,
-		info,
+		options,
+		&info,
 	)
 	assert.NoError(t, err)
 
@@ -163,15 +162,11 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 		t.Errorf("Error checking file: %v", err)
 	}
 
+	options.Format = "json"
+	options.File = "new-planfile.json"
 	err = ExecuteTerraformGeneratePlanfile(
-		component,
-		stack,
-		"new-planfile.json",
-		"json",
-		true,
-		true,
-		nil,
-		info,
+		options,
+		&info,
 	)
 	assert.NoError(t, err)
 
@@ -182,15 +177,11 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 		t.Errorf("Error checking file: %v", err)
 	}
 
+	options.Format = "yaml"
+	options.File = "planfiles/new-planfile.yaml"
 	err = ExecuteTerraformGeneratePlanfile(
-		component,
-		stack,
-		"planfiles/new-planfile.yaml",
-		"yaml",
-		true,
-		true,
-		nil,
-		info,
+		options,
+		&info,
 	)
 	assert.NoError(t, err)
 
@@ -200,4 +191,58 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	} else if err != nil {
 		t.Errorf("Error checking file: %v", err)
 	}
+}
+
+func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
+	component := "component-1"
+	stack := "nonprod"
+	info := schema.ConfigAndStacksInfo{}
+
+	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+
+	defer func() {
+		err := os.Unsetenv("ATMOS_BASE_PATH")
+		assert.NoError(t, err)
+		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		assert.NoError(t, err)
+	}()
+
+	options := PlanfileOptions{
+		Component:            component,
+		Stack:                stack,
+		Format:               "",
+		File:                 "",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+	}
+
+	options.Format = "invalid-format"
+	err = ExecuteTerraformGeneratePlanfile(
+		options,
+		&info,
+	)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidFormat)
+
+	options.Format = "json"
+	options.Component = "invalid-component"
+	err = ExecuteTerraformGeneratePlanfile(
+		options,
+		&info,
+	)
+	assert.Error(t, err)
+
+	options.Component = component
+	options.Stack = "invalid-stack"
+	err = ExecuteTerraformGeneratePlanfile(
+		options,
+		&info,
+	)
+	assert.Error(t, err)
 }
