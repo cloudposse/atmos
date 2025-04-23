@@ -31,6 +31,7 @@ Run `atmos terraform generate planfile --help` to see all the available options
 ```shell
 atmos terraform generate planfile component1 -s plat-ue2-dev
 atmos terraform generate planfile component1 -s plat-ue2-prod --format=json
+atmos terraform generate planfile component1 -s plat-ue2-prod --format=yaml
 ```
 
 ## Arguments
@@ -50,12 +51,28 @@ atmos terraform generate planfile component1 -s plat-ue2-prod --format=json
         Atmos stack.
     </dd>
 
-    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dt>`--format` <em>(optional)</em></dt>
     <dd>
-        Dry run.
+        Output format (`json` or `yaml`, `json` is default).
 
         ```shell
-        atmos terraform generate planfile <component> -s <stack> --dry-run=true
+        atmos terraform generate planfile <component> -s <stack> --format=json
+        atmos terraform generate planfile <component> -s <stack> --format=yaml
+        ```
+    </dd>
+
+    <dt>`--file` <em>(alias `-f`)</em> <em>(optional)</em></dt>
+    <dd>
+        Planfile name.
+
+        If not specified, Atmos generates the planfile in the Terraform component directory with the name
+        `<stack>-<component>.planfile.json` or `<stack>-<component>.planfile.yaml`, depending on the format specified
+        with `--format` flag (`json` is default).
+
+        ```shell
+        atmos terraform generate planfile <component> -s <stack> --file=planfile.json
+        atmos terraform generate planfile <component> -s <stack> --format=yaml --file=planfile.yaml
+        atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Documents/atmos/infra/planfile.json
         ```
     </dd>
 

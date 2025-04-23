@@ -31,7 +31,7 @@ func init() {
 	AddStackCompletion(terraformGeneratePlanfileCmd)
 
 	terraformGeneratePlanfileCmd.PersistentFlags().StringP("file", "f", "", "Planfile name")
-	terraformGeneratePlanfileCmd.PersistentFlags().String("format", "json", "Output format (json or yaml)")
+	terraformGeneratePlanfileCmd.PersistentFlags().String("format", "json", "Output format (`json` or `yaml`, `json` is default)")
 
 	err := terraformGeneratePlanfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
