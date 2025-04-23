@@ -102,6 +102,22 @@ func TestAddConfig_AllTypes(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("Unsupported type should panic", func(t *testing.T) {
+		v := viper.New()
+		cmd := &cobra.Command{Use: "test"}
+		handler := &ConfigHandler{v: v}
+
+		opts := &ConfigOptions{
+			Key:          "tt.key",
+			DefaultValue: uint(33),
+			Description:  "test",
+		}
+
+		assert.Panics(t, func() {
+			handler.AddConfig(cmd, opts)
+		})
+	})
 }
 
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.

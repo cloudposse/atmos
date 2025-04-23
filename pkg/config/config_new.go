@@ -156,11 +156,6 @@ func (c *ConfigHandler) SetDefault(key string, value any) {
 	c.v.SetDefault(key, value)
 }
 
-// GetStringSlice retrieves a []string from the config.
-func (c *ConfigHandler) GetStringSlice(key string) []string {
-	return c.v.GetStringSlice(key)
-}
-
 func (c *ConfigHandler) processEnvVars() {
 	c.BindEnv("stacks.included_paths", "ATMOS_STACKS_INCLUDED_PATHS")
 	c.BindEnv("stacks.excluded_paths", "ATMOS_STACKS_EXCLUDED_PATHS")

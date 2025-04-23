@@ -59,23 +59,23 @@ func setDefaultConfiguration(v *viper.Viper) {
 // loadConfigSources delegates reading configs from each source,
 // returning early if any step in the chain fails.
 func loadConfigSources(v *viper.Viper, atmosCliConfigPath string) error {
-	if err := readSystemConfig(v); err != nil {
+	if err := readSystemConfigFunc(v); err != nil {
 		return err
 	}
 
-	if err := readHomeConfig(v); err != nil {
+	if err := readHomeConfigFunc(v); err != nil {
 		return err
 	}
 
-	if err := readWorkDirConfig(v); err != nil {
+	if err := readWorkDirConfigFunc(v); err != nil {
 		return err
 	}
 
-	if err := readEnvAmosConfigPath(v); err != nil {
+	if err := readEnvAmosConfigPathFunc(v); err != nil {
 		return err
 	}
 
-	if err := readAtmosConfigCli(v, atmosCliConfigPath); err != nil {
+	if err := readAtmosConfigCliFunc(v, atmosCliConfigPath); err != nil {
 		return err
 	}
 
@@ -85,10 +85,19 @@ func loadConfigSources(v *viper.Viper, atmosCliConfigPath string) error {
 		log.Debug("Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'")
 		log.Debug("Using the default CLI config")
 
-		return mergeDefaultConfig(v)
+		return mergeDefaultConfigFunc(v)
 	}
 	return nil
 }
+
+var (
+	readSystemConfigFunc      = readSystemConfig
+	readHomeConfigFunc        = readHomeConfig
+	readWorkDirConfigFunc     = readWorkDirConfig
+	readEnvAmosConfigPathFunc = readEnvAmosConfigPath
+	readAtmosConfigCliFunc    = readAtmosConfigCli
+	mergeDefaultConfigFunc    = mergeDefaultConfig
+)
 
 // readSystemConfig load config from system dir .
 func readSystemConfig(v *viper.Viper) error {
