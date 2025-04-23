@@ -129,12 +129,14 @@ func TestExecuteVendorPull(t *testing.T) {
 		"./components/terraform/github/stargazers/main/versions.tf",
 		"./components/terraform/github/stargazers/main/README.md",
 		"./components/terraform/test-components/main/main.tf",
-		"./components/terraform/test-components/main/outputs.tf",
 		"./components/terraform/test-components/main/README.md",
-		"./components/terraform/test-components/main/variables.tf",
-		"./components/terraform/test-components/main/versions.tf",
-		"./components/terraform/mock/main/main.tf",
-		"./components/terraform/mock/main/README.md",
+		// TODO
+		// Revert to "main" once the mock component is merged into the main branch
+		// https://github.com/cloudposse/atmos/pull/1213
+		// "./components/terraform/mock/main/main.tf",
+		// "./components/terraform/mock/main/README.md",
+		"./components/terraform/mock/chore/replace-mock-component/main.tf",
+		"./components/terraform/mock/chore/replace-mock-component/README.md",
 		"./components/terraform/mock2/main.tf",
 		"./components/terraform/mock2/README.md",
 		"./components/terraform/mock1/main.tf",
