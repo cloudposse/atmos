@@ -101,6 +101,10 @@ func ExecuteTerraformGeneratePlanfile(
 		return err
 	}
 
+	if err := validateComponent(options.Component); err != nil {
+		return err
+	}
+
 	info.ComponentFromArg = options.Component
 	info.Stack = options.Stack
 	info.ComponentType = "terraform"
@@ -168,6 +172,14 @@ func validatePlanfileFormat(format *string) error {
 
 	if *format != "json" && *format != "yaml" {
 		return fmt.Errorf("%w: %s. Supported formats are 'json' and 'yaml'", ErrInvalidFormat, *format)
+	}
+	return nil
+}
+
+// validateComponent checks if the provided component is not empty.
+func validateComponent(component string) error {
+	if component == "" {
+		return ErrNoComponent
 	}
 	return nil
 }

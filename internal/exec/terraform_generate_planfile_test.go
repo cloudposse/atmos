@@ -15,7 +15,7 @@ import (
 
 func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
-	componentPath := filepath.Join(stacksPath, "components", "terraform", "mock")
+	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
 	component := "component-1"
 	stack := "nonprod"
 
@@ -86,7 +86,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 
 func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
-	componentPath := filepath.Join(stacksPath, "components", "terraform", "mock")
+	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
 	component := "component-1"
 	stack := "nonprod"
 	info := schema.ConfigAndStacksInfo{}
@@ -246,4 +246,14 @@ func TestExecuteTerraformGeneratePlanfileErrors(t *testing.T) {
 		&info,
 	)
 	assert.Error(t, err)
+
+	options.Format = "json"
+	options.Stack = stack
+	options.Component = ""
+	err = ExecuteTerraformGeneratePlanfile(
+		&options,
+		&info,
+	)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoComponent)
 }
