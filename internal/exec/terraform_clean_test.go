@@ -67,9 +67,6 @@ func TestCLITerraformClean(t *testing.T) {
 	cleanInfo.AdditionalArgsAndFlags = []string{"--force"}
 	err = ExecuteTerraform(cleanInfo)
 	require.NoError(t, err)
-	if err != nil {
-		t.Errorf("Failed to execute vendor pull command: %v", err)
-	}
 	success, file = verifyFileDeleted(t, files)
 	if !success {
 		t.Fatalf("File %s should not exist", file)
