@@ -1,5 +1,5 @@
 components:
   terraform:
-    myapp:
+    mock:
       vars:
-        location: {{ .not-exist }}
+        foo: {{ .not-exist }}

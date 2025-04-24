@@ -4,11 +4,11 @@ vars:
   stage: nonprod
 
 import:
-  - catalog/myapp
+  - catalog/mock
 
 components:
   terraform:
-    myapp:
+    mock:
       vars:
-        location: Stockholm
-        lang: se
+        foo: "foo nonprod override"
+        bar: "bar nonprod override"
