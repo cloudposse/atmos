@@ -2,7 +2,9 @@ package tests
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +13,44 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
+	stacksPath := "./fixtures/scenarios/terraform-generate-planfile"
+	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
+	component := "component-1"
+	stack := "nonprod"
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	defer func() {
+		// Delete the generated files and folders after the test
+		err := os.RemoveAll(filepath.Join(componentPath, ".terraform"))
+		assert.NoError(t, err)
+
+		err = os.RemoveAll(filepath.Join(componentPath, "terraform.tfstate.d"))
+		assert.NoError(t, err)
+
+		err = os.Remove(fmt.Sprintf("%s/%s-%s.terraform.tfvars.json", componentPath, stack, component))
+		assert.NoError(t, err)
+
+		err = os.Remove(fmt.Sprintf("%s/%s-%s.planfile.json", componentPath, stack, component))
+		assert.NoError(t, err)
+	}()
+
+	// Execute the command
+	os.Args = []string{"atmos", "terraform", "generate", "planfile", component, "-s", stack, "--format", "json"}
+	err := cmd.Execute()
+	assert.NoError(t, err, "'atmos terraform generate planfile' command should execute without error")
+
+	// Check that the planfile was generated
+	filePath := fmt.Sprintf("%s/%s-%s.planfile.json", componentPath, stack, component)
+	if _, err = os.Stat(filePath); os.IsNotExist(err) {
+		t.Errorf("Generated planfile does not exist: %s", filePath)
+	} else if err != nil {
+		t.Errorf("Error checking file: %v", err)
+	}
+}
 
 func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	// Capture the starting working directory
