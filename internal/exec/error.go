@@ -4,6 +4,8 @@ import (
 	"errors"
 )
 
+const ErrWrappingFormat = "%w: %w"
+
 var (
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
@@ -24,4 +26,5 @@ var (
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
 	ErrEmptyPath                             = errors.New("path is empty, expected a valid file path")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
+	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 )

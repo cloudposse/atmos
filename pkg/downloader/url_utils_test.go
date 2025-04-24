@@ -1,4 +1,4 @@
-package utils
+package downloader
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 func TestMaskBasicAuth_WithUsernameAndPassword(t *testing.T) {
 	input := "https://user:secret@github.com/path?query=1"
 	expected := "https://xxx:xxx@github.com/path?query=1"
-	masked, err := MaskBasicAuth(input)
+	masked, err := maskBasicAuth(input)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -19,7 +19,7 @@ func TestMaskBasicAuth_WithUsernameAndPassword(t *testing.T) {
 func TestMaskBasicAuth_WithUsernameOnly(t *testing.T) {
 	input := "https://user@github.com/path"
 	expected := "https://xxx@github.com/path"
-	masked, err := MaskBasicAuth(input)
+	masked, err := maskBasicAuth(input)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -31,7 +31,7 @@ func TestMaskBasicAuth_WithUsernameOnly(t *testing.T) {
 func TestMaskBasicAuth_NoCredentials(t *testing.T) {
 	input := "https://github.com/path"
 	expected := "https://github.com/path"
-	masked, err := MaskBasicAuth(input)
+	masked, err := maskBasicAuth(input)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -42,7 +42,7 @@ func TestMaskBasicAuth_NoCredentials(t *testing.T) {
 
 func TestMaskBasicAuth_InvalidURL(t *testing.T) {
 	input := "://invalid-url"
-	_, err := MaskBasicAuth(input)
+	_, err := maskBasicAuth(input)
 	if err == nil {
 		t.Errorf("Expected error for invalid URL, but got none")
 	}

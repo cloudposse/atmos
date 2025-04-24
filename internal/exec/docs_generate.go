@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 
@@ -18,10 +19,7 @@ import (
 	tfdocsPrint "github.com/terraform-docs/terraform-docs/print"
 	tfdocsTf "github.com/terraform-docs/terraform-docs/terraform"
 
-	"github.com/hashicorp/go-getter"
-
 	log "github.com/charmbracelet/log"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -293,10 +291,10 @@ func downloadSource(
 
 	log.Debug("Downloading source", "source", pathOrURL, "tempDir", tempDir)
 
-	err = u.GoGetterGet(*atmosConfig, pathOrURL, tempDir, getter.ClientModeAny, 10*time.Minute)
-	if err != nil {
+	if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(pathOrURL, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 		return "", tempDir, fmt.Errorf("%w: %s: %v", ErrDownloadPackage, pathOrURL, err)
 	}
+
 	fileName := filepath.Base(pathOrURL)
 	downloadedPath := filepath.Join(tempDir, fileName)
 

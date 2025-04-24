@@ -15,11 +15,11 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hashicorp/go-getter"
 	"github.com/jfrog/jfrog-client-go/utils/log"
 	cp "github.com/otiai10/copy"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -388,7 +388,7 @@ func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig
 		if dryRun {
 			if needsCustomDetection(p.uri) {
 				log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.uri)
-				detector := &u.CustomGitDetector{AtmosConfig: *atmosConfig, Source: ""}
+				detector := downloader.NewCustomGitDetector(atmosConfig, "")
 				_, _, err := detector.Detect(p.uri, "")
 				if err != nil {
 					return installedPkgMsg{
@@ -455,7 +455,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		if err := u.GoGetterGet(*atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %w", p.name, err)
 		}
 
@@ -511,7 +511,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		if err = u.GoGetterGet(*atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
+		if err = downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, filepath.Join(tempDir, p.mixinFilename), downloader.ClientModeFile, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %w", p.name, err)
 		}
 
