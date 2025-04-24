@@ -26,37 +26,37 @@ func TestAddConfig_AllTypes(t *testing.T) {
 	}{
 		{
 			name:         "string flag",
-			key:          "app.name",
-			defaultValue: "default-app",
+			key:          "components.helmfile.command",
+			defaultValue: "helmfile",
 			flagValue:    "cli-app",
-			envVar:       "APP_NAME_ENV",
+			envVar:       "ATMOS_COMPONENTS_HELMFILE_COMMAND",
 			envValue:     "env-app",
 			expected:     "cli-app",
 		},
 		{
 			name:         "int flag",
-			key:          "app.port",
+			key:          "doc.max_width",
 			defaultValue: 8080,
 			flagValue:    "9090",
-			envVar:       "APP_PORT_ENV",
+			envVar:       "ATMOS_DOC_MAX_WIDTH",
 			envValue:     "7070",
 			expected:     9090,
 		},
 		{
 			name:         "bool flag",
-			key:          "app.debug",
+			key:          "default",
 			defaultValue: false,
 			flagValue:    "true",
-			envVar:       "APP_DEBUG_ENV",
+			envVar:       "ATMOS_DEFAULT",
 			envValue:     "true",
 			expected:     true,
 		},
 		{
 			name:         "string slice flag",
-			key:          "app.tags",
-			defaultValue: []string{"dev"},
+			key:          "config_paths",
+			defaultValue: []string{""},
 			flagValue:    "prod,staging",
-			envVar:       "APP_TAGS_ENV",
+			envVar:       "ATMOS_CONFIG_PATHS",
 			envValue:     "qa,uat",
 			expected:     []string{"prod", "staging"},
 		},
@@ -70,8 +70,7 @@ func TestAddConfig_AllTypes(t *testing.T) {
 
 			// Set env var
 			if tt.envVar != "" {
-				os.Setenv(tt.envVar, tt.envValue)
-				defer os.Unsetenv(tt.envVar)
+				t.Setenv(tt.envVar, tt.envValue)
 			}
 
 			opts := &ConfigOptions{
