@@ -148,5 +148,8 @@ func (s *KeyVaultStore) Get(stack string, component string, key string) (interfa
 		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
 	}
 
-	return resp.Value, nil
+	if resp.Value == nil {
+		return "", nil
+	}
+	return *resp.Value, nil
 }
