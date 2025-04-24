@@ -70,6 +70,7 @@ const (
 	GithubSectionName                 = "github"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	CliArgsSectionName                = "cli_args"
+	ComponentTypeSectionName          = "component_type"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
