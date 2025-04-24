@@ -8,8 +8,8 @@ spec:
     - "vendor/vendor4"
 
   sources:
-    - component: "myapp"
-      source: "oci://ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/myapp:{{.Version}}"
+    - component: "mock"
+      source: "oci://ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:{{.Version}}"
       version: "v0"
       targets:
         - "components/terraform/infra/my-app"
