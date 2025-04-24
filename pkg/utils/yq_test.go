@@ -65,7 +65,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, true, res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".settings.mode"
@@ -73,7 +73,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "test", res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".vars.tags.atmos_component"
@@ -81,7 +81,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "vpc", res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".vars.availability_zones.0"
@@ -89,7 +89,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "us-east-2a", res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".vars.ipv4_primary_cidr_block"
@@ -97,7 +97,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "10.8.0.0/18", res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".vars.enabled"
@@ -105,7 +105,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, true, res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".vars.enabled = false"
@@ -117,7 +117,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, false, res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".vars.ipv4_primary_cidr_block = \"10.8.8.0/20\""
@@ -129,7 +129,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "10.8.8.0/20", res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".vars.availability_zones.0 = \"us-east-2d\""
@@ -141,7 +141,7 @@ vars:
 	assert.Nil(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "us-east-2d", res)
-	err = PrintAsYAML(res)
+	err = PrintAsYAML(atmosConfig, res)
 	assert.Nil(t, err)
 
 	yq = ".vars.enabled = false | .vars.tags.terraform_workspace = \"plat-ue2-prod-override\" | .vars.max_subnet_count = 2 | .settings.test = false"
@@ -170,7 +170,7 @@ vars:
 	res4, err := EvaluateYqExpression(atmosConfig, res, yq)
 	assert.Nil(t, err)
 	assert.Equal(t, false, res4)
-	err = PrintAsYAML(res4)
+	err = PrintAsYAML(atmosConfig, res4)
 	assert.Nil(t, err)
 }
 
