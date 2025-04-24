@@ -71,6 +71,7 @@ const (
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	CliArgsSectionName                = "cli_args"
 	ComponentTypeSectionName          = "component_type"
+	OutputsSectionName                = "outputs"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"

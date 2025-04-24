@@ -30,12 +30,12 @@ func componentFunc(
 	if found && existingSections != nil {
 		log.Debug("Cache hit for template function", "function", functionName)
 
-		if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
+		if outputsSection, ok := existingSections.(map[string]any)[cfg.OutputsSectionName]; ok {
 			y, err2 := u.ConvertToYAML(outputsSection)
 			if err2 != nil {
 				log.Error(err2)
 			} else {
-				log.Debug("'outputs' of the template function", "function", functionName, "outputs", y)
+				log.Debug("'outputs' of the template function", "function", functionName, cfg.OutputsSectionName, y)
 			}
 		}
 
@@ -70,7 +70,7 @@ func componentFunc(
 		}
 
 		outputs := map[string]any{
-			"outputs": terraformOutputs,
+			cfg.OutputsSectionName: terraformOutputs,
 		}
 
 		sections = lo.Assign(sections, outputs)
@@ -87,7 +87,7 @@ func componentFunc(
 		if err2 != nil {
 			log.Error(err2)
 		} else {
-			log.Debug("'outputs' of the template function", "function", functionName, "outputs", y)
+			log.Debug("'outputs' of the template function", "function", functionName, cfg.OutputsSectionName, y)
 		}
 	}
 
