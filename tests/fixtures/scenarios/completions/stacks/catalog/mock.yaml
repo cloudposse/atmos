@@ -1,16 +1,10 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
-vars:
-  stage: prod
-
-import:
-  - catalog/mock
-
 components:
   terraform:
-    mock:
+    myapp:
       metadata:
-        locked: true
+        component: mock
       vars:
-        foo: "foo prod override"
-        bar: "bar prod override"
+        foo: "catalog value"
+        bar: "catalog value"

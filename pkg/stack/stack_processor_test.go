@@ -243,8 +243,8 @@ func TestStackProcessorRelativePaths(t *testing.T) {
 	components := mapConfig1["components"].(map[string]any)
 	terraformComponents := components["terraform"].(map[string]any)
 
-	myappComponent := terraformComponents["myapp"].(map[string]any)
-	assert.NotNil(t, myappComponent)
+	mockComponent := terraformComponents["mock"].(map[string]any)
+	assert.NotNil(t, mockComponent)
 }
 
 func TestProcessYAMLConfigFile(t *testing.T) {
