@@ -35,7 +35,7 @@ func componentFunc(
 			if err2 != nil {
 				log.Error(err2)
 			} else {
-				log.Debug("Result of the template function", "function", functionName, "outputs", y)
+				log.Debug("'outputs' of the template function", "function", functionName, "outputs", y)
 			}
 		}
 
@@ -49,7 +49,8 @@ func componentFunc(
 
 	// Process Terraform remote state
 	var terraformOutputs map[string]any
-	if configAndStacksInfo.ComponentType == cfg.TerraformComponentType {
+	componentType := sections[cfg.ComponentTypeSectionName]
+	if componentType == cfg.TerraformComponentType {
 		// Check if the component in the stack is configured with the 'static' remote state backend,
 		// in which case get the `output` from the static remote state instead of executing `terraform output`
 		remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
@@ -80,12 +81,13 @@ func componentFunc(
 
 	log.Debug("Executed template function", "function", functionName)
 
-	if configAndStacksInfo.ComponentType == cfg.TerraformComponentType {
+	// Print the `outputs` section of the Terraform component
+	if componentType == cfg.TerraformComponentType {
 		y, err2 := u.ConvertToYAML(terraformOutputs)
 		if err2 != nil {
 			log.Error(err2)
 		} else {
-			log.Debug("Result of the template function", "function", functionName, "outputs", y)
+			log.Debug("'outputs' of the template function", "function", functionName, "outputs", y)
 		}
 	}
 
