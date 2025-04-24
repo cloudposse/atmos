@@ -39,8 +39,9 @@
 **/cache.*.txt
 
 # Ignore components vendored during tests
-tests/fixtures/scenarios/vendor/components/**
 examples/demo-vendoring/components/**
+tests/fixtures/scenarios/vendor-globs/components/**
+tests/fixtures/scenarios/vendor/components/**
 
 # Coverage files
 coverage.out

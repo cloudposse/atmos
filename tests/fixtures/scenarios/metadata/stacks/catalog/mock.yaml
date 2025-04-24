@@ -2,10 +2,8 @@
 
 components:
   terraform:
-    myapp:
+    mock:
       vars:
-        location: Los Angeles
-        lang: en
-        format: ''
-        options: '0'
-        units: m
+        foo: "foo catalog default"
+        bar: "bar catalog default"
+        baz: "baz catalog default"
