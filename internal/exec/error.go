@@ -4,6 +4,8 @@ import (
 	"errors"
 )
 
+const ErrWrappingFormat = "%w: %w"
+
 var (
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
