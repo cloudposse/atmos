@@ -28,7 +28,7 @@ func TestSplitStringByDelimiter(t *testing.T) {
 			name:      "Empty input string",
 			input:     "",
 			delimiter: ' ',
-			expected:  []string{""},
+			expected:  []string{},
 			expectErr: true,
 		},
 		{
