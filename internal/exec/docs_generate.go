@@ -69,7 +69,7 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 		log.Debug("No input sources configured", "setting", "docs.generate.readme.input")
 	}
 	if len(docsGenerate.Template) == 0 {
-		log.Debug("No 'docs.generate.readme.template' defined, generating minimal readme.")
+		log.Debug("No template defined; falling back to minimal README generation", "setting", "docs.generate.readme.template")
 	}
 
 	// Generate a single README in the targetDir using the default renderer.
