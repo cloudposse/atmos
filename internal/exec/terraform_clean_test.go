@@ -77,7 +77,7 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 	for _, file := range files {
 		fileAbs, err := os.Stat(file)
 		if err == nil {
-			t.Logf("File %s exists", fileAbs.Name())
+			t.Errorf("Reason: File still exists: %q", file)
 			return false, fileAbs.Name()
 		}
 	}
