@@ -130,17 +130,16 @@ func TestExecuteVendorPull(t *testing.T) {
 		"./components/terraform/github/stargazers/main/README.md",
 		"./components/terraform/test-components/main/main.tf",
 		"./components/terraform/test-components/main/README.md",
-		// TODO
-		// Revert to "main" once the mock component is merged into the main branch
-		// https://github.com/cloudposse/atmos/pull/1213
-		// "./components/terraform/mock/main/main.tf",
-		// "./components/terraform/mock/main/README.md",
-		"./components/terraform/mock/chore/replace-mock-component/main.tf",
-		"./components/terraform/mock/chore/replace-mock-component/README.md",
-		"./components/terraform/mock2/main.tf",
-		"./components/terraform/mock2/README.md",
-		"./components/terraform/mock1/main.tf",
-		"./components/terraform/mock1/README.md",
+		"./components/terraform/weather/main/main.tf",
+		"./components/terraform/weather/main/outputs.tf",
+		"./components/terraform/weather/main/providers.tf",
+		"./components/terraform/weather/main/variables.tf",
+		"./components/terraform/weather/main/versions.tf",
+		"./components/terraform/weather/main/README.md",
+		"./components/terraform/myapp2/main.tf",
+		"./components/terraform/myapp2/README.md",
+		"./components/terraform/myapp1/main.tf",
+		"./components/terraform/myapp1/README.md",
 	}
 	success, file := verifyFileExists(t, files)
 	if !success {

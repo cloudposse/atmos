@@ -9,12 +9,8 @@ spec:
 
   sources:
     - component: "github/stargazers"
-      source: "github.com/cloudposse/atmos.git//tests/fixtures/components/terraform/{{ .Component }}?ref={{.Version}}"
-      # TODO
-      # Revert to "main" once the mock component is merged into the main branch
-      # https://github.com/cloudposse/atmos/pull/1213
-      #version: "main"
-      version: "chore/replace-mock-component"
+      source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
+      version: "main"
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       included_paths:

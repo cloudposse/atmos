@@ -39,7 +39,7 @@ func TestCLITerraformClean(t *testing.T) {
 	}()
 
 	// Define the work directory and change to it
-	workDir := "../examples/quick-start-simple"
+	workDir := "fixtures/scenarios/basic"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
@@ -57,7 +57,7 @@ func TestCLITerraformClean(t *testing.T) {
 	// Clean specific component
 	runTerraformCleanCommand(t, binaryPath, "mycomponent")
 	// Clean component with stack
-	runTerraformCleanCommand(t, binaryPath, "mycomponent", "-s", "dev")
+	runTerraformCleanCommand(t, binaryPath, "mycomponent", "-s", "nonprod")
 
 	// Run terraform apply for prod environment
 	runTerraformApply(t, binaryPath, "prod")
@@ -65,8 +65,8 @@ func TestCLITerraformClean(t *testing.T) {
 	runCLITerraformCleanComponent(t, binaryPath, "prod")
 	verifyStateFilesDeleted(t, []string{"./components/terraform/mock/terraform.tfstate.d/prod-mycomponent"})
 
-	// Run terraform apply for dev environment
-	runTerraformApply(t, binaryPath, "dev")
+	// Run terraform apply for nonprod environment
+	runTerraformApply(t, binaryPath, "nonprod")
 
 	// Verify if state files exist before cleaning
 	stateFiles := []string{
