@@ -2,8 +2,10 @@
 
 components:
   terraform:
-    mock:
+    myapp:
       vars:
-        foo: "mock-foo"
-        baz: "mock-baz"
-
+        location: Los Angeles
+        lang: en
+        format: ''
+        options: '0'
+        units: m

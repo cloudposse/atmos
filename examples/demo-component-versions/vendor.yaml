@@ -33,7 +33,7 @@ spec:
   #  component: "github/stargazers"
 
   #- <<: *v1
-  #  component: "mock"
+  #  component: "weather"
 
   - <<: *main
     component: "ipinfo"

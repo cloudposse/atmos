@@ -2,6 +2,8 @@ components:
   terraform:
     myapp:
       vars:
-        foo: "catalog value"
-        bar: "catalog value"
-        baz: "catalog value"
+        location: Los Angeles
+        lang: en
+        format: ''
+        options: '0'
+        units: m

@@ -4,11 +4,11 @@ vars:
   stage: prod
 
 import:
-  - catalog/mock
+  - catalog/myapp
 
 components:
   terraform:
-    mock:
+    myapp:
       vars:
-        foo: "mock-foo-prod"
-        baz: "mock-baz-prod"
+        location: Los Angeles
+        lang: en

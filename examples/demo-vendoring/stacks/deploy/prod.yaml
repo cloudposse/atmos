@@ -8,5 +8,5 @@ components:
   terraform:
     myapp:
       vars:
-        foo: "prod value"
-        bar: "prod value"
+        location: Los Angeles
+        lang: en

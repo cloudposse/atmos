@@ -4,12 +4,11 @@ vars:
   stage: staging
 
 import:
-  - catalog/mycomponent
+  - catalog/station
 
 components:
   terraform:
-    mycomponent:
+    station:
       vars:
-        foo: "custom-foo-staging"
-        baz: "custom-baz-staging"
-
+        location: Los Angeles
+        lang: en

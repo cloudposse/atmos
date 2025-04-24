@@ -18,7 +18,7 @@ tests:
       stdout:
         - "Pulling"
         - "github/stargazers"
-        - "mock"
+        - "weather"
         - "Vendored 3 components"
         - "Vendoring from 'vendor.yaml'"
         - !not 'No TTY detected\. Falling back to basic output\.'
