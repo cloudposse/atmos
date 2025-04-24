@@ -66,7 +66,7 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	targetDir = filepath.Join(currDir, basedir)
 
 	if len(docsGenerate.Input) == 0 {
-		log.Debug("No 'docs.generate.readme.input' sources defined in atmos.yaml.")
+		log.Debug("No input sources configured", "setting", "docs.generate.readme.input")
 	}
 	if len(docsGenerate.Template) == 0 {
 		log.Debug("No 'docs.generate.readme.template' defined, generating minimal readme.")
