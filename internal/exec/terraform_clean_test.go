@@ -52,10 +52,10 @@ func TestCLITerraformClean(t *testing.T) {
 	err = ExecuteTerraform(infoApply)
 	require.NoError(t, err)
 	files := []string{
-		"./components/terraform/component-1/.terraform",
-		"./components/terraform/component-1/terraform.tfstate.d/staging/terraform.tfstate",
-		"./components/terraform/component-1/component-2/.terraform",
-		"./components/terraform/component-1/component-2/terraform.tfstate.d/staging-component-2/terraform.tfstate",
+		"../../components/mock-subcomponents/components/terraform/component-1/.terraform",
+		"../../components/mock-subcomponents/components/terraform/component-1/terraform.tfstate.d/staging/terraform.tfstate",
+		"../../components/mock-subcomponents/components/terraform/component-1/component-2/.terraform",
+		"../../components/mock-subcomponents/components/terraform/component-1/component-2/terraform.tfstate.d/staging-component-2/terraform.tfstate",
 	}
 	success, file := verifyFileExists(t, files)
 	if !success {
