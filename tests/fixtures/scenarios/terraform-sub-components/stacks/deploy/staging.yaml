@@ -4,7 +4,7 @@ components:
   terraform:
     component-1:
       metadata:
-        component: component-1 # Point to the Terraform component
+        component: mock-subcomponents/component-1 # Point to the Terraform component
     component-2:
      metadata:
-       component: component-1/component-2  # Point to the Terraform component
+       component: mock-subcomponents/component-1/component-2  # Point to the Terraform component
