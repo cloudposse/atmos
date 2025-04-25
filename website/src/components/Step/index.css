@@ -7,12 +7,12 @@
   margin-top: 0;
 }
 
-.step h3 > i, html[data-theme='dark'] .step h2 > i {
+.step h3 > i, .step h2 > i {
   font-style: normal;
   color: #000;
 }
 
-html[data-theme='dark'] .step h3 > i, html[data-theme='dark'] .step h2 > i  {
+html[data-theme='dark'] .step h3 > i, html[data-theme='dark'] .step h2 > i {
   color: #fff;
 }
 
