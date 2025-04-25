@@ -13,11 +13,11 @@ import (
 
 const describeConfigTitle = "Atmos Config"
 
-type ErrInvalidFormat struct {
+type DescribeErrorInvalidFormat struct {
 	format string
 }
 
-func (e ErrInvalidFormat) Error() string {
+func (e DescribeErrorInvalidFormat) Error() string {
 	return fmt.Sprintf("invalid 'format': %s", e.format)
 }
 
@@ -55,7 +55,7 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 	if d.atmosConfig.Settings.Terminal.IsPagerEnabled() {
 		err = d.viewConfig(format, res)
 		switch err.(type) {
-		case ErrInvalidFormat:
+		case DescribeErrorInvalidFormat:
 			return err
 		case nil:
 			return nil
@@ -84,7 +84,7 @@ func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfigu
 			return err
 		}
 	default:
-		return ErrInvalidFormat{
+		return DescribeErrorInvalidFormat{
 			format,
 		}
 	}
