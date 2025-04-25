@@ -284,3 +284,18 @@ stores:
 #### Authentication
 
 Azure Key Vault supports multiple authentication methods:
+
+1. **Default Azure Credential Chain**: By default, the Azure Key Vault store uses the DefaultAzureCredential from the Azure Identity library, which attempts authentication through multiple methods in the following order:
+   - Environment variables (Azure CLI, Visual Studio, etc.)
+   - Managed Identity
+   - Azure CLI credentials
+   - Interactive browser authentication (when running locally)
+
+2. **Environment Variables**: Set these environment variables to authenticate:
+   - `AZURE_TENANT_ID`: Your Azure Active Directory tenant ID
+   - `AZURE_CLIENT_ID`: Your Azure Active Directory application ID
+   - `AZURE_CLIENT_SECRET`: Your Azure Active Directory application secret
+
+3. **Managed Identity**: When running in Azure services with managed identity enabled, authentication is automatic.
+
+For more details, refer to the [Azure Identity Authentication Documentation](https://docs.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication).
