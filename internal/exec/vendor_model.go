@@ -115,7 +115,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	var opts []tea.ProgramOption
 	if !term.IsTTYSupportForStdout() {
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
-		log.Warn("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 	}
 
 	if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {

@@ -17,6 +17,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -214,7 +215,7 @@ func execTerraformShellCommand(
 		}
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			u.LogWarning(fmt.Sprintf("Failed to parse ATMOS_SHLVL: %v", err))
+			log.Warn("Failed to parse ATMOS_SHLVL", "error", err)
 			return
 		}
 		// Prevent negative values
@@ -223,7 +224,7 @@ func execTerraformShellCommand(
 			newVal = 0
 		}
 		if err := os.Setenv("ATMOS_SHLVL", fmt.Sprintf("%d", newVal)); err != nil {
-			u.LogWarning(fmt.Sprintf("Failed to update ATMOS_SHLVL: %v", err))
+			log.Warn("Failed to update ATMOS_SHLVL", "error", err)
 		}
 	}()
 
@@ -341,16 +342,6 @@ func execTerraformShellCommand(
 //  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
 func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []string) []string {
 	envMap := make(map[string]string)
-
-	// Parse system environment variables
-	for _, env := range os.Environ() {
-		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			if strings.HasPrefix(parts[0], "TF_") {
-				u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", parts[0]))
-			}
-			envMap[parts[0]] = parts[1]
-		}
-	}
 
 	// Merge with new, Atmos defined environment variables
 	for _, env := range componentEnvList {

@@ -4,11 +4,10 @@ vars:
   stage: dev
 
 import:
-  - catalog/station
+  - catalog/mock
 
 components:
   terraform:
-    station:
+    myapp:
       vars:
-        location: Stockholm
-        lang: se
+        foo: "dev value"
