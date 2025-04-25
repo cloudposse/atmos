@@ -15,30 +15,30 @@ const (
 	statusCodeForbidden = 403
 )
 
-// KeyVaultClient interface allows us to mock the Azure Key Vault client.
-type KeyVaultClient interface {
+// AzureKeyVaultClient interface allows us to mock the Azure Key Vault client.
+type AzureKeyVaultClient interface {
 	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
 }
 
-// KeyVaultStore is an implementation of the Store interface for Azure Key Vault.
-type KeyVaultStore struct {
-	client         KeyVaultClient
+// AzureKeyVaultStore is an implementation of the Store interface for Azure Key Vault.
+type AzureKeyVaultStore struct {
+	client         AzureKeyVaultClient
 	vaultURL       string
 	prefix         string
 	stackDelimiter *string
 }
 
-type KeyVaultStoreOptions struct {
+type AzureKeyVaultStoreOptions struct {
 	VaultURL       string  `mapstructure:"vault_url"`
 	Prefix         *string `mapstructure:"prefix"`
 	StackDelimiter *string `mapstructure:"stack_delimiter"`
 }
 
-// Ensure KeyVaultStore implements the store.Store interface.
-var _ Store = (*KeyVaultStore)(nil)
+// Ensure AzureKeyVaultStore implements the store.Store interface.
+var _ Store = (*AzureKeyVaultStore)(nil)
 
-func NewKeyVaultStore(options KeyVaultStoreOptions) (Store, error) {
+func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions) (Store, error) {
 	if options.VaultURL == "" {
 		return nil, ErrVaultURLRequired
 	}
@@ -65,7 +65,7 @@ func NewKeyVaultStore(options KeyVaultStoreOptions) (Store, error) {
 		prefix = *options.Prefix
 	}
 
-	return &KeyVaultStore{
+	return &AzureKeyVaultStore{
 		client:         client,
 		vaultURL:       options.VaultURL,
 		prefix:         prefix,
@@ -73,7 +73,7 @@ func NewKeyVaultStore(options KeyVaultStoreOptions) (Store, error) {
 	}, nil
 }
 
-func (s *KeyVaultStore) getKey(stack string, component string, key string) (string, error) {
+func (s *AzureKeyVaultStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
 		return "", ErrStackDelimiterNotSet
 	}
@@ -81,7 +81,7 @@ func (s *KeyVaultStore) getKey(stack string, component string, key string) (stri
 	return getKey(s.prefix, *s.stackDelimiter, stack, component, key, "-")
 }
 
-func (s *KeyVaultStore) Set(stack string, component string, key string, value interface{}) error {
+func (s *AzureKeyVaultStore) Set(stack string, component string, key string, value interface{}) error {
 	if stack == "" {
 		return ErrEmptyStack
 	}
@@ -118,7 +118,7 @@ func (s *KeyVaultStore) Set(stack string, component string, key string, value in
 	return nil
 }
 
-func (s *KeyVaultStore) Get(stack string, component string, key string) (interface{}, error) {
+func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (interface{}, error) {
 	if stack == "" {
 		return nil, ErrEmptyStack
 	}

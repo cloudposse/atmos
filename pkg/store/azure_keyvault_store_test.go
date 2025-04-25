@@ -22,7 +22,7 @@ func (m *mockClient) SetSecret(ctx context.Context, name string, parameters azse
 	return m.setSecretFunc(ctx, name, parameters, options)
 }
 
-func TestKeyVaultStore_Set(t *testing.T) {
+func TestAzureKeyVaultStore_Set(t *testing.T) {
 	tests := []struct {
 		name      string
 		stack     string
@@ -92,7 +92,7 @@ func TestKeyVaultStore_Set(t *testing.T) {
 			client := &mockClient{
 				setSecretFunc: tt.mockFunc,
 			}
-			store := &KeyVaultStore{
+			store := &AzureKeyVaultStore{
 				client:         client,
 				vaultURL:       "https://test.vault.azure.net",
 				stackDelimiter: stringPtr("-"),
@@ -108,7 +108,7 @@ func TestKeyVaultStore_Set(t *testing.T) {
 	}
 }
 
-func TestKeyVaultStore_Get(t *testing.T) {
+func TestAzureKeyVaultStore_Get(t *testing.T) {
 	tests := []struct {
 		name      string
 		stack     string
@@ -181,7 +181,7 @@ func TestKeyVaultStore_Get(t *testing.T) {
 			client := &mockClient{
 				getSecretFunc: tt.mockFunc,
 			}
-			store := &KeyVaultStore{
+			store := &AzureKeyVaultStore{
 				client:         client,
 				vaultURL:       "https://test.vault.azure.net",
 				stackDelimiter: stringPtr("-"),

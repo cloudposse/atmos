@@ -8,10 +8,10 @@ import Intro from '@site/src/components/Intro'
 
 <Intro>
 Atmos supports the concept of remote stores to facilitate the sharing of values between components or between
-some external process and a component. In `atmos`, values are saved to stores via
-[hooks](/core-concepts/stacks/hooks) and are read using the [!store](/core-concepts/stacks/yaml-functions/store.mdx)
-yaml function. Values can also be saved to stores from outside of `atmos`, for example, from a CI/CD pipeline or a
-script.
+some external process and a component. In Atmos, values are saved to stores via
+[hooks](/core-concepts/stacks/hooks) and are read using the [`!store`](/core-concepts/stacks/yaml-functions/store)
+YAML function and [`atmos.Store`](/core-concepts/stacks/templates/functions/atmos.Store) template function.
+Values can also be saved to stores from outside of Atmos, for example, from a CI/CD pipeline or a script.
 
 Currently, the following stores are supported:
 
@@ -19,6 +19,7 @@ Currently, the following stores are supported:
 - [AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html)
 - [Google Secret Manager](https://cloud.google.com/secret-manager)
 - [Redis](https://redis.io/)
+- [Azure Key Vault](https://azure.microsoft.com/en-us/products/key-vault)
 </Intro>
 
 Atmos stores are configured in the `atmos.yaml` file and available to use in stacks via the
@@ -255,3 +256,31 @@ stores:
 
 The Redis store supports authentication via the URL in options or via the `ATMOS_REDIS_URL` environment variable. The
 URL format is described in the Redis [docs](https://redis.github.io/lettuce/user-guide/connecting-redis/).
+
+### Azure Key Vault
+
+```yaml
+stores:
+  dev/azure-key-vault:
+    type: azure-key-vault
+    options:
+
+  prod/azure-key-vault:
+    type: azure-key-vault
+    options:
+ ```
+
+<dl>
+    <dt>`stores.[store_name]`</dt>
+    <dd>This map key is the name of the store. It must be unique across all stores. This is how the store is referenced in the `store` function.</dd>
+
+    <dt>`stores.[store_name].type`</dt>
+    <dd>Must be set to either `google-secret-manager` or its alias `gsm`</dd>
+
+    <dt>`stores.[store_name].options`</dt>
+    <dd>A map of options specific to the store type. For Google Secret Manager, the following options are supported:</dd>
+</dl>
+
+#### Authentication
+
+Azure Key Vault supports multiple authentication methods:
