@@ -311,7 +311,7 @@ func ExecuteTerraformGenerateVarfiles(
 							return err
 						}
 					} else if format == "json" {
-						err = u.WriteToFileAsJSON(&atmosConfig, fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsJSON(fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}

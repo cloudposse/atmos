@@ -159,7 +159,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			log.Debug("Writing the variables to file:", "file", varFilePath)
 
 			if !info.DryRun {
-				err = u.WriteToFileAsJSON(&atmosConfig, varFilePath, info.ComponentVarsSection, 0o644)
+				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
 				if err != nil {
 					return err
 				}

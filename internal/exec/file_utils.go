@@ -49,17 +49,7 @@ func printOrWriteToFile(
 				return err
 			}
 		} else {
-			filteredData := u.FilterEmptyValuesRecursive(data, *atmosConfig.Describe.Settings.IncludeEmpty)
-
-			if filteredData == nil {
-				err := os.WriteFile(file, []byte{}, 0o644)
-				if err != nil {
-					return err
-				}
-				return nil
-			}
-
-			y, err := u.ConvertToYAML(filteredData, yamlOpts...)
+			y, err := u.ConvertToYAML(data, yamlOpts...)
 			if err != nil {
 				return err
 			}
@@ -71,12 +61,12 @@ func printOrWriteToFile(
 
 	case "json":
 		if file == "" {
-			err := u.PrintAsJSON(atmosConfig, data)
+			err := u.PrintAsJSON(data)
 			if err != nil {
 				return err
 			}
 		} else {
-			err := u.WriteToFileAsJSON(atmosConfig, file, data, 0o644)
+			err := u.WriteToFileAsJSON(file, data, 0o644)
 			if err != nil {
 				return err
 			}

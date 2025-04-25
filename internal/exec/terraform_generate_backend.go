@@ -102,7 +102,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	u.LogDebug(backendFilePath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsJSON(&atmosConfig, backendFilePath, componentBackendConfig, 0o644)
+		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0o644)
 		if err != nil {
 			return err
 		}
