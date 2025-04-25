@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +23,14 @@ func TestCLITerraformClean(t *testing.T) {
 		t.Fatalf("Failed to get the current working directory: %v", err)
 	}
 
+	// Initialize PathManager and update PATH
+	pathManager := NewPathManager()
+	pathManager.Prepend("../build", "..")
+	err = pathManager.Apply()
+	if err != nil {
+		t.Fatalf("Failed to apply updated PATH: %v", err)
+	}
+	fmt.Printf("Updated PATH: %s\n", pathManager.GetPath())
 	defer func() {
 		// Change back to the original working directory after the test
 		if err := os.Chdir(startingDir); err != nil {
