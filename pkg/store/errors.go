@@ -18,7 +18,7 @@ var (
 	ErrGetParameter   = errors.New("failed to get parameter")
 
 	// Azure Key Vault specific errors.
-	ErrVaultURLRequired = errors.New("vault_url is required in key vault store configuration")
+	ErrVaultURLRequired = errors.New("vault_url is required in azure key vault store configuration")
 
 	// Redis specific errors.
 	ErrParseRedisURL   = errors.New("failed to parse redis url")
