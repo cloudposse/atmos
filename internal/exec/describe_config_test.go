@@ -10,7 +10,7 @@ import (
 )
 
 func TestErrInvalidFormat_Error(t *testing.T) {
-	err := DescribeErrorInvalidFormat{format: "invalid"}
+	err := DescribeConfigFormatError{format: "invalid"}
 	assert.Equal(t, "invalid 'format': invalid", err.Error())
 }
 
@@ -80,7 +80,7 @@ func TestDescribeConfig(t *testing.T) {
 
 		err := dc.ExecuteDescribeConfigCmd("", "invalid", "")
 		assert.Error(t, err)
-		assert.Equal(t, DescribeErrorInvalidFormat{format: "invalid"}, err)
+		assert.Equal(t, DescribeConfigFormatError{format: "invalid"}, err)
 	})
 
 	t.Run("ExecuteDescribeConfigCmd_NoQuery_NoTTY", func(t *testing.T) {

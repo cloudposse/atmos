@@ -96,7 +96,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
 		err = viewConfig(&atmosConfig, component, format, res)
 		switch err.(type) {
-		case DescribeErrorInvalidFormat:
+		case DescribeConfigFormatError:
 			return err
 		case nil:
 			return nil
@@ -131,7 +131,7 @@ func viewConfig(atmosConfig *schema.AtmosConfiguration, displayName string, form
 			return err
 		}
 	default:
-		return DescribeErrorInvalidFormat{
+		return DescribeConfigFormatError{
 			format,
 		}
 	}
