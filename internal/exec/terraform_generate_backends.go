@@ -336,7 +336,7 @@ func ExecuteTerraformGenerateBackends(
 							return err
 						}
 
-						err = u.WriteToFileAsJSON(backendFileAbsolutePath, componentBackendConfig, 0o644)
+						err = u.WriteToFileAsJSON(&atmosConfig, backendFileAbsolutePath, componentBackendConfig, 0o644)
 						if err != nil {
 							return err
 						}

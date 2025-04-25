@@ -27,6 +27,13 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if err != nil {
 		return atmosConfig, err
 	}
+
+	// Set default value for Describe.Settings.IncludeEmpty if not provided
+	if atmosConfig.Describe.Settings.IncludeEmpty == nil {
+		defaultValue := false
+		atmosConfig.Describe.Settings.IncludeEmpty = &defaultValue
+	}
+
 	// Process the base path specified in the Terraform provider (which calls into the atmos code)
 	// This overrides all other atmos base path configs (`atmos.yaml`, ENV var `ATMOS_BASE_PATH`)
 	if configAndStacksInfo.AtmosBasePath != "" {

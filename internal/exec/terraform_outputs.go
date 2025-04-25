@@ -133,7 +133,7 @@ func execTerraformOutput(
 				return nil, err
 			}
 
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o644)
+			err = u.WriteToFileAsJSON(atmosConfig, backendFileName, componentBackendConfig, 0o644)
 			if err != nil {
 				return nil, err
 			}
@@ -150,7 +150,7 @@ func execTerraformOutput(
 			l.Debug("Writing the provider overrides to file:", "file", providerOverrideFileName)
 
 			providerOverrides := generateComponentProviderOverrides(providersSection)
-			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
+			err = u.WriteToFileAsJSON(atmosConfig, providerOverrideFileName, providerOverrides, 0o644)
 			if err != nil {
 				return nil, err
 			}
