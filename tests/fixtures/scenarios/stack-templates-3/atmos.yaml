@@ -7,6 +7,8 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
+  helmfile:
+    base_path: "components/helmfile"
 
 stacks:
   base_path: "stacks"
