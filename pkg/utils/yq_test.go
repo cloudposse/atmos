@@ -152,19 +152,19 @@ vars:
 	res1, err := EvaluateYqExpression(atmosConfig, res, yq)
 	assert.Nil(t, err)
 	assert.Equal(t, false, res1)
-	err = PrintAsYAML(res1)
+	err = PrintAsYAML(atmosConfig, res1)
 	assert.Nil(t, err)
 	yq = ".vars.tags.terraform_workspace"
 	res2, err := EvaluateYqExpression(atmosConfig, res, yq)
 	assert.Nil(t, err)
 	assert.Equal(t, "plat-ue2-prod-override", res2)
-	err = PrintAsYAML(res2)
+	err = PrintAsYAML(atmosConfig, res2)
 	assert.Nil(t, err)
 	yq = ".vars.max_subnet_count"
 	res3, err := EvaluateYqExpression(atmosConfig, res, yq)
 	assert.Nil(t, err)
 	assert.Equal(t, 2, res3)
-	err = PrintAsYAML(res3)
+	err = PrintAsYAML(atmosConfig, res3)
 	assert.Nil(t, err)
 	yq = ".settings.test"
 	res4, err := EvaluateYqExpression(atmosConfig, res, yq)
