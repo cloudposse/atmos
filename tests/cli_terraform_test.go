@@ -30,15 +30,52 @@ func TestCLITerraformClean(t *testing.T) {
 	}()
 
 	// Define the work directory and change to it
-	workDir := "../examples/quick-start-simple"
+	workDir := "fixtures/scenarios/basic"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
+
+	// Find the binary path for "atmos"
+	binaryPath, err := exec.LookPath("atmos")
+	if err != nil {
+		t.Fatalf("Binary not found: %s. Current PATH: %s", "atmos", pathManager.GetPath())
+	}
+
+	// Force clean everything
+	runTerraformCleanCommand(t, binaryPath, "--force")
+	// Clean everything
+	runTerraformCleanCommand(t, binaryPath)
+	// Clean specific component
+	runTerraformCleanCommand(t, binaryPath, "mycomponent")
+	// Clean component with stack
+	runTerraformCleanCommand(t, binaryPath, "mycomponent", "-s", "nonprod")
+
+	// Run terraform apply for prod environment
+	runTerraformApply(t, binaryPath, "prod")
+	verifyStateFilesExist(t, []string{"./components/terraform/mock/terraform.tfstate.d/prod-mycomponent"})
+	runCLITerraformCleanComponent(t, binaryPath, "prod")
+	verifyStateFilesDeleted(t, []string{"./components/terraform/mock/terraform.tfstate.d/prod-mycomponent"})
+
+	// Run terraform apply for nonprod environment
+	runTerraformApply(t, binaryPath, "nonprod")
+
+	// Verify if state files exist before cleaning
+	stateFiles := []string{
+		"./components/terraform/mock/.terraform",
+		"./components/terraform/mock/terraform.tfstate.d",
+	}
+	verifyStateFilesExist(t, stateFiles)
+
+	// Run terraform clean
+	runTerraformClean(t, binaryPath)
+
+	// Verify if state files have been deleted after clean
+	verifyStateFilesDeleted(t, stateFiles)
 }
 
 // runTerraformApply runs the terraform apply command for a given environment.
 func runTerraformApply(t *testing.T, binaryPath, environment string) {
-	cmd := exec.Command(binaryPath, "terraform", "apply", "station", "-s", environment)
+	cmd := exec.Command(binaryPath, "terraform", "apply", "mycomponent", "-s", environment)
 	envVars := os.Environ()
 	envVars = append(envVars, "ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true")
 	cmd.Env = envVars
@@ -49,7 +86,7 @@ func runTerraformApply(t *testing.T, binaryPath, environment string) {
 	err := cmd.Run()
 	t.Log(stdout.String())
 	if err != nil {
-		t.Fatalf("Failed to run terraform apply station -s %s: %v", environment, stderr.String())
+		t.Fatalf("Failed to run terraform apply mycomponent -s %s: %v", environment, stderr.String())
 	}
 }
 
@@ -96,7 +133,7 @@ func verifyStateFilesDeleted(t *testing.T, stateFiles []string) {
 }
 
 func runCLITerraformCleanComponent(t *testing.T, binaryPath, environment string) {
-	cmd := exec.Command(binaryPath, "terraform", "clean", "station", "-s", environment, "--force")
+	cmd := exec.Command(binaryPath, "terraform", "clean", "mycomponent", "-s", environment, "--force")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

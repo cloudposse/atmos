@@ -4,13 +4,13 @@ vars:
   stage: prod
 
 import:
-  - catalog/myapp
+  - catalog/mock
 
 components:
   terraform:
-    myapp:
+    mock:
       metadata:
         locked: true
       vars:
-        location: Los Angeles
-        lang: en
+        foo: "foo prod override"
+        bar: "bar prod override"
