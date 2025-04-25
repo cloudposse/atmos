@@ -38,7 +38,7 @@ type AtmosFuncs struct {
 }
 
 func (f AtmosFuncs) Component(component string, stack string) (any, error) {
-	return componentFunc(f.atmosConfig, f.configAndStacksInfo, component, stack)
+	return componentFunc(f.atmosConfig, component, stack)
 }
 
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
