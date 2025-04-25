@@ -16,7 +16,6 @@ var componentFuncSyncMap = sync.Map{}
 
 func componentFunc(
 	atmosConfig *schema.AtmosConfiguration,
-	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	component string,
 	stack string,
 ) (any, error) {

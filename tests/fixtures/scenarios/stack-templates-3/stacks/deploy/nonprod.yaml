@@ -25,3 +25,17 @@ components:
         foo: '{{ (atmos.Component "component-1" .stack).outputs.foo }}'
         bar: '{{ (atmos.Component "component-1" .stack).outputs.bar }}'
         baz: '{{ (atmos.Component "component-1" .stack).outputs.bar }}--{{ (atmos.Component "component-1" .stack).outputs.baz }}'
+
+  helmfile:
+    component-3:
+      vars:
+        foo: '{{ (atmos.Component "component-1" .stack).vars.foo }}'
+        bar: '{{ (atmos.Component "component-1" .stack).settings.config.b }}'
+        baz: '{{ (atmos.Component "component-1" .stack).vars.bar }}'
+
+    component-4:
+      vars:
+        foo: '{{ (atmos.Component "component-1" .stack).outputs.foo }}'
+        bar: '{{ (atmos.Component "component-3" .stack).vars.bar }}'
+        # Helmfile components don't have `outputs` (terraform output) - this should result in `<no value>`
+        baz: '{{ (atmos.Component "component-3" .stack).outputs.baz }}'

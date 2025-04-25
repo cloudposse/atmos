@@ -62,7 +62,7 @@ func TestComponentFunc(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d, err := componentFunc(&atmosConfig, &info, "component-2", "nonprod")
+	d, err := componentFunc(&atmosConfig, "component-2", "nonprod")
 	assert.NoError(t, err)
 
 	y, err := u.ConvertToYAML(d)
