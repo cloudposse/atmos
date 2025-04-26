@@ -178,7 +178,7 @@ func TestGetIncludeEmptySetting(t *testing.T) {
 			expected: true, // Should default to true if config is nil
 		},
 		{
-			name: "Describe is nil", // Handle potential nil Describe
+			name:   "Describe is nil", // Handle potential nil Describe
 			config: &schema.AtmosConfiguration{
 				// Describe is nil
 			},
