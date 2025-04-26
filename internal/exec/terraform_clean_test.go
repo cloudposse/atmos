@@ -215,6 +215,7 @@ func TestIsValidDataDir(t *testing.T) {
 		})
 	}
 }
+
 func TestCollectComponentsDirectoryObjects(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -255,7 +256,7 @@ func TestCollectComponentsDirectoryObjects(t *testing.T) {
 					"../../tests/fixtures/scenarios/terraform-sub-components/components/terraform/mock-subcomponents/component-1/component-2/terraform.tfstate.d",
 				}
 				for _, dir := range dirs {
-					if err := os.MkdirAll(dir, 0755); err != nil {
+					if err := os.MkdirAll(dir, 0o755); err != nil {
 						return err
 					}
 				}
