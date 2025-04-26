@@ -44,7 +44,7 @@ func (d defaultTemplateRenderer) Render(tmplName, tmplValue string, mergedData m
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate <doc-type>' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("missing doc-type argument (e.g. `readme`). Usage: atmos docs generate <doc-type>")
+		return ErrMissingDocType
 	}
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {

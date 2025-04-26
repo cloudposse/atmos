@@ -28,4 +28,5 @@ var (
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
+	ErrMissingDocType                        = errors.New("doc-type argument missing")
 )
