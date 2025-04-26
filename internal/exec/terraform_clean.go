@@ -398,9 +398,17 @@ func IsValidDataDir(tfDataDir string) error {
 	if err != nil {
 		return fmt.Errorf(ErroFormat, ErrResolveEnvDir, err)
 	}
+
+	// Check for root path on both Unix and Windows systems
 	if absTFDataDir == "/" || absTFDataDir == filepath.Clean("/") {
 		return fmt.Errorf(ErroFormat, ErrRefusingToDeleteDir, absTFDataDir)
 	}
+
+	// Windows-specific root path check (like C:\ or D:\)
+	if len(absTFDataDir) == 3 && absTFDataDir[1:] == ":\\" {
+		return fmt.Errorf(ErroFormat, ErrRefusingToDeleteDir, absTFDataDir)
+	}
+
 	if strings.Contains(absTFDataDir, "..") {
 		return fmt.Errorf(ErroFormat, ErrRefusingToDelete, "..")
 	}
