@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -96,7 +95,7 @@ func TestFindFoldersNamesWithPrefix(t *testing.T) {
 			name:          "Empty root path",
 			root:          "",
 			prefix:        "test",
-			expectedError: fmt.Errorf("root path cannot be empty"),
+			expectedError: ErrRootPath,
 		},
 		{
 			name:          "Non-existent root path",
@@ -130,7 +129,7 @@ func TestCollectDirectoryObjects(t *testing.T) {
 			name:          "Empty base path",
 			basePath:      "",
 			patterns:      []string{"*.tfstate"},
-			expectedError: fmt.Errorf("path cannot be empty"),
+			expectedError: ErrEmptyPath,
 		},
 		{
 			name:          "Non-existent base path",
@@ -212,6 +211,115 @@ func TestIsValidDataDir(t *testing.T) {
 				require.Contains(t, err.Error(), tt.expectedError.Error())
 			} else {
 				require.NoError(t, err)
+			}
+		})
+	}
+}
+func TestCollectComponentsDirectoryObjects(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the test cases
+	tests := []struct {
+		name                 string
+		terraformPath        string
+		componentPaths       []string
+		patterns             []string
+		expectedObjectsCount int
+		expectedError        error
+		setup                func() error
+		cleanup              func() error
+	}{
+		{
+			name:                 "Components with nested subfolders",
+			terraformPath:        "../../tests/fixtures/scenarios/terraform-sub-components/components/terraform",
+			componentPaths:       []string{"mock-subcomponents/component-1", "mock-subcomponents/component-1/component-2"},
+			patterns:             []string{".terraform", "terraform.tfstate.d"},
+			expectedObjectsCount: 2, // One for each component path with matching patterns
+			setup: func() error {
+				// Create test directories and files for nested components
+				dirs := []string{
+					"../../tests/fixtures/scenarios/terraform-sub-components/components/terraform/mock-subcomponents/component-1/.terraform",
+					"../../tests/fixtures/scenarios/terraform-sub-components/components/terraform/mock-subcomponents/component-1/terraform.tfstate.d",
+					"../../tests/fixtures/scenarios/terraform-sub-components/components/terraform/mock-subcomponents/component-1/component-2/.terraform",
+					"../../tests/fixtures/scenarios/terraform-sub-components/components/terraform/mock-subcomponents/component-1/component-2/terraform.tfstate.d",
+				}
+				for _, dir := range dirs {
+					if err := os.MkdirAll(dir, 0755); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+			cleanup: func() error {
+				// Remove the test directories
+				return os.RemoveAll("../../tests/fixtures/scenarios/terraform-sub-components/components")
+			},
+		},
+		{
+			name:           "Empty terraform path",
+			terraformPath:  "",
+			componentPaths: []string{"component-1"},
+			patterns:       []string{".terraform"},
+			expectedError:  ErrEmptyPath,
+		},
+		{
+			name:           "Terraform path does not exist",
+			terraformPath:  "nonexistent/path",
+			componentPaths: []string{"component-1"},
+			patterns:       []string{".terraform"},
+			expectedError:  ErrPathNotExist,
+		},
+		{
+			name:           "Empty component paths",
+			terraformPath:  "../../tests/fixtures/scenarios/terraform-sub-components/components/terraform",
+			componentPaths: []string{},
+			patterns:       []string{".terraform"},
+			expectedError:  nil, // Should return empty result, not error
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup test environment if needed
+			if tt.setup != nil {
+				if err := tt.setup(); err != nil {
+					t.Fatalf("Failed to setup test: %v", err)
+				}
+			}
+
+			// Cleanup after the test
+			defer func() {
+				if tt.cleanup != nil {
+					if err := tt.cleanup(); err != nil {
+						t.Fatalf("Failed to cleanup test: %v", err)
+					}
+				}
+			}()
+
+			// Run the test
+			dirs, err := CollectComponentsDirectoryObjects(tt.terraformPath, tt.componentPaths, tt.patterns)
+
+			// Verify error expectation
+			if tt.expectedError != nil {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				require.NoError(t, err)
+				// Verify expected number of objects
+				if tt.expectedObjectsCount > 0 {
+					require.Len(t, dirs, tt.expectedObjectsCount, "Expected %d directories, got %d", tt.expectedObjectsCount, len(dirs))
+				}
 			}
 		})
 	}

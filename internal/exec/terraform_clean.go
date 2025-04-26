@@ -32,6 +32,8 @@ var (
 	ErrResolveEnvDir             = errors.New("error resolving TF_DATA_DIR path")
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
+	ErrRootPath                  = errors.New("root path cannot be empty")
+	ErroFormat                   = "%w: %s"
 )
 
 type ObjectInfo struct {
@@ -53,7 +55,7 @@ type Directory struct {
 func findFoldersNamesWithPrefix(root, prefix string, atmosConfig schema.AtmosConfiguration) ([]string, error) {
 	var folderNames []string
 	if root == "" {
-		return nil, fmt.Errorf("root path cannot be empty")
+		return nil, ErrRootPath
 	}
 	// First, read the directories at the root level (level 1)
 	level1Dirs, err := os.ReadDir(root)
@@ -394,13 +396,13 @@ func IsValidDataDir(tfDataDir string) error {
 	}
 	absTFDataDir, err := filepath.Abs(tfDataDir)
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrResolveEnvDir, err)
+		return fmt.Errorf(ErroFormat, ErrResolveEnvDir, err)
 	}
 	if absTFDataDir == "/" || absTFDataDir == filepath.Clean("/") {
-		return fmt.Errorf("%w: %s", ErrRefusingToDeleteDir, absTFDataDir)
+		return fmt.Errorf(ErroFormat, ErrRefusingToDeleteDir, absTFDataDir)
 	}
 	if strings.Contains(absTFDataDir, "..") {
-		return fmt.Errorf("%w: %s", ErrRefusingToDelete, "..")
+		return fmt.Errorf(ErroFormat, ErrRefusingToDelete, "..")
 	}
 	return nil
 }
@@ -441,7 +443,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		FilterComponents,
 		nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrDescribeStack, err)
+		return fmt.Errorf(ErroFormat, ErrDescribeStack, err)
 	}
 	allComponentsRelativePaths := getAllStacksComponentsPaths(stacksMap)
 	folders, err := CollectComponentsDirectoryObjects(atmosConfig.TerraformDirAbsolutePath, allComponentsRelativePaths, filesToClear)
