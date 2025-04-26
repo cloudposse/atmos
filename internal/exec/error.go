@@ -27,4 +27,5 @@ var (
 	ErrEmptyPath                             = errors.New("path is empty, expected a valid file path")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 )

@@ -43,6 +43,9 @@ func (d defaultTemplateRenderer) Render(tmplName, tmplValue string, mergedData m
 
 // ExecuteDocsGenerateCmd implements the 'atmos docs generate <doc-type>' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("missing doc-type argument (e.g. `readme`). Usage: atmos docs generate <doc-type>")
+	}
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
@@ -56,7 +59,7 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	// The target directory is taken from docs.generate.<doc-type>.base-dir.
 	docsGenerate, ok := rootConfig.Settings.Docs.Generate[args[0]]
 	if !ok {
-		return fmt.Errorf("no '<doc-type>' entry found under 'docs.generate' in atmos.yaml")
+		return fmt.Errorf("%w: %q", ErrNoDocsGenerateEntry, args[0])
 	}
 
 	basedir := docsGenerate.BaseDir
@@ -82,7 +85,8 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 
 // mergeInputs merges all YAML inputs defined in docsGenerate.Input.
 func mergeInputs(atmosConfig *schema.AtmosConfiguration, dir string, docsGenerate *schema.DocsGenerate) (map[string]any, error) {
-	var allMaps []map[string]any
+	// Preallocate slice for inputs
+	allMaps := make([]map[string]any, 0, len(docsGenerate.Input))
 	for _, src := range docsGenerate.Input {
 		dataMap, err := fetchAndParseYAML(atmosConfig, src, dir)
 		if err != nil {
@@ -90,6 +94,10 @@ func mergeInputs(atmosConfig *schema.AtmosConfiguration, dir string, docsGenerat
 			continue
 		}
 		allMaps = append(allMaps, dataMap)
+	}
+	// If nothing was successfully parsed, return an empty map to avoid nil-map panics
+	if len(allMaps) == 0 {
+		return map[string]any{}, nil
 	}
 	return merge.Merge(*atmosConfig, allMaps)
 }
