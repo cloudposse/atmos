@@ -16,8 +16,12 @@ type sectionFilter struct{}
 func (f *sectionFilter) Filter(data map[string]any) map[string]any {
 	result := make(map[string]any)
 
-	for key, value := range data {
-		if filteredValue := f.filterValue(value); filteredValue != nil {
+	for key, originalValue := range data {
+		filteredValue := f.filterValue(originalValue)
+		// Keep the value if:
+		// 1. filterValue returned something non-nil (meaning it wasn't an empty string or empty map)
+		// 2. OR, the original value itself was nil (we want to preserve explicit nils)
+		if filteredValue != nil || originalValue == nil {
 			result[key] = filteredValue
 		}
 	}
