@@ -5,11 +5,11 @@ vars:
 
 import:
   - ./_defaults
-  - catalog/myapp
+  - catalog/mock
 
 components:
   terraform:
-    myapp:
+    mock:
       vars:
-        location: Los Angeles
-        lang: en
+        foo: "foo prod override"
+        bar: "bar prod override"

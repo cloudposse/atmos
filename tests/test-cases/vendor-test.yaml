@@ -11,6 +11,7 @@ tests:
       stderr:
         - "Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/"
       exit_code: 1
+
   - name: atmos_vendor_pull
     enabled: true
     description: "Ensure atmos vendor pull command executes without errors and files are present."
@@ -27,25 +28,16 @@ tests:
         - "./components/terraform/github/stargazers/main/variables.tf"
         - "./components/terraform/github/stargazers/main/versions.tf"
         - "./components/terraform/test-components/main/main.tf"
-        - "./components/terraform/test-components/main/outputs.tf"
         - "./components/terraform/test-components/main/README.md"
-        - "./components/terraform/test-components/main/variables.tf"
-        - "./components/terraform/test-components/main/versions.tf"
         - "./components/terraform/weather/main/main.tf"
         - "./components/terraform/weather/main/outputs.tf"
         - "./components/terraform/weather/main/providers.tf"
         - "./components/terraform/weather/main/variables.tf"
         - "./components/terraform/weather/main/versions.tf"
-        - "./components/terraform/myapp2/outputs.tf"
         - "./components/terraform/myapp2/main.tf"
-        - "./components/terraform/myapp2/variables.tf"
-        - "./components/terraform/myapp2/versions.tf"
         - "./components/terraform/myapp2/README.md"
-        # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/myapp:v0
-        - "./components/terraform/myapp1/outputs.tf"
+        # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0
         - "./components/terraform/myapp1/main.tf"
-        - "./components/terraform/myapp1/variables.tf"
-        - "./components/terraform/myapp1/versions.tf"
         - "./components/terraform/myapp1/README.md"
       exit_code: 0
 
@@ -61,10 +53,7 @@ tests:
       - "--tags=oci"
     expect:
       file_exists:
-        # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/myapp:v0
-        - "./components/terraform/myapp1/outputs.tf"
+        # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0
         - "./components/terraform/myapp1/main.tf"
-        - "./components/terraform/myapp1/variables.tf"
-        - "./components/terraform/myapp1/versions.tf"
         - "./components/terraform/myapp1/README.md"
       exit_code: 0
