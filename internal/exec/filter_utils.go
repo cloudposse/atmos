@@ -4,15 +4,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// SectionFilter defines the interface for filtering map sections
+// SectionFilter defines the interface for filtering map sections.
 type SectionFilter interface {
 	Filter(data map[string]any) map[string]any
 }
 
-// sectionFilter implements SectionFilter to remove empty sections
+// sectionFilter implements SectionFilter to remove empty sections.
 type sectionFilter struct{}
 
-// Filter removes empty sections and empty string values from a map
+// Filter removes empty sections and empty string values from a map.
 func (f *sectionFilter) Filter(data map[string]any) map[string]any {
 	result := make(map[string]any)
 
@@ -25,7 +25,7 @@ func (f *sectionFilter) Filter(data map[string]any) map[string]any {
 	return result
 }
 
-// filterValue processes a single value, recursively filtering nested maps
+// filterValue processes a single value, recursively filtering nested maps.
 func (f *sectionFilter) filterValue(value any) any {
 	switch v := value.(type) {
 	case map[string]any:
@@ -43,7 +43,7 @@ func (f *sectionFilter) filterValue(value any) any {
 	}
 }
 
-// FilterEmptySections filters out empty sections and empty string values from a map
+// FilterEmptySections filters out empty sections and empty string values from a map.
 // based on the includeEmpty setting.
 func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any {
 	if includeEmpty {
@@ -54,7 +54,7 @@ func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any 
 	return filter.Filter(data)
 }
 
-// GetIncludeEmptySetting gets the include_empty setting from the Atmos configuration
+// GetIncludeEmptySetting gets the include_empty setting from the Atmos configuration.
 func GetIncludeEmptySetting(atmosConfig *schema.AtmosConfiguration) bool {
 	if atmosConfig.Describe.Settings.IncludeEmpty != nil {
 		return *atmosConfig.Describe.Settings.IncludeEmpty
