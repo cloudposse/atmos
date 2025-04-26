@@ -24,6 +24,7 @@ const (
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
 	AtmosYamlFuncEnv             = "!env"
 	AtmosYamlFuncInclude         = "!include"
+	AtmosYamlFuncGitRoot         = "!repo-root"
 )
 
 var (
