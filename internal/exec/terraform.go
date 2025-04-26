@@ -176,7 +176,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		     - Default values in the configuration file: these have the lowest priority
 		*/
 		if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
-			log.Debug("\nCLI variables (will override the variables defined in the stack manifests):")
+			log.Debug("CLI variables (will override the variables defined in the stack manifests):")
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, cliVars)
 				if err != nil {
