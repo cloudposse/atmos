@@ -4,71 +4,60 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// FilterEmptySections recursively filters out empty sections and empty string values from a map
-// based on the includeEmpty setting.
-func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any {
-	if includeEmpty {
-		return data // No filtering needed
-	}
+// SectionFilter defines the interface for filtering map sections
+type SectionFilter interface {
+	Filter(data map[string]any) map[string]any
+}
 
+// sectionFilter implements SectionFilter to remove empty sections
+type sectionFilter struct{}
+
+// Filter removes empty sections and empty string values from a map
+func (f *sectionFilter) Filter(data map[string]any) map[string]any {
 	result := make(map[string]any)
 
 	for key, value := range data {
-		// Handle map values
-		if mapValue, isMap := value.(map[string]any); isMap {
-			// Check if map is empty
-			if len(mapValue) == 0 {
-				continue // Skip empty maps
-			}
-
-			// Check if all values are empty strings
-			allEmptyStrings := true
-			filteredMap := make(map[string]any)
-
-			for subKey, subValue := range mapValue {
-				if strValue, isStr := subValue.(string); isStr {
-					if strValue != "" {
-						allEmptyStrings = false
-						filteredMap[subKey] = strValue
-					}
-				} else if subMapValue, isSubMap := subValue.(map[string]any); isSubMap {
-					// Recursively filter nested maps
-					filteredSubMap := FilterEmptySections(subMapValue, includeEmpty)
-					if len(filteredSubMap) > 0 {
-						allEmptyStrings = false
-						filteredMap[subKey] = filteredSubMap
-					}
-				} else {
-					// Non-string, non-map value
-					allEmptyStrings = false
-					filteredMap[subKey] = subValue
-				}
-			}
-
-			// Skip if all values were empty strings
-			if !allEmptyStrings {
-				result[key] = filteredMap
-			}
-		} else if strValue, isStr := value.(string); isStr {
-			// Skip empty string values
-			if strValue != "" {
-				result[key] = strValue
-			}
-		} else {
-			// Keep non-string, non-map values
-			result[key] = value
+		if filteredValue := f.filterValue(value); filteredValue != nil {
+			result[key] = filteredValue
 		}
 	}
 
 	return result
 }
 
+// filterValue processes a single value, recursively filtering nested maps
+func (f *sectionFilter) filterValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		if filteredMap := f.Filter(v); len(filteredMap) > 0 {
+			return filteredMap
+		}
+		return nil
+	case string:
+		if v != "" {
+			return v
+		}
+		return nil
+	default:
+		return value
+	}
+}
+
+// FilterEmptySections filters out empty sections and empty string values from a map
+// based on the includeEmpty setting.
+func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any {
+	if includeEmpty {
+		return data
+	}
+	
+	filter := &sectionFilter{}
+	return filter.Filter(data)
+}
+
 // GetIncludeEmptySetting gets the include_empty setting from the Atmos configuration
 func GetIncludeEmptySetting(atmosConfig *schema.AtmosConfiguration) bool {
-	// Default to true if setting is not provided
-	includeEmpty := true
 	if atmosConfig.Describe.Settings.IncludeEmpty != nil {
-		includeEmpty = *atmosConfig.Describe.Settings.IncludeEmpty
+		return *atmosConfig.Describe.Settings.IncludeEmpty
 	}
-	return includeEmpty
+	return true
 }
