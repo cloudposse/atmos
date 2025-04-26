@@ -90,7 +90,7 @@ func findFoldersNamesWithPrefix(root, prefix string, atmosConfig schema.AtmosCon
 
 func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, error) {
 	if basePath == "" {
-		return nil, fmt.Errorf("path cannot be empty")
+		return nil, ErrEmptyPath
 	}
 	if _, err := os.Stat(basePath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%w %s", ErrPathNotExist, basePath)
