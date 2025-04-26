@@ -74,7 +74,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Print the component variables
-	u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+	log.Debug("Generating varfile for variables", "component", info.ComponentFromArg, "stack", info.Stack)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
