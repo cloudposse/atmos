@@ -156,7 +156,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
 			}
 
-			log.Debug("Writing the variables to file:", "file", varFilePath)
+			log.Debug("Writing the variables to file", "file", varFilePath)
 
 			if !info.DryRun {
 				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
