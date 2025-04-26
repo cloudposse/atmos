@@ -58,5 +58,5 @@ func GetIncludeEmptySetting(atmosConfig *schema.AtmosConfiguration) bool {
 	if atmosConfig.Describe.Settings.IncludeEmpty != nil {
 		return *atmosConfig.Describe.Settings.IncludeEmpty
 	}
-	return true
+	return false
 }
