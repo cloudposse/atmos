@@ -2,8 +2,8 @@ package exec
 
 import (
 	"errors"
-	"fmt"
 
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
