@@ -33,7 +33,6 @@ var (
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
 	ErrRootPath                  = errors.New("root path cannot be empty")
-	ErroFormat                   = "%w: %s"
 )
 
 type ObjectInfo struct {
@@ -396,21 +395,21 @@ func IsValidDataDir(tfDataDir string) error {
 	}
 	absTFDataDir, err := filepath.Abs(tfDataDir)
 	if err != nil {
-		return fmt.Errorf(ErroFormat, ErrResolveEnvDir, err)
+		return fmt.Errorf("%w: %v", ErrResolveEnvDir, err)
 	}
 
 	// Check for root path on both Unix and Windows systems
 	if absTFDataDir == "/" || absTFDataDir == filepath.Clean("/") {
-		return fmt.Errorf(ErroFormat, ErrRefusingToDeleteDir, absTFDataDir)
+		return fmt.Errorf("%w: %s", ErrRefusingToDeleteDir, absTFDataDir)
 	}
 
 	// Windows-specific root path check (like C:\ or D:\)
 	if len(absTFDataDir) == 3 && absTFDataDir[1:] == ":\\" {
-		return fmt.Errorf(ErroFormat, ErrRefusingToDeleteDir, absTFDataDir)
+		return fmt.Errorf("%w: %s", ErrRefusingToDeleteDir, absTFDataDir)
 	}
 
 	if strings.Contains(absTFDataDir, "..") {
-		return fmt.Errorf(ErroFormat, ErrRefusingToDelete, "..")
+		return fmt.Errorf("%w: %s", ErrRefusingToDelete, "..")
 	}
 	return nil
 }
@@ -451,7 +450,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		FilterComponents,
 		nil, nil, false, false, false, false, nil)
 	if err != nil {
-		return fmt.Errorf(ErroFormat, ErrDescribeStack, err)
+		return fmt.Errorf("%w: %v", ErrDescribeStack, err)
 	}
 	allComponentsRelativePaths := getAllStacksComponentsPaths(stacksMap)
 	folders, err := CollectComponentsDirectoryObjects(atmosConfig.TerraformDirAbsolutePath, allComponentsRelativePaths, filesToClear)
