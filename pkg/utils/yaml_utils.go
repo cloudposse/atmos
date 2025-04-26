@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -53,9 +54,9 @@ func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) err
 		return ErrNilAtmosConfig
 	}
 
-	indent := atmosConfig.Settings.Terminal.TabWidth
-	if indent <= 0 {
-		indent = 2
+	indent := 2
+	if atmosConfig.Settings.Terminal.TabWidth > 0 {
+		indent = atmosConfig.Settings.Terminal.TabWidth
 	}
 
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
@@ -79,7 +80,15 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 		return ErrNilAtmosConfig
 	}
 
-	y, err := ConvertToYAML(data)
+	// Get tab width from config or use default
+	indent := 2
+	if atmosConfig.Settings.Terminal.TabWidth > 0 {
+		indent = atmosConfig.Settings.Terminal.TabWidth
+	}
+
+	log.Debug("PrintAsYAMLToFileDescriptor", "tabWidth", indent)
+
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
@@ -89,10 +98,37 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 
 // WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file.
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
-	y, err := ConvertToYAML(data)
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: 2})
 	if err != nil {
 		return err
 	}
+
+	err = os.WriteFile(filePath, []byte(y), fileMode)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// WriteToFileAsYAMLWithConfig converts the provided value to YAML with custom configuration and writes it to the specified file.
+func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePath string, data any, fileMode os.FileMode) error {
+	if atmosConfig == nil {
+		return ErrNilAtmosConfig
+	}
+
+	// Get tab width from config or use default
+	indent := 2 // Default value
+	if atmosConfig.Settings.Terminal.TabWidth > 0 {
+		indent = atmosConfig.Settings.Terminal.TabWidth
+	}
+
+	log.Debug("WriteToFileAsYAMLWithConfig", "tabWidth", indent, "filePath", filePath)
+
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
+	if err != nil {
+		return err
+	}
+
 	err = os.WriteFile(filePath, []byte(y), fileMode)
 	if err != nil {
 		return err
@@ -110,14 +146,15 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 
+	// Default indent value
+	indent := 2
+
 	if len(opts) > 0 {
-		indent := opts[0].Indent
-		if indent > 0 {
-			encoder.SetIndent(indent)
+		if opts[0].Indent > 0 {
+			indent = opts[0].Indent
 		}
-	} else {
-		encoder.SetIndent(4)
 	}
+	encoder.SetIndent(indent)
 
 	if err := encoder.Encode(data); err != nil {
 		return "", err

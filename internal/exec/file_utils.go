@@ -37,11 +37,6 @@ func printOrWriteToFile(
 ) error {
 	switch format {
 	case "yaml":
-		indent := atmosConfig.Settings.Terminal.TabWidth
-		if indent <= 0 {
-			indent = 2
-		}
-		yamlOpts := []u.YAMLOptions{{Indent: indent}}
 
 		if file == "" {
 			err := u.PrintAsYAMLWithConfig(atmosConfig, data)
@@ -49,11 +44,7 @@ func printOrWriteToFile(
 				return err
 			}
 		} else {
-			y, err := u.ConvertToYAML(data, yamlOpts...)
-			if err != nil {
-				return err
-			}
-			err = os.WriteFile(file, []byte(y), 0o644)
+			err := u.WriteToFileAsYAMLWithConfig(atmosConfig, file, data, 0o644)
 			if err != nil {
 				return err
 			}

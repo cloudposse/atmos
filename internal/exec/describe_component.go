@@ -126,7 +126,11 @@ func ExecuteDescribeComponent(
 		}
 	}
 
-	return configAndStacksInfo.ComponentSection, nil
+	// Apply filtering based on include_empty setting
+	includeEmpty := GetIncludeEmptySetting(&atmosConfig)
+	filteredComponentSection := FilterEmptySections(configAndStacksInfo.ComponentSection, includeEmpty)
+
+	return filteredComponentSection, nil
 }
 
 // FilterAbstractComponents This function removes abstract components and returns the list of components.
