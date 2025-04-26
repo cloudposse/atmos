@@ -316,7 +316,7 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig schema.
 		for _, file := range folder.Files {
 			fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
 			if err != nil {
-				log.Debug(fmt.Errorf("failed to get relative path for %s: %w", file.FullPath, err))
+				log.Debug("failed to get relative path", "path", file.FullPath, "error", err)
 				fileRel = filepath.Join(relativePath, file.Name)
 			}
 			if file.IsDir {
