@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -82,4 +83,136 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 		}
 	}
 	return true, ""
+}
+
+func TestFindFoldersNamesWithPrefix(t *testing.T) {
+	tests := []struct {
+		name          string
+		root          string
+		prefix        string
+		expectedError error
+	}{
+		{
+			name:          "Empty root path",
+			root:          "",
+			prefix:        "test",
+			expectedError: fmt.Errorf("root path cannot be empty"),
+		},
+		{
+			name:          "Non-existent root path",
+			root:          "nonexistent/path",
+			prefix:        "test",
+			expectedError: ErrReadDir,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := findFoldersNamesWithPrefix(tt.root, tt.prefix, schema.AtmosConfiguration{})
+			if tt.expectedError != nil {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCollectDirectoryObjects(t *testing.T) {
+	tests := []struct {
+		name          string
+		basePath      string
+		patterns      []string
+		expectedError error
+	}{
+		{
+			name:          "Empty base path",
+			basePath:      "",
+			patterns:      []string{"*.tfstate"},
+			expectedError: fmt.Errorf("path cannot be empty"),
+		},
+		{
+			name:          "Non-existent base path",
+			basePath:      "nonexistent/path",
+			patterns:      []string{"*.tfstate"},
+			expectedError: ErrPathNotExist,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := CollectDirectoryObjects(tt.basePath, tt.patterns)
+			if tt.expectedError != nil {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestGetStackTerraformStateFolder(t *testing.T) {
+	tests := []struct {
+		name          string
+		componentPath string
+		stack         string
+		expectedError error
+	}{
+		{
+			name:          "Non-existent component path",
+			componentPath: "nonexistent/path",
+			stack:         "test",
+			expectedError: ErrFailedFoundStack,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := getStackTerraformStateFolder(tt.componentPath, tt.stack, schema.AtmosConfiguration{})
+			if tt.expectedError != nil {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestIsValidDataDir(t *testing.T) {
+	tests := []struct {
+		name          string
+		tfDataDir     string
+		expectedError error
+	}{
+		{
+			name:          "Empty TF_DATA_DIR",
+			tfDataDir:     "",
+			expectedError: ErrEmptyEnvDir,
+		},
+		{
+			name:          "Root TF_DATA_DIR",
+			tfDataDir:     "/",
+			expectedError: ErrRefusingToDeleteDir,
+		},
+		{
+			name:          "Valid TF_DATA_DIR",
+			tfDataDir:     "/valid/path",
+			expectedError: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := IsValidDataDir(tt.tfDataDir)
+			if tt.expectedError != nil {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
