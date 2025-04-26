@@ -49,7 +49,7 @@ func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any 
 	if includeEmpty {
 		return data
 	}
-	
+
 	filter := &sectionFilter{}
 	return filter.Filter(data)
 }
