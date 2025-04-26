@@ -13,6 +13,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	DefaultFileMode os.FileMode = 0o644
+)
+
 func removeTempDir(atmosConfig schema.AtmosConfiguration, path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
@@ -44,7 +48,7 @@ func printOrWriteToFile(
 				return err
 			}
 		} else {
-			err := u.WriteToFileAsYAMLWithConfig(atmosConfig, file, data, 0o644)
+			err := u.WriteToFileAsYAMLWithConfig(atmosConfig, file, data, DefaultFileMode)
 			if err != nil {
 				return err
 			}
@@ -57,7 +61,7 @@ func printOrWriteToFile(
 				return err
 			}
 		} else {
-			err := u.WriteToFileAsJSON(file, data, 0o644)
+			err := u.WriteToFileAsJSON(file, data, DefaultFileMode)
 			if err != nil {
 				return err
 			}
