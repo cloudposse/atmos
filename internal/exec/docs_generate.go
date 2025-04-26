@@ -41,7 +41,7 @@ func (d defaultTemplateRenderer) Render(tmplName, tmplValue string, mergedData m
 	return ProcessTmplWithDatasourcesGomplate(tmplName, tmplValue, mergedData, ignoreMissing)
 }
 
-// ExecuteDocsGenerateCmd implements the 'atmos docs generate readme' logic.
+// ExecuteDocsGenerateCmd implements the 'atmos docs generate <doc-type>' logic.
 func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
@@ -52,9 +52,13 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Retrieve the readme generation config from atmos.yaml.
-	// The target directory is taken from docs.generate.readme.base-dir.
-	docsGenerate := rootConfig.Settings.Docs.Generate.Readme
+	// Retrieve the <doc-type> generation config from atmos.yaml.
+	// The target directory is taken from docs.generate.<doc-type>.base-dir.
+	docsGenerate, ok := rootConfig.Settings.Docs.Generate[args[0]]
+	if !ok {
+		return fmt.Errorf("no '<doc-type>' entry found under 'docs.generate' in atmos.yaml")
+	}
+
 	basedir := docsGenerate.BaseDir
 	var targetDir string
 	currDir, err := os.Getwd()
@@ -66,18 +70,18 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	targetDir = filepath.Join(currDir, basedir)
 
 	if len(docsGenerate.Input) == 0 {
-		log.Debug("No 'docs.generate.readme.input' sources defined in atmos.yaml.")
+		log.Debug("docs.generate['<doc-type>'].input is empty in atmos.yaml")
 	}
 	if len(docsGenerate.Template) == 0 {
-		log.Debug("No 'docs.generate.readme.template' defined, generating minimal readme.")
+		log.Debug("No docs.generate['<doc-type>'].template' defined, generating minimal <doc-type>.")
 	}
 
-	// Generate a single README in the targetDir using the default renderer.
-	return generateReadme(&rootConfig, targetDir, &docsGenerate, defaultTemplateRenderer{})
+	// Generate a single document in the targetDir using the default renderer.
+	return generateDocument(&rootConfig, targetDir, &docsGenerate, defaultTemplateRenderer{})
 }
 
 // mergeInputs merges all YAML inputs defined in docsGenerate.Input.
-func mergeInputs(atmosConfig *schema.AtmosConfiguration, dir string, docsGenerate *schema.DocsGenerateReadme) (map[string]any, error) {
+func mergeInputs(atmosConfig *schema.AtmosConfiguration, dir string, docsGenerate *schema.DocsGenerate) (map[string]any, error) {
 	var allMaps []map[string]any
 	for _, src := range docsGenerate.Input {
 		dataMap, err := fetchAndParseYAML(atmosConfig, src, dir)
@@ -119,7 +123,7 @@ func getTemplateContent(atmosConfig *schema.AtmosConfiguration, templateURL, dir
 	return string(body), nil
 }
 
-func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerateReadme, mergedData map[string]any) error {
+func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerate, mergedData map[string]any) error {
 	if !docsGenerate.Terraform.Enabled {
 		return nil
 	}
@@ -138,7 +142,7 @@ func applyTerraformDocs(dir string, docsGenerate *schema.DocsGenerateReadme, mer
 	return nil
 }
 
-func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.DocsGenerateReadme, dir string) string {
+func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.DocsGenerate, dir string) string {
 	if docsGenerate.Template != "" {
 		tmpl, err := getTemplateContent(atmosConfig, docsGenerate.Template, dir)
 		if err == nil {
@@ -150,11 +154,11 @@ func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.
 	return "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
 }
 
-// generateReadme merges docs inputs, optionally runs terraform-docs, renders, and writes the README.
-func generateReadme(
+// generateDocument merges docs inputs, optionally runs terraform-docs, renders, and writes the document.
+func generateDocument(
 	atmosConfig *schema.AtmosConfiguration,
 	baseDir string,
-	docsGenerate *schema.DocsGenerateReadme,
+	docsGenerate *schema.DocsGenerate,
 	renderer TemplateRenderer,
 ) error {
 	// 1) Merge YAML inputs.
@@ -171,13 +175,13 @@ func generateReadme(
 	// 3) Fetch the template.
 	chosenTemplate := fetchTemplate(atmosConfig, docsGenerate, baseDir)
 
-	// 4) Render final README using the injected renderer.
+	// 4) Render final document using the injected renderer.
 	rendered, err := renderer.Render("docs-generate", chosenTemplate, mergedData, true)
 	if err != nil {
 		return fmt.Errorf("failed to render template with datasources: %w", err)
 	}
 
-	// 5) Resolve and write final README.
+	// 5) Resolve and write final document.
 	outputFile := docsGenerate.Output
 	if outputFile == "" {
 		outputFile = defaultReadmeOutput

@@ -71,8 +71,8 @@ var (
 				// Even if these fields are deprecated, initialize them with valid values.
 				MaxWidth:   0,
 				Pagination: false,
-				Generate: schema.DocsGenerate{
-					Readme: schema.DocsGenerateReadme{
+				Generate: map[string]schema.DocsGenerate{
+					"readme": {
 						BaseDir:  ".",
 						Input:    []string{"./README.yaml"},
 						Template: "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl",

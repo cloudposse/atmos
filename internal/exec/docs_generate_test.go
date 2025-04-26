@@ -159,7 +159,7 @@ func TestGetTemplateContent(t *testing.T) {
 
 // TestApplyTerraformDocs_Disabled tests that when terraform docs are disabled, nothing is added.
 func TestApplyTerraformDocs_Disabled(t *testing.T) {
-	docsGen := schema.DocsGenerateReadme{
+	docsGen := schema.DocsGenerate{
 		Terraform: schema.TerraformDocsReadmeSettings{
 			Enabled: false,
 		},
@@ -187,9 +187,9 @@ func (s mockRenderer) Render(tmplName, tmplValue string, mergedData map[string]i
 	return "mock rendered", nil
 }
 
-func TestGenerateReadme_WithInjectedRenderer(t *testing.T) {
+func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 	// Create a temporary target directory.
-	targetDir, err := os.MkdirTemp("", "test-generateReadme")
+	targetDir, err := os.MkdirTemp("", "test-generateDocument")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,10 +211,8 @@ func TestGenerateReadme_WithInjectedRenderer(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			Docs: schema.Docs{
-				Generate: struct {
-					Readme schema.DocsGenerateReadme `yaml:"readme" json:"readme" mapstructure:"readme"`
-				}{
-					Readme: schema.DocsGenerateReadme{
+				Generate: map[string]schema.DocsGenerate{
+					"readme": {
 						BaseDir:  ".",
 						Input:    []string{tmpYAML.Name()},
 						Template: "", // Use default template.
@@ -228,10 +226,11 @@ func TestGenerateReadme_WithInjectedRenderer(t *testing.T) {
 		},
 	}
 
-	// Call generateReadme with our injected stubRenderer.
-	err = generateReadme(&atmosConfig, targetDir, &atmosConfig.Settings.Docs.Generate.Readme, mockRenderer{})
+	docsGenerate := atmosConfig.Settings.Docs.Generate["readme"]
+	// Call generateDocument with our injected stubRenderer.
+	err = generateDocument(&atmosConfig, targetDir, &docsGenerate, mockRenderer{})
 	if err != nil {
-		t.Fatalf("generateReadme failed: %v", err)
+		t.Fatalf("generateDocument failed: %v", err)
 	}
 	outputPath := filepath.Join(targetDir, "TEST_README.md")
 	data, err := os.ReadFile(outputPath)

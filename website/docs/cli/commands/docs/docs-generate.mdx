@@ -2,45 +2,50 @@
 title: atmos docs generate
 sidebar_label: generate
 sidebar_class_name: command
-description: "Generate readme subcommand for Atmos docs"
+description: "Generate documentation artifacts based on a named section under `docs.generate` in atmos.yaml"
 id: generate
 ---
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
 
-Use this command to generate a README.md from one or more input sources.  
+Use this command to generate one of your documentation artifacts (e.g. a README) as defined by the **named** section under `docs.generate.<KEY>` in `atmos.yaml`.  
+Replace `<KEY>` with the name of the section you want to run (for example, `readme`, `release-notes`, etc.).
 
 :::
 
-The sources are defined at `docs.generate.readme` section of `atmos.yaml`.
+In `atmos.yaml`, you can define **one or more** documentation‐generation blocks under `docs.generate`.  Each top‐level key becomes a CLI argument:
 
     ```yaml
-    docs:
-    generate:
-      # Generate README in current working directory
-      readme:
-        base-dir: .
-        input:
-          - "./README.yaml"
-        # A template can be a remote URL/github/gitlab/etc 
-        template:  "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl"
-        # The final README
-        output: "README.md"
-        terraform:
-          source: src/
-          enabled: false
-          format: "markdown"
-          show_providers: false
-          show_inputs: true
-          show_outputs: true
-          sort_by: "name"
-          hide_empty: false
-          indent_level: 2
+        docs:
+          generate:
+            readme:
+              base-dir: .
+              input:
+                - "./README.yaml"
+              template: "https://…/README.md.gotmpl"
+              output: "./README.md"
+              terraform:
+                source: src/
+                enabled: false
+                format: "markdown"
+                show_providers: false
+                show_inputs: true
+                show_outputs: true
+                sort_by: "name"
+                hide_empty: false
+                indent_level: 2
+
+            release-notes:
+              base-dir: .
+              input:
+                - "./CHANGELOG.yaml"
+              template: "./release-notes.gotmpl"
+              output: "./RELEASE_NOTES.md"
 
     ```
 
-The command combines all local or remote YAML files specified at `input` and template file then generates README.md at the `output` folder. In case the template contains `terraform_docs` key, e.g.  
+For each CLI argument the command combines all local or remote YAML files specified at `input` and template file then generates the documentation artifact at the respective `output` folder. In case the template contains `terraform_docs` key, e.g.  
 
     ```yaml
 {{- $data := (ds "config") -}}
@@ -59,8 +64,19 @@ Extra info: {{ $data.extra_info }}
 {{ end }}
 
     ```
-the resultant README.md will also have a corresponding section rendered. By default `terraform.format` is set to `markdown table`, and can also be `markdown`, `tfvars hcl`, and `tfvars json`.  
-This command also aliases to “atmos generate docs”.
+the resultant file will also have a corresponding section rendered. By default `terraform.format` is set to `markdown table`, and can also be `markdown`, `tfvars hcl`, and `tfvars json`.  
+
+:::
+
+## Dynamic Keys
+
+If you add a new key under docs.generate—say readme2 or release-notes —you simply pass that key to the CLI:
+
+
+```shell
+atmos docs generate readme2
+atmos docs generate release-notes
+```
 
 :::
 
@@ -76,7 +92,7 @@ atmos docs generate readme
 
 ### Local Sources
 
-The `!include` function supports the following local file sources:
+It supports the following local file sources:
   - Absolute paths
     ```yaml
     input: - /Users/me/Documents/README.yaml

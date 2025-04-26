@@ -225,12 +225,8 @@ type Docs struct {
 	// Deprecated: this has moved to `settings.terminal.max-width`
 	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
 	// Deprecated: this has moved to `settings.terminal.pagination`
-	Pagination bool         `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
-	Generate   DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
-}
-
-type DocsGenerate struct {
-	Readme DocsGenerateReadme `yaml:"readme" json:"readme" mapstructure:"readme"`
+	Pagination bool                    `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	Generate   map[string]DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
 }
 
 type Templates struct {
@@ -352,7 +348,7 @@ type TerraformDocsReadmeSettings struct {
 	IndentLevel   int    `yaml:"indent_level,omitempty" json:"indent_level,omitempty" mapstructure:"indent_level"`
 }
 
-type DocsGenerateReadme struct {
+type DocsGenerate struct {
 	BaseDir   string                      `yaml:"base-dir,omitempty" json:"base-dir,omitempty" mapstructure:"base-dir"`
 	Input     []string                    `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
 	Template  string                      `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
