@@ -43,7 +43,7 @@ func (f *sectionFilter) filterValue(value any) any {
 	}
 }
 
-// FilterEmptySections filters out empty sections and empty string values from a map.
+// The FilterEmptySections filters out empty sections and empty string values from a map.
 // based on the includeEmpty setting.
 func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any {
 	if includeEmpty {
