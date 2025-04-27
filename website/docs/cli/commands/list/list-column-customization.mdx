@@ -1,0 +1,209 @@
+---
+title: Customizing List Command Output
+sidebar_label: Column Customization
+---
+
+# Customizing List Command Output
+
+## Overview
+
+Atmos provides a powerful feature to customize the columns displayed by various `atmos list` commands (e.g., `atmos list stacks`, `atmos list components`, `atmos list workflows`). This allows you to tailor the tabular output to show precisely the information you need for different contexts.
+
+Column customization is configured within your `atmos.yaml` file using Go template expressions, enabling dynamic values based on stack, component, or workflow data. This guide explains how to configure and use this feature.
+
+## Table of Contents
+
+- [Supported List Commands](#supported-list-commands)
+- [How Column Customization Works](#how-column-customization-works)
+- [YAML Template Syntax](#yaml-template-syntax)
+- [Example: Custom Columns for Stacks](#example-custom-columns-for-stacks)
+- [Example: Custom Columns for Components](#example-custom-columns-for-components)
+- [Example: Custom Columns for Workflows](#example-custom-columns-for-workflows)
+- [Full Reference: atmos.yaml Structure](#full-reference-atmosyaml-structure)
+- [Display Behavior](#display-behavior)
+- [Troubleshooting & Tips](#troubleshooting--tips)
+
+---
+
+## Supported List Commands
+
+The column customization feature applies to the following commands:
+
+- `atmos list stacks`
+- `atmos list components`
+- `atmos list workflows`
+- `atmos list values`
+- `atmos list vars`
+- `atmos list settings`
+- `atmos list metadata`
+
+You can define custom columns for each of these commands individually in your `atmos.yaml`.
+
+---
+
+## How Column Customization Works
+
+To customize columns for a specific `list` command, navigate to the relevant section (e.g., `stacks`, `components`, `workflows`) in your `atmos.yaml` configuration file. Within that section, define a `list` block.
+
+Inside the `list` block:
+1.  Specify the output `format` (optional, defaults to `table`). Other options include `json`, `yaml`, `csv`, `tsv`.
+2.  Define a `columns` array. Each element in this array represents a column in the output table and must have:
+    *   `name`: The string that will appear as the column header.
+    *   `value`: A Go template string that dynamically determines the value for each row in that column.
+
+**Example Structure:**
+```yaml
+# In atmos.yaml
+stacks: # Or components, workflows, etc.
+  list:
+    format: table # Optional
+    columns:
+      - name: "Header 1"
+        value: "{{ .some_template_variable }}"
+      - name: "Header 2"
+        value: "Static Text or {{ .another_variable }}"
+      # ... more columns
+```
+
+---
+
+## YAML Template Syntax
+
+The `value` field in each column definition supports Go templates. The available variables within the template depend on the specific `atmos list` command being customized:
+
+### For `atmos list stacks`:
+```yaml
+{{ .stack_name }}  # Name of the stack
+{{ .stack_path }}  # Filesystem path to the stack configuration file
+```
+
+### For `atmos list components`:
+```yaml
+{{ .component_name }}  # Name of the component
+{{ .component_type }}  # Type of the component (e.g., terraform, helmfile)
+{{ .component_path }}  # Filesystem path to the component directory
+```
+
+### For `atmos list workflows`:
+```yaml
+{{ .workflow_file }}      # The filename containing the workflow definition
+{{ .workflow_name }}      # The name of the workflow
+{{ .workflow_description }}  # The description provided for the workflow
+```
+
+### For `atmos list values`, `atmos list vars`, `atmos list settings`, and `atmos list metadata`:
+```yaml
+{{ .stack_name }}  # Name of the stack context
+{{ .key }}         # The key or property name being listed
+{{ .value }}       # The corresponding value for the key
+```
+
+**Example Usage:**
+```yaml
+# To display the stack name as a column value:
+value: "{{ .stack_name }}"
+```
+---
+## Example: Custom Columns for Stacks
+
+This configuration customizes the output of `atmos list stacks`:
+
+```yaml
+# In atmos.yaml
+stacks:
+  list:
+    format: table
+    columns:
+      - name: Stack Name
+        value: "{{ .stack_name }}"
+      - name: Configuration Path
+        value: "{{ .stack_path }}"
+```
+
+When you run `atmos list stacks`, the output table will have columns titled "Stack Name" and "Configuration Path".
+
+---
+## Example: Custom Columns for Components
+
+This configuration customizes the output of `atmos list components`:
+
+```yaml
+# In atmos.yaml
+components:
+  list:
+    columns:
+      - name: Component Name
+        value: "{{ .component_name }}"
+      - name: Component Type
+        value: "{{ .component_type }}"
+      - name: Component Path
+        value: "{{ .component_path }}"
+```
+Running `atmos list components` will produce a table with these custom columns.
+
+---
+## Example: Custom Columns for Workflows
+
+This configuration customizes the output of `atmos list workflows`:
+
+```yaml
+# In atmos.yaml
+workflows:
+  list:
+    columns:
+      - name: Workflow
+        value: "{{ .workflow_name }}"
+      - name: Definition File
+        value: "{{ .workflow_file }}"
+      - name: Description
+        value: "{{ .workflow_description }}"
+```
+Running `atmos list workflows` will display these columns.
+
+---
+## Full Reference: atmos.yaml Structure
+
+Here's the general structure for defining custom list columns in `atmos.yaml`:
+
+```yaml
+<command_scope>: # e.g., stacks, components, workflows, values, vars, settings, metadata
+  list:
+    format: table|json|csv|yaml|tsv  # Optional, default is 'table'
+    columns:
+      - name: "<Your Column Header>"
+        value: "<Go template string using available variables>"
+      # ... add more column definitions as needed
+```
+
+- Replace `<command_scope>` with the specific scope corresponding to the `atmos list` command you want to customize (e.g., `stacks` for `atmos list stacks`).
+- The `columns` array is mandatory if you want to override the default columns. If `columns` is omitted, the command uses its default output columns.
+
+---
+
+## Display Behavior
+
+### TTY vs Non-TTY Output
+
+The appearance of the output table depends on whether `atmos` detects an interactive terminal (TTY) or not:
+
+- **TTY Output (e.g., running in your terminal)**
+  - Displays a formatted table with borders and styling.
+  - Attempts to fit within the terminal width.
+  - Uses standard padding between columns (TableColumnPadding = 3).
+  - Defaults to `format: table` if not specified.
+
+- **Non-TTY Output (e.g., redirecting to a file, piping to another command)**
+  - Produces a simpler, machine-readable format suitable for scripting or automation.
+  - Ensures consistent structure for programmatic parsing.
+
+---
+
+## Troubleshooting & Tips
+
+- **Blank Columns:** If a column appears empty, double-check the template variable name (`{{ .variable }}`) against the [YAML Template Syntax](#yaml-template-syntax) section for the specific command. Ensure the data context actually contains that variable for the items being listed.
+- **Inspecting Available Data:** Use the command with `--format json` or `--format yaml` (e.g., `atmos list stacks --format json`) to see the raw data structure and available fields you can use in your templates.
+- **Wide Tables:** If the table is too wide for your terminal or you encounter errors about content width:
+    - Reduce the number of columns defined in your `atmos.yaml`.
+    - Use a different output format like `json` or `yaml`.
+    - Some `list` commands might support a `--max-columns` flag (check command help).
+- **Filtering:** Use command-specific flags like `--stacks 'pattern'` for `atmos list stacks` to filter the rows, which can indirectly simplify the output. Query flags (`--query`) might also help narrow down data.
