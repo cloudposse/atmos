@@ -14,7 +14,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/viper"
-	"gopkg.in/yaml.v3"
 )
 
 //go:embed atmos.yaml
@@ -210,6 +209,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	if err != nil {
 		return err
 	}
+
 	err = preprocessAtmosYamlFunc(content, v)
 	if err != nil {
 		return err
@@ -278,87 +278,6 @@ func mergeImports(dst *viper.Viper) error {
 		return err
 	}
 	return nil
-}
-
-// PreprocessYAML processes the given YAML content, replacing specific directives
-// (such as !env) with their corresponding values .
-// It parses the YAML content into a tree structure, processes each node recursively,
-// and updates the provided Viper instance with resolved values.
-//
-// Parameters:
-// - yamlContent: The raw YAML content as a byte slice.
-// - v: A pointer to a Viper instance where processed values will be stored.
-//
-// Returns:
-// - An error if the YAML content cannot be parsed.
-func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
-	var rootNode yaml.Node
-	if err := yaml.Unmarshal(yamlContent, &rootNode); err != nil {
-		log.Debug("failed to parse YAML", "error", err)
-		return err
-	}
-	processNode(&rootNode, v, "")
-	return nil
-}
-
-// processNode recursively traverses a YAML node tree and processes special directives
-// (such as !env). If a directive is found, it replaces the corresponding value in Viper
-// using values retrieved from Atmos custom functions.
-//
-// Parameters:
-// - node: A pointer to the current YAML node being processed.
-// - v: A pointer to a Viper instance where processed values will be stored.
-// - currentPath: The hierarchical key path used to track nested YAML structures.
-func processNode(node *yaml.Node, v *viper.Viper, currentPath string) {
-	if node == nil {
-		return
-	}
-	// If this node is a key-value pair in a mapping
-	if node.Kind == yaml.MappingNode {
-		for i := 0; i < len(node.Content); i += 2 {
-			keyNode := node.Content[i]
-			valueNode := node.Content[i+1]
-			newPath := keyNode.Value // Extracting the key name
-
-			if currentPath != "" {
-				newPath = currentPath + "." + newPath
-			}
-
-			processNode(valueNode, v, newPath)
-		}
-	}
-
-	// If it's a scalar node with a directive tag
-	if node.Kind == yaml.ScalarNode && node.Tag != "" {
-		processScalarNode(node, v, currentPath)
-	}
-
-	// Process children nodes (for sequences/lists)
-	for _, child := range node.Content {
-		processNode(child, v, currentPath)
-	}
-}
-
-func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) {
-	if node.Tag == "" {
-		return
-	}
-	allowedDirectives := []string{AtmosYamlFuncEnv}
-
-	for _, directive := range allowedDirectives {
-		if node.Tag == directive {
-			arg := node.Value
-			if directive == AtmosYamlFuncEnv {
-				envValue := os.Getenv(arg)
-				if envValue != "" {
-					node.Value = envValue
-				}
-				v.Set(currentPath, node.Value) // Store the value to Viper
-			}
-			node.Tag = ""
-			break
-		}
-	}
 }
 
 // mergeConfigFile merges a new configuration file with an existing config into Viper.

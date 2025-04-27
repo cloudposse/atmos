@@ -151,6 +151,22 @@ logs:
   file: /dev/stderr
   level: Info
 `
+	includeConfig := `
+base_path: "./"
+
+components: !include config/component.yaml
+
+logs:
+  file: "/dev/stderr"
+  level: Info`
+	componentContent := `
+terraform:
+  base_path: "components/terraform"
+  apply_auto_approve: true
+  append_user_agent: test !include config/component.yaml
+  deploy_run_init: true
+  init_run_reconfigure: true
+  auto_generate_backend_file: true`
 	type testCase struct {
 		name           string
 		configFileName string
@@ -243,7 +259,20 @@ logs:
 			},
 		},
 		{
-			name:           "environment variable interpolation",
+			name:           "invalid process Stacks,should return error",
+			configFileName: "atmos.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			processStacks: true,
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.Error(t, err)
+			},
+		},
+		{
+			name:           "environment variable interpolation YAML function env (AtmosYamlFuncEnv)",
 			configFileName: "atmos.yaml",
 			configContent:  `base_path: !env TEST_ATMOS_BASE_PATH`,
 			envSetup: func(t *testing.T) func() {
@@ -258,6 +287,103 @@ logs:
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
 				assert.Equal(t, "env/test/path", cfg.BasePath)
+			},
+		},
+		{
+			name:           "environment variable AtmosYamlFuncEnv return default value",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !env NOT_EXIST_VAR env/test/path`,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "env/test/path", cfg.BasePath)
+			},
+		},
+		{
+			name:           "environment variable AtmosYamlFuncEnv should return error",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !env `,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, ErrExecuteYamlFunctions)
+			},
+		},
+		{
+			name:           "shell command execution YAML function exec (AtmosYamlFuncExec)",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !exec echo Hello, World!`,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "Hello, World!", strings.TrimSpace(cfg.BasePath))
+			},
+		},
+		{
+			name:           "execution YAML function include (AtmosYamlFuncInclude)",
+			configFileName: "atmos.yaml",
+			configContent:  includeConfig,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				err := os.Mkdir(filepath.Join(dir, "config"), 0o777)
+				if err != nil {
+					t.Fatal(err)
+				}
+				createConfigFile(t, filepath.Join(dir, "config"), "component.yaml", componentContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "test !include config/component.yaml", cfg.Components.Terraform.AppendUserAgent)
+				assert.Equal(t, true, cfg.Components.Terraform.ApplyAutoApprove)
+				assert.Equal(t, true, cfg.Components.Terraform.DeployRunInit)
+				assert.Equal(t, true, cfg.Components.Terraform.InitRunReconfigure)
+				assert.Equal(t, true, cfg.Components.Terraform.AutoGenerateBackendFile)
+				assert.Equal(t, "components/terraform", cfg.Components.Terraform.BasePath)
+			},
+		},
+		{
+			name:           "execution YAML function !repo-root AtmosYamlFuncGitRoot return default value",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !repo-root /test/path`,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, "/test/path", cfg.BasePath)
+			},
+		},
+		{
+			name:           "execution YAML function !repo-root AtmosYamlFuncGitRoot return root path",
+			configFileName: "atmos.yaml",
+			configContent:  `base_path: !repo-root`,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-repo-root-yaml-function")
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				cwd, errDir := os.Getwd()
+				// expect dir four levels up of the current dir to resolve to the root of the git repo
+				fourLevelsUp := filepath.Join(cwd, "..", "..", "..", "..")
+
+				// Clean and get the absolute path
+				absPath, errPath := filepath.Abs(fourLevelsUp)
+				if errPath != nil {
+					require.NoError(t, err)
+				}
+				require.NoError(t, errDir)
+				require.NoError(t, err)
+				assert.Equal(t, absPath, cfg.BasePath)
 			},
 		},
 		{
