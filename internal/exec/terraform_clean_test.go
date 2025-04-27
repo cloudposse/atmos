@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -324,4 +325,15 @@ func TestCollectComponentsDirectoryObjects(t *testing.T) {
 			}
 		})
 	}
+}
+
+func verifyFileExists(t *testing.T, files []string) (bool, string) {
+	success := true
+	for _, file := range files {
+		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Reason: Expected file does not exist: %q", file)
+			return false, file
+		}
+	}
+	return success, ""
 }
