@@ -26,44 +26,21 @@ var describeComponentCmd = &cobra.Command{
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		if err != nil {
-			return err
-		}
-
+		checkFlagNotPresentError(err)
 		format, err := flags.GetString("format")
-		if err != nil {
-			return err
-		}
-
+		checkFlagNotPresentError(err)
 		file, err := flags.GetString("file")
-		if err != nil {
-			return err
-		}
-
+		checkFlagNotPresentError(err)
 		processTemplates, err := flags.GetBool("process-templates")
-		if err != nil {
-			return err
-		}
-
+		checkFlagNotPresentError(err)
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		if err != nil {
-			return err
-		}
-
+		checkFlagNotPresentError(err)
 		query, err := flags.GetString("query")
-		if err != nil {
-			return err
-		}
-
+		checkFlagNotPresentError(err)
 		skip, err := flags.GetStringSlice("skip")
-		if err != nil {
-			return err
-		}
-
+		checkFlagNotPresentError(err)
 		pager, err := flags.GetString("pager")
-		if err != nil {
-			return err
-		}
+		checkFlagNotPresentError(err)
 
 		component := args[0]
 
@@ -101,4 +78,12 @@ func init() {
 	}
 
 	describeCmd.AddCommand(describeComponentCmd)
+}
+
+// checkFlagNotPresentError checks if the error is nil.
+// we prefer to panic because this is a developer error.
+func checkFlagNotPresentError(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
