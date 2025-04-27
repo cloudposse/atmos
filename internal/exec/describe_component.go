@@ -147,18 +147,22 @@ func ExecuteDescribeComponent(
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
+	configAndStacksInfo.ComponentSection = make(map[string]any)
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	configAndStacksInfo.ComponentType = "terraform"
+	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
 	configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
+	configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = cfg.TerraformComponentType
 	if err != nil {
-		configAndStacksInfo.ComponentType = "helmfile"
+		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
 		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, processTemplates, processYamlFunctions, skip)
+		configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = cfg.HelmfileComponentType
 		if err != nil {
+			configAndStacksInfo.ComponentSection[cfg.ComponentTypeSectionName] = ""
 			return nil, err
 		}
 	}
@@ -166,7 +170,7 @@ func ExecuteDescribeComponent(
 	return configAndStacksInfo.ComponentSection, nil
 }
 
-// FilterAbstractComponents This function removes abstract components and returns the list of components
+// FilterAbstractComponents This function removes abstract components and returns the list of components.
 func FilterAbstractComponents(componentsMap map[string]any) []string {
 	if componentsMap == nil {
 		return []string{}

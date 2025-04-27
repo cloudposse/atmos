@@ -62,7 +62,8 @@ func TestComponentFunc(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d, err := componentFunc(&atmosConfig, &info, "component-2", "nonprod")
+	// Test terraform component `component-2`
+	d, err := componentFunc(&atmosConfig, "component-2", "nonprod")
 	assert.NoError(t, err)
 
 	y, err := u.ConvertToYAML(d)
@@ -71,4 +72,27 @@ func TestComponentFunc(t *testing.T) {
 	assert.Contains(t, y, "foo: component-1-a")
 	assert.Contains(t, y, "bar: component-1-b")
 	assert.Contains(t, y, "baz: component-1-b--component-1-c")
+
+	// Test helmfile component `component-3`
+	d, err = componentFunc(&atmosConfig, "component-3", "nonprod")
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(d)
+	assert.NoError(t, err)
+
+	assert.Contains(t, y, "foo: component-1-a")
+	assert.Contains(t, y, "bar: component-1-b")
+	assert.Contains(t, y, "baz: component-1-b")
+
+	// Test helmfile component `component-4`
+	d, err = componentFunc(&atmosConfig, "component-4", "nonprod")
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(d)
+	assert.NoError(t, err)
+
+	assert.Contains(t, y, "foo: component-1-a")
+	assert.Contains(t, y, "bar: component-1-b")
+	// Helmfile components don't have `outputs` (terraform output) - this should result in `<no value>`
+	assert.Contains(t, y, "baz: <no value>")
 }

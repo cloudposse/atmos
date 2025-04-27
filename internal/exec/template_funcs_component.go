@@ -16,7 +16,6 @@ var componentFuncSyncMap = sync.Map{}
 
 func componentFunc(
 	atmosConfig *schema.AtmosConfiguration,
-	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	component string,
 	stack string,
 ) (any, error) {
@@ -30,12 +29,12 @@ func componentFunc(
 	if found && existingSections != nil {
 		log.Debug("Cache hit for template function", "function", functionName)
 
-		if outputsSection, ok := existingSections.(map[string]any)["outputs"]; ok {
+		if outputsSection, ok := existingSections.(map[string]any)[cfg.OutputsSectionName]; ok {
 			y, err2 := u.ConvertToYAML(outputsSection)
 			if err2 != nil {
 				log.Error(err2)
 			} else {
-				log.Debug("Result of the template function", "function", functionName, "outputs", y)
+				log.Debug("'outputs' of the template function", "function", functionName, cfg.OutputsSectionName, y)
 			}
 		}
 
@@ -49,7 +48,8 @@ func componentFunc(
 
 	// Process Terraform remote state
 	var terraformOutputs map[string]any
-	if configAndStacksInfo.ComponentType == cfg.TerraformComponentType {
+	componentType := sections[cfg.ComponentTypeSectionName]
+	if componentType == cfg.TerraformComponentType {
 		// Check if the component in the stack is configured with the 'static' remote state backend,
 		// in which case get the `output` from the static remote state instead of executing `terraform output`
 		remoteStateBackendStaticTypeOutputs, err := GetComponentRemoteStateBackendStaticType(sections)
@@ -69,7 +69,7 @@ func componentFunc(
 		}
 
 		outputs := map[string]any{
-			"outputs": terraformOutputs,
+			cfg.OutputsSectionName: terraformOutputs,
 		}
 
 		sections = lo.Assign(sections, outputs)
@@ -80,12 +80,13 @@ func componentFunc(
 
 	log.Debug("Executed template function", "function", functionName)
 
-	if configAndStacksInfo.ComponentType == cfg.TerraformComponentType {
+	// Print the `outputs` section of the Terraform component
+	if componentType == cfg.TerraformComponentType {
 		y, err2 := u.ConvertToYAML(terraformOutputs)
 		if err2 != nil {
 			log.Error(err2)
 		} else {
-			log.Debug("Result of the template function", "function", functionName, "outputs", y)
+			log.Debug("'outputs' of the template function", "function", functionName, cfg.OutputsSectionName, y)
 		}
 	}
 

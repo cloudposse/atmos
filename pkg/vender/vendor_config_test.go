@@ -28,7 +28,7 @@ func TestVendorConfigScenarios(t *testing.T) {
 	atmosConfig.Logs.Level = "Trace"
 
 	// Setup test component directory
-	componentPath := filepath.Join(testDir, "components", "terraform", "myapp")
+	componentPath := filepath.Join(testDir, "components", "terraform", "mock")
 	err := os.MkdirAll(componentPath, 0o755)
 	assert.Nil(t, err)
 
@@ -41,7 +41,7 @@ metadata:
   name: test-vendor-config
 spec:
   sources:
-    - component: myapp
+    - component: mock
       source: github.com/cloudposse/terraform-null-label.git//exports?ref={{.Version}}
       version: 0.25.0
       included_paths:
@@ -60,12 +60,12 @@ spec:
 		// Verify the component exists in vendor config
 		var found bool
 		for _, source := range vendorConfig.Spec.Sources {
-			if source.Component == "myapp" {
+			if source.Component == "mock" {
 				found = true
 				break
 			}
 		}
-		assert.True(t, found, "Component 'myapp' should be defined in vendor.yaml")
+		assert.True(t, found, "Component 'mock' should be defined in vendor.yaml")
 
 		// Clean up
 		err = os.Remove(vendorYamlPath)
@@ -78,7 +78,7 @@ spec:
 		componentYaml := `apiVersion: atmos/v1
 kind: ComponentVendorConfig
 metadata:
-  name: myapp-vendor-config
+  name: mock-vendor-config
 spec:
   source:
     uri: github.com/cloudposse/terraform-null-label.git//exports?ref={{.Version}}
@@ -89,7 +89,7 @@ spec:
 		assert.Nil(t, err)
 
 		// Test component vendoring
-		componentConfig, compPath, err := e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "myapp", "terraform")
+		componentConfig, compPath, err := e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
 		assert.Nil(t, err)
 		assert.NotNil(t, componentConfig)
 		assert.Equal(t, componentPath, compPath)
@@ -108,7 +108,7 @@ spec:
 		assert.False(t, exists)
 
 		// Test component vendoring
-		_, _, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "myapp", "terraform")
+		_, _, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "does not exist")
 	})
@@ -122,7 +122,7 @@ metadata:
   name: test-vendor-config
 spec:
   sources:
-    - component: myapp
+    - component: mock
       source: github.com/cloudposse/terraform-null-label.git//exports?ref={{.Version}}
       version: 0.25.0
 `

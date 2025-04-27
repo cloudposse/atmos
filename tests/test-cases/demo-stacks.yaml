@@ -67,6 +67,7 @@ tests:
         - "^$"
       exit_code: 0
 
+
   - name: atmos docs myapp
     enabled: true
     snapshot: true

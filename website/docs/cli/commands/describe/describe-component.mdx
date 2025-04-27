@@ -106,6 +106,8 @@ The output contains the following sections:
 
 - `component` - the Terraform/OpenTofu component for which the Atmos component provides configuration
 
+- `component_type` - the type of the component (`terraform` or `helmfile`)
+
 - `component_info` - a block describing the Terraform or Helmfile components that the Atmos component manages. The `component_info` block has the
   following sections:
   - `component_path` - the filesystem path to the Terraform/OpenTofu or Helmfile component

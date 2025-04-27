@@ -13,7 +13,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "station"
+        - "myapp"
       exit_code: 0
   - name: completion for stacks should be suggested
     enabled: true
@@ -25,7 +25,7 @@ tests:
       - "__completeNoDesc"
       - "terraform"
       - "plan"
-      - "station"
+      - "myapp"
       - "--stack"
     expect:
       diff: []
