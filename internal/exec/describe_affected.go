@@ -38,13 +38,22 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 }
 
-func parseDescribeAffectedCliArgs(atmosConfig *schema.AtmosConfiguration, cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
-	logger, err := l.NewLoggerFromCliConfig(*atmosConfig)
+func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
 
-	err = ValidateStacks(*atmosConfig)
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
+	if err != nil {
+		return DescribeAffectedCmdArgs{}, err
+	}
+
+	err = ValidateStacks(atmosConfig)
 	if err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	}
@@ -169,7 +178,7 @@ func parseDescribeAffectedCliArgs(atmosConfig *schema.AtmosConfiguration, cmd *c
 	}
 
 	result := DescribeAffectedCmdArgs{
-		CLIConfig:                   *atmosConfig,
+		CLIConfig:                   atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
 		Format:                      format,
 		IncludeDependents:           includeDependents,
@@ -206,7 +215,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	a, err := parseDescribeAffectedCliArgs(&atmosConfig, cmd, args)
+	a, err := parseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
 		return err
 	}
