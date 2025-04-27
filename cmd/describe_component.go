@@ -15,6 +15,7 @@ var describeComponentCmd = &cobra.Command{
 	Short:              "Show configuration details for an Atmos component in a stack",
 	Long:               `Display the configuration details for a specific Atmos component within a designated Atmos stack, including its dependencies, settings, and overrides.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	Args:               cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
@@ -66,7 +67,7 @@ var describeComponentCmd = &cobra.Command{
 func init() {
 	describeComponentCmd.DisableFlagParsing = false
 	AddStackCompletion(describeComponentCmd)
-	describeComponentCmd.PersistentFlags().StringP("format", "f", "yaml", "The output format (`yaml` is default)")
+	describeComponentCmd.PersistentFlags().StringP("format", "f", "yaml", "The output format")
 	describeComponentCmd.PersistentFlags().String("file", "", "Write the result to the file")
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
