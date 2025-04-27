@@ -70,6 +70,8 @@ const (
 	GithubSectionName                 = "github"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	CliArgsSectionName                = "cli_args"
+	ComponentTypeSectionName          = "component_type"
+	OutputsSectionName                = "outputs"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
@@ -88,12 +90,6 @@ const (
 	AtmosProTokenEnvVarName    = "ATMOS_PRO_TOKEN"
 	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
 	AtmosProDefaultEndpoint    = "api"
-
-	// Atmos YAML functions
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncEnv             = "!env"
 
 	TerraformDefaultWorkspace = "default"
 )
