@@ -24,7 +24,7 @@ var (
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
-	ErrEmptyPath                             = errors.New("path is empty, expected a valid file path")
+	ErrEmptyFilePath                         = errors.New("file path is empty")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")

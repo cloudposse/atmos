@@ -328,7 +328,7 @@ func isRemoteSource(s string) bool {
 // - Implicit relative paths first against baseDir, then cwd.
 func resolvePath(path string, baseDir string) (string, error) {
 	if path == "" {
-		return "", ErrEmptyPath
+		return "", ErrEmptyFilePath
 	}
 
 	if !filepath.IsAbs(path) && !strings.HasPrefix(path, "./") && !strings.HasPrefix(path, "../") {
