@@ -12,7 +12,6 @@ import (
 
 // --- Test ---
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
-
 	mockedExec := &DescribeComponentExec{
 		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
 			return nil
@@ -108,7 +107,6 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-
 		})
 	}
 }
