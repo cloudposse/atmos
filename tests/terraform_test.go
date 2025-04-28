@@ -20,9 +20,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	component := "component-1"
 	stack := "nonprod"
 
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
+	t.Chdir(stacksPath)
 	defer func() {
 		// Delete the generated files and folders after the test
 		err := os.RemoveAll(filepath.Join(componentPath, ".terraform"))
