@@ -10,13 +10,14 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	stacksPath := "./fixtures/scenarios/terraform-generate-planfile"
-	componentPath := filepath.Join(stacksPath, "..", "..", "components", "terraform", "mock")
+	componentPath := filepath.Join("..", "..", "components", "terraform", "mock")
 	component := "component-1"
 	stack := "nonprod"
 
@@ -25,17 +26,14 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 		// Delete the generated files and folders after the test
 		err := os.RemoveAll(filepath.Join(componentPath, ".terraform"))
 		assert.NoError(t, err)
-
 		err = os.RemoveAll(filepath.Join(componentPath, "terraform.tfstate.d"))
 		assert.NoError(t, err)
-
 		err = os.Remove(fmt.Sprintf("%s/%s-%s.terraform.tfvars.json", componentPath, stack, component))
 		assert.NoError(t, err)
-
 		err = os.Remove(fmt.Sprintf("%s/%s-%s.planfile.json", componentPath, stack, component))
 		assert.NoError(t, err)
 	}()
-
+	config.DefaultConfigHandler = config.New()
 	// Execute the command
 	os.Args = []string{"atmos", "terraform", "generate", "planfile", component, "-s", stack, "--format", "json"}
 	err := cmd.Execute()
