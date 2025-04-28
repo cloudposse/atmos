@@ -684,7 +684,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 
 	// Validate file existence
-	if !verifyFileExists(t, tc.Expect.FileExists) {
+	if exists, _ := verifyFileExists(t, tc.Expect.FileExists); !exists {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
@@ -790,15 +790,15 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 	return success
 }
 
-func verifyFileExists(t *testing.T, files []string) bool {
+func verifyFileExists(t *testing.T, files []string) (bool, string) {
 	success := true
 	for _, file := range files {
 		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Reason: Expected file does not exist: %q", file)
-			success = false
+			return false, file
 		}
 	}
-	return success
+	return success, ""
 }
 
 func verifyFileNotExists(t *testing.T, files []string) bool {

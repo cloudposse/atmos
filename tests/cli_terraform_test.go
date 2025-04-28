@@ -9,8 +9,59 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// test ExecuteTerraform clean command.
+func TestCLITerraformCleanShouldCleanBothComponentFiles(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	// Define the work directory and change to it
+	workDir := "./fixtures/scenarios/terraform-sub-components"
+	t.Chdir(workDir)
+
+	oldArgs := os.Args
+	defer func() {
+		os.Args = oldArgs
+	}()
+	os.Args = []string{"atmos", "terraform", "apply", "component-1", "-s", "staging"}
+	err = cmd.Execute()
+	os.Args = []string{"atmos", "terraform", "apply", "component-2", "-s", "staging"}
+	err = cmd.Execute()
+	require.NoError(t, err)
+	files := []string{
+		"../../components/terraform/mock-subcomponents/component-1/.terraform",
+		"../../components/terraform/mock-subcomponents/component-1/terraform.tfstate.d/staging-component-1/terraform.tfstate",
+		"../../components/terraform/mock-subcomponents/component-1/component-2/.terraform",
+		"../../components/terraform/mock-subcomponents/component-1/component-2/terraform.tfstate.d/staging-component-2/terraform.tfstate",
+	}
+	success, file := verifyFileExists(t, files)
+	if !success {
+		t.Fatalf("File %s does not exist", file)
+	}
+	var cleanInfo schema.ConfigAndStacksInfo
+	cleanInfo.SubCommand = "clean"
+	cleanInfo.ComponentType = "terraform"
+	cleanInfo.AdditionalArgsAndFlags = []string{"--force"}
+	os.Args = []string{"atmos", "terraform", "clean", "--force"}
+	err = cmd.Execute()
+	require.NoError(t, err)
+	success, file = verifyFileDeleted(t, files)
+	if !success {
+		t.Fatalf("File %s should not exist", file)
+	}
+}
 
 func TestCLITerraformClean(t *testing.T) {
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
@@ -204,4 +255,15 @@ func TestCollapseExtraSlashesHandlesOnlySlashes(t *testing.T) {
 			t.Errorf("collapseExtraSlashes(%q) = %q, want %q", tc.input, result, tc.expected)
 		}
 	}
+}
+
+func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
+	for _, file := range files {
+		fileAbs, err := os.Stat(file)
+		if err == nil {
+			t.Errorf("Reason: File still exists: %q", file)
+			return false, fileAbs.Name()
+		}
+	}
+	return true, ""
 }
