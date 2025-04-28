@@ -9,7 +9,6 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,18 +24,12 @@ const (
 )
 
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
-var ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
+var (
+	ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
+	ErrMissingStack          = errors.New("stack must be specified for the terraform command")
+)
 
-// ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
-func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
-	if err != nil {
-		return err
-	}
-	return ExecuteTerraform(info)
-}
-
-// ExecuteTerraform executes terraform commands
+// ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -57,7 +50,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
-	// Skip stack processing when cleaning with --force flag to allow cleaning without requiring stack configuration
+	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
@@ -67,12 +60,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		if len(info.Stack) < 1 && shouldCheckStack {
-			return errors.New("stack must be specified for the terraform command")
+			return ErrMissingStack
 		}
 	}
 
 	if !info.ComponentIsEnabled && info.SubCommand != "clean" {
-		u.LogInfo(fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		log.Info("Component is not enabled and skipped", "component", info.ComponentFromArg)
 		return nil
 	}
 
@@ -81,7 +74,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Check if the component (or base component) exists as Terraform component
+	// Check if the component (or base component) exists as a Terraform component.
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
@@ -92,13 +85,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	// Check if the component is allowed to be provisioned (`metadata.type` attribute is not set to `abstract`)
+	// Check if the component is allowed to be provisioned (`metadata.type` attribute is not set to `abstract`).
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
 		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
 			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
-	// Check if the component is locked (`metadata.locked` is set to true)
+	// Check if the component is locked (`metadata.locked` is set to true).
 	if info.ComponentIsLocked {
 		// Allow read-only commands, block modification commands
 		switch info.SubCommand {
@@ -108,7 +101,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Check if trying to use workspace commands with HTTP backend
+	// Check if trying to use `workspace` commands with HTTP backend.
 	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
 		return ErrHTTPBackendWorkspaces
 	}
@@ -126,7 +119,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	planFile := constructTerraformComponentPlanfileName(info)
 
 	// Print component variables and write to file
-	// Don't process variables when executing `terraform workspace` commands
+	// Don't process variables when executing `terraform workspace` commands.
 	if info.SubCommand != "workspace" {
 		u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
