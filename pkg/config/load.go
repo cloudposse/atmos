@@ -32,6 +32,7 @@ var (
 // * Home directory (~/.atmos).
 // * Current working directory.
 // * ENV vars.
+// * User preferences (`~/.config/atmos`).
 // * Command-line arguments.
 func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
 	v := viper.New()
@@ -229,9 +230,9 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 
 // readUserPreferences load config from user's HOME dir .
 func readUserPreferences(v *viper.Viper) error {
-	// Check if the config file exists in the XDG config directory
-	configPath := filepath.Join(xdg.ConfigHome, CliConfigFileName)
-	err := mergeConfig(v, configPath, CliConfigFileName, true)
+	// Use the proper XDG config path with app name directory `atmos`
+	configDir := filepath.Join(xdg.ConfigHome, "atmos")
+	err := mergeConfig(v, configDir, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
