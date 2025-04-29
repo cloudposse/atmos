@@ -39,7 +39,24 @@ atmos list stacks
 atmos list stacks -c vpc
 ```
 
-For details on customizing the output columns, see the [Column Customization Guide](./list-column-customization.mdx).
+### Customizing Output Columns
+
+This configuration customizes the output of `atmos list stacks`:
+
+```yaml
+# In atmos.yaml
+stacks:
+  list:
+    format: table
+    columns:
+      - name: Stack Name
+        value: "{{ .stack_name }}"
+      - name: Configuration Path
+        value: "{{ .stack_path }}"
+```
+
+When you run `atmos list stacks`, the output table will have columns titled "Stack Name" and "Configuration Path".
+
 ## Flags
 
 | Flag             | Description                                                                                                                                                                                                                               | Alias | Required |

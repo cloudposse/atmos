@@ -89,3 +89,46 @@ For details on customizing the output columns, see the [Column Customization Gui
 - Use the `--file` flag to filter workflows from a specific manifest file
 - The `describe workflows` command provides more detailed information about workflows
 :::
+
+---
+
+## Examples
+
+### Custom Columns for Workflows
+
+This configuration customizes the output of `atmos list workflows`:
+
+```yaml
+# In atmos.yaml
+workflows:
+  list:
+    columns:
+      - name: Workflow
+        value: "{{ .workflow_name }}"
+      - name: Definition File
+        value: "{{ .workflow_file }}"
+      - name: Description
+        value: "{{ .workflow_description }}"
+```
+Running `atmos list workflows` will display these columns.
+---
+
+## Examples
+
+### Custom Columns for Workflows
+
+This configuration customizes the output of `atmos list workflows`:
+
+```yaml
+# In atmos.yaml
+workflows:
+  list:
+    columns:
+      - name: Workflow
+        value: "{{ .workflow_name }}"
+      - name: Definition File
+        value: "{{ .workflow_file }}"
+      - name: Description
+        value: "{{ .workflow_description }}"
+```
+Running `atmos list workflows` will display these columns.
