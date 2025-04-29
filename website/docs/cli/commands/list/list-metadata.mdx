@@ -86,7 +86,22 @@ atmos list metadata --format csv
 atmos list metadata --format tsv
 ```
 
-For details on customizing the output columns, see the [Column Customization Guide](./list-column-customization.mdx).
+### Custom Column using Stack Name
+
+You can use available variables like `.stack_name` in your column definitions:
+
+```yaml
+# In atmos.yaml, under the appropriate scope (values, vars, settings, or metadata)
+list:
+  columns:
+    - name: "Context Stack"
+      value: "{{ .stack_name }}"
+    - name: "Key"
+      value: "{{ .key }}"
+    - name: "Value"
+      value: "{{ .value }}"
+```
+
 ## Example Output
 
 ```shell
