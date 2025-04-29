@@ -132,16 +132,13 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 		return err
 	}
 
-	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
-		if err := readEnvAmosConfigPath(v, os.Getenv("ATMOS_CLI_CONFIG_PATH")); err != nil {
-			return err
-		}
-	}
-
 	if err := readWorkDirConfig(v); err != nil {
 		return err
 	}
 
+	if err := readEnvAmosConfigPath(v); err != nil {
+		return err
+	}
 	if err := readUserPreferences(v); err != nil {
 		return err
 	}
@@ -210,7 +207,11 @@ func readWorkDirConfig(v *viper.Viper) error {
 	return nil
 }
 
-func readEnvAmosConfigPath(v *viper.Viper, atmosPath string) error {
+func readEnvAmosConfigPath(v *viper.Viper) error {
+	atmosPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+	if atmosPath == "" {
+		return nil
+	}
 	err := mergeConfig(v, atmosPath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
