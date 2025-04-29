@@ -17,13 +17,15 @@ Column customization is configured within your `atmos.yaml` file using Go templa
 
 The column customization feature applies to the following commands:
 
-- `atmos list stacks`
-- `atmos list components`
-- `atmos list workflows`
-- `atmos list values`
-- `atmos list vars`
-- `atmos list settings`
-- `atmos list metadata`
+| Command                    | Description                                                                                   |
+|---------------------------|-----------------------------------------------------------------------------------------------|
+| `atmos list stacks`       | Lists all defined **stacks** in your project. A *stack* is a named configuration representing a deployment environment (e.g., `dev/us-east-1`, `prod/eu-west-1`). |
+| `atmos list components`   | Lists all available **components** (Terraform, Helmfile, etc.) defined in the project. Components are reusable infrastructure building blocks. |
+| `atmos list workflows`    | Lists all defined **workflows**, which are custom command sequences defined in `atmos.yaml` to streamline repetitive tasks. |
+| `atmos list values`       | Displays the fully resolved **configuration values** for a specified component in a stack, after inheritance and imports are applied. |
+| `atmos list vars`         | Lists the **Terraform `vars`** (input variables) that will be passed to a component for a given stack. Useful for debugging variable resolution. |
+| `atmos list settings`     | Shows the **`settings` block**, typically used for configuring a component’s behavior (e.g., module version, backend type). |
+| `atmos list metadata`     | Displays the **`metadata` block** associated with a component in a stack, including attributes like `stage`, `tenant`, `environment`, and `namespace`. |
 
 You can define custom columns for each of these commands individually in your `atmos.yaml`.
 
