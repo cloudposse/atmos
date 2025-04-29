@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/adrg/xdg"
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/config/go-homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -21,7 +22,10 @@ var embeddedConfigData []byte
 
 const MaximumImportLvL = 10
 
-var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
+var (
+	ErrAtmosDIrConfigNotFound   = errors.New("atmos config directory not found")
+	ErrEnvCliConfigPathNotFound = errors.New("config not found in ENV var ATMOS_CLI_CONFIG_PATH")
+)
 
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
@@ -128,14 +132,19 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 		return err
 	}
 
+	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+		if err := readEnvAmosConfigPath(v, os.Getenv("ATMOS_CLI_CONFIG_PATH")); err != nil {
+			return err
+		}
+	}
+
 	if err := readWorkDirConfig(v); err != nil {
 		return err
 	}
 
-	if err := readEnvAmosConfigPath(v); err != nil {
+	if err := readUserPreferences(v); err != nil {
 		return err
 	}
-
 	return readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
 }
 
@@ -169,7 +178,7 @@ func readHomeConfig(v *viper.Viper) error {
 	if err != nil {
 		return err
 	}
-	configFilePath := filepath.Join(home, ".atmos")
+	configFilePath := filepath.Join(home, DotCliConfigFileName)
 	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
@@ -201,17 +210,13 @@ func readWorkDirConfig(v *viper.Viper) error {
 	return nil
 }
 
-func readEnvAmosConfigPath(v *viper.Viper) error {
-	atmosPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
-	if atmosPath == "" {
-		return nil
-	}
+func readEnvAmosConfigPath(v *viper.Viper, atmosPath string) error {
 	err := mergeConfig(v, atmosPath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
 			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", atmosPath)
-			return nil
+			return fmt.Errorf("%w: %s", ErrEnvCliConfigPathNotFound, err)
 		default:
 			return err
 		}
@@ -221,6 +226,21 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	return nil
 }
 
+// readUserPreferences load config from user's HOME dir .
+func readUserPreferences(v *viper.Viper) error {
+	// Check if the config file exists in the XDG config directory
+	configPath := filepath.Join(xdg.ConfigHome, CliConfigFileName)
+	err := mergeConfig(v, configPath, CliConfigFileName, true)
+	if err != nil {
+		switch err.(type) {
+		case viper.ConfigFileNotFoundError:
+			return nil
+		default:
+			return err
+		}
+	}
+	return nil
+}
 func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	if len(atmosCliConfigPath) == 0 {
 		return nil
