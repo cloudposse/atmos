@@ -58,6 +58,14 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	setLogConfig(&atmosConfig)
 
 	atmosConfig.Initialized = true
+
+	// TODO: This should be replaced with the config pr: https://github.com/cloudposse/atmos/pull/1174
+	flagKeyValue := parseFlags()
+	if flagKeyValue, ok := flagKeyValue["no-color"]; ok || flagKeyValue == "true" {
+		atmosConfig.Settings.Terminal.NoColor = true
+	} else if flagKeyValue == "false" {
+		atmosConfig.Settings.Terminal.NoColor = false
+	}
 	return atmosConfig, nil
 }
 

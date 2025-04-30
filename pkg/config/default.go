@@ -56,7 +56,6 @@ var (
 			Terminal: schema.Terminal{
 				MaxWidth: templates.GetTerminalWidth(),
 				Pager:    true,
-				Colors:   true,
 				Unicode:  true,
 				SyntaxHighlighting: schema.SyntaxHighlighting{
 					Enabled:                true,

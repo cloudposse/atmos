@@ -32,6 +32,21 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 		opt(r)
 	}
 
+	if atmosConfig.Settings.Terminal.NoColor {
+		renderer, err := glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(int(r.width)),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		r.renderer = renderer
+		return r, nil
+	}
+
 	// Get default style
 	style, err := GetDefaultStyle(atmosConfig)
 	if err != nil {

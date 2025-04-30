@@ -95,6 +95,17 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.InfoLevel)
 	}
 
+	if atmosConfig.Settings.Terminal.NoColor {
+		styles := log.DefaultStyles()
+		// Clear colors for levels
+		styles.Levels[log.DebugLevel] = styles.Levels[log.DebugLevel].UnsetForeground()
+		styles.Levels[log.InfoLevel] = styles.Levels[log.InfoLevel].UnsetForeground()
+		styles.Levels[log.WarnLevel] = styles.Levels[log.WarnLevel].UnsetForeground()
+		styles.Levels[log.ErrorLevel] = styles.Levels[log.ErrorLevel].UnsetForeground()
+		styles.Levels[log.FatalLevel] = styles.Levels[log.FatalLevel].UnsetForeground()
+
+		log.SetStyles(styles)
+	}
 	var output io.Writer
 
 	switch atmosConfig.Logs.File {
@@ -157,6 +168,7 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
+	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 	err = RootCmd.Execute()
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {

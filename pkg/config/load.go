@@ -99,6 +99,8 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.gitlab_token", "GITLAB_TOKEN")
 	bindEnv(v, "settings.inject_gitlab_token", "ATMOS_INJECT_GITLAB_TOKEN")
 	bindEnv(v, "settings.atmos_gitlab_token", "ATMOS_GITLAB_TOKEN")
+
+	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
@@ -115,6 +117,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Info")
+	v.SetDefault("settings.terminal.no_color", false)
 }
 
 // loadConfigSources delegates reading configs from each source,
