@@ -179,7 +179,7 @@ components:
           # Example of using the `atmos.Store` template function in a multi-line string
           ENGINE_CONFIG_JSON: |
             {
-              "cidr": '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}',
+              "cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" | quote }},
               "defaults": {{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }},
               "subnets_count": {{ (atmos.Store "redis" .stack "config" "config_map").vpc_config.subnets_count }}
             }
@@ -223,7 +223,7 @@ components:
         lambda_environment:
           ENGINE_CONFIG_JSON: |
             {
-                "cidr": '{{ atmos.Store "redis" "prod" "vpc" "cidr" }}',
+                "cidr": {{ atmos.Store "redis" "prod" "vpc" "cidr" | quote }},
                 "defaults": {{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }},
                 "subnets_count": {{ (atmos.Store "redis" .stack "config" "config_map").vpc_config.subnets_count }}
             }

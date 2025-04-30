@@ -20,17 +20,26 @@ func UniqueStrings(input []string) []string {
 	return u
 }
 
-// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes
+// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
 func SplitStringByDelimiter(str string, delimiter rune) ([]string, error) {
 	r := csv.NewReader(strings.NewReader(str))
 	r.Comma = delimiter
+	r.TrimLeadingSpace = true // Trim leading spaces in fields
 
 	parts, err := r.Read()
 	if err != nil {
 		return nil, err
 	}
 
-	return parts, nil
+	// Remove empty strings caused by multiple spaces
+	filteredParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			filteredParts = append(filteredParts, part)
+		}
+	}
+
+	return filteredParts, nil
 }
 
 // SplitStringAtFirstOccurrence splits a string into two parts at the first occurrence of the separator
