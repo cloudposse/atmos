@@ -135,7 +135,7 @@ The appearance of the output table depends on whether `atmos` detects an interac
 ## Troubleshooting & Tips
 
 - **Blank Columns:** If a column appears empty, double-check the template variable name (`{{ .variable }}`) against the [YAML Template Syntax](#yaml-template-syntax) section for the specific command. Ensure the data context actually contains that variable for the items being listed.
-- **Inspecting Available Data:** Use the command with `--format json` or `--format yaml` (e.g., `atmos list stacks --format json`) to see the raw data structure and available fields you can use in your templates.
+- **Inspecting Available Data:** Use the `describe` command with `--format json` or `--format yaml` (e.g., `atmos describe stacks --format json`) to see the raw data structure and available fields you can use in your templates.
 - **Wide Tables:** If the table is too wide for your terminal or you encounter errors about content width:
     - Reduce the number of columns defined in your `atmos.yaml`.
     - Use a different output format like `json` or `yaml`.
