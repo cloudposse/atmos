@@ -164,11 +164,7 @@ func extractComponentValues(stacksMap map[string]interface{}, component string, 
 func processComponentType(component string, componentFilter string, includeAbstract bool) string {
 	// If this is a regular component query with a specific component filter
 	if component == "" && componentFilter != "" {
-		// Extract component name from path
-		componentName := getComponentNameFromPath(componentFilter)
-
-		// Return a direct path to the component.
-		return fmt.Sprintf(".components.%s.%s", KeyTerraform, componentName)
+		return fmt.Sprintf(".components.%s.\"%s\"", KeyTerraform, componentFilter)
 	}
 
 	// Handle special section queries.

@@ -31,10 +31,6 @@ func CheckComponentExists(atmosConfig *schema.AtmosConfiguration, componentName 
 		return false
 	}
 
-	// Extract component name from path if needed
-	parts := strings.Split(componentName, "/")
-	baseName := parts[len(parts)-1]
-
 	// Get all stacks to check for the component
 	stacksMap, err := e.ExecuteDescribeStacks(*atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
@@ -59,7 +55,7 @@ func CheckComponentExists(atmosConfig *schema.AtmosConfiguration, componentName 
 		}
 
 		// Check if the component exists in this stack
-		_, exists := terraformComponents[baseName]
+		_, exists := terraformComponents[componentName]
 		if exists {
 			return true
 		}
