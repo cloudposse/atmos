@@ -84,9 +84,9 @@ The `value` field in each column definition supports Go templates. The available
 
 ### For `atmos list workflows`:
 ```yaml
-{{ .workflow_file }}      # The filename containing the workflow definition
-{{ .workflow_name }}      # The name of the workflow
-{{ .workflow_description }}  # The description provided for the workflow
+{{ .name }}      # The name of the workflow
+{{ .file }}      # The manifest name
+{{ .description }}  # The description provided for the workflow
 ```
 
 ### For `atmos list values`, `atmos list vars`, `atmos list settings`, and `atmos list metadata`:
@@ -113,6 +113,25 @@ Here's the general structure for defining custom list columns in `atmos.yaml`:
 
 - Replace `<command_scope>` with the specific scope corresponding to the `atmos list` command you want to customize (e.g., `stacks` for `atmos list stacks`).
 - The `columns` array is mandatory if you want to override the default columns. If `columns` is omitted, the command uses its default output columns.
+
+### Custom Columns for Workflows
+
+```yaml
+# In atmos.yaml
+workflows:
+  list:
+    columns:
+      - name: Workflow
+        value: "{{ .name }}"  # Corresponds to the workflow key in the manifest
+      - name: Manifest Name
+        value: "{{ .file }}"   # Corresponds to the 'name' field within the manifest file
+      - name: Description
+        value: "{{ .description }}" # Corresponds to the 'description' field for the workflow
+```
+
+:::info
+Note that `{{ .file }}` in this context refers to the value of the top-level `name` attribute within the workflow manifest file itself, not the path to the file.
+:::
 
 
 ## Display Behavior
