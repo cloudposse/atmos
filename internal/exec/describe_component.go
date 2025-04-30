@@ -29,6 +29,7 @@ type DescribeComponentExec struct {
 	IsTTYSupportForStdout    func() bool
 	initCliConfig            func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
 	executeDescribeComponent func(component string, stack string, processTemplates bool, processYamlFunctions bool, skip []string) (map[string]any, error)
+	evaluateYqExpression     func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error)
 }
 
 func NewDescribeComponentExec() *DescribeComponentExec {
@@ -38,6 +39,7 @@ func NewDescribeComponentExec() *DescribeComponentExec {
 		pageCreator:              pager.New(),
 		initCliConfig:            cfg.InitCliConfig,
 		executeDescribeComponent: ExecuteDescribeComponent,
+		evaluateYqExpression:     u.EvaluateYqExpression,
 	}
 }
 
@@ -80,7 +82,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	}
 
 	if query != "" {
-		res, err = u.EvaluateYqExpression(&atmosConfig, componentSection, query)
+		res, err = d.evaluateYqExpression(&atmosConfig, componentSection, query)
 		if err != nil {
 			return err
 		}

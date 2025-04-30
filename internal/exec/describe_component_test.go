@@ -28,6 +28,9 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 		initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 			return schema.AtmosConfiguration{}, nil
 		},
+		evaluateYqExpression: func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
+			return data, nil
+		},
 	}
 
 	tests := []struct {
@@ -80,6 +83,16 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				Format:    "invalid-format",
 			},
 			expectedError: true,
+		},
+		{
+			name: "Test pager with query",
+			params: DescribeComponentParams{
+				Component: "component-1",
+				Stack:     "nonprod",
+				Pager:     "less",
+				Format:    "json",
+				Query:     ".component",
+			},
 		},
 	}
 	for _, test := range tests {
