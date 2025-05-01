@@ -51,3 +51,14 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 
 	return filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
 }
+
+// FetchData fetches content from a given source and returns it as a byte slice.
+func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
+	filePath := fd.tempPathGenerator()
+
+	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
+		return nil, fmt.Errorf("failed to download file '%s': %w", src, err)
+	}
+
+	return fd.fileReader(filePath)
+}
