@@ -37,6 +37,7 @@ func TestCLITerraformCleanShouldCleanBothComponentFiles(t *testing.T) {
 	}()
 	os.Args = []string{"atmos", "terraform", "apply", "component-1", "-s", "staging"}
 	err = cmd.Execute()
+	require.NoError(t, err)
 	os.Args = []string{"atmos", "terraform", "apply", "component-2", "-s", "staging"}
 	err = cmd.Execute()
 	require.NoError(t, err)
