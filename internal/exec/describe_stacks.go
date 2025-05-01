@@ -347,6 +347,7 @@ func ExecuteDescribeStacks(
 							}
 
 							// Atmos component, stack, and stack manifest file
+							configAndStacksInfo.Stack = stackName
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
 							componentSection["stack"] = stackName
@@ -555,6 +556,7 @@ func ExecuteDescribeStacks(
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
+						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 						configAndStacksInfo.ComponentSection["stack"] = stackName
