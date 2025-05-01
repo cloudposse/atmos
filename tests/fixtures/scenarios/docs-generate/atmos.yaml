@@ -21,24 +21,24 @@ logs:
 
 settings:
   list_merge_strategy: replace
-  docs:
-    generate:
-      # Generate README in current working directory
-      readme:
-        base-dir: .
-        input:
-          - "./README.yaml"
-        # To Do: template can be a remote URL/github, using this local for testing
-        template:  "./README.md.gotmpl"
-        # The final README
-        output: "./README.md"
-        terraform:
-          source: terraform/
-          enabled: true
-          format: "markdown"
-          show_providers: false
-          show_inputs: true
-          show_outputs: true
-          sort_by: "name"
-          hide_empty: false
-          indent_level: 2 
+docs:
+  generate:
+    # Generate README in current working directory
+    readme:
+      base-dir: .
+      input:
+        - "./README.yaml"
+      # To Do: template can be a remote URL/github, using this local for testing
+      template:  "./README.md.gotmpl"
+      # The final README
+      output: "./README.md"
+      terraform:
+        source: terraform/
+        enabled: true
+        format: "markdown"
+        show_providers: false
+        show_inputs: true
+        show_outputs: true
+        sort_by: "name"
+        hide_empty: false
+        indent_level: 2 

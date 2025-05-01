@@ -57,7 +57,7 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 
 	// Retrieve the <doc-type> generation config from atmos.yaml.
 	// The target directory is taken from docs.generate.<doc-type>.base-dir.
-	docsGenerate, ok := rootConfig.Settings.Docs.Generate[args[0]]
+	docsGenerate, ok := rootConfig.Docs.Generate[args[0]]
 	if !ok {
 		return fmt.Errorf("%w: %q", ErrNoDocsGenerateEntry, args[0])
 	}
