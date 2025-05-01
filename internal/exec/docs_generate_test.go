@@ -209,24 +209,22 @@ func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 
 	// Create a dummy atmosConfig with minimal Docs configuration.
 	atmosConfig := schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			Docs: schema.Docs{
-				Generate: map[string]schema.DocsGenerate{
-					"readme": {
-						BaseDir:  ".",
-						Input:    []string{tmpYAML.Name()},
-						Template: "", // Use default template.
-						Output:   "TEST_README.md",
-						Terraform: schema.TerraformDocsReadmeSettings{
-							Enabled: false,
-						},
+		Docs: schema.Docs{
+			Generate: map[string]schema.DocsGenerate{
+				"readme": {
+					BaseDir:  ".",
+					Input:    []string{tmpYAML.Name()},
+					Template: "", // Use default template.
+					Output:   "TEST_README.md",
+					Terraform: schema.TerraformDocsReadmeSettings{
+						Enabled: false,
 					},
 				},
 			},
 		},
 	}
 
-	docsGenerate := atmosConfig.Settings.Docs.Generate["readme"]
+	docsGenerate := atmosConfig.Docs.Generate["readme"]
 	// Call generateDocument with our injected stubRenderer.
 	err = generateDocument(&atmosConfig, targetDir, &docsGenerate, mockRenderer{})
 	if err != nil {
