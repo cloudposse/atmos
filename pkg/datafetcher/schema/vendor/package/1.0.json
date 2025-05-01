@@ -1,0 +1,102 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Atmos Vendor Config",
+    "description": "Schema for Atmos vendoring manifest",
+    "fileMatch": [
+        "vendor.{yml,yaml}",
+        "vendor.d/**/*.{yml,yaml}"
+    ],
+    "type": "object",
+    "properties": {
+      "apiVersion": {
+        "type": "string",
+        "enum": ["atmos/v1"],
+        "description": "API version of the Atmos configuration"
+      },
+      "kind": {
+        "type": "string",
+        "enum": ["AtmosVendorConfig"],
+        "description": "The type of configuration, must be AtmosVendorConfig"
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Metadata for the vendoring configuration",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the vendoring configuration"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the vendoring configuration"
+          }
+        },
+        "required": ["name", "description"]
+      },
+      "spec": {
+        "type": "object",
+        "description": "Specification of the vendoring configuration",
+        "properties": {
+          "imports": {
+            "type": "array",
+            "description": "List of imports for the vendoring configuration",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "description": "List of sources for the vendoring configuration",
+            "items": {
+              "type": "object",
+              "properties": {
+                "component": {
+                  "type": "string",
+                  "description": "Name of the component"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Source URL for the component. Supports Git, HTTP, S3, etc."
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Version of the component to fetch"
+                },
+                "targets": {
+                  "type": "array",
+                  "description": "List of target paths where the component will be vendored",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "included_paths": {
+                  "type": "array",
+                  "description": "Glob patterns for files to include",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "excluded_paths": {
+                  "type": "array",
+                  "description": "Glob patterns for files to exclude",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tags": {
+                  "type": "array",
+                  "description": "Tags associated with the component",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": ["component", "source", "version", "targets"]
+            }
+          }
+        },
+        "required": ["sources"]
+      }
+    },
+    "required": ["apiVersion", "kind", "metadata", "spec"]
+  }
