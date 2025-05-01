@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Mock NoValuesFoundError for testing IsNoValuesFoundError
+// Mock NoValuesFoundError for testing IsNoValuesFoundError.
 type mockNoValuesFoundError struct {
 	message string
 }
@@ -222,8 +222,7 @@ func TestCheckComponentExistsLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var actual bool
-			actual = processMapForComponent(simulatedStacksMap, tt.componentName)
+			actual := processMapForComponent(simulatedStacksMap, tt.componentName)
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
