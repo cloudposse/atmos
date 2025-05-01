@@ -3,6 +3,7 @@ package markdown
 import (
 	"testing"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 )
@@ -45,6 +46,9 @@ func TestRenderer(t *testing.T) {
 			r.isTTYSupportForStdout = func() bool {
 				return true
 			}
+			defer func() {
+				r.isTTYSupportForStdout = term.IsTTYSupportForStdout
+			}()
 			str, err := r.Render(tt.input)
 			assert.Contains(t, str, tt.expected)
 			assert.NoError(t, err)
