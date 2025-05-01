@@ -512,7 +512,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			printMessageForMissingAtmosConfig(atmosConfig)
-			os.Exit(1)
+			u.OsExit(1)
 		}
 	}
 }
