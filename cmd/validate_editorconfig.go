@@ -116,9 +116,7 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 			cliConfig.Verbose = true
 		}
 	}
-	if !cmd.Flags().Changed("no-color") && !atmosConfig.Validate.EditorConfig.Color {
-		cliConfig.NoColor = !atmosConfig.Validate.EditorConfig.Color
-	}
+	cliConfig.NoColor = atmosConfig.Settings.Terminal.NoColor
 	if atmosConfig.Settings.Terminal.NoColor {
 		cliConfig.NoColor = atmosConfig.Settings.Terminal.NoColor
 	}

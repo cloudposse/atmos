@@ -173,7 +173,6 @@ type EditorConfig struct {
 	IgnoreDefaults  bool     `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
 	DryRun          bool     `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
 	Format          string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
-	Color           bool     `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
 	ConfigFilePaths []string `yaml:"config_file_paths,omitempty" json:"config_file_paths,omitempty" mapstructure:"config_file_paths"`
 	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
 	Init            bool     `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
