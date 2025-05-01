@@ -12,6 +12,8 @@ import (
 	"github.com/muesli/termenv"
 )
 
+const defaultWidth = 80
+
 // Renderer is a markdown renderer using Glamour
 type Renderer struct {
 	renderer              *glamour.TermRenderer
@@ -25,7 +27,7 @@ type Renderer struct {
 // NewRenderer creates a new markdown renderer with the given options
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
-		width:                 80,                     // default width
+		width:                 defaultWidth,           // default width
 		profile:               termenv.ColorProfile(), // default color profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
@@ -38,7 +40,7 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 	if atmosConfig.Settings.Terminal.NoColor {
 		renderer, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStandardStyle(styles.AsciiStyle),
 			glamour.WithWordWrap(int(r.width)),
 			glamour.WithColorProfile(r.profile),
 			glamour.WithEmoji(),
@@ -75,14 +77,28 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	// Render without line wrapping
-	out, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(), // Uses terminal's default style
-		glamour.WithWordWrap(0),
-		glamour.WithColorProfile(r.profile),
-		glamour.WithEmoji(),
-	)
-	if err != nil {
-		return "", err
+	var out *glamour.TermRenderer
+	var err error
+	if r.atmosConfig.Settings.Terminal.NoColor {
+		out, err = glamour.NewTermRenderer(
+			glamour.WithStandardStyle(styles.AsciiStyle),
+			glamour.WithWordWrap(0),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		out, err = glamour.NewTermRenderer(
+			glamour.WithAutoStyle(), // Uses terminal's default style
+			glamour.WithWordWrap(0),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return "", err
+		}
 	}
 	result := ""
 	if r.isTTYSupportForStdout() {
@@ -152,22 +168,6 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return renderer.Render(content)
-}
-
-// RenderWithStyle renders markdown content with a specific style
-func (r *Renderer) RenderWithStyle(content string, style []byte) (string, error) {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(int(r.width)),
-		glamour.WithStylesFromJSONBytes(style),
-		glamour.WithColorProfile(r.profile),
-		glamour.WithEmoji(),
-	)
-	if err != nil {
-		return "", err
-	}
-
 	return renderer.Render(content)
 }
 
