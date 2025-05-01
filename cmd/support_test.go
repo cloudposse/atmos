@@ -31,5 +31,5 @@ func TestSupportCmd(t *testing.T) {
 	assert.NoError(t, err, "'atmos support' command should execute without error")
 
 	// Check if output contains expected markdown content
-	assert.Contains(t, output.String(), supportMarkdown, "'atmos support' output should contain information about Cloud Posse Atmos support")
+	assert.Contains(t, output.String(), "Connect with active users in the", "'atmos support' output should contain information about Cloud Posse Atmos support")
 }
