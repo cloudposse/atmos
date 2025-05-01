@@ -101,8 +101,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		// Clear colors for levels
 		styles := &log.Styles{}
 		styles.Levels = make(map[log.Level]lipgloss.Style)
-		for k, val := range stylesDefault.Levels {
-			styles.Levels[k] = val.UnsetForeground().Bold(false)
+		for k := range stylesDefault.Levels {
+			styles.Levels[k] = stylesDefault.Levels[k].UnsetForeground().Bold(false)
 		}
 		log.SetStyles(styles)
 	}
