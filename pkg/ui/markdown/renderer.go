@@ -31,6 +31,7 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 		profile:               termenv.ColorProfile(), // default color profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
+		atmosConfig:           &atmosConfig,
 	}
 
 	// Apply options
