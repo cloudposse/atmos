@@ -14,17 +14,21 @@ import (
 
 // Renderer is a markdown renderer using Glamour
 type Renderer struct {
-	renderer    *glamour.TermRenderer
-	width       uint
-	profile     termenv.Profile
-	atmosConfig *schema.AtmosConfiguration
+	renderer              *glamour.TermRenderer
+	width                 uint
+	profile               termenv.Profile
+	atmosConfig           *schema.AtmosConfiguration
+	isTTYSupportForStdout func() bool
+	isTTYSupportForStderr func() bool
 }
 
 // NewRenderer creates a new markdown renderer with the given options
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
-		width:   80,                     // default width
-		profile: termenv.ColorProfile(), // default color profile
+		width:                 80,                     // default width
+		profile:               termenv.ColorProfile(), // default color profile
+		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		isTTYSupportForStderr: term.IsTTYSupportForStderr,
 	}
 
 	// Apply options
@@ -81,7 +85,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		return "", err
 	}
 	result := ""
-	if term.IsTTYSupportForStdout() {
+	if r.isTTYSupportForStdout() {
 		result, err = out.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
@@ -94,7 +98,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
-	if term.IsTTYSupportForStdout() {
+	if r.isTTYSupportForStdout() {
 		rendered, err = r.renderer.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
@@ -198,7 +202,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 
 // RenderErrorf renders an error message with specific styling
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
-	if term.IsTTYSupportForStderr() {
+	if r.isTTYSupportForStderr() {
 		return r.Render(content)
 	}
 	// Fallback to ASCII rendering for non-TTY stderr
