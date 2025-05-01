@@ -1,0 +1,16 @@
+name: "MyApp"
+version: "1.0.0"
+enabled: true
+settings:
+  timeout: 30
+  debug: false
+users:
+  - id: 1
+    name: "Alice"
+    role: "admin"
+  - id: 2
+    name: "Bob"
+    role: "user"
+  - id: 3
+    name: "Charlie"
+    role: "guest"
