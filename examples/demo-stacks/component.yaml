@@ -1,0 +1,251 @@
+atmos_cli_config:
+    base_path: ./
+    components:
+        helmfile:
+            use_eks: true
+        terraform:
+            append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+            apply_auto_approve: false
+            auto_generate_backend_file: false
+            base_path: components/terraform
+            deploy_run_init: true
+            init:
+                pass_vars: false
+            init_run_reconfigure: true
+    stacks:
+        base_path: stacks
+        excluded_paths:
+            - '**/_defaults.yaml'
+        included_paths:
+            - deploy/**/*
+        name_pattern: '{stage}'
+    workflows:
+        list:
+            columns: []
+atmos_component: myapp
+atmos_manifest: deploy/dev
+atmos_stack: dev
+atmos_stack_file: deploy/dev
+cli_args: []
+command: terraform
+component: myapp
+component_info:
+    component_path: components/terraform/myapp
+    component_type: terraform
+    terraform_config:
+        path: components/terraform/myapp
+        variables:
+            format:
+                name: format
+                type: string
+                description: Format of the output.
+                default: v2
+                required: false
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/variables.tf
+                    line: 18
+            lang:
+                name: lang
+                type: string
+                description: Language in which the weather is displayed.
+                default: en
+                required: false
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/variables.tf
+                    line: 24
+            location:
+                name: location
+                type: string
+                description: Location for which the weather.
+                default: Los Angeles
+                required: false
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/variables.tf
+                    line: 6
+            options:
+                name: options
+                type: string
+                description: Options to customize the output.
+                default: 0T
+                required: false
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/variables.tf
+                    line: 12
+            stage:
+                name: stage
+                type: string
+                description: Stage where it will be deployed
+                default: null
+                required: true
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/variables.tf
+                    line: 1
+            units:
+                name: units
+                type: string
+                description: Units in which the weather is displayed.
+                default: m
+                required: false
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/variables.tf
+                    line: 30
+        outputs:
+            lang:
+                name: lang
+                description: Language which the weather is displayed.
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/outputs.tf
+                    line: 19
+            location:
+                name: location
+                description: Location of the weather report.
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/outputs.tf
+                    line: 14
+            stage:
+                name: stage
+                description: Stage where it was deployed
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/outputs.tf
+                    line: 9
+            units:
+                name: units
+                description: Units the weather is displayed.
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/outputs.tf
+                    line: 24
+            url:
+                name: url
+                description: ""
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/outputs.tf
+                    line: 5
+            weather:
+                name: weather
+                description: ""
+                sensitive: false
+                pos:
+                    filename: components/terraform/myapp/outputs.tf
+                    line: 1
+        requiredcore:
+            - '>= 1.0.0'
+        requiredproviders:
+            http:
+                source: ""
+                versionconstraints: []
+                configurationaliases: []
+            local:
+                source: ""
+                versionconstraints: []
+                configurationaliases: []
+        providerconfigs: {}
+        managedresources:
+            local_file.cache:
+                mode: 77
+                type: local_file
+                name: cache
+                provider:
+                    name: local
+                    alias: ""
+                pos:
+                    filename: components/terraform/myapp/main.tf
+                    line: 19
+        dataresources:
+            data.http.weather:
+                mode: 68
+                type: http
+                name: weather
+                provider:
+                    name: http
+                    alias: ""
+                pos:
+                    filename: components/terraform/myapp/main.tf
+                    line: 11
+        modulecalls: {}
+        diagnostics: []
+component_type: terraform
+deps:
+    - catalog/myapp
+    - deploy/dev
+deps_all:
+    - catalog/myapp
+    - deploy/dev
+imports:
+    - catalog/myapp
+inheritance: []
+sources:
+    vars:
+        format:
+            name: format
+            stack_dependencies:
+                - dependency_type: import
+                  stack_file: catalog/myapp
+                  stack_file_section: components.terraform.vars
+                  variable_value: ""
+        lang:
+            final_value: se
+            name: lang
+            stack_dependencies:
+                - dependency_type: inline
+                  stack_file: deploy/dev
+                  stack_file_section: components.terraform.vars
+                  variable_value: se
+                - dependency_type: import
+                  stack_file: catalog/myapp
+                  stack_file_section: components.terraform.vars
+                  variable_value: en
+        location:
+            final_value: Stockholm
+            name: location
+            stack_dependencies:
+                - dependency_type: inline
+                  stack_file: deploy/dev
+                  stack_file_section: components.terraform.vars
+                  variable_value: Stockholm
+                - dependency_type: import
+                  stack_file: catalog/myapp
+                  stack_file_section: components.terraform.vars
+                  variable_value: Los Angeles
+        options:
+            final_value: "0"
+            name: options
+            stack_dependencies:
+                - dependency_type: import
+                  stack_file: catalog/myapp
+                  stack_file_section: components.terraform.vars
+                  variable_value: "0"
+        stage:
+            final_value: dev
+            name: stage
+            stack_dependencies:
+                - dependency_type: inline
+                  stack_file: deploy/dev
+                  stack_file_section: vars
+                  variable_value: dev
+        units:
+            final_value: m
+            name: units
+            stack_dependencies:
+                - dependency_type: import
+                  stack_file: catalog/myapp
+                  stack_file_section: components.terraform.vars
+                  variable_value: m
+stack: dev
+vars:
+    lang: se
+    location: Stockholm
+    options: "0"
+    stage: dev
+    units: m
+workspace: dev

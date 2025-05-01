@@ -1,12 +1,14 @@
 package utils
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -15,7 +17,7 @@ import (
 )
 
 const (
-	// Atmos YAML functions
+	// Atmos YAML functions.
 	AtmosYamlFuncExec            = "!exec"
 	AtmosYamlFuncStore           = "!store"
 	AtmosYamlFuncTemplate        = "!template"
@@ -38,17 +40,32 @@ var (
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
+	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
 )
 
-// PrintAsYAML prints the provided value as YAML document to the console
+// PrintAsYAML prints the provided value as YAML document to the console.
 func PrintAsYAML(data any) error {
-	y, err := ConvertToYAML(data)
+	atmosConfig := ExtractAtmosConfig(data)
+	return PrintAsYAMLWithConfig(&atmosConfig, data)
+}
+
+// PrintAsYAMLWithConfig prints the provided value as YAML document to the console with custom configuration.
+func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
+	if atmosConfig == nil {
+		return ErrNilAtmosConfig
+	}
+
+	indent := 2
+	if atmosConfig.Settings.Terminal.TabWidth > 0 {
+		indent = atmosConfig.Settings.Terminal.TabWidth
+	}
+
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
 
-	atmosConfig := ExtractAtmosConfig(data)
-	highlighted, err := HighlightCodeWithConfig(y, atmosConfig)
+	highlighted, err := HighlightCodeWithConfig(y, *atmosConfig, "yaml")
 	if err != nil {
 		// Fallback to plain text if highlighting fails
 		PrintMessage(y)
@@ -58,9 +75,21 @@ func PrintAsYAML(data any) error {
 	return nil
 }
 
-// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
-func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
-	y, err := ConvertToYAML(data)
+// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor.
+func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data any) error {
+	if atmosConfig == nil {
+		return ErrNilAtmosConfig
+	}
+
+	// Get tab width from config or use default
+	indent := 2
+	if atmosConfig.Settings.Terminal.TabWidth > 0 {
+		indent = atmosConfig.Settings.Terminal.TabWidth
+	}
+
+	log.Debug("PrintAsYAMLToFileDescriptor", "tabWidth", indent)
+
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
@@ -68,12 +97,13 @@ func PrintAsYAMLToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	return nil
 }
 
-// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file
+// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file.
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
-	y, err := ConvertToYAML(data)
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: 2})
 	if err != nil {
 		return err
 	}
+
 	err = os.WriteFile(filePath, []byte(y), fileMode)
 	if err != nil {
 		return err
@@ -81,13 +111,56 @@ func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// ConvertToYAML converts the provided data to a YAML string
-func ConvertToYAML(data any) (string, error) {
-	y, err := yaml.Marshal(data)
+// WriteToFileAsYAMLWithConfig converts the provided value to YAML with custom configuration and writes it to the specified file.
+func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePath string, data any, fileMode os.FileMode) error {
+	if atmosConfig == nil {
+		return ErrNilAtmosConfig
+	}
+
+	// Get tab width from config or use default
+	indent := 2 // Default value
+	if atmosConfig.Settings.Terminal.TabWidth > 0 {
+		indent = atmosConfig.Settings.Terminal.TabWidth
+	}
+
+	log.Debug("WriteToFileAsYAMLWithConfig", "tabWidth", indent, "filePath", filePath)
+
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(filePath, []byte(y), fileMode)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// YAMLOptions contains options for YAML conversion.
+type YAMLOptions struct {
+	Indent int
+}
+
+// ConvertToYAML converts the provided data to a YAML string.
+func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+
+	// Default indent value
+	indent := 2
+
+	if len(opts) > 0 {
+		if opts[0].Indent > 0 {
+			indent = opts[0].Indent
+		}
+	}
+	encoder.SetIndent(indent)
+
+	if err := encoder.Encode(data); err != nil {
 		return "", err
 	}
-	return string(y), nil
+	return buf.String(), nil
 }
 
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
@@ -214,13 +287,17 @@ func getValueWithTag(n *yaml.Node) string {
 	return strings.TrimSpace(tag + " " + val)
 }
 
-// UnmarshalYAML unmarshals YAML into a Go type
+// UnmarshalYAML unmarshals YAML into a Go type.
 func UnmarshalYAML[T any](input string) (T, error) {
 	return UnmarshalYAMLFromFile[T](&schema.AtmosConfiguration{}, input, "")
 }
 
-// UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type
+// UnmarshalYAMLFromFile unmarshals YAML downloaded from a file into a Go type.
 func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input string, file string) (T, error) {
+	if atmosConfig == nil {
+		return *new(T), ErrNilAtmosConfig
+	}
+
 	var zeroValue T
 	var node yaml.Node
 	b := []byte(input)

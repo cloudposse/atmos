@@ -1,50 +1,50 @@
 base_path: ./
 components:
-    terraform:
-        base_path: components/terraform
-        apply_auto_approve: false
-        append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
-        deploy_run_init: true
-        init_run_reconfigure: true
-        auto_generate_backend_file: false
-        command: ""
-        shell:
-            prompt: ""
-        init:
-            pass_vars: false
-    helmfile:
-        base_path: ""
-        use_eks: true
-        kubeconfig_path: ""
-        helm_aws_profile_pattern: ""
-        cluster_name_pattern: ""
-        command: ""
+  terraform:
+    base_path: components/terraform
+    apply_auto_approve: false
+    append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+    command: ""
+    shell:
+      prompt: ""
+    init:
+      pass_vars: false
+  helmfile:
+    base_path: ""
+    use_eks: true
+    kubeconfig_path: ""
+    helm_aws_profile_pattern: ""
+    cluster_name_pattern: ""
+    command: ""
 stacks:
-    base_path: stacks
-    included_paths:
-        - deploy/**/*
-    excluded_paths:
-        - '**/_defaults.yaml'
-    name_pattern: '{stage}'
-    name_template: ""
+  base_path: stacks
+  included_paths:
+    - deploy/**/*
+  excluded_paths:
+    - '**/_defaults.yaml'
+  name_pattern: '{stage}'
+  name_template: ""
 logs:
-    file: /dev/stderr
-    level: Info
+  file: /dev/stderr
+  level: Info
 settings:
-    list_merge_strategy: ""
-    inject_github_token: true
+  list_merge_strategy: ""
+  inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks
 includeStackAbsolutePaths:
-    - /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
+  - /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
 excludeStackAbsolutePaths:
-    - /absolute/path/to/repo/examples/demo-stacks/stacks/**/_defaults.yaml
+  - /absolute/path/to/repo/examples/demo-stacks/stacks/**/_defaults.yaml
 terraformDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false
 validate:
-    editorconfig:
-        color: true
+  editorconfig:
+    color: true
 cli_config_path: /absolute/path/to/repo/examples/demo-stacks
 import: []
 
