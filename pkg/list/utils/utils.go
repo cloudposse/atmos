@@ -21,7 +21,7 @@ func IsEmptyTable(output string) bool {
 	}
 
 	lines := strings.Split(output, "\n")
-	
+
 	// Remove empty lines
 	var nonEmptyLines []string
 	for _, line := range lines {
@@ -29,7 +29,7 @@ func IsEmptyTable(output string) bool {
 			nonEmptyLines = append(nonEmptyLines, line)
 		}
 	}
-	
+
 	// A table is empty if it has 2 or fewer non-empty lines (header and separator)
 	return len(nonEmptyLines) <= 2
 }

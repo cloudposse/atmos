@@ -23,7 +23,6 @@ func newMockNoValuesFoundError(message string) error {
 	return &mockNoValuesFoundError{message: message}
 }
 
-
 func TestIsNoValuesFoundError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -60,7 +59,6 @@ func TestIsNoValuesFoundError(t *testing.T) {
 		})
 	}
 }
-
 
 func TestIsEmptyTable(t *testing.T) {
 	tests := []struct {
@@ -102,7 +100,6 @@ func TestIsEmptyTable(t *testing.T) {
 		})
 	}
 }
-
 
 // TestCheckComponentExists focuses on the logic *within* CheckComponentExists,
 // specifically the processing of the map structure returned by ExecuteDescribeStacks.
@@ -179,7 +176,6 @@ func TestCheckComponentExistsLogic(t *testing.T) {
 		}
 		return false // Covers line 68 (component not found after checking all stacks)
 	}
-
 
 	tests := []struct {
 		name          string
