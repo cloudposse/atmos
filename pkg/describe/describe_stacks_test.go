@@ -176,6 +176,23 @@ func TestDescribeStacksWithFilter7(t *testing.T) {
 	t.Log(stacksYaml)
 }
 
+func TestDescribeStacksWithFilter8(t *testing.T) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	assert.Nil(t, err)
+
+	componentTypes := []string{"helmfile"}
+	sections := []string{"none"}
+
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, componentTypes, sections, false, false)
+	assert.Nil(t, err)
+
+	dependentsYaml, err := u.ConvertToYAML(stacks)
+	assert.Nil(t, err)
+	t.Log(dependentsYaml)
+}
+
 func TestDescribeStacksWithEmptyStacks(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
