@@ -8,7 +8,6 @@ import (
 )
 
 func TestRenderer(t *testing.T) {
-
 	tests := []struct {
 		name        string
 		input       string
