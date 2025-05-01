@@ -1,0 +1,54 @@
+---
+title: atmos validate schema
+sidebar_label: schema
+sidebar_class_name: command
+id: schema
+description: Use this command to validate the schema of yaml files of the Atmos project against the rules defined in the schema/manifest file.
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note purpose
+Use this command to validate files against the rules defined in your schema in atmos.yaml.
+:::
+
+<Screengrab title="atmos validate schema --help" slug="atmos-validate-schema--help" />
+
+## Usage
+
+Execute the `validate schema` command like this:
+
+```shell
+atmos validate schema
+```
+
+This command validates files against the formatting rules defined in your .editorconfig file.
+
+:::tip
+Run `atmos validate schema --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+atmos validate schema
+atmos validate schema <my_custom_key>
+```
+
+## How to set my schema validators?
+
+You need to use the `schmeas` key in atmos config.
+
+```yaml
+schemas:
+    my_custom_key:
+        schema: !import https://www.jsonschema.com/example.json # json to be used for validation
+        matches:
+            - folder/*.yaml # pattern of the file to be validated
+```
+
+
+## Flags
+
+| Flag                                 | Description                                                                                                    | Alias | Required |
+|:-------------------------------------|:---------------------------------------------------------------------------------------------------------------|:------|:---------|
+| `--schemas-atmos-manifest`           | Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file |       | no       |
