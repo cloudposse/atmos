@@ -52,6 +52,9 @@ func TestRenderer(t *testing.T) {
 			str, err := r.Render(tt.input)
 			assert.Contains(t, str, tt.expected)
 			assert.NoError(t, err)
+			str, err = r.RenderWithoutWordWrap(tt.input)
+			assert.Contains(t, str, tt.expected)
+			assert.NoError(t, err)
 		})
 	}
 }

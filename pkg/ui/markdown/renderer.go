@@ -91,9 +91,15 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 			return "", err
 		}
 	} else {
+		// Get default style
+		style, err := GetDefaultStyle(*r.atmosConfig)
+		if err != nil {
+			return "", err
+		}
 		out, err = glamour.NewTermRenderer(
 			glamour.WithAutoStyle(), // Uses terminal's default style
 			glamour.WithWordWrap(0),
+			glamour.WithStylesFromJSONBytes(style),
 			glamour.WithColorProfile(r.profile),
 			glamour.WithEmoji(),
 		)
