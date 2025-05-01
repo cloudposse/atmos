@@ -35,7 +35,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	}()
 	config.DefaultConfigHandler = config.New()
 	// Execute the command
-	os.Args = []string{"atmos", "terraform", "generate", "planfile", component, "-s", stack, "--format", "json"}
+	os.Args = []string{"atmos", "terraform", "generate", "planfile", component, "-s", stack, "--format", "json", "--file="}
 	err := cmd.Execute()
 	assert.NoError(t, err, "'atmos terraform generate planfile' command should execute without error")
 
