@@ -9,7 +9,7 @@ DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/sc
 DEBU Atmos configuration not found path=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run/.atmos.d/**/* error="failed to find matching files: no files matching patterns found"
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 WARN Vendor config file does not exist. Proceeding without vendor configurations path="{ApiVersion: Kind: Metadata:{Name: Description:} Spec:{Imports:[] Sources:[]}}"
-WARN No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
+DEBU No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
 DEBU CustomGitDetector.Detect called
 DEBU Rewriting SCP-style SSH URL old_url="" new_url="ssh://xxx@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
 DEBU Reading config param InjectGithubToken=true

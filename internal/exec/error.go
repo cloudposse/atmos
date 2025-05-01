@@ -4,6 +4,8 @@ import (
 	"errors"
 )
 
+const ErrWrappingFormat = "%w: %w"
+
 var (
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
@@ -19,4 +21,5 @@ var (
 	ErrFailedToInitializeTUIModelWithDetails = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
+	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 )
