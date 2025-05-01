@@ -467,6 +467,12 @@ func TestSetLogConfig(t *testing.T) {
 			expectedLogLevel: "Debug",
 			expectetdNoColor: true,
 		},
+		{
+			name:             "No color flag disable with log level",
+			args:             []string{"--no-color=false", "--logs-level", "Debug"},
+			expectedLogLevel: "Debug",
+			expectetdNoColor: false,
+		},
 	}
 
 	for _, test := range tests {
