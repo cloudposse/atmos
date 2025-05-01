@@ -9,6 +9,7 @@ coverage:
         threshold: 2.01% # Allow a small drop in coverage
 
   ignore:
+    - "**/mock_*.go"  # Adjust this pattern based on your project structure
     - "mock_*.go"  # Adjust this pattern based on your project structure
 
 comment:
