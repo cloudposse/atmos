@@ -168,7 +168,6 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations
 	RootCmd.SilenceErrors = true
-	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 	err = RootCmd.Execute()
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
@@ -206,6 +205,7 @@ func init() {
 	RootCmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
+	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
