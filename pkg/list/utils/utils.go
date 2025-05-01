@@ -20,8 +20,18 @@ func IsEmptyTable(output string) bool {
 		return true
 	}
 
-	newlineCount := strings.Count(output, "\n")
-	return newlineCount <= 4
+	lines := strings.Split(output, "\n")
+	
+	// Remove empty lines
+	var nonEmptyLines []string
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			nonEmptyLines = append(nonEmptyLines, line)
+		}
+	}
+	
+	// A table is empty if it has 2 or fewer non-empty lines (header and separator)
+	return len(nonEmptyLines) <= 2
 }
 
 // CheckComponentExists checks if a component exists in the Atmos configuration.
