@@ -68,7 +68,6 @@
     "terminal": {
       "max_width": 0,
       "pager": false,
-      "colors": false,
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
@@ -78,7 +77,8 @@
         "pager": false,
         "line_numbers": false,
         "wrap": false
-      }
+      },
+      "no_color": false
     },
     "docs": {
       "max_width": 0,

@@ -111,7 +111,6 @@ settings:
     terminal:
         max_width: 120
         pager: true
-        colors: true
         unicode: true
         syntax_highlighting:
             enabled: true
@@ -121,6 +120,7 @@ settings:
             pager: false
             line_numbers: true
             wrap: false
+        no_color: false
     markdown:
         document:
             color: ${colors.text}
