@@ -167,7 +167,7 @@ jobs:
           config: |-
             charmbracelet/vhs:
               tag: latest
-              binaries-location: "*/vhs"
+              binaries-location: "**/vhs"
             Crosse/font-install: latest
             cloudposse/atmos:
               tag: ${{ needs.prepare.outputs.version }}
