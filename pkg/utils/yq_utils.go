@@ -31,14 +31,21 @@ func (n logBackend) IsEnabledFor(level logging.Level, s string) bool {
 	return false
 }
 
-func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
-	// Use the `yqlib` default (chatty) logger only when Atmos Logs Level is set to `Trace`
-	// Otherwise, use the no-op logging backend
-	if atmosConfig.Logs.Level != LogLevelTrace {
+// configureYqLogger configures the yq logger based on Atmos configuration.
+// If atmosConfig is nil or log level is not Trace, use a no-op logging backend.
+func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
+	// Only use the default (chatty) logger when atmosConfig is not nil and log level is Trace
+	// In all other cases, use the no-op logging backend
+	if atmosConfig == nil || atmosConfig.Logs.Level != LogLevelTrace {
 		logger := yqlib.GetLogger()
 		backend := logBackend{}
 		logger.SetBackend(backend)
 	}
+}
+
+func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
+	// Configure the yq logger based on Atmos configuration
+	configureYqLogger(atmosConfig)
 
 	evaluator := yqlib.NewStringEvaluator()
 

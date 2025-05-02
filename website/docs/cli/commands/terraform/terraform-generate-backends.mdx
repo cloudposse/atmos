@@ -49,13 +49,37 @@ atmos terraform generate backends --format backend-config --file-template <file_
 
 ## Flags
 
-| Flag              | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Alias | Required |
-|:------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--file-template` | Backend file template (path, file name, and file extension).<br/>Supports absolute and relative paths.<br/>Supports context tokens: `{namespace}`, `{tenant}`, `{environment}`,<br/>`{region}`, `{stage}`, `{base-component}`, `{component}`, `{component-path}`.<br/>All subdirectories in the path will be created automatically.<br/>If the flag is not specified, all backend config files will be written<br/>to the corresponding terraform component folders |       | no       |
-| `--stacks`        | Only process the specified stacks (comma-separated values).<br/>The names of top-level stack manifests and Atmos stack names are supported                                                                                                                                                                                                                                                                                                                          |       | no       |
-| `--components`    | Only generate backend files for the specified Atmos components<br/>(comma-separated values)                                                                                                                                                                                                                                                                                                                                                                         |       | no       |
-| `--format`        | Backend file format: `hcl`, `json`, `backend-config` (`hcl` is default)                                                                                                                                                                                                                                                                                                                                                                                             |       | no       |
-| `--dry-run`       | Dry run                                                                                                                                                                                                                                                                                                                                                                                                                                                             |       | no       |
+<dl>
+    <dt>`--file-template` <em>(optional)</em></dt>
+    <dd>
+        Backend file template (path, file name, and file extension).
+        Supports absolute and relative paths.
+        Supports context tokens: `{namespace}`, `{tenant}`, `{environment}`, `{region}`, `{stage}`, `{base-component}`, `{component}`, `{component-path}`.
+        All subdirectories in the path will be created automatically.
+        If the flag is not specified, all backend config files will be written to the corresponding terraform component folders.
+    </dd>
+
+    <dt>`--stacks` <em>(optional)</em></dt>
+    <dd>
+        Only process the specified stacks (comma-separated values).
+        The names of top-level stack manifests and Atmos stack names are supported.
+    </dd>
+
+    <dt>`--components` <em>(optional)</em></dt>
+    <dd>
+        Only generate backend files for the specified Atmos components (comma-separated values).
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Backend file format: `json`, `hcl`, `backend-config` (`json` is default) .
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Dry run.
+    </dd>
+</dl>
 
 :::info
 

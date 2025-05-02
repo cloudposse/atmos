@@ -9,6 +9,9 @@ import RemoteFile from '@site/src/components/RemoteFile'
 import Intro from '@site/src/components/Intro'
 import Admonition from '@theme/Admonition';
 
+import Step from '@site/src/components/Step'
+import StepNumber from '@site/src/components/StepNumber'
+
 <Intro>
 Keep your infrastructure repositories current with the latest versions of [vendored components](/core-concepts/vendor) using the [Atmos Component Updater GitHub Action](https://github.com/cloudposse/github-action-atmos-component-updater). This powerful action simplifies and accelerates the management of component updates across repositories by using pull requests, ensuring that updates are processed quickly, accurately, and without hassle.
 </Intro>
@@ -40,29 +43,40 @@ Discover more details and a comprehensive list of `inputs` and `outputs` in the 
 This action will automatically open pull requests for updated components in your repository.
 To use it, we recommend installing a GitHub App to allow GitHub Actions to create pull requests within your GitHub Organization.
 
-- [ ] Create and install a GitHub App, following [Using a GitHub App](#using-a-github-app)
-- [ ] Grant GitHub Actions workflows read and write permission
+<Step> 
+  #### <StepNumber/> Create and install a GitHub App
 
-1. Go to `https://github.com/organizations/YOUR_ORG/settings/actions`
+  Follow the [Using a GitHub App](#using-a-github-app) steps below.
+</Step>
+<Step>
+  #### <StepNumber/> Grant GitHub Actions workflows read and write permission
 
-If you're using GitHub Enterprise, update this setting under "enterprises": `https://github.com/enterprises/YOUR_ORG/settings/actions`
+  If you're using GitHub Enterprise, first update this setting under "enterprises". The setting for the Organization will not be available until it's allowed for the Enterprise.
+  `https://github.com/enterprises/YOUR_ORG/settings/actions`
 
-2. Find the section called "Workflow permissions"
-3. Select "Read and write permissions"
+  In either case, then enable the setting for your "organization": 
+  `https://github.com/organizations/YOUR_ORG/settings/actions`
 
-- [ ] Allow GitHub Actions to create and approve pull requests
+  1. Find the section called "Workflow permissions"
+  1. Select "Read and write permissions"
+</Step>
+<Step>
+  #### <StepNumber/> Allow GitHub Actions to create and approve pull requests
 
-1. Go to `https://github.com/organizations/YOUR_ORG/settings/actions`
+  Again, if you're using GitHub Enterprise first update this setting under "enterprises": 
+  `https://github.com/enterprises/YOUR_ORG/settings/actions`
 
-Or if you're using GitHub Enterprise, go to `https://github.com/enterprises/YOUR_ORG/settings/actions`
+  In either case, then enable the setting for your "organization": 
+  `https://github.com/organizations/YOUR_ORG/settings/actions`
 
-2. Check "Allow GitHub Actions to create and approve pull requests"
+  1. Check "Allow GitHub Actions to create and approve pull requests"
 
-:::tip Repository-Level Action Settings
+  :::info Repository-Level Action Settings
 
-Enabling these action settings at an Organization level will enable the same settings for all repositories in your Organization. Confirm the same settings have been enabled for your infrastructure repository and optionally disable these settings for other repositories in your Organization at your own discretion.
+  Enabling these action settings at an Organization level will enable the same settings for all repositories in your Organization. Confirm the same settings have been enabled for your infrastructure repository and optionally disable these settings for other repositories in your Organization at your own discretion.
 
-:::
+  :::
+</Step>
 
 ### Using a GitHub App
 
@@ -168,7 +182,9 @@ If your [`atmos.yaml` file](https://atmos.tools/cli/configuration) is not locate
 ```
 </File>
 
-**IMPORTANT:** The backtick symbols must be escaped in the GitHub Action parameters. This is because GitHub evaluates whatever is in the backticks and it will render as an empty string.
+:::important Escape Backticks
+The backtick symbols must be escaped in the GitHub Action parameters. This is because GitHub evaluates whatever is in the backticks and it will render as an empty string.
+:::
 
 #### For `title` template these placeholders are available:
 - `component_name`

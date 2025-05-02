@@ -29,32 +29,18 @@ func init() {
 	terraformGenerateVarfilesCmd.DisableFlagParsing = false
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("file-template", "",
-		"Varfile template (the file path, file name, and file extension).\n"+
-			"Supports absolute and relative paths.\n"+
-			"Supports context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}.\n"+
-			"atmos terraform generate varfiles --file-template {component-path}/{environment}-{stage}.tfvars.json\n"+
-			"atmos terraform generate varfiles --file-template /configs/{tenant}/{environment}/{stage}/{component}.json\n"+
-			"atmos terraform generate varfiles --file-template /{tenant}/{stage}/{region}/{component}.yaml\n"+
-			"All subdirectories in the path will be created automatically.",
+		"Template for generating backend configuration files, supporting absolute/relative paths and context tokens (e.g., {tenant}, {environment}, {component}). Subdirectories are created automatically. If not specified, files are written to corresponding Terraform component folders.",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("stacks", "",
-		"Only process the specified stacks (comma-separated values).\n"+
-			"atmos terraform generate varfiles --file-template <file_template> --stacks <stack1>,<stack2>\n"+
-			"The filter can contain names of the top-level stack manifests (including subfolder paths), and 'atmos' stack names (derived from the context vars)\n"+
-			"atmos terraform generate varfiles --stacks orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2\n"+
-			"atmos terraform generate varfiles --stacks tenant1-ue2-staging,tenant1-ue2-prod\n"+
-			"atmos terraform generate varfiles --stacks orgs/cp/tenant1/staging/us-east-2,tenant1-ue2-prod",
+		"Only process the specified stacks (comma-separated values), supporting top-level stack manifest paths or derived Atmos stack names",
 	)
 
 	terraformGenerateVarfilesCmd.PersistentFlags().String("components", "",
-		"Generate Terraform '.tfvar' files only for the specified 'atmos' components (use comma-separated values to specify multiple components).\n"+
-			"atmos terraform generate varfiles --file-template <file_template> --components <component1>,<component2>",
+		"Only generate the `.tfvar` files for the specified `atmos` components (use comma-separated values).",
 	)
 
-	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "json", "Output format.\n"+
-		"Supported formats: json, yaml, hcl ('json' is default).\n"+
-		"atmos terraform generate varfiles --file-template <file_template> --format=json|yaml|hcl")
+	terraformGenerateVarfilesCmd.PersistentFlags().String("format", "hcl", "Specify the output format. Supported formats: `hcl`, `json`, `backend-config` (`hcl` is default).")
 
 	err := terraformGenerateVarfilesCmd.MarkPersistentFlagRequired("file-template")
 	if err != nil {

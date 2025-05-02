@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -22,6 +23,9 @@ const (
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
 )
+
+// ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
+var ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
 
 // ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
 func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
@@ -57,8 +61,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
-		processTemplatesAndYamlFunctions := needProcessTemplatesAndYamlFunctions(info.SubCommand)
-		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, processTemplatesAndYamlFunctions, processTemplatesAndYamlFunctions, nil)
+		info, err = ProcessStacks(atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip)
 		if err != nil {
 			return err
 		}
@@ -103,6 +106,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return fmt.Errorf("component '%s' is locked and cannot be modified (metadata.locked = true)",
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Check if trying to use workspace commands with HTTP backend
+	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
+		return ErrHTTPBackendWorkspaces
 	}
 
 	if info.SubCommand == "clean" {
@@ -215,15 +223,46 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Check for any Terraform environment variables that might conflict with Atmos
+	// Check for specific Terraform environment variables that might conflict with Atmos
+	warnOnExactVars := []string{
+		"TF_CLI_ARGS",
+		"TF_WORKSPACE",
+	}
+
+	warnOnPrefixVars := []string{
+		"TF_VAR_",
+		"TF_CLI_ARGS_",
+	}
+
+	var problematicVars []string
+
 	for _, envVar := range os.Environ() {
-		if strings.HasPrefix(envVar, "TF_") {
-			varName := strings.SplitN(envVar, "=", 2)[0]
-			u.LogWarning(fmt.Sprintf("detected '%s' set in the environment; this may interfere with Atmos's control of Terraform.", varName))
+		if parts := strings.SplitN(envVar, "=", 2); len(parts) == 2 {
+			// Check for exact matches
+			if u.SliceContainsString(warnOnExactVars, parts[0]) {
+				problematicVars = append(problematicVars, parts[0])
+			}
+			// Check for prefix matches
+			for _, prefix := range warnOnPrefixVars {
+				if strings.HasPrefix(parts[0], prefix) {
+					problematicVars = append(problematicVars, parts[0])
+					break
+				}
+			}
 		}
 	}
+
+	if len(problematicVars) > 0 {
+		log.Warn("detected environment variables that may interfere with Atmos's control of Terraform",
+			"variables", problematicVars)
+	}
+
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
-	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_BASE_PATH=%s", atmosConfig.BasePath))
+	basePath, err := filepath.Abs(atmosConfig.BasePath)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	// Set `TF_IN_AUTOMATION` ENV var to `true` to suppress verbose instructions after terraform commands
 	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
 	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
@@ -263,6 +302,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		initCommandWithArguments := []string{"init"}
 		if info.SubCommand == "workspace" || atmosConfig.Components.Terraform.InitRunReconfigure {
 			initCommandWithArguments = []string{"init", "-reconfigure"}
+		}
+		// Add `--var-file` if configured in `atmos.yaml
+		// OpenTofu supports passing a varfile to `init` to dynamically configure backends
+		if atmosConfig.Components.Terraform.Init.PassVars {
+			initCommandWithArguments = append(initCommandWithArguments, []string{varFileFlag, varFile}...)
 		}
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
@@ -355,6 +399,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if atmosConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
+		// Add `--var-file` if configured in `atmos.yaml
+		// OpenTofu supports passing a varfile to `init` to dynamically configure backends
+		if atmosConfig.Components.Terraform.Init.PassVars {
+			allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
+		}
 	case "workspace":
 		if info.SubCommand2 == "list" || info.SubCommand2 == "show" {
 			allArgsAndFlags = append(allArgsAndFlags, []string{info.SubCommand2}...)
@@ -376,6 +425,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			// Otherwise, use the planfile name what is autogenerated by Atmos
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
 		}
+	}
+
+	// Handle the plan-diff command
+	if info.SubCommand == "plan-diff" {
+		return TerraformPlanDiff(&atmosConfig, &info)
 	}
 
 	// Run `terraform workspace` before executing other terraform commands

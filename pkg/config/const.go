@@ -1,7 +1,9 @@
 package config
 
 const (
-	CliConfigFileName       = "atmos"
+	CliConfigFileName    = "atmos"
+	DotCliConfigFileName = ".atmos"
+
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
@@ -28,6 +30,7 @@ const (
 	AutoGenerateBackendFileFlag = "--auto-generate-backend-file"
 	AppendUserAgentFlag         = "--append-user-agent"
 	InitRunReconfigure          = "--init-run-reconfigure"
+	InitPassVars                = "--init-pass-vars"
 
 	FromPlanFlag       = "--from-plan"
 	PlanFileFlag       = "--planfile"
@@ -37,6 +40,9 @@ const (
 
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
+
+	TerraformComponentType = "terraform"
+	HelmfileComponentType  = "helmfile"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
@@ -64,11 +70,17 @@ const (
 	GithubSectionName                 = "github"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	CliArgsSectionName                = "cli_args"
+	ComponentTypeSectionName          = "component_type"
+	OutputsSectionName                = "outputs"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
 
 	QueryFlag = "--query"
+
+	ProcessTemplatesFlag = "--process-templates"
+	ProcessFunctionsFlag = "--process-functions"
+	SkipFlag             = "--skip"
 
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
@@ -79,9 +91,5 @@ const (
 	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
 	AtmosProDefaultEndpoint    = "api"
 
-	// Atmos YAML functions
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncEnv             = "!env"
+	TerraformDefaultWorkspace = "default"
 )

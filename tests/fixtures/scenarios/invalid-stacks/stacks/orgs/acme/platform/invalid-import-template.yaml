@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: invalid-import-template
+
+import:
+  - path: catalog/invalid-template
+    context:
+      a: 1

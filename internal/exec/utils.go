@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -50,6 +51,9 @@ var commonFlags = []string{
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
 	cfg.QueryFlag,
+	cfg.ProcessTemplatesFlag,
+	cfg.ProcessFunctionsFlag,
+	cfg.SkipFlag,
 }
 
 // ProcessComponentConfig processes component config sections
@@ -205,6 +209,18 @@ func ProcessCommandLineArgs(
 		return configAndStacksInfo, err
 	}
 
+	configAndStacksInfo.BasePath, err = cmd.Flags().GetString("base-path")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.AtmosConfigFilesFromArg, err = cmd.Flags().GetStringSlice("config")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	configAndStacksInfo.AtmosConfigDirsFromArg, err = cmd.Flags().GetStringSlice("config-path")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
 		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
@@ -216,7 +232,6 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.ComponentType = componentType
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
-	configAndStacksInfo.BasePath = argsAndFlagsInfo.BasePath
 	configAndStacksInfo.TerraformCommand = argsAndFlagsInfo.TerraformCommand
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
@@ -226,6 +241,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.WorkflowsDir = argsAndFlagsInfo.WorkflowsDir
 	configAndStacksInfo.DeployRunInit = argsAndFlagsInfo.DeployRunInit
 	configAndStacksInfo.InitRunReconfigure = argsAndFlagsInfo.InitRunReconfigure
+	configAndStacksInfo.InitPassVars = argsAndFlagsInfo.InitPassVars
 	configAndStacksInfo.AutoGenerateBackendFile = argsAndFlagsInfo.AutoGenerateBackendFile
 	configAndStacksInfo.UseTerraformPlan = argsAndFlagsInfo.UseTerraformPlan
 	configAndStacksInfo.PlanFile = argsAndFlagsInfo.PlanFile
@@ -507,7 +523,8 @@ func ProcessStacks(
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
-			atmosConfig,
+			&atmosConfig,
+			&configAndStacksInfo,
 			settingsSectionStruct,
 			"templates-all-atmos-sections",
 			componentSectionStr,
@@ -639,6 +656,9 @@ func ProcessStacks(
 }
 
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
+//
+// Deprecated: use Cobra command flag parser instead.
+// Post https://github.com/cloudposse/atmos/pull/1174 we can use the API provided by this PR for better handling of flags.
 func processArgsAndFlags(
 	componentType string,
 	inputArgsAndFlags []string,
@@ -840,6 +860,19 @@ func processArgsAndFlags(
 				return info, fmt.Errorf("invalid flag: %s", arg)
 			}
 			info.InitRunReconfigure = initRunReconfigureParts[1]
+		}
+
+		if arg == cfg.InitPassVars {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.InitPassVars = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.InitPassVars) {
+			initPassVarsParts := strings.Split(arg, "=")
+			if len(initPassVarsParts) != 2 {
+				return info, fmt.Errorf("invalid flag: %s", arg)
+			}
+			info.InitPassVars = initPassVarsParts[1]
 		}
 
 		if arg == cfg.JsonSchemaDirFlag {
@@ -1185,7 +1218,7 @@ func getCliVars(args []string) (map[string]any, error) {
 				varName := parts[0]
 				part2 := parts[1]
 				var varValue any
-				if u.IsJSON(part2) {
+				if filetype.IsJSON(part2) {
 					v, err := u.ConvertFromJSON(part2)
 					if err != nil {
 						return nil, err

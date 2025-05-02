@@ -24,6 +24,21 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
+	processTemplates, err := flags.GetBool("process-templates")
+	if err != nil {
+		return err
+	}
+
+	processYamlFunctions, err := flags.GetBool("process-functions")
+	if err != nil {
+		return err
+	}
+
+	skip, err := flags.GetStringSlice("skip")
+	if err != nil {
+		return err
+	}
+
 	component := args[0]
 
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
@@ -40,7 +55,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
 	if err != nil {
 		return err
 	}

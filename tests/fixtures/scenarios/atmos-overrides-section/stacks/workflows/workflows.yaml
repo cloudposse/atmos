@@ -1,0 +1,32 @@
+workflows:
+  describe-all:
+    description: Test 'atmos describe component' in a workflow
+    steps:
+      - command: describe component c1 -s prod
+      - command: describe component c1 -s staging
+      - command: describe component c1 -s dev
+      - command: describe component c1 -s sandbox
+      - command: describe component c1 -s test
+
+  plan-all:
+    description: Test 'atmos terraform plan' in a workflow
+    steps:
+      - command: terraform plan c1 -s prod
+      - command: terraform plan c1 -s staging
+      - command: terraform plan c1 -s dev
+      - command: terraform plan c1 -s sandbox
+      - command: terraform plan c1 -s test
+
+  show-all-describe-component-commands:
+    description: Show all `atmos describe component' commands in a workflow
+    steps:
+      - command: echo atmos describe component c1 -s prod
+        type: shell
+      - command: echo atmos describe component c1 -s staging
+        type: shell
+      - command: echo atmos describe component c1 -s dev
+        type: shell
+      - command: echo atmos describe component c1 -s sandbox
+        type: shell
+      - command: echo atmos describe component c1 -s test
+        type: shell

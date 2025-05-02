@@ -255,10 +255,10 @@ For this to work for both the `atmos` CLI and the Terraform `utils` provider, we
   set `ATMOS_CLI_CONFIG_PATH=/atmos/config`. Then set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the root of the repo
 
 - When working in a Docker container, place `atmos.yaml` in the `rootfs` directory
-  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml)
-  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/master/examples/quick-start-advanced/Dockerfile)
+  at [/rootfs/usr/local/etc/atmos/atmos.yaml](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml)
+  and then copy it into the container's file system in the [Dockerfile](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/Dockerfile)
   by executing the `COPY rootfs/ /` Docker command. Then in the Dockerfile, set the ENV var `ATMOS_BASE_PATH` pointing to the absolute path of the
-  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/master/examples/quick-start)
+  root of the repo. Note that the [Atmos example](https://github.com/cloudposse/atmos/blob/main/examples/quick-start)
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
   var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
 

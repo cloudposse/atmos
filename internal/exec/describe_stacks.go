@@ -347,6 +347,7 @@ func ExecuteDescribeStacks(
 							}
 
 							// Atmos component, stack, and stack manifest file
+							configAndStacksInfo.Stack = stackName
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
 							componentSection["stack"] = stackName
@@ -375,7 +376,8 @@ func ExecuteDescribeStacks(
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
-									atmosConfig,
+									&atmosConfig,
+									&configAndStacksInfo,
 									settingsSectionStruct,
 									"describe-stacks-all-sections",
 									componentSectionStr,
@@ -538,6 +540,7 @@ func ExecuteDescribeStacks(
 							finalStacksMap[stackName] = make(map[string]any)
 						}
 
+						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 						configAndStacksInfo.ComponentSection["stack"] = stackName
@@ -576,7 +579,8 @@ func ExecuteDescribeStacks(
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
-									atmosConfig,
+									&atmosConfig,
+									&configAndStacksInfo,
 									settingsSectionStruct,
 									"templates-describe-stacks-all-atmos-sections",
 									componentSectionStr,

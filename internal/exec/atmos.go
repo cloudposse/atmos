@@ -147,6 +147,8 @@ func ExecuteAtmosCmd() error {
 		configAndStacksInfo.ComponentFromArg = selectedComponent
 		configAndStacksInfo.Stack = selectedStack
 		configAndStacksInfo.SubCommand = subcommand
+		configAndStacksInfo.ProcessTemplates = true
+		configAndStacksInfo.ProcessFunctions = true
 		err = ExecuteTerraform(configAndStacksInfo)
 		if err != nil {
 			return err

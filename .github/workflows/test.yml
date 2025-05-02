@@ -83,7 +83,7 @@ jobs:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
           - { os: macos-latest, target: macos }
-    timeout-minutes: 15
+    timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
     steps:
       - name: Check out code into the Go module directory
@@ -154,13 +154,24 @@ jobs:
       #       }
 
       - name: Acceptance tests
-        timeout-minutes: 10
+        timeout-minutes: 30
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make testacc
+        run: make testacc-cover
+
+      - name: Upload coverage report to Codecov
+        if: matrix.flavor.target == 'linux'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: coverage.out
+          fail_ci_if_error: true
+          flags: unittests
+          verbose: true
 
   docker:
-    name: "Docker Lint"
+    name: "[lint] Dockerfile"
     needs: build
     runs-on: ubuntu-latest
     steps:

@@ -46,13 +46,14 @@ var (
 var logger *log.Logger
 
 type Expectation struct {
-	Stdout       []MatchPattern            `yaml:"stdout"`        // Expected stdout output
-	Stderr       []MatchPattern            `yaml:"stderr"`        // Expected stderr output
-	ExitCode     int                       `yaml:"exit_code"`     // Expected exit code
-	FileExists   []string                  `yaml:"file_exists"`   // Files to validate
-	FileContains map[string][]MatchPattern `yaml:"file_contains"` // File contents to validate (file to patterns map)
-	Diff         []string                  `yaml:"diff"`          // Acceptable differences in snapshot
-	Timeout      string                    `yaml:"timeout"`       // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
+	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output
+	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output
+	ExitCode      int                       `yaml:"exit_code"`       // Expected exit code
+	FileExists    []string                  `yaml:"file_exists"`     // Files to validate
+	FileNotExists []string                  `yaml:"file_not_exists"` // Files that should not exist
+	FileContains  map[string][]MatchPattern `yaml:"file_contains"`   // File contents to validate (file to patterns map)
+	Diff          []string                  `yaml:"diff"`            // Acceptable differences in snapshot
+	Timeout       string                    `yaml:"timeout"`         // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
 }
 type TestCase struct {
 	Name        string            `yaml:"name"`        // Name of the test
@@ -248,7 +249,24 @@ func isCIEnvironment() bool {
 
 // collapseExtraSlashes replaces multiple consecutive slashes with a single slash.
 func collapseExtraSlashes(s string) string {
-	return regexp.MustCompile("/+").ReplaceAllString(s, "/")
+	// Normalize the protocol to have exactly two slashes after http: or https:
+	protocolRegex := regexp.MustCompile(`(?i)(https?):/*`)
+	s = protocolRegex.ReplaceAllString(s, "$1://")
+
+	// Split into protocol and the rest of the URL
+	parts := regexp.MustCompile(`(?i)^(https?://)(.*)$`).FindStringSubmatch(s)
+	if len(parts) == 3 {
+		protocol := parts[1]
+		rest := parts[2]
+		// Collapse multiple slashes in the rest part
+		rest = regexp.MustCompile(`/+`).ReplaceAllString(rest, "/")
+		// Remove any leading slashes after the protocol to avoid triple slashes
+		rest = strings.TrimLeft(rest, "/")
+		return protocol + rest
+	}
+
+	// If no protocol, collapse all slashes
+	return regexp.MustCompile(`/+`).ReplaceAllString(s, "/")
 }
 
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
@@ -311,6 +329,15 @@ func sanitizeOutput(output string) (string, error) {
 		fixedRemainder := collapseExtraSlashes(groups[2])
 		return groups[1] + fixedRemainder
 	})
+
+	// 6. Handle URLs in the output to ensure they are normalized.
+	//    Use a regex to find URLs and collapse extra slashes while preserving the protocol.
+	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
+	result = urlRegex.ReplaceAllStringFunc(result, collapseExtraSlashes)
+
+	// 7. Remove the random number added to file name like `atmos-import-454656846`
+	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
+	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
 	return result, nil
 }
@@ -517,7 +544,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
 		tc.Env["XDG_CACHE_HOME"] = filepath.Join(tempDir, ".cache")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
-
 		// Copy some files to the temporary HOME directory
 		originalHome := os.Getenv("HOME")
 		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
@@ -560,13 +586,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Fatalf("Binary not found: %s. Current PATH: %s", tc.Command, os.Getenv("PATH"))
 	}
 
+	// Include the system PATH in the test environment
+	tc.Env["PATH"] = os.Getenv("PATH")
+
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
-	// Set environment variables
-	envVars := os.Environ()
+	// Set environment variables without inheriting from the current environment.
+	// This ensures an isolated test environment, preventing unintended side effects
+	// and improving reproducibility across different systems.
+	var envVars []string
 	for key, value := range tc.Env {
-		// t.Logf("Setting env: %s=%s", key, value)
 		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
 	}
 	cmd.Env = envVars
@@ -655,6 +685,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Validate file existence
 	if !verifyFileExists(t, tc.Expect.FileExists) {
+		t.Errorf("Description: %s", tc.Description)
+	}
+
+	// Validate file not existence
+	if !verifyFileNotExists(t, tc.Expect.FileNotExists) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
@@ -760,6 +795,20 @@ func verifyFileExists(t *testing.T, files []string) bool {
 	for _, file := range files {
 		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Reason: Expected file does not exist: %q", file)
+			success = false
+		}
+	}
+	return success
+}
+
+func verifyFileNotExists(t *testing.T, files []string) bool {
+	success := true
+	for _, file := range files {
+		if _, err := os.Stat(file); err == nil {
+			t.Errorf("Reason: File %q exists but it should not.", file)
+			success = false
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("Reason: Unexpected error checking file %q: %v", file, err)
 			success = false
 		}
 	}

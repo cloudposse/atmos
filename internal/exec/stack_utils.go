@@ -12,6 +12,13 @@ import (
 
 // BuildTerraformWorkspace builds Terraform workspace
 func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+	// Return 'default' workspace if workspaces are disabled
+	// Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,
+	// preventing switching or creating additional workspaces.
+	if !isWorkspacesEnabled(&atmosConfig, &configAndStacksInfo) {
+		return cfg.TerraformDefaultWorkspace, nil
+	}
+
 	var contextPrefix string
 	var err error
 	var tmpl string
@@ -141,7 +148,6 @@ func BuildDependentStackNameFromDependsOn(
 	dependsOnStackName string,
 	allStackNames []string,
 ) (string, error) {
-
 	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
 
 	if u.SliceContainsString(allStackNames, dep) {
@@ -165,7 +171,6 @@ func BuildComponentPath(
 	componentSectionMap map[string]any,
 	componentType string,
 ) string {
-
 	var componentPath string
 
 	if stackComponentSection, ok := componentSectionMap[cfg.ComponentSectionName].(string); ok {

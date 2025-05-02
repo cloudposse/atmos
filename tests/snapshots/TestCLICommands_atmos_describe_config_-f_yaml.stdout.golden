@@ -10,6 +10,8 @@ components:
         command: ""
         shell:
             prompt: ""
+        init:
+            pass_vars: false
     helmfile:
         base_path: ""
         use_eks: true
@@ -43,5 +45,6 @@ default: false
 validate:
     editorconfig:
         color: true
-cli_config_path: /absolute/path/to/repo/examples/demo-stacks/atmos
+cli_config_path: /absolute/path/to/repo/examples/demo-stacks
+import: []
 

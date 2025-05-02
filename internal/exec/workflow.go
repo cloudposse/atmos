@@ -123,9 +123,9 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			validWorkflows = append(validWorkflows, fmt.Sprintf("\n- %s", w))
 		}
 		// sorting so that the output is deterministic
-		sort.Sort(sort.StringSlice(validWorkflows))
+		sort.Strings(validWorkflows)
 		errorMarkdown += strings.Join(validWorkflows, "")
-		return fmt.Errorf(errorMarkdown)
+		return fmt.Errorf("%s", errorMarkdown)
 	} else {
 		workflowDefinition = i
 	}

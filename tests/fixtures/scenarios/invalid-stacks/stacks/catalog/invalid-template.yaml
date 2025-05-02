@@ -1,0 +1,5 @@
+components:
+  terraform:
+    mock:
+      vars:
+        foo: {{ .not-exist }}
