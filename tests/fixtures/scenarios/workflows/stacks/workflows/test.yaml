@@ -4,7 +4,6 @@ workflows:
       Run a command that will pass.
     steps:
       - command: terraform deploy mock -s nonprod
-      - command: terraform clean mock -s nonprod --force
 
   fail:
     description: |

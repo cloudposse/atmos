@@ -41,5 +41,3 @@ Outputs:
 [0mbar = "bar nonprod override"
 baz = "baz catalog default"
 foo = "foo nonprod override"
-✓ Deleted workflows/../../components/terraform/mock/.terraform/
-✓ Deleted workflows/../../components/terraform/mock/terraform.tfstate.d/nonprod/terraform.tfstate
