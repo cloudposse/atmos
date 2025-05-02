@@ -94,8 +94,8 @@ jobs:
     #  - runs-on=${{ github.run_id }}
     #  - runner=large
 
-    # Longer timeouts typically indicate VHS has hung
-    timeout-minutes: 20
+    # If VHS takes longer than 20 minutes, it indicate typically that VHS has hung
+    timeout-minutes: 60
     environment: demo
     env:
       AWS_REGION: us-east-2
