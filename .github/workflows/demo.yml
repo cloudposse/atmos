@@ -184,6 +184,15 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
+      - name: Install Atmos
+        uses: jaxxstorm/action-install-gh-release@v1.11.0
+        with:
+          repo: cloudposse/atmos
+          tag: ${{ needs.prepare.outputs.version }}
+          chmod: 0755
+          extension-matching: disable
+          rename-to: atmos
+
       - name: Test Atmos
         run: |
           which atmos
