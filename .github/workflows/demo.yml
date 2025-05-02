@@ -161,14 +161,18 @@ jobs:
         with:
           swap-size-gb: 15
 
-      - name: Install Atmos
-        uses: jaxxstorm/action-install-gh-release@v1.11.0
+      - name: Install all required binaries
+        uses: cloudposse-github-actions/install-gh-releases@v1.4.1
         with:
-          repo: cloudposse/atmos
-          tag: ${{ needs.prepare.outputs.version }}
-          chmod: 0755
-          extension-matching: disable
-          rename-to: atmos
+          config: |-
+            tsl0922/ttyd: latest
+            charmbracelet/vhs: latest
+            Crosse/font-install: latest
+            cloudposse/atmos:
+              tag: ${{ needs.prepare.outputs.version }}
+              chmod: 0755
+              extension-matching: false
+              rename-to: atmos
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -195,47 +199,30 @@ jobs:
       #    token: ${{ secrets.GITHUB_TOKEN }}
       #    install-fonts: true
 
-      - name: Install ttyd
-        uses: cloudposse/github-action-install-release@v1
-        with:
-          repo: tsl0922/ttyd
-
-      - name: Install vhs
-        uses: cloudposse/github-action-install-release@v1
-        with:
-          repo: charmbracelet/vhs
-
       - name: Set up FFmpeg (Latest release)
         uses: FedericoCarboni/setup-ffmpeg@v3.1
         with:
           ffmpeg-version: "7.1"
           github-token: ${{ secrets.GITHUB_TOKEN }} # Optional: helps prevent rate limit errors
 
-      - uses: actions/setup-go@v4
-        with:
-          go-version: 1.21
-
-      - name: Install font-install
-        run: go install github.com/Crosse/font-install@latest
-
       - name: Install Nerd Fonts & Google Fonts
         run: |
-          ~/.go/bin/font-install nerd-font JetBrainsMono \
-                                  nerd-font BitstreamVeraSansMono \
-                                  nerd-font DejaVuSansMono \
-                                  nerd-font FiraCode \
-                                  nerd-font Hack \
-                                  nerd-font IBMPlexMono \
-                                  nerd-font Inconsolata \
-                                  nerd-font InconsolataGo \
-                                  nerd-font LiberationMono \
-                                  nerd-font SourceCodePro \
-                                  nerd-font UbuntuMono \
-                                  google-font "Source Code Pro" \
-                                  google-font Inconsolata \
-                                  google-font "Noto Sans Mono" \
-                                  google-font "Roboto Mono" \
-                                  google-font "Ubuntu Mono"
+          font-install nerd-font JetBrainsMono \
+                       nerd-font BitstreamVeraSansMono \
+                       nerd-font DejaVuSansMono \
+                       nerd-font FiraCode \
+                       nerd-font Hack \
+                       nerd-font IBMPlexMono \
+                       nerd-font Inconsolata \
+                       nerd-font InconsolataGo \
+                       nerd-font LiberationMono \
+                       nerd-font SourceCodePro \
+                       nerd-font UbuntuMono \
+                       google-font "Source Code Pro" \
+                       google-font Inconsolata \
+                       google-font "Noto Sans Mono" \
+                       google-font "Roboto Mono" \
+                       google-font "Ubuntu Mono"
 
       - name: Record screencast
         working-directory: demo/recordings
