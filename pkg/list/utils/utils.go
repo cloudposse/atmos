@@ -49,15 +49,16 @@ func CheckComponentExists(atmosConfig *schema.AtmosConfiguration, componentName 
 			continue
 		}
 
-		terraformComponents, ok := componentsMap["terraform"].(map[string]interface{})
-		if !ok {
-			continue
-		}
+		for _, componentTypeMap := range componentsMap {
+			typedComponents, ok := componentTypeMap.(map[string]interface{})
+			if !ok {
+				continue
+			}
 
-		// Check if the component exists in this stack
-		_, exists := terraformComponents[componentName]
-		if exists {
-			return true
+			_, exists := typedComponents[componentName]
+			if exists {
+				return true
+			}
 		}
 	}
 
