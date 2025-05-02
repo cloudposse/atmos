@@ -30,6 +30,27 @@ tests:
       diff: []
       stderr:
         - "Step 'step2' failed:"
-        - "terraform deploy mock -s idontexist"
+        - "atmos terraform deploy mock -s idontexist"
         - "atmos workflow fail -f test --from-step step2"
+      exit_code: 1
+
+  - name: atmos workflow failure on shell command
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns command on failure"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-failure"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Step 'step1' failed:"
+        - "echo \"This should fail\""
+        - "exit 1"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow shell-failure -f test --from-step step1"
       exit_code: 1

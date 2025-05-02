@@ -117,7 +117,11 @@ func ExecuteWorkflow(
 				"error", err,
 			)
 
-			failedMsg := fmt.Sprintf("\nStep '%s' failed:\n%s\n\n", step.Name, command)
+			failedMsg := fmt.Sprintf("\nStep '%s' failed:\n", step.Name)
+			failedCmd := command
+			if commandType == "atmos" {
+				failedCmd = fmt.Sprintf("atmos %s", command)
+			}
 
 			workflowFileName := filepath.Base(workflowPath)
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
@@ -129,7 +133,7 @@ func ExecuteWorkflow(
 				step.Name,
 			)
 
-			return fmt.Errorf("%s\n%s", failedMsg, resumeMsg)
+			return fmt.Errorf("%s\n%s\n%s", failedMsg, failedCmd, resumeMsg)
 		}
 	}
 
