@@ -11,8 +11,8 @@ Show
 Type "# Then we can learn about the VPC component" Sleep 500ms Enter
 Type "atmos docs vpc" Sleep 500ms Enter
 Sleep 1s
-Down 25 Sleep 500ms
-Down 50 Sleep 500ms
-Down 75 Sleep 500ms
+#Down 25 Sleep 500ms
+#Down 50 Sleep 500ms
+#Down 75 Sleep 500ms
 Sleep 2s
 Type "q" Sleep 500ms Enter
