@@ -1,0 +1,35 @@
+tests:
+  - name: atmos workflow success
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow passes"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pass"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stdout: []
+      exit_code: 0
+
+  - name: atmos workflow failure
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns command on failure"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "fail"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Step 'step2' failed:"
+        - "terraform deploy mock -s idontexist"
+        - "atmos workflow fail -f test --from-step step2"
+      exit_code: 1
