@@ -165,7 +165,9 @@ jobs:
         uses: cloudposse-github-actions/install-gh-releases@v1.4.1
         with:
           config: |-
-            charmbracelet/vhs: latest
+            charmbracelet/vhs:
+              tag: latest
+              binaries-location: "*/vhs"
             Crosse/font-install: latest
             cloudposse/atmos:
               tag: ${{ needs.prepare.outputs.version }}
