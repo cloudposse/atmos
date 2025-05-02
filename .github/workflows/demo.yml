@@ -175,15 +175,6 @@ jobs:
           extension-matching: disable
           rename-to: atmos
 
-      - name: Install VHS
-        uses: jaxxstorm/action-install-gh-release@v1.11.0
-        with:
-          repo: charmbracelet/vhs
-          tag: v2.1.0
-          chmod: 0755
-          extension-matching: disable
-          rename-to: vhs
-
       - name: Install TTYD
         uses: jaxxstorm/action-install-gh-release@v1.11.0
         with:
@@ -192,6 +183,15 @@ jobs:
           chmod: 0755
           extension-matching: disable
           rename-to: ttyd
+
+      - name: Install VHS
+        uses: jaxxstorm/action-install-gh-release@v1.11.0
+        with:
+          repo: charmbracelet/vhs
+          tag: v0.9.0
+          chmod: 0755
+          extension-matching: disable
+          rename-to: vhs
 
       - name: Test Atmos
         run: |
