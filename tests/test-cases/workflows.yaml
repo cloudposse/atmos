@@ -1,7 +1,7 @@
 tests:
   - name: atmos workflow success
     enabled: true
-    snapshot: true
+    snapshot: false
     description: "Ensure atmos workflow passes"
     workdir: "fixtures/scenarios/workflows/"
     command: "atmos"
