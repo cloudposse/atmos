@@ -29,7 +29,7 @@ tests:
       diff: []
       stderr:
         - "Step 'step1' failed:"
-        - "atmos terraform deploy mock -s idontexist"
+        - "atmos terraform plan mock -s idontexist"
         - "atmos workflow fail -f test --from-step step1"
       exit_code: 1
 

@@ -3,13 +3,13 @@ workflows:
     description: |
       Run a command that will pass.
     steps:
-      - command: terraform deploy mock -s nonprod
+      - command: terraform plan mock -s nonprod
 
   fail:
     description: |
       Run a command that will fail.
     steps:
-      - command: terraform deploy mock -s idontexist
+      - command: terraform plan mock -s idontexist
 
   shell-failure:
     description: |
