@@ -4,12 +4,24 @@
 [0m[1mInitializing provider plugins...[0m
 
 [0m[1m[32mTerraform has been successfully initialized![0m[32m[0m
-[0m[32mSwitched to workspace "nonprod".[0m
+[31m
+Workspace "nonprod" doesn't exist.
 
-[0m[1m[32mNo changes.[0m[1m Your infrastructure matches the configuration.[0m
+You can create this workspace with the "new" subcommand 
+or include the "-or-create" flag with the "select" subcommand.[0m[0m
+[0m[32m[1mCreated and switched to workspace "nonprod"![0m[32m
 
-[0mTerraform has compared your real infrastructure against your configuration
-and found no differences, so no changes are needed.
+You're now on a new, empty workspace. Workspaces isolate their state,
+so if you run "terraform plan" Terraform will not see any existing state
+for this configuration.[0m
+
+Changes to Outputs:
+  [32m+[0m[0m bar = "bar nonprod override"
+  [32m+[0m[0m baz = "baz catalog default"
+  [32m+[0m[0m foo = "foo nonprod override"
+
+You can apply this plan to save these new output values to the Terraform
+state, without changing any real infrastructure.
 [33m╷[0m[0m
 [33m│[0m [0m[1m[33mWarning: [0m[0m[1mValue for undeclared variable[0m
 [33m│[0m [0m
@@ -35,12 +47,24 @@ foo = "foo nonprod override"
 [0m[1mInitializing provider plugins...[0m
 
 [0m[1m[32mTerraform has been successfully initialized![0m[32m[0m
-[0m[32mSwitched to workspace "prod".[0m
+[31m
+Workspace "prod" doesn't exist.
 
-[0m[1m[32mNo changes.[0m[1m Your infrastructure matches the configuration.[0m
+You can create this workspace with the "new" subcommand 
+or include the "-or-create" flag with the "select" subcommand.[0m[0m
+[0m[32m[1mCreated and switched to workspace "prod"![0m[32m
 
-[0mTerraform has compared your real infrastructure against your configuration
-and found no differences, so no changes are needed.
+You're now on a new, empty workspace. Workspaces isolate their state,
+so if you run "terraform plan" Terraform will not see any existing state
+for this configuration.[0m
+
+Changes to Outputs:
+  [32m+[0m[0m bar = "bar prod override"
+  [32m+[0m[0m baz = "baz catalog default"
+  [32m+[0m[0m foo = "foo prod override"
+
+You can apply this plan to save these new output values to the Terraform
+state, without changing any real infrastructure.
 [33m╷[0m[0m
 [33m│[0m [0m[1m[33mWarning: [0m[0m[1mValue for undeclared variable[0m
 [33m│[0m [0m
