@@ -169,6 +169,8 @@ jobs:
               tag: latest
               extension: "\\.x86_64$"
               extension-matching: true
+              platform: ""
+              arch: ""
             charmbracelet/vhs: latest
             Crosse/font-install: latest
             cloudposse/atmos:
