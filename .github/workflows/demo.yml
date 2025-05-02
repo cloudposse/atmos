@@ -161,14 +161,11 @@ jobs:
         with:
           swap-size-gb: 15
 
-      - name: Set up aqua
+      - name: Install tools with aqua
         uses: aquaproj/aqua-installer@3.1.2
         with:
           aqua_version: v2.50.0
-
-      - name: Install tools with aqua
-        working-directory: demo/recordings
-        run: aqua install
+          working_directory: demo/recordings
 
       - uses: hashicorp/setup-terraform@v3
         with:
