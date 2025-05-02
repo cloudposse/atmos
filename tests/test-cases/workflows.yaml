@@ -28,9 +28,9 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Step 'step2' failed:"
+        - "Step 'step1' failed:"
         - "atmos terraform deploy mock -s idontexist"
-        - "atmos workflow fail -f test --from-step step2"
+        - "atmos workflow fail -f test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow failure on shell command
