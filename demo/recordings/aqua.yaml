@@ -1,6 +1,0 @@
-registries:
-  - type: standard
-
-packages:
-  - name: charmbracelet/vhs@v0.9.0
-  - name: tsl0922/ttyd@1.7.7
