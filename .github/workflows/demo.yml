@@ -172,13 +172,9 @@ jobs:
           swap-size-gb: 15
 
       - name: Set up aqua
-        uses: aquaproj/aqua-installer@v3
+        uses: aquaproj/aqua-installer@5e54e5cee8a95ee2ce7c04cb993da6dfad13e59c # v3.1.2
         with:
           aqua_version: v2.43.0
-
-      - name: Set Atmos version in aqua.yaml
-        run: |
-          sed -i "s|cloudposse/atmos@.*|cloudposse/atmos@${{ needs.prepare.outputs.version }}|" aqua.yaml
 
       - name: Install tools with aqua
         run: aqua install
