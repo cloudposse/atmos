@@ -60,47 +60,6 @@ func TestIsNoValuesFoundError(t *testing.T) {
 	}
 }
 
-func TestIsEmptyTable(t *testing.T) {
-	tests := []struct {
-		name     string
-		output   string
-		expected bool
-	}{
-		{
-			name:     "Test with empty string",
-			output:   "",
-			expected: true,
-		},
-		{
-			name:     "Test with header only (3 lines)",
-			output:   "HEADER1 | HEADER2\n------- | -------\n",
-			expected: true, // 3 lines <= 4
-		},
-		{
-			name:     "Test with header and separator (4 lines)",
-			output:   "HEADER1 | HEADER2\n------- | -------\n\n",
-			expected: true, // 4 lines <= 4
-		},
-		{
-			name:     "Test with header, separator, and one row (5 lines)",
-			output:   "HEADER1 | HEADER2\n------- | -------\nValue1  | Value2\n\n",
-			expected: false, // 5 lines > 4
-		},
-		{
-			name:     "Test with typical non-empty table output",
-			output:   "Component | Stack | Status\n--------- | ----- | ------\ncomp1     | dev   | OK\ncomp2     | prod  | OK\n",
-			expected: false, // 5 lines > 4
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			actual := utils.IsEmptyTable(tt.output)
-			assert.Equal(t, tt.expected, actual)
-		})
-	}
-}
-
 // TestCheckComponentExists focuses on the logic *within* CheckComponentExists,
 // specifically the processing of the map structure returned by ExecuteDescribeStacks.
 // It does not test the ExecuteDescribeStacks call itself or its error handling.

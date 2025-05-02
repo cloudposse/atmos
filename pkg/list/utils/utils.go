@@ -14,26 +14,6 @@ func IsNoValuesFoundError(err error) bool {
 	return ok
 }
 
-// IsEmptyTable checks if the output is an empty table (only contains headers and formatting).
-func IsEmptyTable(output string) bool {
-	if output == "" {
-		return true
-	}
-
-	lines := strings.Split(output, "\n")
-
-	// Remove empty lines
-	var nonEmptyLines []string
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			nonEmptyLines = append(nonEmptyLines, line)
-		}
-	}
-
-	// A table is empty if it has 2 or fewer non-empty lines (header and separator)
-	return len(nonEmptyLines) <= 2
-}
-
 // CheckComponentExists checks if a component exists in the Atmos configuration.
 // It returns true if the component exists, false otherwise.
 func CheckComponentExists(atmosConfig *schema.AtmosConfiguration, componentName string) bool {
