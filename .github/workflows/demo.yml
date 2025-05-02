@@ -165,7 +165,10 @@ jobs:
         uses: cloudposse-github-actions/install-gh-releases@v1.4.1
         with:
           config: |-
-            tsl0922/ttyd: latest
+            tsl0922/ttyd:
+              tag: latest
+              extension: "\\.x86_64$"
+              extension-matching: true
             charmbracelet/vhs: latest
             Crosse/font-install: latest
             cloudposse/atmos:
