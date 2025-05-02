@@ -1,4 +1,4 @@
-package cmd
+package tests
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cloudposse/atmos/cmd"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,9 +15,13 @@ func TestSupportCmd(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-
+	oldArgs := os.Args
+	defer func() {
+		os.Args = oldArgs
+	}()
 	// Execute the command
-	err := supportCmd.RunE(supportCmd, []string{})
+	os.Args = []string{"atmos", "support"}
+	err := cmd.Execute()
 	assert.NoError(t, err, "'atmos support' command should execute without error")
 
 	// Close the writer and restore stdout
