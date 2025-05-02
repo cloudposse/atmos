@@ -216,7 +216,7 @@ jobs:
       - name: Set up FFmpeg (Latest release)
         uses: FedericoCarboni/setup-ffmpeg@v3.1
         with:
-          ffmpeg-version: "7.1"
+          ffmpeg-version: "release"
           github-token: ${{ secrets.GITHUB_TOKEN }} # Optional: helps prevent rate limit errors
 
       - name: Install Nerd Fonts & Google Fonts
