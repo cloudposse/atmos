@@ -235,8 +235,10 @@ jobs:
           echo "PATH=$PATH" > /tmp/path.sh
           ffmpeg -version
           go run studio.go build
-          cp demo/recordings/gif/atmos.gif docs/demo.gif
-          git add docs/demo.gif
+          ls -al demo/recordings/gif
+          ls -al demo/recordings/mp4
+          #cp demo/recordings/gif/atmos.gif docs/demo.gif
+          #git add docs/demo.gif
 
       - name: Upload Assets to S3 (atmos.tools)
         run: |
