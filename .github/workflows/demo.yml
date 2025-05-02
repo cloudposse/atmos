@@ -175,16 +175,6 @@ jobs:
           extension-matching: disable
           rename-to: atmos
 
-      - name: Install TTYD
-        uses: jaxxstorm/action-install-gh-release@v2.1.0
-        with:
-          repo: tsl0922/ttyd
-          tag: 1.7.7
-          chmod: 0755
-          asset-name: ttyd.x86_64
-          extension-matching: disable
-          rename-to: ttyd
-
       - name: Install VHS
         uses: jaxxstorm/action-install-gh-release@v2.1.0
         with:
