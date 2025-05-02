@@ -13,3 +13,12 @@ workflows:
       - command: terraform deploy mock -s nonprod    # 1. This should pass
       - command: terraform deploy mock -s idontexist # 2. This should fail
       - command: terraform deploy mock -s prod       # 3. This should not run
+
+  shell-failure:
+    description: |
+      Run a shell command that will fail.
+    steps:
+      - command: |
+          echo "This should fail"
+          exit 1
+        type: shell
