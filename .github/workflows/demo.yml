@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y aha util-linux make jq bat
+          sudo apt-get install -y aha util-linux make jq bat ttyd
           sudo ln -s /usr/bin/batcat /usr/bin/bat
 
       - name: Set Git Preferences for windows
@@ -165,12 +165,6 @@ jobs:
         uses: cloudposse-github-actions/install-gh-releases@v1.4.1
         with:
           config: |-
-            tsl0922/ttyd:
-              tag: latest
-              extension: "\\.x86_64$"
-              extension-matching: true
-              platform: ""
-              arch: ""
             charmbracelet/vhs: latest
             Crosse/font-install: latest
             cloudposse/atmos:
