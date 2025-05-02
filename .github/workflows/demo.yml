@@ -44,16 +44,6 @@ jobs:
           sudo apt-get install -y aha util-linux make jq bat ttyd
           sudo ln -s /usr/bin/batcat /usr/bin/bat
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-
-      - name: Add Go bin to PATH
-        run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
-
-      - name: Install font-install
-        run: |
-          go install github.com/Crosse/font-install@latest
-
       - name: Set Git Preferences for windows
         run: |
           git config --global core.autocrlf false
@@ -218,6 +208,16 @@ jobs:
         with:
           ffmpeg-version: "release"
           github-token: ${{ secrets.GITHUB_TOKEN }} # Optional: helps prevent rate limit errors
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+
+      - name: Add Go bin to PATH
+        run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install font-install
+        run: |
+          go install github.com/Crosse/font-install@latest
 
       - name: Install Nerd Fonts & Google Fonts
         run: |
