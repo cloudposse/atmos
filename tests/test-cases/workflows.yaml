@@ -13,6 +13,7 @@ tests:
     expect:
       diff: []
       stdout: []
+      stderr: []
       exit_code: 0
 
   - name: atmos workflow failure
@@ -28,6 +29,7 @@ tests:
       - "test"
     expect:
       diff: []
+      stdout: []
       stderr:
         - "Step 'step2' failed:"
         - "atmos terraform deploy mock -s idontexist"
@@ -47,6 +49,7 @@ tests:
       - "test"
     expect:
       diff: []
+      stdout: []
       stderr:
         - "Step 'step1' failed:"
         - "echo \"This should fail\""
