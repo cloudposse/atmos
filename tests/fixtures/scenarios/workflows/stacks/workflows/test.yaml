@@ -1,0 +1,15 @@
+workflows:
+  pass:
+    description: |
+      Run a command that will pass
+    steps:
+      - command: terraform deploy mock -s nonprod
+      - command: terraform deploy mock -s prod
+
+  fail:
+    description: |
+      Run a command that will pass and then run a command that will fail.
+    steps:
+      - command: terraform deploy mock -s nonprod    # 1. This should pass
+      - command: terraform deploy mock -s idontexist # 2. This should fail
+      - command: terraform deploy mock -s prod       # 3. This should not run
