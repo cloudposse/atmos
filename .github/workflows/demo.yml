@@ -161,19 +161,17 @@ jobs:
         with:
           swap-size-gb: 15
 
-      - name: Install all required binaries
-        uses: cloudposse-github-actions/install-gh-releases@v1.4.1
+      - name: Set up aqua
+        uses: aquaproj/aqua-installer@v3
         with:
-          config: |-
-            charmbracelet/vhs:
-              tag: latest
-              binaries-location: "**/vhs"
-            Crosse/font-install: latest
-            cloudposse/atmos:
-              tag: ${{ needs.prepare.outputs.version }}
-              chmod: 0755
-              extension-matching: false
-              rename-to: atmos
+          aqua_version: v2.43.0
+
+      - name: Set Atmos version in aqua.yaml
+        run: |
+          sed -i "s|cloudposse/atmos@.*|cloudposse/atmos@${{ needs.prepare.outputs.version }}|" aqua.yaml
+
+      - name: Install tools with aqua
+        run: aqua install
 
       - uses: hashicorp/setup-terraform@v3
         with:
