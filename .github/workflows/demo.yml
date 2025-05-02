@@ -227,7 +227,7 @@ jobs:
 
       - name: Install Nerd Fonts & Google Fonts
         run: |
-          font-install -f demo/recordings/fonts.txt
+          font-install -fromFile demo/recordings/fonts.txt
 
       - name: Record screencast
         working-directory: demo/recordings
