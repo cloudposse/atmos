@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y aha util-linux make jq bat ttyd
+          sudo apt-get install -y aha util-linux make jq bat
           sudo ln -s /usr/bin/batcat /usr/bin/bat
 
       - name: Set Git Preferences for windows
@@ -189,6 +189,11 @@ jobs:
           which atmos
           atmos version
           atmos --help
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ttyd
 
       - name: Prepare variables
         id: vars
