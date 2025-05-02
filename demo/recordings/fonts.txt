@@ -1,0 +1,12 @@
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/JetBrainsMono.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/BitstreamVeraSansMono.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/DejaVuSansMono.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/FiraCode.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/Hack.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/IBMPlexMono.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/Inconsolata.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/InconsolataGo.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/LiberationMono.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/SourceCodePro.zip
+https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/UbuntuMono.zip
+https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz
