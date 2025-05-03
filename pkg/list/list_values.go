@@ -16,7 +16,11 @@ import (
 
 // Error variables for list_values package.
 var (
-	ErrInvalidStackPattern = errors.New("invalid stack pattern")
+	ErrInvalidStackPattern          = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound    = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections  = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                  = errors.New("query execution failed")
 )
 
 // Component and section name constants.
@@ -160,15 +164,17 @@ func extractComponentValueFromSingleStack(stackMap map[string]interface{}, stack
 		return nil
 	}
 
-	value, err := executeQueryForStack(
-		stackName,
-		stackMap,
-		component,
-		filter,
-		targetComponentName,
-		componentType,
-		includeAbstract,
-	)
+	params := QueryParams{
+		StackName:           stackName,
+		StackMap:            stackMap,
+		Component:           component,
+		ComponentFilter:     filter,
+		TargetComponentName: targetComponentName,
+		ComponentType:       componentType,
+		IncludeAbstract:     includeAbstract,
+	}
+	
+	value, err := executeQueryForStack(params)
 	if err != nil {
 		log.Warn("Query failed", KeyStack, stackName, "error", err)
 		return nil
@@ -191,38 +197,50 @@ func detectComponentTypeInStack(stackMap map[string]interface{}, targetComponent
 	return detectedType
 }
 
-func executeQueryForStack(
-	stackName string,
-	stackMap map[string]interface{},
-	component, componentFilter, targetComponentName, componentType string,
-	includeAbstract bool,
-) (interface{}, error) {
-	yqExpression := buildYqExpressionForComponent(component, componentFilter, includeAbstract, componentType)
-	queryResult, err := utils.EvaluateYqExpression(nil, stackMap, yqExpression)
+// QueryParams holds all parameters needed for executing a query on a stack.
+type QueryParams struct {
+	StackName           string
+	StackMap            map[string]interface{}
+	Component           string
+	ComponentFilter     string
+	TargetComponentName string
+	ComponentType       string
+	IncludeAbstract     bool
+}
+
+func executeQueryForStack(params QueryParams) (interface{}, error) {
+	yqExpression := buildYqExpressionForComponent(
+		params.Component, 
+		params.ComponentFilter, 
+		params.IncludeAbstract, 
+		params.ComponentType,
+	)
+	
+	queryResult, err := utils.EvaluateYqExpression(nil, params.StackMap, yqExpression)
 	if err != nil {
 		var logKey string
 		var logValue string
-		if targetComponentName != "" {
+		if params.TargetComponentName != "" {
 			logKey = KeyComponent
-			logValue = targetComponentName
+			logValue = params.TargetComponentName
 		} else {
 			logKey = "section"
-			logValue = component
+			logValue = params.Component
 		}
 
 		log.Warn("YQ evaluation failed",
-			KeyStack, stackName,
+			KeyStack, params.StackName,
 			"yqExpression", yqExpression,
 			logKey, logValue,
 			"error", err)
-		return nil, fmt.Errorf("query failed: %w", err)
+		return nil, fmt.Errorf("%w: %s", ErrQueryFailed, err.Error())
 	}
 
 	if queryResult == nil {
 		return nil, nil
 	}
 
-	return extractRelevantDataFromQueryResult(component, queryResult), nil
+	return extractRelevantDataFromQueryResult(params.Component, queryResult), nil
 }
 
 func determineTargetComponentName(component, componentFilter string) string {
@@ -240,12 +258,12 @@ func determineTargetComponentName(component, componentFilter string) string {
 
 func determineComponentType(stack map[string]interface{}, targetComponentName string) (string, error) {
 	if targetComponentName == "" {
-		return "", fmt.Errorf("targetComponentName cannot be empty")
+		return "", ErrEmptyTargetComponentName
 	}
 
 	components, ok := stack[KeyComponents].(map[string]interface{})
 	if !ok {
-		return "", fmt.Errorf("components section not found in stack")
+		return "", ErrComponentsSectionNotFound
 	}
 
 	if isComponentInSection(components, KeyTerraform, targetComponentName) {
@@ -258,7 +276,7 @@ func determineComponentType(stack map[string]interface{}, targetComponentName st
 		return KeyHelmfile, nil
 	}
 
-	return "", fmt.Errorf("component '%s' not found in terraform or helmfile sections", targetComponentName)
+	return "", fmt.Errorf("%w: %s", ErrComponentNotFoundInSections, targetComponentName)
 }
 
 func isComponentInSection(components map[string]interface{}, sectionKey, componentName string) bool {
