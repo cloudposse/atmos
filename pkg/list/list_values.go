@@ -164,7 +164,7 @@ func extractComponentValueFromSingleStack(stackMap map[string]interface{}, stack
 		return nil
 	}
 
-	params := QueryParams{
+	params := &QueryParams{
 		StackName:           stackName,
 		StackMap:            stackMap,
 		Component:           component,
@@ -208,7 +208,7 @@ type QueryParams struct {
 	IncludeAbstract     bool
 }
 
-func executeQueryForStack(params QueryParams) (interface{}, error) {
+func executeQueryForStack(params *QueryParams) (interface{}, error) {
 	yqExpression := buildYqExpressionForComponent(
 		params.Component,
 		params.ComponentFilter,
