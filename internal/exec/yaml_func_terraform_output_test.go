@@ -1,7 +1,6 @@
 package exec
 
 import (
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +10,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestProcessTagTerraformOutput(t *testing.T) {
