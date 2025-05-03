@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
@@ -8,7 +9,6 @@ import (
 	"strings"
 
 	log "github.com/charmbracelet/log"
-	"github.com/pkg/errors"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
