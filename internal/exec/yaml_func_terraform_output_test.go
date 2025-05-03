@@ -1,6 +1,7 @@
 package exec
 
 import (
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,6 +16,8 @@ import (
 func TestProcessTagTerraformOutput(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(os.Stdout)
+
+	stack := "nonprod"
 
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -44,7 +47,7 @@ func TestProcessTagTerraformOutput(t *testing.T) {
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
-		Stack:            "nonprod",
+		Stack:            stack,
 		StackFile:        "",
 		ComponentType:    "terraform",
 		ComponentFromArg: "component-1",
@@ -61,12 +64,27 @@ func TestProcessTagTerraformOutput(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d := processTagTerraformOutput(atmosConfig, "!terraform.output component-1 foo", "nonprod")
+	d := processTagTerraformOutput(atmosConfig, "!terraform.output component-1 foo", stack)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-1 bar", "nonprod")
+	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-1 bar", stack)
 	assert.Equal(t, "component-1-b", d)
 
 	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-1 nonprod baz", "")
 	assert.Equal(t, "component-1-c", d)
+
+	res, err := ExecuteDescribeComponent(
+		"component-2",
+		stack,
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err := u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "foo: component-1-a")
+	assert.Contains(t, y, "bar: component-1-b")
+	assert.Contains(t, y, "baz: component-1-c")
 }
