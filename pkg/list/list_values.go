@@ -169,7 +169,6 @@ func extractComponentValueFromSingleStack(stackMap map[string]interface{}, stack
 		componentType,
 		includeAbstract,
 	)
-
 	if err != nil {
 		log.Warn("Query failed", KeyStack, stackName, "error", err)
 		return nil
@@ -200,7 +199,6 @@ func executeQueryForStack(
 ) (interface{}, error) {
 	yqExpression := buildYqExpressionForComponent(component, componentFilter, includeAbstract, componentType)
 	queryResult, err := utils.EvaluateYqExpression(nil, stackMap, yqExpression)
-
 	if err != nil {
 		var logKey string
 		var logValue string
