@@ -13,7 +13,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func TestProcessTagTerraformOutput(t *testing.T) {
+func TestYamlFuncTerraformOutput(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(os.Stdout)
 
