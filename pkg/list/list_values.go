@@ -307,7 +307,9 @@ func buildSettingsExpression(componentFilter, componentType string) string {
 	if componentFilter != "" {
 		return fmt.Sprintf(".components.%s.\"%s\"", componentType, componentFilter)
 	}
-	return "select(.settings // .terraform.settings // .components.terraform.*.settings)"
+	return "select(.settings // " +
+		".components." + KeyTerraform + ".*.settings // " +
+		".components." + KeyHelmfile + ".*.settings)"
 }
 
 func buildMetadataExpression(componentFilter, componentType string) string {
@@ -316,14 +318,6 @@ func buildMetadataExpression(componentFilter, componentType string) string {
 		return fmt.Sprintf(".components.%s.\"%s\"", componentType, componentFilter)
 	}
 	return DotChar + KeyMetadata
-}
-
-func getComponentNameFromPath(component string) string {
-	parts := strings.Split(component, "/")
-	if len(parts) > 1 {
-		return parts[len(parts)-1]
-	}
-	return component
 }
 
 func buildComponentYqExpression(component string, includeAbstract bool, componentType string) string {
