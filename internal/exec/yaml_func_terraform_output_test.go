@@ -87,4 +87,44 @@ func TestProcessTagTerraformOutput(t *testing.T) {
 	assert.Contains(t, y, "foo: component-1-a")
 	assert.Contains(t, y, "bar: component-1-b")
 	assert.Contains(t, y, "baz: component-1-c")
+
+	info = schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            stack,
+		StackFile:        "",
+		ComponentType:    "terraform",
+		ComponentFromArg: "component-2",
+		SubCommand:       "deploy",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	err = ExecuteTerraform(info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+
+	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-2 foo", stack)
+	assert.Equal(t, "component-1-a", d)
+
+	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-2 nonprod bar", stack)
+	assert.Equal(t, "component-1-b", d)
+
+	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-2 nonprod baz", "")
+	assert.Equal(t, "component-1-c", d)
+
+	res, err = ExecuteDescribeComponent(
+		"component-3",
+		stack,
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "foo: component-1-a")
+	assert.Contains(t, y, "bar: component-1-b")
+	assert.Contains(t, y, "baz: component-1-c")
 }

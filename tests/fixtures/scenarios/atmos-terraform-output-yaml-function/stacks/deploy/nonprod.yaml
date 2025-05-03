@@ -6,6 +6,7 @@ vars:
 components:
   terraform:
     component-1:
+      command: tofu
       metadata:
         component: mock
       settings:
@@ -19,9 +20,19 @@ components:
         baz: "{{ .settings.config.c }}"
 
     component-2:
+      command: tofu
       metadata:
         component: mock
       vars:
         foo: !terraform.output component-1 foo
         bar: !terraform.output component-1 bar
         baz: !terraform.output component-1 {{ .stack }} baz
+
+    component-3:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.output component-1 {{ .stack }} foo
+        bar: !terraform.output component-2 bar
+        baz: !terraform.output component-2 {{ .stack }} baz
