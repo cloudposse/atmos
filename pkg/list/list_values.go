@@ -245,12 +245,12 @@ func executeQueryForStack(params QueryParams) (interface{}, error) {
 
 func determineTargetComponentName(component, componentFilter string) string {
 	if componentFilter != "" {
-		return getComponentNameFromPath(componentFilter)
+		return componentFilter
 	}
 
 	isRegularComponent := component != KeySettings && component != KeyMetadata
 	if isRegularComponent {
-		return getComponentNameFromPath(component)
+		return component
 	}
 
 	return ""
@@ -299,23 +299,21 @@ func buildYqExpressionForComponent(component string, componentFilter string, inc
 	case KeyMetadata:
 		return buildMetadataExpression(componentFilter, componentType)
 	default:
-		componentName := getComponentNameFromPath(component)
-		return buildComponentYqExpression(componentName, includeAbstract, componentType)
+		return buildComponentYqExpression(component, includeAbstract, componentType)
 	}
 }
 
 func buildSettingsExpression(componentFilter, componentType string) string {
 	if componentFilter != "" {
-		componentName := getComponentNameFromPath(componentFilter)
-		return fmt.Sprintf(".components.%s.%s", componentType, componentName)
+		return fmt.Sprintf(".components.%s.\"%s\"", componentType, componentFilter)
 	}
 	return "select(.settings // .terraform.settings // .components.terraform.*.settings)"
 }
 
 func buildMetadataExpression(componentFilter, componentType string) string {
 	if componentFilter != "" {
-		componentName := getComponentNameFromPath(componentFilter)
-		return fmt.Sprintf(".components.%s.%s", componentType, componentName)
+		// Use full component path and wrap in quotes for nested support
+		return fmt.Sprintf(".components.%s.\"%s\"", componentType, componentFilter)
 	}
 	return DotChar + KeyMetadata
 }
@@ -328,8 +326,8 @@ func getComponentNameFromPath(component string) string {
 	return component
 }
 
-func buildComponentYqExpression(componentName string, includeAbstract bool, componentType string) string {
-	path := fmt.Sprintf("%scomponents%s%s%s%s", DotChar, DotChar, componentType, DotChar, componentName)
+func buildComponentYqExpression(component string, includeAbstract bool, componentType string) string {
+	path := fmt.Sprintf("%scomponents%s%s%s\"%s\"", DotChar, DotChar, componentType, DotChar, component)
 
 	if !includeAbstract {
 		path += fmt.Sprintf(" | select(has(\"%s\") == false or %s%s == false)",
