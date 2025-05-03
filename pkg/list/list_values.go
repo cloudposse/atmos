@@ -16,11 +16,11 @@ import (
 
 // Error variables for list_values package.
 var (
-	ErrInvalidStackPattern          = errors.New("invalid stack pattern")
-	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
-	ErrComponentsSectionNotFound    = errors.New("components section not found in stack")
-	ErrComponentNotFoundInSections  = errors.New("component not found in terraform or helmfile sections")
-	ErrQueryFailed                  = errors.New("query execution failed")
+	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound   = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                 = errors.New("query execution failed")
 )
 
 // Component and section name constants.
@@ -173,7 +173,7 @@ func extractComponentValueFromSingleStack(stackMap map[string]interface{}, stack
 		ComponentType:       componentType,
 		IncludeAbstract:     includeAbstract,
 	}
-	
+
 	value, err := executeQueryForStack(params)
 	if err != nil {
 		log.Warn("Query failed", KeyStack, stackName, "error", err)
@@ -210,12 +210,12 @@ type QueryParams struct {
 
 func executeQueryForStack(params QueryParams) (interface{}, error) {
 	yqExpression := buildYqExpressionForComponent(
-		params.Component, 
-		params.ComponentFilter, 
-		params.IncludeAbstract, 
+		params.Component,
+		params.ComponentFilter,
+		params.IncludeAbstract,
 		params.ComponentType,
 	)
-	
+
 	queryResult, err := utils.EvaluateYqExpression(nil, params.StackMap, yqExpression)
 	if err != nil {
 		var logKey string
