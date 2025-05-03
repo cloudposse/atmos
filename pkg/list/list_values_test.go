@@ -409,3 +409,49 @@ func TestFilterAndListValues(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildComponentYqExpression(t *testing.T) {
+	tests := []struct {
+		name            string
+		component       string
+		includeAbstract bool
+		componentType   string
+		expected        string
+	}{
+		{
+			name:            "basic component without including abstract",
+			component:       "vpc",
+			includeAbstract: false,
+			componentType:   "terraform",
+			expected:        ".components.terraform.\"vpc\" | select(has(\"abstract\") == false or .abstract == false) | .vars",
+		},
+		{
+			name:            "basic component including abstract",
+			component:       "vpc",
+			includeAbstract: true,
+			componentType:   "terraform",
+			expected:        ".components.terraform.\"vpc\" | .vars",
+		},
+		{
+			name:            "nested component without including abstract",
+			component:       "nested/vpc",
+			includeAbstract: false,
+			componentType:   "terraform",
+			expected:        ".components.terraform.\"nested/vpc\" | select(has(\"abstract\") == false or .abstract == false) | .vars",
+		},
+		{
+			name:            "helmfile component",
+			component:       "nginx",
+			includeAbstract: false,
+			componentType:   "helmfile",
+			expected:        ".components.helmfile.\"nginx\" | select(has(\"abstract\") == false or .abstract == false) | .vars",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildComponentYqExpression(tt.component, tt.includeAbstract, tt.componentType)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
