@@ -96,7 +96,7 @@ func PrintInvalidUsageErrorAndExit(err error, suggestion string) {
 // PrintfMarkdown prints a message in Markdown format.
 func PrintfMarkdown(format string, a ...interface{}) {
 	if render == nil {
-		_, err := fmt.Printf(format, a...)
+		_, err := os.Stdout.WriteString(fmt.Sprintf(format, a...))
 		LogError(err)
 		return
 	}
@@ -107,7 +107,7 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	if renderErr != nil {
 		LogErrorAndExit(renderErr)
 	}
-	_, err := fmt.Printf("%s\n", markdown)
+	_, err := os.Stdout.WriteString(fmt.Sprint(markdown + "\n"))
 	LogError(err)
 }
 
