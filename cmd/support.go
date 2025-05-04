@@ -2,6 +2,7 @@ package cmd
 
 import (
 	_ "embed"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -21,7 +22,9 @@ var supportCmd = &cobra.Command{
 	SilenceUsage:       true,
 	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("________________________________________________________________________________")
 		utils.PrintfMarkdown("%s", supportMarkdown)
+		fmt.Println("________________________________________________________________________________")
 		return nil
 	},
 }
