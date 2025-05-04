@@ -58,3 +58,43 @@ func TestRenderer(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderErrorf(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		isColor  bool
+	}{
+		{
+			name:     "Test with no color",
+			input:    "## Hello **world**",
+			expected: "## Hello **world**",
+			isColor:  false,
+		},
+		{
+			name:     "Test with color",
+			input:    "## Hello **world**",
+			expected: "\x1b[;1m\x1b[0m\x1b[;1m\x1b[0m\x1b[;1m## \x1b[0m\x1b[;1mHello \x1b[0m\x1b[;1m**\x1b[0m\x1b[;1mworld\x1b[0m\x1b[;1m**\x1b[0m",
+			isColor:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, _ := NewRenderer(schema.AtmosConfiguration{})
+			r.isTTYSupportForStderr = func() bool {
+				return tt.isColor
+			}
+			r.isTTYSupportForStdout = func() bool {
+				return tt.isColor
+			}
+			defer func() {
+				r.isTTYSupportForStderr = term.IsTTYSupportForStderr
+				r.isTTYSupportForStdout = term.IsTTYSupportForStdout
+			}()
+			str, err := r.RenderErrorf(tt.input)
+			assert.Contains(t, str, tt.expected)
+			assert.NoError(t, err)
+		})
+	}
+}
