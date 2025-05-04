@@ -36,6 +36,8 @@ const (
 
 	varEnvVarPrefix    = "TF_VAR_"
 	cliArgEnvVarPrefix = "TF_CLI_ARGS_"
+
+	componentStr = "component"
 )
 
 var prohibitedEnvVars = []string{
@@ -297,7 +299,7 @@ func GetTerraformOutput(
 	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
 	if err != nil {
 		u.PrintfMessageToTUI("\r✗ %s\n", message)
-		log.Fatal("Failed to describe the component", "component", component, "stack", stack, "error", err)
+		log.Fatal("Failed to describe the component", componentStr, component, "stack", stack, "error", err)
 	}
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
@@ -318,7 +320,7 @@ func GetTerraformOutput(
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections)
 		if err != nil {
 			u.PrintfMessageToTUI("\r✗ %s\n", message)
-			log.Fatal("Failed to execute terraform output", "component", component, "stack", stack, "error", err)
+			log.Fatal("Failed to execute terraform output", componentStr, component, "stack", stack, "error", err)
 		}
 
 		// Cache the result
@@ -344,7 +346,7 @@ func getTerraformOutputVariable(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, outputs, val)
 	if err != nil {
-		log.Fatal("Error evaluating terraform output", "output", output, "component", component, "stack", stack, "error", err)
+		log.Fatal("Error evaluating terraform output", "output", output, componentStr, component, "stack", stack, "error", err)
 	}
 
 	return res
@@ -364,7 +366,7 @@ func getStaticRemoteStateOutput(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, remoteStateSection, val)
 	if err != nil {
-		log.Fatal("Error evaluating the 'static' remote state backend output", "output", output, "component", component, "stack", stack, "error", err)
+		log.Fatal("Error evaluating the 'static' remote state backend output", "output", output, componentStr, component, "stack", stack, "error", err)
 	}
 
 	return res
