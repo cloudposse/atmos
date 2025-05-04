@@ -11,6 +11,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
+	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
@@ -107,7 +108,9 @@ func PrintfMarkdown(format string, a ...interface{}) {
 	if renderErr != nil {
 		LogErrorAndExit(renderErr)
 	}
+	log.Info("_____________34-----------------______________")
 	_, err := os.Stdout.WriteString(fmt.Sprint(markdown + "\n"))
+	log.Info("_____________3-----------------______________")
 	LogError(err)
 }
 
