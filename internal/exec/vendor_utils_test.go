@@ -79,12 +79,14 @@ func TestExecuteVendorPull(t *testing.T) {
 			t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
 		}
 	}
+
 	if os.Getenv("ATMOS_BASE_PATH") != "" {
 		err := os.Unsetenv("ATMOS_BASE_PATH")
 		if err != nil {
 			t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
 		}
 	}
+
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -116,11 +118,13 @@ func TestExecuteVendorPull(t *testing.T) {
 	flags.Bool("everything", false, "")
 	err = flags.Set("component", "")
 	require.NoError(t, err)
+
 	err = ExecuteVendorPullCommand(&cmd, []string{})
 	require.NoError(t, err)
 	if err != nil {
 		t.Errorf("Failed to execute vendor pull command: %v", err)
 	}
+
 	files := []string{
 		"./components/terraform/github/stargazers/main/main.tf",
 		"./components/terraform/github/stargazers/main/outputs.tf",
@@ -146,6 +150,7 @@ func TestExecuteVendorPull(t *testing.T) {
 		t.Errorf("Files do not exist: %v", file)
 	}
 	deleteStateFiles(t, files)
+
 	// test dry run
 	err = flags.Set("dry-run", "true")
 	require.NoError(t, err)
@@ -170,14 +175,13 @@ func TestExecuteVendorPull(t *testing.T) {
 }
 
 func verifyFileExists(t *testing.T, files []string) (bool, string) {
-	success := true
 	for _, file := range files {
 		if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
 			t.Errorf("Reason: Expected file does not exist: %q", file)
 			return false, file
 		}
 	}
-	return success, ""
+	return true, ""
 }
 
 func deleteStateFiles(t *testing.T, files []string) {

@@ -37,4 +37,4 @@ templates:
       enabled: true
       timeout: 10
       # https://docs.gomplate.ca/datasources
-      datasources: { }
+      datasources: {}
