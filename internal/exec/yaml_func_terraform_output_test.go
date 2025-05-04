@@ -14,7 +14,17 @@ import (
 )
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
-	log.SetLevel(log.DebugLevel)
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
 	stack := "nonprod"
