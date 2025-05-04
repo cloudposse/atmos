@@ -1,15 +1,13 @@
 package exec
 
 import (
-	"errors"
-	"fmt"
-
+	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	l "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
-	"github.com/spf13/cobra"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -22,7 +20,6 @@ type DescribeAffectedCmdArgs struct {
 	IncludeDependents           bool
 	IncludeSettings             bool
 	IncludeSpaceliftAdminStacks bool
-	Logger                      *l.Logger
 	OutputFile                  string
 	Ref                         string
 	RepoPath                    string
@@ -38,192 +35,190 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 }
 
-func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	err = ValidateStacks(atmosConfig)
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	// Process flags
-	flags := cmd.Flags()
-
-	ref, err := flags.GetString("ref")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	sha, err := flags.GetString("sha")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	repoPath, err := flags.GetString("repo-path")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	if format != "" && format != "yaml" && format != "json" {
-		return DescribeAffectedCmdArgs{}, fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", format)
-	}
-
-	if format == "" {
-		format = "json"
-	}
-
-	file, err := flags.GetString("file")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	verbose, err := flags.GetBool("verbose")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	sshKeyPath, err := flags.GetString("ssh-key")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	sshKeyPassword, err := flags.GetString("ssh-key-password")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	includeSpaceliftAdminStacks, err := flags.GetBool("include-spacelift-admin-stacks")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	includeDependents, err := flags.GetBool("include-dependents")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	includeSettings, err := flags.GetBool("include-settings")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	upload, err := flags.GetBool("upload")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	cloneTargetRef, err := flags.GetBool("clone-target-ref")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	stack, err := flags.GetString("stack")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
-		return DescribeAffectedCmdArgs{}, errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
-	}
-
-	// When uploading, always include dependents and settings for all affected components
-	if upload {
-		includeDependents = true
-		includeSettings = true
-	}
-
-	if verbose {
-		atmosConfig.Logs.Level = u.LogLevelTrace
-		err := logger.SetLogLevel(l.LogLevelTrace)
-		if err != nil {
-			return DescribeAffectedCmdArgs{}, err
-		}
-	}
-
-	query, err := flags.GetString("query")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	processTemplates, err := flags.GetBool("process-templates")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	processYamlFunctions, err := flags.GetBool("process-functions")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	skip, err := flags.GetStringSlice("skip")
-	if err != nil {
-		return DescribeAffectedCmdArgs{}, err
-	}
-
-	result := DescribeAffectedCmdArgs{
-		CLIConfig:                   atmosConfig,
-		CloneTargetRef:              cloneTargetRef,
-		Format:                      format,
-		IncludeDependents:           includeDependents,
-		IncludeSettings:             includeSettings,
-		IncludeSpaceliftAdminStacks: includeSpaceliftAdminStacks,
-		Logger:                      logger,
-		OutputFile:                  file,
-		Ref:                         ref,
-		RepoPath:                    repoPath,
-		SHA:                         sha,
-		SSHKeyPath:                  sshKeyPath,
-		SSHKeyPassword:              sshKeyPassword,
-		Verbose:                     verbose,
-		Upload:                      upload,
-		Stack:                       stack,
-		Query:                       query,
-		ProcessTemplates:            processTemplates,
-		ProcessYamlFunctions:        processYamlFunctions,
-		Skip:                        skip,
-	}
-
-	return result, nil
+type DescribeAffectedExec struct {
+	atmosConfig                               *schema.AtmosConfiguration
+	executeDescribeAffectedWithTargetRepoPath func(
+		atmosConfig schema.AtmosConfiguration,
+		targetRefPath string,
+		verbose bool,
+		includeSpaceliftAdminStacks bool,
+		includeSettings bool,
+		stack string,
+		processTemplates bool,
+		processYamlFunctions bool,
+		skip []string,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
+	executeDescribeAffectedWithTargetRefClone func(
+		atmosConfig schema.AtmosConfiguration,
+		ref string,
+		sha string,
+		sshKeyPath string,
+		sshKeyPassword string,
+		verbose bool,
+		includeSpaceliftAdminStacks bool,
+		includeSettings bool,
+		stack string,
+		processTemplates bool,
+		processYamlFunctions bool,
+		skip []string,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
+	executeDescribeAffectedWithTargetRefCheckout func(
+		atmosConfig schema.AtmosConfiguration,
+		ref string,
+		sha string,
+		verbose bool,
+		includeSpaceliftAdminStacks bool,
+		includeSettings bool,
+		stack string,
+		processTemplates bool,
+		processYamlFunctions bool,
+		skip []string,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
+	addDependentsToAffected func(
+		atmosConfig schema.AtmosConfiguration,
+		affected *[]schema.Affected,
+		includeSettings bool,
+	) error
+	printOrWriteToFile func(
+		atmosConfig *schema.AtmosConfiguration,
+		format string,
+		file string,
+		data any,
+	) error
+	IsTTYSupportForStdout func() bool
+	pageCreator           pager.PageCreator
 }
 
-// ExecuteDescribeAffectedCmd executes `describe affected` command
-func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
-		return err
+func NewDescribeAffectedExec(
+	atmosConfig *schema.AtmosConfiguration) *DescribeAffectedExec {
+	return &DescribeAffectedExec{
+		atmosConfig: atmosConfig,
+		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
+		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefClone,
+		executeDescribeAffectedWithTargetRefCheckout: ExecuteDescribeAffectedWithTargetRefCheckout,
+		addDependentsToAffected:                      addDependentsToAffected,
+		printOrWriteToFile:                           printOrWriteToFile,
+		IsTTYSupportForStdout:                        term.IsTTYSupportForStdout,
+		pageCreator:                                  pager.New(),
 	}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	a, err := parseDescribeAffectedCliArgs(cmd, args)
-	if err != nil {
-		return err
-	}
-
+}
+func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
+	var err error
+	if a.RepoPath != "" {
+		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRepoPath(
+			a.CLIConfig,
+			a.RepoPath,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	} else if a.CloneTargetRef {
+		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.SSHKeyPath,
+			a.SSHKeyPassword,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	} else {
+		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	}
 
+	if err != nil {
+		return err
+	}
+
+	// Add dependent components and stacks for each affected component
+	if len(affected) > 0 && a.IncludeDependents {
+		err = addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
+		if err != nil {
+			return err
+		}
+	}
+
+	if a.Query == "" {
+		log.Debug("\nAffected components and stacks: \n")
+		err = viewWithScroll(d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, affected)
+		if err != nil {
+			return err
+		}
+
+		if a.Upload {
+			// Parse the repo URL
+			gitURL, err := giturl.NewGitURL(repoUrl)
+			if err != nil {
+				return err
+			}
+			logger, err := l.NewLoggerFromCliConfig(*d.atmosConfig)
+			if err != nil {
+				return err
+			}
+			apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
+			if err != nil {
+				return err
+			}
+
+			req := pro.AffectedStacksUploadRequest{
+				HeadSHA:   headHead.Hash().String(),
+				BaseSHA:   baseHead.Hash().String(),
+				RepoURL:   repoUrl,
+				RepoName:  gitURL.GetRepoName(),
+				RepoOwner: gitURL.GetOwnerName(),
+				RepoHost:  gitURL.GetHostName(),
+				Stacks:    affected,
+			}
+
+			err = apiClient.UploadAffectedStacks(req)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		res, err := u.EvaluateYqExpression(d.atmosConfig, affected, a.Query)
+		if err != nil {
+			return err
+		}
+
+		err = viewWithScroll(pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+
+}
+
+// ExecuteDescribeAffectedCmd executes `describe affected` command
+func ExecuteDescribeAffectedCmd(atmosConfig *schema.AtmosConfiguration, a DescribeAffectedCmdArgs) error {
+	var affected []schema.Affected
+	var headHead, baseHead *plumbing.Reference
+	var repoUrl string
+	var err error
 	if a.RepoPath != "" {
 		affected, headHead, baseHead, repoUrl, err = ExecuteDescribeAffectedWithTargetRepoPath(
 			a.CLIConfig,
@@ -279,9 +274,9 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if a.Query == "" {
-		a.Logger.Trace("\nAffected components and stacks: \n")
+		log.Debug("\nAffected components and stacks: \n")
 
-		err = printOrWriteToFile(&atmosConfig, a.Format, a.OutputFile, affected)
+		err = printOrWriteToFile(atmosConfig, a.Format, a.OutputFile, affected)
 		if err != nil {
 			return err
 		}
@@ -292,8 +287,11 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-
-			apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
+			logger, err := l.NewLoggerFromCliConfig(*atmosConfig)
+			if err != nil {
+				return err
+			}
+			apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
 			if err != nil {
 				return err
 			}
@@ -314,21 +312,67 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		res, err := u.EvaluateYqExpression(atmosConfig, affected, a.Query)
 		if err != nil {
 			return err
 		}
 
-		res, err := u.EvaluateYqExpression(&atmosConfig, affected, a.Query)
-		if err != nil {
-			return err
-		}
-
-		err = printOrWriteToFile(&atmosConfig, a.Format, a.OutputFile, res)
+		err = viewWithScroll(pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res)
 		if err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+func viewWithScroll(pageCreator pager.PageCreator,
+	isTTYSupportForStdout func() bool,
+	printOrWriteToFile func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error,
+	atmosConfig *schema.AtmosConfiguration, displayName string, format string, file string, res any) error {
+	if atmosConfig.Settings.Terminal.IsPagerEnabled() && file == "" {
+		err := viewConfig(pageCreator, isTTYSupportForStdout, atmosConfig, displayName, format, res)
+		switch err.(type) {
+		case DescribeConfigFormatError:
+			return err
+		case nil:
+			return nil
+		default:
+			log.Debug("Failed to use pager")
+		}
+	}
+
+	err := printOrWriteToFile(atmosConfig, format, file, res)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func viewConfig(pageCreator pager.PageCreator, isTTYSupportForStdout func() bool, atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {
+	if !isTTYSupportForStdout() {
+		return ErrTTYNotSupported
+	}
+	var content string
+	var err error
+	switch format {
+	case "yaml":
+		content, err = u.GetHighlightedYAML(atmosConfig, data)
+		if err != nil {
+			return err
+		}
+	case "json":
+		content, err = u.GetHighlightedJSON(atmosConfig, data)
+		if err != nil {
+			return err
+		}
+	default:
+		return DescribeConfigFormatError{
+			format,
+		}
+	}
+	if err := pageCreator.Run(displayName, content); err != nil {
+		return err
+	}
 	return nil
 }
