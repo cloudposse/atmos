@@ -3,7 +3,6 @@ package cmd
 import (
 	_ "embed"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -22,9 +21,7 @@ var supportCmd = &cobra.Command{
 	SilenceUsage:       true,
 	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		log.Info("__________________________________________________")
 		utils.PrintfMarkdown("%s", supportMarkdown)
-		log.Info("__________________________________________________")
 		return nil
 	},
 }
