@@ -17,14 +17,14 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.19
 	github.com/bmatcuk/doublestar/v4 v4.8.1
 	github.com/charmbracelet/bubbles v0.21.0
-	github.com/charmbracelet/bubbletea v1.3.4
+	github.com/charmbracelet/bubbletea v1.3.5
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/huh v0.7.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v0.4.1
 	github.com/creack/pty v1.1.24
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.2.1
-	github.com/elewis787/boa v0.1.2
+	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.16.0
 	github.com/gobwas/glob v0.2.3
