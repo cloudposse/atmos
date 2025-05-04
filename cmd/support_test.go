@@ -1,4 +1,4 @@
-package tests
+package cmd
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/cmd"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,13 +14,9 @@ func TestSupportCmd(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	oldArgs := os.Args
-	defer func() {
-		os.Args = oldArgs
-	}()
+
 	// Execute the command
-	os.Args = []string{"atmos", "support"}
-	err := cmd.Execute()
+	err := supportCmd.RunE(supportCmd, []string{})
 	assert.NoError(t, err, "'atmos support' command should execute without error")
 
 	// Close the writer and restore stdout
@@ -36,5 +31,5 @@ func TestSupportCmd(t *testing.T) {
 	assert.NoError(t, err, "'atmos support' command should execute without error")
 
 	// Check if output contains expected markdown content
-	assert.Contains(t, output.String(), "Connect with active users in the", "'atmos support' output should contain information about Cloud Posse Atmos support")
+	assert.Contains(t, output.String(), supportMarkdown, "'atmos support' output should contain information about Cloud Posse Atmos support")
 }
