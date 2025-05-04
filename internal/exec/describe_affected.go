@@ -90,7 +90,8 @@ type DescribeAffectedExec struct {
 }
 
 func NewDescribeAffectedExec(
-	atmosConfig *schema.AtmosConfiguration) *DescribeAffectedExec {
+	atmosConfig *schema.AtmosConfiguration,
+) *DescribeAffectedExec {
 	return &DescribeAffectedExec{
 		atmosConfig: atmosConfig,
 		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
@@ -102,6 +103,7 @@ func NewDescribeAffectedExec(
 		pageCreator:                                  pager.New(),
 	}
 }
+
 func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
@@ -210,7 +212,6 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 		}
 	}
 	return nil
-
 }
 
 // ExecuteDescribeAffectedCmd executes `describe affected` command
@@ -329,7 +330,8 @@ func ExecuteDescribeAffectedCmd(atmosConfig *schema.AtmosConfiguration, a Descri
 func viewWithScroll(pageCreator pager.PageCreator,
 	isTTYSupportForStdout func() bool,
 	printOrWriteToFile func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error,
-	atmosConfig *schema.AtmosConfiguration, displayName string, format string, file string, res any) error {
+	atmosConfig *schema.AtmosConfiguration, displayName string, format string, file string, res any,
+) error {
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() && file == "" {
 		err := viewConfig(pageCreator, isTTYSupportForStdout, atmosConfig, displayName, format, res)
 		switch err.(type) {
