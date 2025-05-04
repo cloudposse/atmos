@@ -105,6 +105,7 @@ func TestExecuteVendorPull(t *testing.T) {
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
+
 	// set vendor pull command
 	cmd := cobra.Command{}
 	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
@@ -145,6 +146,7 @@ func TestExecuteVendorPull(t *testing.T) {
 		"./components/terraform/myapp1/main.tf",
 		"./components/terraform/myapp1/README.md",
 	}
+
 	success, file := verifyFileExists(t, files)
 	if !success {
 		t.Errorf("Files do not exist: %v", file)
