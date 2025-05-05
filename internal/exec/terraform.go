@@ -349,10 +349,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Print command info
 	log.Debug("Command info:")
-	log.Debug("Terraform binary: " + info.Command)
+	log.Debug("Terraform executable", "command", info.Command)
 
 	if info.SubCommand2 == "" {
-		log.Debug(fmt.Sprintf("Terraform command: %s", info.SubCommand))
+		log.Debug("Executing terraform", "command", info.SubCommand)
 	} else {
 		log.Debug(fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
 	}
@@ -375,7 +375,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		log.Debug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
 	}
 
-	log.Debug(fmt.Sprintf("Working dir: %s", workingDir))
+	log.Debug("Working directory", "path", workingDir)
 
 	allArgsAndFlags := strings.Fields(info.SubCommand)
 

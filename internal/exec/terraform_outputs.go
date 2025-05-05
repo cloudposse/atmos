@@ -119,7 +119,7 @@ func execTerraformOutput(
 		if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 			backendFileName := filepath.Join(componentPath, "backend.tf.json")
 
-			log.Debug("Writing the backend config to file:", "file", backendFileName)
+			log.Debug("Writing backend config", "file", backendFileName)
 
 			backendTypeSection, ok := sections["backend_type"].(string)
 			if !ok {
@@ -141,7 +141,7 @@ func execTerraformOutput(
 				return nil, err
 			}
 
-			log.Debug("Wrote the backend config to file:", "file", backendFileName)
+			log.Debug("Wrote backend config", "file", backendFileName)
 		}
 
 		// Generate `providers_override.tf.json` file if the `providers` section is configured
@@ -150,7 +150,7 @@ func execTerraformOutput(
 		if ok && len(providersSection) > 0 {
 			providerOverrideFileName := filepath.Join(componentPath, "providers_override.tf.json")
 
-			log.Debug("Writing the provider overrides to file:", "file", providerOverrideFileName)
+			log.Debug("Writing provider overrides", "file", providerOverrideFileName)
 
 			providerOverrides := generateComponentProviderOverrides(providersSection)
 			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
@@ -158,7 +158,7 @@ func execTerraformOutput(
 				return nil, err
 			}
 
-			log.Debug("Wrote the provider overrides to file:", "file", providerOverrideFileName)
+			log.Debug("Wrote provider overrides", "file", providerOverrideFileName)
 		}
 
 		// Initialize Terraform/OpenTofu
@@ -195,7 +195,7 @@ func execTerraformOutput(
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
 
-		log.Debug(fmt.Sprintf("Executing 'terraform init %s -s %s'", component, stack))
+		log.Debug("Executing terraform", "command", fmt.Sprintf("terraform init %s -s %s", component, stack))
 
 		var initOptions []tfexec.InitOption
 		initOptions = append(initOptions, tfexec.Upgrade(false))
