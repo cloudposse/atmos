@@ -119,7 +119,7 @@ func TestGSMStore_Set(t *testing.T) {
 					expectedReq := &secretmanagerpb.AddSecretVersionRequest{
 						Parent: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key",
 						Payload: &secretmanagerpb.SecretPayload{
-							Data: []byte("test-value"),
+							Data: []byte(`"test-value"`),
 						},
 					}
 					return req.Parent == expectedReq.Parent &&
@@ -156,7 +156,7 @@ func TestGSMStore_Set(t *testing.T) {
 					expectedReq := &secretmanagerpb.AddSecretVersionRequest{
 						Parent: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key",
 						Payload: &secretmanagerpb.SecretPayload{
-							Data: []byte("test-value"),
+							Data: []byte(`"test-value"`),
 						},
 					}
 					return req.Parent == expectedReq.Parent &&
@@ -221,7 +221,7 @@ func TestGSMStore_Set(t *testing.T) {
 					expectedReq := &secretmanagerpb.AddSecretVersionRequest{
 						Parent: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key",
 						Payload: &secretmanagerpb.SecretPayload{
-							Data: []byte("test-value"),
+							Data: []byte(`"test-value"`),
 						},
 					}
 					return req.Parent == expectedReq.Parent &&
@@ -231,13 +231,121 @@ func TestGSMStore_Set(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:      "invalid value type",
+			name:      "successful set with int",
 			stack:     "dev-usw2",
 			component: "app/service",
 			key:       "config-key",
-			value:     123, // Not a string
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   true,
+			value:     123,
+			mockFn: func(m *MockGSMClient) {
+				m.On("CreateSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.CreateSecretRequest) bool {
+					expectedReq := &secretmanagerpb.CreateSecretRequest{
+						Parent:   "projects/test-project",
+						SecretId: "test-prefix_dev_usw2_app_service_config-key",
+						Secret: &secretmanagerpb.Secret{
+							Replication: &secretmanagerpb.Replication{
+								Replication: &secretmanagerpb.Replication_Automatic_{
+									Automatic: &secretmanagerpb.Replication_Automatic{},
+								},
+							},
+						},
+					}
+					return req.Parent == expectedReq.Parent &&
+						req.SecretId == expectedReq.SecretId &&
+						req.Secret.GetReplication().GetAutomatic() != nil
+				})).Return(&secretmanagerpb.Secret{
+					Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key",
+				}, nil)
+
+				m.On("AddSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AddSecretVersionRequest) bool {
+					expectedReq := &secretmanagerpb.AddSecretVersionRequest{
+						Parent: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key",
+						Payload: &secretmanagerpb.SecretPayload{
+							Data: []byte("123"),
+						},
+					}
+					return req.Parent == expectedReq.Parent &&
+						string(req.Payload.Data) == string(expectedReq.Payload.Data)
+				})).Return(&secretmanagerpb.SecretVersion{}, nil)
+			},
+			wantErr: false,
+		},
+		{
+			name:      "successful_set_with_slice",
+			stack:     "dev_usw2",
+			component: "app/service",
+			key:       "slice-key",
+			value:     []string{"value1", "value2", "value3"},
+
+			mockFn: func(m *MockGSMClient) {
+				m.On("CreateSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.CreateSecretRequest) bool {
+					expectedReq := &secretmanagerpb.CreateSecretRequest{
+						Parent:   "projects/test-project",
+						SecretId: "test-prefix_dev_usw2_app_service_slice-key",
+						Secret: &secretmanagerpb.Secret{
+							Replication: &secretmanagerpb.Replication{
+								Replication: &secretmanagerpb.Replication_Automatic_{
+									Automatic: &secretmanagerpb.Replication_Automatic{},
+								},
+							},
+						},
+					}
+					return req.Parent == expectedReq.Parent &&
+						req.SecretId == expectedReq.SecretId &&
+						req.Secret.GetReplication().GetAutomatic() != nil
+				})).Return(&secretmanagerpb.Secret{
+					Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_slice-key",
+				}, nil)
+
+				m.On("AddSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AddSecretVersionRequest) bool {
+					expectedReq := &secretmanagerpb.AddSecretVersionRequest{
+						Parent: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_slice-key",
+						Payload: &secretmanagerpb.SecretPayload{
+							Data: []byte(`["value1","value2","value3"]`),
+						},
+					}
+					return req.Parent == expectedReq.Parent &&
+						string(req.Payload.Data) == string(expectedReq.Payload.Data)
+				})).Return(&secretmanagerpb.SecretVersion{}, nil)
+			},
+		},
+		{
+			name:      "successful_set_with_map",
+			stack:     "dev_usw2",
+			component: "app/service",
+			key:       "map-key",
+			value:     map[string]interface{}{"key1": "value1", "key2": 42, "key3": true},
+
+			mockFn: func(m *MockGSMClient) {
+				m.On("CreateSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.CreateSecretRequest) bool {
+					expectedReq := &secretmanagerpb.CreateSecretRequest{
+						Parent:   "projects/test-project",
+						SecretId: "test-prefix_dev_usw2_app_service_map-key",
+						Secret: &secretmanagerpb.Secret{
+							Replication: &secretmanagerpb.Replication{
+								Replication: &secretmanagerpb.Replication_Automatic_{
+									Automatic: &secretmanagerpb.Replication_Automatic{},
+								},
+							},
+						},
+					}
+					return req.Parent == expectedReq.Parent &&
+						req.SecretId == expectedReq.SecretId &&
+						req.Secret.GetReplication().GetAutomatic() != nil
+				})).Return(&secretmanagerpb.Secret{
+					Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_map-key",
+				}, nil)
+
+				m.On("AddSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AddSecretVersionRequest) bool {
+					expectedReq := &secretmanagerpb.AddSecretVersionRequest{
+						Parent: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_map-key",
+						Payload: &secretmanagerpb.SecretPayload{
+							Data: []byte(`{"key1":"value1","key2":42,"key3":true}`),
+						},
+					}
+					return req.Parent == expectedReq.Parent &&
+						string(req.Payload.Data) == string(expectedReq.Payload.Data)
+				})).Return(&secretmanagerpb.SecretVersion{}, nil)
+			},
 		},
 		{
 			name:      "empty stack",
@@ -319,7 +427,27 @@ func TestGSMStore_Get(t *testing.T) {
 					return req.Name == expectedReq.Name
 				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
 					Payload: &secretmanagerpb.SecretPayload{
-						Data: []byte("test-value"),
+						Data: []byte(`"test-value"`),
+					},
+				}, nil)
+			},
+			want:    "test-value",
+			wantErr: false,
+		},
+		{
+			name:      "successful get - legacy value without json",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+					expectedReq := &secretmanagerpb.AccessSecretVersionRequest{
+						Name: "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest",
+					}
+					return req.Name == expectedReq.Name
+				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
+					Payload: &secretmanagerpb.SecretPayload{
+						Data: []byte(`test-value`),
 					},
 				}, nil)
 			},
