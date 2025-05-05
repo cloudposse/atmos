@@ -84,22 +84,33 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 }
 
 // mergeInputs merges all YAML inputs defined in docsGenerate.Input.
-func mergeInputs(atmosConfig *schema.AtmosConfiguration, dir string, docsGenerate *schema.DocsGenerate) (map[string]any, error) {
-	// Preallocate slice for inputs
-	allMaps := make([]map[string]any, 0, len(docsGenerate.Input))
-	for _, src := range docsGenerate.Input {
-		dataMap, err := fetchAndParseYAML(atmosConfig, src, dir)
-		if err != nil {
-			log.Debug("Skipping input due to error", "input", src, "error", err)
-			continue
+func mergeInputs(cfg *schema.AtmosConfiguration, dir string, dg *schema.DocsGenerate) (map[string]any, error) {
+	var allMaps []map[string]any
+	for _, src := range dg.Input {
+		var dataMap map[string]any
+		switch v := src.(type) {
+		case string:
+			// fetch from file or URL
+			m, err := fetchAndParseYAML(cfg, v, dir)
+			if err != nil {
+				log.Debug("skipping input", "input", v, "err", err)
+				continue
+			}
+			dataMap = m
+
+		case map[string]any:
+			// inline map
+			dataMap = v
+
+		default:
+			return nil, fmt.Errorf("%w: %T", ErrUnsupportedInputType, v)
 		}
 		allMaps = append(allMaps, dataMap)
 	}
-	// If nothing was successfully parsed, return an empty map to avoid nil-map panics
 	if len(allMaps) == 0 {
 		return map[string]any{}, nil
 	}
-	return merge.Merge(*atmosConfig, allMaps)
+	return merge.Merge(*cfg, allMaps)
 }
 
 // getTerraformSource returns the directory to use for generating Terraform docs.

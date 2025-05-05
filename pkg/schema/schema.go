@@ -352,7 +352,7 @@ type TerraformDocsReadmeSettings struct {
 
 type DocsGenerate struct {
 	BaseDir   string                      `yaml:"base-dir,omitempty" json:"base-dir,omitempty" mapstructure:"base-dir"`
-	Input     []string                    `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
+	Input     []any                       `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
 	Template  string                      `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 	Output    string                      `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
 	Terraform TerraformDocsReadmeSettings `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`

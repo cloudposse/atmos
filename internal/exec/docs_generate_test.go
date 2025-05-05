@@ -2,6 +2,8 @@
 package exec
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -213,7 +215,7 @@ func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 			Generate: map[string]schema.DocsGenerate{
 				"readme": {
 					BaseDir:  ".",
-					Input:    []string{tmpYAML.Name()},
+					Input:    []any{tmpYAML.Name()},
 					Template: "", // Use default template.
 					Output:   "TEST_README.md",
 					Terraform: schema.TerraformDocsReadmeSettings{
@@ -246,5 +248,124 @@ func TestRunTerraformDocs_Error(t *testing.T) {
 	_, err := runTerraformDocs("nonexistent_directory", &schema.TerraformDocsReadmeSettings{})
 	if err == nil {
 		t.Errorf("Expected error for invalid terraform module directory, got nil")
+	}
+}
+
+// TestMergeInputs covers various merge scenarios: local only, remote overrides local, inline overrides all.
+func TestMergeInputs(t *testing.T) {
+	tests := []struct {
+		name          string
+		localContent  string
+		remoteContent string
+		inlineMap     map[string]any
+		expected      map[string]any
+	}{
+		{
+			name: "only local input",
+			localContent: `a: 1
+common: local
+`,
+			// no remote, no inline
+			remoteContent: "",
+			inlineMap:     nil,
+			expected: map[string]any{
+				"a":      1,
+				"common": "local",
+			},
+		},
+		{
+			name: "remote overrides local",
+			localContent: `a: 1
+common: local
+`,
+			remoteContent: `a: 2
+extra: r
+common: remote
+`,
+			inlineMap: nil,
+			expected: map[string]any{
+				"a":      2,
+				"extra":  "r",
+				"common": "remote",
+			},
+		},
+		{
+			name: "inline overrides all",
+			localContent: `a: 1
+common: local
+`,
+			remoteContent: `a: 2
+b: 3
+common: remote
+`,
+			inlineMap: map[string]any{
+				"common": "inline",
+				"c":      4,
+			},
+			expected: map[string]any{
+				"a":      2,
+				"b":      3,
+				"common": "inline",
+				"c":      4,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Prepare base directory
+			baseDir := t.TempDir()
+			// Write local YAML if any
+			var localPath string
+			if tc.localContent != "" {
+				localPath = filepath.Join(baseDir, "local.yaml")
+				if err := os.WriteFile(localPath, []byte(tc.localContent), 0o644); err != nil {
+					t.Fatalf("failed to write local: %v", err)
+				}
+			}
+
+			// Setup remote HTTP server if remoteContent provided
+			var remoteURL string
+			if tc.remoteContent != "" {
+				remoteDir := t.TempDir()
+				remoteFile := filepath.Join(remoteDir, "remote.yaml")
+				if err := os.WriteFile(remoteFile, []byte(tc.remoteContent), 0o644); err != nil {
+					t.Fatalf("failed to write remote: %v", err)
+				}
+				srv := httptest.NewServer(http.FileServer(http.Dir(remoteDir)))
+				defer srv.Close()
+				remoteURL = srv.URL + "/remote.yaml"
+			}
+
+			// Build Inputs
+			var inputs []any
+			if localPath != "" {
+				inputs = append(inputs, localPath)
+			}
+			if remoteURL != "" {
+				inputs = append(inputs, remoteURL)
+			}
+			if tc.inlineMap != nil {
+				inputs = append(inputs, tc.inlineMap)
+			}
+
+			dg := &schema.DocsGenerate{Input: inputs}
+			merged, err := mergeInputs(&schema.AtmosConfiguration{}, baseDir, dg)
+			if err != nil {
+				t.Fatalf("mergeInputs error: %v", err)
+			}
+
+			// Verify expected
+			for key, exp := range tc.expected {
+				got, ok := merged[key]
+				if !ok {
+					t.Errorf("missing key %q", key)
+					continue
+				}
+				if got != exp {
+					t.Errorf("merged[%q] = %v; expected %v", key, got, exp)
+				}
+			}
+		})
 	}
 }

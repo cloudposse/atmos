@@ -4,7 +4,7 @@ tests:
     enabled: true
     snapshot: false
     description: "Ensure terraform docs are generated"
-    workdir: "fixtures/scenarios/docs-generate/"
+    workdir: "fixtures/scenarios/docs-generate/terraform/"
     command: "atmos"
     args:
       - "docs"
@@ -22,10 +22,10 @@ tests:
           - "## Requirements"
           - "## Providers" 
 
-  - name: "atmos docs generate with remote temlate"
+  - name: "atmos docs generate with remote template"
     enabled: true
     snapshot: false
-    description: "Ensure terraform docs are generated"
+    description: "Ensure readme is generated"
     workdir: "fixtures/scenarios/docs-generate/readme/"
     command: "atmos"
     args:
@@ -42,4 +42,31 @@ tests:
       file_contains:
         "README.md":
           - "## Use Atmos to break your architecture into reusable"
-          - "## Screenshots"        
+          - "## Screenshots"
+
+  - name: "atmos docs generate input variants"
+    enabled: true
+    snapshot: false
+    description: "Ensure all 3 input types are supported"
+    workdir: "fixtures/scenarios/docs-generate/input-variants/"
+    command: "atmos"
+    args:
+      - "docs"
+      - "generate"
+      - "readme"
+    expect:
+      diff: []
+      exit_code: 0
+      stdout:
+        - "^$"
+      file_exists:
+        - "README.md"
+      file_contains:
+        "README.md":
+          - "##name:## inline map"
+          - "##Description:## inline override: description"
+          - "Note: Local extra info"
+          - "##Github_repo:## Inline override: testing inline merge"
+          - "##License:## APACHE2"
+          - "##Categories:## \\[.+\\]"
+     

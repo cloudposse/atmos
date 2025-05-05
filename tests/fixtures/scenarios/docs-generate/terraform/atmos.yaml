@@ -33,7 +33,7 @@ docs:
       # The final README
       output: "./README.md"
       terraform:
-        source: terraform/
+        source: .
         enabled: true
         format: "markdown"
         show_providers: false

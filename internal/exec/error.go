@@ -29,4 +29,5 @@ var (
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
+	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 )
