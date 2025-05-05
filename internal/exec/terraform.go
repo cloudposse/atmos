@@ -160,7 +160,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
 			}
 
-			log.Debug("Writing the variables to file", "file", varFilePath)
+			log.Debug("Writing the variables", "file", varFilePath)
 
 			if !info.DryRun {
 				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
@@ -347,36 +347,31 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Print command info
-	log.Debug("Command info:")
-	log.Debug("Terraform executable", "command", info.Command)
-
+	// Print the command info/context.
+	var command string
 	if info.SubCommand2 == "" {
-		log.Debug("Executing terraform", "command", info.SubCommand)
+		command = info.SubCommand
 	} else {
-		log.Debug(fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
+		command = fmt.Sprintf("%s %s", info.SubCommand, info.SubCommand2)
 	}
 
-	log.Debug(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
-	log.Debug("Component: " + info.ComponentFromArg)
-
-	if len(info.BaseComponentPath) > 0 {
-		log.Debug("Terraform component: " + info.BaseComponentPath)
-	}
-
+	var inheritance string
 	if len(info.ComponentInheritanceChain) > 0 {
-		log.Debug("Inheritance: " + info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> "))
+		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
-	if info.Stack == info.StackFromArg {
-		log.Debug("Stack: " + info.StackFromArg)
-	} else {
-		log.Debug("Stack: " + info.StackFromArg)
-		log.Debug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
-	}
+	log.Debug("Terraform context",
+		"executable", info.Command,
+		"command", command,
+		"component", info.ComponentFromArg,
+		"stack", info.StackFromArg,
+		"arguments and flags", info.AdditionalArgsAndFlags,
+		"terraform component", info.BaseComponentPath,
+		"inheritance", inheritance,
+		"working directory", workingDir,
+	)
 
-	log.Debug("Working directory", "path", workingDir)
-
+	// Prepare the terraform command
 	allArgsAndFlags := strings.Fields(info.SubCommand)
 
 	switch info.SubCommand {
