@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -77,102 +78,68 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 	// Process flags
 	flags := cmd.Flags()
 
-	if flags.Changed("pager") {
-		atmosConfig.Settings.Terminal.Pager, err = flags.GetString("pager")
-		checkFlagError(err)
+	result := exec.DescribeAffectedCmdArgs{
+		CLIConfig: atmosConfig,
+	}
+	setFlagValueInCliArgs(flags, &result)
+
+	// When uploading, always include dependents and settings for all affected components
+	if result.Upload {
+		result.IncludeDependents = true
+		result.IncludeSettings = true
 	}
 
-	ref, err := flags.GetString("ref")
-	checkFlagError(err)
-
-	sha, err := flags.GetString("sha")
-	checkFlagError(err)
-
-	repoPath, err := flags.GetString("repo-path")
-	checkFlagError(err)
-
-	format, err := flags.GetString("format")
-	checkFlagError(err)
-
-	if format != "" && format != "yaml" && format != "json" {
-		return exec.DescribeAffectedCmdArgs{}, fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", format)
+	if result.Format != "" && result.Format != "yaml" && result.Format != "json" {
+		return exec.DescribeAffectedCmdArgs{}, fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", result.Format)
 	}
-
-	if format == "" {
-		format = "json"
+	if result.Format == "" {
+		result.Format = "json"
 	}
-
-	file, err := flags.GetString("file")
-	checkFlagError(err)
-
-	sshKeyPath, err := flags.GetString("ssh-key")
-	checkFlagError(err)
-
-	sshKeyPassword, err := flags.GetString("ssh-key-password")
-	checkFlagError(err)
-
-	includeSpaceliftAdminStacks, err := flags.GetBool("include-spacelift-admin-stacks")
-	checkFlagError(err)
-
-	includeDependents, err := flags.GetBool("include-dependents")
-	checkFlagError(err)
-
-	includeSettings, err := flags.GetBool("include-settings")
-	checkFlagError(err)
-
-	upload, err := flags.GetBool("upload")
-	checkFlagError(err)
-
-	cloneTargetRef, err := flags.GetBool("clone-target-ref")
-	checkFlagError(err)
-
-	stack, err := flags.GetString("stack")
-	checkFlagError(err)
-
-	if repoPath != "" && (ref != "" || sha != "" || sshKeyPath != "" || sshKeyPassword != "") {
+	if result.RepoPath != "" && (result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
 		return exec.DescribeAffectedCmdArgs{}, errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 	}
 
-	// When uploading, always include dependents and settings for all affected components
-	if upload {
-		includeDependents = true
-		includeSettings = true
-	}
-
-	query, err := flags.GetString("query")
-	checkFlagError(err)
-
-	processTemplates, err := flags.GetBool("process-templates")
-	checkFlagError(err)
-
-	processYamlFunctions, err := flags.GetBool("process-functions")
-	checkFlagError(err)
-
-	skip, err := flags.GetStringSlice("skip")
-	checkFlagError(err)
-
-	result := exec.DescribeAffectedCmdArgs{
-		CLIConfig:                   atmosConfig,
-		CloneTargetRef:              cloneTargetRef,
-		Format:                      format,
-		IncludeDependents:           includeDependents,
-		IncludeSettings:             includeSettings,
-		IncludeSpaceliftAdminStacks: includeSpaceliftAdminStacks,
-		OutputFile:                  file,
-		Ref:                         ref,
-		RepoPath:                    repoPath,
-		SHA:                         sha,
-		SSHKeyPath:                  sshKeyPath,
-		SSHKeyPassword:              sshKeyPassword,
-		Upload:                      upload,
-		Stack:                       stack,
-		Query:                       query,
-		ProcessTemplates:            processTemplates,
-		ProcessYamlFunctions:        processYamlFunctions,
-		Skip:                        skip,
-	}
-
 	return result, nil
+}
+
+func setFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffectedCmdArgs) {
+	flagsKeyValue := map[string]any{
+		"ref":                            &describe.Ref,
+		"sha":                            &describe.SHA,
+		"repo-path":                      &describe.RepoPath,
+		"ssh-key":                        &describe.SSHKeyPath,
+		"ssh-key-password":               &describe.SSHKeyPassword,
+		"include-spacelift-admin-stacks": &describe.IncludeSpaceliftAdminStacks,
+		"include-dependents":             &describe.IncludeDependents,
+		"include-settings":               &describe.IncludeSettings,
+		"upload":                         &describe.Upload,
+		"clone-target-ref":               &describe.CloneTargetRef,
+		"process-templates":              &describe.ProcessTemplates,
+		"process-functions":              &describe.ProcessYamlFunctions,
+		"skip":                           &describe.Skip,
+		"pager":                          &describe.CLIConfig.Settings.Terminal.Pager,
+		"stack":                          &describe.Stack,
+		"format":                         &describe.Format,
+		"file":                           &describe.OutputFile,
+		"query":                          &describe.Query,
+		"sha-key-path":                   &describe.SSHKeyPath,
+	}
+
+	var err error
+	for k := range flagsKeyValue {
+		if !flags.Changed(k) {
+			continue
+		}
+		switch v := flagsKeyValue[k].(type) {
+		case *string:
+			*v, err = flags.GetString(k)
+		case *bool:
+			*v, err = flags.GetBool(k)
+		default:
+			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
+		}
+		checkFlagError(err)
+	}
 }
 
 func checkFlagError(err error) {
