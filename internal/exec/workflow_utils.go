@@ -33,12 +33,6 @@ func ExecuteWorkflow(
 		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
 	}
 
-	// Logging: use log.Info for dryRun, log.Debug otherwise
-	logFn := log.Debug
-	if dryRun {
-		logFn = log.Info
-	}
-
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
@@ -66,7 +60,7 @@ func ExecuteWorkflow(
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
 
-		logFn("Executing workflow step", "step", stepIdx, "command", command)
+		log.Debug("Executing workflow step", "step", stepIdx, "command", command)
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -99,7 +93,7 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				logFn("Stack", "stack", finalStack)
+				log.Debug("Stack", "stack", finalStack)
 			}
 
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
