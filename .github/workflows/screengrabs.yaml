@@ -10,6 +10,20 @@ env:
   ATMOS_LOGS_LEVEL: "Info"
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get Atmos version
+        id: get-version
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+
   screengrabs:
     needs: [prepare]
     runs-on: ubuntu-latest
