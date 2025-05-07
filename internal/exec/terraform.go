@@ -105,7 +105,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Allow read-only commands, block modification commands
 		switch info.SubCommand {
 		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
-			return fmt.Errorf("%w: the component '%s' is locked and cannot be modified (metadata.locked: true)",
+			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 				ErrLockedComponent,
 				filepath.Join(info.ComponentFolderPrefix, info.Component),
 			)
