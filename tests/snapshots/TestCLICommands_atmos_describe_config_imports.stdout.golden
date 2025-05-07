@@ -173,5 +173,16 @@ docs:
     pagination: false
     generate:
         readme:
+            base-dir: .
+            input:
+                - ./README.yaml
+            template: https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl
             output: ./README.md
+            terraform:
+                source: src/
+                format: markdown
+                show_inputs: true
+                show_outputs: true
+                sort_by: name
+                indent_level: 2
 
