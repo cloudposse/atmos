@@ -9,7 +9,7 @@ import (
 func ProcessTagExec(
 	input string,
 ) (any, error) {
-	log.Info("Executing Atmos YAML function", "function", input)
+	log.Debug("Executing Atmos YAML function", "function", input)
 	str, err := getStringAfterTag(input, AtmosYamlFuncExec)
 	if err != nil {
 		return nil, err

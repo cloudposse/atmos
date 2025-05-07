@@ -39,8 +39,10 @@ func processTagTerraformOutput(
 		component = strings.TrimSpace(parts[0])
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
-		log.Debug("Atmos YAML function is called with two parameters 'component' and 'output'. "+
-			"Using the current stack as the 'stack' parameter", "function", input, "stack", currentStack)
+		log.Debug("Calling Atmos YAML function with component and output parameters; using current stack",
+    "function", input,
+    "stack", currentStack,
+)
 	} else {
 		err := fmt.Errorf("invalid number of arguments in the Atmos YAML function: %s", input)
 		log.Fatal(err)
