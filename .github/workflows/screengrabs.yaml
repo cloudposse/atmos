@@ -28,7 +28,7 @@ jobs:
     outputs:
       version: ${{ steps.get-version.outputs.version }}
 
-  screengrabs:
+  build:
     needs: [prepare]
     runs-on: ubuntu-latest
     steps:
