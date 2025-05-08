@@ -4,11 +4,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/datafetcher"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/goccy/go-yaml"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/datafetcher"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var ErrFailedToFetchSchema = errors.New("failed to fetch schema")
