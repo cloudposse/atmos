@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -254,6 +255,13 @@ func execTerraformShellCommand(
 //  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
 func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []string) []string {
 	envMap := make(map[string]string)
+
+	// Parse system environment variables
+	for _, env := range os.Environ() {
+		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
 
 	// Merge with new, Atmos defined environment variables
 	for _, env := range componentEnvList {
