@@ -165,7 +165,7 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 
 	if a.Query == "" {
 		log.Debug("\nAffected components and stacks: \n")
-		err = viewWithScroll(d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, affected)
+		err = viewWithScroll(viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, affected})
 		if err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 			return err
 		}
 
-		err = viewWithScroll(pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res)
+		err = viewWithScroll(viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
 		if err != nil {
 			return err
 		}
@@ -318,7 +318,7 @@ func ExecuteDescribeAffectedCmd(atmosConfig *schema.AtmosConfiguration, a Descri
 			return err
 		}
 
-		err = viewWithScroll(pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res)
+		err = viewWithScroll(viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
 		if err != nil {
 			return err
 		}
@@ -327,13 +327,20 @@ func ExecuteDescribeAffectedCmd(atmosConfig *schema.AtmosConfiguration, a Descri
 	return nil
 }
 
-func viewWithScroll(pageCreator pager.PageCreator,
-	isTTYSupportForStdout func() bool,
-	printOrWriteToFile func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error,
-	atmosConfig *schema.AtmosConfiguration, displayName string, format string, file string, res any,
-) error {
-	if atmosConfig.Settings.Terminal.IsPagerEnabled() && file == "" {
-		err := viewConfig(pageCreator, isTTYSupportForStdout, atmosConfig, displayName, format, res)
+type viewWithScrollProps struct {
+	pageCreator           pager.PageCreator
+	isTTYSupportForStdout func() bool
+	printOrWriteToFile    func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
+	atmosConfig           *schema.AtmosConfiguration
+	displayName           string
+	format                string
+	file                  string
+	res                   any
+}
+
+func viewWithScroll(v viewWithScrollProps) error {
+	if v.atmosConfig.Settings.Terminal.IsPagerEnabled() && v.file == "" {
+		err := viewConfig(viewConfigProps{v.pageCreator, v.isTTYSupportForStdout, v.atmosConfig, v.displayName, v.format, v.res})
 		switch err.(type) {
 		case DescribeConfigFormatError:
 			return err
@@ -344,36 +351,45 @@ func viewWithScroll(pageCreator pager.PageCreator,
 		}
 	}
 
-	err := printOrWriteToFile(atmosConfig, format, file, res)
+	err := printOrWriteToFile(v.atmosConfig, v.format, v.file, v.res)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func viewConfig(pageCreator pager.PageCreator, isTTYSupportForStdout func() bool, atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {
-	if !isTTYSupportForStdout() {
+type viewConfigProps struct {
+	pageCreator           pager.PageCreator
+	isTTYSupportForStdout func() bool
+	atmosConfig           *schema.AtmosConfiguration
+	displayName           string
+	format                string
+	data                  any
+}
+
+func viewConfig(v viewConfigProps) error {
+	if !v.isTTYSupportForStdout() {
 		return ErrTTYNotSupported
 	}
 	var content string
 	var err error
-	switch format {
+	switch v.format {
 	case "yaml":
-		content, err = u.GetHighlightedYAML(atmosConfig, data)
+		content, err = u.GetHighlightedYAML(v.atmosConfig, v.data)
 		if err != nil {
 			return err
 		}
 	case "json":
-		content, err = u.GetHighlightedJSON(atmosConfig, data)
+		content, err = u.GetHighlightedJSON(v.atmosConfig, v.data)
 		if err != nil {
 			return err
 		}
 	default:
 		return DescribeConfigFormatError{
-			format,
+			v.format,
 		}
 	}
-	if err := pageCreator.Run(displayName, content); err != nil {
+	if err := v.pageCreator.Run(v.displayName, content); err != nil {
 		return err
 	}
 	return nil
