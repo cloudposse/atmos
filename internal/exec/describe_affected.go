@@ -157,7 +157,7 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component
 	if len(affected) > 0 && a.IncludeDependents {
-		err = addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
 		if err != nil {
 			return err
 		}
@@ -351,7 +351,7 @@ func viewWithScroll(v viewWithScrollProps) error {
 		}
 	}
 
-	err := printOrWriteToFile(v.atmosConfig, v.format, v.file, v.res)
+	err := v.printOrWriteToFile(v.atmosConfig, v.format, v.file, v.res)
 	if err != nil {
 		return err
 	}
