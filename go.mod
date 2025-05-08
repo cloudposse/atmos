@@ -47,10 +47,8 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
 	github.com/kubescape/go-git-url v0.0.30
-	github.com/lrstanley/bubblezone v0.0.0-20250404061050-e13639e27357
-	github.com/mattn/go-runewidth v0.0.16
-	github.com/mikefarah/yq/v4 v4.45.1
 	github.com/lrstanley/bubblezone v1.0.0
+	github.com/mattn/go-runewidth v0.0.16
 	github.com/mikefarah/yq/v4 v4.45.2
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
