@@ -9,7 +9,12 @@ import (
 
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+var (
+	ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 )
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
@@ -60,17 +65,14 @@ func init() {
 }
 
 func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error) {
-	info, err := exec.ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
+	var atmosConfig schema.AtmosConfiguration
+	if info, err := exec.ProcessCommandLineArgs("", cmd, args, nil); err != nil {
+		return exec.DescribeAffectedCmdArgs{}, err
+	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
 		return exec.DescribeAffectedCmdArgs{}, err
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return exec.DescribeAffectedCmdArgs{}, err
-	}
-
-	err = exec.ValidateStacks(atmosConfig)
+	err := exec.ValidateStacks(atmosConfig)
 	if err != nil {
 		return exec.DescribeAffectedCmdArgs{}, err
 	}
@@ -83,20 +85,11 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 	}
 	setFlagValueInCliArgs(flags, &result)
 
-	// When uploading, always include dependents and settings for all affected components
-	if result.Upload {
-		result.IncludeDependents = true
-		result.IncludeSettings = true
-	}
-
-	if result.Format != "" && result.Format != "yaml" && result.Format != "json" {
-		return exec.DescribeAffectedCmdArgs{}, fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'json' (default) and 'yaml'", result.Format)
-	}
-	if result.Format == "" {
-		result.Format = "json"
+	if result.Format != "yaml" && result.Format != "json" {
+		return exec.DescribeAffectedCmdArgs{}, exec.ErrInvalidFormat
 	}
 	if result.RepoPath != "" && (result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
-		return exec.DescribeAffectedCmdArgs{}, errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+		return exec.DescribeAffectedCmdArgs{}, ErrRepoPathConflict
 	}
 
 	return result, nil
@@ -139,6 +132,11 @@ func setFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffected
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}
 		checkFlagError(err)
+	}
+	// When uploading, always include dependents and settings for all affected components
+	if describe.Upload {
+		describe.IncludeDependents = true
+		describe.IncludeSettings = true
 	}
 }
 

@@ -109,7 +109,8 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
 	var err error
-	if a.RepoPath != "" {
+	switch {
+	case a.RepoPath != "":
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRepoPath(
 			a.CLIConfig,
 			a.RepoPath,
@@ -121,7 +122,7 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 		)
-	} else if a.CloneTargetRef {
+	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
 			a.CLIConfig,
 			a.Ref,
@@ -136,7 +137,7 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 		)
-	} else {
+	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
 			a.CLIConfig,
 			a.Ref,
@@ -164,41 +165,8 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 	}
 
 	if a.Query == "" {
-		log.Debug("\nAffected components and stacks: \n")
-		err = viewWithScroll(viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, affected})
-		if err != nil {
+		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
 			return err
-		}
-
-		if a.Upload {
-			// Parse the repo URL
-			gitURL, err := giturl.NewGitURL(repoUrl)
-			if err != nil {
-				return err
-			}
-			logger, err := l.NewLoggerFromCliConfig(*d.atmosConfig)
-			if err != nil {
-				return err
-			}
-			apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
-			if err != nil {
-				return err
-			}
-
-			req := pro.AffectedStacksUploadRequest{
-				HeadSHA:   headHead.Hash().String(),
-				BaseSHA:   baseHead.Hash().String(),
-				RepoURL:   repoUrl,
-				RepoName:  gitURL.GetRepoName(),
-				RepoOwner: gitURL.GetOwnerName(),
-				RepoHost:  gitURL.GetHostName(),
-				Stacks:    affected,
-			}
-
-			err = apiClient.UploadAffectedStacks(req)
-			if err != nil {
-				return err
-			}
 		}
 	} else {
 		res, err := u.EvaluateYqExpression(d.atmosConfig, affected, a.Query)
@@ -206,7 +174,47 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 			return err
 		}
 
-		err = viewWithScroll(viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
+		err = viewWithScroll(viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DescribeAffectedExec) uploadableQuery(args DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
+	log.Debug("\nAffected components and stacks: \n")
+	err := viewWithScroll(viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
+	if err != nil {
+		return err
+	}
+
+	if args.Upload {
+		// Parse the repo URL
+		gitURL, err := giturl.NewGitURL(repoUrl)
+		if err != nil {
+			return err
+		}
+		logger, err := l.NewLoggerFromCliConfig(*d.atmosConfig)
+		if err != nil {
+			return err
+		}
+		apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
+		if err != nil {
+			return err
+		}
+
+		req := pro.AffectedStacksUploadRequest{
+			HeadSHA:   headHead.Hash().String(),
+			BaseSHA:   baseHead.Hash().String(),
+			RepoURL:   repoUrl,
+			RepoName:  gitURL.GetRepoName(),
+			RepoOwner: gitURL.GetOwnerName(),
+			RepoHost:  gitURL.GetHostName(),
+			Stacks:    affected,
+		}
+
+		err = apiClient.UploadAffectedStacks(req)
 		if err != nil {
 			return err
 		}
