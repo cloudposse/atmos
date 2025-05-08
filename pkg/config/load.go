@@ -116,6 +116,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Info")
 	v.SetDefault("settings.terminal.no_color", false)
+	v.SetDefault("docs.generate.readme.output", "./README.md")
 }
 
 // loadConfigSources delegates reading configs from each source,

@@ -102,6 +102,30 @@ var (
 				Frequency: "daily",
 			},
 		},
+		Docs: schema.Docs{
+			// Even if these fields are deprecated, initialize them with valid values.
+			MaxWidth:   0,
+			Pagination: false,
+			Generate: map[string]schema.DocsGenerate{
+				"readme": {
+					BaseDir:  ".",
+					Input:    []any{"./README.yaml"},
+					Template: "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl",
+					Output:   "./README.md",
+					Terraform: schema.TerraformDocsReadmeSettings{
+						Source:        "src/",
+						Enabled:       false,
+						Format:        "markdown",
+						ShowProviders: false,
+						ShowInputs:    true,
+						ShowOutputs:   true,
+						SortBy:        "name",
+						HideEmpty:     false,
+						IndentLevel:   2,
+					},
+				},
+			},
+		},
 	}
 )
 
