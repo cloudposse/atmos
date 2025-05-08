@@ -9,9 +9,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	errInvalidFlag = errors.New("invalid arguments. The command requires one argument `component`")
-)
+var errInvalidFlag = errors.New("invalid arguments. The command requires one argument `component`")
 
 // describeComponentCmd describes configuration for components
 var describeComponentCmd = &cobra.Command{
