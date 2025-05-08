@@ -19,6 +19,7 @@ on:
 
 env:
   TERRAFORM_VERSION: "1.9.7"
+  OPEN_TOFU_VERSION: "1.9.1"
 
 jobs:
   # ensure the code builds...
@@ -115,10 +116,17 @@ jobs:
           }
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
+          tofu_wrapper: false
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows'
@@ -242,10 +250,17 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
+          tofu_wrapper: false
 
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
@@ -370,10 +385,17 @@ jobs:
         run: |
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
+          tofu_wrapper: false
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
@@ -441,6 +463,12 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
+          tofu_wrapper: false
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@v1
