@@ -238,7 +238,7 @@ func execTerraformShellCommand(
 		return err
 	}
 
-	// Wait until user exits the shell
+	// Wait until the user exits the shell
 	state, err := proc.Wait()
 	if err != nil {
 		return err
@@ -277,7 +277,7 @@ func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []stri
 					envMap[parts[0]] = parts[1]
 				}
 			} else {
-				// For all other environment variables, simply override any existing value
+				// For all other environment variables, just override any existing value
 				envMap[parts[0]] = parts[1]
 			}
 		}

@@ -1859,8 +1859,8 @@ github.com/terminalstatic/go-xsd-validate v0.1.6 h1:TenYeQ3eY631qNi1/cTmLH/s2slH
 github.com/terminalstatic/go-xsd-validate v0.1.6/go.mod h1:18lsvYFofBflqCrvo1umpABZ99+GneNTw2kEEc8UPJw=
 github.com/terraform-docs/terraform-config-inspect v0.0.0-20210728164355-9c1f178932fa h1:wdyf3TobwYFwsqnUGJcjdNHxKfwHPFbaOknBJehnF1M=
 github.com/terraform-docs/terraform-config-inspect v0.0.0-20210728164355-9c1f178932fa/go.mod h1:GtanFwTsRRXScYHOMb5h4K18XQBFeS2tXat9/LrPtPc=
-github.com/terraform-docs/terraform-docs v0.19.0 h1:YDC9YTxEzH0NPbXaqSwi1opp3+F2Ka3ZL/vIUa1Dv68=
-github.com/terraform-docs/terraform-docs v0.19.0/go.mod h1:+Hd2ngjXmsC9H9hHDz4BXdxLaOHJX3/cZEWqaeaG8m0=
+github.com/terraform-docs/terraform-docs v0.20.0 h1:qg0gtYlecCLDgEoJ+KqeAfYDc1iDDmOaF8may9iK444=
+github.com/terraform-docs/terraform-docs v0.20.0/go.mod h1:wNwRd0HM4G78v8ZtNXVPtCyp0/i/79wtMYr3hmekZGw=
 github.com/tidwall/gjson v1.18.0 h1:FIDeeyB800efLX89e5a8Y0BNH+LOngJyGrIWxG2FKQY=
 github.com/tidwall/gjson v1.18.0/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
 github.com/tidwall/match v1.1.1 h1:+Ho715JplO36QYgwN9PGYNhgZvoUSc9X2c80KVTi+GA=
