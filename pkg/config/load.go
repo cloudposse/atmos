@@ -115,6 +115,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Info")
+	v.SetDefault("docs.generate.readme.output", "./README.md")
 }
 
 // loadConfigSources delegates reading configs from each source,
