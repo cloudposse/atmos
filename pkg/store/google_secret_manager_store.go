@@ -247,7 +247,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	}
 
 	var unmarshalled interface{}
-	//nolint:nilerr // Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party secrets that might not be JSON-encoded
+	// Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party secrets that might not be JSON-encoded
 	if err := json.Unmarshal(result.Payload.Data, &unmarshalled); err != nil {
 		// If it's not valid JSON, return the raw string value
 		return string(result.Payload.Data), nil
