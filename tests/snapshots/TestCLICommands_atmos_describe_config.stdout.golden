@@ -126,7 +126,11 @@
     "GitlabToken": ""
   },
   "vendor": {
-    "base_path": ""
+    "base_path": "",
+    "list": {
+      "format": "",
+      "columns": null
+    }
   },
   "initialized": true,
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
