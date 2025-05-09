@@ -168,7 +168,6 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 }
 
 func (d *DescribeAffectedExec) view(a DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
-
 	if a.Query == "" {
 		if err := d.uploadableQuery(&a, repoUrl, headHead, baseHead, affected); err != nil {
 			return err
