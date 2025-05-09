@@ -116,9 +116,10 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 			cliConfig.Verbose = true
 		}
 	}
-	cliConfig.NoColor = atmosConfig.Settings.Terminal.NoColor
-	if atmosConfig.Settings.Terminal.NoColor {
+	if !cmd.Flags().Changed("no-color") && atmosConfig.Settings.Terminal.NoColor {
 		cliConfig.NoColor = atmosConfig.Settings.Terminal.NoColor
+	} else if cmd.Flags().Changed("no-color") {
+		cliConfig.NoColor, _ = cmd.Flags().GetBool("no-color")
 	}
 	if !cmd.Flags().Changed("disable-trim-trailing-whitespace") && atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace {
 		cliConfig.Disable.TrimTrailingWhitespace = atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace
