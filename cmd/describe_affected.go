@@ -13,9 +13,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
-)
+var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
 var describeAffectedCmd = &cobra.Command{
