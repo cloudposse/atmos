@@ -77,6 +77,11 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if v, ok := flagKeyValue["logs-file"]; ok {
 		atmosConfig.Logs.File = v
 	}
+	if flagKeyValue, ok := flagKeyValue["no-color"]; ok || flagKeyValue == "true" {
+		atmosConfig.Settings.Terminal.NoColor = true
+	} else if flagKeyValue == "false" {
+		atmosConfig.Settings.Terminal.NoColor = false
+	}
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
