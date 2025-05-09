@@ -74,6 +74,8 @@ tests:
     description: "Validate atmos docs command outputs documentation for a specific component."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
+    env:
+      ATMOS_PAGER: false
     args:
       - "docs"
       - "myapp"
@@ -91,6 +93,8 @@ tests:
     description: "Ensure atmos CLI outputs the Atmos configuration in YAML."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
+    env:
+      ATMOS_PAGER: false
     args:
       - "describe"
       - "config"
@@ -111,6 +115,8 @@ tests:
     description: "Ensure atmos CLI outputs the Atmos configuration in JSON."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
+    env:
+      ATMOS_PAGER: false
     args:
       - "describe"
       - "config"

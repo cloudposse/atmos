@@ -55,7 +55,7 @@ var (
 			ListMergeStrategy: "replace",
 			Terminal: schema.Terminal{
 				MaxWidth: templates.GetTerminalWidth(),
-				Pager:    true,
+				Pager:    "less",
 				Colors:   true,
 				Unicode:  true,
 				SyntaxHighlighting: schema.SyntaxHighlighting{
