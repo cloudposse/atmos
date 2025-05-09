@@ -164,8 +164,13 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 		}
 	}
 
+	return d.view(a, repoUrl, headHead, baseHead, affected)
+}
+
+func (d *DescribeAffectedExec) view(a DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
+
 	if a.Query == "" {
-		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
+		if err := d.uploadableQuery(&a, repoUrl, headHead, baseHead, affected); err != nil {
 			return err
 		}
 	} else {
@@ -174,52 +179,47 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 			return err
 		}
 
-		err = viewWithScroll(viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
+		err = viewWithScroll(&viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
 		if err != nil {
 			return err
 		}
 	}
-	return nil
 }
 
-func (d *DescribeAffectedExec) uploadableQuery(args DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
+func (d *DescribeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	log.Debug("\nAffected components and stacks: \n")
-	err := viewWithScroll(viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
+	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
+	if err != nil {
+		return err
+	}
+	if !args.Upload {
+		return nil
+	}
+	// Parse the repo URL
+	gitURL, err := giturl.NewGitURL(repoUrl)
+	if err != nil {
+		return err
+	}
+	logger, err := l.NewLoggerFromCliConfig(*d.atmosConfig)
+	if err != nil {
+		return err
+	}
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
 	if err != nil {
 		return err
 	}
 
-	if args.Upload {
-		// Parse the repo URL
-		gitURL, err := giturl.NewGitURL(repoUrl)
-		if err != nil {
-			return err
-		}
-		logger, err := l.NewLoggerFromCliConfig(*d.atmosConfig)
-		if err != nil {
-			return err
-		}
-		apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
-		if err != nil {
-			return err
-		}
-
-		req := pro.AffectedStacksUploadRequest{
-			HeadSHA:   headHead.Hash().String(),
-			BaseSHA:   baseHead.Hash().String(),
-			RepoURL:   repoUrl,
-			RepoName:  gitURL.GetRepoName(),
-			RepoOwner: gitURL.GetOwnerName(),
-			RepoHost:  gitURL.GetHostName(),
-			Stacks:    affected,
-		}
-
-		err = apiClient.UploadAffectedStacks(req)
-		if err != nil {
-			return err
-		}
+	req := pro.AffectedStacksUploadRequest{
+		HeadSHA:   headHead.Hash().String(),
+		BaseSHA:   baseHead.Hash().String(),
+		RepoURL:   repoUrl,
+		RepoName:  gitURL.GetRepoName(),
+		RepoOwner: gitURL.GetOwnerName(),
+		RepoHost:  gitURL.GetHostName(),
+		Stacks:    affected,
 	}
-	return nil
+
+	return apiClient.UploadAffectedStacks(req)
 }
 
 // ExecuteDescribeAffectedCmd executes `describe affected` command
@@ -326,7 +326,7 @@ func ExecuteDescribeAffectedCmd(atmosConfig *schema.AtmosConfiguration, a Descri
 			return err
 		}
 
-		err = viewWithScroll(viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
+		err = viewWithScroll(&viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, printOrWriteToFile, atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
 		if err != nil {
 			return err
 		}
@@ -346,9 +346,9 @@ type viewWithScrollProps struct {
 	res                   any
 }
 
-func viewWithScroll(v viewWithScrollProps) error {
+func viewWithScroll(v *viewWithScrollProps) error {
 	if v.atmosConfig.Settings.Terminal.IsPagerEnabled() && v.file == "" {
-		err := viewConfig(viewConfigProps{v.pageCreator, v.isTTYSupportForStdout, v.atmosConfig, v.displayName, v.format, v.res})
+		err := viewConfig(&viewConfigProps{v.pageCreator, v.isTTYSupportForStdout, v.atmosConfig, v.displayName, v.format, v.res})
 		switch err.(type) {
 		case DescribeConfigFormatError:
 			return err
@@ -375,7 +375,7 @@ type viewConfigProps struct {
 	data                  any
 }
 
-func viewConfig(v viewConfigProps) error {
+func viewConfig(v *viewConfigProps) error {
 	if !v.isTTYSupportForStdout() {
 		return ErrTTYNotSupported
 	}
