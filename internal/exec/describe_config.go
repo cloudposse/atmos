@@ -26,7 +26,7 @@ var ErrTTYNotSupported = fmt.Errorf("tty not supported for this command")
 type describeConfigExec struct {
 	atmosConfig           *schema.AtmosConfiguration
 	pageCreator           pager.PageCreator
-	printOrWriteToFile    func(format string, file string, data any) error
+	printOrWriteToFile    func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
 	IsTTYSupportForStdout func() bool
 }
 
@@ -63,7 +63,7 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 			log.Debug("Failed to use pager")
 		}
 	}
-	return d.printOrWriteToFile(format, output, res)
+	return d.printOrWriteToFile(d.atmosConfig, format, output, res)
 }
 
 func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfiguration) error {
@@ -74,12 +74,12 @@ func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfigu
 	var err error
 	switch format {
 	case "yaml":
-		content, err = u.GetAtmosConfigYAML(data)
+		content, err = u.GetHighlightedYAML(data, data)
 		if err != nil {
 			return err
 		}
 	case "json":
-		content, err = u.GetAtmosConfigJSON(data)
+		content, err = u.GetHighlightedJSON(data, data)
 		if err != nil {
 			return err
 		}

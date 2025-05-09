@@ -87,7 +87,7 @@ func TestDescribeConfig(t *testing.T) {
 		dc := &describeConfigExec{
 			atmosConfig:           config,
 			IsTTYSupportForStdout: func() bool { return false },
-			printOrWriteToFile: func(format, file string, data any) error {
+			printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
 				assert.Equal(t, "yaml", format)
 				assert.Equal(t, "", file)
 				assert.Equal(t, config, data)
@@ -103,7 +103,7 @@ func TestDescribeConfig(t *testing.T) {
 		dc := &describeConfigExec{
 			atmosConfig:           config,
 			IsTTYSupportForStdout: func() bool { return false },
-			printOrWriteToFile: func(format, file string, data any) error {
+			printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
 				assert.Equal(t, "yaml", format)
 				assert.Equal(t, "", file)
 				assert.Equal(t, config, data)
