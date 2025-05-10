@@ -183,6 +183,7 @@ func (d *DescribeAffectedExec) view(a DescribeAffectedCmdArgs, repoUrl string, h
 			return err
 		}
 	}
+	return nil
 }
 
 func (d *DescribeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
