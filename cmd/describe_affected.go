@@ -113,7 +113,6 @@ func setFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffected
 		"format":                         &describe.Format,
 		"file":                           &describe.OutputFile,
 		"query":                          &describe.Query,
-		"sha-key-path":                   &describe.SSHKeyPath,
 	}
 
 	var err error
