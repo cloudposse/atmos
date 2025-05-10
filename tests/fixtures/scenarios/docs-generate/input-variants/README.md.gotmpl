@@ -1,0 +1,25 @@
+{{- $data := (ds "config") -}}
+
+{{- if has $data "name" }}
+##name:## {{ $data.name }}
+{{ end }}
+
+{{- if has $data "description" }}
+##Description:## {{ $data.description }}
+{{ end }}
+
+{{- if has $data "extra_info" }}
+> Note: {{ $data.extra_info }}
+{{ end }}
+
+{{- if has $data "github_repo" }}
+##Github_repo:## {{ $data.github_repo }}
+{{ end }}
+
+{{- if has $data "license" }}
+##License:## {{ $data.license }}
+{{ end }}
+
+{{- if has $data "categories" }}
+##Categories:## {{ $data.categories }}
+{{ end }}

@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    component-1:
+      command: tofu
+      metadata:
+        component: mock
+      settings:
+        config:
+          a: component-1-a
+          b: component-1-b
+          c: component-1-c
+      vars:
+        foo: "{{ .settings.config.a }}"
+        bar: "{{ .settings.config.b }}"
+        baz: "{{ .settings.config.c }}"
+
+    component-2:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.output component-1 foo
+        bar: !terraform.output component-1 bar
+        baz: !terraform.output component-1 {{ .stack }} baz
+
+    component-3:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.output component-1 {{ .stack }} foo
+        bar: !terraform.output component-2 bar
+        baz: !terraform.output component-2 {{ .stack }} baz

@@ -62,7 +62,7 @@ func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndSta
 }
 
 // ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether
-// the component is real or abstract and whether the component is disabled or not and whether the component is locked
+// the component is real or abstract and whether the component is disabled or not and whether the component is locked.
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,

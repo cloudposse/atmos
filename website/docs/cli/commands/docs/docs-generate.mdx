@@ -1,0 +1,129 @@
+---
+title: atmos docs generate
+sidebar_label: generate
+sidebar_class_name: command
+description: "Generate documentation artifacts based on a named section under `docs.generate` in atmos.yaml"
+id: generate
+---
+import Screengrab from '@site/src/components/Screengrab'
+
+:::note Purpose
+
+Use this command to generate one of your documentation artifacts (e.g. a README) as defined by the **named** section under `docs.generate.<KEY>` in `atmos.yaml`.  
+
+Replace `<KEY>` with the name of the section you want to run (for example, `readme`, `release-notes`, etc.).
+
+:::
+
+In `atmos.yaml`, you can define **one or more** documentation‐generation blocks under `docs.generate`.  Each top‐level key becomes a CLI argument:
+
+```yaml
+docs:
+  generate:
+    readme:
+      base-dir: .
+      input:
+        - "./README.yaml"
+      template: "https://.../README.md.gotmpl"
+      output: "./README.md"
+      terraform:
+        source: src/
+        enabled: false
+        format: "markdown"
+        show_providers: false
+        show_inputs: true
+        show_outputs: true
+        sort_by: "name"
+        hide_empty: false
+        indent_level: 2
+
+    release-notes:
+      base-dir: .
+      input:
+        - "./CHANGELOG.yaml"
+      template: "./release-notes.gotmpl"
+      output: "./RELEASE_NOTES.md"
+```
+
+For each CLI argument the command combines all local or remote YAML files specified at `input` and template file then generates the documentation artifact at the respective `output` folder. In case the template contains `terraform_docs` key, e.g.  
+
+    ```yaml
+{{- $data := (ds "config") -}}
+
+{{ $data.name | default "Project Title" }}
+
+{{ $data.description | default "No description provided." }}
+
+{{ if has $data "extra_info" }}
+Extra info: {{ $data.extra_info }}
+{{ end }}
+
+{{ if has $data "terraform_docs" }}
+## Terraform Docs
+{{ $data.terraform_docs }}
+{{ end }}
+
+    ```
+the resultant file will also have a corresponding section rendered. By default `terraform.format` is set to `markdown table`, and can also be `markdown`, `tfvars hcl`, and `tfvars json`.  
+
+## Dynamic Keys
+
+If you add a new key under docs.generate—say readme2 or release-notes —you simply pass that key to the CLI:
+
+
+```shell
+atmos docs generate readme2
+atmos docs generate release-notes
+```
+
+## Usage
+
+<Screengrab title="atmos docs generate --help" slug="atmos-docs-generate--help" />
+
+```shell
+atmos docs generate readme
+``` 
+
+## Supported Sources for README.yaml and template
+
+### Local Sources
+
+It supports the following local file sources:
+
+  - Absolute paths
+
+    ```yaml
+    docs:
+      generate:
+        readme:
+          input:
+            - "/Users/me/Documents/README.yaml"
+          template: "/Users/me/Documents/README.md.gotmpl"
+    ```
+
+  - Paths relative to the current working directory
+
+    ```yaml
+    docs:
+      generate:
+        readme:
+          input:
+            - "./README.yaml"
+          template: "./README.md.gotmpl"
+    ```
+
+  - Paths relative to the `base_dir` defined in `atmos.yaml` CLI config file (then resolved as relative to cwd)
+
+    ```yaml
+    docs:
+      generate:
+        readme:
+          input: 
+            - "terraform/README.yaml"
+          template: "terraform/README.md.gotmpl"
+    ```
+
+### Remote Sources
+
+To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/go-getter)
+(used by [Terraform](https://www.terraform.io/) for downloading modules)

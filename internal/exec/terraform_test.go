@@ -15,7 +15,7 @@ import (
 // TestExecuteTerraform_ExportEnvVar check that when executing the terraform apply command.
 // It checks that the environment variables are correctly exported and used.
 // Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
-// Check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` refers to directory.
+// Check that `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` point to a directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -159,13 +159,13 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	output := buf.String()
 
 	// Check the output
-	if !strings.Contains(output, "foo = \"component-1-a\"") {
+	if !strings.Contains(output, "foo   = \"component-1-a\"") {
 		t.Errorf("'foo' variable should be 'component-1-a'")
 	}
-	if !strings.Contains(output, "bar = \"component-1-b\"") {
+	if !strings.Contains(output, "bar   = \"component-1-b\"") {
 		t.Errorf("'bar' variable should be 'component-1-b'")
 	}
-	if !strings.Contains(output, "baz = \"component-1-c\"") {
+	if !strings.Contains(output, "baz   = \"component-1-c\"") {
 		t.Errorf("'baz' variable should be 'component-1-c'")
 	}
 }
@@ -222,14 +222,16 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	}
 	output := buf.String()
 
+	t.Log(output)
+
 	// Check the output
-	if !strings.Contains(output, "foo = \"{{ .settings.config.a }}\"") {
+	if !strings.Contains(output, "foo   = \"{{ .settings.config.a }}\"") {
 		t.Errorf("'foo' variable should be '{{ .settings.config.a }}'")
 	}
-	if !strings.Contains(output, "bar = \"{{ .settings.config.b }}\"") {
+	if !strings.Contains(output, "bar   = \"{{ .settings.config.b }}\"") {
 		t.Errorf("'bar' variable should be '{{ .settings.config.b }}'")
 	}
-	if !strings.Contains(output, "baz = \"{{ .settings.config.c }}\"") {
+	if !strings.Contains(output, "baz   = \"{{ .settings.config.c }}\"") {
 		t.Errorf("'baz' variable should be '{{ .settings.config.c }}'")
 	}
 }
