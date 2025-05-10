@@ -23,10 +23,12 @@ import (
 //
 //nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-	atmosConfig, err := processAtmosConfigs(&configAndStacksInfo)
-	if err != nil {
-		return atmosConfig, err
+	if err := DefaultConfigHandler.load(&configAndStacksInfo); err != nil {
+		return schema.AtmosConfiguration{}, err
 	}
+	atmosConfig := *DefaultConfigHandler.atmosConfig
+
+	// processAtmosConfigs(&configAndStacksInfo)
 	// Process the base path specified in the Terraform provider (which calls into the atmos code)
 	// This overrides all other atmos base path configs (`atmos.yaml`, ENV var `ATMOS_BASE_PATH`)
 	if configAndStacksInfo.AtmosBasePath != "" {
@@ -39,7 +41,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 
 	// Check config
-	err = checkConfig(atmosConfig, processStacks)
+	err := checkConfig(atmosConfig, processStacks)
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -61,18 +63,13 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	return atmosConfig, nil
 }
 
+var flagKeyValue = parseFlags()
+
 func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	// TODO: This is a quick patch to mitigate the issue we can look for better code later
 	// Issue: https://linear.app/cloudposse/issue/DEV-3093/create-a-cli-command-core-library
-	if os.Getenv("ATMOS_LOGS_LEVEL") != "" {
-		atmosConfig.Logs.Level = os.Getenv("ATMOS_LOGS_LEVEL")
-	}
-	flagKeyValue := parseFlags()
 	if v, ok := flagKeyValue["logs-level"]; ok {
 		atmosConfig.Logs.Level = v
-	}
-	if os.Getenv("ATMOS_LOGS_FILE") != "" {
-		atmosConfig.Logs.File = os.Getenv("ATMOS_LOGS_FILE")
 	}
 	if v, ok := flagKeyValue["logs-file"]; ok {
 		atmosConfig.Logs.File = v
@@ -112,33 +109,6 @@ func parseFlags() map[string]string {
 		}
 	}
 	return flags
-}
-
-func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-	atmosConfig, err := LoadConfig(configAndStacksInfo)
-	if err != nil {
-		return atmosConfig, err
-	}
-	atmosConfig.ProcessSchemas()
-
-	// Process ENV vars
-	err = processEnvVars(&atmosConfig)
-	if err != nil {
-		return atmosConfig, err
-	}
-
-	// Process command-line args
-	err = processCommandLineArgs(&atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return atmosConfig, err
-	}
-
-	// Process stores config
-	err = processStoreConfig(&atmosConfig)
-	if err != nil {
-		return atmosConfig, err
-	}
-	return atmosConfig, nil
 }
 
 // atmosConfigAbsolutePaths converts paths to absolute paths.

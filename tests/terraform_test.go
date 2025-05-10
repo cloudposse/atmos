@@ -1,21 +1,301 @@
-package exec
+package tests
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
+	stacksPath := "./fixtures/scenarios/terraform-generate-planfile"
+	componentPath := filepath.Join("..", "..", "components", "terraform", "mock")
+	component := "component-1"
+	stack := "nonprod"
+
+	t.Chdir(stacksPath)
+	defer func() {
+		// Delete the generated files and folders after the test
+		err := os.RemoveAll(filepath.Join(componentPath, ".terraform"))
+		assert.NoError(t, err)
+		err = os.RemoveAll(filepath.Join(componentPath, "terraform.tfstate.d"))
+		assert.NoError(t, err)
+		err = os.Remove(filepath.Join(componentPath, fmt.Sprintf("%s-%s.terraform.tfvars.json", stack, component)))
+		assert.NoError(t, err)
+		err = os.Remove(filepath.Join(componentPath, fmt.Sprintf("%s-%s.planfile.json", stack, component)))
+		assert.NoError(t, err)
+	}()
+	config.DefaultConfigHandler = config.New()
+	// Execute the command
+	os.Args = []string{"atmos", "terraform", "generate", "planfile", component, "-s", stack, "--format", "json", "--file="}
+	err := cmd.Execute()
+	assert.NoError(t, err, "'atmos terraform generate planfile' command should execute without error")
+
+	// Check that the planfile was generated
+	filePath := fmt.Sprintf("%s/%s-%s.planfile.json", componentPath, stack, component)
+	if _, err = os.Stat(filePath); os.IsNotExist(err) {
+		t.Errorf("Generated planfile does not exist: %s", filePath)
+	} else if err != nil {
+		t.Errorf("Error checking file: %v", err)
+	}
+}
+
+func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "./fixtures/scenarios/stack-templates-2"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// Create a pipe to capture stdout to check if terraform is executed correctly
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	os.Args = []string{"atmos", "terraform", "plan", "component-1", "--stack", "nonprod"}
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+	// Restore stdout
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stdout = oldStdout
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	// Check the output
+	if !strings.Contains(output, "foo = \"component-1-a\"") {
+		t.Errorf("'foo' variable should be 'component-1-a'")
+	}
+	if !strings.Contains(output, "bar = \"component-1-b\"") {
+		t.Errorf("'bar' variable should be 'component-1-b'")
+	}
+	if !strings.Contains(output, "baz = \"component-1-c\"") {
+		t.Errorf("'baz' variable should be 'component-1-c'")
+	}
+}
+
+func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "./fixtures/scenarios/stack-templates-2"
+	if err = os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// Create a pipe to capture stdout to check if terraform is executed correctly
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	os.Args = []string{"atmos", "terraform", "plan", "component-1", "--stack", "nonprod", "--process-templates=false"}
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+	// Restore stdout
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stdout = oldStdout
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+	// Check the output
+	if !strings.Contains(output, "foo = \"{{ .settings.config.a }}\"") {
+		t.Errorf("'foo' variable should be '{{ .settings.config.a }}'")
+	}
+	if !strings.Contains(output, "bar = \"{{ .settings.config.b }}\"") {
+		t.Errorf("'bar' variable should be '{{ .settings.config.b }}'")
+	}
+	if !strings.Contains(output, "baz = \"{{ .settings.config.c }}\"") {
+		t.Errorf("'baz' variable should be '{{ .settings.config.c }}'")
+	}
+}
+
+func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
+	err := os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "./fixtures/scenarios/stack-templates-2"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// Create a pipe to capture stdout to check if terraform is executed correctly
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	os.Args = []string{"atmos", "terraform", "workspace", "component-1", "--stack", "nonprod"}
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+	// Restore stdout
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stdout = oldStdout
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	// Check the output
+	if !strings.Contains(output, "workspace \"nonprod-component-1\"") {
+		t.Errorf("The output should contain 'nonprod-component-1'")
+	}
+}
+
+func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+	oldPrintFunc := utils.PrintErrorMarkdownAndExitFn
+	defer func() {
+		utils.PrintErrorMarkdownAndExitFn = oldPrintFunc
+	}()
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+	errFuncationCalled := false
+	utils.PrintErrorMarkdownAndExitFn = func(title string, err error, suggestion string) {
+		errFuncationCalled = true
+		assert.Contains(t, err.Error(), "invalid")
+	}
+	// Define the working directory
+	workDir := "./fixtures/scenarios/invalid-stacks"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	os.Args = []string{"atmos", "terraform", "plan", "component-1", "--stack", "nonprod", "--skip=!terraform.output"}
+	cmd.Execute()
+	assert.True(t, errFuncationCalled, "Error function should be called")
+}
+
+func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "./fixtures/scenarios/terraform-init"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	log.SetLevel(log.DebugLevel)
+	log.SetOutput(w)
+	os.Args = []string{"atmos", "terraform", "init", "component-1", "--stack", "nonprod", "--var-file", "nonprod-component-1.terraform.tfvars.json"}
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+
+	// Restore stderr
+	err = w.Close()
+	assert.NoError(t, err)
+	os.Stderr = oldStderr
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	// Check the output
+	expected := "init -reconfigure -var-file nonprod-component-1.terraform.tfvars.json"
+	if !strings.Contains(output, expected) {
+		t.Logf("TestExecuteTerraform_TerraformInitWithVarfile output:\n%s", output)
+		t.Errorf("Output should contain '%s'", expected)
+	}
+}
 
 // TestExecuteTerraform_ExportEnvVar check that when executing the terraform apply command.
 // It checks that the environment variables are correctly exported and used.
 // Env var `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` should be exported and used in the terraform apply command.
-// Check that `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` point to a directory.
+// Check `ATMOS_BASE_PATH` and `ATMOS_CLI_CONFIG_PATH` refers to directory.
 func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
@@ -31,26 +311,17 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	}()
 
 	// Define the work directory and change to it
-	workDir := "../../tests/fixtures/scenarios/env"
+	workDir := "./fixtures/scenarios/env"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
-
-	// set info for ExecuteTerraform
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            "dev",
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "env-example",
-		SubCommand:       "apply",
 	}
 
 	// Create a pipe to capture stdout to check if terraform is executed correctly
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	err = ExecuteTerraform(info)
+	os.Args = []string{"atmos", "terraform", "apply", "env-example", "--stack", "dev"}
+	err = cmd.Execute()
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -104,298 +375,6 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	}
 	t.Logf("atmos_base_path: %s", basePath)
 	t.Logf("atmos_cli_config_path: %s", configPath)
-}
-
-func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
-	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
-
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            "nonprod",
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "component-1",
-		SubCommand:       "plan",
-		ProcessTemplates: true,
-		ProcessFunctions: true,
-	}
-
-	// Create a pipe to capture stdout to check if terraform is executed correctly
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	err = ExecuteTerraform(info)
-	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-	}
-	// Restore stdout
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
-
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
-	output := buf.String()
-
-	// Check the output
-	if !strings.Contains(output, "foo   = \"component-1-a\"") {
-		t.Errorf("'foo' variable should be 'component-1-a'")
-	}
-	if !strings.Contains(output, "bar   = \"component-1-b\"") {
-		t.Errorf("'bar' variable should be 'component-1-b'")
-	}
-	if !strings.Contains(output, "baz   = \"component-1-c\"") {
-		t.Errorf("'baz' variable should be 'component-1-c'")
-	}
-}
-
-func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
-	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
-	if err = os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
-
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            "nonprod",
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "component-1",
-		SubCommand:       "plan",
-		ProcessTemplates: false,
-		ProcessFunctions: true,
-	}
-
-	// Create a pipe to capture stdout to check if terraform is executed correctly
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	err = ExecuteTerraform(info)
-	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-	}
-	// Restore stdout
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
-
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
-	output := buf.String()
-
-	t.Log(output)
-
-	// Check the output
-	if !strings.Contains(output, "foo   = \"{{ .settings.config.a }}\"") {
-		t.Errorf("'foo' variable should be '{{ .settings.config.a }}'")
-	}
-	if !strings.Contains(output, "bar   = \"{{ .settings.config.b }}\"") {
-		t.Errorf("'bar' variable should be '{{ .settings.config.b }}'")
-	}
-	if !strings.Contains(output, "baz   = \"{{ .settings.config.c }}\"") {
-		t.Errorf("'baz' variable should be '{{ .settings.config.c }}'")
-	}
-}
-
-func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
-	err := os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
-
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
-	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
-
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            "nonprod",
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "component-1",
-		SubCommand:       "workspace",
-		ProcessTemplates: true,
-		ProcessFunctions: true,
-	}
-
-	// Create a pipe to capture stdout to check if terraform is executed correctly
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	err = ExecuteTerraform(info)
-	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-	}
-	// Restore stdout
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
-
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
-	output := buf.String()
-
-	// Check the output
-	if !strings.Contains(output, "workspace \"nonprod-component-1\"") {
-		t.Errorf("The output should contain 'nonprod-component-1'")
-	}
-}
-
-func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
-	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/invalid-stacks"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
-
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            "nonprod",
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "component-1",
-		SubCommand:       "plan",
-		ProcessTemplates: true,
-		ProcessFunctions: true,
-		Skip:             []string{"!terraform.output"},
-	}
-
-	err = ExecuteTerraform(info)
-	assert.Error(t, err)
-	assert.ErrorContains(t, err, "invalid")
-}
-
-func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
-	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/terraform-init"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
-
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            "nonprod",
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "component-1",
-		SubCommand:       "init",
-		ProcessTemplates: true,
-		ProcessFunctions: true,
-	}
-
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	log.SetLevel(log.DebugLevel)
-	log.SetOutput(w)
-
-	err = ExecuteTerraform(info)
-	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-	}
-
-	// Restore stderr
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stderr = oldStderr
-
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
-	output := buf.String()
-
-	// Check the output
-	expected := "init -reconfigure -var-file nonprod-component-1.terraform.tfvars.json"
-	if !strings.Contains(output, expected) {
-		t.Logf("TestExecuteTerraform_TerraformInitWithVarfile output:\n%s", output)
-		t.Errorf("Output should contain '%s'", expected)
-	}
 }
 
 // Helper Function to extract key-value pairs from a string.

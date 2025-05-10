@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/cloudposse/atmos/cmd"
 )
 
 func TestMainHooksAndStoreIntegration(t *testing.T) {
@@ -35,10 +36,10 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	// Set the arguments for the first call to main() to deploy the `component1` component, which uses a `hook` to set a
 	// value in Redis
 	os.Args = []string{"atmos", "terraform", "deploy", "component1", "-s", "test"}
-	main()
+	cmd.Execute()
 
 	// Set the arguments for the second call to main() to deploy the `component2` component, which uses a `store` to read a
 	// value  that was set in the first apply.
 	os.Args = []string{"atmos", "terraform", "deploy", "component2", "-s", "test"}
-	main()
+	cmd.Execute()
 }

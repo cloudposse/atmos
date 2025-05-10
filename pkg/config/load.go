@@ -23,69 +23,6 @@ const MaximumImportLvL = 10
 
 var ErrAtmosDIrConfigNotFound = errors.New("atmos config directory not found")
 
-// * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
-// * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
-// * Home directory (~/.atmos).
-// * Current working directory.
-// * ENV vars.
-// * Command-line arguments.
-func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
-	v := viper.New()
-	var atmosConfig schema.AtmosConfiguration
-	v.SetConfigType("yaml")
-	v.SetTypeByDefaultValue(true)
-	setDefaultConfiguration(v)
-	// Load embed atmos.yaml
-	if err := loadEmbeddedConfig(v); err != nil {
-		return atmosConfig, err
-	}
-	if len(configAndStacksInfo.AtmosConfigFilesFromArg) > 0 || len(configAndStacksInfo.AtmosConfigDirsFromArg) > 0 {
-		err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
-		if err != nil {
-			return atmosConfig, err
-		}
-		return atmosConfig, nil
-	}
-
-	// Load configuration from different sources.
-	if err := loadConfigSources(v, configAndStacksInfo); err != nil {
-		return atmosConfig, err
-	}
-	// If no config file is used, fall back to the default CLI config.
-	if v.ConfigFileUsed() == "" {
-		log.Debug("'atmos.yaml' CLI config was not found", "paths", "system dir, home dir, current dir, ENV vars")
-		log.Debug("Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'")
-		log.Debug("Using the default CLI config")
-
-		if err := mergeDefaultConfig(v); err != nil {
-			return atmosConfig, err
-		}
-	}
-	if v.ConfigFileUsed() != "" {
-		// get dir of atmosConfigFilePath
-		atmosConfigDir := filepath.Dir(v.ConfigFileUsed())
-		atmosConfig.CliConfigPath = atmosConfigDir
-		// Set the CLI config path in the atmosConfig struct
-		if !filepath.IsAbs(atmosConfig.CliConfigPath) {
-			absPath, err := filepath.Abs(atmosConfig.CliConfigPath)
-			if err != nil {
-				return atmosConfig, err
-			}
-			atmosConfig.CliConfigPath = absPath
-		}
-	}
-	setEnv(v)
-	// We want the editorconfig color by default to be true
-	atmosConfig.Validate.EditorConfig.Color = true
-	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
-	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
-	err := v.Unmarshal(&atmosConfig)
-	if err != nil {
-		return atmosConfig, err
-	}
-	return atmosConfig, nil
-}
-
 func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")
@@ -115,30 +52,52 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.inject_github_token", true)
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Info")
+	v.SetDefault("validate.editorconfig.color", true)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 }
 
 // loadConfigSources delegates reading configs from each source,
 // returning early if any step in the chain fails.
-func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
-	if err := readSystemConfig(v); err != nil {
+func loadConfigSources(v *viper.Viper, atmosCliConfigPath string) error {
+	if err := readSystemConfigFunc(v); err != nil {
 		return err
 	}
 
-	if err := readHomeConfig(v); err != nil {
+	if err := readHomeConfigFunc(v); err != nil {
 		return err
 	}
 
-	if err := readWorkDirConfig(v); err != nil {
+	if err := readWorkDirConfigFunc(v); err != nil {
 		return err
 	}
 
-	if err := readEnvAmosConfigPath(v); err != nil {
+	if err := readEnvAmosConfigPathFunc(v); err != nil {
 		return err
 	}
 
-	return readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
+	if err := readAtmosConfigCliFunc(v, atmosCliConfigPath); err != nil {
+		return err
+	}
+
+	// If no config file is used, fall back to the default CLI config.
+	if v.ConfigFileUsed() == "" {
+		log.Debug("'atmos.yaml' CLI config was not found", "paths", "system dir, home dir, current dir, ENV vars")
+		log.Debug("Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'")
+		log.Debug("Using the default CLI config")
+
+		return mergeDefaultConfigFunc(v)
+	}
+	return nil
 }
+
+var (
+	readSystemConfigFunc      = readSystemConfig
+	readHomeConfigFunc        = readHomeConfig
+	readWorkDirConfigFunc     = readWorkDirConfig
+	readEnvAmosConfigPathFunc = readEnvAmosConfigPath
+	readAtmosConfigCliFunc    = readAtmosConfigCli
+	mergeDefaultConfigFunc    = mergeDefaultConfig
+)
 
 // readSystemConfig load config from system dir .
 func readSystemConfig(v *viper.Viper) error {
@@ -226,15 +185,7 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 	if len(atmosCliConfigPath) == 0 {
 		return nil
 	}
-	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
-	switch err.(type) {
-	case viper.ConfigFileNotFoundError:
-		log.Debug("config not found", "file", atmosCliConfigPath)
-	default:
-		return err
-	}
-
-	return nil
+	return mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
 }
 
 // mergeConfig merge config from a specified path directory and process imports. Return error if config file does not exist.

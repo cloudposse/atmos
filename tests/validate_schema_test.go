@@ -36,6 +36,8 @@ func TestCliValidateSchema(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 	os.Args = []string{"atmos", "validate", "schema"}
+	utils.OsExit = func(code int) {
+	}
 	err = cmd.Execute()
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)

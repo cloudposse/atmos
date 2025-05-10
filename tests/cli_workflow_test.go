@@ -1,4 +1,4 @@
-package exec
+package tests
 
 import (
 	"bytes"
@@ -6,17 +6,16 @@ import (
 	"os"
 	"testing"
 
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
-
-	"github.com/stretchr/testify/assert"
-
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExecuteWorkflowCmd(t *testing.T) {
-	stacksPath := "../../tests/fixtures/scenarios/atmos-overrides-section"
+	stacksPath := "./fixtures/scenarios/atmos-overrides-section"
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
@@ -28,7 +27,9 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-
+	utils.OsExit = func(code int) {}
+	utils.PrintErrorMarkdownAndExitFn = func(title string, err error, suggestion string) {
+	}
 	expectedOutput := `atmos describe component c1 -s prod
 atmos describe component c1 -s staging
 atmos describe component c1 -s dev
@@ -36,30 +37,8 @@ atmos describe component c1 -s sandbox
 atmos describe component c1 -s test
 `
 
-	cmd := &cobra.Command{
-		Use:   "workflow",
-		Short: "Run predefined tasks using workflows",
-		Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
-
-		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-		Run: func(cmd *cobra.Command, args []string) {
-			err := ExecuteWorkflowCmd(cmd, args)
-			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
-			}
-		},
-	}
-
-	cmd.DisableFlagParsing = false
-	cmd.PersistentFlags().StringP("file", "f", "", "Specify the workflow file to run")
-	cmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
-	cmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
-	cmd.PersistentFlags().String("stack", "", "Execute the workflow for the specified stack")
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
 	// Execute the command
-	cmd.SetArgs([]string{"--file", "workflows", "show-all-describe-component-commands"})
+	os.Args = []string{"atmos", "workflow", "--file", "workflows", "show-all-describe-component-commands"}
 	err = cmd.Execute()
 	assert.NoError(t, err, "'atmos workflow' command should execute without error")
 
@@ -79,8 +58,8 @@ atmos describe component c1 -s test
 }
 
 func TestExecuteWorkflow(t *testing.T) {
-	stacksPath := "../tests/fixtures/scenarios/atmos-overrides-section"
-	workflowPath := "../tests/fixtures/scenarios/atmos-overrides-section/stacks/workflows/workflows.yaml"
+	stacksPath := "./fixtures/scenarios/atmos-overrides-section"
+	workflowPath := "./fixtures/scenarios/atmos-overrides-section/stacks/workflows/workflows.yaml"
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
@@ -100,7 +79,7 @@ atmos describe component c1 -s sandbox
 atmos describe component c1 -s test
 `
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	assert.NoError(t, err, "'InitCliConfig' should execute without error")
 
 	workflowDefinition := schema.WorkflowDefinition{
@@ -128,7 +107,7 @@ atmos describe component c1 -s test
 		},
 	}
 
-	err = ExecuteWorkflow(atmosConfig, "show-all-describe-component-commands", workflowPath, &workflowDefinition, false, "", "")
+	err = exec.ExecuteWorkflow(atmosConfig, "show-all-describe-component-commands", workflowPath, &workflowDefinition, false, "", "")
 	assert.NoError(t, err, "'ExecuteWorkflow' should execute without error")
 
 	// Close the writer and restore stdout

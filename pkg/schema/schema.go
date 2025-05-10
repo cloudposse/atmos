@@ -11,6 +11,8 @@ type AtmosSectionMapType = map[string]any
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	Config                        []string               `yaml:"config" json:"config" mapstructure:"config"`
+	ConfigPaths                   []string               `yaml:"config_paths" json:"config_paths" mapstructure:"config_paths"`
 	BasePath                      string                 `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Components                    Components             `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks                 `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
@@ -97,7 +99,7 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 			continue
 		}
 
-		if key == "cue" || key == "opa" || key == "jsonschema" {
+		if key == "opa" || key == "jsonschema" {
 			var temp ResourcePath
 			if err := node.Decode(&temp); err == nil {
 				m.Schemas[key] = temp
@@ -121,7 +123,7 @@ func (m *AtmosConfiguration) UnmarshalYAML(value *yaml.Node) error {
 
 func (a *AtmosConfiguration) ProcessSchemas() {
 	for key := range a.Schemas {
-		if key == "cue" || key == "opa" || key == "jsonschema" {
+		if key == "opa" || key == "jsonschema" {
 			a.processResourceSchema(key)
 			continue
 		}

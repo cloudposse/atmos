@@ -6,11 +6,118 @@ import (
 	"strings"
 	"testing"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAddConfig_AllTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		key          string
+		defaultValue interface{}
+		flagValue    string
+		envVar       string
+		envValue     string
+		expected     interface{}
+	}{
+		{
+			name:         "string flag",
+			key:          "components.helmfile.command",
+			defaultValue: "helmfile",
+			flagValue:    "cli-app",
+			envVar:       "ATMOS_COMPONENTS_HELMFILE_COMMAND",
+			envValue:     "env-app",
+			expected:     "cli-app",
+		},
+		{
+			name:         "int flag",
+			key:          "doc.max_width",
+			defaultValue: 8080,
+			flagValue:    "9090",
+			envVar:       "ATMOS_DOC_MAX_WIDTH",
+			envValue:     "7070",
+			expected:     9090,
+		},
+		{
+			name:         "bool flag",
+			key:          "default",
+			defaultValue: false,
+			flagValue:    "true",
+			envVar:       "ATMOS_DEFAULT",
+			envValue:     "true",
+			expected:     true,
+		},
+		{
+			name:         "string slice flag",
+			key:          "config_paths",
+			defaultValue: []string{""},
+			flagValue:    "prod,staging",
+			envVar:       "ATMOS_CONFIG_PATHS",
+			envValue:     "qa,uat",
+			expected:     []string{"prod", "staging"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			cmd := &cobra.Command{Use: "test"}
+			handler := &ConfigHandler{v: v}
+
+			// Set env var
+			if tt.envVar != "" {
+				t.Setenv(tt.envVar, tt.envValue)
+			}
+
+			opts := &ConfigOptions{
+				Key:          tt.key,
+				DefaultValue: tt.defaultValue,
+				Description:  "test",
+				EnvVar:       tt.envVar,
+			}
+
+			handler.AddConfig(cmd, opts)
+
+			// CLI flag
+			flagName := strings.ReplaceAll(tt.key, ".", "-")
+			cmd.SetArgs([]string{"--" + flagName + "=" + tt.flagValue})
+			cmd.Execute()
+
+			switch expected := tt.expected.(type) {
+			case string:
+				assert.Equal(t, expected, v.GetString(tt.key))
+			case int:
+				assert.Equal(t, expected, v.GetInt(tt.key))
+			case bool:
+				assert.Equal(t, expected, v.GetBool(tt.key))
+			case []string:
+				assert.Equal(t, expected, v.GetStringSlice(tt.key))
+			default:
+				t.Fatalf("unsupported type in test")
+			}
+		})
+	}
+
+	t.Run("Unsupported type should panic", func(t *testing.T) {
+		v := viper.New()
+		cmd := &cobra.Command{Use: "test"}
+		handler := &ConfigHandler{v: v}
+
+		opts := &ConfigOptions{
+			Key:          "tt.key",
+			DefaultValue: uint(33),
+			Description:  "test",
+		}
+
+		assert.Panics(t, func() {
+			handler.AddConfig(cmd, opts)
+		})
+	})
+}
 
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.
 // It should also check that the base path and atmos Config File Path are correctly set and directory.
@@ -21,7 +128,7 @@ func TestInitCliConfig(t *testing.T) {
 	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_LOGS_LEVEL")
 	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
-
+	log.SetLevel(log.DebugLevel)
 	configContent := `
 base_path: ./
 components:
@@ -72,12 +179,31 @@ terraform:
 
 	testCases := []testCase{
 		{
+			name:           "invalid config file name. Should fallback to default configuration",
+			configFileName: "config.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				changeWorkingDir(t, dir)
+				DefaultConfigHandler = New()
+			},
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.NoError(t, err)
+				// check if the atmos config path is set to empty
+				assert.Equal(t, "", cfg.CliConfigPath)
+				// check if the base path is set correctly from the default value
+				assert.Equal(t, ".", cfg.BasePath)
+				// check if the apply auto approve is set correctly from the default value
+				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
+			},
+		},
+		{
 			name:           "valid configuration file name atmos.yaml extension yaml",
 			configFileName: "atmos.yaml",
 			configContent:  configContent,
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -102,6 +228,7 @@ terraform:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -116,27 +243,10 @@ terraform:
 			},
 		},
 		{
-			name:           "invalid config file name. Should fallback to default configuration",
-			configFileName: "config.yaml",
-			configContent:  configContent,
-			setup: func(t *testing.T, dir string, tc testCase) {
-				createConfigFile(t, dir, tc.configFileName, tc.configContent)
-				changeWorkingDir(t, dir)
-			},
-			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
-				require.NoError(t, err)
-				// check if the atmos config path is set to empty
-				assert.Equal(t, "", cfg.CliConfigPath)
-				// check if the base path is set correctly from the default value
-				assert.Equal(t, ".", cfg.BasePath)
-				// check if the apply auto approve is set correctly from the default value
-				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
-			},
-		},
-		{
 			name: "valid process Stacks",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../examples/demo-stacks")
+				DefaultConfigHandler = New()
 			},
 			processStacks: true,
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
@@ -172,6 +282,7 @@ terraform:
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
 				changeWorkingDir(t, dir)
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -279,6 +390,7 @@ terraform:
 			name: "valid import .atmos.d",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-configuration")
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -294,6 +406,7 @@ terraform:
 			name: "valid import custom",
 			setup: func(t *testing.T, dir string, tc testCase) {
 				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports")
+				DefaultConfigHandler = New()
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -303,6 +416,20 @@ terraform:
 				require.NoError(t, err)
 				assert.True(t, baseInfo.IsDir())
 				assert.Equal(t, "Debug", cfg.Logs.Level)
+			},
+		},
+		{
+			name:           "invalid process Stacks,should return error",
+			configFileName: "atmos.yaml",
+			configContent:  configContent,
+			setup: func(t *testing.T, dir string, tc testCase) {
+				createConfigFile(t, dir, tc.configFileName, tc.configContent)
+				changeWorkingDir(t, dir)
+				DefaultConfigHandler = New()
+			},
+			processStacks: true,
+			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
+				require.Error(t, err)
 			},
 		},
 	}
@@ -352,6 +479,7 @@ func changeWorkingDir(t *testing.T, dir string) {
 
 	err = os.Chdir(dir)
 	require.NoError(t, err, "Failed to change working directory")
+	t.Log("Changed working directory to", dir)
 }
 
 func TestMergeConfig_ConfigFileNotFound(t *testing.T) {
@@ -402,4 +530,24 @@ func TestMergeDefaultConfig(t *testing.T) {
 	v.SetConfigType("yaml")
 	err = mergeDefaultConfig(v)
 	assert.NoError(t, err, "should not return error if config type is yaml")
+}
+
+func TestGetString(t *testing.T) {
+	DefaultConfigHandler.SetDefault("test_key", "test_value")
+	value := DefaultConfigHandler.GetString("test_key")
+	assert.Equal(t, "test_value", value, "should return the correct value for the key")
+
+	DefaultConfigHandler.SetDefault("test_key", 3)
+	valueInt := DefaultConfigHandler.GetInt("test_key")
+	assert.Equal(t, 3, valueInt, "should return the correct value for the key")
+
+	DefaultConfigHandler.SetDefault("test_key", true)
+	valueBool := DefaultConfigHandler.GetBool("test_key")
+	assert.Equal(t, true, valueBool, "should return the correct value for the key")
+
+	DefaultConfigHandler.BindEnv("test_key_env", "TEST_KEY_ENV")
+	os.Setenv("TEST_KEY_ENV", "env_value")
+	valueEnv := DefaultConfigHandler.GetString("test_key_env")
+	assert.Equal(t, "env_value", valueEnv, "should return the correct value for the key from environment variable")
+	os.Unsetenv("TEST_KEY_ENV")
 }
