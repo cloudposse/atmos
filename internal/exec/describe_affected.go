@@ -151,11 +151,9 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 			a.Skip,
 		)
 	}
-
 	if err != nil {
 		return err
 	}
-
 	// Add dependent components and stacks for each affected component
 	if len(affected) > 0 && a.IncludeDependents {
 		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
