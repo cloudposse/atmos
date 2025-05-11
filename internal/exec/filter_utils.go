@@ -54,7 +54,6 @@ func FilterEmptySections(data map[string]any, includeEmpty bool) map[string]any 
 	return filter.Filter(data)
 }
 
-// GetIncludeEmptySetting gets the include_empty setting from the Atmos configuration.
 func GetIncludeEmptySetting(atmosConfig *schema.AtmosConfiguration) bool {
 	if atmosConfig == nil || atmosConfig.Describe.Settings.IncludeEmpty == nil {
 		return DefaultIncludeEmpty

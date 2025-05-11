@@ -26,7 +26,6 @@ const (
 	AtmosYamlFuncInclude         = "!include"
 	AtmosYamlFuncGitRoot         = "!repo-root"
 
-	// Default YAML formatting settings
 	DefaultYAMLIndent = 2
 )
 
@@ -46,13 +45,11 @@ var (
 	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
 )
 
-// PrintAsYAML prints the provided value as YAML document to the console.
 func PrintAsYAML(data any) error {
 	atmosConfig := ExtractAtmosConfig(data)
 	return PrintAsYAMLWithConfig(&atmosConfig, data)
 }
 
-// getIndentFromConfig returns the configured tab width or the default value
 func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 	if atmosConfig == nil || atmosConfig.Settings.Terminal.TabWidth <= 0 {
 		return DefaultYAMLIndent
@@ -60,7 +57,6 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 	return atmosConfig.Settings.Terminal.TabWidth
 }
 
-// PrintAsYAMLWithConfig prints the provided value as YAML document to the console with custom configuration.
 func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if atmosConfig == nil {
 		return ErrNilAtmosConfig
@@ -81,7 +77,6 @@ func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) err
 	return nil
 }
 
-// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor.
 func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if atmosConfig == nil {
 		return ErrNilAtmosConfig
@@ -98,7 +93,6 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 	return nil
 }
 
-// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file.
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: DefaultYAMLIndent})
 	if err != nil {
@@ -112,7 +106,6 @@ func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// WriteToFileAsYAMLWithConfig converts the provided value to YAML with custom configuration and writes it to the specified file.
 func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePath string, data any, fileMode os.FileMode) error {
 	if atmosConfig == nil {
 		return ErrNilAtmosConfig
@@ -133,12 +126,10 @@ func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePat
 	return nil
 }
 
-// YAMLOptions contains options for YAML conversion.
 type YAMLOptions struct {
 	Indent int
 }
 
-// ConvertToYAML converts the provided data to a YAML string.
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
