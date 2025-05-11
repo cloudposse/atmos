@@ -25,6 +25,9 @@ const (
 	AtmosYamlFuncEnv             = "!env"
 	AtmosYamlFuncInclude         = "!include"
 	AtmosYamlFuncGitRoot         = "!repo-root"
+
+	// Default YAML formatting settings
+	DefaultYAMLIndent = 2
 )
 
 var (
@@ -49,17 +52,21 @@ func PrintAsYAML(data any) error {
 	return PrintAsYAMLWithConfig(&atmosConfig, data)
 }
 
+// getIndentFromConfig returns the configured tab width or the default value
+func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
+	if atmosConfig == nil || atmosConfig.Settings.Terminal.TabWidth <= 0 {
+		return DefaultYAMLIndent
+	}
+	return atmosConfig.Settings.Terminal.TabWidth
+}
+
 // PrintAsYAMLWithConfig prints the provided value as YAML document to the console with custom configuration.
 func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if atmosConfig == nil {
 		return ErrNilAtmosConfig
 	}
 
-	indent := 2
-	if atmosConfig.Settings.Terminal.TabWidth > 0 {
-		indent = atmosConfig.Settings.Terminal.TabWidth
-	}
-
+	indent := getIndentFromConfig(atmosConfig)
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
@@ -67,7 +74,6 @@ func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) err
 
 	highlighted, err := HighlightCodeWithConfig(y, *atmosConfig, "yaml")
 	if err != nil {
-		// Fallback to plain text if highlighting fails
 		PrintMessage(y)
 		return nil
 	}
@@ -81,12 +87,7 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 		return ErrNilAtmosConfig
 	}
 
-	// Get tab width from config or use default
-	indent := 2
-	if atmosConfig.Settings.Terminal.TabWidth > 0 {
-		indent = atmosConfig.Settings.Terminal.TabWidth
-	}
-
+	indent := getIndentFromConfig(atmosConfig)
 	log.Debug("PrintAsYAMLToFileDescriptor", "tabWidth", indent)
 
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
@@ -99,7 +100,7 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 
 // WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file.
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: 2})
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: DefaultYAMLIndent})
 	if err != nil {
 		return err
 	}
@@ -117,12 +118,7 @@ func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePat
 		return ErrNilAtmosConfig
 	}
 
-	// Get tab width from config or use default
-	indent := 2 // Default value
-	if atmosConfig.Settings.Terminal.TabWidth > 0 {
-		indent = atmosConfig.Settings.Terminal.TabWidth
-	}
-
+	indent := getIndentFromConfig(atmosConfig)
 	log.Debug("WriteToFileAsYAMLWithConfig", "tabWidth", indent, "filePath", filePath)
 
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
@@ -147,13 +143,9 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	var buf bytes.Buffer
 	encoder := yaml.NewEncoder(&buf)
 
-	// Default indent value
-	indent := 2
-
-	if len(opts) > 0 {
-		if opts[0].Indent > 0 {
-			indent = opts[0].Indent
-		}
+	indent := DefaultYAMLIndent
+	if len(opts) > 0 && opts[0].Indent > 0 {
+		indent = opts[0].Indent
 	}
 	encoder.SetIndent(indent)
 
@@ -168,8 +160,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		return processCustomTags(atmosConfig, node.Content[0], file)
 	}
 
-	for i := 0; i < len(node.Content); i++ {
-		n := node.Content[i]
+	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
 
