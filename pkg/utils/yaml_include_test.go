@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestIncludeWithHashCharacter verifies that strings starting with '#' are properly handled with !include
+// TestIncludeWithHashCharacter verifies that strings starting with '#' are properly handled with !include.
 func TestIncludeWithHashCharacter(t *testing.T) {
 	// Create a temporary directory for test files
 	tempDir, err := os.MkdirTemp("", "atmos-include-test")
