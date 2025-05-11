@@ -39,5 +39,4 @@ func TestDescribeAffected(t *testing.T) {
 		Format: "yaml",
 	})
 	assert.NoError(t, err)
-
 }
