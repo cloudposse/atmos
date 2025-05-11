@@ -181,21 +181,31 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 				}
 			}
 
-			// Convert the Go structure to YAML
-			y, err := ConvertToYAML(res)
-			if err != nil {
-				return err
-			}
+			// Handle special case for strings starting with '#'
+			// If the result is a string starting with '#', we need to handle it specially
+			if strVal, ok := res.(string); ok && strings.HasPrefix(strVal, "#") {
+				// Create a scalar node with the string value and set the style to single quoted
+				n.Kind = yaml.ScalarNode
+				n.Tag = "!!str"
+				n.Value = strVal
+				n.Style = yaml.SingleQuotedStyle
+			} else {
+				// For other types, convert the Go structure to YAML
+				y, err := ConvertToYAML(res)
+				if err != nil {
+					return err
+				}
 
-			// Decode the YAML content into a YAML node
-			var includedNode yaml.Node
-			err = yaml.Unmarshal([]byte(y), &includedNode)
-			if err != nil {
-				return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
-			}
+				// Decode the YAML content into a YAML node
+				var includedNode yaml.Node
+				err = yaml.Unmarshal([]byte(y), &includedNode)
+				if err != nil {
+					return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+				}
 
-			// Replace the current node with the decoded YAML node with the included content
-			*n = includedNode
+				// Replace the current node with the decoded YAML node with the included content
+				*n = includedNode
+			}
 		}
 
 		// Recursively process the child nodes
