@@ -1,3 +1,5 @@
+config: []
+config_paths: []
 base_path: ./
 components:
     terraform:
@@ -18,7 +20,7 @@ components:
         kubeconfig_path: /dev/shm
         helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
         cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
-        command: ""
+        command: helmfile
 stacks:
     base_path: stacks
     included_paths:
@@ -43,8 +45,12 @@ commands:
         - atmos describe config
       commands: []
       verbose: false
+schemas:
+    atmos: {}
+    jsonschema: {}
+    opa: {}
 settings:
-    list_merge_strategy: ""
+    list_merge_strategy: replace
     inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks

@@ -1,3 +1,5 @@
 --stack
+--stacks-base-path
+--stacks-dir
 dev
 :4
