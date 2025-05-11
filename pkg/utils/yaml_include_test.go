@@ -26,7 +26,7 @@ hash_at_start_single_quoted: '#something'
 hash_at_start_double_quoted: "#something"
 hash_in_middle: 'value#with#hash'
 `
-	err = os.WriteFile(testValuesFile, []byte(testValuesContent), 0644)
+	err = os.WriteFile(testValuesFile, []byte(testValuesContent), 0o644)
 	assert.NoError(t, err)
 
 	// Create a test file that includes values from the first file
@@ -44,7 +44,7 @@ components:
         hash_at_start_double_quoted: !include test_values.yaml .hash_at_start_double_quoted
         hash_in_middle: !include test_values.yaml .hash_in_middle
 `
-	err = os.WriteFile(testIncludeFile, []byte(testIncludeContent), 0644)
+	err = os.WriteFile(testIncludeFile, []byte(testIncludeContent), 0o644)
 	assert.NoError(t, err)
 
 	// Change to the temp directory to make relative paths work
