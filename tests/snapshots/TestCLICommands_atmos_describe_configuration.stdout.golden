@@ -61,9 +61,9 @@ validate:
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 import: []
 docs:
-    max-width: 0
-    pagination: false
-    generate:
-        readme:
-            output: ./README.md
+  max-width: 0
+  pagination: false
+  generate:
+    readme:
+      output: ./README.md
 
