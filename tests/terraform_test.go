@@ -91,13 +91,13 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	output := buf.String()
 
 	// Check the output
-	if !strings.Contains(output, "foo = \"component-1-a\"") {
+	if !strings.Contains(output, "foo   = \"component-1-a\"") {
 		t.Errorf("'foo' variable should be 'component-1-a'")
 	}
-	if !strings.Contains(output, "bar = \"component-1-b\"") {
+	if !strings.Contains(output, "bar   = \"component-1-b\"") {
 		t.Errorf("'bar' variable should be 'component-1-b'")
 	}
-	if !strings.Contains(output, "baz = \"component-1-c\"") {
+	if !strings.Contains(output, "baz   = \"component-1-c\"") {
 		t.Errorf("'baz' variable should be 'component-1-c'")
 	}
 }
@@ -144,13 +144,13 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	}
 	output := buf.String()
 	// Check the output
-	if !strings.Contains(output, "foo = \"{{ .settings.config.a }}\"") {
+	if !strings.Contains(output, "foo   = \"{{ .settings.config.a }}\"") {
 		t.Errorf("'foo' variable should be '{{ .settings.config.a }}'")
 	}
-	if !strings.Contains(output, "bar = \"{{ .settings.config.b }}\"") {
+	if !strings.Contains(output, "bar   = \"{{ .settings.config.b }}\"") {
 		t.Errorf("'bar' variable should be '{{ .settings.config.b }}'")
 	}
-	if !strings.Contains(output, "baz = \"{{ .settings.config.c }}\"") {
+	if !strings.Contains(output, "baz   = \"{{ .settings.config.c }}\"") {
 		t.Errorf("'baz' variable should be '{{ .settings.config.c }}'")
 	}
 }
