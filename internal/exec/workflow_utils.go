@@ -40,7 +40,7 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
-	logFunc(fmt.Sprintf("\nExecuting the workflow '%s' from '%s'\n", workflow, workflowPath))
+	log.Debug("Executing the workflow", "workflow", workflow, "file", workflowPath)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
