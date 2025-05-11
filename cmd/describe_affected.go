@@ -135,6 +135,9 @@ func setFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffected
 		describe.IncludeDependents = true
 		describe.IncludeSettings = true
 	}
+	if describe.Format == "" {
+		describe.Format = "json"
+	}
 }
 
 func checkFlagError(err error) {
