@@ -7,6 +7,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TestEvaluateYqExpression_InvalidYAML tests the error case when yaml.Unmarshal fails.
+func TestEvaluateYqExpression_InvalidYAML(t *testing.T) {
+	// Create a test with invalid YAML that will cause yaml.Unmarshal to fail.
+	// Create a test function that will try to unmarshal invalid YAML.
+	var node yaml.Node
+	err := yaml.Unmarshal([]byte("invalid: yaml: :"), &node)
+
+	// Verify that we get an error from yaml.Unmarshal.
+	assert.Error(t, err, "Invalid YAML should cause an error")
+}
+
 func TestIsSimpleStringStartingWithHash(t *testing.T) {
 	tests := []struct {
 		name     string

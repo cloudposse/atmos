@@ -8,6 +8,14 @@ import (
 )
 
 func TestParseYAML(t *testing.T) {
+	// Test error case for yaml.Unmarshal.
+	t.Run("invalid yaml", func(t *testing.T) {
+		invalidYAML := []byte("invalid: yaml: :")
+		result, err := parseYAML(invalidYAML)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
 	tests := []struct {
 		name     string
 		input    string
