@@ -95,8 +95,7 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		return processCustomTags(atmosConfig, node.Content[0], file)
 	}
 
-	for i := 0; i < len(node.Content); i++ {
-		n := node.Content[i]
+	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
 
@@ -181,29 +180,23 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 				}
 			}
 
-			// Handle special case for strings starting with '#'
-			// If the result is a string starting with '#', we need to handle it specially
 			if strVal, ok := res.(string); ok && strings.HasPrefix(strVal, "#") {
-				// Create a scalar node with the string value and set the style to single quoted
 				n.Kind = yaml.ScalarNode
 				n.Tag = "!!str"
 				n.Value = strVal
 				n.Style = yaml.SingleQuotedStyle
 			} else {
-				// For other types, convert the Go structure to YAML
 				y, err := ConvertToYAML(res)
 				if err != nil {
 					return err
 				}
 
-				// Decode the YAML content into a YAML node
 				var includedNode yaml.Node
 				err = yaml.Unmarshal([]byte(y), &includedNode)
 				if err != nil {
 					return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
 				}
 
-				// Replace the current node with the decoded YAML node with the included content
 				*n = includedNode
 			}
 		}

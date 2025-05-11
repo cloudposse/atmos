@@ -103,21 +103,15 @@ func parseYAML(data []byte) (any, error) {
 	return v, nil
 }
 
-// processYAMLNode recursively processes a YAML node to ensure strings starting with '#' are properly handled
 func processYAMLNode(node *yaml.Node) {
 	if node == nil {
 		return
 	}
 
-	// For scalar nodes, ensure strings starting with '#' are properly quoted
-	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" {
-		// If the string starts with '#', ensure it's properly quoted by setting the style
-		if strings.HasPrefix(node.Value, "#") {
-			node.Style = yaml.SingleQuotedStyle
-		}
+	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" && strings.HasPrefix(node.Value, "#") {
+		node.Style = yaml.SingleQuotedStyle
 	}
 
-	// Process child nodes recursively
 	for _, child := range node.Content {
 		processYAMLNode(child)
 	}
