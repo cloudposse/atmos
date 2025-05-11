@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
@@ -8,8 +9,6 @@ import (
 	"strings"
 
 	log "github.com/charmbracelet/log"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,18 +24,17 @@ const (
 )
 
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
-var ErrHTTPBackendWorkspaces = errors.New("workspaces are not supported for the HTTP backend")
+var (
+	ErrHTTPBackendWorkspaces     = errors.New("workspaces are not supported for the HTTP backend")
+	ErrMissingStack              = errors.New("stack must be specified")
+	ErrInvalidTerraformComponent = errors.New("invalid Terraform component")
+	ErrAbstractComponent         = errors.New("component is abstract")
+	ErrLockedComponent           = errors.New("component is locked")
+	ErrComponentNotValid         = errors.New("component is invalid")
+	ErrNoTty                     = errors.New("no TTY attached")
+)
 
-// ExecuteTerraformCmd parses the provided arguments and flags and executes terraform commands
-func ExecuteTerraformCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, additionalArgsAndFlags)
-	if err != nil {
-		return err
-	}
-	return ExecuteTerraform(info)
-}
-
-// ExecuteTerraform executes terraform commands
+// ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -57,7 +55,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
-	// Skip stack processing when cleaning with --force flag to allow cleaning without requiring stack configuration
+	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
 	if shouldProcessStacks {
@@ -67,12 +65,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		if len(info.Stack) < 1 && shouldCheckStack {
-			return errors.New("stack must be specified for the terraform command")
+			return ErrMissingStack
 		}
 	}
 
 	if !info.ComponentIsEnabled && info.SubCommand != "clean" {
-		u.LogInfo(fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
+		log.Info("Component is not enabled and skipped", "component", info.ComponentFromArg)
 		return nil
 	}
 
@@ -81,42 +79,48 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Check if the component (or base component) exists as Terraform component
+	// Check if the component (or base component) exists as a Terraform component.
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		return fmt.Errorf("'%s' points to the Terraform component '%s', but it does not exist in '%s'",
+		return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
+			ErrInvalidTerraformComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,
 			filepath.Join(atmosConfig.Components.Terraform.BasePath, info.ComponentFolderPrefix),
 		)
 	}
 
-	// Check if the component is allowed to be provisioned (`metadata.type` attribute is not set to `abstract`)
+	// Check if the component is allowed to be provisioned (the `metadata.type` attribute is not set to `abstract`).
 	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
-		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
+		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
+			ErrAbstractComponent,
+			filepath.Join(info.ComponentFolderPrefix,
+				info.Component,
+			))
 	}
 
-	// Check if the component is locked (`metadata.locked` is set to true)
+	// Check if the component is locked (`metadata.locked` is set to true).
 	if info.ComponentIsLocked {
 		// Allow read-only commands, block modification commands
 		switch info.SubCommand {
 		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
-			return fmt.Errorf("component '%s' is locked and cannot be modified (metadata.locked = true)",
-				filepath.Join(info.ComponentFolderPrefix, info.Component))
+			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+				ErrLockedComponent,
+				filepath.Join(info.ComponentFolderPrefix, info.Component),
+			)
 		}
 	}
 
-	// Check if trying to use workspace commands with HTTP backend
+	// Check if trying to use `workspace` commands with HTTP backend.
 	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
 		return ErrHTTPBackendWorkspaces
 	}
 
 	if info.SubCommand == "clean" {
-		err := handleCleanSubCommand(info, componentPath, atmosConfig)
+		err = handleCleanSubCommand(info, componentPath, atmosConfig)
 		if err != nil {
-			u.LogDebug(fmt.Errorf("error cleaning the terraform component: %v", err).Error())
+			log.Debug("error cleaning the terraform component", "error", err)
 			return err
 		}
 		return nil
@@ -126,9 +130,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	planFile := constructTerraformComponentPlanfileName(info)
 
 	// Print component variables and write to file
-	// Don't process variables when executing `terraform workspace` commands
+	// Don't process variables when executing `terraform workspace` commands.
 	if info.SubCommand != "workspace" {
-		log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack)
+		log.Debug("Variables for the component in the stack", "component", info.ComponentFromArg, "stack", info.Stack)
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
 			if err != nil {
@@ -156,7 +160,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				varFilePath = constructTerraformComponentVarfilePath(atmosConfig, info)
 			}
 
-			log.Debug("Writing the variables to file", "file", varFilePath)
+			log.Debug("Writing the variables", "file", varFilePath)
 
 			if !info.DryRun {
 				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
@@ -191,7 +195,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
-	// Check if component 'settings.validation' section is specified and validate the component
+	// Check if the component 'settings.validation' section is specified and validate the component
 	valid, err := ValidateComponent(
 		atmosConfig,
 		info.ComponentFromArg,
@@ -206,7 +210,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if !valid {
-		return fmt.Errorf("\nComponent '%s' did not pass the validation policies.\n", info.ComponentFromArg)
+		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
+			ErrComponentNotValid,
+			info.ComponentFromArg,
+		)
 	}
 
 	// Component working directory
@@ -278,7 +285,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Print ENV vars if they are found in the component's stack config
 	if len(info.ComponentEnvList) > 0 {
-		log.Debug("\nUsing ENV vars:")
+		log.Debug("Using ENV vars:")
 		for _, v := range info.ComponentEnvList {
 			log.Debug(v)
 		}
@@ -293,7 +300,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SkipInit {
-		u.LogDebug("Skipping over 'terraform init' due to '--skip-init' flag being passed")
+		log.Debug("Skipping over 'terraform init' due to '--skip-init' flag being passed")
 		runTerraformInit = false
 	}
 
@@ -340,36 +347,31 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Print command info
-	u.LogDebug("\nCommand info:")
-	u.LogDebug("Terraform binary: " + info.Command)
-
+	// Print the command info/context.
+	var command string
 	if info.SubCommand2 == "" {
-		u.LogDebug(fmt.Sprintf("Terraform command: %s", info.SubCommand))
+		command = info.SubCommand
 	} else {
-		u.LogDebug(fmt.Sprintf("Terraform command: %s %s", info.SubCommand, info.SubCommand2))
+		command = fmt.Sprintf("%s %s", info.SubCommand, info.SubCommand2)
 	}
 
-	u.LogDebug(fmt.Sprintf("Arguments and flags: %v", info.AdditionalArgsAndFlags))
-	u.LogDebug("Component: " + info.ComponentFromArg)
-
-	if len(info.BaseComponentPath) > 0 {
-		u.LogDebug("Terraform component: " + info.BaseComponentPath)
-	}
-
+	var inheritance string
 	if len(info.ComponentInheritanceChain) > 0 {
-		u.LogDebug("Inheritance: " + info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> "))
+		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
-	if info.Stack == info.StackFromArg {
-		u.LogDebug("Stack: " + info.StackFromArg)
-	} else {
-		u.LogDebug("Stack: " + info.StackFromArg)
-		u.LogDebug("Stack path: " + filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath, info.Stack))
-	}
+	log.Debug("Terraform context",
+		"executable", info.Command,
+		"command", command,
+		"component", info.ComponentFromArg,
+		"stack", info.StackFromArg,
+		"arguments and flags", info.AdditionalArgsAndFlags,
+		"terraform component", info.BaseComponentPath,
+		"inheritance", inheritance,
+		"working directory", workingDir,
+	)
 
-	u.LogDebug(fmt.Sprintf("Working dir: %s", workingDir))
-
+	// Prepare the terraform command
 	allArgsAndFlags := strings.Fields(info.SubCommand)
 
 	switch info.SubCommand {
@@ -479,15 +481,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Check if the terraform command requires a user interaction,
 	// but it's running in a scripted environment (where a `tty` is not attached or `stdin` is not attached)
 	if os.Stdin == nil && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
-		errorMessage := ""
-
 		if info.SubCommand == "apply" {
-			errorMessage = "'terraform apply' requires a user interaction, but it's running without `tty` or `stdin` attached." +
-				"\nUse 'terraform apply -auto-approve' or 'terraform deploy' instead."
-		}
-
-		if errorMessage != "" {
-			return errors.New(errorMessage)
+			return fmt.Errorf("%w: 'terraform apply' requires a user interaction, but no TTY is attached. Use 'terraform apply -auto-approve' or 'terraform deploy' instead",
+				ErrNoTty,
+			)
 		}
 	}
 

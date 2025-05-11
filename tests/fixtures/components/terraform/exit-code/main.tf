@@ -15,10 +15,9 @@ variable "stage" {
 
 variable "exit_code" {
   description = "Exit code used to simulate the command's exit status."
-  type        =  number
-  default     =  0
+  type        = number
+  default     = 0
 }
-
 
 resource "null_resource" "fail_on_second_apply" {
   triggers = {

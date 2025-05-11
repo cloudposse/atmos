@@ -155,5 +155,15 @@
     }
   },
   "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks",
-  "import": null
+  "import": null,
+  "docs": {
+    "max_width": 0,
+    "pagination": false,
+    "generate": {
+      "readme": {
+        "output": "./README.md",
+        "terraform": {}
+      }
+    }
+  }
 }
