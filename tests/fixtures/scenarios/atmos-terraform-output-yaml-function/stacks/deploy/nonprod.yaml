@@ -25,7 +25,7 @@ components:
         component: mock
       vars:
         foo: !terraform.output component-1 foo
-        bar: !terraform.output component-1 bar
+        bar: !terraform.output component-1 .bar
         baz: !terraform.output component-1 {{ .stack }} baz
 
     component-3:
@@ -36,3 +36,4 @@ components:
         foo: !terraform.output component-1 {{ .stack }} foo
         bar: !terraform.output component-2 .bar
         baz: !terraform.output component-2 {{ .stack }} ".invalid-output // ""default-value"""
+        test: !terraform.output component-2 ".invalid-output2 // [""fallback1"", ""fallback2""]"

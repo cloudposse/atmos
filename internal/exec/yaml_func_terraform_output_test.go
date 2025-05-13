@@ -137,4 +137,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	assert.Contains(t, y, "foo: component-1-a")
 	assert.Contains(t, y, "bar: component-1-b")
 	assert.Contains(t, y, "baz: default-value")
+	assert.Contains(t, y, `test:
+        - fallback1
+        - fallback2`)
 }
