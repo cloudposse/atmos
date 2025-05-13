@@ -65,7 +65,7 @@ func ProcessComponentFromContext(
 
 	stackNamePattern := e.GetStackNamePattern(atmosConfig)
 
-	if len(stackNamePattern) < 1 {
+	if stackNamePattern == "" {
 		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
 		log.Error(er)
 		return nil, er
