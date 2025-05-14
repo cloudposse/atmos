@@ -68,7 +68,6 @@
     "terminal": {
       "max_width": 0,
       "pager": "0",
-      "colors": false,
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
@@ -78,7 +77,8 @@
         "pager": false,
         "line_numbers": false,
         "wrap": false
-      }
+      },
+      "no_color": false
     },
     "docs": {
       "max_width": 0,
@@ -147,10 +147,18 @@
     }
   },
   "validate": {
-    "editorconfig": {
-      "color": true
-    }
+    "editorconfig": {}
   },
   "cli_config_path": "/absolute/path/to/repo/examples/demo-stacks",
-  "import": null
+  "import": null,
+  "docs": {
+    "max_width": 0,
+    "pagination": false,
+    "generate": {
+      "readme": {
+        "output": "./README.md",
+        "terraform": {}
+      }
+    }
+  }
 }

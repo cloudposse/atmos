@@ -14,6 +14,17 @@ tests:
         - "^$"
       exit_code: 0
 
+  - name: atmos support
+    enabled: true
+    snapshot: true
+    description: "Check that atmos support command outputs support details."
+    workdir: "fixtures/scenarios/empty-dir"
+    command: "atmos"
+    args:
+      - "support"
+    expect:
+      exit_code: 0
+
   - name: check atmos in empty-dir
     enabled: true
     snapshot: true
