@@ -185,7 +185,7 @@ func execTerraformShellCommand(
 	log.Debug("Setting the ENV vars in the shell")
 
 	// Merge env vars, ensuring componentEnvList takes precedence
-	mergedEnv := mergeEnvVars(atmosConfig, componentEnvList)
+	mergedEnv := mergeEnvVars(componentEnvList)
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
 	pa := os.ProcAttr{
@@ -220,7 +220,7 @@ func execTerraformShellCommand(
 
 		// This means you cannot have a custom shell prompt inside Geodesic (Geodesic requires "-l").
 		// Perhaps we should have special detection for Geodesic?
-		// We could test if env var GEODESIC_SHELL is set to "true" (or set at all).
+		// Test if the environment variable GEODESIC_SHELL is set to "true" (or set at all).
 		if !hasCustomShellPrompt {
 			shellCommand = shellCommand + " -l"
 		}
@@ -247,13 +247,13 @@ func execTerraformShellCommand(
 	return nil
 }
 
-// mergeEnvVars adds a list of environment variables to the system environment variables
+// mergeEnvVars adds a list of environment variables to the system environment variables.
 //
 // This is necessary because:
 //  1. We need to preserve existing system environment variables (PATH, HOME, etc.)
 //  2. Atmos-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
 //  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
-func mergeEnvVars(atmosConfig schema.AtmosConfiguration, componentEnvList []string) []string {
+func mergeEnvVars(componentEnvList []string) []string {
 	envMap := make(map[string]string)
 
 	// Parse system environment variables
