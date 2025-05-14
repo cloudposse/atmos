@@ -48,7 +48,6 @@ settings:
     terminal:
         max_width: 0
         pager: "1"
-        colors: false
         unicode: false
         syntax_highlighting:
             enabled: false
@@ -58,6 +57,7 @@ settings:
             pager: false
             line_numbers: false
             wrap: false
+        no_color: false
     inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/stacks
