@@ -58,13 +58,13 @@ you can utilize [YQ](https://mikefarah.gitbook.io/yq) expressions.
 
 For example:
 
-- Retrieve the first item from a list:
+- Retrieve the first item from a list
 
 ```yaml
 subnet_id1: !terraform.output vpc .private_subnet_ids[0]
 ```
 
-- Read a key from a map:
+- Read a key from a map
 
 ```yaml
 username: !terraform.output config .config_map.username
@@ -78,30 +78,44 @@ For more details, review the following docs:
 ## Using YQ Expressions to provide a default value
 
 If the component for which you are reading the output has not been provisioned yet, the `!terraform.output` function
-will return `<no value>` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
+will return the string `<no value>` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
 in the YQ expression, in which case the function will return the default value.
 
 This will allow you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
 and the dependent components are not provisioned yet.
 
+:::note
+To provide a default value, you use the `//` YQ operator.
+The whole YQ expression contains spaces, and to make it a single parameter, you need to double-quote it.
+
+YQ requires the strings in the default values to be qouble-qouted as well.
+This means that you have to escape the double-qoutes in the default values by using two double-qoutes.
+:::
+
 For example:
 
-- Specify a string default value:
+- Specify a string default value.
+  Read the `username` output from the `config` component in the current stack.
+  If the `config` component has not been provisioned yet, return the default value `default-user`
 
 ```yaml
 username: !terraform.output config ".username // ""default-user"""
 ```
 
-- Specify a list default value
+- Specify a list default value.
+  Read the `private_subnet_ids` output from the `vpc` component in the current stack.
+  If the `vpc` component has not been provisioned yet, return the default value `["mock-subnet1", "mock-subnet2"]`
 
 ```yaml
-test_list: !terraform.output component-2 ".invalid-output2 // [""fallback1"", ""fallback2""]"
+subnet_ids: !terraform.output vpc ".private_subnet_ids // [""mock-subnet1"", ""mock-subnet2""]"
 ```
 
-- Specify a map default value:
+- Specify a map default value.
+  Read the `config_map` output from the `config` component in the current stack.
+  If the `config` component has not been provisioned yet, return the default value `{"api_endpoint": "localhost:3000", "user": "test"}`
 
 ```yaml
-test_map: !terraform.output 'component-2 ".invalid-output3 // {""key1"": ""value1"", ""key2"": ""value2""}"'
+config_map: !terraform.output 'config ".config_map // {""api_endpoint"": ""localhost:3000"", ""user"": ""test""}"'
 ```
 
 For more details, review the following docs:
