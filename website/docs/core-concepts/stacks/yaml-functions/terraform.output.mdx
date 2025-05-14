@@ -21,8 +21,14 @@ The `!terraform.output` function can be called with either two or three paramete
   # Get the `output` of the `component` in the current stack
   !terraform.output <component> <output>
 
-  # Get the `output` of the `component` in the provided stack
+  # Get the `output` of the `component` in the provided `stack`
   !terraform.output <component> <stack> <output>
+
+  # Get the output of the `component` by evaluating the YQ expression
+  !terraform.output <component> <yq-expression>
+
+ # Get the output of the `component` in the provided `stack` by evaluating the YQ expression
+  !terraform.output <component> <yq-expression>
 ```
 
 ## Arguments
@@ -34,8 +40,8 @@ The `!terraform.output` function can be called with either two or three paramete
   <dt>`stack`</dt>
   <dd>(Optional) Atmos stack name</dd>
 
-  <dt>`output`</dt>
-  <dd>Terraform output</dd>
+  <dt>`output` or `yq-expression`</dt>
+  <dd>Terraform output or [YQ](https://mikefarah.gitbook.io/yq) expression to evaluate the output</dd>
 </dl>
 
 
@@ -52,13 +58,13 @@ you can utilize [YQ](https://mikefarah.gitbook.io/yq) expressions.
 
 For example:
 
-- Retrieve the first item from a list
+- Retrieve the first item from a list:
 
 ```yaml
 subnet_id1: !terraform.output vpc .private_subnet_ids[0]
 ```
 
-- Read a key from a map
+- Read a key from a map:
 
 ```yaml
 username: !terraform.output config .config_map.username
@@ -68,6 +74,39 @@ For more details, review the following docs:
 
 - [YQ Guide](https://mikefarah.gitbook.io/yq)
 - [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
+
+## Using YQ Expressions to provide a default value
+
+If the component for which you are reading the output has not been provisioned yet, the `!terraform.output` function
+will return `<no value>` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
+in the YQ expression, in which case the function will return the default value.
+
+This will allow you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
+and the dependent components are not provisioned yet.
+
+For example:
+
+- Specify a string default value:
+
+```yaml
+username: !terraform.output config ".username // ""default-user"""
+```
+
+- Specify a list default value
+
+```yaml
+test_list: !terraform.output component-2 ".invalid-output2 // [""fallback1"", ""fallback2""]"
+```
+
+- Specify a map default value:
+
+```yaml
+test_map: !terraform.output 'component-2 ".invalid-output3 // {""key1"": ""value1"", ""key2"": ""value2""}"'
+```
+
+For more details, review the following docs:
+
+- [YQ Alternative (Default value)](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
 
 ## Examples
 
