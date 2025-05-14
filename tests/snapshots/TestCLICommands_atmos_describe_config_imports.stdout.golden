@@ -110,7 +110,7 @@ settings:
     list_merge_strategy: replace
     terminal:
         max_width: 120
-        pager: true
+        pager: "1"
         unicode: true
         syntax_highlighting:
             enabled: true

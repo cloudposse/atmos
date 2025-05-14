@@ -13,3 +13,4 @@ DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/at
 DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/stack.yaml
 DEBU atmos merged config path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/tools/terraform.yaml
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
+DEBU Failed to use pager

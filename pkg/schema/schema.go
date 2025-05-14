@@ -188,10 +188,15 @@ type EditorConfig struct {
 
 type Terminal struct {
 	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
-	Pager              bool               `yaml:"pager" json:"pager" mapstructure:"pager"`
+	Pager              string             `yaml:"pager" json:"pager" mapstructure:"pager"`
+	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"`
+}
+
+func (t *Terminal) IsPagerEnabled() bool {
+	return t.Pager == "" || t.Pager == "on" || t.Pager == "less" || t.Pager == "true" || t.Pager == "yes" || t.Pager == "y" || t.Pager == "1"
 }
 
 type SyntaxHighlighting struct {

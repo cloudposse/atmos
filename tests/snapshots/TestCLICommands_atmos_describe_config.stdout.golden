@@ -67,7 +67,7 @@
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
-      "pager": false,
+      "pager": "0",
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
