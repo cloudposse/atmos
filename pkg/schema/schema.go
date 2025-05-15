@@ -796,10 +796,20 @@ type AtmosVendorConfig struct {
 	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
 }
 
+// ComponentManifest defines the structure of the component manifest file (component.yaml).
+type ComponentManifest struct {
+	APIVersion string         `yaml:"apiVersion,omitempty" json:"apiVersion,omitempty" mapstructure:"apiVersion,omitempty"`
+	Kind       string         `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind,omitempty"`
+	Metadata   map[string]any `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+	Spec       map[string]any `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec,omitempty"`
+	Vars       map[string]any `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars,omitempty"`
+}
+
 type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	List     ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 type MarkdownSettings struct {
