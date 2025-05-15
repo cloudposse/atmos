@@ -12,7 +12,7 @@ import (
 var listDeploymentsCmd = &cobra.Command{
 	Use:                "deployments",
 	Short:              "List all Atmos deployments",
-	Long:               "This command lists all Atmos deployments, or filters the list to show only the deployments with drift detection enabled.",
+	Long:               "This command lists all Atmos deployments or is used to upload deployments to the pro API.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
