@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -179,10 +180,12 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
 	defer cancel()
 
-	strValue, ok := value.(string)
-	if !ok {
-		return ErrValueMustBeString
+	// Convert value to JSON string
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
 	}
+	strValue := string(jsonValue)
 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
@@ -243,5 +246,11 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
 	}
 
-	return string(result.Payload.Data), nil
+	var unmarshalled interface{}
+	// Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party secrets that might not be JSON-encoded
+	if err := json.Unmarshal(result.Payload.Data, &unmarshalled); err != nil {
+		// If it's not valid JSON, return the raw string value
+		return string(result.Payload.Data), nil
+	}
+	return unmarshalled, nil
 }
