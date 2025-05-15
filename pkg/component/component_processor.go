@@ -1,12 +1,12 @@
 package component
 
 import (
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
@@ -24,7 +24,7 @@ func ProcessComponentInStack(
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.LogError(err)
+		log.Error(err)
 		return nil, err
 	}
 
@@ -34,7 +34,7 @@ func ProcessComponentInStack(
 		configAndStacksInfo.ComponentType = "helmfile"
 		configAndStacksInfo, err = e.ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
 		if err != nil {
-			u.LogError(err)
+			log.Error(err)
 			return nil, err
 		}
 	}
@@ -59,19 +59,21 @@ func ProcessComponentFromContext(
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		u.LogError(err)
+		log.Error(err)
 		return nil, err
 	}
 
-	if len(e.GetStackNamePattern(atmosConfig)) < 1 {
+	stackNamePattern := e.GetStackNamePattern(atmosConfig)
+
+	if stackNamePattern == "" {
 		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-		u.LogError(er)
+		log.Error(er)
 		return nil, er
 	}
 
-	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, e.GetStackNamePattern(atmosConfig))
+	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, stackNamePattern)
 	if err != nil {
-		u.LogError(err)
+		log.Error(err)
 		return nil, err
 	}
 
