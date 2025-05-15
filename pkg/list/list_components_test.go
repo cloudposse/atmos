@@ -287,3 +287,155 @@ func TestFilterAndListComponentsIntegration(t *testing.T) {
 		assert.Contains(t, err.Error(), "non-existent-stack")
 	})
 }
+
+func TestGetComponentsForDriftDetection(t *testing.T) {
+	tests := []struct {
+		name          string
+		stacksMap     map[string]any
+		expectedComps []string
+		expectedError bool
+	}{
+		{
+			name: "components with drift detection enabled",
+			stacksMap: map[string]any{
+				"stack1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"comp1": map[string]any{
+								"settings": map[string]any{
+									"pro": map[string]any{
+										"enabled": true,
+										"drift_detection": map[string]any{
+											"enabled": true,
+										},
+									},
+								},
+							},
+							"comp2": map[string]any{
+								"settings": map[string]any{
+									"pro": map[string]any{
+										"enabled": true,
+										"drift_detection": map[string]any{
+											"enabled": true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedComps: []string{"comp1", "comp2"},
+			expectedError: false,
+		},
+		{
+			name: "components with pro disabled",
+			stacksMap: map[string]any{
+				"stack1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"comp1": map[string]any{
+								"settings": map[string]any{
+									"pro": map[string]any{
+										"enabled": false,
+										"drift_detection": map[string]any{
+											"enabled": true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedComps: []string{},
+			expectedError: false,
+		},
+		{
+			name: "components with drift detection disabled",
+			stacksMap: map[string]any{
+				"stack1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"comp1": map[string]any{
+								"settings": map[string]any{
+									"pro": map[string]any{
+										"enabled": true,
+										"drift_detection": map[string]any{
+											"enabled": false,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedComps: []string{},
+			expectedError: false,
+		},
+		{
+			name: "components without pro settings",
+			stacksMap: map[string]any{
+				"stack1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"comp1": map[string]any{
+								"settings": map[string]any{},
+							},
+						},
+					},
+				},
+			},
+			expectedComps: []string{},
+			expectedError: false,
+		},
+		{
+			name: "components without drift detection settings",
+			stacksMap: map[string]any{
+				"stack1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"comp1": map[string]any{
+								"settings": map[string]any{
+									"pro": map[string]any{
+										"enabled": true,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedComps: []string{},
+			expectedError: false,
+		},
+		{
+			name:          "nil stacks map",
+			stacksMap:     nil,
+			expectedComps: nil,
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comps, err := GetComponentsForDriftDetection(tt.stacksMap)
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, comps)
+			} else {
+				assert.NoError(t, err)
+				assert.ElementsMatch(t, tt.expectedComps, comps)
+			}
+		})
+	}
+}
+
+func TestUploadDriftDetection(t *testing.T) {
+	// Since UploadDriftDetection is just a placeholder that prints to stdout,
+	// we'll just test that it doesn't error
+	components := []string{"comp1", "comp2"}
+	err := UploadDriftDetection(components)
+	assert.NoError(t, err)
+}

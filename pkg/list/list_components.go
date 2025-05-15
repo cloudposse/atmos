@@ -100,3 +100,87 @@ func FilterAndListComponents(stackFlag string, stacksMap map[string]any) ([]stri
 	}
 	return components, nil
 }
+
+// GetComponentsForDriftDetection returns a list of components that have drift detection enabled
+func GetComponentsForDriftDetection(stacksMap map[string]any) ([]string, error) {
+	if stacksMap == nil {
+		return nil, fmt.Errorf("stacks map is nil")
+	}
+
+	var components []string
+
+	// Iterate through all stacks
+	for _, stackData := range stacksMap {
+		stackDataMap, ok := stackData.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Get components section
+		componentsSection, ok := stackDataMap["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Get terraform components
+		terraformComponents, ok := componentsSection["terraform"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Check each component for drift detection settings
+		// We only support drift detection for pro, terraform components at this time
+		for componentName, componentData := range terraformComponents {
+			componentDataMap, ok := componentData.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			settings, ok := componentDataMap["settings"].(map[string]any)
+			if !ok {
+				continue
+			}
+
+			pro, ok := settings["pro"].(map[string]any)
+			if !ok {
+				continue
+			}
+
+			proEnabled, ok := pro["enabled"].(bool)
+			if !ok || !proEnabled {
+				continue
+			}
+
+			// Check drift detection settings
+			driftDetection, ok := pro["drift_detection"].(map[string]any)
+			if !ok {
+				continue
+			}
+
+			// Check if drift detection is enabled
+			driftEnabled, ok := driftDetection["enabled"].(bool)
+			if !ok || !driftEnabled {
+				continue
+			}
+
+			components = append(components, componentName)
+		}
+	}
+
+	// Remove duplicates and sort
+	components = lo.Uniq(components)
+	sort.Strings(components)
+
+	return components, nil
+}
+
+// UploadDriftDetection uploads components with drift detection enabled to the pro API
+func UploadDriftDetection(components []string) error {
+	// TODO: Implement actual API call
+	// For now, just print the components that would be uploaded
+	fmt.Printf("Would upload the following components for drift detection:\n")
+	for _, component := range components {
+		fmt.Printf("- %s\n", component)
+	}
+	return nil
+}

@@ -57,6 +57,11 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}
 
-	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
-	return output, err
+	// Get components based on stack filter
+	components, err := l.FilterAndListComponents(stackFlag, stacksMap)
+	if err != nil {
+		return nil, err
+	}
+
+	return components, nil
 }

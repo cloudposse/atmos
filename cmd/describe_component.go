@@ -33,6 +33,8 @@ func init() {
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
+	describeComponentCmd.PersistentFlags().Bool("drift-enabled", false, "Filter components to only show those with drift detection enabled")
+	describeComponentCmd.PersistentFlags().Bool("upload", false, "Upload the component configuration to the pro API")
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
