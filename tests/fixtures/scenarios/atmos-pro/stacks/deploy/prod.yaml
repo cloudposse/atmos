@@ -9,7 +9,25 @@ import:
 
 components:
   terraform:
-    mock:
+    mock/drift:
+      metadata:
+        component: mock
+        inherits:
+          - mock
       vars:
         foo: "foo prod override"
         bar: "bar prod override"
+
+    mock/nodrift:
+      metadata:
+        component: mock
+        inherits:
+          - mock
+      settings:
+        pro:
+          drift_detection:
+            enabled: false
+      vars:
+        foo: "foo prod override"
+        bar: "bar prod override"
+

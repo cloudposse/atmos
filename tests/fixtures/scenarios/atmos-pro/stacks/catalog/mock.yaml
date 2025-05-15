@@ -3,6 +3,8 @@
 components:
   terraform:
     mock:
+      metadata:
+        type: abstract
       vars:
         foo: "foo catalog default"
         bar: "bar catalog default"
