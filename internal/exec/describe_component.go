@@ -58,16 +58,6 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	driftEnabled, err := flags.GetBool("drift-enabled")
-	if err != nil {
-		return err
-	}
-
-	upload, err := flags.GetBool("upload")
-	if err != nil {
-		return err
-	}
-
 	component := args[0]
 
 	componentSection, err := ExecuteDescribeComponent(
@@ -79,31 +69,6 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 	)
 	if err != nil {
 		return err
-	}
-
-	// If drift detection is enabled, check if the component has drift detection enabled
-	if driftEnabled {
-		settings, ok := componentSection["settings"].(map[string]any)
-		if !ok {
-			return errors.New("component does not have drift detection enabled")
-		}
-
-		driftDetection, ok := settings["drift_detection"].(map[string]any)
-		if !ok {
-			return errors.New("component does not have drift detection enabled")
-		}
-
-		enabled, ok := driftDetection["enabled"].(bool)
-		if !ok || !enabled {
-			return errors.New("component does not have drift detection enabled")
-		}
-	}
-
-	// If upload is enabled, upload the component configuration to the pro API
-	if upload {
-		// TODO: Implement the upload functionality to the pro API
-		// This is a placeholder for the actual implementation
-		u.PrintMessage("Uploading component configuration to pro API...")
 	}
 
 	var res any
