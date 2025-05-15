@@ -11,8 +11,9 @@ import (
 	"context"
 	"text/template"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hairyhenderson/gomplate/v3/data"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // FuncMap creates and returns a map of template functions
@@ -37,9 +38,13 @@ type AtmosFuncs struct {
 }
 
 func (f AtmosFuncs) Component(component string, stack string) (any, error) {
-	return componentFunc(f.atmosConfig, f.configAndStacksInfo, component, stack)
+	return componentFunc(f.atmosConfig, component, stack)
 }
 
 func (f AtmosFuncs) GomplateDatasource(alias string, args ...string) (any, error) {
 	return gomplateDatasourceFunc(alias, f.gomplateData, args...)
+}
+
+func (f AtmosFuncs) Store(store string, stack string, component string, key string) (any, error) {
+	return storeFunc(f.atmosConfig, store, stack, component, key)
 }

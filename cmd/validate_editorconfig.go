@@ -50,6 +50,12 @@ func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
 	configPaths := []string{}
+	if cmd.Flags().Changed("config") {
+		config := cmd.Flags().Lookup("config")
+		if config != nil {
+			configFilePaths = strings.Split(config.Value.String(), ",")
+		}
+	}
 	if len(configFilePaths) == 0 {
 		configPaths = append(configPaths, defaultConfigFileNames...)
 	} else {
@@ -110,8 +116,10 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 			cliConfig.Verbose = true
 		}
 	}
-	if !cmd.Flags().Changed("no-color") && !atmosConfig.Validate.EditorConfig.Color {
-		cliConfig.NoColor = !atmosConfig.Validate.EditorConfig.Color
+	if !cmd.Flags().Changed("no-color") && atmosConfig.Settings.Terminal.NoColor {
+		cliConfig.NoColor = atmosConfig.Settings.Terminal.NoColor
+	} else if cmd.Flags().Changed("no-color") {
+		cliConfig.NoColor, _ = cmd.Flags().GetBool("no-color")
 	}
 	if !cmd.Flags().Changed("disable-trim-trailing-whitespace") && atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace {
 		cliConfig.Disable.TrimTrailingWhitespace = atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace
@@ -179,7 +187,6 @@ func checkVersion(config config.Config) error {
 
 // addPersistentFlags adds flags to the root command
 func addPersistentFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringSliceVar(&configFilePaths, "config", defaultConfigFileNames, "Paths to the configuration files")
 	cmd.PersistentFlags().StringVar(&tmpExclude, "exclude", "", "Regex to exclude files from checking")
 	cmd.PersistentFlags().BoolVar(&initEditorConfig, "init", false, "Create an initial configuration")
 
@@ -187,7 +194,6 @@ func addPersistentFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&cliConfig.DryRun, "dry-run", false, "Show which files would be checked")
 	cmd.PersistentFlags().BoolVar(&cliConfig.ShowVersion, "version", false, "Print the version number")
 	cmd.PersistentFlags().StringVar(&format, "format", "default", "Specify the output format: default, gcc")
-	cmd.PersistentFlags().BoolVar(&cliConfig.NoColor, "no-color", false, "Don't print colors")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.TrimTrailingWhitespace, "disable-trim-trailing-whitespace", false, "Disable trailing whitespace check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.EndOfLine, "disable-end-of-line", false, "Disable end-of-line check")
 	cmd.PersistentFlags().BoolVar(&cliConfig.Disable.InsertFinalNewline, "disable-insert-final-newline", false, "Disable final newline check")

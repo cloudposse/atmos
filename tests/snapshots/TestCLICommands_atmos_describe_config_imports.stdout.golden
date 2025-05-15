@@ -110,8 +110,7 @@ settings:
     list_merge_strategy: replace
     terminal:
         max_width: 120
-        pager: true
-        colors: true
+        pager: "1"
         unicode: true
         syntax_highlighting:
             enabled: true
@@ -121,6 +120,7 @@ settings:
             pager: false
             line_numbers: true
             wrap: false
+        no_color: false
     markdown:
         document:
             color: ${colors.text}
@@ -159,10 +159,26 @@ version:
 validate:
     editorconfig:
         format: default
-        color: true
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 import:
     - https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml
     - configs.d/**/*
     - ./logs.yaml
+docs:
+    max-width: 0
+    pagination: false
+    generate:
+        readme:
+            base-dir: .
+            input:
+                - ./README.yaml
+            template: https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl
+            output: ./README.md
+            terraform:
+                source: src/
+                format: markdown
+                show_inputs: true
+                show_outputs: true
+                sort_by: name
+                indent_level: 2
 

@@ -1,7 +1,9 @@
 package config
 
 const (
-	CliConfigFileName       = "atmos"
+	CliConfigFileName    = "atmos"
+	DotCliConfigFileName = ".atmos"
+
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
@@ -68,6 +70,8 @@ const (
 	GithubSectionName                 = "github"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	CliArgsSectionName                = "cli_args"
+	ComponentTypeSectionName          = "component_type"
+	OutputsSectionName                = "outputs"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
@@ -87,11 +91,8 @@ const (
 	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
 	AtmosProDefaultEndpoint    = "api"
 
-	// Atmos YAML functions
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncEnv             = "!env"
-
 	TerraformDefaultWorkspace = "default"
+
+	ComponentStr = "component"
+	StackStr     = "stack"
 )

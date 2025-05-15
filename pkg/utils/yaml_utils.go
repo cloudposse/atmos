@@ -9,6 +9,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -20,6 +22,7 @@ const (
 	AtmosYamlFuncTerraformOutput = "!terraform.output"
 	AtmosYamlFuncEnv             = "!env"
 	AtmosYamlFuncInclude         = "!include"
+	AtmosYamlFuncGitRoot         = "!repo-root"
 )
 
 var (
@@ -39,20 +42,25 @@ var (
 
 // PrintAsYAML prints the provided value as YAML document to the console
 func PrintAsYAML(data any) error {
-	y, err := ConvertToYAML(data)
+	y, err := GetAtmosConfigYAML(data)
 	if err != nil {
 		return err
 	}
+	PrintMessage(y)
+	return nil
+}
 
+func GetAtmosConfigYAML(data any) (string, error) {
+	y, err := ConvertToYAML(data)
+	if err != nil {
+		return "", err
+	}
 	atmosConfig := ExtractAtmosConfig(data)
 	highlighted, err := HighlightCodeWithConfig(y, atmosConfig)
 	if err != nil {
-		// Fallback to plain text if highlighting fails
-		PrintMessage(y)
-		return nil
+		return y, err
 	}
-	PrintMessage(highlighted)
-	return nil
+	return highlighted, nil
 }
 
 // PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
@@ -158,13 +166,13 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 			// Process local file
 			if localFile != "" {
-				res, err = DetectFormatAndParseFile(localFile)
+				res, err = filetype.DetectFormatAndParseFile(os.ReadFile, localFile)
 				if err != nil {
 					return err
 				}
 			} else {
 				// Process remote file with `go-getter`
-				res, err = DownloadDetectFormatAndParseFile(atmosConfig, includeFile)
+				res, err = downloader.NewGoGetterDownloader(atmosConfig).FetchAndAutoParse(includeFile)
 				if err != nil {
 					return err
 				}
@@ -238,23 +246,4 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 	}
 
 	return data, nil
-}
-
-// IsYAML checks if data is in YAML format
-func IsYAML(data string) bool {
-	if strings.TrimSpace(data) == "" {
-		return false
-	}
-
-	var yml any
-	err := yaml.Unmarshal([]byte(data), &yml)
-	if err != nil {
-		return false
-	}
-
-	// Ensure that the parsed result is not nil and has some meaningful content
-	_, isMap := yml.(map[string]any)
-	_, isSlice := yml.([]any)
-
-	return isMap || isSlice
 }

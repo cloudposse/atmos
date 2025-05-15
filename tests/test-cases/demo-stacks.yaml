@@ -67,12 +67,15 @@ tests:
         - "^$"
       exit_code: 0
 
+
   - name: atmos docs myapp
     enabled: true
     snapshot: true
     description: "Validate atmos docs command outputs documentation for a specific component."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
+    env:
+      ATMOS_PAGER: false
     args:
       - "docs"
       - "myapp"
@@ -90,13 +93,16 @@ tests:
     description: "Ensure atmos CLI outputs the Atmos configuration in YAML."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
+    env:
+      ATMOS_PAGER: false
     args:
       - "describe"
       - "config"
       - "-f"
       - "yaml"
     expect:
-      diff: []
+      diff:
+        - "github_token"
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       stderr:
@@ -109,12 +115,15 @@ tests:
     description: "Ensure atmos CLI outputs the Atmos configuration in JSON."
     workdir: "../examples/demo-stacks/"
     command: "atmos"
+    env:
+      ATMOS_PAGER: false
     args:
       - "describe"
       - "config"
     expect:
       diff:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
+        - "GithubToken"
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       stderr:

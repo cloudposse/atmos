@@ -24,9 +24,9 @@ tests:
         - !not 'No TTY detected\. Falling back to basic output\.'
       exit_code: 0
 
-  - name: atmos vendor pull (no tty)
+  - name: atmos vendor pull no tty
     enabled: true
-    snapshot: true
+    snapshot: false # We cant use snapshots because temp paths will always be different
     tty: false
     description: "Vendoring works with pull command"
     workdir: "../examples/demo-vendoring/"
@@ -34,6 +34,8 @@ tests:
     args:
       - "vendor"
       - "pull"
+    env:
+      ATMOS_LOGS_LEVEL: Debug
     expect:
       diff: []
       stderr:

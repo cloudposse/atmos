@@ -42,6 +42,7 @@ type AtmosConfiguration struct {
 	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
 	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
 	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
+	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -173,7 +174,6 @@ type EditorConfig struct {
 	IgnoreDefaults  bool     `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
 	DryRun          bool     `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
 	Format          string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
-	Color           bool     `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
 	ConfigFilePaths []string `yaml:"config_file_paths,omitempty" json:"config_file_paths,omitempty" mapstructure:"config_file_paths"`
 	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
 	Init            bool     `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
@@ -188,10 +188,14 @@ type EditorConfig struct {
 
 type Terminal struct {
 	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
-	Pager              bool               `yaml:"pager" json:"pager" mapstructure:"pager"`
-	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
+	Pager              string             `yaml:"pager" json:"pager" mapstructure:"pager"`
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
+	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"`
+}
+
+func (t *Terminal) IsPagerEnabled() bool {
+	return t.Pager == "" || t.Pager == "on" || t.Pager == "less" || t.Pager == "true" || t.Pager == "yes" || t.Pager == "y" || t.Pager == "1"
 }
 
 type SyntaxHighlighting struct {
@@ -205,16 +209,29 @@ type SyntaxHighlighting struct {
 }
 
 type AtmosSettings struct {
-	ListMergeStrategy string           `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Terminal          Terminal         `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
-	Docs              Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Markdown          MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
-	InjectGithubToken bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
+	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	// Deprecated: this was moved to top-level Atmos config
+	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
+	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
+	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
+	AtmosGithubToken     string           `yaml:"atmos_github_token,omitempty" mapstructure:"atmos_github_token"`
+	InjectBitbucketToken bool             `yaml:"inject_bitbucket_token,omitempty" mapstructure:"inject_bitbucket_token"`
+	BitbucketToken       string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
+	AtmosBitbucketToken  string           `yaml:"atmos_bitbucket_token,omitempty" mapstructure:"atmos_bitbucket_token"`
+	BitbucketUsername    string           `yaml:"bitbucket_username,omitempty" mapstructure:"bitbucket_username"`
+	InjectGitlabToken    bool             `yaml:"inject_gitlab_token,omitempty" mapstructure:"inject_gitlab_token"`
+	AtmosGitlabToken     string           `yaml:"atmos_gitlab_token,omitempty" mapstructure:"atmos_gitlab_token"`
+	GitlabToken          string           `yaml:"gitlab_token,omitempty" mapstructure:"gitlab_token"`
 }
 
 type Docs struct {
-	MaxWidth   int  `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
-	Pagination bool `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	// Deprecated: this has moved to `settings.terminal.max-width`
+	MaxWidth int `yaml:"max-width" json:"max_width" mapstructure:"max-width"`
+	// Deprecated: this has moved to `settings.terminal.pagination`
+	Pagination bool                    `yaml:"pagination" json:"pagination" mapstructure:"pagination"`
+	Generate   map[string]DocsGenerate `yaml:"generate,omitempty" json:"generate,omitempty" mapstructure:"generate"`
 }
 
 type Templates struct {
@@ -324,6 +341,26 @@ type Version struct {
 	Check VersionCheck `yaml:"check,omitempty" mapstructure:"check"`
 }
 
+type TerraformDocsReadmeSettings struct {
+	Source        string `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Format        string `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	ShowProviders bool   `yaml:"show_providers,omitempty" json:"show_providers,omitempty" mapstructure:"show_providers"`
+	ShowInputs    bool   `yaml:"show_inputs,omitempty" json:"show_inputs,omitempty" mapstructure:"show_inputs"`
+	ShowOutputs   bool   `yaml:"show_outputs,omitempty" json:"show_outputs,omitempty" mapstructure:"show_outputs"`
+	SortBy        string `yaml:"sort_by,omitempty" json:"sort_by,omitempty" mapstructure:"sort_by"`
+	HideEmpty     bool   `yaml:"hide_empty,omitempty" json:"hide_empty,omitempty" mapstructure:"hide_empty"`
+	IndentLevel   int    `yaml:"indent_level,omitempty" json:"indent_level,omitempty" mapstructure:"indent_level"`
+}
+
+type DocsGenerate struct {
+	BaseDir   string                      `yaml:"base-dir,omitempty" json:"base-dir,omitempty" mapstructure:"base-dir"`
+	Input     []any                       `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
+	Template  string                      `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+	Output    string                      `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Terraform TerraformDocsReadmeSettings `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
+}
+
 type ArgsAndFlagsInfo struct {
 	AdditionalArgsAndFlags    []string
 	SubCommand                string
@@ -425,6 +462,8 @@ type ConfigAndStacksInfo struct {
 	LogsFile                      string
 	SettingsListMergeStrategy     string
 	Query                         string
+	AtmosConfigFilesFromArg       []string
+	AtmosConfigDirsFromArg        []string
 	ProcessTemplates              bool
 	ProcessFunctions              bool
 	Skip                          []string
@@ -617,6 +656,7 @@ type ResourcePath struct {
 
 type SchemaRegistry struct {
 	Manifest string   `yaml:"manifest,omitempty" json:"manifest,omitempty" mapstructure:"manifest"`
+	Schema   string   `yaml:"schema,omitempty" json:"schema,omitempty" mapstructure:"schema"`
 	Matches  []string `yaml:"matches,omitempty" json:"matches,omitempty" mapstructure:"matches"`
 }
 

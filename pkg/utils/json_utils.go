@@ -35,6 +35,26 @@ func PrintAsJSON(data any) error {
 	return nil
 }
 
+func GetAtmosConfigJSON(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	j, err := ConvertToJSON(atmosConfig)
+	if err != nil {
+		return "", err
+	}
+
+	var prettyJSON bytes.Buffer
+	err = json.Indent(&prettyJSON, []byte(j), "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	highlighted, err := HighlightCodeWithConfig(prettyJSON.String(), *atmosConfig)
+	if err == nil {
+		return highlighted, nil
+	}
+	// Fallback to plain text if highlighting fails
+	return prettyJSON.String(), nil
+}
+
 // PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
 func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
 	j, err := ConvertToJSON(data)
@@ -132,14 +152,4 @@ func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
 		return nil, err
 	}
 	return data, nil
-}
-
-// IsJSON checks if data is in JSON format
-func IsJSON(data string) bool {
-	if strings.TrimSpace(data) == "" {
-		return false
-	}
-
-	var js json.RawMessage
-	return json.Unmarshal([]byte(data), &js) == nil
 }

@@ -1,9 +1,7 @@
 package exec
 
 import (
-	"embed"
 	"fmt"
-	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -12,17 +10,15 @@ import (
 	"time"
 
 	log "github.com/charmbracelet/log"
-	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/datafetcher"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-//go:embed schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
-var atmosManifestDefault embed.FS
 
 const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
@@ -108,7 +104,7 @@ func ValidateStacks(atmosConfig schema.AtmosConfiguration) error {
 	switch {
 	case manifestSchema.Manifest == "":
 		// If the validation schema location is not specified, use the embedded one
-		f, err := getEmbeddedSchemaPath()
+		f, err := getEmbeddedSchemaPath(&atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -408,15 +404,16 @@ func downloadSchemaFromURL(atmosConfig *schema.AtmosConfiguration) (string, erro
 
 	atmosManifestJsonSchemaFilePath := filepath.Join(tempDir, fileName)
 
-	if err = u.GoGetterGet(*atmosConfig, manifestURL, atmosManifestJsonSchemaFilePath, getter.ClientModeFile, time.Second*30); err != nil {
+	if err = downloader.NewGoGetterDownloader(atmosConfig).Fetch(manifestURL, atmosManifestJsonSchemaFilePath, downloader.ClientModeFile, 30*time.Second); err != nil {
 		return "", fmt.Errorf("failed to download the Atmos JSON Schema file '%s' from the URL '%s': %w", fileName, manifestURL, err)
 	}
 
 	return atmosManifestJsonSchemaFilePath, nil
 }
 
-func getEmbeddedSchemaPath() (string, error) {
-	embedded, err := fs.ReadFile(atmosManifestDefault, atmosManifestDefaultFileName)
+func getEmbeddedSchemaPath(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	fetcher := datafetcher.NewDataFetcher(atmosConfig)
+	embedded, err := fetcher.GetData("atmos://schema/atmos/manifest/1.0")
 	if err != nil {
 		return "", err
 	}
