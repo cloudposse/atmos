@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"strings"
-
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/list/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
