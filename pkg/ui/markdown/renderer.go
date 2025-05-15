@@ -12,24 +12,46 @@ import (
 	"github.com/muesli/termenv"
 )
 
+const defaultWidth = 80
+
 // Renderer is a markdown renderer using Glamour
 type Renderer struct {
-	renderer    *glamour.TermRenderer
-	width       uint
-	profile     termenv.Profile
-	atmosConfig *schema.AtmosConfiguration
+	renderer              *glamour.TermRenderer
+	width                 uint
+	profile               termenv.Profile
+	atmosConfig           *schema.AtmosConfiguration
+	isTTYSupportForStdout func() bool
+	isTTYSupportForStderr func() bool
 }
 
 // NewRenderer creates a new markdown renderer with the given options
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	r := &Renderer{
-		width:   80,                     // default width
-		profile: termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,           // default width
+		profile:               termenv.ColorProfile(), // default color profile
+		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		isTTYSupportForStderr: term.IsTTYSupportForStderr,
+		atmosConfig:           &atmosConfig,
 	}
 
 	// Apply options
 	for _, opt := range opts {
 		opt(r)
+	}
+
+	if atmosConfig.Settings.Terminal.NoColor {
+		renderer, err := glamour.NewTermRenderer(
+			glamour.WithStandardStyle(styles.AsciiStyle),
+			glamour.WithWordWrap(int(r.width)),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		r.renderer = renderer
+		return r, nil
 	}
 
 	// Get default style
@@ -56,17 +78,37 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	// Render without line wrapping
-	out, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(), // Uses terminal's default style
-		glamour.WithWordWrap(0),
-		glamour.WithColorProfile(r.profile),
-		glamour.WithEmoji(),
-	)
-	if err != nil {
-		return "", err
+	var out *glamour.TermRenderer
+	var err error
+	if r.atmosConfig.Settings.Terminal.NoColor {
+		out, err = glamour.NewTermRenderer(
+			glamour.WithStandardStyle(styles.AsciiStyle),
+			glamour.WithWordWrap(0),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		// Get default style
+		style, err := GetDefaultStyle(*r.atmosConfig)
+		if err != nil {
+			return "", err
+		}
+		out, err = glamour.NewTermRenderer(
+			glamour.WithAutoStyle(), // Uses terminal's default style
+			glamour.WithWordWrap(0),
+			glamour.WithStylesFromJSONBytes(style),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return "", err
+		}
 	}
 	result := ""
-	if term.IsTTYSupportForStdout() {
+	if r.isTTYSupportForStdout() {
 		result, err = out.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
@@ -79,7 +121,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
-	if term.IsTTYSupportForStdout() {
+	if r.isTTYSupportForStdout() {
 		rendered, err = r.renderer.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
@@ -136,22 +178,6 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	return renderer.Render(content)
 }
 
-// RenderWithStyle renders markdown content with a specific style
-func (r *Renderer) RenderWithStyle(content string, style []byte) (string, error) {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(int(r.width)),
-		glamour.WithStylesFromJSONBytes(style),
-		glamour.WithColorProfile(r.profile),
-		glamour.WithEmoji(),
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return renderer.Render(content)
-}
-
 // RenderWorkflow renders workflow documentation with specific styling
 func (r *Renderer) RenderWorkflow(content string) (string, error) {
 	// Add workflow header
@@ -183,7 +209,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 
 // RenderErrorf renders an error message with specific styling
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
-	if term.IsTTYSupportForStderr() {
+	if r.isTTYSupportForStderr() {
 		return r.Render(content)
 	}
 	// Fallback to ASCII rendering for non-TTY stderr
