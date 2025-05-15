@@ -170,11 +170,39 @@ func TestUploadDriftDetection(t *testing.T) {
 				Component:     "vpc",
 				Stack:         "tenant1-ue2-dev",
 				ComponentType: "terraform",
+				Settings: map[string]any{
+					"pro": map[string]any{
+						"drift_detection": map[string]any{
+							"enabled":  true,
+							"schedule": "0 0 * * *",
+						},
+					},
+				},
+				Vars: map[string]any{
+					"environment": "dev",
+					"tenant":      "tenant1",
+					"region":      "ue2",
+					"cidr_block":  "10.0.0.0/16",
+				},
 			},
 			{
 				Component:     "eks",
 				Stack:         "tenant1-ue2-dev",
 				ComponentType: "terraform",
+				Settings: map[string]any{
+					"pro": map[string]any{
+						"drift_detection": map[string]any{
+							"enabled": true,
+						},
+					},
+				},
+				Vars: map[string]any{
+					"environment":        "dev",
+					"tenant":             "tenant1",
+					"region":             "ue2",
+					"cluster_name":       "tenant1-ue2-dev",
+					"kubernetes_version": "1.27",
+				},
 			},
 		},
 	}
@@ -217,11 +245,38 @@ func TestUploadDriftDetection_Error(t *testing.T) {
 				Component:     "vpc",
 				Stack:         "tenant1-ue2-dev",
 				ComponentType: "terraform",
+				Settings: map[string]any{
+					"pro": map[string]any{
+						"drift_detecion": map[string]any{
+							"schedule": "0 0 * * *",
+						},
+					},
+				},
+				Vars: map[string]any{
+					"environment": "dev",
+					"tenant":      "tenant1",
+					"region":      "ue2",
+					"cidr_block":  "10.0.0.0/16",
+				},
 			},
 			{
 				Component:     "eks",
 				Stack:         "tenant1-ue2-dev",
 				ComponentType: "terraform",
+				Settings: map[string]any{
+					"pro": map[string]any{
+						"drift_detection": map[string]any{
+							"enabled": true,
+						},
+					},
+				},
+				Vars: map[string]any{
+					"environment":        "dev",
+					"tenant":             "tenant1",
+					"region":             "ue2",
+					"cluster_name":       "tenant1-ue2-dev",
+					"kubernetes_version": "1.27",
+				},
 			},
 		},
 	}
