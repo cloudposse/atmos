@@ -1,0 +1,44 @@
+vars:
+  stage: test
+# This is defined in the global hooks section to ensure that the hooks merging works correctly so that we can
+# use hooks defined in the global section in catalog and region/account default files.
+hooks:
+  write-outputs:
+    events:
+      - after-terraform-apply
+
+# This is defined in the terraform hooks section to ensure that the hooks merging works correctly so that we can
+# use hooks defined in the global section in catalog and region/account default files.
+terraform:
+  hooks:
+    write-outputs:
+
+
+
+components:
+  terraform:
+    mock:
+      metadata:
+        component: mock
+      vars:
+        foo: baz
+      hooks:
+        write-outputs:
+          command: write
+          events:
+            - after-terraform-apply
+          output:
+            stacks/_generated.foo.yaml:
+              replacements:
+                foo: .foo
+                list: .list
+                object: .object
+              content: | 
+                settings:
+                  foo: {{ .foo }}
+                  object: {{ .object }}
+                
+                  jsonobject: !template {{  toJson (.object) }}
+                  jsonlist: {{ toJson (.list) }}
+                  list: {{ .list }}
+            
