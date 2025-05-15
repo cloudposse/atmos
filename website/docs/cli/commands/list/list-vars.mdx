@@ -102,6 +102,22 @@ Filter by stack and specific variables:
 atmos list vars vpc --stack '*-ue2-*' --query .vars.region
 ```
 
+### Custom Column using Stack Name
+
+You can use available variables like `.stack_name` in your column definitions:
+
+```yaml
+# In atmos.yaml, under the appropriate scope (values, vars, settings, or metadata)
+list:
+  columns:
+    - name: "Stack"
+      value: "{{ .stack_name }}"
+    - name: "Variable"
+      value: "{{ .key }}"
+    - name: "Value"
+      value: "{{ .value }}"
+```
+
 ## Example Output
 
 ```shell
