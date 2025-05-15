@@ -35,7 +35,6 @@ settings:
     terminal:
         max_width: 0
         pager: "0"
-        colors: false
         unicode: false
         syntax_highlighting:
             enabled: false
@@ -45,6 +44,7 @@ settings:
             pager: false
             line_numbers: false
             wrap: false
+        no_color: false
     inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks
@@ -55,9 +55,6 @@ excludeStackAbsolutePaths:
 terraformDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false
-validate:
-    editorconfig:
-        color: true
 cli_config_path: /absolute/path/to/repo/examples/demo-stacks
 import: []
 docs:

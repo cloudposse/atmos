@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/elewis787/boa"
 	"github.com/spf13/cobra"
@@ -95,6 +96,16 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.InfoLevel)
 	}
 
+	if atmosConfig.Settings.Terminal.NoColor {
+		stylesDefault := log.DefaultStyles()
+		// Clear colors for levels
+		styles := &log.Styles{}
+		styles.Levels = make(map[log.Level]lipgloss.Style)
+		for k := range stylesDefault.Levels {
+			styles.Levels[k] = stylesDefault.Levels[k].UnsetForeground().Bold(false)
+		}
+		log.SetStyles(styles)
+	}
 	var output io.Writer
 
 	switch atmosConfig.Logs.File {
@@ -194,6 +205,7 @@ func init() {
 	RootCmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
+	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 	// Set custom usage template
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
