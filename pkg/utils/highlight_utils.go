@@ -71,76 +71,79 @@ func HighlightCode(code string, lexerName string, theme string) (string, error) 
 	return buf.String(), nil
 }
 
-// HighlightCodeWithConfig highlights the given code using the provided configuration.
+// HighlightCodeWithConfig highlights the given code using the provided configuration
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
-	// Skip highlighting if not in a terminal or disabled
-	if !term.IsTerminal(int(os.Stdout.Fd())) || !GetHighlightSettings(config).Enabled {
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return code, nil
+	}
+	settings := GetHighlightSettings(config)
+	if !settings.Enabled {
 		return code, nil
 	}
 
-	// Set terminal width
+	// Get terminal width
 	config.Settings.Terminal.MaxWidth = templates.GetTerminalWidth()
 
-	// Select lexer based on format or code content
-	lexer := getLexer(format, code)
+	// Determine lexer based on format flag or content format
+	var lexerName string
+	if len(format) > 0 && format[0] != "" {
+		// Use format flag if provided
+		lexerName = strings.ToLower(format[0])
+	} else {
+		// This is just a fallback
+		trimmed := strings.TrimSpace(code)
+
+		// Try to parse as JSON first
+		if json.Valid([]byte(trimmed)) {
+			lexerName = "json"
+		} else {
+			// Check for common YAML indicators
+			// 1. Contains key-value pairs with colons
+			// 2. Does not start with a curly brace (which could indicate malformed JSON)
+			// 3. Contains indentation or list markers
+			if (strings.Contains(trimmed, ":") && !strings.HasPrefix(trimmed, "{")) ||
+				strings.Contains(trimmed, "\n  ") ||
+				strings.Contains(trimmed, "\n- ") {
+				lexerName = "yaml"
+			} else {
+				// Fallback to plaintext if format is unclear
+				lexerName = "plaintext"
+			}
+		}
+	}
+
+	// Get lexer
+	lexer := lexers.Get(lexerName)
 	if lexer == nil {
 		lexer = lexers.Fallback
 	}
-
-	// Select style
-	settings := GetHighlightSettings(config)
-	style := styles.Get(settings.Theme)
-	if style == nil {
-		style = styles.Fallback
+	// Get style
+	s := styles.Get(settings.Theme)
+	if s == nil {
+		s = styles.Fallback
 	}
-
-	// Select formatter
-	formatter := getFormatter(settings)
-	if formatter == nil {
-		formatter = formatters.Fallback
+	// Get formatter
+	var formatter chroma.Formatter
+	if settings.LineNumbers {
+		formatter = formatters.TTY256
+	} else {
+		formatter = formatters.Get(settings.Formatter)
+		if formatter == nil {
+			formatter = formatters.Fallback
+		}
 	}
-
-	// Format the code
+	// Create buffer for output
 	var buf bytes.Buffer
+	// Format the code
 	iterator, err := lexer.Tokenise(nil, code)
 	if err != nil {
 		return code, err
 	}
-	if err := formatter.Format(&buf, style, iterator); err != nil {
+	err = formatter.Format(&buf, s, iterator)
+	if err != nil {
 		return code, err
 	}
-
 	return buf.String(), nil
-}
-
-// getLexer selects a lexer based on format or code content.
-func getLexer(format []string, code string) chroma.Lexer {
-	if len(format) > 0 && format[0] != "" {
-		return lexers.Get(strings.ToLower(format[0]))
-	}
-	trimmed := strings.TrimSpace(code)
-	if json.Valid([]byte(trimmed)) {
-		return lexers.Get("json")
-	}
-	if isYAML(trimmed) {
-		return lexers.Get("yaml")
-	}
-	return lexers.Get("plaintext")
-}
-
-// isYAML checks if the code resembles YAML.
-func isYAML(code string) bool {
-	return (strings.Contains(code, ":") && !strings.HasPrefix(code, "{")) ||
-		strings.Contains(code, "\n  ") ||
-		strings.Contains(code, "\n- ")
-}
-
-// getFormatter selects a formatter based on settings.
-func getFormatter(settings *schema.SyntaxHighlighting) chroma.Formatter {
-	if settings.LineNumbers {
-		return formatters.TTY256
-	}
-	return formatters.Get(settings.Formatter)
 }
 
 // HighlightWriter returns an io.Writer that highlights code written to it

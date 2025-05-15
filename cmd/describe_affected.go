@@ -1,19 +1,11 @@
 package cmd
 
 import (
-	"errors"
-	"fmt"
-
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
-	"github.com/cloudposse/atmos/internal/exec"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
+	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
 var describeAffectedCmd = &cobra.Command{
@@ -25,11 +17,8 @@ var describeAffectedCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-		props, err := parseDescribeAffectedCliArgs(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
-		err = exec.NewDescribeAffectedExec(&props.CLIConfig).Execute(props)
+
+		err := e.ExecuteDescribeAffectedCmd(cmd, args)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
@@ -44,6 +33,7 @@ func init() {
 	describeAffectedCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch")
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to the file")
 	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format. (`json` is default)")
+	describeAffectedCmd.PersistentFlags().Bool("verbose", false, "Print more detailed output when cloning and checking out the Git repository")
 	describeAffectedCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH")
 	describeAffectedCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block")
 	describeAffectedCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "Include the Spacelift admin stack of any stack that is affected by config changes")
@@ -60,88 +50,4 @@ func init() {
 	describeAffectedCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
 
 	describeCmd.AddCommand(describeAffectedCmd)
-}
-
-func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error) {
-	var atmosConfig schema.AtmosConfiguration
-	if info, err := exec.ProcessCommandLineArgs("", cmd, args, nil); err != nil {
-		return exec.DescribeAffectedCmdArgs{}, err
-	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
-		return exec.DescribeAffectedCmdArgs{}, err
-	}
-
-	err := exec.ValidateStacks(atmosConfig)
-	if err != nil {
-		return exec.DescribeAffectedCmdArgs{}, err
-	}
-
-	// Process flags
-	flags := cmd.Flags()
-
-	result := exec.DescribeAffectedCmdArgs{
-		CLIConfig: atmosConfig,
-	}
-	setFlagValueInCliArgs(flags, &result)
-
-	if result.Format != "yaml" && result.Format != "json" {
-		return exec.DescribeAffectedCmdArgs{}, exec.ErrInvalidFormat
-	}
-	if result.RepoPath != "" && (result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
-		return exec.DescribeAffectedCmdArgs{}, ErrRepoPathConflict
-	}
-
-	return result, nil
-}
-
-func setFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffectedCmdArgs) {
-	flagsKeyValue := map[string]any{
-		"ref":                            &describe.Ref,
-		"sha":                            &describe.SHA,
-		"repo-path":                      &describe.RepoPath,
-		"ssh-key":                        &describe.SSHKeyPath,
-		"ssh-key-password":               &describe.SSHKeyPassword,
-		"include-spacelift-admin-stacks": &describe.IncludeSpaceliftAdminStacks,
-		"include-dependents":             &describe.IncludeDependents,
-		"include-settings":               &describe.IncludeSettings,
-		"upload":                         &describe.Upload,
-		"clone-target-ref":               &describe.CloneTargetRef,
-		"process-templates":              &describe.ProcessTemplates,
-		"process-functions":              &describe.ProcessYamlFunctions,
-		"skip":                           &describe.Skip,
-		"pager":                          &describe.CLIConfig.Settings.Terminal.Pager,
-		"stack":                          &describe.Stack,
-		"format":                         &describe.Format,
-		"file":                           &describe.OutputFile,
-		"query":                          &describe.Query,
-	}
-
-	var err error
-	for k := range flagsKeyValue {
-		if !flags.Changed(k) {
-			continue
-		}
-		switch v := flagsKeyValue[k].(type) {
-		case *string:
-			*v, err = flags.GetString(k)
-		case *bool:
-			*v, err = flags.GetBool(k)
-		default:
-			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
-		}
-		checkFlagError(err)
-	}
-	// When uploading, always include dependents and settings for all affected components
-	if describe.Upload {
-		describe.IncludeDependents = true
-		describe.IncludeSettings = true
-	}
-	if describe.Format == "" {
-		describe.Format = "json"
-	}
-}
-
-func checkFlagError(err error) {
-	if err != nil {
-		panic(err)
-	}
 }
