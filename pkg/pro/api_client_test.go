@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // MockRoundTripper is an implementation of http.RoundTripper for testing purposes.
@@ -159,12 +160,23 @@ func TestUploadDriftDetection(t *testing.T) {
 	}
 
 	dto := DriftDetectionUploadRequest{
-		BaseSHA:    "abc123",
-		RepoURL:    "https://github.com/org/repo",
-		RepoName:   "repo",
-		RepoOwner:  "org",
-		RepoHost:   "github.com",
-		Components: []string{"component1", "component2"},
+		BaseSHA:   "abc123",
+		RepoURL:   "https://github.com/org/repo",
+		RepoName:  "repo",
+		RepoOwner: "org",
+		RepoHost:  "github.com",
+		Stacks: []schema.Deployment{
+			{
+				Component:     "vpc",
+				Stack:         "tenant1-ue2-dev",
+				ComponentType: "terraform",
+			},
+			{
+				Component:     "eks",
+				Stack:         "tenant1-ue2-dev",
+				ComponentType: "terraform",
+			},
+		},
 	}
 
 	mockResponse := &http.Response{
@@ -195,12 +207,23 @@ func TestUploadDriftDetection_Error(t *testing.T) {
 	}
 
 	dto := DriftDetectionUploadRequest{
-		BaseSHA:    "abc123",
-		RepoURL:    "https://github.com/org/repo",
-		RepoName:   "repo",
-		RepoOwner:  "org",
-		RepoHost:   "github.com",
-		Components: []string{"component1", "component2"},
+		BaseSHA:   "abc123",
+		RepoURL:   "https://github.com/org/repo",
+		RepoName:  "repo",
+		RepoOwner: "org",
+		RepoHost:  "github.com",
+		Stacks: []schema.Deployment{
+			{
+				Component:     "vpc",
+				Stack:         "tenant1-ue2-dev",
+				ComponentType: "terraform",
+			},
+			{
+				Component:     "eks",
+				Stack:         "tenant1-ue2-dev",
+				ComponentType: "terraform",
+			},
+		},
 	}
 
 	mockResponse := &http.Response{
