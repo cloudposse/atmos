@@ -16,7 +16,7 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
 
-	_, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return err
 	}
@@ -74,11 +74,6 @@ func ExecuteDescribeComponentCmd(cmd *cobra.Command, args []string) error {
 	var res any
 
 	if query != "" {
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-		if err != nil {
-			return err
-		}
-
 		res, err = u.EvaluateYqExpression(&atmosConfig, componentSection, query)
 		if err != nil {
 			return err

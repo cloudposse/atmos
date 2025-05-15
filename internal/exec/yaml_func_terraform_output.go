@@ -27,8 +27,13 @@ func processTagTerraformOutput(
 	var output string
 
 	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace
-	parts := strings.Fields(str)
+	// while also ignoring leading and trailing whitespace.
+	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
+	parts, err := u.SplitStringByDelimiter(str, ' ')
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	partsLen := len(parts)
 
 	if partsLen == 3 {
