@@ -23,9 +23,6 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 		return err
 	}
 
-	// Get stack filter
-	stackFilter := info.StackFromArg
-
 	// Get drift detection filter
 	driftEnabled := cmd.Flags().Changed("drift-enabled")
 
@@ -33,7 +30,7 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 	upload := cmd.Flags().Changed("upload")
 
 	// Get all stacks
-	stacksMap, err := describe.ExecuteDescribeStacks(atmosConfig, stackFilter, nil, nil, nil, false, false)
+	stacksMap, err := describe.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false)
 	if err != nil {
 		return err
 	}

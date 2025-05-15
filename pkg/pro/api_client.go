@@ -105,6 +105,8 @@ func (c *AtmosProAPIClient) UploadDriftDetection(dto DriftDetectionUploadRequest
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
+	c.Logger.Debug(fmt.Sprintf("Uploading drift detection DTO: %s", data))
+
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
 	if err != nil {
 		return fmt.Errorf("failed to create authenticated request: %w", err)
