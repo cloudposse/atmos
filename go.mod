@@ -40,7 +40,7 @@ require (
 	github.com/hashicorp/go-getter v1.7.8
 	github.com/hashicorp/hcl v1.0.0
 	github.com/hashicorp/hcl/v2 v2.23.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20250401063509-d2d12f9a63bb
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20250515145901-f4c50e64fd6d
 	github.com/hashicorp/terraform-exec v0.23.0
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/jfrog/jfrog-client-go v1.53.0
