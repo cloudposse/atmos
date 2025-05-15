@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"strings"
-
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/list/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -20,10 +18,6 @@ func CheckComponentExists(atmosConfig *schema.AtmosConfiguration, componentName 
 	if componentName == "" {
 		return false
 	}
-
-	// Extract component name from path if needed
-	parts := strings.Split(componentName, "/")
-	baseName := parts[len(parts)-1]
 
 	// Get all stacks to check for the component
 	stacksMap, err := e.ExecuteDescribeStacks(*atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
@@ -43,15 +37,16 @@ func CheckComponentExists(atmosConfig *schema.AtmosConfiguration, componentName 
 			continue
 		}
 
-		terraformComponents, ok := componentsMap["terraform"].(map[string]interface{})
-		if !ok {
-			continue
-		}
+		for _, componentTypeMap := range componentsMap {
+			typedComponents, ok := componentTypeMap.(map[string]interface{})
+			if !ok {
+				continue
+			}
 
-		// Check if the component exists in this stack
-		_, exists := terraformComponents[baseName]
-		if exists {
-			return true
+			_, exists := typedComponents[componentName]
+			if exists {
+				return true
+			}
 		}
 	}
 
