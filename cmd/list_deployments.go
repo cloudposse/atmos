@@ -10,7 +10,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// listDeploymentsCmd lists atmos deployments
+// listDeploymentsCmd lists atmos deployments.
 var listDeploymentsCmd = &cobra.Command{
 	Use:                "deployments",
 	Short:              "List all Atmos deployments",
