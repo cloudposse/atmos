@@ -63,8 +63,8 @@ type AffectedStacksUploadRequest struct {
 	Stacks    []schema.Affected `json:"stacks"`
 }
 
-// DriftDetectionUploadRequest represents the data structure for uploading components for drift detection
-// We call this from "atmos list deployments"
+// DriftDetectionUploadRequest represents the data structure for uploading components for drift detection.
+// We call this from "atmos list deployments".
 type DriftDetectionUploadRequest struct {
 	BaseSHA   string              `json:"base_sha"`
 	RepoURL   string              `json:"repo_url"`

@@ -96,7 +96,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest
 	return nil
 }
 
-// UploadDriftDetection uploads drift detection results to the API
+// UploadDriftDetection uploads drift detection results to the API.
 func (c *AtmosProAPIClient) UploadDriftDetection(dto DriftDetectionUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/drift-detection", c.BaseURL, c.BaseAPIEndpoint)
 

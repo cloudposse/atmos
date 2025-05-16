@@ -868,7 +868,7 @@ type ListColumnConfig struct {
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 }
 
-// Deployment represents a deployment of a component for a specific stack
+// Deployment represents a deployment of a component for a specific stack.
 type Deployment struct {
 	Component     string              `yaml:"component" json:"component" mapstructure:"component"`
 	Stack         string              `yaml:"stack" json:"stack" mapstructure:"stack"`

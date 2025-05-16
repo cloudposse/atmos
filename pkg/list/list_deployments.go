@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/describe"
 	"github.com/cloudposse/atmos/pkg/git"
@@ -162,23 +163,27 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 		// Gather repo info
 		repo, err := git.GetLocalRepo()
 		if err != nil {
-			return fmt.Errorf("failed to get local git repo: %w", err)
+			log.Error("Failed to get local git repo", "error", err)
+			return err
 		}
 		repoInfo, err := git.GetRepoInfo(repo)
 		if err != nil {
-			return fmt.Errorf("failed to get git repo info: %w", err)
+			log.Error("Failed to get git repo info", "error", err)
+			return err
 		}
 
 		// Get logger
 		logger, err := logger.NewLoggerFromCliConfig(atmosConfig)
 		if err != nil {
-			return fmt.Errorf("failed to create logger: %w", err)
+			log.Error("Failed to create logger", "error", err)
+			return err
 		}
 
 		// Create API client
 		apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
 		if err != nil {
-			return fmt.Errorf("failed to create Atmos Pro API client: %w", err)
+			log.Error("Failed to create Atmos Pro API client", "error", err)
+			return err
 		}
 
 		// TODO: Get the correct base SHA (for now, leave blank)
@@ -191,9 +196,15 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 			Stacks:    deployments,
 		}
 
-		err = apiClient.UploadDriftDetection(req)
-		if err != nil {
-			return fmt.Errorf("failed to upload deployments: %w", err)
+		if driftEnabled {
+			err = apiClient.UploadDriftDetection(req)
+			if err != nil {
+				log.Error("Failed to upload deployments", "error", err)
+				return err
+			}
+		} else {
+			log.Info("Atmos Pro only supports uploading drift detection stacks at this time.\n\nTo upload drift detection stacks, use the --drift-enabled flag:\n  atmos list deployments --upload --drift-enabled")
+			return nil
 		}
 
 		logger.Info("Successfully uploaded deployments to Atmos Pro API.")
