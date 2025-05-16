@@ -80,7 +80,7 @@ function __atmos_clear_perform_completion_once_result
     __atmos_debug &quot;========= clearing previously set __atmos_perform_completion_once_result variable ==========&quot;
     set --erase __atmos_perform_completion_once_result
     __atmos_debug &quot;Successfully erased the variable __atmos_perform_completion_once_result&quot;
-end
+end
 
 function __atmos_requires_order_preservation
     __atmos_debug &quot;&quot;
@@ -233,3 +233,4 @@ complete -c atmos -n '__atmos_clear_perform_completion_once_result'
 complete -c atmos -n 'not __atmos_requires_order_preservation &amp;&amp; __atmos_prepare_completions' -f -a '$__atmos_comp_results'
 # otherwise we use the -k flag
 complete -k -c atmos -n '__atmos_requires_order_preservation &amp;&amp; __atmos_prepare_completions' -f -a '$__atmos_comp_results'
+
