@@ -75,7 +75,7 @@ Atmos supports the following lifecycle events:
 
 - `after-terraform-apply` (this event is triggered after the `atmos terraform apply` or `atmos terraform deploy` command is run)
 
-## Supported Commands
+# Supported Commands
 
 ## store
 
@@ -103,4 +103,41 @@ The `store` command is used to write data to a remote store.
   [Terraform output](https://developer.hashicorp.com/terraform/language/values/outputs) and the value will be retrieved
   from the Terraform state for the current component.
   </dd>
+</dl>
+
+## write
+
+<dl>
+    <dt>`hooks.[hook_name]`</dt>
+    <dd>This map key is the name you want to give to the hook. This must be unique for each hook in the component.</dd>
+
+    <dt>`hooks.[hook_name].events`</dt>
+    <dd>
+        This is a list of [Supported Lifecycle Events](#supported-lifecycle-events) that should trigger running the command.
+    </dd>
+
+    <dt>`hooks.[hook_name].command`</dt>
+    <dd>Must be set to `write`</dd>
+    
+    <dt>`hooks.[hook_name].output`</dt>
+    <dd>
+        `output` is a map where the key is the file name, and the value contains two sub-maps:
+          - `replacements`: them mapping of context (key) to the terraform output (value)
+          - `content`: the template to write to the file
+        
+        Example:
+        ```yaml
+          output:
+            stacks/_generated.foo.yaml:
+              replacements:
+                foo: .foo
+                list: .list
+                object: .object
+              content: | 
+                settings:
+                  foo: {{ .foo }}
+                  object: {{ .object }}
+                  list: {{ .list }}
+        ```
+    </dd>
 </dl>
