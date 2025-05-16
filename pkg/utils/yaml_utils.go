@@ -41,21 +41,25 @@ var (
 )
 
 // PrintAsYAML prints the provided value as YAML document to the console
-func PrintAsYAML(data any) error {
-	y, err := ConvertToYAML(data)
+func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
+	y, err := GetHighlightedYAML(atmosConfig, data)
 	if err != nil {
 		return err
 	}
-
-	atmosConfig := ExtractAtmosConfig(data)
-	highlighted, err := HighlightCodeWithConfig(y, atmosConfig)
-	if err != nil {
-		// Fallback to plain text if highlighting fails
-		PrintMessage(y)
-		return nil
-	}
-	PrintMessage(highlighted)
+	PrintMessage(y)
 	return nil
+}
+
+func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
+	y, err := ConvertToYAML(data)
+	if err != nil {
+		return "", err
+	}
+	highlighted, err := HighlightCodeWithConfig(atmosConfig, y)
+	if err != nil {
+		return y, err
+	}
+	return highlighted, nil
 }
 
 // PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
