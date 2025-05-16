@@ -75,7 +75,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if err != nil {
 		return err
 	}
-	
+
 	var res any
 	if pager != "" {
 		atmosConfig.Settings.Terminal.Pager = pager
@@ -89,7 +89,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	} else {
 		res = componentSection
 	}
-	
+
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
 		err = d.viewConfig(&atmosConfig, component, format, res)
 		switch err.(type) {
