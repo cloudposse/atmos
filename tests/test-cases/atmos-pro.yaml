@@ -1,0 +1,37 @@
+tests:
+  - name: atmos list deployments
+    snapshot: true
+    enabled: true
+    description: "Ensure Atmos processes deployments"
+    workdir: "fixtures/scenarios/atmos-pro"
+    command: "atmos"
+    args:
+      - "list"
+      - "deployments"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Component.*Stack"
+        - "mock/drift.*nonprod"
+        - "mock/nodrift.*nonprod"
+        - "mock/drift.*prod"
+        - "mock/nodrift.*prod"
+
+  - name: atmos list deployments drift enabled
+    snapshot: true
+    enabled: true
+    description: "Ensure Atmos processes deployments with drift filter"
+    workdir: "fixtures/scenarios/atmos-pro"
+    command: "atmos"
+    args:
+      - "list"
+      - "deployments"
+      - "--drift-enabled"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Component.*Stack"
+        - "mock/drift.*nonprod"
+        - "mock/drift.*prod"
+        - !not "mock/nodrift.*nonprod"
+        - !not "mock/nodrift.*prod"
