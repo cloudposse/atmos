@@ -125,7 +125,10 @@ filter __atmos_escapeStringWithSpecialChars {
         if (-Not $Description) {
             $Description = &quot; &quot;
         }
-        @{Name=&quot;$Name&quot;;Description=&quot;$Description&quot;}
+        New-Object -TypeName PSCustomObject -Property @{
+            Name = &quot;$Name&quot;
+            Description = &quot;$Description&quot;
+        }
     }
 
 
@@ -203,7 +206,12 @@ filter __atmos_escapeStringWithSpecialChars {
                     __atmos_debug &quot;Only one completion left&quot;
 
                     # insert space after value
-                    [System.Management.Automation.CompletionResult]::new($($comp.Name | __atmos_escapeStringWithSpecialChars) + $Space, &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+                    $CompletionText = $($comp.Name | __atmos_escapeStringWithSpecialChars) + $Space
+                    if ($ExecutionContext.SessionState.LanguageMode -eq &quot;FullLanguage&quot;){
+                        [System.Management.Automation.CompletionResult]::new($CompletionText, &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+                    } else {
+                        $CompletionText
+                    }
 
                 } else {
                     # Add the proper number of spaces to align the descriptions
@@ -218,7 +226,12 @@ filter __atmos_escapeStringWithSpecialChars {
                         $Description = &quot;  ($($comp.Description))&quot;
                     }
 
-                    [System.Management.Automation.CompletionResult]::new(&quot;$($comp.Name)$Description&quot;, &quot;$($comp.Name)$Description&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+                    $CompletionText = &quot;$($comp.Name)$Description&quot;
+                    if ($ExecutionContext.SessionState.LanguageMode -eq &quot;FullLanguage&quot;){
+                        [System.Management.Automation.CompletionResult]::new($CompletionText, &quot;$($comp.Name)$Description&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+                    } else {
+                        $CompletionText
+                    }
                 }
              }
 
@@ -227,7 +240,13 @@ filter __atmos_escapeStringWithSpecialChars {
                 # insert space after value
                 # MenuComplete will automatically show the ToolTip of
                 # the highlighted value at the bottom of the suggestions.
-                [System.Management.Automation.CompletionResult]::new($($comp.Name | __atmos_escapeStringWithSpecialChars) + $Space, &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+
+                $CompletionText = $($comp.Name | __atmos_escapeStringWithSpecialChars) + $Space
+                if ($ExecutionContext.SessionState.LanguageMode -eq &quot;FullLanguage&quot;){
+                    [System.Management.Automation.CompletionResult]::new($CompletionText, &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+                } else {
+                    $CompletionText
+                }
             }
 
             # TabCompleteNext and in case we get something unknown
@@ -235,7 +254,13 @@ filter __atmos_escapeStringWithSpecialChars {
                 # Like MenuComplete but we don't want to add a space here because
                 # the user need to press space anyway to get the completion.
                 # Description will not be shown because that's not possible with TabCompleteNext
-                [System.Management.Automation.CompletionResult]::new($($comp.Name | __atmos_escapeStringWithSpecialChars), &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+
+                $CompletionText = $($comp.Name | __atmos_escapeStringWithSpecialChars)
+                if ($ExecutionContext.SessionState.LanguageMode -eq &quot;FullLanguage&quot;){
+                    [System.Management.Automation.CompletionResult]::new($CompletionText, &quot;$($comp.Name)&quot;, 'ParameterValue', &quot;$($comp.Description)&quot;)
+                } else {
+                    $CompletionText
+                }
             }
         }
 
@@ -243,3 +268,4 @@ filter __atmos_escapeStringWithSpecialChars {
 }
 
 Register-ArgumentCompleter -CommandName 'atmos' -ScriptBlock ${__atmosCompleterBlock}
+
