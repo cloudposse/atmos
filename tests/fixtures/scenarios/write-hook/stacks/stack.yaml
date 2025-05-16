@@ -37,8 +37,5 @@ components:
                 settings:
                   foo: {{ .foo }}
                   object: {{ .object }}
-                
-                  jsonobject: !template {{  toJson (.object) }}
-                  jsonlist: {{ toJson (.list) }}
                   list: {{ .list }}
             

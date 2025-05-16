@@ -1,0 +1,7 @@
+vars:        
+  stage: test
+
+components:
+  terraform:
+    github:
+      vars: {}

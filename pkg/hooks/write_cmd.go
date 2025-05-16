@@ -3,7 +3,6 @@ package hooks
 import (
 	"fmt"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/log"
@@ -74,44 +73,20 @@ func (c *WriteHook) processWriteCommand(hook *Hook) error {
 
 		replaceMap := make(map[string]any)
 		for replaceKey, replaceOutputKey := range output.Replacements {
-			//for _, replaceOutputKey := range output.Replacements {
 			_, replaceOutput := c.getOutputValue(replaceOutputKey)
-			d, _ := u.ConvertToYAML(replaceOutput)
-			replaceMap[replaceKey] = d
-
-			//yamlData, err := yaml.Marshal(replaceOutput)
-			//if err != nil {
-			//	return fmt.Errorf("failed to marshal output: %w", err)
-			//}
-			//newContent = strings.ReplaceAll(newContent, replaceKey, d)
-
+			replaceMap[replaceKey] = replaceOutput
 		}
-		log.Info("ReplacementMap", "replaceMap", replaceMap)
-		//newContent = e.ProcessCustomYamlTags(c.config, replaceMap, newContent, [])
-		//convertedReplaceMap := schema.AtmosSectionMapType(replaceMap)
-		result, _ := e.ProcessCustomYamlTags(*c.config, replaceMap, newContent, []string{})
-		log.Info("result", "result", result)
-		newContent, err := e.ProcessTmpl("write-hook", newContent, result, true)
 
-		//if err != nil {
-		//	fmt.Errorf(err.Error())
-		//}
-		//content, _ := u.ConvertToYAML(newContent)
-		err = os.WriteFile(fileName, []byte(newContent), 0644)
-		//content, _ := yaml.Marshal(result)
-		//err := os.WriteFile(fileName, content, 0644)
+		var result map[string]any
+		result, _ = e.ProcessCustomYamlTags(*c.config, replaceMap, newContent, []string{})
+		err := u.WriteToFileAsYAML(fileName, result, 0o644)
+		if err != nil {
+			return err
+		}
 		if err != nil {
 			return err
 		}
 	}
-	//for key, value := range c.Output. {
-	//	outputKey, outputValue := c.getOutputValue(value)
-	//
-	//	err := c.writeOutput(hook, key, outputKey, outputValue)
-	//	if err != nil {
-	//		return err
-	//	}
-	//}
 	return nil
 }
 
