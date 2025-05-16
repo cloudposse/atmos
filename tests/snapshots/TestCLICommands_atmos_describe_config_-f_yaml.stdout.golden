@@ -55,9 +55,6 @@ excludeStackAbsolutePaths:
 terraformDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false
-validate:
-  editorconfig:
-    color: true
 cli_config_path: /absolute/path/to/repo/examples/demo-stacks
 import: []
 docs:
