@@ -12,7 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// mockGitRepo is a mock implementation of git.Repository
+// mockGitRepo is a mock implementation of git.Repository.
 type mockGitRepo struct {
 	repoInfo *git.RepoInfo
 	err      error
@@ -22,7 +22,7 @@ func (m *mockGitRepo) GetRepoInfo() (*git.RepoInfo, error) {
 	return m.repoInfo, m.err
 }
 
-// mockAPIClient is a mock implementation of pro.AtmosProAPIClient
+// mockAPIClient is a mock implementation of pro.AtmosProAPIClient.
 type mockAPIClient struct {
 	uploadErr error
 }
@@ -31,7 +31,7 @@ func (m *mockAPIClient) UploadDriftDetection(req pro.DriftDetectionUploadRequest
 	return m.uploadErr
 }
 
-// mockDescribeStacks is a mock implementation of describe.ExecuteDescribeStacks
+// mockDescribeStacks is a mock implementation of describe.ExecuteDescribeStacks.
 type mockDescribeStacks struct {
 	stacks map[string]interface{}
 	err    error
@@ -41,9 +41,9 @@ func (m *mockDescribeStacks) Execute(config schema.AtmosConfiguration, stack str
 	return m.stacks, m.err
 }
 
-// TestExecuteListDeploymentsCmd tests the ExecuteListDeploymentsCmd function
+// TestExecuteListDeploymentsCmd tests the ExecuteListDeploymentsCmd function.
 func TestExecuteListDeploymentsCmd(t *testing.T) {
-	// Create a new command for testing
+	// Create a new command for testing.
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("drift-enabled", false, "Filter deployments with drift detection enabled")
 	cmd.Flags().Bool("upload", false, "Upload deployments to pro API")
@@ -176,7 +176,7 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			}
 
 			// Create a test-specific implementation of ExecuteListDeploymentsCmd
-			executeListDeployments := func(info schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+			executeListDeployments := func(_ schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 				// Get stacks
 				_, err := mockDescriber.Execute(schema.AtmosConfiguration{}, "", nil, nil, nil, true, false)
 				if err != nil {
