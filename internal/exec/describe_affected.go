@@ -205,6 +205,16 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 // ExecuteDescribeAffectedCmd executes `describe affected` command
 func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
+	if err != nil {
+		return err
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+
 	a, err := parseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
 		return err
@@ -272,6 +282,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 		a.Logger.Trace("\nAffected components and stacks: \n")
 
 		err = printOrWriteToFile(&a.CLIConfig, a.Format, a.OutputFile, affected)
+		err = printOrWriteToFile(&atmosConfig, a.Format, a.OutputFile, affected)
 		if err != nil {
 			return err
 		}

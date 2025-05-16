@@ -45,9 +45,14 @@ var (
 	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
 )
 
-func PrintAsYAML(data any) error {
-	atmosConfig := ExtractAtmosConfig(data)
-	return PrintAsYAMLWithConfig(&atmosConfig, data)
+// PrintAsYAML prints the provided value as YAML document to the console
+func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
+	y, err := GetHighlightedYAML(atmosConfig, data)
+	if err != nil {
+		return err
+	}
+	PrintMessage(y)
+	return nil
 }
 
 func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
@@ -77,6 +82,19 @@ func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) err
 	return nil
 }
 
+func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
+	y, err := ConvertToYAML(data)
+	if err != nil {
+		return "", err
+	}
+	highlighted, err := HighlightCodeWithConfig(atmosConfig, y)
+	if err != nil {
+		return y, err
+	}
+	return highlighted, nil
+}
+
+// PrintAsYAMLToFileDescriptor prints the provided value as YAML document to a file descriptor
 func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if atmosConfig == nil {
 		return ErrNilAtmosConfig
@@ -93,6 +111,7 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 	return nil
 }
 
+// WriteToFileAsYAML converts the provided value to YAML and writes it to the specified file
 func WriteToFileAsYAML(filePath string, data any, fileMode os.FileMode) error {
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: DefaultYAMLIndent})
 	if err != nil {

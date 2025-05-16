@@ -32,6 +32,19 @@ logs:
   level: Info
 settings:
   list_merge_strategy: ""
+  terminal:
+    max_width: 0
+    pager: "0"
+    unicode: false
+    syntax_highlighting:
+      enabled: false
+      lexer: ""
+      formatter: ""
+      theme: ""
+      pager: false
+      line_numbers: false
+      wrap: false
+    no_color: false
   inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks

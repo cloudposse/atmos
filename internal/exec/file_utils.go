@@ -57,7 +57,7 @@ func printOrWriteToFile(
 
 	case "json":
 		if file == "" {
-			err := u.PrintAsJSON(data)
+			err := u.PrintAsJSON(atmosConfig, data)
 			if err != nil {
 				return err
 			}
