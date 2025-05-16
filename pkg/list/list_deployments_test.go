@@ -197,7 +197,6 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 				if tt.upload && tt.driftEnabled {
 					apiClient := &mockAPIClient{uploadErr: tt.mockUploadErr}
 					req := pro.DriftDetectionUploadRequest{
-						BaseSHA:   "",
 						RepoURL:   repoInfo.RepoUrl,
 						RepoName:  repoInfo.RepoName,
 						RepoOwner: repoInfo.RepoOwner,

@@ -160,7 +160,6 @@ func TestUploadDriftDetection(t *testing.T) {
 	}
 
 	dto := DriftDetectionUploadRequest{
-		BaseSHA:   "abc123",
 		RepoURL:   "https://github.com/org/repo",
 		RepoName:  "repo",
 		RepoOwner: "org",
@@ -173,8 +172,7 @@ func TestUploadDriftDetection(t *testing.T) {
 				Settings: map[string]any{
 					"pro": map[string]any{
 						"drift_detection": map[string]any{
-							"enabled":  true,
-							"schedule": "0 0 * * *",
+							"enabled": true,
 						},
 					},
 				},
@@ -235,7 +233,6 @@ func TestUploadDriftDetection_Error(t *testing.T) {
 	}
 
 	dto := DriftDetectionUploadRequest{
-		BaseSHA:   "abc123",
 		RepoURL:   "https://github.com/org/repo",
 		RepoName:  "repo",
 		RepoOwner: "org",
@@ -247,8 +244,8 @@ func TestUploadDriftDetection_Error(t *testing.T) {
 				ComponentType: "terraform",
 				Settings: map[string]any{
 					"pro": map[string]any{
-						"drift_detecion": map[string]any{
-							"schedule": "0 0 * * *",
+						"drift_detection": map[string]any{
+							"enabled": true,
 						},
 					},
 				},

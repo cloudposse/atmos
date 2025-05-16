@@ -186,9 +186,7 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 			return err
 		}
 
-		// TODO: Get the correct base SHA (for now, leave blank)
 		req := pro.DriftDetectionUploadRequest{
-			BaseSHA:   "",
 			RepoURL:   repoInfo.RepoUrl,
 			RepoName:  repoInfo.RepoName,
 			RepoOwner: repoInfo.RepoOwner,
