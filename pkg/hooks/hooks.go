@@ -75,7 +75,6 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 				u.LogErrorAndExit(err)
 			}
 		}
-
 	}
 	return nil
 }

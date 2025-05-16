@@ -2,8 +2,9 @@ package hooks
 
 import (
 	"fmt"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"strings"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/charmbracelet/log"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -64,7 +65,7 @@ func (c *WriteHook) processWriteCommand(hook *Hook) error {
 
 	log.Debug("executing 'after-terraform-apply' hook", "hook", hook.Name, "command", hook.Command)
 	for fileName, output := range c.Output {
-		var newContent = fmt.Sprintf("# This file is stack generated\n# Hook: `%s`\n# Component: %s\n# Stack: %s\n# StackFile: %s\n", c.Name, c.info.Component, c.info.Stack, c.info.StackFile) + output.Content
+		newContent := fmt.Sprintf("# This file is stack generated\n# Hook: `%s`\n# Component: %s\n# Stack: %s\n# StackFile: %s\n", c.Name, c.info.Component, c.info.Stack, c.info.StackFile) + output.Content
 
 		replaceMap := make(map[string]any)
 		for replaceKey, replaceOutputKey := range output.Replacements {
