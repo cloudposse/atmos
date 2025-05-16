@@ -2,8 +2,8 @@ package exec
 
 import (
 	"errors"
-	"fmt"
 
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -74,10 +74,10 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	}
 
 	// Print the component variables
-	u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+	log.Debug("Generating varfile for variables", "component", info.ComponentFromArg, "stack", info.Stack)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
+		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
 		if err != nil {
 			return err
 		}
