@@ -1,8 +1,8 @@
-INSTALL_PATH ?= ../../website/src/components/screengrabs
+INSTALL_PATH ?= ../../website/src/components/Screengrabs
 all: build-all install
 
 # Write to /website/static/screengrab/
-install: 
+install:
 	@echo "Installing screengrabs to $(INSTALL_PATH)"
 	@mkdir -p $(INSTALL_PATH)
 	@cp -a artifacts/* $(INSTALL_PATH)

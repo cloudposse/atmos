@@ -1,0 +1,86 @@
+name: Screengrabs
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, opened, synchronize]
+    paths:
+      - ".github/workflows/screengrabs.yaml"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  TERM: "xterm-256color"
+  COLORTERM: "truecolor"
+  LANG: "en_US.UTF-8"
+  ATMOS_LOGS_LEVEL: "Info"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get Atmos version
+        id: get-version
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | jq -r .tag_name)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+
+  build:
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aha util-linux make jq bat
+          sudo ln -s /usr/bin/batcat /usr/bin/bat
+
+      - name: Set Git Preferences for windows
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Atmos
+        uses: jaxxstorm/action-install-gh-release@v2.1.0
+        with:
+          repo: cloudposse/atmos
+          tag: ${{ needs.prepare.outputs.version }}
+          chmod: 0755
+          extension-matching: disable
+          rename-to: atmos
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Run make build-all install
+        run: |
+          make -C demo/screengrabs build-all install
+          git add -A
+          git status
+
+      - name: Create or update PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
+          title: "Update screengrabs for ${{ needs.prepare.outputs.version }}"
+          delete-branch: true
+          sign-commits: true
+          commit-message: |
+            chore: update screengrabs for ${{ needs.prepare.outputs.version }}
+          body: |
+            This PR updates the screengrabs for Atmos version ${{ needs.prepare.outputs.version }}.
+          base: main
+          labels: "no-release"
+
