@@ -13,4 +13,6 @@ tests:
       - "-f"
       - "yaml"
     expect:
+      diff:
+        - "github_token"
       exit_code: 0
