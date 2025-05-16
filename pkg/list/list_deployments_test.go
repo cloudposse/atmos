@@ -22,15 +22,6 @@ func (m *mockGitRepo) GetRepoInfo() (*git.RepoInfo, error) {
 	return m.repoInfo, m.err
 }
 
-// mockLogger is a mock implementation of logger.Logger
-type mockLogger struct {
-	infoCalled  bool
-	errorCalled bool
-}
-
-func (m *mockLogger) Info(msg string, args ...interface{})  { m.infoCalled = true }
-func (m *mockLogger) Error(msg string, args ...interface{}) { m.errorCalled = true }
-
 // mockAPIClient is a mock implementation of pro.AtmosProAPIClient
 type mockAPIClient struct {
 	uploadErr error
