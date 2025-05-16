@@ -8,8 +8,9 @@ tests:
     workdir: "fixtures/scenarios/indentation"
     command: "atmos"
     args:
-      - terraform
-      - describe
-      - config
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
     expect:
       exit_code: 0
