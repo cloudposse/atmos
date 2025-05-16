@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: "indentation"
+    enabled: true
+    snapshot: true
+    description: "Ensure indentation setting works at `4` spaces."
+    workdir: "fixtures/scenarios/indentation"
+    command: "atmos"
+    args:
+      - terraform
+      - describe
+      - config
+    expect:
+      exit_code: 0
