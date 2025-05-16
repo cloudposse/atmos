@@ -107,39 +107,39 @@ templates:
       datasources: {}
     evaluations: 1
 settings:
-    list_merge_strategy: replace
-    terminal:
-        max_width: 120
-        pager: "1"
-        unicode: true
-        syntax_highlighting:
-            enabled: true
-            lexer: ""
-            formatter: terminal
-            theme: dracula
-            pager: false
-            line_numbers: true
-            wrap: false
-        no_color: false
-    markdown:
-        document:
-            color: ${colors.text}
-        heading:
-            color: ${colors.primary}
-            bold: true
-        strong:
-            color: ${colors.secondary}
-            bold: true
-        emph:
-            color: ${colors.muted}
-            italic: true
-        code_block:
-            color: ${colors.secondary}
-            margin: 1
-        link:
-            color: ${colors.primary}
-            underline: true
-    inject_github_token: true
+  list_merge_strategy: replace
+  terminal:
+    max_width: 120
+    pager: "1"
+    unicode: true
+    syntax_highlighting:
+      enabled: true
+      lexer: ""
+      formatter: terminal
+      theme: dracula
+      pager: false
+      line_numbers: true
+      wrap: false
+    no_color: false
+  markdown:
+    document:
+      color: ${colors.text}
+    heading:
+      color: ${colors.primary}
+      bold: true
+    strong:
+      color: ${colors.secondary}
+      bold: true
+    emph:
+      color: ${colors.muted}
+      italic: true
+    code_block:
+      color: ${colors.secondary}
+      margin: 1
+    link:
+      color: ${colors.primary}
+      underline: true
+  inject_github_token: true
 vendor:
   base_path: ./vendor.yaml
 initialized: true
