@@ -12,11 +12,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-//type WriteCommand struct {
-//	//StoreCommand
-//	StoreCommand StoreCommand
-//}
-
 type WriteOutput struct {
 	Content      string            `yaml:"content"`
 	Replacements map[string]string `json:"replacements"`
