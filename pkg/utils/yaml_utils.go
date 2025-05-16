@@ -73,7 +73,7 @@ func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) err
 		return err
 	}
 
-	highlighted, err := HighlightCodeWithConfig(y, *atmosConfig, "yaml")
+	highlighted, err := HighlightCodeWithConfig(atmosConfig, y, "yaml")
 	if err != nil {
 		PrintMessage(y)
 		return nil
