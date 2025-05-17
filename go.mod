@@ -11,6 +11,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
+	github.com/aws/aws-lambda-go v1.48.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.14
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.67
@@ -69,7 +70,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/terraform-docs/terraform-docs v0.20.0
 	github.com/xeipuuv/gojsonschema v1.2.0
-	github.com/zclconf/go-cty v1.16.2
+	github.com/zclconf/go-cty v1.16.3
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/term v0.32.0
 	golang.org/x/text v0.25.0
