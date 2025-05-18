@@ -22,6 +22,10 @@ var describeComponentCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
+		if len(args) != 1 {
+			return errors.New("invalid arguments. The command requires one argument `component`")
+		}
+
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
