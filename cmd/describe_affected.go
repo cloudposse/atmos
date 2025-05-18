@@ -82,8 +82,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 		return exec.DescribeAffectedCmdArgs{}, err
 	}
 
-	err := exec.ValidateStacks(atmosConfig)
-	if err != nil {
+	if err := exec.ValidateStacks(atmosConfig); err != nil {
 		return exec.DescribeAffectedCmdArgs{}, err
 	}
 
