@@ -16,13 +16,19 @@ import (
 
 // Error variables for list_values package.
 var (
-	ErrInvalidStackPattern = errors.New("invalid stack pattern")
+	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound   = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                 = errors.New("query execution failed")
 )
 
 // Component and section name constants.
 const (
 	// KeyTerraform is the key for terraform components.
 	KeyTerraform = "terraform"
+	// KeyHelmfile is the key for helmfile components.
+	KeyHelmfile = "helmfile"
 	// KeySettings is the key for settings section.
 	KeySettings = "settings"
 	// KeyMetadata is the key for metadata section.
@@ -75,7 +81,7 @@ func FilterAndListValues(stacksMap map[string]interface{}, options *FilterOption
 	}
 
 	// Extract stack values
-	extractedValues, err := extractComponentValues(stacksMap, options.Component, options.ComponentFilter, options.IncludeAbstract)
+	extractedValues, err := extractComponentValuesFromAllStacks(stacksMap, options.Component, options.ComponentFilter, options.IncludeAbstract)
 	if err != nil {
 		return "", err
 	}
@@ -117,125 +123,230 @@ func createComponentError(component, componentFilter string) error {
 	}
 }
 
-// extractComponentValues extracts the component values from all stacks.
-func extractComponentValues(stacksMap map[string]interface{}, component string, componentFilter string, includeAbstract bool) (map[string]interface{}, error) {
-	values := make(map[string]interface{})
+func extractComponentValuesFromAllStacks(stacks map[string]interface{}, component, filter string, includeAbstract bool) (map[string]interface{}, error) {
+	stackComponentValues := make(map[string]interface{})
 
-	// Check if this is a regular component and use it as filter if no specific filter
-	isComponentSection := component != KeySettings && component != KeyMetadata
-	if isComponentSection && componentFilter == "" {
-		log.Debug("Using component as filter", KeyComponent, component)
-		componentFilter = component
-		component = ""
-	}
+	component, filter = normalizeComponentAndFilterInputs(component, filter)
 
-	log.Debug("Building YQ expression", KeyComponent, component, "componentFilter", componentFilter)
-
-	for stackName, stackData := range stacksMap {
-		stack, ok := stackData.(map[string]interface{})
+	for stackName, data := range stacks {
+		stackMap, ok := data.(map[string]interface{})
 		if !ok {
-			log.Debug("stack data is not a map", KeyStack, stackName)
 			continue
 		}
 
-		// Build and execute YQ expression
-		yqExpression := processComponentType(component, componentFilter, includeAbstract)
-		queryResult, err := utils.EvaluateYqExpression(nil, stack, yqExpression)
-		if err != nil || queryResult == nil {
-			log.Debug("no values found",
-				KeyStack, stackName, KeyComponent, component,
-				"componentFilter", componentFilter, "yq_expression", yqExpression,
-				"error", err)
-			continue
+		componentValue := extractComponentValueFromSingleStack(stackMap, stackName, component, filter, includeAbstract)
+		if componentValue != nil {
+			stackComponentValues[stackName] = componentValue
 		}
-
-		// Process the result based on component type
-		values[stackName] = processQueryResult(component, queryResult)
 	}
 
-	if len(values) == 0 {
-		return nil, createComponentError(component, componentFilter)
+	if len(stackComponentValues) == 0 {
+		return nil, createComponentError(component, filter)
 	}
 
-	return values, nil
+	return stackComponentValues, nil
 }
 
-// processComponentType determines the YQ expression based on component type.
-func processComponentType(component string, componentFilter string, includeAbstract bool) string {
-	// If this is a regular component query with a specific component filter
-	if component == "" && componentFilter != "" {
-		// Extract component name from path
-		componentName := getComponentNameFromPath(componentFilter)
+func normalizeComponentAndFilterInputs(component, filter string) (string, string) {
+	isRegularComponent := component != KeySettings && component != KeyMetadata
+	if isRegularComponent && filter == "" {
+		log.Debug("Using component name as filter", KeyComponent, component)
+		return "", component
+	}
+	return component, filter
+}
 
-		// Return a direct path to the component.
-		return fmt.Sprintf(".components.%s.%s", KeyTerraform, componentName)
+func extractComponentValueFromSingleStack(stackMap map[string]interface{}, stackName, component, filter string, includeAbstract bool) interface{} {
+	targetComponentName := determineTargetComponentName(component, filter)
+
+	componentType := detectComponentTypeInStack(stackMap, targetComponentName, stackName)
+	if componentType == "" {
+		return nil
 	}
 
-	// Handle special section queries.
+	params := &QueryParams{
+		StackName:           stackName,
+		StackMap:            stackMap,
+		Component:           component,
+		ComponentFilter:     filter,
+		TargetComponentName: targetComponentName,
+		ComponentType:       componentType,
+		IncludeAbstract:     includeAbstract,
+	}
+
+	value, err := executeQueryForStack(params)
+	if err != nil {
+		log.Warn("Query failed", KeyStack, stackName, "error", err)
+		return nil
+	}
+
+	return value
+}
+
+func detectComponentTypeInStack(stackMap map[string]interface{}, targetComponent, stackName string) string {
+	if targetComponent == "" {
+		return KeyTerraform
+	}
+
+	detectedType, err := determineComponentType(stackMap, targetComponent)
+	if err != nil {
+		log.Debug("Component not found", KeyStack, stackName, KeyComponent, targetComponent)
+		return ""
+	}
+
+	return detectedType
+}
+
+// QueryParams holds all parameters needed for executing a query on a stack.
+type QueryParams struct {
+	StackName           string
+	StackMap            map[string]interface{}
+	Component           string
+	ComponentFilter     string
+	TargetComponentName string
+	ComponentType       string
+	IncludeAbstract     bool
+}
+
+func executeQueryForStack(params *QueryParams) (interface{}, error) {
+	yqExpression := buildYqExpressionForComponent(
+		params.Component,
+		params.ComponentFilter,
+		params.IncludeAbstract,
+		params.ComponentType,
+	)
+
+	queryResult, err := utils.EvaluateYqExpression(nil, params.StackMap, yqExpression)
+	if err != nil {
+		var logKey string
+		var logValue string
+		if params.TargetComponentName != "" {
+			logKey = KeyComponent
+			logValue = params.TargetComponentName
+		} else {
+			logKey = "section"
+			logValue = params.Component
+		}
+
+		log.Warn("YQ evaluation failed",
+			KeyStack, params.StackName,
+			"yqExpression", yqExpression,
+			logKey, logValue,
+			"error", err)
+		return nil, fmt.Errorf("%w: %s", ErrQueryFailed, err.Error())
+	}
+
+	if queryResult == nil {
+		return nil, nil
+	}
+
+	return extractRelevantDataFromQueryResult(params.Component, queryResult), nil
+}
+
+func determineTargetComponentName(component, componentFilter string) string {
+	if componentFilter != "" {
+		return componentFilter
+	}
+
+	isRegularComponent := component != KeySettings && component != KeyMetadata
+	if isRegularComponent {
+		return component
+	}
+
+	return ""
+}
+
+func determineComponentType(stack map[string]interface{}, targetComponentName string) (string, error) {
+	if targetComponentName == "" {
+		return "", ErrEmptyTargetComponentName
+	}
+
+	components, ok := stack[KeyComponents].(map[string]interface{})
+	if !ok {
+		return "", ErrComponentsSectionNotFound
+	}
+
+	if isComponentInSection(components, KeyTerraform, targetComponentName) {
+		log.Debug("Component found under terraform", KeyComponent, targetComponentName)
+		return KeyTerraform, nil
+	}
+
+	if isComponentInSection(components, KeyHelmfile, targetComponentName) {
+		log.Debug("Component found under helmfile", KeyComponent, targetComponentName)
+		return KeyHelmfile, nil
+	}
+
+	return "", fmt.Errorf("%w: %s", ErrComponentNotFoundInSections, targetComponentName)
+}
+
+func isComponentInSection(components map[string]interface{}, sectionKey, componentName string) bool {
+	section, ok := components[sectionKey].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	_, exists := section[componentName]
+	return exists
+}
+
+func buildYqExpressionForComponent(component string, componentFilter string, includeAbstract bool, componentType string) string {
+	if component == "" && componentFilter != "" {
+		return fmt.Sprintf(".components.%s.\"%s\"", componentType, componentFilter)
+	}
+
 	switch component {
 	case KeySettings:
-		if componentFilter != "" {
-			componentName := getComponentNameFromPath(componentFilter)
-			return fmt.Sprintf(".components.%s.%s", KeyTerraform, componentName)
-		}
-		return "select(.settings // .terraform.settings // .components.terraform.*.settings)"
+		return buildSettingsExpression(componentFilter, componentType)
 	case KeyMetadata:
-		if componentFilter != "" {
-			// For metadata with component filter, target the specific component.
-			componentName := getComponentNameFromPath(componentFilter)
-			return fmt.Sprintf(".components.%s.%s", KeyTerraform, componentName)
-		}
-		// For general metadata query.
-		return DotChar + KeyMetadata
+		return buildMetadataExpression(componentFilter, componentType)
 	default:
-		// Extract component name from path.
-		componentName := getComponentNameFromPath(component)
-
-		// Build query for component vars.
-		return buildComponentYqExpression(componentName, includeAbstract)
+		return buildComponentYqExpression(component, includeAbstract, componentType)
 	}
 }
 
-// getComponentNameFromPath extracts the component name from a potentially nested path.
-func getComponentNameFromPath(component string) string {
-	parts := strings.Split(component, "/")
-	if len(parts) > 1 {
-		return parts[len(parts)-1]
+func buildSettingsExpression(componentFilter, componentType string) string {
+	if componentFilter != "" {
+		return fmt.Sprintf(".components.%s.\"%s\"", componentType, componentFilter)
 	}
-	return component
+	return "select(.settings // " +
+		".components." + KeyTerraform + ".*.settings // " +
+		".components." + KeyHelmfile + ".*.settings)"
 }
 
-// buildComponentYqExpression creates the YQ expression for extracting component vars.
-func buildComponentYqExpression(componentName string, includeAbstract bool) string {
-	// Base expression to target the component
-	yqExpression := fmt.Sprintf("%scomponents%s%s%s%s", DotChar, DotChar, KeyTerraform, DotChar, componentName)
+func buildMetadataExpression(componentFilter, componentType string) string {
+	if componentFilter != "" {
+		// Use full component path and wrap in quotes for nested support
+		return fmt.Sprintf(".components.%s.\"%s\"", componentType, componentFilter)
+	}
+	return DotChar + KeyMetadata
+}
 
-	// If not including abstract components, filter them out
+func buildComponentYqExpression(component string, includeAbstract bool, componentType string) string {
+	path := fmt.Sprintf("%scomponents%s%s%s\"%s\"", DotChar, DotChar, componentType, DotChar, component)
+
 	if !includeAbstract {
-		// Only get component that either doesn't have abstract flag or has it set to false
-		yqExpression += fmt.Sprintf(" | select(has(\"%s\") == false or %s%s == false)",
+		path += fmt.Sprintf(" | select(has(\"%s\") == false or %s%s == false)",
 			KeyAbstract, DotChar, KeyAbstract)
 	}
 
-	// Get the vars
-	yqExpression += fmt.Sprintf(" | %s%s", DotChar, KeyVars)
-
-	return yqExpression
+	return path + fmt.Sprintf(" | %s%s", DotChar, KeyVars)
 }
 
-// processQueryResult handles the query result based on component type.
-func processQueryResult(component string, queryResult interface{}) interface{} {
-	// Process settings specially to handle nested settings key
-	if component == KeySettings {
-		if settings, ok := queryResult.(map[string]interface{}); ok {
-			if settingsContent, ok := settings[KeySettings].(map[string]interface{}); ok {
-				return settingsContent
-			}
-		}
+func extractRelevantDataFromQueryResult(component string, queryResult interface{}) interface{} {
+	if component != KeySettings {
+		return queryResult
 	}
 
-	// Return the result as is for other components
-	return queryResult
+	settings, ok := queryResult.(map[string]interface{})
+	if !ok {
+		return queryResult
+	}
+
+	settingsContent, ok := settings[KeySettings].(map[string]interface{})
+	if !ok {
+		return queryResult
+	}
+
+	return settingsContent
 }
 
 // applyFilters applies stack pattern and column limits to the values.
@@ -410,7 +521,7 @@ func processStackWithQuery(stackName string, stackData interface{}, query string
 		return nil, false
 	}
 
-	formattedResult := formatResultForDisplay(queryResult, query)
+	formattedResult := formatResultForDisplay(queryResult)
 	return formattedResult, formattedResult != nil
 }
 
@@ -445,16 +556,10 @@ func applyQuery(filteredValues map[string]interface{}, query string, component s
 }
 
 // formatResultForDisplay formats query results for display.
-func formatResultForDisplay(result interface{}, query string) interface{} {
-	log.Debug("Formatting query result for display",
-		"result_type", fmt.Sprintf(TypeFormatSpec, result),
-		"query", query)
-
+func formatResultForDisplay(result interface{}) interface{} {
 	if result == nil {
-		log.Debug("Skipping nil result")
 		return nil
 	}
-
 	return result
 }
 
