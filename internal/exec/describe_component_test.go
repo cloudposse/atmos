@@ -9,13 +9,12 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// --- Test ---
+// --- Tests ---
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	mockedExec := &DescribeComponentExec{
 		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
@@ -143,8 +142,6 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	stack := "nonprod"
-
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -166,42 +163,17 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	}()
 
 	// Define the working directory
-	workDir := "../../tests/fixtures/scenarios/atmos-terraform-output-yaml-function"
+	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
 
-	info := schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            stack,
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "component-1",
-		SubCommand:       "deploy",
-		ProcessTemplates: true,
-		ProcessFunctions: true,
-	}
+	component := "c1"
 
-	err = ExecuteTerraform(info)
-	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	assert.NoError(t, err)
-
-	d := processTagTerraformOutput(atmosConfig, "!terraform.output component-1 foo", stack)
-	assert.Equal(t, "component-1-a", d)
-
-	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-1 bar", stack)
-	assert.Equal(t, "component-1-b", d)
-
-	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-1 nonprod baz", "")
-	assert.Equal(t, "component-1-c", d)
-
+	// `dev`
 	res, err := ExecuteDescribeComponent(
-		"component-2",
-		stack,
+		component,
+		"dev",
 		true,
 		true,
 		nil,
@@ -210,38 +182,15 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 
 	y, err := u.ConvertToYAML(res)
 	assert.Nil(t, err)
-	assert.Contains(t, y, "foo: component-1-a")
-	assert.Contains(t, y, "bar: component-1-b")
-	assert.Contains(t, y, "baz: component-1-c")
+	assert.Contains(t, y, "a: a-dev")
+	assert.Contains(t, y, "b: b-team2")
+	assert.Contains(t, y, "c: c-team1")
+	assert.Contains(t, y, "d: d")
 
-	info = schema.ConfigAndStacksInfo{
-		StackFromArg:     "",
-		Stack:            stack,
-		StackFile:        "",
-		ComponentType:    "terraform",
-		ComponentFromArg: "component-2",
-		SubCommand:       "deploy",
-		ProcessTemplates: true,
-		ProcessFunctions: true,
-	}
-
-	err = ExecuteTerraform(info)
-	if err != nil {
-		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
-	}
-
-	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-2 foo", stack)
-	assert.Equal(t, "component-1-a", d)
-
-	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-2 nonprod bar", stack)
-	assert.Equal(t, "component-1-b", d)
-
-	d = processTagTerraformOutput(atmosConfig, "!terraform.output component-2 nonprod baz", "")
-	assert.Equal(t, "component-1-c", d)
-
+	// `staging`
 	res, err = ExecuteDescribeComponent(
-		"component-3",
-		stack,
+		component,
+		"staging",
 		true,
 		true,
 		nil,
@@ -250,13 +199,59 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 
 	y, err = u.ConvertToYAML(res)
 	assert.Nil(t, err)
-	assert.Contains(t, y, "foo: component-1-a")
-	assert.Contains(t, y, "bar: component-1-b")
-	assert.Contains(t, y, "baz: default-value")
-	assert.Contains(t, y, `test_list:
-    - fallback1
-    - fallback2`)
-	assert.Contains(t, y, `test_map:
-    key1: value1
-    key2: value2`)
+	assert.Contains(t, y, "a: a-staging")
+	assert.Contains(t, y, "b: b-team2")
+	assert.Contains(t, y, "c: c-team1")
+	assert.Contains(t, y, "d: d")
+
+	// `prod`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"prod",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-prod")
+	assert.Contains(t, y, "b: b-prod")
+	assert.Contains(t, y, "c: c-prod")
+	assert.Contains(t, y, "d: d")
+
+	// `sandbox`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"sandbox",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-team2")
+	assert.Contains(t, y, "b: b-team2")
+	assert.Contains(t, y, "c: c-team1")
+	assert.Contains(t, y, "d: d")
+
+	// `test`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"test",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-test-2")
+	assert.Contains(t, y, "b: b-test")
+	assert.Contains(t, y, "c: c-team1")
+	assert.Contains(t, y, "d: d")
 }
