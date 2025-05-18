@@ -35,7 +35,12 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 }
 
-type DescribeAffectedExec struct {
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+type DescribeAffectedExec interface {
+	Execute(*DescribeAffectedCmdArgs) error
+}
+
+type describeAffectedExec struct {
 	atmosConfig                               *schema.AtmosConfiguration
 	executeDescribeAffectedWithTargetRepoPath func(
 		atmosConfig schema.AtmosConfiguration,
@@ -91,8 +96,8 @@ type DescribeAffectedExec struct {
 
 func NewDescribeAffectedExec(
 	atmosConfig *schema.AtmosConfiguration,
-) *DescribeAffectedExec {
-	return &DescribeAffectedExec{
+) DescribeAffectedExec {
+	return &describeAffectedExec{
 		atmosConfig: atmosConfig,
 		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
 		executeDescribeAffectedWithTargetRefClone:    ExecuteDescribeAffectedWithTargetRefClone,
@@ -104,7 +109,7 @@ func NewDescribeAffectedExec(
 	}
 }
 
-func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
+func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
@@ -165,9 +170,9 @@ func (d *DescribeAffectedExec) Execute(a DescribeAffectedCmdArgs) error {
 	return d.view(a, repoUrl, headHead, baseHead, affected)
 }
 
-func (d *DescribeAffectedExec) view(a DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
+func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	if a.Query == "" {
-		if err := d.uploadableQuery(&a, repoUrl, headHead, baseHead, affected); err != nil {
+		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
 			return err
 		}
 	} else {
@@ -184,7 +189,7 @@ func (d *DescribeAffectedExec) view(a DescribeAffectedCmdArgs, repoUrl string, h
 	return nil
 }
 
-func (d *DescribeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
+func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	log.Debug("\nAffected components and stacks: \n")
 	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
 	if err != nil {

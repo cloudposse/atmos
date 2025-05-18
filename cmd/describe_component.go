@@ -1,15 +1,11 @@
 package cmd
 
 import (
-	"errors"
-
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-var errInvalidFlag = errors.New("invalid arguments. The command requires one argument `component`")
 
 // describeComponentCmd describes configuration for components
 var describeComponentCmd = &cobra.Command{
