@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/internal/exec"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -17,12 +21,69 @@ var describeStacksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
-
-		err := e.ExecuteDescribeStacksCmd(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
+		info, err := exec.ProcessCommandLineArgs("", cmd, args, nil)
+		printErrorAndExit(err)
+		atmosConfig, err := cfg.InitCliConfig(info, true)
+		printErrorAndExit(err)
+		err = exec.ValidateStacks(atmosConfig)
+		printErrorAndExit(err)
+		describe := &exec.DescribeStacksArgs{}
+		err = setCliArgsForDescribeStackCli(cmd, describe)
+		printErrorAndExit(err)
+		err = e.ExecuteDescribeStacksCmd(atmosConfig, describe)
+		printErrorAndExit(err)
 	},
+}
+
+func printErrorAndExit(err error) {
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+}
+
+func setCliArgsForDescribeStackCli(cmd *cobra.Command, describe *exec.DescribeStacksArgs) error {
+	flags := cmd.Flags()
+	flagsKeyValue := map[string]any{
+		"stack":                &describe.FilterByStack,
+		"format":               &describe.Format,
+		"file":                 &describe.File,
+		"include-empty-stacks": &describe.IncludeEmptyStacks,
+		"components":           &describe.Components,
+		"component-types":      &describe.ComponentTypes,
+		"sections":             &describe.Sections,
+		"process-templates":    &describe.ProcessTemplates,
+		"process-functions":    &describe.ProcessYamlFunctions,
+		"query":                &describe.Query,
+		"skip":                 &describe.Skip,
+	}
+
+	var err error
+	for k := range flagsKeyValue {
+		if !flags.Changed(k) {
+			continue
+		}
+		switch v := flagsKeyValue[k].(type) {
+		case *string:
+			*v, err = flags.GetString(k)
+		case *bool:
+			*v, err = flags.GetBool(k)
+		case *[]string:
+			*v, err = flags.GetStringArray(k)
+		default:
+			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
+		}
+		checkFlagError(err)
+	}
+	format := describe.Format
+	if format != "" && format != "yaml" && format != "json" {
+		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
+	}
+
+	if format == "" {
+		format = "yaml"
+	}
+	describe.Format = format
+	return nil
 }
 
 func init() {
