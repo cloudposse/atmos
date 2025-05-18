@@ -34,7 +34,7 @@ func (m *MockDescribeAffectedExec) EXPECT() *MockDescribeAffectedExecMockRecorde
 }
 
 // Execute mocks base method.
-func (m *MockDescribeAffectedExec) Execute(arg0 DescribeAffectedCmdArgs) error {
+func (m *MockDescribeAffectedExec) Execute(arg0 *DescribeAffectedCmdArgs) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0)
 	ret0, _ := ret[0].(error)
