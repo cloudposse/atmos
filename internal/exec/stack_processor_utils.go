@@ -179,8 +179,13 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
+
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
+
+	if relativeFilePath == "teams/cloud-test/ue1-staging.yaml" {
+		fmt.Println("filePath: ", filePath)
+	}
 
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
@@ -436,37 +441,48 @@ func ProcessYAMLConfigFile(
 
 		// Process the imports in the current manifest
 		for _, importFile := range importMatches {
-			yamlConfig, _, yamlConfigRaw, _, terraformOverridesImports, _, helmfileOverridesImports, err2 := ProcessYAMLConfigFile(
-				atmosConfig,
-				basePath,
-				importFile,
-				importsConfig,
-				mergedContext,
-				ignoreMissingFiles,
-				importStruct.SkipTemplatesProcessing,
-				true, // importStruct.IgnoreMissingTemplateValues,
-				importStruct.SkipIfMissing,
-				parentTerraformOverridesInline,
-				parentTerraformOverridesImports,
-				parentHelmfileOverridesInline,
-				parentHelmfileOverridesImports,
-				"",
-			)
+			yamlConfig,
+				_,
+				yamlConfigRaw,
+				terraformOverridesInline,
+				terraformOverridesImports,
+				helmfileOverridesInline,
+				helmfileOverridesImports, err2 :=
+				ProcessYAMLConfigFile(
+					atmosConfig,
+					basePath,
+					importFile,
+					importsConfig,
+					mergedContext,
+					ignoreMissingFiles,
+					importStruct.SkipTemplatesProcessing,
+					true, // importStruct.IgnoreMissingTemplateValues,
+					importStruct.SkipIfMissing,
+					parentTerraformOverridesInline,
+					parentTerraformOverridesImports,
+					parentHelmfileOverridesInline,
+					parentHelmfileOverridesImports,
+					"",
+				)
 			if err2 != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err2
 			}
 
+			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
+			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
 			parentTerraformOverridesImports, err = m.Merge(
 				atmosConfig,
-				[]map[string]any{parentTerraformOverridesImports, terraformOverridesImports},
+				[]map[string]any{parentTerraformOverridesImports, terraformOverridesImports, terraformOverridesInline},
 			)
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err
 			}
 
+			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
+			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
 			parentHelmfileOverridesImports, err = m.Merge(
 				atmosConfig,
-				[]map[string]any{parentHelmfileOverridesImports, helmfileOverridesImports},
+				[]map[string]any{parentHelmfileOverridesImports, helmfileOverridesImports, helmfileOverridesInline},
 			)
 			if err != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err
@@ -541,9 +557,13 @@ func ProcessYAMLConfigFile(
 		return nil, nil, nil, nil, nil, nil, nil, err2
 	}
 
-	return stackConfigsDeepMerged, importsConfig, stackConfigMap,
-		parentTerraformOverridesInline, parentTerraformOverridesImports,
-		parentHelmfileOverridesInline, parentHelmfileOverridesImports,
+	return stackConfigsDeepMerged,
+		importsConfig,
+		stackConfigMap,
+		parentTerraformOverridesInline,
+		parentTerraformOverridesImports,
+		parentHelmfileOverridesInline,
+		parentHelmfileOverridesImports,
 		nil
 }
 

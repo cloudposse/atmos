@@ -11,7 +11,6 @@ require (
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
-	github.com/aws/aws-lambda-go v1.48.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.14
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.67

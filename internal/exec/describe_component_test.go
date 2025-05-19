@@ -254,4 +254,38 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "b: b-test")
 	assert.Contains(t, y, "c: c-team1")
 	assert.Contains(t, y, "d: d")
+
+	// `test2`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"test2",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a")
+	assert.Contains(t, y, "b: b")
+	assert.Contains(t, y, "c: c")
+	assert.Contains(t, y, "d: d")
+
+	// `test3`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"test3",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-overridden")
+	assert.Contains(t, y, "b: b-overridden")
+	assert.Contains(t, y, "c: c")
+	assert.Contains(t, y, "d: d")
 }
