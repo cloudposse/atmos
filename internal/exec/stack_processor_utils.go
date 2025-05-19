@@ -179,7 +179,6 @@ func ProcessYAMLConfigFile(
 	map[string]any,
 	error,
 ) {
-
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
@@ -447,23 +446,22 @@ func ProcessYAMLConfigFile(
 				terraformOverridesInline,
 				terraformOverridesImports,
 				helmfileOverridesInline,
-				helmfileOverridesImports, err2 :=
-				ProcessYAMLConfigFile(
-					atmosConfig,
-					basePath,
-					importFile,
-					importsConfig,
-					mergedContext,
-					ignoreMissingFiles,
-					importStruct.SkipTemplatesProcessing,
-					true, // importStruct.IgnoreMissingTemplateValues,
-					importStruct.SkipIfMissing,
-					parentTerraformOverridesInline,
-					parentTerraformOverridesImports,
-					parentHelmfileOverridesInline,
-					parentHelmfileOverridesImports,
-					"",
-				)
+				helmfileOverridesImports, err2 := ProcessYAMLConfigFile(
+				atmosConfig,
+				basePath,
+				importFile,
+				importsConfig,
+				mergedContext,
+				ignoreMissingFiles,
+				importStruct.SkipTemplatesProcessing,
+				true, // importStruct.IgnoreMissingTemplateValues,
+				importStruct.SkipIfMissing,
+				parentTerraformOverridesInline,
+				parentTerraformOverridesImports,
+				parentHelmfileOverridesInline,
+				parentHelmfileOverridesImports,
+				"",
+			)
 			if err2 != nil {
 				return nil, nil, nil, nil, nil, nil, nil, err2
 			}
