@@ -14,7 +14,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// --- Tests ---
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	mockedExec := &DescribeComponentExec{
 		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
