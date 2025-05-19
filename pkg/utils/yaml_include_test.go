@@ -25,6 +25,8 @@ hash_at_start: '#something'
 hash_at_start_single_quoted: '#something'
 hash_at_start_double_quoted: "#something"
 hash_in_middle: 'value#with#hash'
+comment_at_end: 'value' # with comment
+comment_at_end_no_quotes: value # with comment
 `
 	err = os.WriteFile(testValuesFile, []byte(testValuesContent), 0o644)
 	assert.NoError(t, err)
@@ -43,6 +45,8 @@ components:
         hash_at_start_single_quoted: !include test_values.yaml .hash_at_start_single_quoted
         hash_at_start_double_quoted: !include test_values.yaml .hash_at_start_double_quoted
         hash_in_middle: !include test_values.yaml .hash_in_middle
+        comment_at_end: !include test_values.yaml .comment_at_end
+        comment_at_end_no_quotes: !include test_values.yaml .comment_at_end_no_quotes
 `
 	err = os.WriteFile(testIncludeFile, []byte(testIncludeContent), 0o644)
 	assert.NoError(t, err)
@@ -78,4 +82,6 @@ components:
 	assert.Equal(t, "#something", componentVars["hash_at_start_single_quoted"], "Single-quoted string starting with # should be included correctly")
 	assert.Equal(t, "#something", componentVars["hash_at_start_double_quoted"], "Double-quoted string starting with # should be included correctly")
 	assert.Equal(t, "value#with#hash", componentVars["hash_in_middle"], "String with # in the middle should be included correctly")
+	assert.Equal(t, "value", componentVars["comment_at_end"], "String with comment at the end should be included correctly")
+	assert.Equal(t, "value", componentVars["comment_at_end_no_quotes"], "String with comment at the end (no quotes) should be included correctly")
 }
