@@ -652,6 +652,9 @@ func ProcessStacks(
 	}
 	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
 
+	configAndStacksInfo.ComponentSection[cfg.CliCommandSectionName] = configAndStacksInfo.CliCommand
+	configAndStacksInfo.ComponentSection[cfg.CliSubCommandSectionName] = configAndStacksInfo.CliSubCommand
+
 	return configAndStacksInfo, nil
 }
 
