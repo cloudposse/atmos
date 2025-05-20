@@ -153,69 +153,6 @@ Since the OPA validation policies don't pass, Atmos does not allow provisioning 
 ![atmos-validate-vpc-in-plat-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
 </Terminal>
 
-### Policy Execution Context
-
-Atmos allows enforcing custom governance rules based on metadata about Atmos command executions and provides a powerful
-policy evaluation mechanism by passing structured metadata to OPA policies at runtime.
-
-This metadata enables fine-grained control over when certain actions (like `terraform apply`) are allowed or denied,
-based on the context in which they're executed.
-
-#### Atmos Policy Input Metadata
-
-When Atmos runs a command, it supplies an input object to OPA policies that contains detailed contextual information, such as:
-
-- `cli_command`: The main Atmos command being run, such as `terraform` or `helmfile`
-- `cli_subcommand`: The first-level subcommand, such as `apply`, `plan`, or `generate`
-- `cli_subcommand2`: The second-level subcommand when applicable, e.g., `varfile`, `planfile`
-- `vars`: A map of variables passed to the command, either via CLI flags or stack config files
-- Other contextual attributes: Such as the stack name and component name
-
-#### Atmos Policy Metadata Example
-
-Below is an OPA policy rule to enforce infrastructure governance during command execution.
-Specifically, this rule blocks the execution of `atmos terraform apply` if the Terraform variable `foo` is set to the string `"foo"`.
-
-```rego
-# 'package atmos' is required in all `atmos` OPA policies
-package atmos
-
-# Atmos looks for the 'errors' (array of strings) output from all OPA policies
-# If the 'errors' output contains one or more error messages, Atmos considers the policy failed
-
-# Don't allow `terraform apply` if the `foo` variable is set to `foo`
-# The `input` map contains the following attributes:
-# - `cli_command` - Atmos command, e.g. `terraform`, `helmfile` (as in `atmos terraform ...`)
-# - `cli_subcommand` -  subcommand, e.g. `apply`, `plan`, `generate` (as in `atmos terraform apply`)
-# - `cli_subcommand2` -  subcommand2, e.g. `varfile`, `varfiles`, `planfile` (as in `atmos terraform generate varfile`)
-errors[message] {
-    input.cli_command == "terraform"
-    input.cli_subcommand == "apply"
-    input.vars.foo == "foo"
-    message = "the component can't be applied if the 'foo' variable is set to 'foo'"
-}
-```
-
-How it works:
-
-The policy receives a structured input map containing metadata about the Atmos command being executed, such as:
-
- - `cli_command`: The main Atmos command (`terraform`)
- - `cli_subcommand`: The subcommand (`apply`)
- - `vars`: A map of variable names and their values passed to the command
-
-Rule Logic:
-
-The rule checks if:
- - The main command is `terraform`
- - The subcommand is `apply`
- - The variable `foo` is set to `"foo"`
-
-If all conditions are true, the rule generates an error message.
-
-The generated error message is added to the `errors` array.
-Atmos interprets the presence of any messages in `errors` as a policy violation and blocks the operation.
-
 ### Advanced Policy Examples
 
 <EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
@@ -230,3 +167,72 @@ Atmos interprets the presence of any messages in `errors` as a policy violation 
 - If you want to match the backslash character itself, you'll need four slashes.
 
 :::
+
+## Policy Execution Context
+
+Atmos allows enforcing custom governance rules based on metadata about Atmos commands and provides a powerful
+policy evaluation mechanism by passing structured metadata to OPA policies at runtime.
+
+This metadata enables fine-grained control over when certain actions (like `terraform apply`) are allowed or denied,
+based on the context in which they're executed.
+
+### Policy Metadata
+
+When Atmos runs a command, it supplies an input object to OPA policies that contains detailed contextual information, such as:
+
+- `cli_command`: the main Atmos command being run, such as `terraform` or `helmfile`
+- `cli_subcommand`: the first-level subcommand, such as `apply`, or `plan`
+- `cli_subcommand2`: the second-level subcommand when applicable, e.g., `varfile`, `planfile`
+- `vars`: a map of variables passed to the command, either via CLI flags or stack config files
+- other contextual attributes such as the stack and component names
+
+### Policy Execution Context Example
+
+Below is an OPA policy rule to enforce infrastructure governance during command execution.
+Specifically, this rule blocks the execution of `atmos terraform apply` if the variable `foo` is set to the string `"foo"`.
+
+<File title="validate-component.rego">
+```rego
+# 'package atmos' is required in all Atmos OPA policies
+package atmos
+
+# Atmos looks for the 'errors' (array of strings) output from all OPA policies
+# If the 'errors' output contains one or more error messages, Atmos considers the policy failed
+
+# Don't allow `terraform apply` if the `foo` variable is set to `foo`
+# The `input` map contains the following attributes:
+# - `cli_command` - Atmos command, e.g. `terraform`, `helmfile` (as in `atmos terraform ...`)
+# - `cli_subcommand` -  subcommand, e.g. `apply`, `plan`, `generate` (as in `atmos terraform apply`)
+# - `cli_subcommand2` -  subcommand2, e.g. `varfile`, `varfiles`, `planfile` (as in `atmos terraform generate varfile`)
+errors[message] {
+  input.cli_command == "terraform"
+  input.cli_subcommand == "apply"
+  input.vars.foo == "foo"
+  message = "the component can't be applied if the 'foo' variable is set to 'foo'"
+}
+```
+</File>
+
+The policy receives a structured input map containing metadata about the Atmos command being executed, such as:
+ - `cli_command`: the main Atmos command (`terraform`)
+ - `cli_subcommand`: the subcommand (`apply`)
+ - `vars`: a map of variable names and their values passed to the command
+
+The rule checks if:
+ - The main command is `terraform`
+ - The subcommand is `apply`
+ - The variable `foo` is set to `"foo"`
+
+If all conditions are true, the rule generates an error message.
+
+The generated error message is added to the `errors` array.
+Atmos interprets the presence of any messages in `errors` as a policy violation and blocks the operation with the
+following error:
+
+<Terminal title="atmos terraform apply component-1 -s nonprod">
+```console
+the component can't be applied if the 'foo' variable is set to 'foo'
+
+exit status 1
+```
+</Terminal>
