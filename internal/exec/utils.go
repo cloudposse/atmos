@@ -654,6 +654,7 @@ func ProcessStacks(
 
 	configAndStacksInfo.ComponentSection[cfg.CliCommandSectionName] = configAndStacksInfo.CliCommand
 	configAndStacksInfo.ComponentSection[cfg.CliSubCommandSectionName] = configAndStacksInfo.CliSubCommand
+	configAndStacksInfo.ComponentSection[cfg.CliSubCommand2SectionName] = configAndStacksInfo.CliSubCommand2
 
 	return configAndStacksInfo, nil
 }

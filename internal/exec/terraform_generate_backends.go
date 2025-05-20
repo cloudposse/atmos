@@ -21,6 +21,10 @@ func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
+	info.CliCommand = "terraform"
+	info.CliSubCommand = "generate"
+	info.CliSubCommand2 = "backends"
+
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err

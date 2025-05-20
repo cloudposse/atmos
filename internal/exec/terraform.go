@@ -36,6 +36,10 @@ var (
 
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
+	info.CliCommand = "terraform"
+	info.CliSubCommand = info.SubCommand
+	info.CliSubCommand2 = info.SubCommand2
+
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
