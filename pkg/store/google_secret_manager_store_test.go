@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/go-cmp/cmp"
 	"os"
 	"testing"
 
@@ -97,9 +98,24 @@ func gsmClientSecretCreationMock(parent string, secretId string, secretPayload s
 					Replication: replication,
 				},
 			}
+			replicationMatched := false
+			if replication.GetAutomatic() != nil {
+				replicationMatched = req.Secret.GetReplication().GetAutomatic() != nil
+			} else {
+				var expectedLocations []string
+				var receivedLocations []string
+				for _, replica := range replication.GetUserManaged().Replicas {
+					expectedLocations = append(expectedLocations, replica.Location)
+				}
+				for _, replica := range req.Secret.GetReplication().GetUserManaged().Replicas {
+					receivedLocations = append(receivedLocations, replica.Location)
+				}
+				replicationMatched = cmp.Diff(expectedLocations, receivedLocations) == ""
+			}
+
 			return req.Parent == expectedReq.Parent &&
 				req.SecretId == expectedReq.SecretId &&
-				req.Secret.GetReplication().GetAutomatic() != nil
+				replicationMatched
 		})).Return(&secretmanagerpb.Secret{
 			Name: fmt.Sprintf("%s/secrets/%s", parent, secretId),
 		}, nil)
@@ -214,8 +230,8 @@ func TestGSMStore_Set(t *testing.T) {
 			component: "app/service",
 			key:       "map-key",
 			value:     map[string]interface{}{"key1": "value1", "key2": 42, "key3": true},
-
-			mockFn: gsmClientSecretCreationMock("projects/test-project", "test-prefix_dev_usw2_app_service_map-key", `{"key1":"value1","key2":42,"key3":true}`, nil, nil),
+			locations: []string{},
+			mockFn:    gsmClientSecretCreationMock("projects/test-project", "test-prefix_dev_usw2_app_service_map-key", `{"key1":"value1","key2":42,"key3":true}`, nil, nil),
 		},
 		{
 			name:      "successful_set_user_managed_replication",
@@ -230,7 +246,7 @@ func TestGSMStore_Set(t *testing.T) {
 						UserManaged: &secretmanagerpb.Replication_UserManaged{
 							Replicas: []*secretmanagerpb.Replication_UserManaged_Replica{
 								{Location: "us-west1"},
-								{Location: "us-central11"},
+								{Location: "us-central1"},
 							},
 						},
 					},
@@ -276,6 +292,7 @@ func TestGSMStore_Set(t *testing.T) {
 				ProjectID:      "test-project",
 				Prefix:         &testPrefix,
 				StackDelimiter: &testDelimiter,
+				Locations:      &tt.locations,
 			})
 
 			err := store.Set(tt.stack, tt.component, tt.key, tt.value)
