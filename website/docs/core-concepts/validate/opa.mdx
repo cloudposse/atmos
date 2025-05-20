@@ -183,7 +183,7 @@ When Atmos runs a command, it supplies an input object to OPA policies that cont
 - `cli_command`: the main Atmos command being run, such as `terraform` or `helmfile`
 - `cli_subcommand`: the first-level subcommand, such as `apply`, or `plan`
 - `cli_subcommand2`: the second-level subcommand when applicable, e.g., `varfile`, `planfile`
-- `vars`: a map of variables passed to the command, either via CLI flags or stack config files
+- `vars`: a map of variables passed to the command, either via the stack config files or [CLI flags](/core-concepts/validate/terraform-variables)
 - other contextual attributes such as the stack and component names
 
 ### Policy Execution Context Example
