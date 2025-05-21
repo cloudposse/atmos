@@ -36,7 +36,7 @@ stacks:
     {{- $tenant := .vars.tenant -}}
     {{- $env := .vars.environment -}}
     {{- $stage := .vars.stage -}}
-    {{- $name := "" -}}
+    {{- $stack_name := "" -}}
 
     {{- if eq $ns "" -}}
       {{- fail "Error: 'namespace' is required." -}}
@@ -53,20 +53,20 @@ stacks:
     {{- if and (ne $stage "") (or (eq $env "") (eq $tenant "") (eq $ns "")) -}}
       {{- fail "Error: 'stage' requires 'environment', 'tenant', and 'namespace'." -}}
     {{- end -}}
-  
+
     {{- if ne $tenant "" -}}
-      {{- $name = $tenant -}}
+      {{- $stack_name = $tenant -}}
     {{- end -}}
 
     {{- if ne $env "" -}}
-      {{- $name = printf "%s-%s" $name $env -}}
+      {{- $stack_name = printf "%s-%s" $stack_name $env -}}
     {{- end -}}
 
     {{- if ne $stage "" -}}
-      {{- $name = printf "%s-%s" $name $stage -}}
+      {{- $stack_name = printf "%s-%s" $stack_name $stage -}}
     {{- end -}}
 
-    {{- $name -}}
+    {{- $stack_name -}}
 
 logs:
   file: "/dev/stderr"
