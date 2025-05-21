@@ -24,7 +24,50 @@ stacks:
   #
   # `name_template` is a Golang template.
   # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
-  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+  # name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+
+  # `name_template` can have complex logic and use template functions:
+  # - Atmos functions (https://atmos.tools/core-concepts/stacks/templates/functions)
+  # - Sprig functions (https://masterminds.github.io/sprig)
+  # - Gomplate functions (https://docs.gomplate.ca/functions)
+  # https://yaml-multiline.info
+  name_template: >
+    {{- $ns := .vars.namespace -}}
+    {{- $tenant := .vars.tenant -}}
+    {{- $env := .vars.environment -}}
+    {{- $stage := .vars.stage -}}
+
+    {{- if eq $ns "" -}}
+      {{- fail "Error: 'namespace' is required." -}}
+    {{- end -}}
+
+    {{- if and (ne $tenant "") (eq $ns "") -}}
+      {{- fail "Error: 'tenant' requires 'namespace'." -}}
+    {{- end -}}
+
+    {{- if and (ne $env "") (or (eq $tenant "") (eq $ns "")) -}}
+      {{- fail "Error: 'environment' requires 'tenant' and 'namespace'." -}}
+    {{- end -}}
+
+    {{- if and (ne $stage "") (or (eq $env "") (eq $tenant "") (eq $ns "")) -}}
+      {{- fail "Error: 'stage' requires 'environment', 'tenant', and 'namespace'." -}}
+    {{- end -}}
+
+    {{- $name := $ns -}}
+
+    {{- if ne $tenant "" -}}
+      {{- $name = printf "%s-%s" $name $tenant -}}
+    {{- end -}}
+
+    {{- if ne $env "" -}}
+      {{- $name = printf "%s-%s" $name $env -}}
+    {{- end -}}
+
+    {{- if ne $stage "" -}}
+      {{- $name = printf "%s-%s" $name $stage -}}
+    {{- end -}}
+
+    {{- $name -}}
 
 logs:
   file: "/dev/stderr"
