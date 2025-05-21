@@ -13,7 +13,7 @@ var (
 	ErrMissingStackNameTemplateAndPattern = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 )
 
-// ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
+// ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack.
 func ProcessComponentInStack(
 	component string,
 	stack string,
@@ -46,7 +46,7 @@ func ProcessComponentInStack(
 	return configAndStacksInfo.ComponentSection, nil
 }
 
-// ProcessComponentFromContext accepts context (namespace, tenant, environment, stage) and returns the component configuration in the stack
+// ProcessComponentFromContext accepts context (namespace, tenant, environment, stage) and returns the component configuration in the stack.
 func ProcessComponentFromContext(
 	component string,
 	namespace string,
