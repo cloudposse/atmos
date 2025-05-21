@@ -9,6 +9,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var (
+	ErrMissingStackNameTemplateAndPattern = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
+)
+
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack
 func ProcessComponentInStack(
 	component string,
@@ -63,18 +67,32 @@ func ProcessComponentFromContext(
 		return nil, err
 	}
 
+	stackNameTemplate := e.GetStackNameTemplate(atmosConfig)
 	stackNamePattern := e.GetStackNamePattern(atmosConfig)
+	var stack string
 
-	if stackNamePattern == "" {
-		er := errors.New("stack name pattern must be provided in 'stacks.name_pattern' CLI config or 'ATMOS_STACKS_NAME_PATTERN' ENV variable")
-		log.Error(er)
-		return nil, er
-	}
+	if stackNameTemplate != "" {
+		ctx := map[string]any{
+			"namespace":   namespace,
+			"tenant":      tenant,
+			"environment": environment,
+			"stage":       stage,
+		}
 
-	stack, err := cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, stackNamePattern)
-	if err != nil {
-		log.Error(err)
-		return nil, err
+		stack, err = e.ProcessTmpl("name-template-from-context", stackNameTemplate, ctx, false)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+	} else if stackNamePattern != "" {
+		stack, err = cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, stackNamePattern)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+	} else {
+		log.Error(ErrMissingStackNameTemplateAndPattern)
+		return nil, ErrMissingStackNameTemplateAndPattern
 	}
 
 	return ProcessComponentInStack(component, stack, atmosCliConfigPath, atmosBasePath)

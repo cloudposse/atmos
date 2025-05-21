@@ -32,7 +32,7 @@ require (
 	github.com/goccy/go-yaml v1.17.1
 	github.com/gofrs/flock v0.12.1
 	github.com/golang/mock v1.6.0
-	github.com/google/go-containerregistry v0.20.3
+	github.com/google/go-containerregistry v0.20.4
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.14.2
@@ -159,9 +159,9 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.11.0 // indirect
-	github.com/docker/cli v27.5.0+incompatible // indirect
+	github.com/docker/cli v28.1.1+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
-	github.com/docker/docker-credential-helpers v0.8.2 // indirect
+	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/docker/libkv v0.2.2-0.20180912205406-458977154600 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -288,7 +288,7 @@ require (
 	github.com/terraform-docs/terraform-config-inspect v0.0.0-20210728164355-9c1f178932fa // indirect
 	github.com/ugorji/go/codec v1.2.7 // indirect
 	github.com/ulikunitz/xz v0.5.12 // indirect
-	github.com/vbatts/tar-split v0.11.6 // indirect
+	github.com/vbatts/tar-split v0.12.1 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
@@ -323,7 +323,7 @@ require (
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
-	golang.org/x/tools v0.31.0 // indirect
+	golang.org/x/tools v0.33.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/genproto v0.0.0-20250505200425-f936aa4a68b2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250505200425-f936aa4a68b2 // indirect
