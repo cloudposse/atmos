@@ -84,22 +84,6 @@ atmos list settings --format csv
 atmos list settings --format tsv
 ```
 
-### Custom Column using Stack Name
-
-You can use available variables like `.stack_name` in your column definitions:
-
-```yaml
-# In atmos.yaml, under the appropriate scope (values, vars, settings, or metadata)
-list:
-  columns:
-    - name: "Stack"
-      value: "{{ .stack_name }}"
-    - name: "Setting"
-      value: "{{ .key }}"
-    - name: "Value"
-      value: "{{ .value }}"
-```
-
 ## Example Output
 
 ```shell

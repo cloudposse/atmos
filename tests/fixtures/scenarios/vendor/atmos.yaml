@@ -19,7 +19,22 @@ stacks:
 vendor:  
   # Single file
   base_path: "./vendor.yaml"
-  
+  list:
+    columns:
+      - name: Component
+        value: "{{ .atmos_component }}"
+      - name: Type
+        value: "{{ .type }}"
+      - name: Manifest
+        value: "{{ .atmos_vendor_file }}"
+      - name: Folder
+        value: "{{ .atmos_vendor_folder }}"
+#      - name: Description
+#        value: "{{ .atmos_vendor_version }}"
+#      - name: Folder
+#        value: "foo" # TODO
+  ## Currently custom columns doesn't work as this prints off the valid folder name, regardless of the value
+        
   # Directory with multiple files
   #base_path: "./vendor"
   
