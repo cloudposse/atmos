@@ -1,7 +1,6 @@
 package component
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -191,20 +190,7 @@ func TestComponentProcessor_StackNameTemplate(t *testing.T) {
 	environment := "ue2"
 	stage := "dev"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	defer func() {
-		err := os.Unsetenv("ATMOS_BASE_PATH")
-		assert.NoError(t, err)
-		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		assert.NoError(t, err)
-	}()
-
-	componentMap, err := ProcessComponentFromContext(component, namespace, tenant, environment, stage, "", "")
+	componentMap, err := ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
 	assert.Nil(t, err)
 
 	componentVars := componentMap["vars"].(map[string]any)
@@ -214,8 +200,4 @@ func TestComponentProcessor_StackNameTemplate(t *testing.T) {
 	assert.Equal(t, tenant, componentVars["tenant"].(string))
 	assert.Equal(t, environment, componentVars["environment"].(string))
 	assert.Equal(t, stage, componentVars["stage"].(string))
-
-	yamlConfig, err := u.ConvertToYAML(componentMap)
-	assert.Nil(t, err)
-	t.Log(yamlConfig)
 }
