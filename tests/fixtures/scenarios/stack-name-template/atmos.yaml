@@ -20,11 +20,11 @@ stacks:
   # `name_template` has a higher priority (if `name_template` is specified, `name_pattern` will be ignored).
   #
   # `name_pattern` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
-  name_pattern: "{tenant}-{environment}-{stage}"
+  # name_pattern: "{tenant}-{environment}-{stage}"
   #
   # `name_template` is a Golang template.
   # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
-  # name_template: "{{.tenant}}-{{.environment}}-{{.stage}}"
+  name_template: "{{.tenant}}-{{.environment}}-{{.stage}}"
 
 logs:
   file: "/dev/stderr"
