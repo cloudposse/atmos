@@ -2,4 +2,4 @@
 
 import:
   - orgs/acme/plat/_defaults
-  - orgs/mixins/stage/prod
+  - mixins/stage/prod

@@ -1,6 +1,7 @@
 package component
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -178,6 +179,43 @@ func TestComponentProcessorHierarchicalInheritance(t *testing.T) {
 	assert.Equal(t, "base-component-1", componentHierarchicalInheritanceTestVar)
 
 	yamlConfig, err = u.ConvertToYAML(componentMap)
+	assert.Nil(t, err)
+	t.Log(yamlConfig)
+}
+
+func TestComponentProcessor_StackNameTemplate(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/stack-name-template"
+	component := "c1"
+	namespace := "acme"
+	tenant := "plat"
+	environment := "ue2"
+	stage := "dev"
+
+	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+
+	defer func() {
+		err := os.Unsetenv("ATMOS_BASE_PATH")
+		assert.NoError(t, err)
+		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		assert.NoError(t, err)
+	}()
+
+	componentMap, err := ProcessComponentFromContext(component, namespace, tenant, environment, stage, "", "")
+	assert.Nil(t, err)
+
+	componentVars := componentMap["vars"].(map[string]any)
+	assert.Equal(t, "a", componentVars["a"].(string))
+	assert.Equal(t, "b", componentVars["b"].(string))
+	assert.Equal(t, namespace, componentVars["namespace"].(string))
+	assert.Equal(t, tenant, componentVars["tenant"].(string))
+	assert.Equal(t, environment, componentVars["environment"].(string))
+	assert.Equal(t, stage, componentVars["stage"].(string))
+
+	yamlConfig, err := u.ConvertToYAML(componentMap)
 	assert.Nil(t, err)
 	t.Log(yamlConfig)
 }

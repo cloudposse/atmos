@@ -72,6 +72,7 @@ func ProcessComponentFromContext(
 	var stack string
 
 	if stackNameTemplate != "" {
+		// Create the template context from the context variables.
 		ctx := map[string]any{
 			"namespace":   namespace,
 			"tenant":      tenant,
