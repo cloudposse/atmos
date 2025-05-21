@@ -74,10 +74,12 @@ func ProcessComponentFromContext(
 	if stackNameTemplate != "" {
 		// Create the template context from the context variables.
 		ctx := map[string]any{
-			"namespace":   namespace,
-			"tenant":      tenant,
-			"environment": environment,
-			"stage":       stage,
+			"vars": map[string]any{
+				"namespace":   namespace,
+				"tenant":      tenant,
+				"environment": environment,
+				"stage":       stage,
+			},
 		}
 
 		stack, err = e.ProcessTmpl("name-template-from-context", stackNameTemplate, ctx, false)

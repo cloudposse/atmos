@@ -24,7 +24,7 @@ stacks:
   #
   # `name_template` is a Golang template.
   # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
-  name_template: "{{.tenant}}-{{.environment}}-{{.stage}}"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 
 logs:
   file: "/dev/stderr"
