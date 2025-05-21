@@ -31,11 +31,12 @@ stacks:
   # - Sprig functions (https://masterminds.github.io/sprig)
   # - Gomplate functions (https://docs.gomplate.ca/functions)
   # https://yaml-multiline.info
-  name_template: >
+  name_template: |-
     {{- $ns := .vars.namespace -}}
     {{- $tenant := .vars.tenant -}}
     {{- $env := .vars.environment -}}
     {{- $stage := .vars.stage -}}
+    {{- $name := "" -}}
 
     {{- if eq $ns "" -}}
       {{- fail "Error: 'namespace' is required." -}}
@@ -52,11 +53,9 @@ stacks:
     {{- if and (ne $stage "") (or (eq $env "") (eq $tenant "") (eq $ns "")) -}}
       {{- fail "Error: 'stage' requires 'environment', 'tenant', and 'namespace'." -}}
     {{- end -}}
-
-    {{- $name := $ns -}}
-
+  
     {{- if ne $tenant "" -}}
-      {{- $name = printf "%s-%s" $name $tenant -}}
+      {{- $name = $tenant -}}
     {{- end -}}
 
     {{- if ne $env "" -}}
