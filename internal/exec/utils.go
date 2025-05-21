@@ -644,17 +644,22 @@ func ProcessStacks(
 
 	// Add command-line arguments and vars to the component section
 	// It will allow using them when validating with OPA policies or JSON Schema
-	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = configAndStacksInfo.AdditionalArgsAndFlags
+	args := append([]string{configAndStacksInfo.CliCommand, configAndStacksInfo.CliSubCommand, configAndStacksInfo.CliSubCommand2}, configAndStacksInfo.AdditionalArgsAndFlags...)
+
+	var filteredArgs []string
+	for _, item := range args {
+		if item != "" {
+			filteredArgs = append(filteredArgs, item)
+		}
+	}
+
+	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = filteredArgs
 
 	cliVars, err := getCliVars(configAndStacksInfo.AdditionalArgsAndFlags)
 	if err != nil {
 		return configAndStacksInfo, err
 	}
 	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
-
-	configAndStacksInfo.ComponentSection[cfg.CliCommandSectionName] = configAndStacksInfo.CliCommand
-	configAndStacksInfo.ComponentSection[cfg.CliSubCommandSectionName] = configAndStacksInfo.CliSubCommand
-	configAndStacksInfo.ComponentSection[cfg.CliSubCommand2SectionName] = configAndStacksInfo.CliSubCommand2
 
 	return configAndStacksInfo, nil
 }

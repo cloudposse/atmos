@@ -180,9 +180,7 @@ based on the context in which they're executed.
 
 When Atmos runs a command, it supplies an input object to OPA policies that contains detailed contextual information, such as:
 
-- `cli_command`: the main Atmos command being run, such as `terraform` or `helmfile`
-- `cli_subcommand`: the first-level subcommand, such as `apply`, or `plan`
-- `cli_subcommand2`: the second-level subcommand when applicable, e.g., `varfile`, `planfile`
+- `cli_args`: a list of the command line arguments and flags (e.g., executing the `atmos terraform apply` command will generate the `["terraform", "apply"]` list)
 - `vars`: a map of variables passed to the command, either via the stack config files or [CLI flags](/core-concepts/validate/terraform-variables)
 - other contextual attributes such as the stack and component names
 
@@ -200,27 +198,21 @@ package atmos
 # If the 'errors' output contains one or more error messages, Atmos considers the policy failed
 
 # Don't allow `terraform apply` if the `foo` variable is set to `foo`
-# The `input` map contains the following attributes:
-# - `cli_command` - Atmos command, e.g. `terraform`, `helmfile` (as in `atmos terraform ...`)
-# - `cli_subcommand` -  subcommand, e.g. `apply`, `plan`, `generate` (as in `atmos terraform apply`)
-# - `cli_subcommand2` -  subcommand2, e.g. `varfile`, `varfiles`, `planfile` (as in `atmos terraform generate varfile`)
+# The `input` map contains the `cli_args` attribute (a list of the command line arguments and flags)
 errors[message] {
-  input.cli_command == "terraform"
-  input.cli_subcommand == "apply"
+  count(input.cli_args) >= 2
+  input.cli_args[0] == "terraform"
+  input.cli_args[1] == "apply"
   input.vars.foo == "foo"
   message = "the component can't be applied if the 'foo' variable is set to 'foo'"
 }
 ```
 </File>
 
-The policy receives a structured input map containing metadata about the Atmos command being executed, such as:
- - `cli_command`: the main Atmos command (`terraform`)
- - `cli_subcommand`: the subcommand (`apply`)
- - `vars`: a map of variable names and their values passed to the command
-
 The rule checks if:
- - The main command is `terraform`
- - The subcommand is `apply`
+ - The `cli_args` list has at least two items
+ - The command (first item in the `cli_args` list) is `terraform`
+ - The subcommand (second item in the `cli_args` list) is `apply`
  - The variable `foo` is set to `"foo"`
 
 If all conditions are true, the rule generates an error message.
