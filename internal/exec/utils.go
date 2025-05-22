@@ -307,7 +307,7 @@ func ProcessStacks(
 		return configAndStacksInfo, errors.New(message)
 	}
 
-	// Check if component was provided
+	// Check if the component was provided.
 	if len(configAndStacksInfo.ComponentFromArg) < 1 {
 		message := fmt.Sprintf("`component` is required.\n\nUsage:\n\n`atmos %s <command> <component> <arguments_and_flags>`", configAndStacksInfo.ComponentType)
 		return configAndStacksInfo, errors.New(message)
@@ -469,14 +469,6 @@ func ProcessStacks(
 	configAndStacksInfo.ComponentSection["stack"] = configAndStacksInfo.StackFromArg
 	configAndStacksInfo.ComponentSection["atmos_stack_file"] = configAndStacksInfo.StackFile
 	configAndStacksInfo.ComponentSection["atmos_manifest"] = configAndStacksInfo.StackFile
-
-	// Add Atmos CLI config
-	atmosCliConfig := map[string]any{}
-	atmosCliConfig["base_path"] = atmosConfig.BasePath
-	atmosCliConfig["components"] = atmosConfig.Components
-	atmosCliConfig["stacks"] = atmosConfig.Stacks
-	atmosCliConfig["workflows"] = atmosConfig.Workflows
-	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	// If the command-line component does not inherit anything, then the Terraform/Helmfile component is the same as the provided one
 	if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
@@ -651,6 +643,14 @@ func ProcessStacks(
 		return configAndStacksInfo, err
 	}
 	configAndStacksInfo.ComponentSection[cfg.TerraformCliVarsSectionName] = cliVars
+
+	// Add Atmos CLI config
+	atmosCliConfig := map[string]any{}
+	atmosCliConfig["base_path"] = atmosConfig.BasePath
+	atmosCliConfig["components"] = atmosConfig.Components
+	atmosCliConfig["stacks"] = atmosConfig.Stacks
+	atmosCliConfig["workflows"] = atmosConfig.Workflows
+	configAndStacksInfo.ComponentSection["atmos_cli_config"] = atmosCliConfig
 
 	return configAndStacksInfo, nil
 }
