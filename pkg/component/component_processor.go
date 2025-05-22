@@ -9,9 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	ErrMissingStackNameTemplateAndPattern = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
-)
+var ErrMissingStackNameTemplateAndPattern = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack.
 func ProcessComponentInStack(
