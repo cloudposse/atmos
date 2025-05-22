@@ -525,7 +525,7 @@ specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` se
 			return err
 		}
 	} else {
-		err = u.PrintAsYAML(atlantisYaml)
+		err = u.PrintAsYAML(&atmosConfig, atlantisYaml)
 		if err != nil {
 			return err
 		}

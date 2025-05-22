@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: "indentation"
+    enabled: true
+    snapshot: true
+    description: "Ensure indentation setting works at `4` spaces."
+    workdir: "fixtures/scenarios/indentation"
+    command: "atmos"
+    args:
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
+    expect:
+      diff:
+        - "github_token"
+      exit_code: 0

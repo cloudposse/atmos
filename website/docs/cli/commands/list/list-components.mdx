@@ -38,6 +38,24 @@ atmos list components
 atmos list components -s tenant1-ue2-dev
 ```
 
+### Custom Columns for Components
+
+This configuration customizes the output of `atmos list components`:
+
+```yaml
+# In atmos.yaml
+components:
+  list:
+    columns:
+      - name: Component Name
+        value: "{{ .component_name }}"
+      - name: Component Type
+        value: "{{ .component_type }}"
+      - name: Component Path
+        value: "{{ .component_path }}"
+```
+Running `atmos list components` will produce a table with these custom columns.
+
 ## Flags
 
 | Flag             | Description                                                                                                                                                                                                                               | Alias | Required |

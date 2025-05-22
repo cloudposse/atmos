@@ -92,4 +92,7 @@ const (
 	AtmosProDefaultEndpoint    = "api"
 
 	TerraformDefaultWorkspace = "default"
+
+	ComponentStr = "component"
+	StackStr     = "stack"
 )

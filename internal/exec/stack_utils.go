@@ -62,7 +62,7 @@ func BuildTerraformWorkspace(atmosConfig schema.AtmosConfiguration, configAndSta
 }
 
 // ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether
-// the component is real or abstract and whether the component is disabled or not and whether the component is locked
+// the component is real or abstract and whether the component is disabled or not and whether the component is locked.
 func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
@@ -184,9 +184,14 @@ func BuildComponentPath(
 	return componentPath
 }
 
-// GetStackNamePattern returns stack name pattern
+// GetStackNamePattern returns the stack name pattern.
 func GetStackNamePattern(atmosConfig schema.AtmosConfiguration) string {
 	return atmosConfig.Stacks.NamePattern
+}
+
+// GetStackNameTemplate returns the stack name template.
+func GetStackNameTemplate(atmosConfig *schema.AtmosConfiguration) string {
+	return atmosConfig.Stacks.NameTemplate
 }
 
 // IsComponentAbstract returns 'true' if the component is abstract

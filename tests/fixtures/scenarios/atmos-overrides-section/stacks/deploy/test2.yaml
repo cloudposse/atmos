@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test2
+
+import:
+  # The `overrides` is imported after the component `c1` is imported.
+  # The `overrides` should not override anything for the component `c1`.
+  - catalog/c1
+  - catalog/overrides

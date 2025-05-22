@@ -108,7 +108,7 @@ func ExecuteAtmosCmd() error {
 		if err != nil {
 			return err
 		}
-		err = u.PrintAsYAML(data)
+		err = u.PrintAsYAML(&atmosConfig, data)
 		if err != nil {
 			return err
 		}
@@ -120,7 +120,7 @@ func ExecuteAtmosCmd() error {
 		if err != nil {
 			return err
 		}
-		err = u.PrintAsYAML(data)
+		err = u.PrintAsYAML(&atmosConfig, data)
 		if err != nil {
 			return err
 		}

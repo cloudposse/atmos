@@ -70,7 +70,13 @@ func extractValueKeys(data map[string]interface{}, stackKeys []string) []string 
 }
 
 // createHeader creates the table header.
-func createHeader(stackKeys []string) []string {
+func createHeader(stackKeys []string, customHeaders []string) []string {
+	// If custom headers are provided, use them
+	if len(customHeaders) > 0 {
+		return customHeaders
+	}
+
+	// Otherwise, use the default header format
 	header := []string{"Key"}
 	return append(header, stackKeys...)
 }
@@ -164,7 +170,7 @@ func formatComplexValue(val interface{}) string {
 }
 
 // createStyledTable creates a styled table with headers and rows.
-func createStyledTable(header []string, rows [][]string) string {
+func CreateStyledTable(header []string, rows [][]string) string {
 	t := table.New().
 		Border(lipgloss.ThickBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
@@ -206,10 +212,10 @@ func (f *TableFormatter) Format(data map[string]interface{}, options FormatOptio
 			ErrTableTooWide.Error(), estimatedWidth, terminalWidth)
 	}
 
-	header := createHeader(stackKeys)
+	header := createHeader(stackKeys, options.CustomHeaders)
 	rows := createRows(data, valueKeys, stackKeys)
 
-	return createStyledTable(header, rows), nil
+	return CreateStyledTable(header, rows), nil
 }
 
 // calculateMaxKeyWidth determines the maximum width needed for the key column.

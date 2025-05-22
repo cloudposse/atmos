@@ -403,3 +403,86 @@ func TestMergeDefaultConfig(t *testing.T) {
 	err = mergeDefaultConfig(v)
 	assert.NoError(t, err, "should not return error if config type is yaml")
 }
+
+func TestParseFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected map[string]string
+	}{
+		{
+			name:     "no flags",
+			args:     []string{},
+			expected: map[string]string{},
+		},
+		{
+			name:     "single flag",
+			args:     []string{"--key=value"},
+			expected: map[string]string{"key": "value"},
+		},
+		{
+			name:     "multiple flags",
+			args:     []string{"--key1=value1", "--key2=value2"},
+			expected: map[string]string{"key1": "value1", "key2": "value2"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			oldArgs := os.Args
+			defer func() { os.Args = oldArgs }()
+			os.Args = test.args
+			result := parseFlags()
+			assert.Equal(t, test.expected, result)
+		})
+	}
+}
+
+func TestSetLogConfig(t *testing.T) {
+	tests := []struct {
+		name             string
+		args             []string
+		expectedLogLevel string
+		expectetdNoColor bool
+	}{
+		{
+			name:             "valid log level",
+			args:             []string{"--logs-level", "Debug"},
+			expectedLogLevel: "Debug",
+		},
+		{
+			name:             "invalid log level",
+			args:             []string{"--logs-level", "InvalidLevel"},
+			expectedLogLevel: "InvalidLevel",
+		},
+		{
+			name:             "No color flag",
+			args:             []string{"--no-color"},
+			expectedLogLevel: "",
+			expectetdNoColor: true,
+		},
+		{
+			name:             "No color flag with log level",
+			args:             []string{"--no-color", "--logs-level", "Debug"},
+			expectedLogLevel: "Debug",
+			expectetdNoColor: true,
+		},
+		{
+			name:             "No color flag disable with log level",
+			args:             []string{"--no-color=false", "--logs-level", "Debug"},
+			expectedLogLevel: "Debug",
+			expectetdNoColor: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			oldArgs := os.Args
+			defer func() { os.Args = oldArgs }()
+			os.Args = test.args
+			atmosConfig := &schema.AtmosConfiguration{}
+			setLogConfig(atmosConfig)
+			assert.Equal(t, test.expectedLogLevel, atmosConfig.Logs.Level)
+		})
+	}
+}

@@ -4,5 +4,5 @@ DEBU Atmos configuration not found path=/absolute/path/to/repo/.atmos.d/**/* err
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU processStoreConfig atmosConfig.StoresConfig=map[]
 
-👽 Atmos test on darwin/arm64
+👽 Atmos test on linux/amd64
 

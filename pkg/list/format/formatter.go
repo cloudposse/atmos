@@ -8,19 +8,21 @@ import (
 type Format string
 
 const (
-	FormatTable Format = "table"
-	FormatJSON  Format = "json"
-	FormatYAML  Format = "yaml"
-	FormatCSV   Format = "csv"
-	FormatTSV   Format = "tsv"
+	FormatTable    Format = "table"
+	FormatJSON     Format = "json"
+	FormatYAML     Format = "yaml"
+	FormatCSV      Format = "csv"
+	FormatTSV      Format = "tsv"
+	FormatTemplate Format = "template"
 )
 
 // FormatOptions contains options for formatting output.
 type FormatOptions struct {
-	MaxColumns int
-	Delimiter  string
-	TTY        bool
-	Format     Format
+	MaxColumns    int
+	Delimiter     string
+	TTY           bool
+	Format        Format
+	CustomHeaders []string
 }
 
 // Formatter defines the interface for formatting output.

@@ -1,0 +1,73 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  # Can also be set using 'ATMOS_STACKS_INCLUDED_PATHS' ENV var (comma-separated values string)
+  included_paths:
+    - "orgs/**/*"
+  # Can also be set using 'ATMOS_STACKS_EXCLUDED_PATHS' ENV var (comma-separated values string)
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # To define the Atmos stack naming convention, use either `name_template` or `name_pattern`.
+  # `name_template` has a higher priority (if `name_template` is specified, `name_pattern` will be ignored).
+  #
+  # `name_pattern` can also be set using 'ATMOS_STACKS_NAME_PATTERN' ENV var
+  # name_pattern: "{tenant}-{environment}-{stage}"
+  #
+  # `name_template` is a Golang template.
+  # `name_template` can also be set using 'ATMOS_STACKS_NAME_TEMPLATE' ENV var
+  # name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+
+  # `name_template` can have complex logic and use template expressions and functions:
+  # - Atmos functions (https://atmos.tools/core-concepts/stacks/templates/functions)
+  # - Sprig functions (https://masterminds.github.io/sprig)
+  # - Gomplate functions (https://docs.gomplate.ca/functions)
+  # https://yaml-multiline.info
+  name_template: |-
+    {{- $ns := .vars.namespace -}}
+    {{- $tenant := .vars.tenant -}}
+    {{- $env := .vars.environment -}}
+    {{- $stage := .vars.stage -}}
+    {{- $stack_name := "" -}}
+
+    {{- if eq $ns "" -}}
+      {{- fail "Error: 'namespace' is required." -}}
+    {{- end -}}
+
+    {{- if and (ne $tenant "") (eq $ns "") -}}
+      {{- fail "Error: 'tenant' requires 'namespace'." -}}
+    {{- end -}}
+
+    {{- if and (ne $env "") (or (eq $tenant "") (eq $ns "")) -}}
+      {{- fail "Error: 'environment' requires 'tenant' and 'namespace'." -}}
+    {{- end -}}
+
+    {{- if and (ne $stage "") (or (eq $env "") (eq $tenant "") (eq $ns "")) -}}
+      {{- fail "Error: 'stage' requires 'environment', 'tenant', and 'namespace'." -}}
+    {{- end -}}
+
+    {{- if ne $tenant "" -}}
+      {{- $stack_name = $tenant -}}
+    {{- end -}}
+
+    {{- if ne $env "" -}}
+      {{- $stack_name = printf "%s-%s" $stack_name $env -}}
+    {{- end -}}
+
+    {{- if ne $stage "" -}}
+      {{- $stack_name = printf "%s-%s" $stack_name $stage -}}
+    {{- end -}}
+
+    {{- $stack_name -}}
+
+logs:
+  file: "/dev/stderr"
+  level: Info

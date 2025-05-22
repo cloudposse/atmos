@@ -1,6 +1,7 @@
 package component
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -180,4 +181,50 @@ func TestComponentProcessorHierarchicalInheritance(t *testing.T) {
 	yamlConfig, err = u.ConvertToYAML(componentMap)
 	assert.Nil(t, err)
 	t.Log(yamlConfig)
+}
+
+func TestComponentProcessor_StackNameTemplate(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/stack-name-template"
+	component := "c1"
+	namespace := "acme"
+	tenant := "plat"
+	environment := "ue2"
+	stage := "dev"
+
+	componentMap, err := ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
+	assert.Nil(t, err)
+
+	componentVars := componentMap["vars"].(map[string]any)
+	assert.Equal(t, "a", componentVars["a"].(string))
+	assert.Equal(t, "b", componentVars["b"].(string))
+	assert.Equal(t, namespace, componentVars["namespace"].(string))
+	assert.Equal(t, tenant, componentVars["tenant"].(string))
+	assert.Equal(t, environment, componentVars["environment"].(string))
+	assert.Equal(t, stage, componentVars["stage"].(string))
+}
+
+func TestComponentProcessor_StackNameTemplate_Errors(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/stack-name-template"
+	component := "c1"
+	namespace := ""
+	tenant := "plat"
+	environment := "ue2"
+	stage := "dev"
+
+	_, err := ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
+	assert.ErrorContains(t, err, "'namespace' is required")
+
+	namespace = "acme"
+	tenant = ""
+	_, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
+	assert.ErrorContains(t, err, "'environment' requires 'tenant' and 'namespace'")
+
+	err = os.Setenv("ATMOS_STACKS_NAME_TEMPLATE", "{{ .invalid }}")
+	assert.NoError(t, err, "Setting 'ATMOS_STACKS_NAME_TEMPLATE' environment variable should execute without error")
+	defer func() {
+		os.Unsetenv("ATMOS_STACKS_NAME_TEMPLATE")
+	}()
+
+	_, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
+	assert.ErrorContains(t, err, "map has no entry for key \"invalid\"")
 }

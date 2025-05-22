@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
@@ -36,10 +37,10 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
-	log.Info("Executing the workflow", "workflow", workflow, "path", workflowPath)
+	log.Info("Executing the workflow", "workflow", workflow, "file", workflowPath)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err := u.PrintAsYAMLToFileDescriptor(atmosConfig, workflowDefinition)
+		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
 		if err != nil {
 			return err
 		}

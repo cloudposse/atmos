@@ -15,7 +15,7 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	err = u.PrintAsYAML(atmosConfig)
+	err = u.PrintAsYAML(&atmosConfig, atmosConfig)
 	assert.Nil(t, err)
 
 	atlantisConfig := atmosConfig.Integrations.Atlantis
@@ -37,7 +37,7 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
 	atlantisYaml.Projects = []schema.AtlantisProjectConfig{projectTemplate}
 
-	err = u.PrintAsYAML(atlantisYaml)
+	err = u.PrintAsYAML(&atmosConfig, atlantisYaml)
 	assert.Nil(t, err)
 }
 

@@ -30,7 +30,7 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 }
 
 // GetHighlightSettings returns the syntax highlighting settings from the config or defaults
-func GetHighlightSettings(config schema.AtmosConfiguration) *schema.SyntaxHighlighting {
+func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighlighting {
 	defaults := DefaultHighlightSettings()
 	if config.Settings.Terminal.SyntaxHighlighting == (schema.SyntaxHighlighting{}) {
 		return defaults
@@ -72,7 +72,7 @@ func HighlightCode(code string, lexerName string, theme string) (string, error) 
 }
 
 // HighlightCodeWithConfig highlights the given code using the provided configuration
-func HighlightCodeWithConfig(code string, config schema.AtmosConfiguration, format ...string) (string, error) {
+func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	if !term.IsTerminal(int(os.Stdout.Fd())) {
 		return code, nil
 	}
@@ -172,7 +172,7 @@ func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration, format ..
 // This maintains compatibility with the io.Writer interface contract while still
 // providing syntax highlighting functionality.
 func (h *HighlightWriter) Write(p []byte) (n int, err error) {
-	highlighted, err := HighlightCodeWithConfig(string(p), h.config, h.format)
+	highlighted, err := HighlightCodeWithConfig(&h.config, string(p), h.format)
 	if err != nil {
 		return 0, err
 	}

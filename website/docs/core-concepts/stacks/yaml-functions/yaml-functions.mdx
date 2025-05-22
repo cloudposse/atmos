@@ -41,7 +41,8 @@ YAML supports three types of data: core, defined, and user-defined.
 
  - The [__`!terraform.output`__](/core-concepts/stacks/yaml-functions/terraform.output) YAML function allows you to
    [access component outputs (remote state) directly within Atmos stack manifests](/core-concepts/share-data/remote-state).
-   Note that this requires initializing each component (`terraform init`), which downloads all Terraform providers and may significantly impact performance.
+   Note that this requires initializing each component (`terraform init`), which downloads all Terraform providers and
+   may significantly impact performance.
 
  - The [__`!store`__](/core-concepts/stacks/yaml-functions/store) YAML function allows reading the values from a
    remote [store](/core-concepts/projects/configuration/stores) (e.g. SSM Parameter Store, Artifactory, etc.)
@@ -52,6 +53,9 @@ YAML supports three types of data: core, defined, and user-defined.
 
  - The [__`!include`__](/core-concepts/stacks/yaml-functions/include) YAML function allows downloading local or remote files from different sources,
    and assigning the file contents or individual values to the sections in Atmos stack manifests
+
+ - The [__`!repo-root`__](/core-concepts/stacks/yaml-functions/repo-root) YAML function is used to retrieve the
+   root directory of the Atmos repository
 
 :::tip
 You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration.

@@ -12,27 +12,51 @@ import (
 )
 
 // PrintAsJSON prints the provided value as JSON document to the console
-func PrintAsJSON(data any) error {
-	j, err := ConvertToJSON(data)
+func PrintAsJSON(atmosConfig *schema.AtmosConfiguration, data any) error {
+	highlighted, err := GetHighlightedJSON(atmosConfig, data)
 	if err != nil {
 		return err
+	}
+	PrintMessage(highlighted)
+	return nil
+}
+
+func GetHighlightedJSON(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
+	j, err := ConvertToJSON(data)
+	if err != nil {
+		return "", err
 	}
 
 	var prettyJSON bytes.Buffer
 	err = json.Indent(&prettyJSON, []byte(j), "", "  ")
 	if err != nil {
-		return err
+		return "", err
+	}
+	highlighted, err := HighlightCodeWithConfig(atmosConfig, prettyJSON.String())
+	if err != nil {
+		return prettyJSON.String(), nil
+	}
+	return highlighted, nil
+}
+
+func GetAtmosConfigJSON(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	j, err := ConvertToJSON(atmosConfig)
+	if err != nil {
+		return "", err
 	}
 
-	atmosConfig := ExtractAtmosConfig(data)
-	highlighted, err := HighlightCodeWithConfig(prettyJSON.String(), atmosConfig)
+	var prettyJSON bytes.Buffer
+	err = json.Indent(&prettyJSON, []byte(j), "", "  ")
 	if err != nil {
-		// Fallback to plain text if highlighting fails
-		PrintMessage(prettyJSON.String())
-		return nil
+		return "", err
 	}
-	PrintMessage(highlighted)
-	return nil
+
+	highlighted, err := HighlightCodeWithConfig(atmosConfig, prettyJSON.String())
+	if err == nil {
+		return highlighted, nil
+	}
+	// Fallback to plain text if highlighting fails
+	return prettyJSON.String(), nil
 }
 
 // PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
