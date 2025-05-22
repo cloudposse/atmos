@@ -48,7 +48,7 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 	cmd.Flags().Bool("drift-enabled", false, "Filter deployments with drift detection enabled")
 	cmd.Flags().Bool("upload", false, "Upload deployments to pro API")
 
-	// Mock stacks data
+	// Mock stacks data with various scenarios
 	mockStacks := map[string]interface{}{
 		"stack1": map[string]interface{}{
 			"components": map[string]interface{}{
@@ -65,7 +65,7 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 						"env":     map[string]interface{}{},
 						"backend": map[string]interface{}{},
 						"metadata": map[string]interface{}{
-							"type": "concrete",
+							"type": "real",
 						},
 					},
 					"abstract-vpc": map[string]interface{}{
@@ -73,6 +73,13 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 							"type": "abstract",
 						},
 					},
+				},
+			},
+		},
+		"stack2": map[string]interface{}{
+			"components": map[string]interface{}{
+				"terraform": map[string]interface{}{
+					"invalid-component": "not-a-map",
 				},
 			},
 		},
@@ -156,6 +163,61 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			},
 			mockUploadErr: errors.New("failed to upload"),
 			expectedError: "failed to upload",
+		},
+		{
+			name:         "no deployments found",
+			info:         schema.ConfigAndStacksInfo{},
+			driftEnabled: false,
+			upload:       false,
+			mockStacks:   map[string]interface{}{},
+		},
+		{
+			name:         "invalid component configuration",
+			info:         schema.ConfigAndStacksInfo{},
+			driftEnabled: false,
+			upload:       false,
+			mockStacks: map[string]interface{}{
+				"stack1": map[string]interface{}{
+					"components": "not-a-map",
+				},
+			},
+		},
+		{
+			name:         "multiple component types",
+			info:         schema.ConfigAndStacksInfo{},
+			driftEnabled: false,
+			upload:       false,
+			mockStacks:   mockStacks,
+		},
+		{
+			name:         "sorting edge case - same component different stacks",
+			info:         schema.ConfigAndStacksInfo{},
+			driftEnabled: false,
+			upload:       false,
+			mockStacks: map[string]interface{}{
+				"stack2": map[string]interface{}{
+					"components": map[string]interface{}{
+						"terraform": map[string]interface{}{
+							"vpc": map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"type": "real",
+								},
+							},
+						},
+					},
+				},
+				"stack1": map[string]interface{}{
+					"components": map[string]interface{}{
+						"terraform": map[string]interface{}{
+							"vpc": map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"type": "real",
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
