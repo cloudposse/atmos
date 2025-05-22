@@ -32,9 +32,8 @@ require (
 	github.com/goccy/go-yaml v1.17.1
 	github.com/gofrs/flock v0.12.1
 	github.com/golang/mock v1.6.0
-	github.com/google/go-containerregistry v0.20.5
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.20.4
+	github.com/google/go-containerregistry v0.20.5
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.14.2
