@@ -32,6 +32,7 @@ require (
 	github.com/goccy/go-yaml v1.17.1
 	github.com/gofrs/flock v0.12.1
 	github.com/golang/mock v1.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.4
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
@@ -190,7 +191,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/wire v0.5.0 // indirect
