@@ -5,8 +5,8 @@ import (
 	"os"
 
 	log "github.com/charmbracelet/log"
+	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/describe"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/logger"
@@ -32,7 +32,7 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 	upload := cmd.Flags().Changed("upload")
 
 	// Get all stacks
-	stacksMap, err := describe.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
