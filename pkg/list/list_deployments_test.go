@@ -176,7 +176,7 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			}
 
 			// Create a test-specific implementation of ExecuteListDeploymentsCmd
-			executeListDeployments := func(_ schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+			executeListDeployments := func(_ schema.ConfigAndStacksInfo, _ *cobra.Command, args []string) error {
 				// Get stacks
 				_, err := mockDescriber.Execute(schema.AtmosConfiguration{}, "", nil, nil, nil, true, false)
 				if err != nil {

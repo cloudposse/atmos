@@ -2,21 +2,22 @@ package list
 
 import (
 	"fmt"
+	"os"
 
-	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/describe"
 	"github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
+	"golang.org/x/term"
 )
 
-// ExecuteListDeploymentsCmd executes the list deployments command
+// ExecuteListDeploymentsCmd executes the list deployments command.
 func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	// Initialize CLI config
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -139,24 +140,35 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 		return 0
 	})
 
-	// Print deployments in a pretty table format using lipgloss
-	componentColWidth := 24
-	stackColWidth := 18
-
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.ColorGreen)).Padding(0, 1)
-	cellStyle := lipgloss.NewStyle().Padding(0, 1)
-
-	tableBorder := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color(theme.ColorCyan)).Margin(0, 1)
-
-	header := headerStyle.Width(componentColWidth).Render("Component") + headerStyle.Width(stackColWidth).Render("Stack")
-	rows := []string{header}
-	for _, rowData := range rowsData {
-		row := cellStyle.Width(componentColWidth).Render(rowData.Component) + cellStyle.Width(stackColWidth).Render(rowData.Stack)
-		rows = append(rows, row)
+	// Convert to rows for formatter
+	var rows []map[string]interface{}
+	for _, row := range rowsData {
+		rows = append(rows, map[string]interface{}{
+			"Component": row.Component,
+			"Stack":     row.Stack,
+		})
 	}
 
-	table := tableBorder.Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
-	fmt.Println(table)
+	// Create formatter options
+	formatOpts := format.FormatOptions{
+		Format:        format.FormatTable,
+		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
+		CustomHeaders: []string{"Component", "Stack"},
+		MaxColumns:    0,
+	}
+
+	// Format and print output
+	output := format.CreateStyledTable(formatOpts.CustomHeaders, func() [][]string {
+		var tableRows [][]string
+		for _, row := range rows {
+			tableRows = append(tableRows, []string{
+				fmt.Sprintf("%v", row["Component"]),
+				fmt.Sprintf("%v", row["Stack"]),
+			})
+		}
+		return tableRows
+	}())
+	fmt.Println(output)
 
 	// Upload deployments if requested
 	if upload {
