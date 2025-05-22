@@ -75,11 +75,11 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 		{
 			name: "Set format explicitly, no override",
 			setFlags: func(fs *pflag.FlagSet) {
-				fs.Set("format", "table")
+				fs.Set("format", "json")
 			},
 			describe: &exec.DescribeAffectedCmdArgs{},
 			expected: &exec.DescribeAffectedCmdArgs{
-				Format: "table",
+				Format: "json",
 			},
 		},
 	}

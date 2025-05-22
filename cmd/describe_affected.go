@@ -136,6 +136,8 @@ func setFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffected
 			*v, err = flags.GetString(k)
 		case *bool:
 			*v, err = flags.GetBool(k)
+		case *[]string:
+			*v, err = flags.GetStringSlice(k)
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}
