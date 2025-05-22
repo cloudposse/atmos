@@ -190,7 +190,7 @@ func GetStackNamePattern(atmosConfig schema.AtmosConfiguration) string {
 }
 
 // GetStackNameTemplate returns the stack name template.
-func GetStackNameTemplate(atmosConfig schema.AtmosConfiguration) string {
+func GetStackNameTemplate(atmosConfig *schema.AtmosConfiguration) string {
 	return atmosConfig.Stacks.NameTemplate
 }
 

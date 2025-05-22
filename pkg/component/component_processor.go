@@ -65,11 +65,12 @@ func ProcessComponentFromContext(
 		return nil, err
 	}
 
-	stackNameTemplate := e.GetStackNameTemplate(atmosConfig)
+	stackNameTemplate := e.GetStackNameTemplate(&atmosConfig)
 	stackNamePattern := e.GetStackNamePattern(atmosConfig)
 	var stack string
 
-	if stackNameTemplate != "" {
+	switch {
+	case stackNameTemplate != "":
 		// Create the template context from the context variables.
 		ctx := map[string]any{
 			"vars": map[string]any{
@@ -85,13 +86,15 @@ func ProcessComponentFromContext(
 			log.Error(err)
 			return nil, err
 		}
-	} else if stackNamePattern != "" {
+
+	case stackNamePattern != "":
 		stack, err = cfg.GetStackNameFromContextAndStackNamePattern(namespace, tenant, environment, stage, stackNamePattern)
 		if err != nil {
 			log.Error(err)
 			return nil, err
 		}
-	} else {
+
+	default:
 		log.Error(ErrMissingStackNameTemplateAndPattern)
 		return nil, ErrMissingStackNameTemplateAndPattern
 	}
