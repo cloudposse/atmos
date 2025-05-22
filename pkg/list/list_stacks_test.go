@@ -17,7 +17,8 @@ func TestListStacks(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, true, true, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
+		nil, false, true, true, false, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, "")
@@ -32,7 +33,8 @@ func TestListStacksWithComponent(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, true, true, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil,
+		nil, false, true, true, false, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, "eks-blue/cluster")
