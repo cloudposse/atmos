@@ -2,6 +2,10 @@ tests:
   - name: atmos list deployments
     snapshot: true
     enabled: true
+    tty: true
+    skip:
+      # PTY not supported on windows
+      os: !not windows
     description: "Ensure Atmos processes deployments"
     workdir: "fixtures/scenarios/atmos-pro"
     command: "atmos"
@@ -20,6 +24,10 @@ tests:
   - name: atmos list deployments drift enabled
     snapshot: true
     enabled: true
+    tty: true
+    skip:
+      # PTY not supported on windows
+      os: !not windows
     description: "Ensure Atmos processes deployments with drift filter"
     workdir: "fixtures/scenarios/atmos-pro"
     command: "atmos"
@@ -35,3 +43,42 @@ tests:
         - "mock/drift.*prod"
         - !not "mock/nodrift.*nonprod"
         - !not "mock/nodrift.*prod"
+
+  - name: atmos list deployments without tty
+    snapshot: true
+    enabled: true
+    tty: false
+    description: "Ensure Atmos processes deployments without tty"
+    workdir: "fixtures/scenarios/atmos-pro"
+    command: "atmos"
+    args:
+      - "list"
+      - "deployments"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Component.*Stack"
+        - "mock/drift.*nonprod"
+        - "mock/nodrift.*nonprod"
+        - "mock/drift.*prod"
+        - "mock/nodrift.*prod"
+
+  - name: atmos list deployments without tty with drift enabled
+    snapshot: true
+    enabled: true
+    tty: false
+    description: "Ensure Atmos processes deployments without tty with drift enabled"
+    workdir: "fixtures/scenarios/atmos-pro"
+    command: "atmos"
+    args:
+      - "list"
+      - "deployments"
+      - "--drift-enabled"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Component.*Stack"
+        - "mock/drift.*nonprod"
+        - "mock/drift.*prod"
+        - !not "mock/nodrift.*nonprod"
+        - !not "mock/nodrift.*prod"   
