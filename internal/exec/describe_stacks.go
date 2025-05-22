@@ -7,7 +7,9 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -56,12 +58,7 @@ func ExecuteDescribeStacksCmd(atmosConfig schema.AtmosConfiguration, args *Descr
 		res = finalStacksMap
 	}
 
-	err = printOrWriteToFile(&atmosConfig, args.Format, args.File, res)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return viewWithScroll(&viewWithScrollProps{pageCreator: pager.New(), isTTYSupportForStdout: term.IsTTYSupportForStdout, printOrWriteToFile: printOrWriteToFile, atmosConfig: &atmosConfig, displayName: "describe stacks", format: args.Format, file: args.File, res: res})
 }
 
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
