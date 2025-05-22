@@ -32,7 +32,7 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 	upload := cmd.Flags().Changed("upload")
 
 	// Get all stacks
-	stacksMap, err := describe.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false)
+	stacksMap, err := describe.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false)
 	if err != nil {
 		return err
 	}
