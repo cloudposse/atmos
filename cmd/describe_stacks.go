@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
-	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -30,7 +29,7 @@ var describeStacksCmd = &cobra.Command{
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd, describe)
 		printErrorAndExit(err)
-		err = e.ExecuteDescribeStacksCmd(atmosConfig, describe)
+		err = exec.NewDescribeStacksExec().Execute(atmosConfig, describe)
 		printErrorAndExit(err)
 	},
 }

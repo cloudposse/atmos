@@ -29,9 +29,36 @@ type DescribeStacksArgs struct {
 	File                 string
 }
 
+type DescribeStacksExec struct {
+	pageCreator           pager.PageCreator
+	isTTYSupportForStdout func() bool
+	printOrWriteToFile    func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
+	executeDescribeStacks func(
+		atmosConfig schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+	) (map[string]any, error)
+}
+
+func NewDescribeStacksExec() *DescribeStacksExec {
+	return &DescribeStacksExec{
+		pageCreator:           pager.New(),
+		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		printOrWriteToFile:    printOrWriteToFile,
+		executeDescribeStacks: ExecuteDescribeStacks,
+	}
+}
+
 // ExecuteDescribeStacksCmd executes `describe stacks` command
-func ExecuteDescribeStacksCmd(atmosConfig schema.AtmosConfiguration, args *DescribeStacksArgs) error {
-	finalStacksMap, err := ExecuteDescribeStacks(
+func (d *DescribeStacksExec) Execute(atmosConfig schema.AtmosConfiguration, args *DescribeStacksArgs) error {
+	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
 		args.FilterByStack,
 		args.Components,
@@ -58,7 +85,16 @@ func ExecuteDescribeStacksCmd(atmosConfig schema.AtmosConfiguration, args *Descr
 		res = finalStacksMap
 	}
 
-	return viewWithScroll(&viewWithScrollProps{pageCreator: pager.New(), isTTYSupportForStdout: term.IsTTYSupportForStdout, printOrWriteToFile: printOrWriteToFile, atmosConfig: &atmosConfig, displayName: "describe stacks", format: args.Format, file: args.File, res: res})
+	return viewWithScroll(&viewWithScrollProps{
+		pageCreator:           pager.New(),
+		isTTYSupportForStdout: d.isTTYSupportForStdout,
+		printOrWriteToFile:    d.printOrWriteToFile,
+		atmosConfig:           &atmosConfig,
+		displayName:           "Stacks",
+		format:                args.Format,
+		file:                  args.File,
+		res:                   res,
+	})
 }
 
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
