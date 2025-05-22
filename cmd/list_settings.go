@@ -125,8 +125,7 @@ func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilte
 	}
 
 	// Execute describe stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
-		processingFlags.Templates, processingFlags.Functions, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, true, true, nil)
 	if err != nil {
 		return nil, &listerrors.DescribeStacksError{Cause: err}
 	}

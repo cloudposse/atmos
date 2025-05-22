@@ -14,6 +14,8 @@ func ExecuteDescribeStacks(
 	sections []string,
 	ignoreMissingFiles bool,
 	includeEmptyStacks bool,
+	processTemplates bool,
+	processYamlFunctions bool,
 ) (map[string]any, error) {
-	return e.ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, true, true, includeEmptyStacks, nil)
+	return e.ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, nil)
 }

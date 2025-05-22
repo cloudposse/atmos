@@ -260,7 +260,7 @@ func initAtmosAndDescribeStacksForList(componentName string, processingFlags *fl
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, true, true, nil)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
 	}

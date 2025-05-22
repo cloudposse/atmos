@@ -16,7 +16,7 @@ func TestDescribeStacks(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 
 	dependentsYaml, err := u.ConvertToYAML(stacks)
@@ -32,7 +32,7 @@ func TestDescribeStacksWithFilter1(t *testing.T) {
 
 	stack := "tenant1-ue2-dev"
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 
 	dependentsYaml, err := u.ConvertToYAML(stacks)
@@ -49,7 +49,7 @@ func TestDescribeStacksWithFilter2(t *testing.T) {
 	stack := "tenant1-ue2-dev"
 	components := []string{"infra/vpc"}
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, nil, nil, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 
 	dependentsYaml, err := u.ConvertToYAML(stacks)
@@ -66,7 +66,7 @@ func TestDescribeStacksWithFilter3(t *testing.T) {
 	stack := "tenant1-ue2-dev"
 	sections := []string{"vars"}
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, sections, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, sections, false, false, true, true)
 	assert.Nil(t, err)
 
 	dependentsYaml, err := u.ConvertToYAML(stacks)
@@ -83,7 +83,7 @@ func TestDescribeStacksWithFilter4(t *testing.T) {
 	componentTypes := []string{"terraform"}
 	sections := []string{"none"}
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, componentTypes, sections, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, componentTypes, sections, false, false, true, true)
 	assert.Nil(t, err)
 
 	dependentsYaml, err := u.ConvertToYAML(stacks)
@@ -101,7 +101,7 @@ func TestDescribeStacksWithFilter5(t *testing.T) {
 	components := []string{"top-level-component1"}
 	sections := []string{"vars"}
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", components, componentTypes, sections, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", components, componentTypes, sections, false, false, true, true)
 	assert.Nil(t, err)
 	assert.Equal(t, 8, len(stacks))
 
@@ -133,7 +133,7 @@ func TestDescribeStacksWithFilter6(t *testing.T) {
 	components := []string{"top-level-component1"}
 	sections := []string{"workspace"}
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "tenant1-ue2-dev", components, componentTypes, sections, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "tenant1-ue2-dev", components, componentTypes, sections, false, false, true, true)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(stacks))
 
@@ -160,7 +160,7 @@ func TestDescribeStacksWithFilter7(t *testing.T) {
 	components := []string{"test/test-component-override-3"}
 	sections := []string{"workspace"}
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, sections, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, sections, false, false, true, true)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(stacks))
 
@@ -185,7 +185,7 @@ func TestDescribeStacksWithFilter8(t *testing.T) {
 	componentTypes := []string{"helmfile"}
 	sections := []string{"none"}
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, componentTypes, sections, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, componentTypes, sections, false, false, true, true)
 	assert.Nil(t, err)
 
 	dependentsYaml, err := u.ConvertToYAML(stacks)
@@ -199,12 +199,12 @@ func TestDescribeStacksWithEmptyStacks(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 
 	initialStackCount := len(stacks)
 
-	stacksWithEmpty, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true)
+	stacksWithEmpty, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, true)
 	assert.Nil(t, err)
 
 	assert.Greater(t, len(stacksWithEmpty), initialStackCount, "Should include more stacks when empty stacks are included")
@@ -235,11 +235,11 @@ func TestDescribeStacksWithVariousEmptyStacks(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	assert.Nil(t, err)
 
-	stacksWithoutEmpty, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false)
+	stacksWithoutEmpty, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 	initialCount := len(stacksWithoutEmpty)
 
-	stacksWithEmpty, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true)
+	stacksWithEmpty, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, true)
 	assert.Nil(t, err)
 
 	assert.Greater(t, len(stacksWithEmpty), initialCount, "Should have more stacks when including empty ones")
@@ -360,13 +360,13 @@ func TestDescribeStacksWithEmptySectionFilteringAllStacks(t *testing.T) {
 	atmosConfigFiltered, err := setupEmptySectionFilteringTest(false)
 	assert.Nil(t, err)
 
-	stacksWithFilteredSections, err := ExecuteDescribeStacks(atmosConfigFiltered, "", nil, nil, nil, false, false)
+	stacksWithFilteredSections, err := ExecuteDescribeStacks(atmosConfigFiltered, "", nil, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 
 	atmosConfigAll, err := setupEmptySectionFilteringTest(true)
 	assert.Nil(t, err)
 
-	stacksWithAllSections, err := ExecuteDescribeStacks(atmosConfigAll, "", nil, nil, nil, false, false)
+	stacksWithAllSections, err := ExecuteDescribeStacks(atmosConfigAll, "", nil, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 
 	filteredSectionCount := countSections(stacksWithFilteredSections)
@@ -384,13 +384,13 @@ func TestDescribeStacksWithEmptySectionFilteringComponent(t *testing.T) {
 	atmosConfigFiltered, err := setupEmptySectionFilteringTest(false)
 	assert.Nil(t, err)
 
-	filteredStack, err := ExecuteDescribeStacks(atmosConfigFiltered, stack, []string{component}, nil, nil, false, false)
+	filteredStack, err := ExecuteDescribeStacks(atmosConfigFiltered, stack, []string{component}, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 
 	atmosConfigAll, err := setupEmptySectionFilteringTest(true)
 	assert.Nil(t, err)
 
-	completeStack, err := ExecuteDescribeStacks(atmosConfigAll, stack, []string{component}, nil, nil, false, false)
+	completeStack, err := ExecuteDescribeStacks(atmosConfigAll, stack, []string{component}, nil, nil, false, false, true, true)
 	assert.Nil(t, err)
 
 	filteredCompSections := countComponentSections(filteredStack, stack, component)
