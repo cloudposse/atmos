@@ -613,11 +613,14 @@ For example:
 
 ## Templates
 
-Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests.
+Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests, and the following template
+functions and data sources:
 
-[Sprig Functions](https://masterminds.github.io/sprig/), [Gomplate Functions](https://docs.gomplate.ca/functions/)
-and [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
-are supported as well.
+ - [Go `text/template` functions](https://pkg.go.dev/text/template#hdr-Functions)
+ - [Atmos Template Functions](/core-concepts/stacks/templates/functions)
+ - [Sprig Functions](https://masterminds.github.io/sprig/)
+ - [Gomplate Functions](https://docs.gomplate.ca/functions/)
+ - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
 
 :::tip
 For more details, refer to [Atmos Stack Manifest Templating](/core-concepts/stacks/templates)
