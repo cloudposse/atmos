@@ -182,10 +182,6 @@ func ProcessYAMLConfigFile(
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
 
-	if relativeFilePath == "teams/cloud-test/ue1-staging.yaml" {
-		fmt.Println("filePath: ", filePath)
-	}
-
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
 	globalOverrides := map[string]any{}

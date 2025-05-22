@@ -21,9 +21,7 @@ func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	info.CliCommand = "terraform"
-	info.CliSubCommand = "generate"
-	info.CliSubCommand2 = "varfiles"
+	info.CliArgs = []string{"terraform", "generate", "varfiles"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {

@@ -30,8 +30,7 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
-	info.CliCommand = "helmfile"
-	info.CliSubCommand = commandName
+	info.CliArgs = []string{"helmfile", commandName}
 	err := e.ExecuteHelmfile(info)
 	if err != nil {
 		u.PrintErrorMarkdownAndExit("", err, "")

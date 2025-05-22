@@ -16,8 +16,7 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	info.CliCommand = "describe"
-	info.CliSubCommand = "workflows"
+	info.CliArgs = []string{"describe", "workflows"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {

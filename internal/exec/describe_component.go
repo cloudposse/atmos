@@ -149,8 +149,7 @@ func ExecuteDescribeComponent(
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
-	configAndStacksInfo.CliCommand = "describe"
-	configAndStacksInfo.CliSubCommand = "component"
+	configAndStacksInfo.CliArgs = []string{"describe", "component"}
 	configAndStacksInfo.ComponentSection = make(map[string]any)
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
