@@ -77,6 +77,8 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
+	info.CliArgs = []string{"terraform", "generate", "planfile"}
+
 	component := args[0]
 
 	options := PlanfileOptions{

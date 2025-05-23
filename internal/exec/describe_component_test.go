@@ -1,13 +1,17 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	log "github.com/charmbracelet/log"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
@@ -121,4 +125,166 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDescribeComponentWithOverridesSection(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Delete the generated files and folders after the test
+		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
+		assert.NoError(t, err)
+
+		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
+		assert.NoError(t, err)
+
+		// Change back to the original working directory after the test
+		if err = os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	component := "c1"
+
+	// `dev`
+	res, err := ExecuteDescribeComponent(
+		component,
+		"dev",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err := u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-dev")
+	assert.Contains(t, y, "b: b-team2")
+	assert.Contains(t, y, "c: c-team1")
+	assert.Contains(t, y, "d: d")
+
+	// `staging`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"staging",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-staging")
+	assert.Contains(t, y, "b: b-team2")
+	assert.Contains(t, y, "c: c-team1")
+	assert.Contains(t, y, "d: d")
+
+	// `prod`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"prod",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-prod")
+	assert.Contains(t, y, "b: b-prod")
+	assert.Contains(t, y, "c: c-prod")
+	assert.Contains(t, y, "d: d")
+
+	// `sandbox`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"sandbox",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-team2")
+	assert.Contains(t, y, "b: b-team2")
+	assert.Contains(t, y, "c: c-team1")
+	assert.Contains(t, y, "d: d")
+
+	// `test`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"test",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-test-2")
+	assert.Contains(t, y, "b: b-test")
+	assert.Contains(t, y, "c: c-team1")
+	assert.Contains(t, y, "d: d")
+
+	// `test2`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"test2",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a")
+	assert.Contains(t, y, "b: b")
+	assert.Contains(t, y, "c: c")
+	assert.Contains(t, y, "d: d")
+
+	// `test3`
+	res, err = ExecuteDescribeComponent(
+		component,
+		"test3",
+		true,
+		true,
+		nil,
+	)
+	assert.NoError(t, err)
+
+	y, err = u.ConvertToYAML(res)
+	assert.Nil(t, err)
+	assert.Contains(t, y, "a: a-overridden")
+	assert.Contains(t, y, "b: b-overridden")
+	assert.Contains(t, y, "c: c")
+	assert.Contains(t, y, "d: d")
 }

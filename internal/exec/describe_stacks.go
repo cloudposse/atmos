@@ -13,12 +13,14 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeStacksCmd executes `describe stacks` command
+// ExecuteDescribeStacksCmd executes `describe stacks` command.
 func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
+
+	info.CliArgs = []string{"describe", "stacks"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -144,7 +146,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
+// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
 func ExecuteDescribeStacks(
 	atmosConfig schema.AtmosConfiguration,
 	filterByStack string,
@@ -181,7 +183,7 @@ func ExecuteDescribeStacks(
 		// Delete the stack-wide imports
 		delete(stackSection.(map[string]any), "imports")
 
-		// Check if components section exists and has explicit components
+		// Check if the `components` section exists and has explicit components
 		hasExplicitComponents := false
 		if componentsSection, ok := stackSection.(map[string]any)["components"]; ok {
 			if componentsSection != nil {

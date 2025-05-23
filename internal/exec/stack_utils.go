@@ -184,9 +184,14 @@ func BuildComponentPath(
 	return componentPath
 }
 
-// GetStackNamePattern returns stack name pattern
+// GetStackNamePattern returns the stack name pattern.
 func GetStackNamePattern(atmosConfig schema.AtmosConfiguration) string {
 	return atmosConfig.Stacks.NamePattern
+}
+
+// GetStackNameTemplate returns the stack name template.
+func GetStackNameTemplate(atmosConfig *schema.AtmosConfiguration) string {
+	return atmosConfig.Stacks.NameTemplate
 }
 
 // IsComponentAbstract returns 'true' if the component is abstract
