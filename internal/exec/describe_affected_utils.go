@@ -1050,8 +1050,10 @@ func appendToAffected(
 	stacks map[string]any,
 	includeSettings bool,
 ) ([]schema.Affected, error) {
-	// If the affected component in the stack was already added to the result, don't add it again, just update the `affected_all` section
-	for _, v := range affectedList {
+	// If the affected component in the stack was already added to the result, don't add it again, just update the `affected_all` section.
+	// To update the actual elements in the slice, iterate by index.
+	for i := range affectedList {
+		v := &affectedList[i]
 		if v.Component == affected.Component && v.Stack == affected.Stack && v.ComponentType == affected.ComponentType {
 			v.AffectedAll = append(v.AffectedAll, affected.Affected)
 			return affectedList, nil
@@ -1117,7 +1119,7 @@ func appendToAffected(
 		}
 	}
 
-	// Check `component` section and add `ComponentPath` to the output
+	// Check the `component` section and add `ComponentPath` to the output.
 	affected.ComponentPath = BuildComponentPath(atmosConfig, componentSection, affected.ComponentType)
 	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.Replace(componentName, "/", "-", -1))
 
