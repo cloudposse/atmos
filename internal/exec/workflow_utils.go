@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	log "github.com/charmbracelet/log"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -33,15 +34,10 @@ func ExecuteWorkflow(
 		return fmt.Errorf("workflow '%s' does not have any steps defined", workflow)
 	}
 
-	logFunc := u.LogDebug
-	if dryRun {
-		logFunc = u.LogInfo
-	}
-
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
-	log.Debug("Executing the workflow", "workflow", workflow, "file", workflowPath)
+	log.Info("Executing the workflow", "workflow", workflow, "file", workflowPath)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
@@ -65,7 +61,7 @@ func ExecuteWorkflow(
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
 
-		logFunc(fmt.Sprintf("Executing workflow step: %s", command))
+		log.Debug("Executing workflow step", "step", stepIdx, "command", command)
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -98,7 +94,7 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				logFunc(fmt.Sprintf("Stack: %s", finalStack))
+				log.Debug("Stack", "stack", finalStack)
 			}
 
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
@@ -107,13 +103,22 @@ func ExecuteWorkflow(
 		}
 
 		if err != nil {
+			log.Debug("Workflow failed",
+				"workflow", workflow,
+				"path", workflowPath,
+				"step", step.Name,
+				"command", command,
+				"error", err,
+			)
+
+			failedMsg := fmt.Sprintf("\nStep '%s' failed:\n", step.Name)
+			failedCmd := command
+			if commandType == "atmos" {
+				failedCmd = fmt.Sprintf("atmos %s", command)
+			}
+
 			workflowFileName := filepath.Base(workflowPath)
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
-
-			failedMsg := fmt.Sprintf("\nStep '%s' failed!", step.Name)
-
-			u.LogDebug(fmt.Sprintf("\nCommand failed: %s", command))
-			u.LogDebug(fmt.Sprintf("Error: %v", err))
 
 			resumeMsg := fmt.Sprintf(
 				"\nTo resume the workflow from this step, run:\natmos workflow %s -f %s --from-step %s",
@@ -122,7 +127,7 @@ func ExecuteWorkflow(
 				step.Name,
 			)
 
-			return fmt.Errorf("%s\n%s", failedMsg, resumeMsg)
+			return fmt.Errorf("%s\n%s\n%s", failedMsg, failedCmd, resumeMsg)
 		}
 	}
 
