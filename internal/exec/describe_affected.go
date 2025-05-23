@@ -16,7 +16,7 @@ import (
 )
 
 type DescribeAffectedCmdArgs struct {
-	CLIConfig                   schema.AtmosConfiguration
+	CLIConfig                   *schema.AtmosConfiguration
 	CloneTargetRef              bool
 	Format                      string
 	IncludeDependents           bool
@@ -178,7 +178,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 
 	result := DescribeAffectedCmdArgs{
-		CLIConfig:                   atmosConfig,
+		CLIConfig:                   &atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
 		Format:                      format,
 		IncludeDependents:           includeDependents,
