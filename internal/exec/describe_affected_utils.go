@@ -1050,9 +1050,10 @@ func appendToAffected(
 	stacks map[string]any,
 	includeSettings bool,
 ) ([]schema.Affected, error) {
-	// If the affected component in the stack was already added to the result, don't add it again
+	// If the affected component in the stack was already added to the result, don't add it again, just update the `affected_all` section
 	for _, v := range affectedList {
 		if v.Component == affected.Component && v.Stack == affected.Stack && v.ComponentType == affected.ComponentType {
+			v.AffectedAll = append(v.AffectedAll, affected.Affected)
 			return affectedList, nil
 		}
 	}
