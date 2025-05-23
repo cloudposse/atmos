@@ -398,6 +398,46 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	}
 }
 
+func TestExecuteTerraform_OpaValidation(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the working directory
+	workDir := "../../tests/fixtures/scenarios/atmos-stacks-validation"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// Test `terraform plan`
+	info := schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            "nonprod",
+		StackFile:        "",
+		ComponentType:    "terraform",
+		ComponentFromArg: "component-1",
+		SubCommand:       "plan",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+	err = ExecuteTerraform(info)
+	assert.NoError(t, err)
+
+	// Test `terraform apply`
+	info.SubCommand = "apply"
+	err = ExecuteTerraform(info)
+	assert.ErrorContains(t, err, "the component can't be applied if the 'foo' variable is set to 'foo'")
+}
+
 // Helper Function to extract key-value pairs from a string.
 func extractKeyValuePairs(input string) map[string]string {
 	// Split the input into lines

@@ -636,7 +636,16 @@ func ProcessStacks(
 
 	// Add command-line arguments and vars to the component section
 	// It will allow using them when validating with OPA policies or JSON Schema
-	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = configAndStacksInfo.AdditionalArgsAndFlags
+	args := append(configAndStacksInfo.CliArgs, configAndStacksInfo.AdditionalArgsAndFlags...)
+
+	var filteredArgs []string
+	for _, item := range args {
+		if item != "" {
+			filteredArgs = append(filteredArgs, item)
+		}
+	}
+
+	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = filteredArgs
 
 	cliVars, err := getCliVars(configAndStacksInfo.AdditionalArgsAndFlags)
 	if err != nil {
