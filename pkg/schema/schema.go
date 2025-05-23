@@ -479,6 +479,7 @@ type ConfigAndStacksInfo struct {
 	ProcessTemplates              bool
 	ProcessFunctions              bool
 	Skip                          []string
+	CliArgs                       []string
 }
 
 // Workflows
