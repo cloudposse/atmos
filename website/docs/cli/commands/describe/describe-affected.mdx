@@ -237,6 +237,7 @@ Each object has the following schema:
   "spacelift_stack": ".....",
   "atlantis_project": ".....",
   "affected": ".....",
+  "affected_all": [],
   "file": ".....",
   "folder": ".....",
   "dependents": [],
@@ -481,8 +482,11 @@ where:
 
 :::note
 
-Abstract Atmos components (where `metadata.type` is set to `abstract`) are not included in the output since they serve
-as blueprints for other Atmos components and are not meant to be provisioned.
+[Abstract Atmos components](/design-patterns/abstract-component) (`metadata.type` is set to `abstract`)
+are not included in the output since they serve as blueprints for other Atmos components and are not meant to be provisioned.
+
+[Disabled Atmos components](/core-concepts/stacks/define-components/#disabling-components-with-metadataenabled) (`metadata.enabled` is set to `false`)
+are also not included in the output since they are explicitly disabled.
 
 :::
 
