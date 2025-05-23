@@ -81,8 +81,8 @@ func init() {
 	describeCmd.AddCommand(describeComponentCmd)
 }
 
+// We prefer to panic because this is a developer error.
 // checkFlagNotPresentError checks if the error is nil.
-// we prefer to panic because this is a developer error.
 func checkFlagNotPresentError(err error) {
 	if err != nil {
 		panic(err)

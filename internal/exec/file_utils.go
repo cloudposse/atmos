@@ -44,7 +44,7 @@ func printOrWriteToFile(
 	case "yaml":
 
 		if file == "" {
-			err := u.PrintAsYAMLWithConfig(atmosConfig, data)
+			err := u.PrintAsYAML(atmosConfig, data)
 			if err != nil {
 				return err
 			}
