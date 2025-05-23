@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
@@ -23,13 +24,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	localRepoIsNotGitRepoError  = errors.New("the local repo is not a Git repository. Check that it was initialized and has '.git' folder")
-	remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
-)
+var remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 
 // ExecuteDescribeAffectedWithTargetRefClone clones the remote reference,
-// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
+// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
 func ExecuteDescribeAffectedWithTargetRefClone(
 	atmosConfig schema.AtmosConfiguration,
 	ref string,
@@ -45,7 +43,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	if verbose {
-		atmosConfig.Logs.Level = u.LogLevelTrace
+		atmosConfig.Logs.Level = u.LogLevelDebug
 	}
 
 	localRepo, err := g.GetLocalRepo()
@@ -75,7 +73,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 	defer removeTempDir(atmosConfig, tempDir)
 
-	u.LogTrace(fmt.Sprintf("\nCloning repo '%s' into the temp dir '%s'", localRepoInfo.RepoUrl, tempDir))
+	log.Debug("Cloning repo into temp directory", "repo", localRepoInfo.RepoUrl, "dir", tempDir)
 
 	cloneOptions := git.CloneOptions{
 		URL:          localRepoInfo.RepoUrl,
@@ -86,9 +84,9 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// If `ref` flag is not provided, it will clone the HEAD of the default branch
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		u.LogTrace(fmt.Sprintf("\nCloning Git ref '%s' ...\n", ref))
+		log.Debug("Cloning Git", "ref", ref)
 	} else {
-		u.LogTrace("\nCloned the HEAD of the default branch ...\n")
+		log.Debug("Cloned the HEAD of the default branch")
 	}
 
 	if verbose {
@@ -128,14 +126,14 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	}
 
 	if ref != "" {
-		u.LogTrace(fmt.Sprintf("\nCloned Git ref '%s'\n", ref))
+		log.Debug("Cloned Git", "ref", ref)
 	} else {
-		u.LogTrace(fmt.Sprintf("\nCloned Git ref '%s'\n", remoteRepoHead.Name()))
+		log.Debug("Cloned Git", "ref", remoteRepoHead.Name())
 	}
 
 	// Check if a commit SHA was provided and checkout the repo at that commit SHA
 	if sha != "" {
-		u.LogTrace(fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+		log.Debug("Checking out commit", "SHA", sha)
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -154,7 +152,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(fmt.Sprintf("\nChecked out commit SHA '%s'\n", sha))
+		log.Debug("Checked out commit", "SHA", sha)
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
@@ -179,7 +177,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 }
 
 // ExecuteDescribeAffectedWithTargetRefCheckout checks out the target reference,
-// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits
+// processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
 func ExecuteDescribeAffectedWithTargetRefCheckout(
 	atmosConfig schema.AtmosConfiguration,
 	ref string,
@@ -193,7 +191,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	if verbose {
-		atmosConfig.Logs.Level = u.LogLevelTrace
+		atmosConfig.Logs.Level = u.LogLevelDebug
 	}
 
 	localRepo, err := g.GetLocalRepo()
@@ -215,7 +213,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	defer removeTempDir(atmosConfig, tempDir)
 
 	// Copy the local repo into the temp directory
-	u.LogTrace(fmt.Sprintf("\nCopying the local repo into the temp directory '%s' ...", tempDir))
+	log.Debug("Copying the local repo into temp directory", "dir", tempDir)
 
 	copyOptions := cp.Options{
 		PreserveTimes: false,
@@ -243,7 +241,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	u.LogTrace(fmt.Sprintf("Copied the local repo into the temp directory '%s'\n", tempDir))
+	log.Debug("Copied the local repo into temp directory", "dir", tempDir)
 
 	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
 		DetectDotGit:          false,
@@ -260,7 +258,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	}
 
 	if sha != "" {
-		u.LogTrace(fmt.Sprintf("\nChecking out commit SHA '%s' ...\n", sha))
+		log.Debug("Checking out commit", "SHA", sha)
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -279,14 +277,14 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(fmt.Sprintf("Checked out commit SHA '%s'\n", sha))
+		log.Debug("Checked out commit", "SHA", sha)
 	} else {
 		// If `ref` is not provided, use the HEAD of the remote origin
 		if ref == "" {
 			ref = "refs/remotes/origin/HEAD"
 		}
 
-		u.LogTrace(fmt.Sprintf("\nChecking out Git ref '%s' ...", ref))
+		log.Debug("Checking out Git", "ref", ref)
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -311,7 +309,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		u.LogTrace(fmt.Sprintf("Checked out Git ref '%s'\n", ref))
+		log.Debug("Checked out Git", "ref", ref)
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
@@ -336,7 +334,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 }
 
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs
-// and returns a list of the affected Atmos components and stacks given two Git commits
+// and returns a list of the affected Atmos components and stacks given two Git commits.
 func ExecuteDescribeAffectedWithTargetRepoPath(
 	atmosConfig schema.AtmosConfiguration,
 	targetRefPath string,
@@ -408,7 +406,7 @@ func executeDescribeAffected(
 	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	if verbose {
-		atmosConfig.Logs.Level = u.LogLevelTrace
+		atmosConfig.Logs.Level = u.LogLevelDebug
 	}
 
 	localRepoHead, err := localRepo.Head()
@@ -421,8 +419,8 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Current HEAD: %s", localRepoHead))
-	u.LogTrace(fmt.Sprintf("BASE: %s", remoteRepoHead))
+	log.Debug("Current", "HEAD", localRepoHead)
+	log.Debug("Current", "BASE", remoteRepoHead)
 
 	currentStacks, err := ExecuteDescribeStacks(
 		atmosConfig,
@@ -487,39 +485,39 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("\nGetting current working repo commit object..."))
+	log.Debug("Getting current working repo commit object")
 
 	localCommit, err := localRepo.CommitObject(localRepoHead.Hash())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Got current working repo commit object"))
-	u.LogTrace(fmt.Sprintf("Getting current working repo commit tree..."))
+	log.Debug("Got current working repo commit object")
+	log.Debug("Getting current working repo commit tree")
 
 	localTree, err := localCommit.Tree()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Got current working repo commit tree"))
-	u.LogTrace(fmt.Sprintf("Getting remote repo commit object..."))
+	log.Debug("Got current working repo commit tree")
+	log.Debug("Getting remote repo commit object")
 
 	remoteCommit, err := remoteRepo.CommitObject(remoteRepoHead.Hash())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Got remote repo commit object"))
-	u.LogTrace(fmt.Sprintf("Getting remote repo commit tree..."))
+	log.Debug("Got remote repo commit object")
+	log.Debug("Getting remote repo commit tree")
 
 	remoteTree, err := remoteCommit.Tree()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	u.LogTrace(fmt.Sprintf("Got remote repo commit tree"))
-	u.LogTrace(fmt.Sprintf("Finding difference between the current working branch and remote target branch ..."))
+	log.Debug("Got remote repo commit tree")
+	log.Debug("Finding difference between the current working branch and remote target branch")
 
 	// Find a slice of Patch objects with all the changes between the current working and remote trees
 	patch, err := localTree.Patch(remoteTree)
@@ -530,16 +528,14 @@ func executeDescribeAffected(
 	var changedFiles []string
 
 	if len(patch.Stats()) > 0 {
-		u.LogTrace(fmt.Sprintf("Found difference between the current working branch and remote target branch"))
-		u.LogTrace("\nChanged files:\n")
+		log.Debug("Found difference between the current working branch and remote target branch")
+		log.Debug("Changed", "files", patch.Stats())
 
 		for _, fileStat := range patch.Stats() {
-			u.LogTrace(fileStat.Name)
 			changedFiles = append(changedFiles, fileStat.Name)
 		}
-		u.LogTrace("")
 	} else {
-		u.LogTrace(fmt.Sprintf("The current working branch and remote target branch are the same"))
+		log.Debug("The current working branch and remote target branch are the same")
 	}
 
 	affected, err := findAffected(
@@ -1042,7 +1038,7 @@ func findAffected(
 	return res, nil
 }
 
-// appendToAffected adds an item to the affected list, and adds the Spacelift stack and Atlantis project (if configured)
+// appendToAffected adds an item to the affected list, and adds the Spacelift stack and Atlantis project (if configured).
 func appendToAffected(
 	atmosConfig schema.AtmosConfiguration,
 	componentName string,
@@ -1127,7 +1123,7 @@ func appendToAffected(
 	return append(affectedList, affected), nil
 }
 
-// isEqual compares a section of a component from the remote stacks with a section of a local component
+// isEqual compares a section of a component from the remote stacks with a section of a local component.
 func isEqual(
 	remoteStacks map[string]any,
 	localStackName string,
@@ -1152,7 +1148,7 @@ func isEqual(
 	return false
 }
 
-// isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed
+// isComponentDependentFolderOrFileChanged checks if a folder or file that the component depends on has changed.
 func isComponentDependentFolderOrFileChanged(
 	changedFiles []string,
 	deps schema.DependsOn,
@@ -1210,7 +1206,7 @@ func isComponentDependentFolderOrFileChanged(
 	return isChanged, changedType, changedFileOrFolder, nil
 }
 
-// isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its sub-folders)
+// isComponentFolderChanged checks if the component folder changed (has changed files in the folder or its subfolders).
 func isComponentFolderChanged(
 	component string,
 	componentType string,
@@ -1252,7 +1248,7 @@ func isComponentFolderChanged(
 	return false, nil
 }
 
-// areTerraformComponentModulesChanged checks if any of the external Terraform modules (but on the local filesystem) that the component uses have changed
+// areTerraformComponentModulesChanged checks if any of the external Terraform modules (but on the local filesystem) that the component uses have changed.
 func areTerraformComponentModulesChanged(
 	component string,
 	atmosConfig schema.AtmosConfiguration,
@@ -1302,7 +1298,7 @@ func areTerraformComponentModulesChanged(
 	return false, nil
 }
 
-// addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack
+// addAffectedSpaceliftAdminStack adds the affected Spacelift admin stack that manages the affected child stack.
 func addAffectedSpaceliftAdminStack(
 	atmosConfig schema.AtmosConfiguration,
 	affectedList []schema.Affected,
@@ -1450,7 +1446,7 @@ func addAffectedSpaceliftAdminStack(
 	return affectedList, nil
 }
 
-// addDependentsToAffected adds dependent components and stacks to each affected component
+// addDependentsToAffected adds dependent components and stacks to each affected component.
 func addDependentsToAffected(
 	atmosConfig schema.AtmosConfiguration,
 	affected *[]schema.Affected,
@@ -1479,7 +1475,7 @@ func addDependentsToAffected(
 	return nil
 }
 
-// addDependentsToDependents recursively adds dependent components and stacks to each dependent component
+// addDependentsToDependents recursively adds dependent components and stacks to each dependent component.
 func addDependentsToDependents(
 	atmosConfig schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
@@ -1551,11 +1547,11 @@ func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, 
 	return false
 }
 
-// isComponentEnabled checks if a component is enabled based on its metadata
+// isComponentEnabled checks if a component is enabled based on its metadata.
 func isComponentEnabled(metadataSection map[string]any, componentName string, atmosConfig schema.AtmosConfiguration) bool {
 	if enabled, ok := metadataSection["enabled"].(bool); ok {
 		if !enabled {
-			u.LogTrace(fmt.Sprintf("Skipping disabled component %s", componentName))
+			log.Debug("Skipping disabled", "component", componentName)
 			return false
 		}
 	}
