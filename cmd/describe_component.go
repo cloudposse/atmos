@@ -9,8 +9,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var errInvalidFlag = errors.New("invalid arguments. The command requires one argument `component`")
-
 // describeComponentCmd describes configuration for components
 var describeComponentCmd = &cobra.Command{
 	Use:                "component",
@@ -21,6 +19,10 @@ var describeComponentCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
+		if len(args) != 1 {
+			return errors.New("invalid arguments. The command requires one argument `component`")
+		}
 
 		flags := cmd.Flags()
 

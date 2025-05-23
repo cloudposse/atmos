@@ -15,6 +15,8 @@ import (
 
 var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
+type describeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec
+
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
@@ -22,18 +24,28 @@ var describeAffectedCmd = &cobra.Command{
 	Long:               "Identify and list Atmos components and stacks impacted by changes between two Git commits.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run:                getRunnableDescribeAffectedCmd(checkAtmosConfig, parseDescribeAffectedCliArgs, exec.NewDescribeAffectedExec),
+}
+
+func getRunnableDescribeAffectedCmd(
+	checkAtmosConfig func(opts ...AtmosValidateOption),
+	parseDescribeAffectedCliArgs func(cmd *cobra.Command, args []string) (exec.DescribeAffectedCmdArgs, error),
+	newDescribeAffectedExec describeAffectedExecCreator,
+) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		checkAtmosConfig()
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
-		err = exec.NewDescribeAffectedExec(&props.CLIConfig).Execute(props)
-		if err != nil {
-			u.PrintErrorMarkdownAndExit("", err, "")
-		}
-	},
+		checkErrorAndExit(err)
+		err = newDescribeAffectedExec(&props.CLIConfig).Execute(&props)
+		checkErrorAndExit(err)
+	}
+}
+
+func checkErrorAndExit(err error) {
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
 }
 
 func init() {
@@ -70,8 +82,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 		return exec.DescribeAffectedCmdArgs{}, err
 	}
 
-	err := exec.ValidateStacks(atmosConfig)
-	if err != nil {
+	if err := exec.ValidateStacks(atmosConfig); err != nil {
 		return exec.DescribeAffectedCmdArgs{}, err
 	}
 
@@ -125,6 +136,8 @@ func setDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.
 			*v, err = flags.GetString(k)
 		case *bool:
 			*v, err = flags.GetBool(k)
+		case *[]string:
+			*v, err = flags.GetStringSlice(k)
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}

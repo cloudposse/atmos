@@ -71,10 +71,12 @@ func HighlightCode(code string, lexerName string, theme string) (string, error) 
 	return buf.String(), nil
 }
 
+var isTermPresent = term.IsTerminal(int(os.Stdout.Fd()))
+
 // HighlightCodeWithConfig highlights the given code using the provided configuration.
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	// Skip highlighting if not in a terminal or disabled
-	if !term.IsTerminal(int(os.Stdout.Fd())) || !GetHighlightSettings(config).Enabled {
+	if !isTermPresent || !GetHighlightSettings(config).Enabled {
 		return code, nil
 	}
 

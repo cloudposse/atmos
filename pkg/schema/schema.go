@@ -9,6 +9,16 @@ import (
 
 type AtmosSectionMapType = map[string]any
 
+// DescribeSettings contains settings for the describe command output
+type DescribeSettings struct {
+	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
+}
+
+// Describe contains configuration for the describe command.
+type Describe struct {
+	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+}
+
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string                 `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
@@ -22,6 +32,7 @@ type AtmosConfiguration struct {
 	Schemas                       map[string]interface{} `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates              `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Settings                      AtmosSettings          `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Describe                      Describe               `yaml:"describe,omitempty" json:"describe,omitempty" mapstructure:"describe"`
 	StoresConfig                  store.StoresConfig     `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor                 `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool                   `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
@@ -174,7 +185,6 @@ type EditorConfig struct {
 	IgnoreDefaults  bool     `yaml:"ignore_defaults,omitempty" json:"ignore_defaults,omitempty" mapstructure:"ignore_defaults"`
 	DryRun          bool     `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`
 	Format          string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
-	Color           bool     `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"`
 	ConfigFilePaths []string `yaml:"config_file_paths,omitempty" json:"config_file_paths,omitempty" mapstructure:"config_file_paths"`
 	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`
 	Init            bool     `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
@@ -190,9 +200,10 @@ type EditorConfig struct {
 type Terminal struct {
 	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
 	Pager              string             `yaml:"pager" json:"pager" mapstructure:"pager"`
-	Colors             bool               `yaml:"colors" json:"colors" mapstructure:"colors"`
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
+	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"`
+	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 }
 
 func (t *Terminal) IsPagerEnabled() bool {
@@ -468,6 +479,7 @@ type ConfigAndStacksInfo struct {
 	ProcessTemplates              bool
 	ProcessFunctions              bool
 	Skip                          []string
+	CliArgs                       []string
 }
 
 // Workflows
@@ -797,10 +809,20 @@ type AtmosVendorConfig struct {
 	Spec       AtmosVendorSpec `yaml:"spec" json:"spec" mapstructure:"spec"`
 }
 
+// ComponentManifest defines the structure of the component manifest file (component.yaml).
+type ComponentManifest struct {
+	APIVersion string         `yaml:"apiVersion,omitempty" json:"apiVersion,omitempty" mapstructure:"apiVersion,omitempty"`
+	Kind       string         `yaml:"kind,omitempty" json:"kind,omitempty" mapstructure:"kind,omitempty"`
+	Metadata   map[string]any `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+	Spec       map[string]any `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec,omitempty"`
+	Vars       map[string]any `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars,omitempty"`
+}
+
 type Vendor struct {
 	// Path to vendor configuration file or directory containing vendor files
 	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
-	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	List     ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 type MarkdownSettings struct {

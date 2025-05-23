@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -33,14 +34,16 @@ type GSMStore struct {
 	projectID      string
 	prefix         string
 	stackDelimiter *string
+	replication    *secretmanagerpb.Replication
 }
 
 // GSMStoreOptions defines the configuration options for Google Secret Manager store.
 type GSMStoreOptions struct {
-	Prefix         *string `mapstructure:"prefix"`
-	ProjectID      string  `mapstructure:"project_id"`
-	StackDelimiter *string `mapstructure:"stack_delimiter"`
-	Credentials    *string `mapstructure:"credentials"` // Optional JSON credentials
+	Prefix         *string   `mapstructure:"prefix"`
+	ProjectID      string    `mapstructure:"project_id"`
+	StackDelimiter *string   `mapstructure:"stack_delimiter"`
+	Credentials    *string   `mapstructure:"credentials"` // Optional JSON credentials
+	Locations      *[]string `mapstructure:"locations"`   // Optional replication locations
 }
 
 // Verify that GSMStore implements the Store interface.
@@ -84,7 +87,34 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 		store.stackDelimiter = &defaultDelimiter
 	}
 
+	store.replication = createReplicationFromLocations(options.Locations)
+
 	return store, nil
+}
+
+func createReplicationFromLocations(locations *[]string) *secretmanagerpb.Replication {
+	if locations == nil || len(*locations) == 0 {
+		return &secretmanagerpb.Replication{
+			Replication: &secretmanagerpb.Replication_Automatic_{
+				Automatic: &secretmanagerpb.Replication_Automatic{},
+			},
+		}
+	} else {
+		replicas := make([]*secretmanagerpb.Replication_UserManaged_Replica, len(*locations))
+		for i, location := range *locations {
+			replicas[i] = &secretmanagerpb.Replication_UserManaged_Replica{
+				Location: location,
+			}
+		}
+
+		return &secretmanagerpb.Replication{
+			Replication: &secretmanagerpb.Replication_UserManaged_{
+				UserManaged: &secretmanagerpb.Replication_UserManaged{
+					Replicas: replicas,
+				},
+			},
+		}
+	}
 }
 
 // getKey generates a key for the Google Secret Manager.
@@ -114,11 +144,7 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 		Parent:   parent,
 		SecretId: secretID,
 		Secret: &secretmanagerpb.Secret{
-			Replication: &secretmanagerpb.Replication{
-				Replication: &secretmanagerpb.Replication_Automatic_{
-					Automatic: &secretmanagerpb.Replication_Automatic{},
-				},
-			},
+			Replication: s.replication,
 		},
 	}
 
@@ -179,10 +205,12 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
 	defer cancel()
 
-	strValue, ok := value.(string)
-	if !ok {
-		return ErrValueMustBeString
+	// Convert value to JSON string
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrSerializeJSON, err)
 	}
+	strValue := string(jsonValue)
 
 	// Get the secret ID using getKey
 	secretID, err := s.getKey(stack, component, key)
@@ -243,5 +271,11 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
 	}
 
-	return string(result.Payload.Data), nil
+	var unmarshalled interface{}
+	// Intentionally ignoring JSON unmarshal error to handle legacy or 3rd-party secrets that might not be JSON-encoded
+	if err := json.Unmarshal(result.Payload.Data, &unmarshalled); err != nil {
+		// If it's not valid JSON, return the raw string value
+		return string(result.Payload.Data), nil
+	}
+	return unmarshalled, nil
 }

@@ -11,7 +11,7 @@ import (
 )
 
 func TestDescribeAffected(t *testing.T) {
-	d := NewDescribeAffectedExec(&schema.AtmosConfiguration{})
+	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{}}
 	d.IsTTYSupportForStdout = func() bool {
 		return false
 	}
@@ -24,13 +24,20 @@ func TestDescribeAffected(t *testing.T) {
 	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig schema.AtmosConfiguration, ref, sha string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
+	d.atmosConfig = &schema.AtmosConfiguration{}
+	d.addDependentsToAffected = func(atmosConfig schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool) error {
+		return nil
+	}
+	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+		return nil
+	}
 
-	err := d.Execute(DescribeAffectedCmdArgs{
+	err := d.Execute(&DescribeAffectedCmdArgs{
 		Format:   "json",
 		RepoPath: "",
 	})
 	assert.NoError(t, err)
-	err = d.Execute(DescribeAffectedCmdArgs{
+	err = d.Execute(&DescribeAffectedCmdArgs{
 		Format:         "yaml",
 		CloneTargetRef: true,
 	})
@@ -43,12 +50,12 @@ func TestDescribeAffected(t *testing.T) {
 	mockPager := pager.NewMockPageCreator(ctrl)
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
 	d.pageCreator = mockPager
-	err = d.Execute(DescribeAffectedCmdArgs{
+	err = d.Execute(&DescribeAffectedCmdArgs{
 		Format: "json",
 	})
 	assert.NoError(t, err)
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
-	err = d.Execute(DescribeAffectedCmdArgs{
+	err = d.Execute(&DescribeAffectedCmdArgs{
 		Format: "yaml",
 	})
 	assert.NoError(t, err)
