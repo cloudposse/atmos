@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -27,7 +28,7 @@ var describeStacksCmd = &cobra.Command{
 		err = exec.ValidateStacks(atmosConfig)
 		printErrorAndExit(err)
 		describe := &exec.DescribeStacksArgs{}
-		err = setCliArgsForDescribeStackCli(cmd, describe)
+		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
 		printErrorAndExit(err)
 		err = exec.NewDescribeStacksExec().Execute(atmosConfig, describe)
 		printErrorAndExit(err)
@@ -40,8 +41,7 @@ func printErrorAndExit(err error) {
 	}
 }
 
-func setCliArgsForDescribeStackCli(cmd *cobra.Command, describe *exec.DescribeStacksArgs) error {
-	flags := cmd.Flags()
+func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
 	flagsKeyValue := map[string]any{
 		"stack":                &describe.FilterByStack,
 		"format":               &describe.Format,
