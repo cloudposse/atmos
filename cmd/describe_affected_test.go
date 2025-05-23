@@ -125,7 +125,7 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				}()
 			}
 
-			setFlagValueInCliArgs(fs, tt.describe)
+			setDescribeAffectedFlagValueInCliArgs(fs, tt.describe)
 
 			// Assert the describe struct matches the expected values
 			assert.Equal(t, tt.expected, tt.describe, "Describe struct does not match expected")

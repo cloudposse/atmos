@@ -27,5 +27,4 @@ func TestDescribeStacksExec(t *testing.T) {
 	}
 	err := d.Execute(schema.AtmosConfiguration{}, &DescribeStacksArgs{})
 	assert.NoError(t, err)
-
 }
