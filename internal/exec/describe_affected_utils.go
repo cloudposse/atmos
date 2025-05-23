@@ -1037,13 +1037,17 @@ func appendToAffected(
 	stacks *map[string]any,
 	includeSettings bool,
 ) error {
-	fmt.Println(affected.Affected)
-	// Append the affected component to the `affected_all` slice
-	affected.AffectedAll = append(affected.AffectedAll, affected.Affected)
+	if len(*affectedList) == 0 {
+		// Append the affected section to the `affected_all` slice.
+		affected.AffectedAll = append(affected.AffectedAll, affected.Affected)
+	}
 
 	// If the affected component in the stack was already added to the result, don't add it again
-	for _, v := range *affectedList {
+	for i := range *affectedList {
+		v := &(*affectedList)[i]
 		if v.Component == affected.Component && v.Stack == affected.Stack && v.ComponentType == affected.ComponentType {
+			// For the found item in the list, append the affected section to the `affected_all` slice.
+			v.AffectedAll = append(v.AffectedAll, affected.Affected)
 			return nil
 		}
 	}
