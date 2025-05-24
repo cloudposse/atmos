@@ -370,10 +370,15 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		return nil, nil, nil, "", errors.Join(err, remoteRepoIsNotGitRepoError)
 	}
 
+	remoteRepoInfo, err := g.GetRepoInfo(remoteRepo)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
 		atmosConfig,
 		localRepoInfo.LocalWorktreePath,
-		targetRefPath,
+		remoteRepoInfo.LocalWorktreePath,
 		localRepo,
 		remoteRepo,
 		verbose,
