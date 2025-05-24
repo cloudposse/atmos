@@ -117,5 +117,7 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		nil,
 	)
 	assert.Nil(t, err)
+
+	// The `affected` list should be empty, since the local repo is compared with itself.
 	assert.Equal(t, 0, len(affected))
 }
