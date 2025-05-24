@@ -96,11 +96,16 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
+	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",
+	// which will be wrong for the remote repo which is cloned into a temp dir.
+	// Set the correct base path for the cloned remote repo
+	atmosConfig.BasePath = "./tests/fixtures/scenarios/atmos-describe-affected"
+
 	// Point to the same local repository
 	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
 	repoPath := "../../"
 
-	_, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
 		false,
@@ -112,4 +117,5 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		nil,
 	)
 	assert.Nil(t, err)
+	assert.Equal(t, 0, len(affected))
 }

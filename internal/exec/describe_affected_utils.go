@@ -597,7 +597,7 @@ func findAffected(
 									continue
 								}
 								// Check `metadata` section
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, &metadataSection, "metadata") {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
@@ -683,7 +683,7 @@ func findAffected(
 							}
 							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, &varSection, "vars") {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, varSection, "vars") {
 									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
@@ -708,7 +708,7 @@ func findAffected(
 							}
 							// Check `env` section
 							if envSection, ok := componentSection["env"].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, &envSection, "env") {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, envSection, "env") {
 									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
@@ -733,7 +733,7 @@ func findAffected(
 							}
 							// Check `settings` section
 							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "terraform", componentName, &settingsSection, cfg.SettingsSectionName) {
+								if !isEqual(remoteStacks, stackName, "terraform", componentName, settingsSection, cfg.SettingsSectionName) {
 									affected := schema.Affected{
 										ComponentType: "terraform",
 										Component:     componentName,
@@ -833,7 +833,7 @@ func findAffected(
 									continue
 								}
 								// Check `metadata` section
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, &metadataSection, "metadata") {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, metadataSection, "metadata") {
 									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
@@ -890,7 +890,7 @@ func findAffected(
 							}
 							// Check `vars` section
 							if varSection, ok := componentSection["vars"].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, &varSection, "vars") {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, varSection, "vars") {
 									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
@@ -915,7 +915,7 @@ func findAffected(
 							}
 							// Check `env` section
 							if envSection, ok := componentSection["env"].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, &envSection, "env") {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, envSection, "env") {
 									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
@@ -940,7 +940,7 @@ func findAffected(
 							}
 							// Check `settings` section
 							if settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any); ok {
-								if !isEqual(remoteStacks, stackName, "helmfile", componentName, &settingsSection, cfg.SettingsSectionName) {
+								if !isEqual(remoteStacks, stackName, "helmfile", componentName, settingsSection, cfg.SettingsSectionName) {
 									affected := schema.Affected{
 										ComponentType: "helmfile",
 										Component:     componentName,
@@ -1128,7 +1128,7 @@ func isEqual(
 	localStackName string,
 	componentType string,
 	localComponentName string,
-	localSection *map[string]any,
+	localSection map[string]any,
 	sectionName string,
 ) bool {
 	if remoteStackSection, ok := (*remoteStacks)[localStackName].(map[string]any); ok {
