@@ -4,3 +4,12 @@ import:
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-east-2
   - catalog/c1
+
+components:
+  terraform:
+    c1:
+      vars:
+        a: a
+        b: b
+        c: c
+        d: d2
