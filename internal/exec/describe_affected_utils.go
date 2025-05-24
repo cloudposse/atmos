@@ -1037,10 +1037,8 @@ func appendToAffected(
 	stacks *map[string]any,
 	includeSettings bool,
 ) error {
-	if len(*affectedList) == 0 {
-		// Append the affected section to the `affected_all` slice.
-		affected.AffectedAll = append(affected.AffectedAll, affected.Affected)
-	}
+	// Append the affected section to the `affected_all` slice.
+	affected.AffectedAll = append(affected.AffectedAll, affected.Affected)
 
 	// If the affected component in the stack was already added to the result, don't add it again
 	for i := range *affectedList {

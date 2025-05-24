@@ -1,6 +1,9 @@
 package exec
 
 import (
+	"fmt"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"os"
 	"testing"
 
@@ -73,4 +76,46 @@ func TestExecuteDescribeAffectedCmd(t *testing.T) {
 	cmd.SetArgs([]string{"--clone-target-ref=true", "--include-settings=true"})
 	err = cmd.Execute()
 	assert.NoError(t, err, "'atmos describe affected' command should execute without error")
+}
+
+func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/atmos-describe-affected"
+
+	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+
+	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
+	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+
+	defer func() {
+		err := os.Unsetenv("ATMOS_BASE_PATH")
+		assert.NoError(t, err)
+		err = os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+		assert.NoError(t, err)
+	}()
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	// Point to the same local repository
+	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
+	repoPath := "../../"
+
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		false,
+		true,
+		"",
+		false,
+		false,
+		nil,
+	)
+	assert.Nil(t, err)
+
+	affectedYaml, err := u.ConvertToYAML(affected)
+	assert.Nil(t, err)
+
+	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
 }
