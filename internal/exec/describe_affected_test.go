@@ -1,15 +1,14 @@
 package exec
 
 import (
-	"fmt"
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -101,7 +100,7 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
 	repoPath := "../../"
 
-	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+	_, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
 		false,
@@ -113,9 +112,4 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		nil,
 	)
 	assert.Nil(t, err)
-
-	affectedYaml, err := u.ConvertToYAML(affected)
-	assert.Nil(t, err)
-
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
 }
