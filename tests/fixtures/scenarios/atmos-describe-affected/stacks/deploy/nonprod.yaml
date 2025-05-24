@@ -8,6 +8,17 @@ components:
     component-1:
       metadata:
         component: mock
+      settings:
+        a: 1
+        b: 2
+      vars:
+        foo: "foo"
+        bar: "bar"
+        baz: "baz"
+
+    component-2:
+      metadata:
+        component: mock
       vars:
         foo: "foo"
         bar: "bar"
