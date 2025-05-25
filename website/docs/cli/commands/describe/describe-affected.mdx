@@ -494,7 +494,26 @@ where:
 
 - `affected_all` - shows all component sections and attributes that were changed
 
-    For example, if you create a new Terraform/Tofu component, configure an Atmos component `component-1` in the
+    For example, if you make changes to the `vars` and `settings` sections of the component `component-1` in the
+    `nonprod` stack, and execute `atmos describe affected`, you will get the following result:
+
+      ```json
+      [
+        {
+          "component": "component-1",
+          "component_type": "terraform",
+          "stack": "nonprod",
+          "stack_slug": "nonprod-component-1",
+          "affected": "stack.vars",
+          "affected_all": [
+             "stack.vars",
+             "stack.settings"
+          ]
+        }
+      ]
+    ```
+
+    If you create a new Terraform/Tofu component, configure a new Atmos component `component-1` in the
     `nonprod` stack, and execute `atmos describe affected`, you will get the following result:
 
     ```json
