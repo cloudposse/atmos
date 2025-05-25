@@ -497,7 +497,7 @@ where:
     For example, if you make changes to the `vars` and `settings` sections of the component `component-1` in the
     `nonprod` stack, and execute `atmos describe affected`, you will get the following result:
 
-      ```json
+    ```json
       [
         {
           "component": "component-1",
@@ -537,15 +537,15 @@ where:
 
     where:
 
-      - `affected` shows that the Atmos component's `metadata` section was changed
+    - `affected` shows that the Atmos component's `metadata` section was changed
         (since the component is new and the `metadata` section is the first section that Atmos processes)
 
-      - `affected_all` shows all the affected sections and attributes:
-        - `component` - the Terraform component (Terraform configuration) was affected (since it was just added)
-        - `stack.metadata` - the Atmos component's `metadata` section was changed
-        - `stack.vars` - the Atmos component's `vars` section was changed
-        - `stack.env` - the Atmos component's `env` section was changed
-        - `stack.settings` - the Atmos component's `settings` section was changed
+    - `affected_all` shows all the affected sections and attributes:
+      - `component` - the Terraform component (Terraform configuration) was affected (since it was just added)
+      - `stack.metadata` - the Atmos component's `metadata` section was changed
+      - `stack.vars` - the Atmos component's `vars` section was changed
+      - `stack.env` - the Atmos component's `env` section was changed
+      - `stack.settings` - the Atmos component's `settings` section was changed
 
 :::note
 
