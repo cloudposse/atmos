@@ -13,15 +13,20 @@ type DescribeWorkflowsArgs struct {
 	Query      string
 }
 
-type DescribeWorkflowsExec struct {
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+type DescribeWorkflowsExec interface {
+	Execute(*schema.AtmosConfiguration, *DescribeWorkflowsArgs) error
+}
+
+type describeWorkflowsExec struct {
 	printOrWriteToFile       func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error
 	IsTTYSupportForStdout    func() bool
 	pagerCreator             pager.PageCreator
 	executeDescribeWorkflows func(atmosConfig schema.AtmosConfiguration) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error)
 }
 
-func NewDescribeWorkflowsExec() *DescribeWorkflowsExec {
-	return &DescribeWorkflowsExec{
+func NewDescribeWorkflowsExec() DescribeWorkflowsExec {
+	return &describeWorkflowsExec{
 		printOrWriteToFile:       printOrWriteToFile,
 		IsTTYSupportForStdout:    term.IsTTYSupportForStdout,
 		executeDescribeWorkflows: ExecuteDescribeWorkflows,
@@ -30,7 +35,7 @@ func NewDescribeWorkflowsExec() *DescribeWorkflowsExec {
 }
 
 // ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command
-func (d *DescribeWorkflowsExec) Execute(atmosConfig *schema.AtmosConfiguration, describeWorkflowsArgs *DescribeWorkflowsArgs) error {
+func (d *describeWorkflowsExec) Execute(atmosConfig *schema.AtmosConfiguration, describeWorkflowsArgs *DescribeWorkflowsArgs) error {
 	outputType := describeWorkflowsArgs.OutputType
 	query := describeWorkflowsArgs.Query
 	format := describeWorkflowsArgs.Format

@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cloudposse/atmos/internal/exec"
-	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
@@ -18,18 +18,28 @@ var describeWorkflowsCmd = &cobra.Command{
 	Long:               "List all Atmos workflows, showing their associated files and workflow names for easy reference.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run:                getRunnableDescribeWorkflowsCmd(checkAtmosConfig, exec.ProcessCommandLineArgs, cfg.InitCliConfig, exec.NewDescribeWorkflowsExec()),
+}
+
+func getRunnableDescribeWorkflowsCmd(
+	checkAtmosConfig func(opts ...AtmosValidateOption),
+	processCommandLineArgs func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error),
+	initCliConfig func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error),
+	describeWorkflowsExec exec.DescribeWorkflowsExec,
+) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		// Check Atmos configuration
 		checkAtmosConfig()
-		info, err := exec.ProcessCommandLineArgs("terraform", cmd, args, nil)
+		info, err := processCommandLineArgs("terraform", cmd, args, nil)
 		checkErrorAndExit(err)
-		atmosConfig, err := cfg.InitCliConfig(info, true)
+		atmosConfig, err := initCliConfig(info, true)
 		checkErrorAndExit(err)
-		describeWorkflowArgs := &e.DescribeWorkflowsArgs{}
+		describeWorkflowArgs := &exec.DescribeWorkflowsArgs{}
 		err = flagsToDescribeWorkflowsArgs(cmd.Flags(), describeWorkflowArgs)
 		checkErrorAndExit(err)
-		err = exec.NewDescribeWorkflowsExec().Execute(&atmosConfig, describeWorkflowArgs)
+		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
 		checkErrorAndExit(err)
-	},
+	}
 }
 
 func init() {
@@ -39,7 +49,7 @@ func init() {
 	describeCmd.AddCommand(describeWorkflowsCmd)
 }
 
-func flagsToDescribeWorkflowsArgs(flags *pflag.FlagSet, describe *e.DescribeWorkflowsArgs) error {
+func flagsToDescribeWorkflowsArgs(flags *pflag.FlagSet, describe *exec.DescribeWorkflowsArgs) error {
 	var err error
 	flagsKeyValue := map[string]any{
 		"format": &describe.Format,
@@ -54,10 +64,6 @@ func flagsToDescribeWorkflowsArgs(flags *pflag.FlagSet, describe *e.DescribeWork
 		switch v := flagsKeyValue[k].(type) {
 		case *string:
 			*v, err = flags.GetString(k)
-		case *bool:
-			*v, err = flags.GetBool(k)
-		case *[]string:
-			*v, err = flags.GetStringSlice(k)
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}
