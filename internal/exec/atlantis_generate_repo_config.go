@@ -106,7 +106,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 		}
 
 		return ExecuteAtlantisGenerateRepoConfigAffectedOnly(
-			&atmosConfig,
+			atmosConfig,
 			outputPath,
 			configTemplateName,
 			projectTemplateName,
@@ -122,7 +122,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 	}
 
 	return ExecuteAtlantisGenerateRepoConfig(
-		&atmosConfig,
+		atmosConfig,
 		outputPath,
 		configTemplateName,
 		projectTemplateName,
@@ -133,7 +133,7 @@ func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) err
 
 // ExecuteAtlantisGenerateRepoConfigAffectedOnly generates repository configuration for Atlantis only for the affected components and stacks
 func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
-	atmosConfig *schema.AtmosConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	outputPath string,
 	configTemplateName string,
 	projectTemplateName string,
@@ -155,7 +155,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 
 	if repoPath != "" {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
-			atmosConfig,
+			&atmosConfig,
 			repoPath,
 			verbose,
 			false,
@@ -167,7 +167,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		)
 	} else if cloneTargetRef {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
-			atmosConfig,
+			&atmosConfig,
 			ref,
 			sha,
 			sshKeyPath,
@@ -182,7 +182,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		)
 	} else {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
-			atmosConfig,
+			&atmosConfig,
 			ref,
 			sha,
 			verbose,
@@ -229,14 +229,14 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 
 // ExecuteAtlantisGenerateRepoConfig generates repository configuration for Atlantis
 func ExecuteAtlantisGenerateRepoConfig(
-	atmosConfig *schema.AtmosConfiguration,
+	atmosConfig schema.AtmosConfiguration,
 	outputPath string,
 	configTemplateNameArg string,
 	projectTemplateNameArg string,
 	stacks []string,
 	components []string,
 ) error {
-	stacksMap, _, err := FindStacksMap(*atmosConfig, false)
+	stacksMap, _, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, GetStackNamePattern(*atmosConfig), stackConfigFileName)
+				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, GetStackNamePattern(atmosConfig), stackConfigFileName)
 				if err != nil {
 					return err
 				}
@@ -381,7 +381,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				}
 
 				// Calculate terraform workspace
-				workspace, err := BuildTerraformWorkspace(*atmosConfig, configAndStacksInfo)
+				workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 				if err != nil {
 					return err
 				}
@@ -525,7 +525,7 @@ specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` se
 			return err
 		}
 	} else {
-		err = u.PrintAsYAML(atmosConfig, atlantisYaml)
+		err = u.PrintAsYAML(&atmosConfig, atlantisYaml)
 		if err != nil {
 			return err
 		}
