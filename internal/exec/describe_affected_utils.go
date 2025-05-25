@@ -26,6 +26,11 @@ import (
 
 var remoteRepoIsNotGitRepoError = errors.New("the target remote repo is not a Git repository. Check that it was initialized and has '.git' folder")
 
+const (
+	shaString = "SHA"
+	refString = "ref"
+)
+
 // ExecuteDescribeAffectedWithTargetRefClone clones the remote reference,
 // processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
 func ExecuteDescribeAffectedWithTargetRefClone(
@@ -84,7 +89,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// If `ref` flag is not provided, it will clone the HEAD of the default branch
 	if ref != "" {
 		cloneOptions.ReferenceName = plumbing.ReferenceName(ref)
-		log.Debug("Cloning Git", "ref", ref)
+		log.Debug("Cloning Git", refString, ref)
 	} else {
 		log.Debug("Cloned the HEAD of the default branch")
 	}
@@ -126,14 +131,14 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	}
 
 	if ref != "" {
-		log.Debug("Cloned Git", "ref", ref)
+		log.Debug("Cloned Git", refString, ref)
 	} else {
-		log.Debug("Cloned Git", "ref", remoteRepoHead.Name())
+		log.Debug("Cloned Git", refString, remoteRepoHead.Name())
 	}
 
-	// Check if a commit SHA was provided and checkout the repo at that commit SHA
+	// Check if a commit SHA was provided and check out the repo at that commit SHA
 	if sha != "" {
-		log.Debug("Checking out commit", "SHA", sha)
+		log.Debug("Checking out commit", shaString, sha)
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -152,7 +157,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 			return nil, nil, nil, "", err
 		}
 
-		log.Debug("Checked out commit", "SHA", sha)
+		log.Debug("Checked out commit", shaString, sha)
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
@@ -258,7 +263,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	}
 
 	if sha != "" {
-		log.Debug("Checking out commit", "SHA", sha)
+		log.Debug("Checking out commit", shaString, sha)
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -277,14 +282,14 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		log.Debug("Checked out commit", "SHA", sha)
+		log.Debug("Checked out commit", shaString, sha)
 	} else {
 		// If `ref` is not provided, use the HEAD of the remote origin
 		if ref == "" {
 			ref = "refs/remotes/origin/HEAD"
 		}
 
-		log.Debug("Checking out Git", "ref", ref)
+		log.Debug("Checking out Git", refString, ref)
 
 		w, err := remoteRepo.Worktree()
 		if err != nil {
@@ -309,7 +314,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			return nil, nil, nil, "", err
 		}
 
-		log.Debug("Checked out Git", "ref", ref)
+		log.Debug("Checked out Git", refString, ref)
 	}
 
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
