@@ -200,26 +200,129 @@ Affected components and stacks:
 
 ## Flags
 
-| Flag                               | Description                                                                                                                                                                                                                                                                                                                                                                                                  | Required |
-|:-----------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                                                                                | no       |
-| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                                                                              | no       |
-| `--file`                           | If specified, write the result to the file                                                                                                                                                                                                                                                                                                                                                                   | no       |
-| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                                                                                                                                                                                                                                                              | no       |
-| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                                                                             | no       |
-| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                                                                                   | no       |
-| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                                                                             | no       |
-| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                                                                             | no       |
-| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                                                                        | no       |
-| `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory                                                      | no       |
-| `--stack`                          | Only show results for the specific stack.<br/>`atmos describe affected --stack=plat-ue2-prod`                                                                                                                                                                                                                                                                                                                | no       |
-| `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                                                                         | no       |
-| `--include-settings`               | Include the `settings` section for each affected component.<br/>`atmos describe affected --include-settings=true`                                                                                                                                                                                                                                                                                            | no       |
-| `--upload`                         | Upload the affected components and stacks to a specified HTTP endpoint.<br/><br/>`atmos describe affected --upload=true`<br/><br/>Atmos will perform an HTTP POST request<br/>to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,<br/>where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,<br/>and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable. | no       |
-| `--query`                          | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe affected --query=<yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                                                                                                                                                     | no       |
-| `--process-templates`              | Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe affected --process-templates=false`                                                                                                                                                                            |          | no       |
-| `--process-functions`              | Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe affected --process-functions=false`                                                                                                                                                                      |          | no       |
-| `--skip`                           | Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe affected --skip=terraform.output --skip=include`<br/>`atmos describe affected --skip=terraform.output,include`                                                  |          | no       |
+<dl>
+    <dt>`--ref`</dt>
+    <dd>
+        [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch
+    </dd>
+
+    <dt>`--sha`</dt>
+    <dd>
+        Git commit SHA with which to compare the current working branch
+    </dd>
+
+    <dt>`--file`</dt>
+    <dd>
+        If specified, write the result to the file
+    </dd>
+
+    <dt>`--format`</dt>
+    <dd>
+        Specify the output format: `json` or `yaml` (`json` is default)
+    </dd>
+
+    <dt>`--ssh-key`</dt>
+    <dd>
+        Path to PEM-encoded private key to clone private repos using SSH
+    </dd>
+
+    <dt>`--ssh-key-password`</dt>
+    <dd>
+        Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
+    </dd>
+
+    <dt>`--repo-path`</dt>
+    <dd>
+        Path to the already cloned target repository with which to compare the current branch. Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`
+    </dd>
+
+    <dt>`--verbose`</dt>
+    <dd>
+        Print more detailed output when cloning and checking out the target Git repository and processing the result
+    </dd>
+
+    <dt>`--include-spacelift-admin-stacks`</dt>
+    <dd>
+        Include the Spacelift admin stack of any stack that is affected by config changes
+    </dd>
+
+    <dt>`--clone-target-ref`</dt>
+    <dd>
+        Clone the target reference with which to compare the current branch.
+
+        `atmos describe affected --clone-target-ref=true`
+
+        If set to `false` (default), the target reference will be checked out instead.
+        This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory
+    </dd>
+
+    <dt>`--stack`</dt>
+    <dd>
+        Only show results for the specific stack.
+
+        `atmos describe affected --stack=plat-ue2-prod`
+    </dd>
+
+    <dt>`--include-dependents`</dt>
+    <dd>
+        Include the dependent components and stacks.
+
+        `atmos describe affected --include-dependents=true`
+    </dd>
+
+    <dt>`--include-settings`</dt>
+    <dd>
+        Include the `settings` section for each affected component.
+
+        `atmos describe affected --include-settings=true`
+    </dd>
+
+    <dt>`--query`</dt>
+    <dd>
+        Query the results of the command using `yq` expressions.
+
+        `atmos describe affected --query=<yq-expression>`
+
+        For more details, refer to [YQ - a lightweight and portable command-line YAML processor](https://mikefarah.gitbook.io/yq)
+    </dd>
+
+    <dt>`--process-templates`</dt>
+    <dd>
+        Enable/disable processing of all `Go` templates in Atmos stacks manifests when executing the command.
+        If the flag is not provided, it's set to `true` by default.
+
+        `atmos describe affected --process-templates=false`
+    </dd>
+
+    <dt>`--process-functions`</dt>
+    <dd>
+        Enable/disable processing of all Atmos YAML functions in Atmos stacks manifests when executing the command.
+        If the flag is not provided, it's set to `true` by default.
+
+        `atmos describe affected --process-functions=false`
+    </dd>
+
+    <dt>`--skip`</dt>
+    <dd>
+        Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing the command.
+        To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma:
+
+        `atmos describe affected --skip=terraform.output --skip=include`
+
+        `atmos describe affected --skip=terraform.output,include`
+    </dd>
+
+    <dt>`--upload`</dt>
+    <dd>
+        Upload the affected components and stacks to a specified HTTP endpoint.
+
+        `atmos describe affected --upload=true`
+
+        Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
+        where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
+        and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable
+    </dd>
+</dl>
 
 ## Output
 
@@ -537,15 +640,40 @@ where:
 
     where:
 
-    - `affected` shows that the Atmos component's `metadata` section was changed
-        (since the component is new and the `metadata` section is the first section that Atmos processes)
+        <dl>
+            <dt>`affected`</dt>
+            <dd>
+                shows that the Atmos component's `metadata` section was changed
+                (since the component is new and the `metadata` section is the first section that Atmos processes)
+            </dd>
 
-    - `affected_all` shows all the affected sections and attributes:
-      - `component` - the Terraform component (Terraform configuration) was affected (since it was just added)
-      - `stack.metadata` - the Atmos component's `metadata` section was changed
-      - `stack.vars` - the Atmos component's `vars` section was changed
-      - `stack.env` - the Atmos component's `env` section was changed
-      - `stack.settings` - the Atmos component's `settings` section was changed
+            <dt>`affected_all`</dt>
+            <dd>
+                shows all the affected sections and attributes:
+                <dl>
+                    <dt>`component`</dt>
+                    <dd>
+                        the Terraform component (Terraform configuration) was affected (since it was just added)
+                    </dd>
+                    <dt>`stack.metadata`</dt>
+                    <dd>
+                        the Atmos component's `metadata` section was changed
+                    </dd>
+                    <dt>`stack.vars`</dt>
+                    <dd>
+                        the Atmos component's `vars` section was changed
+                    </dd>
+                    <dt>`stack.env`</dt>
+                    <dd>
+                        the Atmos component's `env` section was changed
+                    </dd>
+                    <dt>`stack.settings`</dt>
+                    <dd>
+                        the Atmos component's `settings` section was changed
+                    </dd>
+                </dl>
+            </dd>
+        </dl>
 
 :::note
 
