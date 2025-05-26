@@ -221,6 +221,8 @@ func execTerraformOutput(
 		)
 
 		// Terraform workspace
+	  backendType, ok := sections[cfg.BackendTypeSectionName].(string)
+		if ok && backendType != "http" {
 		log.Debug("Creating a new terraform workspace",
 			"command", fmt.Sprintf("terraform workspace new %s", terraformWorkspace),
 			cfg.ComponentStr, component,
@@ -248,6 +250,7 @@ func execTerraformOutput(
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
 			)
+		}
 		}
 
 		// Terraform output
