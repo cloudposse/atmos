@@ -77,6 +77,11 @@ func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
+	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../tests/fixtures/scenarios/complete",
+	// which will be wrong for the remote repo which is cloned into a temp dir.
+	// Set the correct base path for the cloned remote repo
+	atmosConfig.BasePath = "./tests/fixtures/scenarios/complete"
+
 	err = e.ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		atmosConfig,
 		"/dev/stdout",
