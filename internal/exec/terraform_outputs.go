@@ -221,36 +221,36 @@ func execTerraformOutput(
 		)
 
 		// Terraform workspace
-	  backendType, ok := sections[cfg.BackendTypeSectionName].(string)
+		backendType, ok := sections[cfg.BackendTypeSectionName].(string)
 		if ok && backendType != "http" {
-		log.Debug("Creating a new terraform workspace",
-			"command", fmt.Sprintf("terraform workspace new %s", terraformWorkspace),
-			cfg.ComponentStr, component,
-			cfg.StackStr, stack,
-		)
-		err = tf.WorkspaceNew(ctx, terraformWorkspace)
-		if err != nil {
-			log.Debug("Selecting existing terraform workspace",
-				"command", fmt.Sprintf("terraform workspace select %s", terraformWorkspace),
-				cfg.ComponentStr, component,
-				cfg.StackStr, stack,
-			)
-			err = tf.WorkspaceSelect(ctx, terraformWorkspace)
-			if err != nil {
-				return nil, err
-			}
-			log.Debug("Successfully selected terraform workspace",
-				"command", fmt.Sprintf("terraform workspace select %s", terraformWorkspace),
-				cfg.ComponentStr, component,
-				cfg.StackStr, stack,
-			)
-		} else {
-			log.Debug("Successfully created terraform workspace",
+			log.Debug("Creating a new terraform workspace",
 				"command", fmt.Sprintf("terraform workspace new %s", terraformWorkspace),
 				cfg.ComponentStr, component,
 				cfg.StackStr, stack,
 			)
-		}
+			err = tf.WorkspaceNew(ctx, terraformWorkspace)
+			if err != nil {
+				log.Debug("Selecting existing terraform workspace",
+					"command", fmt.Sprintf("terraform workspace select %s", terraformWorkspace),
+					cfg.ComponentStr, component,
+					cfg.StackStr, stack,
+				)
+				err = tf.WorkspaceSelect(ctx, terraformWorkspace)
+				if err != nil {
+					return nil, err
+				}
+				log.Debug("Successfully selected terraform workspace",
+					"command", fmt.Sprintf("terraform workspace select %s", terraformWorkspace),
+					cfg.ComponentStr, component,
+					cfg.StackStr, stack,
+				)
+			} else {
+				log.Debug("Successfully created terraform workspace",
+					"command", fmt.Sprintf("terraform workspace new %s", terraformWorkspace),
+					cfg.ComponentStr, component,
+					cfg.StackStr, stack,
+				)
+			}
 		}
 
 		// Terraform output
