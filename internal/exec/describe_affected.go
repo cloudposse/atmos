@@ -16,7 +16,7 @@ import (
 )
 
 type DescribeAffectedCmdArgs struct {
-	CLIConfig                   schema.AtmosConfiguration
+	CLIConfig                   *schema.AtmosConfiguration
 	CloneTargetRef              bool
 	Format                      string
 	IncludeDependents           bool
@@ -178,7 +178,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 
 	result := DescribeAffectedCmdArgs{
-		CLIConfig:                   atmosConfig,
+		CLIConfig:                   &atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
 		Format:                      format,
 		IncludeDependents:           includeDependents,
@@ -316,11 +316,6 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-		if err != nil {
-			return err
-		}
-
 		res, err := u.EvaluateYqExpression(&atmosConfig, affected, a.Query)
 		if err != nil {
 			return err
