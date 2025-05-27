@@ -15,7 +15,6 @@ import (
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
-	u "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -158,11 +157,6 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 			return "", nil
 		}
 		return "", err
-	}
-
-	if output == "" || u.IsEmptyTable(output) {
-		logNoMetadataFoundMessage(params.ComponentFilter)
-		return "", nil
 	}
 
 	return output, nil

@@ -16,7 +16,7 @@ import (
 )
 
 type DescribeAffectedCmdArgs struct {
-	CLIConfig                   schema.AtmosConfiguration
+	CLIConfig                   *schema.AtmosConfiguration
 	CloneTargetRef              bool
 	Format                      string
 	IncludeDependents           bool
@@ -178,7 +178,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 
 	result := DescribeAffectedCmdArgs{
-		CLIConfig:                   atmosConfig,
+		CLIConfig:                   &atmosConfig,
 		CloneTargetRef:              cloneTargetRef,
 		Format:                      format,
 		IncludeDependents:           includeDependents,
@@ -205,6 +205,18 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 // ExecuteDescribeAffectedCmd executes `describe affected` command
 func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
+	info, err := ProcessCommandLineArgs("", cmd, args, nil)
+	if err != nil {
+		return err
+	}
+
+	info.CliArgs = []string{"describe", "affected"}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return err
+	}
+
 	a, err := parseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
 		return err
@@ -271,7 +283,7 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 	if a.Query == "" {
 		a.Logger.Trace("\nAffected components and stacks: \n")
 
-		err = printOrWriteToFile(a.Format, a.OutputFile, affected)
+		err = printOrWriteToFile(&atmosConfig, a.Format, a.OutputFile, affected)
 		if err != nil {
 			return err
 		}
@@ -304,17 +316,12 @@ func ExecuteDescribeAffectedCmd(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-		if err != nil {
-			return err
-		}
-
 		res, err := u.EvaluateYqExpression(&atmosConfig, affected, a.Query)
 		if err != nil {
 			return err
 		}
 
-		err = printOrWriteToFile(a.Format, a.OutputFile, res)
+		err = printOrWriteToFile(&atmosConfig, a.Format, a.OutputFile, res)
 		if err != nil {
 			return err
 		}

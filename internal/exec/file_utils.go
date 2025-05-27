@@ -13,9 +13,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const forwardSlash = "/"
+const (
+	DefaultFileMode os.FileMode = 0o644
+	forwardSlash                = "/"
+)
 
-func removeTempDir(atmosConfig schema.AtmosConfiguration, path string) {
+func removeTempDir(path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
 		u.LogWarning(err.Error())
@@ -32,19 +35,21 @@ func closeFile(fileName string, file io.ReadCloser) {
 // printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
 // and prints the data to the console or to a file (if file is specified)
 func printOrWriteToFile(
+	atmosConfig *schema.AtmosConfiguration,
 	format string,
 	file string,
 	data any,
 ) error {
 	switch format {
 	case "yaml":
+
 		if file == "" {
-			err := u.PrintAsYAML(data)
+			err := u.PrintAsYAMLWithConfig(atmosConfig, data)
 			if err != nil {
 				return err
 			}
 		} else {
-			err := u.WriteToFileAsYAML(file, data, 0o644)
+			err := u.WriteToFileAsYAMLWithConfig(atmosConfig, file, data, DefaultFileMode)
 			if err != nil {
 				return err
 			}
@@ -52,12 +57,12 @@ func printOrWriteToFile(
 
 	case "json":
 		if file == "" {
-			err := u.PrintAsJSON(data)
+			err := u.PrintAsJSON(atmosConfig, data)
 			if err != nil {
 				return err
 			}
 		} else {
-			err := u.WriteToFileAsJSON(file, data, 0o644)
+			err := u.WriteToFileAsJSON(file, data, DefaultFileMode)
 			if err != nil {
 				return err
 			}

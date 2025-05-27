@@ -204,4 +204,4 @@ tenant `net` (instead of `plat`):
    If you operate with limited permissions (e.g., scoped to `dev`) and reference production stacks, the command will fail.
 - Be mindful of disaster recovery (DR) implications when using it across regions.
 - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the value in the store may not
-  yet be available and the `!store` function call will fail unless you provide a default value with `|default`.
+  yet be available and the `!store` function call will fail unless you provide a default value with `| default`.

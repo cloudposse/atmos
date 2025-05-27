@@ -15,7 +15,7 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	err = u.PrintAsYAML(atmosConfig)
+	err = u.PrintAsYAML(&atmosConfig, atmosConfig)
 	assert.Nil(t, err)
 
 	atlantisConfig := atmosConfig.Integrations.Atlantis
@@ -37,7 +37,7 @@ func TestAtlantisGenerateRepoConfig(t *testing.T) {
 	atlantisYaml.AllowedRegexpPrefixes = configTemplate.AllowedRegexpPrefixes
 	atlantisYaml.Projects = []schema.AtlantisProjectConfig{projectTemplate}
 
-	err = u.PrintAsYAML(atlantisYaml)
+	err = u.PrintAsYAML(&atmosConfig, atlantisYaml)
 	assert.Nil(t, err)
 }
 
@@ -76,6 +76,11 @@ func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
+
+	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../tests/fixtures/scenarios/complete",
+	// which will be wrong for the remote repo which is cloned into a temp dir.
+	// Set the correct base path for the cloned remote repo
+	atmosConfig.BasePath = "./tests/fixtures/scenarios/complete"
 
 	err = e.ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		atmosConfig,

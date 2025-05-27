@@ -114,3 +114,40 @@ func processYAMLNode(node *yaml.Node) {
 		processYAMLNode(child)
 	}
 }
+
+
+func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration, data T, yq string) (*T, error) {
+	// Configure the yq logger based on Atmos configuration
+	configureYqLogger(atmosConfig)
+
+	evaluator := yqlib.NewStringEvaluator()
+
+	yaml, err := ConvertToYAML(data)
+	if err != nil {
+		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to convert data to YAML: %w", err)
+	}
+
+	pref := yqlib.YamlPreferences{
+		Indent:                      2,
+		ColorsEnabled:               false,
+		LeadingContentPreProcessing: true,
+		PrintDocSeparators:          true,
+		UnwrapScalar:                true,
+		EvaluateTogether:            false,
+	}
+
+	encoder := yqlib.NewYamlEncoder(pref)
+	decoder := yqlib.NewYamlDecoder(pref)
+
+	result, err := evaluator.Evaluate(yq, yaml, encoder, decoder)
+	if err != nil {
+		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to evaluate YQ expression '%s': %w", yq, err)
+	}
+
+	res, err := UnmarshalYAML[T](result)
+	if err != nil {
+		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to convert YAML to Go type: %w", err)
+	}
+
+	return &res, nil
+}
