@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
+
 	e "github.com/cloudposse/atmos/internal/exec"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 // helmfileCmd represents the base command for all helmfile sub-commands
@@ -29,6 +30,7 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
 	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	info.CliArgs = []string{"helmfile", commandName}
 	err := e.ExecuteHelmfile(info)
 	if err != nil {
 		u.PrintErrorMarkdownAndExit("", err, "")

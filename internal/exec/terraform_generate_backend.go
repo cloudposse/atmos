@@ -49,6 +49,7 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
+	info.CliArgs = []string{"terraform", "generate", "backend"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {

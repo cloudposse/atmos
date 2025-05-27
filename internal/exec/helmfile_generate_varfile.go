@@ -33,6 +33,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "helmfile"
+	info.CliArgs = []string{"helmfile", "generate", "varfile"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
