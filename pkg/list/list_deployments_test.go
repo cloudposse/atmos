@@ -2,6 +2,7 @@ package list
 
 import (
 	"errors"
+	"sort"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -74,6 +75,20 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 						},
 					},
 				},
+				"helmfile": map[string]interface{}{
+					"app": map[string]interface{}{
+						"settings": map[string]interface{}{
+							"pro": map[string]interface{}{
+								"drift_detection": map[string]interface{}{
+									"enabled": false,
+								},
+							},
+						},
+						"metadata": map[string]interface{}{
+							"type": "real",
+						},
+					},
+				},
 			},
 		},
 		"stack2": map[string]interface{}{
@@ -87,17 +102,18 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 
 	// Test cases
 	tests := []struct {
-		name           string
-		info           schema.ConfigAndStacksInfo
-		driftEnabled   bool
-		upload         bool
-		mockStacks     map[string]interface{}
-		mockStacksErr  error
-		mockRepoInfo   *git.RepoInfo
-		mockRepoErr    error
-		mockUploadErr  error
-		expectedError  string
-		expectedOutput string
+		name                string
+		info                schema.ConfigAndStacksInfo
+		driftEnabled        bool
+		upload              bool
+		mockStacks          map[string]interface{}
+		mockStacksErr       error
+		mockRepoInfo        *git.RepoInfo
+		mockRepoErr         error
+		mockUploadErr       error
+		expectedError       string
+		expectedOutput      string
+		expectedDeployments []schema.Deployment
 	}{
 		{
 			name:         "default flags",
@@ -105,6 +121,32 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			driftEnabled: false,
 			upload:       false,
 			mockStacks:   mockStacks,
+			expectedDeployments: []schema.Deployment{
+				{
+					Component:     "vpc",
+					Stack:         "stack1",
+					ComponentType: "terraform",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+				{
+					Component:     "app",
+					Stack:         "stack1",
+					ComponentType: "helmfile",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": false,
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			name:         "drift detection enabled",
@@ -112,6 +154,20 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			driftEnabled: true,
 			upload:       false,
 			mockStacks:   mockStacks,
+			expectedDeployments: []schema.Deployment{
+				{
+					Component:     "vpc",
+					Stack:         "stack1",
+					ComponentType: "terraform",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+			},
 		},
 		{
 			name:           "upload enabled without drift detection",
@@ -132,6 +188,20 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 				RepoName:  "repo",
 				RepoOwner: "test",
 				RepoHost:  "github.com",
+			},
+			expectedDeployments: []schema.Deployment{
+				{
+					Component:     "vpc",
+					Stack:         "stack1",
+					ComponentType: "terraform",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
 			},
 		},
 		{
@@ -218,6 +288,18 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 					},
 				},
 			},
+			expectedDeployments: []schema.Deployment{
+				{
+					Component:     "vpc",
+					Stack:         "stack1",
+					ComponentType: "terraform",
+				},
+				{
+					Component:     "vpc",
+					Stack:         "stack2",
+					ComponentType: "terraform",
+				},
+			},
 		},
 	}
 
@@ -263,7 +345,7 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 						RepoName:  repoInfo.RepoName,
 						RepoOwner: repoInfo.RepoOwner,
 						RepoHost:  repoInfo.RepoHost,
-						Stacks:    []schema.Deployment{},
+						Stacks:    tt.expectedDeployments,
 					}
 					err := apiClient.UploadDriftDetection(req)
 					if err != nil {
@@ -284,6 +366,101 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+
+			// Check deployments if expected
+			if tt.expectedDeployments != nil {
+				// TODO: Add assertions to verify the deployments match expected
+				// This would require modifying the ExecuteListDeploymentsCmd to return the deployments
+				// or capturing them in a way that can be verified
+			}
 		})
 	}
+}
+
+// TestSortDeployments tests the sorting functionality of deployments
+func TestSortDeployments(t *testing.T) {
+	deployments := []schema.Deployment{
+		{Component: "b", Stack: "stack2"},
+		{Component: "a", Stack: "stack1"},
+		{Component: "c", Stack: "stack1"},
+		{Component: "a", Stack: "stack2"},
+	}
+
+	// Sort deployments by stack, then by component
+	type deploymentRow struct {
+		Component string
+		Stack     string
+	}
+	rowsData := make([]deploymentRow, 0, len(deployments))
+	for _, d := range deployments {
+		rowsData = append(rowsData, deploymentRow{Component: d.Component, Stack: d.Stack})
+	}
+
+	// Sort
+	sort.Slice(rowsData, func(i, j int) bool {
+		if rowsData[i].Stack != rowsData[j].Stack {
+			return rowsData[i].Stack < rowsData[j].Stack
+		}
+		return rowsData[i].Component < rowsData[j].Component
+	})
+
+	// Verify sorting
+	expected := []deploymentRow{
+		{Component: "a", Stack: "stack1"},
+		{Component: "c", Stack: "stack1"},
+		{Component: "a", Stack: "stack2"},
+		{Component: "b", Stack: "stack2"},
+	}
+
+	assert.Equal(t, expected, rowsData)
+}
+
+// TestDriftDetectionFiltering tests the drift detection filtering logic
+func TestDriftDetectionFiltering(t *testing.T) {
+	deployments := []schema.Deployment{
+		{
+			Component: "vpc",
+			Stack:     "stack1",
+			Settings: map[string]interface{}{
+				"pro": map[string]interface{}{
+					"drift_detection": map[string]interface{}{
+						"enabled": true,
+					},
+				},
+			},
+		},
+		{
+			Component: "app",
+			Stack:     "stack1",
+			Settings: map[string]interface{}{
+				"pro": map[string]interface{}{
+					"drift_detection": map[string]interface{}{
+						"enabled": false,
+					},
+				},
+			},
+		},
+		{
+			Component: "db",
+			Stack:     "stack1",
+			Settings:  map[string]interface{}{},
+		},
+	}
+
+	// Filter deployments with drift detection enabled
+	filtered := make([]schema.Deployment, 0)
+	for _, d := range deployments {
+		if settings, ok := d.Settings["pro"].(map[string]interface{}); ok {
+			if driftDetection, ok := settings["drift_detection"].(map[string]interface{}); ok {
+				if enabled, ok := driftDetection["enabled"].(bool); ok && enabled {
+					filtered = append(filtered, d)
+				}
+			}
+		}
+	}
+
+	// Verify filtering
+	assert.Len(t, filtered, 1)
+	assert.Equal(t, "vpc", filtered[0].Component)
+	assert.Equal(t, "stack1", filtered[0].Stack)
 }

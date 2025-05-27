@@ -3,6 +3,7 @@ package list
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	log "github.com/charmbracelet/log"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -13,7 +14,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
-	"golang.org/x/exp/slices"
 	"golang.org/x/term"
 )
 
@@ -126,18 +126,11 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 		rowsData = append(rowsData, deploymentRow{Component: d.Component, Stack: d.Stack})
 	}
 	// Sort
-	slices.SortFunc(rowsData, func(a, b deploymentRow) int {
-		if a.Stack < b.Stack {
-			return -1
-		} else if a.Stack > b.Stack {
-			return 1
+	sort.Slice(rowsData, func(i, j int) bool {
+		if rowsData[i].Stack != rowsData[j].Stack {
+			return rowsData[i].Stack < rowsData[j].Stack
 		}
-		if a.Component < b.Component {
-			return -1
-		} else if a.Component > b.Component {
-			return 1
-		}
-		return 0
+		return rowsData[i].Component < rowsData[j].Component
 	})
 
 	// Convert to rows for formatter
