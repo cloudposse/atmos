@@ -115,7 +115,6 @@ func processYAMLNode(node *yaml.Node) {
 	}
 }
 
-
 func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration, data T, yq string) (*T, error) {
 	// Configure the yq logger based on Atmos configuration
 	configureYqLogger(atmosConfig)
