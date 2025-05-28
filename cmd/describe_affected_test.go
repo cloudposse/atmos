@@ -28,7 +28,6 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 	tests := []struct {
 		name          string
 		setFlags      func(*pflag.FlagSet)
-		describe      *exec.DescribeAffectedCmdArgs
 		expected      *exec.DescribeAffectedCmdArgs
 		expectedPanic bool
 		panicMessage  string
@@ -41,7 +40,6 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 				fs.Set("include-dependents", "true")
 				fs.Set("format", "yaml")
 			},
-			describe: &exec.DescribeAffectedCmdArgs{},
 			expected: &exec.DescribeAffectedCmdArgs{
 				Ref:               "main",
 				SHA:               "abc123",
@@ -54,7 +52,6 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			setFlags: func(fs *pflag.FlagSet) {
 				fs.Set("upload", "true")
 			},
-			describe: &exec.DescribeAffectedCmdArgs{},
 			expected: &exec.DescribeAffectedCmdArgs{
 				Upload:            true,
 				IncludeDependents: true,
@@ -67,7 +64,6 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			setFlags: func(fs *pflag.FlagSet) {
 				// No flags set
 			},
-			describe: &exec.DescribeAffectedCmdArgs{},
 			expected: &exec.DescribeAffectedCmdArgs{
 				Format: "json",
 			},
@@ -77,7 +73,6 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			setFlags: func(fs *pflag.FlagSet) {
 				fs.Set("format", "json")
 			},
-			describe: &exec.DescribeAffectedCmdArgs{},
 			expected: &exec.DescribeAffectedCmdArgs{
 				Format: "json",
 			},
@@ -124,47 +119,14 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 					}
 				}()
 			}
-
-			setFlagValueInCliArgs(fs, tt.describe)
+			gotDescribe := &exec.DescribeAffectedCmdArgs{
+				CLIConfig: &schema.AtmosConfiguration{},
+			}
+			setFlagValueInCliArgs(fs, gotDescribe)
 
 			// Assert the describe struct matches the expected values
-			assert.Equal(t, tt.expected, tt.describe, "Describe struct does not match expected")
+			assert.Equal(t, tt.expected, gotDescribe, "Describe struct does not match expected")
 		})
 	}
 
-	// Test panic for unsupported type
-	t.Run("Unsupported flag type", func(t *testing.T) {
-		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-		fs.Int("invalid", 0, "Invalid flag") // Int type is not supported
-		fs.Set("invalid", "42")
-
-		defer func() {
-			if r := recover(); r != nil {
-				expected := "unsupported type *int for flag invalid"
-				if fmt.Sprintf("%v", r) != expected {
-					t.Errorf("Expected panic message %q, got %v", expected, r)
-				}
-			} else {
-				t.Error("Expected panic but none occurred")
-			}
-		}()
-
-		// Override flagsKeyValue to include an int type
-		originalFlagsKeyValue := map[string]any{
-			"invalid": new(int),
-		}
-		for k, v := range originalFlagsKeyValue {
-			if !fs.Changed(k) {
-				continue
-			}
-			switch v := v.(type) {
-			case *string:
-				*v, _ = fs.GetString(k)
-			case *bool:
-				*v, _ = fs.GetBool(k)
-			default:
-				panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
-			}
-		}
-	})
 }

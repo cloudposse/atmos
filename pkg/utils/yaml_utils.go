@@ -255,21 +255,25 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 				}
 			}
 
-			// Convert the Go structure to YAML
-			y, err := ConvertToYAML(res)
-			if err != nil {
-				return err
-			}
+			if strVal, ok := res.(string); ok && strings.HasPrefix(strVal, "#") {
+				n.Kind = yaml.ScalarNode
+				n.Tag = "!!str"
+				n.Value = strVal
+				n.Style = yaml.SingleQuotedStyle
+			} else {
+				y, err := ConvertToYAML(res)
+				if err != nil {
+					return err
+				}
 
-			// Decode the YAML content into a YAML node
-			var includedNode yaml.Node
-			err = yaml.Unmarshal([]byte(y), &includedNode)
-			if err != nil {
-				return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
-			}
+				var includedNode yaml.Node
+				err = yaml.Unmarshal([]byte(y), &includedNode)
+				if err != nil {
+					return fmt.Errorf("%w: %s, stack manifest: %s, error: %v", ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+				}
 
-			// Replace the current node with the decoded YAML node with the included content
-			*n = includedNode
+				*n = includedNode
+			}
 		}
 
 		// Recursively process the child nodes
