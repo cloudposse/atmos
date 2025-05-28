@@ -21,35 +21,44 @@ For example, the following config shows how to define two Atmos components, `sta
 
 <File title="stacks/deploy/dev.yaml">
 ```yaml
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
 import:
   # Import the baseline for all station components
   - catalog/station
 
 components:
   terraform:
-  # Atmos component `station/1`
-  station/1:
-    metadata:
-    # Point to the Terraform component in `components/terraform/weather`
-    component: weather
-    # Inherit the defaults for all station components
-    inherits:
-      - station
-    # Define/override variables specific to this `station/1` component
-    vars:
-      name: station-1
-
-  # Atmos component `station/2`
-  station/2:
-    metadata:
-    # Point to the Terraform component in `components/terraform/weather`
-    component: weather
-    # Inherit the defaults for all station components
-    inherits:
-      - station
-    # Define/override variables specific to this `station/2` component
-    vars:
-      name: station-2
+    station:
+      vars:
+        location: Stockholm
+        lang: se
+    # Atmos component `station/1`
+    station/1:
+      metadata:
+        # Inherit the defaults for all station components
+        inherits:
+          - station
+        # Point to the Terraform component in `components/terraform/weather`
+        component: weather
+      # Define/override variables specific to this `station/1` component
+      vars:
+        name: station-1
+  
+    # Atmos component `station/2`
+    station/2:
+      metadata:
+        # Inherit the defaults for all station components
+        inherits:
+          - station
+        # Point to the Terraform component in `components/terraform/weather`
+        component: weather
+      # Define/override variables specific to this `station/2` component
+      vars:
+        name: station-2
 ```
 </File>
 
