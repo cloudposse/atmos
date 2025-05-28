@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 
 	l "github.com/charmbracelet/log"
+	logger "github.com/cloudposse/atmos/pkg/logger"
 
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -167,4 +169,49 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	}
 
 	return true
+}
+
+// shouldUploadResult checks if the upload flag is set for the `plan` command.
+func shouldUploadResult(info *schema.ConfigAndStacksInfo) bool {
+	if info.SubCommand == "plan" && info.Upload {
+		// Do not upload the result if pro isn't enabled
+		if !info.Settings.Pro.Enabled {
+			l.Warn("Pro is not enabled. Skipping upload of Terraform result.")
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// uploadTerraformResult uploads the Terraform result to the pro API if the exit code indicates changes or no changes.
+func uploadTerraformResult(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, exitCode int) error {
+	// Only upload if exit code is 0 (no changes) or 2 (has changes)
+	if exitCode == 0 || exitCode == 2 {
+		logger, err := logger.NewLoggerFromCliConfig(atmosConfig)
+		if err != nil {
+			return err
+		}
+
+		apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
+		if err != nil {
+			return err
+		}
+
+		err = apiClient.UploadDriftResultStatus(pro.DriftResultStatusUploadRequest{
+			// AtmosProRunID: info.AtmosProRunID,
+			// GitSHA:        info.GitSHA,
+			// RepoURL:       info.RepoURL,
+			// RepoName:      info.RepoName,
+			// RepoOwner:     info.RepoOwner,
+			// RepoHost:      info.RepoHost,
+			Component: info.Component,
+			Stack:     info.Stack,
+			HasDrift:  exitCode == 2,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -21,6 +21,7 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
+	detailedExitCodeFlag      = "--detailed-exitcode"
 )
 
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
@@ -385,6 +386,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
+		// Add detailed exit code if upload flag is set and detailed exit code isn't already set
+		// We need the detailed exit code to be set when uploading deployments to the pro API
+		if u.SliceContainsString(info.AdditionalArgsAndFlags, "upload-drift-result") &&
+			!u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
+			allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
+		}
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 	case "import":
@@ -527,6 +534,21 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr,
 		)
 		if err != nil {
+			// For Terraform Plan, we need to return the result to the pro API if upload flag is set
+			if shouldUploadResult(&info) {
+				var exitCode int
+				var osErr *osexec.ExitError
+				if errors.As(err, &osErr) {
+					exitCode = osErr.ExitCode()
+				} else {
+					exitCode = 1
+				}
+
+				if err := uploadTerraformResult(atmosConfig, info, exitCode); err != nil {
+					return err
+				}
+			}
+			// For other commands or failure, return the error as is
 			return err
 		}
 	}
