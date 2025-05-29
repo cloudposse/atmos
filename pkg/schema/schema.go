@@ -480,7 +480,6 @@ type ConfigAndStacksInfo struct {
 	ProcessFunctions              bool
 	Skip                          []string
 	CliArgs                       []string
-	Upload                        bool
 }
 
 // Workflows

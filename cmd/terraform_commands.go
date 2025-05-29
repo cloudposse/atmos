@@ -303,7 +303,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 var commandMaps = map[string]func(cmd *cobra.Command){
 	"plan": func(cmd *cobra.Command) {
-		cmd.PersistentFlags().Bool("upload-drift-result", false, "If set atmos will upload the plan result to the pro API")
+		cmd.PersistentFlags().Bool("upload-drift-results", false, "If set atmos will upload the plan result to the pro API")
 	},
 	"deploy": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("deploy-run-init", false, "If set atmos will run `terraform init` before executing the command")

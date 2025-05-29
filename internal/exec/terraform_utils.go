@@ -8,6 +8,7 @@ import (
 	l "github.com/charmbracelet/log"
 	logger "github.com/cloudposse/atmos/pkg/logger"
 
+	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -173,9 +174,10 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 
 // shouldUploadResult checks if the upload flag is set for the `plan` command.
 func shouldUploadResult(info *schema.ConfigAndStacksInfo) bool {
-	if info.SubCommand == "plan" && info.Upload {
+	// Only supported for Terraform Plan command
+	if info.SubCommand == "plan" {
 		// Do not upload the result if pro isn't enabled
-		if !info.Settings.Pro.Enabled {
+		if proSettings, ok := info.ComponentSettingsSection["pro"].(map[string]any); !ok || proSettings["enabled"] != true {
 			l.Warn("Pro is not enabled. Skipping upload of Terraform result.")
 			return false
 		}
@@ -184,8 +186,8 @@ func shouldUploadResult(info *schema.ConfigAndStacksInfo) bool {
 	return false
 }
 
-// uploadTerraformResult uploads the Terraform result to the pro API if the exit code indicates changes or no changes.
-func uploadTerraformResult(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, exitCode int) error {
+// uploadDriftResult uploads the Terraform result to the pro API if the exit code indicates changes or no changes.
+func uploadDriftResult(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, exitCode int) error {
 	// Only upload if exit code is 0 (no changes) or 2 (has changes)
 	if exitCode == 0 || exitCode == 2 {
 		logger, err := logger.NewLoggerFromCliConfig(atmosConfig)
@@ -198,17 +200,29 @@ func uploadTerraformResult(atmosConfig schema.AtmosConfiguration, info schema.Co
 			return err
 		}
 
-		err = apiClient.UploadDriftResultStatus(pro.DriftResultStatusUploadRequest{
-			// AtmosProRunID: info.AtmosProRunID,
-			// GitSHA:        info.GitSHA,
-			// RepoURL:       info.RepoURL,
-			// RepoName:      info.RepoName,
-			// RepoOwner:     info.RepoOwner,
-			// RepoHost:      info.RepoHost,
-			Component: info.Component,
-			Stack:     info.Stack,
-			HasDrift:  exitCode == 2,
-		})
+		repo, err := git.GetLocalRepo()
+		if err != nil {
+			return err
+		}
+
+		repoInfo, err := git.GetRepoInfo(repo)
+		if err != nil {
+			return err
+		}
+
+		dto := pro.DriftStatusUploadRequest{
+			AtmosProRunID: "", // TODO
+			GitSHA:        "", // TODO
+			RepoURL:       repoInfo.RepoUrl,
+			RepoName:      repoInfo.RepoName,
+			RepoOwner:     repoInfo.RepoOwner,
+			RepoHost:      repoInfo.RepoHost,
+			Component:     info.Component,
+			Stack:         info.Stack,
+			HasDrift:      exitCode == 2,
+		}
+
+		err = apiClient.UploadDriftResultStatus(dto)
 		if err != nil {
 			return err
 		}

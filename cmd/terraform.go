@@ -81,15 +81,9 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 
-	upload, err := flags.GetBool("upload")
-	if err != nil {
-		u.PrintErrorMarkdownAndExit("", err, "")
-	}
-
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
 	info.Skip = skip
-	info.Upload = upload
 
 	err = e.ExecuteTerraform(info)
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
