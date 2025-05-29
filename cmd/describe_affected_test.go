@@ -128,5 +128,4 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			assert.Equal(t, tt.expected, gotDescribe, "Describe struct does not match expected")
 		})
 	}
-
 }
