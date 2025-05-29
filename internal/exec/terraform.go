@@ -47,6 +47,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
+	// Add the `command` from `components.terraform.command` from `atmos.yaml`.
+	if info.Command == "" {
+		if atmosConfig.Components.Terraform.Command != "" {
+			info.Command = atmosConfig.Components.Terraform.Command
+		} else {
+			info.Command = cfg.TerraformComponentType
+		}
+	}
+
 	if info.SubCommand == "version" {
 		return ExecuteShellCommand(atmosConfig,
 			info.Command,
