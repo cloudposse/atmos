@@ -180,11 +180,14 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
 	configAndStacksInfo.BaseComponentPath = baseComponentName
-	configAndStacksInfo.Command = command
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
 	configAndStacksInfo.ComponentMetadataSection = componentMetadata
 	configAndStacksInfo.ComponentImportsSection = componentImportsSection
+
+	if command != "" {
+		configAndStacksInfo.Command = command
+	}
 
 	return nil
 }
