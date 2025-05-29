@@ -1494,12 +1494,12 @@ github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99/go.mod h1:1lJo3i
 github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
 github.com/jfrog/archiver/v3 v3.6.1 h1:LOxnkw9pOn45DzCbZNFV6K0+6dCsQ0L8mR3ZcujO5eI=
 github.com/jfrog/archiver/v3 v3.6.1/go.mod h1:VgR+3WZS4N+i9FaDwLZbq+jeU4B4zctXL+gL4EMzfLw=
-github.com/jfrog/build-info-go v1.10.11 h1:wAMGCAHa49+ec01HqzSidLAHNIub+glh4ksFp3pYy7o=
-github.com/jfrog/build-info-go v1.10.11/go.mod h1:JcISnovFXKx3wWf3p1fcMmlPdt6adxScXvoJN4WXqIE=
+github.com/jfrog/build-info-go v1.10.12 h1:KO/YUeKYtDrnpcmsXmwqr6akjzrwA0hSTUB+Op/HF88=
+github.com/jfrog/build-info-go v1.10.12/go.mod h1:JcISnovFXKx3wWf3p1fcMmlPdt6adxScXvoJN4WXqIE=
 github.com/jfrog/gofrog v1.7.6 h1:QmfAiRzVyaI7JYGsB7cxfAJePAZTzFz0gRWZSE27c6s=
 github.com/jfrog/gofrog v1.7.6/go.mod h1:ntr1txqNOZtHplmaNd7rS4f8jpA5Apx8em70oYEe7+4=
-github.com/jfrog/jfrog-client-go v1.53.0 h1:oCNuxEtN2VWcbqGdIp1tdYupm7PJZP53etX1Pr24kxY=
-github.com/jfrog/jfrog-client-go v1.53.0/go.mod h1:IKmGx4sYeaiSKBnVzp/j6lVrmyRAXTABfo3B02SPxXI=
+github.com/jfrog/jfrog-client-go v1.53.1 h1:GDRLUDs6hhfGNjqbI+bjc3ApgBHnpVwURM+f26PVfyw=
+github.com/jfrog/jfrog-client-go v1.53.1/go.mod h1:XxYs2QtlTm92yqJ5O4j4vzWI8d4sDtKQUT1miNHMgnw=
 github.com/jhump/protoreflect v1.6.0/go.mod h1:eaTn3RZAmMBcV0fifFvlm6VHNz3wSkYyXYWUh7ymB74=
 github.com/jhump/protoreflect v1.15.1 h1:HUMERORf3I3ZdX05WaQ6MIpd/NJ434hTp5YiKgfCL6c=
 github.com/jhump/protoreflect v1.15.1/go.mod h1:jD/2GMKKE6OqX8qTjhADU1e6DShO+gavG9e0Q693nKo=
