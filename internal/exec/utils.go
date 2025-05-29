@@ -58,6 +58,7 @@ var commonFlags = []string{
 
 // ProcessComponentConfig processes component config sections
 func ProcessComponentConfig(
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
@@ -338,6 +339,7 @@ func ProcessStacks(
 	// Check and process stacks
 	if atmosConfig.StackType == "Directory" {
 		err = ProcessComponentConfig(
+			&atmosConfig,
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
@@ -371,6 +373,7 @@ func ProcessStacks(
 		for stackName := range stacksMap {
 			// Check if we've found the component in the stack
 			err = ProcessComponentConfig(
+				&atmosConfig,
 				&configAndStacksInfo,
 				stackName,
 				stacksMap,

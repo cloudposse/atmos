@@ -49,7 +49,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	if info.SubCommand == "version" {
 		return ExecuteShellCommand(atmosConfig,
-			"terraform",
+			info.Command,
 			[]string{info.SubCommand},
 			"",
 			nil,
