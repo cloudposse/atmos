@@ -203,8 +203,8 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// shouldUploadResult checks if the upload flag is set for the `plan` command.
-func shouldUploadResult(info *schema.ConfigAndStacksInfo) bool {
+// shouldUploadDriftResult checks if the upload flag is set for the `plan` command.
+func shouldUploadDriftResult(info *schema.ConfigAndStacksInfo) bool {
 	// Only supported for Terraform Plan command
 	if info.SubCommand == "plan" {
 		// Do not upload the result if pro isn't enabled

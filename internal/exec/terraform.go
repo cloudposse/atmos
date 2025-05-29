@@ -539,7 +539,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		)
 		if err != nil {
 			// For Terraform Plan, we need to return the result to the pro API if upload flag is set
-			if uploadDriftResultsFlag && shouldUploadResult(&info) {
+			if uploadDriftResultsFlag && shouldUploadDriftResult(&info) {
 				var exitCode int
 				var osErr *osexec.ExitError
 				if errors.As(err, &osErr) {
