@@ -67,7 +67,7 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		case *bool:
 			*v, err = flags.GetBool(k)
 		case *[]string:
-			*v, err = flags.GetStringArray(k)
+			*v, err = flags.GetStringSlice(k)
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}

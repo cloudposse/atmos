@@ -22,13 +22,17 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 		{
 			name: "Set string and bool flags",
 			setFlags: func(fs *pflag.FlagSet) {
-				fs.Set("process-templates", "false")
-				fs.Set("format", "json")
+				fs.Parse([]string{
+					"--format", "json",
+					"--skip", "tests",
+					"--process-templates",
+				})
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
 				Format:           "json",
-				ProcessTemplates: false,
+				ProcessTemplates: true,
+				Skip:             []string{"tests"},
 			},
 		},
 		{
