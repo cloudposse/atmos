@@ -11,7 +11,7 @@ import (
 
 func TestDescribeStacksExec(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	d := &DescribeStacksExec{
+	d := &describeStacksExec{
 		pageCreator: pager.NewMockPageCreator(ctrl),
 		isTTYSupportForStdout: func() bool {
 			return false

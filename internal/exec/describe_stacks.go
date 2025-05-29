@@ -29,7 +29,12 @@ type DescribeStacksArgs struct {
 	File                 string
 }
 
-type DescribeStacksExec struct {
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+type DescribeStacksExec interface {
+	Execute(atmosConfig schema.AtmosConfiguration, args *DescribeStacksArgs) error
+}
+
+type describeStacksExec struct {
 	pageCreator           pager.PageCreator
 	isTTYSupportForStdout func() bool
 	printOrWriteToFile    func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
@@ -47,8 +52,8 @@ type DescribeStacksExec struct {
 	) (map[string]any, error)
 }
 
-func NewDescribeStacksExec() *DescribeStacksExec {
-	return &DescribeStacksExec{
+func NewDescribeStacksExec() DescribeStacksExec {
+	return &describeStacksExec{
 		pageCreator:           pager.New(),
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		printOrWriteToFile:    printOrWriteToFile,
@@ -57,7 +62,7 @@ func NewDescribeStacksExec() *DescribeStacksExec {
 }
 
 // ExecuteDescribeStacksCmd executes `describe stacks` command
-func (d *DescribeStacksExec) Execute(atmosConfig schema.AtmosConfiguration, args *DescribeStacksArgs) error {
+func (d *describeStacksExec) Execute(atmosConfig schema.AtmosConfiguration, args *DescribeStacksArgs) error {
 	finalStacksMap, err := d.executeDescribeStacks(
 		atmosConfig,
 		args.FilterByStack,

@@ -5,9 +5,36 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/golang/mock/gomock"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestDescribeStacksRunnable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockExec := exec.NewMockDescribeStacksExec(ctrl)
+	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	run := getRunnableDescribeStacksCmd(
+		func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
+		},
+		func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(atmosConfig schema.AtmosConfiguration) error {
+			return nil
+		},
+		func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
+			return nil
+		},
+		mockExec,
+	)
+	run(describeStacksCmd, []string{})
+}
 
 func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 	// Initialize test cases
