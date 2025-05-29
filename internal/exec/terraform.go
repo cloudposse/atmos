@@ -376,8 +376,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Prepare the terraform command
 	allArgsAndFlags := strings.Fields(info.SubCommand)
-
-	uploadDriftResultFlag := false
+	uploadDriftResultsFlag := false
 
 	switch info.SubCommand {
 	case "plan":
@@ -389,25 +388,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
 		// Check if the upload-drift-results flag is set in the command line arguments
-		uploadDriftResultFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--upload-drift-results")
-		// Add detailed exit code if upload flag is set and detailed exit code isn't already set
-		// We need the detailed exit code to be set when uploading deployments to the pro API
-		if uploadDriftResultFlag &&
-			!u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
-			allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
-		}
-		// And remove the upload-drift-results flag from the command line arguments for terraform
-		//
-		// TODO this isnt right!
-		// How do we create an arg for atmos and not terraform?
-		//
-		var filteredArgs []string
-		for _, arg := range info.AdditionalArgsAndFlags {
-			if arg != "--upload-drift-results" {
-				filteredArgs = append(filteredArgs, arg)
+		uploadDriftResultsFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDriftResultsFlag)
+		if uploadDriftResultsFlag {
+			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
+				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
 			}
+			// Remove the upload-drift-results flag from the command line arguments
+			info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDriftResultsFlag)
 		}
-		info.AdditionalArgsAndFlags = filteredArgs
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
 	case "import":
@@ -551,7 +539,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		)
 		if err != nil {
 			// For Terraform Plan, we need to return the result to the pro API if upload flag is set
-			if uploadDriftResultFlag && shouldUploadResult(&info) {
+			if uploadDriftResultsFlag && shouldUploadResult(&info) {
 				var exitCode int
 				var osErr *osexec.ExitError
 				if errors.As(err, &osErr) {

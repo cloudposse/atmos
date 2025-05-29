@@ -6,10 +6,7 @@ import (
 	"path/filepath"
 
 	l "github.com/charmbracelet/log"
-	logger "github.com/cloudposse/atmos/pkg/logger"
 
-	"github.com/cloudposse/atmos/pkg/git"
-	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -170,62 +167,4 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	}
 
 	return true
-}
-
-// shouldUploadResult checks if the upload flag is set for the `plan` command.
-func shouldUploadResult(info *schema.ConfigAndStacksInfo) bool {
-	// Only supported for Terraform Plan command
-	if info.SubCommand == "plan" {
-		// Do not upload the result if pro isn't enabled
-		if proSettings, ok := info.ComponentSettingsSection["pro"].(map[string]any); !ok || proSettings["enabled"] != true {
-			l.Warn("Pro is not enabled. Skipping upload of Terraform result.")
-			return false
-		}
-		return true
-	}
-	return false
-}
-
-// uploadDriftResult uploads the Terraform result to the pro API if the exit code indicates changes or no changes.
-func uploadDriftResult(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, exitCode int) error {
-	// Only upload if exit code is 0 (no changes) or 2 (has changes)
-	if exitCode == 0 || exitCode == 2 {
-		logger, err := logger.NewLoggerFromCliConfig(atmosConfig)
-		if err != nil {
-			return err
-		}
-
-		apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
-		if err != nil {
-			return err
-		}
-
-		repo, err := git.GetLocalRepo()
-		if err != nil {
-			return err
-		}
-
-		repoInfo, err := git.GetRepoInfo(repo)
-		if err != nil {
-			return err
-		}
-
-		dto := pro.DriftStatusUploadRequest{
-			AtmosProRunID: "", // TODO
-			GitSHA:        "", // TODO
-			RepoURL:       repoInfo.RepoUrl,
-			RepoName:      repoInfo.RepoName,
-			RepoOwner:     repoInfo.RepoOwner,
-			RepoHost:      repoInfo.RepoHost,
-			Component:     info.Component,
-			Stack:         info.Stack,
-			HasDrift:      exitCode == 2,
-		}
-
-		err = apiClient.UploadDriftResultStatus(dto)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

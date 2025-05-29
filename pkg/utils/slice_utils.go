@@ -76,3 +76,13 @@ func SliceOfInterfacesToSliceOfStrings(input []any) ([]string, error) {
 
 	return output, nil
 }
+
+// SliceRemoveString removes a string from a slice.
+func SliceRemoveString(slice []string, str string) []string {
+	for i, v := range slice {
+		if v == str {
+			return append(slice[:i], slice[i+1:]...)
+		}
+	}
+	return slice
+}
