@@ -438,6 +438,106 @@ func TestExecuteTerraform_OpaValidation(t *testing.T) {
 	assert.ErrorContains(t, err, "the component can't be applied if the 'foo' variable is set to 'foo'")
 }
 
+func TestExecuteTerraform_TerraformVersion(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the work directory and change to it
+	workDir := "../../tests/fixtures/scenarios/atmos-terraform-version"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// set info for ExecuteTerraform
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "version",
+	}
+
+	// Create a pipe to capture stdout to check if terraform is executed correctly
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	err = ExecuteTerraform(info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "Terraform v") {
+		t.Errorf("Terraform version not found in the output")
+	}
+}
+
+func TestExecuteTerraform_TofuVersion(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the work directory and change to it
+	workDir := "../../tests/fixtures/scenarios/atmos-tofu-version"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// set info for ExecuteTerraform
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "version",
+	}
+
+	// Create a pipe to capture stdout to check if terraform is executed correctly
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	err = ExecuteTerraform(info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	if !strings.Contains(output, "OpenTofu v") {
+		t.Errorf("OpenTofu version not found in the output")
+	}
+}
+
 // Helper Function to extract key-value pairs from a string.
 func extractKeyValuePairs(input string) map[string]string {
 	// Split the input into lines
