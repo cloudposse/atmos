@@ -233,6 +233,18 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 							},
 						},
 					},
+					Metadata: map[string]interface{}{
+						"type": "real",
+					},
+				},
+				{
+					Component:     "app",
+					Stack:         "stack1",
+					ComponentType: "helmfile",
+					Settings:      map[string]interface{}{},
+					Metadata: map[string]interface{}{
+						"type": "real",
+					},
 				},
 			},
 		},
@@ -863,7 +875,13 @@ func TestProcessStackComponents(t *testing.T) {
 					Component:     "vpc",
 					Stack:         "stack1",
 					ComponentType: "terraform",
-					Settings:      map[string]interface{}{},
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
 					Metadata: map[string]interface{}{
 						"type": "real",
 					},
