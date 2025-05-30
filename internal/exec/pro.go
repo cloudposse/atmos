@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 
+	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
@@ -290,6 +291,9 @@ func shouldUploadDriftResult(info *schema.ConfigAndStacksInfo) bool {
 			return true
 		}
 	}
+
+	// Create logger from atmos config
+	log.Warn("Pro is not enabled. Skipping upload of Terraform result.")
 
 	return false
 }
