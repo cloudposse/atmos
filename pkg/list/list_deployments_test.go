@@ -42,8 +42,8 @@ func (m *mockDescribeStacks) Execute(config *schema.AtmosConfiguration, stack st
 	return m.stacks, m.err
 }
 
-// isDriftDetectionEnabled checks if drift detection is enabled for a deployment
-func isDriftDetectionEnabled(deployment schema.Deployment) bool {
+// isDriftDetectionEnabled checks if drift detection is enabled for a deployment.
+func isDriftDetectionEnabled(deployment *schema.Deployment) bool {
 	settings, ok := deployment.Settings["pro"].(map[string]any)
 	if !ok {
 		return false
@@ -58,7 +58,7 @@ func isDriftDetectionEnabled(deployment schema.Deployment) bool {
 	return ok && enabled
 }
 
-// filterDeploymentsByDriftDetection filters deployments based on drift detection setting
+// filterDeploymentsByDriftDetection filters deployments based on drift detection setting.
 func filterDeploymentsByDriftDetection(deployments []schema.Deployment, driftEnabled bool) []schema.Deployment {
 	if !driftEnabled {
 		return deployments
@@ -66,7 +66,7 @@ func filterDeploymentsByDriftDetection(deployments []schema.Deployment, driftEna
 
 	filtered := make([]schema.Deployment, 0, len(deployments))
 	for _, deployment := range deployments {
-		if isDriftDetectionEnabled(deployment) {
+		if isDriftDetectionEnabled(&deployment) {
 			filtered = append(filtered, deployment)
 		}
 	}
@@ -654,7 +654,7 @@ func TestDriftDetectionFiltering(t *testing.T) {
 	assert.Equal(t, "stack1", filtered[0].Stack)
 }
 
-// TestProcessComponentConfig tests the processComponentConfig function
+// TestProcessComponentConfig tests the processComponentConfig function.
 func TestProcessComponentConfig(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -736,7 +736,7 @@ func TestProcessComponentConfig(t *testing.T) {
 	}
 }
 
-// TestProcessComponentType tests the processComponentType function
+// TestProcessComponentType tests the processComponentType function.
 func TestProcessComponentType(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -822,7 +822,7 @@ func TestProcessComponentType(t *testing.T) {
 	}
 }
 
-// TestProcessStackComponents tests the processStackComponents function
+// TestProcessStackComponents tests the processStackComponents function.
 func TestProcessStackComponents(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -923,7 +923,7 @@ func TestProcessStackComponents(t *testing.T) {
 	}
 }
 
-// TestFormatDeployments tests the formatDeployments function
+// TestFormatDeployments tests the formatDeployments function.
 func TestFormatDeployments(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -969,7 +969,7 @@ func TestFormatDeployments(t *testing.T) {
 	}
 }
 
-// TestUploadDeployments tests the uploadDeployments function
+// TestUploadDeployments tests the uploadDeployments function.
 func TestUploadDeployments(t *testing.T) {
 	tests := []struct {
 		name          string
