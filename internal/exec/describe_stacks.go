@@ -13,12 +13,14 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteDescribeStacksCmd executes `describe stacks` command
+// ExecuteDescribeStacksCmd executes `describe stacks` command.
 func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
 		return err
 	}
+
+	info.CliArgs = []string{"describe", "stacks"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -144,7 +146,7 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components
+// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
 func ExecuteDescribeStacks(
 	atmosConfig schema.AtmosConfiguration,
 	filterByStack string,
@@ -181,7 +183,7 @@ func ExecuteDescribeStacks(
 		// Delete the stack-wide imports
 		delete(stackSection.(map[string]any), "imports")
 
-		// Check if components section exists and has explicit components
+		// Check if the `components` section exists and has explicit components
 		hasExplicitComponents := false
 		if componentsSection, ok := stackSection.(map[string]any)["components"]; ok {
 			if componentsSection != nil {
@@ -418,8 +420,24 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
+							// Check if we should include empty sections
+							includeEmpty := true // Default to true if setting is not provided // pending Erik accept
+							if atmosConfig.Describe.Settings.IncludeEmpty != nil {
+								includeEmpty = *atmosConfig.Describe.Settings.IncludeEmpty
+							}
+
 							// Add sections
 							for sectionName, section := range componentSection {
+								// Skip empty sections if includeEmpty is false
+								// pending Erik to check if this should also remove empty strings e.g (vars: format: "")
+								if !includeEmpty {
+									if sectionMap, ok := section.(map[string]any); ok {
+										if len(sectionMap) == 0 {
+											continue
+										}
+									}
+								}
+
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
 								}

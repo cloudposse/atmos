@@ -2,8 +2,8 @@ package exec
 
 import (
 	"errors"
-	"fmt"
 
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -33,6 +33,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "helmfile"
+	info.CliArgs = []string{"helmfile", "generate", "varfile"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -59,18 +60,17 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 	}
 
 	// Print the component variables
-	u.LogDebug(fmt.Sprintf("\nVariables for the component '%s' in the stack '%s':", info.ComponentFromArg, info.Stack))
+	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
+		err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Write the variables to file
-	u.LogDebug("Writing the variables to file:")
-	u.LogDebug(varFilePath)
+	log.Debug("Writing the variables to file", "file", varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0o644)

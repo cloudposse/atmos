@@ -29,7 +29,7 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 	sha := ""
 
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRefClone(
-		atmosConfig,
+		&atmosConfig,
 		ref,
 		sha,
 		"",
@@ -66,7 +66,7 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	repoPath := "../../"
 
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
-		atmosConfig,
+		&atmosConfig,
 		repoPath,
 		true,
 		true,

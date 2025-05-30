@@ -36,6 +36,8 @@ var (
 
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
+	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
+
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
@@ -134,7 +136,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if info.SubCommand != "workspace" {
 		log.Debug("Variables for the component in the stack", "component", info.ComponentFromArg, "stack", info.Stack)
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-			err = u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection)
+			err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
 			if err != nil {
 				return err
 			}
@@ -182,7 +184,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
 			log.Debug("CLI variables (will override the variables defined in the stack manifests):")
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-				err = u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars)
+				err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, cliVars)
 				if err != nil {
 					return err
 				}

@@ -9,6 +9,16 @@ import (
 
 type AtmosSectionMapType = map[string]any
 
+// DescribeSettings contains settings for the describe command output
+type DescribeSettings struct {
+	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
+}
+
+// Describe contains configuration for the describe command.
+type Describe struct {
+	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+}
+
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string                 `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
@@ -22,6 +32,7 @@ type AtmosConfiguration struct {
 	Schemas                       map[string]interface{} `yaml:"schemas,omitempty" json:"schemas,omitempty" mapstructure:"schemas"`
 	Templates                     Templates              `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Settings                      AtmosSettings          `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Describe                      Describe               `yaml:"describe,omitempty" json:"describe,omitempty" mapstructure:"describe"`
 	StoresConfig                  store.StoresConfig     `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor                 `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool                   `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
@@ -192,6 +203,7 @@ type Terminal struct {
 	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"`
+	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 }
 
 func (t *Terminal) IsPagerEnabled() bool {
@@ -467,6 +479,7 @@ type ConfigAndStacksInfo struct {
 	ProcessTemplates              bool
 	ProcessFunctions              bool
 	Skip                          []string
+	CliArgs                       []string
 }
 
 // Workflows
@@ -686,6 +699,7 @@ type Affected struct {
 	SpaceliftStack       string              `yaml:"spacelift_stack,omitempty" json:"spacelift_stack,omitempty" mapstructure:"spacelift_stack"`
 	AtlantisProject      string              `yaml:"atlantis_project,omitempty" json:"atlantis_project,omitempty" mapstructure:"atlantis_project"`
 	Affected             string              `yaml:"affected" json:"affected" mapstructure:"affected"`
+	AffectedAll          []string            `yaml:"affected_all" json:"affected_all" mapstructure:"affected_all"`
 	File                 string              `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
 	Folder               string              `yaml:"folder,omitempty" json:"folder,omitempty" mapstructure:"folder"`
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
