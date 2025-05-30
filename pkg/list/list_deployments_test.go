@@ -474,40 +474,115 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 
 // TestSortDeployments tests the sorting functionality of deployments.
 func TestSortDeployments(t *testing.T) {
-	deployments := []schema.Deployment{
-		{Component: "b", Stack: "stack2"},
-		{Component: "a", Stack: "stack1"},
-		{Component: "c", Stack: "stack1"},
-		{Component: "a", Stack: "stack2"},
+	tests := []struct {
+		name        string
+		deployments []schema.Deployment
+		expected    []schema.Deployment
+	}{
+		{
+			name: "basic sorting",
+			deployments: []schema.Deployment{
+				{Component: "b", Stack: "stack2"},
+				{Component: "a", Stack: "stack1"},
+				{Component: "c", Stack: "stack1"},
+				{Component: "a", Stack: "stack2"},
+			},
+			expected: []schema.Deployment{
+				{Component: "a", Stack: "stack1"},
+				{Component: "c", Stack: "stack1"},
+				{Component: "a", Stack: "stack2"},
+				{Component: "b", Stack: "stack2"},
+			},
+		},
+		{
+			name: "same component different stacks",
+			deployments: []schema.Deployment{
+				{Component: "vpc", Stack: "prod"},
+				{Component: "vpc", Stack: "dev"},
+				{Component: "vpc", Stack: "staging"},
+			},
+			expected: []schema.Deployment{
+				{Component: "vpc", Stack: "dev"},
+				{Component: "vpc", Stack: "prod"},
+				{Component: "vpc", Stack: "staging"},
+			},
+		},
+		{
+			name: "same stack different components",
+			deployments: []schema.Deployment{
+				{Component: "z", Stack: "prod"},
+				{Component: "a", Stack: "prod"},
+				{Component: "m", Stack: "prod"},
+			},
+			expected: []schema.Deployment{
+				{Component: "a", Stack: "prod"},
+				{Component: "m", Stack: "prod"},
+				{Component: "z", Stack: "prod"},
+			},
+		},
+		{
+			name: "complex sorting - both components and stacks",
+			deployments: []schema.Deployment{
+				{Component: "z", Stack: "prod"},
+				{Component: "a", Stack: "dev"},
+				{Component: "m", Stack: "prod"},
+				{Component: "a", Stack: "prod"},
+				{Component: "z", Stack: "dev"},
+				{Component: "m", Stack: "dev"},
+			},
+			expected: []schema.Deployment{
+				{Component: "a", Stack: "dev"},
+				{Component: "m", Stack: "dev"},
+				{Component: "z", Stack: "dev"},
+				{Component: "a", Stack: "prod"},
+				{Component: "m", Stack: "prod"},
+				{Component: "z", Stack: "prod"},
+			},
+		},
+		{
+			name:        "empty deployments",
+			deployments: []schema.Deployment{},
+			expected:    []schema.Deployment{},
+		},
+		{
+			name: "single deployment",
+			deployments: []schema.Deployment{
+				{Component: "vpc", Stack: "prod"},
+			},
+			expected: []schema.Deployment{
+				{Component: "vpc", Stack: "prod"},
+			},
+		},
 	}
 
-	// Sort deployments by stack, then by component
-	type deploymentRow struct {
-		Component string
-		Stack     string
-	}
-	rowsData := make([]deploymentRow, 0, len(deployments))
-	for _, d := range deployments {
-		rowsData = append(rowsData, deploymentRow{Component: d.Component, Stack: d.Stack})
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sorted := sortDeployments(tt.deployments)
+			assert.Equal(t, len(tt.expected), len(sorted), "Number of deployments should match")
 
-	// Sort
-	sort.Slice(rowsData, func(i, j int) bool {
-		if rowsData[i].Stack != rowsData[j].Stack {
-			return rowsData[i].Stack < rowsData[j].Stack
-		}
-		return rowsData[i].Component < rowsData[j].Component
-	})
+			for i := range sorted {
+				assert.Equal(t, tt.expected[i].Component, sorted[i].Component,
+					"Component at index %d should match", i)
+				assert.Equal(t, tt.expected[i].Stack, sorted[i].Stack,
+					"Stack at index %d should match", i)
+			}
 
-	// Verify sorting
-	expected := []deploymentRow{
-		{Component: "a", Stack: "stack1"},
-		{Component: "c", Stack: "stack1"},
-		{Component: "a", Stack: "stack2"},
-		{Component: "b", Stack: "stack2"},
+			// Additional verification for complex sorting
+			if tt.name == "complex sorting - both components and stacks" {
+				// Verify stacks are sorted
+				for i := 1; i < len(sorted); i++ {
+					assert.LessOrEqual(t, sorted[i-1].Stack, sorted[i].Stack,
+						"Stacks should be in ascending order")
+
+					// If stacks are equal, verify components are sorted
+					if sorted[i-1].Stack == sorted[i].Stack {
+						assert.LessOrEqual(t, sorted[i-1].Component, sorted[i].Component,
+							"Components should be in ascending order within same stack")
+					}
+				}
+			}
+		})
 	}
-
-	assert.Equal(t, expected, rowsData)
 }
 
 // TestDriftDetectionFiltering tests the drift detection filtering logic.

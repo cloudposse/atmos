@@ -114,10 +114,11 @@ func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
 	type deploymentRow struct {
 		Component string
 		Stack     string
+		Index     int // Add index to track original position
 	}
 	rowsData := make([]deploymentRow, 0, len(deployments))
-	for _, d := range deployments {
-		rowsData = append(rowsData, deploymentRow{Component: d.Component, Stack: d.Stack})
+	for i, d := range deployments {
+		rowsData = append(rowsData, deploymentRow{Component: d.Component, Stack: d.Stack, Index: i})
 	}
 	sort.Slice(rowsData, func(i, j int) bool {
 		if rowsData[i].Stack != rowsData[j].Stack {
@@ -126,14 +127,12 @@ func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
 		return rowsData[i].Component < rowsData[j].Component
 	})
 
-	var rows []map[string]interface{}
-	for _, row := range rowsData {
-		rows = append(rows, map[string]interface{}{
-			"Component": row.Component,
-			"Stack":     row.Stack,
-		})
+	// Create a new slice with sorted deployments
+	sortedDeployments := make([]schema.Deployment, len(deployments))
+	for i, row := range rowsData {
+		sortedDeployments[i] = deployments[row.Index]
 	}
-	return deployments
+	return sortedDeployments
 }
 
 // formatDeployments formats the deployments for output.
