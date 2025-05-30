@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -172,16 +173,26 @@ func formatDeployments(deployments []schema.Deployment) string {
 		MaxColumns:    0,
 	}
 
-	return format.CreateStyledTable(formatOpts.CustomHeaders, func() [][]string {
-		var tableRows [][]string
-		for _, row := range rows {
-			tableRows = append(tableRows, []string{
-				fmt.Sprintf("%v", row["Component"]),
-				fmt.Sprintf("%v", row["Stack"]),
-			})
+	// Create table rows
+	var tableRows [][]string
+	for _, row := range rows {
+		tableRows = append(tableRows, []string{
+			fmt.Sprintf("%v", row["Component"]),
+			fmt.Sprintf("%v", row["Stack"]),
+		})
+	}
+
+	// If not in a TTY environment, output plain rows
+	if !formatOpts.TTY {
+		var output strings.Builder
+		output.WriteString("Component,Stack\n")
+		for _, row := range tableRows {
+			output.WriteString(fmt.Sprintf("%s,%s\n", row[0], row[1]))
 		}
-		return tableRows
-	}())
+		return output.String()
+	}
+
+	return format.CreateStyledTable(formatOpts.CustomHeaders, tableRows)
 }
 
 // uploadDeployments uploads deployments to Atmos Pro API.

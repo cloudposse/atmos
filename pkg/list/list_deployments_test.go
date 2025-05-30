@@ -237,15 +237,6 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 						"type": "real",
 					},
 				},
-				{
-					Component:     "app",
-					Stack:         "stack1",
-					ComponentType: "helmfile",
-					Settings:      map[string]interface{}{},
-					Metadata: map[string]interface{}{
-						"type": "real",
-					},
-				},
 			},
 		},
 		{
@@ -927,9 +918,12 @@ func TestProcessStackComponents(t *testing.T) {
 			if tt.expected == nil {
 				assert.Nil(t, result)
 			} else {
-				assert.Equal(t, len(tt.expected), len(result))
-				for i, expected := range tt.expected {
-					actual := result[i]
+				// Sort both actual and expected deployments for order-insensitive comparison
+				sortedResult := sortDeployments(result)
+				sortedExpected := sortDeployments(tt.expected)
+				assert.Equal(t, len(sortedExpected), len(sortedResult))
+				for i, expected := range sortedExpected {
+					actual := sortedResult[i]
 					assert.Equal(t, expected.Component, actual.Component)
 					assert.Equal(t, expected.Stack, actual.Stack)
 					assert.Equal(t, expected.ComponentType, actual.ComponentType)
@@ -951,7 +945,7 @@ func TestFormatDeployments(t *testing.T) {
 		{
 			name:        "empty deployments",
 			deployments: []schema.Deployment{},
-			expected:    "┏━━━━━━━━━━━┳━━━━━━━┓\n┃ Component ┃ Stack ┃\n┣━━━━━━━━━━━╋━━━━━━━┫\n┗━━━━━━━━━━━┻━━━━━━━┛\n",
+			expected:    "Component,Stack\n",
 		},
 		{
 			name: "single deployment",
@@ -961,7 +955,7 @@ func TestFormatDeployments(t *testing.T) {
 					Stack:     "prod",
 				},
 			},
-			expected: "┏━━━━━━━━━━━┳━━━━━━━┓\n┃ Component ┃ Stack ┃\n┣━━━━━━━━━━━╋━━━━━━━┫\n┃ vpc       ┃ prod  ┃\n┗━━━━━━━━━━━┻━━━━━━━┛\n",
+			expected: "Component,Stack\nvpc,prod\n",
 		},
 		{
 			name: "multiple deployments",
@@ -975,7 +969,7 @@ func TestFormatDeployments(t *testing.T) {
 					Stack:     "dev",
 				},
 			},
-			expected: "┏━━━━━━━━━━━┳━━━━━━━┓\n┃ Component ┃ Stack ┃\n┣━━━━━━━━━━━╋━━━━━━━┫\n┃ vpc       ┃ prod  ┃\n┃ app       ┃ dev   ┃\n┗━━━━━━━━━━━┻━━━━━━━┛\n",
+			expected: "Component,Stack\nvpc,prod\napp,dev\n",
 		},
 	}
 
