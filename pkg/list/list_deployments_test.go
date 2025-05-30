@@ -28,7 +28,7 @@ type mockAPIClient struct {
 	uploadErr error
 }
 
-func (m *mockAPIClient) UploadDriftDetection(req pro.DriftDetectionUploadRequest) error {
+func (m *mockAPIClient) UploadDriftDetection(req *pro.DriftDetectionUploadRequest) error {
 	return m.uploadErr
 }
 
@@ -38,7 +38,7 @@ type mockDescribeStacks struct {
 	err    error
 }
 
-func (m *mockDescribeStacks) Execute(config schema.AtmosConfiguration, stack string, additionalStacks []string, additionalStacksList []string, additionalStacksMap map[string]bool, includeAllStacks bool, includeStackGroups bool) (map[string]interface{}, error) {
+func (m *mockDescribeStacks) Execute(config *schema.AtmosConfiguration, stack string, additionalStacks []string, additionalStacksList []string, additionalStacksMap map[string]bool, includeAllStacks bool, includeStackGroups bool) (map[string]interface{}, error) {
 	return m.stacks, m.err
 }
 
@@ -102,18 +102,19 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 
 	// Test cases
 	tests := []struct {
-		name                string
-		info                schema.ConfigAndStacksInfo
-		driftEnabled        bool
-		upload              bool
-		mockStacks          map[string]interface{}
-		mockStacksErr       error
-		mockRepoInfo        *git.RepoInfo
-		mockRepoErr         error
-		mockUploadErr       error
-		expectedError       string
-		expectedOutput      string
-		expectedDeployments []schema.Deployment
+		name                 string
+		info                 schema.ConfigAndStacksInfo
+		driftEnabled         bool
+		upload               bool
+		mockStacks           map[string]interface{}
+		mockStacksErr        error
+		mockRepoInfo         *git.RepoInfo
+		mockRepoErr          error
+		mockUploadErr        error
+		expectedError        string
+		expectedOutput       string
+		expectedDeployments  []schema.Deployment
+		processedDeployments []schema.Deployment
 	}{
 		{
 			name:         "default flags",
@@ -123,18 +124,6 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			mockStacks:   mockStacks,
 			expectedDeployments: []schema.Deployment{
 				{
-					Component:     "vpc",
-					Stack:         "stack1",
-					ComponentType: "terraform",
-					Settings: map[string]interface{}{
-						"pro": map[string]interface{}{
-							"drift_detection": map[string]interface{}{
-								"enabled": true,
-							},
-						},
-					},
-				},
-				{
 					Component:     "app",
 					Stack:         "stack1",
 					ComponentType: "helmfile",
@@ -142,6 +131,18 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 						"pro": map[string]interface{}{
 							"drift_detection": map[string]interface{}{
 								"enabled": false,
+							},
+						},
+					},
+				},
+				{
+					Component:     "vpc",
+					Stack:         "stack1",
+					ComponentType: "terraform",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
 							},
 						},
 					},
@@ -293,11 +294,13 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 					Component:     "vpc",
 					Stack:         "stack1",
 					ComponentType: "terraform",
+					Settings:      nil,
 				},
 				{
 					Component:     "vpc",
 					Stack:         "stack2",
 					ComponentType: "terraform",
+					Settings:      nil,
 				},
 			},
 		},
@@ -322,10 +325,90 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			// Create a test-specific implementation of ExecuteListDeploymentsCmd
 			executeListDeployments := func(_ schema.ConfigAndStacksInfo, _ *cobra.Command, args []string) error {
 				// Get stacks
-				_, err := mockDescriber.Execute(schema.AtmosConfiguration{}, "", nil, nil, nil, true, false)
+				stacks, err := mockDescriber.Execute(&schema.AtmosConfiguration{}, "", nil, nil, nil, true, false)
 				if err != nil {
 					return err
 				}
+
+				// Collect deployments from stacks
+				var processedDeployments []schema.Deployment
+				for stackName, stackConfig := range stacks {
+					stackConfigMap, ok := stackConfig.(map[string]any)
+					if !ok {
+						continue
+					}
+
+					components, ok := stackConfigMap["components"].(map[string]any)
+					if !ok {
+						continue
+					}
+
+					for componentType, typeComponents := range components {
+						typeComponentsMap, ok := typeComponents.(map[string]any)
+						if !ok {
+							continue
+						}
+
+						for componentName, componentConfig := range typeComponentsMap {
+							componentConfigMap, ok := componentConfig.(map[string]any)
+							if !ok {
+								continue
+							}
+
+							deployment := &schema.Deployment{
+								Component:     componentName,
+								Stack:         stackName,
+								ComponentType: componentType,
+							}
+
+							if settings, ok := componentConfigMap["settings"].(map[string]any); ok {
+								deployment.Settings = settings
+							}
+							if vars, ok := componentConfigMap["vars"].(map[string]any); ok {
+								deployment.Vars = vars
+							}
+							if env, ok := componentConfigMap["env"].(map[string]any); ok {
+								deployment.Env = env
+							}
+							if backend, ok := componentConfigMap["backend"].(map[string]any); ok {
+								deployment.Backend = backend
+							}
+							if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
+								deployment.Metadata = metadata
+							}
+
+							// Skip abstract components
+							if componentType, ok := deployment.Metadata["type"].(string); ok && componentType == "abstract" {
+								continue
+							}
+
+							processedDeployments = append(processedDeployments, *deployment)
+						}
+					}
+				}
+
+				// Filter deployments if drift detection is enabled
+				if tt.driftEnabled {
+					filtered := []schema.Deployment{}
+					for _, deployment := range processedDeployments {
+						if settings, ok := deployment.Settings["pro"].(map[string]any); ok {
+							if driftDetection, ok := settings["drift_detection"].(map[string]any); ok {
+								if enabled, ok := driftDetection["enabled"].(bool); ok && enabled {
+									filtered = append(filtered, deployment)
+								}
+							}
+						}
+					}
+					processedDeployments = filtered
+				}
+
+				// Sort deployments
+				sort.Slice(processedDeployments, func(i, j int) bool {
+					if processedDeployments[i].Stack != processedDeployments[j].Stack {
+						return processedDeployments[i].Stack < processedDeployments[j].Stack
+					}
+					return processedDeployments[i].Component < processedDeployments[j].Component
+				})
 
 				// Get repo info if needed
 				var repoInfo *git.RepoInfo
@@ -345,13 +428,16 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 						RepoName:  repoInfo.RepoName,
 						RepoOwner: repoInfo.RepoOwner,
 						RepoHost:  repoInfo.RepoHost,
-						Stacks:    tt.expectedDeployments,
+						Stacks:    processedDeployments,
 					}
-					err := apiClient.UploadDriftDetection(req)
+					err := apiClient.UploadDriftDetection(&req)
 					if err != nil {
 						return err
 					}
 				}
+
+				// Store the processed deployments for verification
+				tt.processedDeployments = processedDeployments
 
 				return nil
 			}
@@ -369,15 +455,24 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 
 			// Check deployments if expected
 			if tt.expectedDeployments != nil {
-				// TODO: Add assertions to verify the deployments match expected
-				// This would require modifying the ExecuteListDeploymentsCmd to return the deployments
-				// or capturing them in a way that can be verified
+				assert.Equal(t, len(tt.expectedDeployments), len(tt.processedDeployments), "Number of deployments should match")
+				for i, expected := range tt.expectedDeployments {
+					actual := tt.processedDeployments[i]
+					assert.Equal(t, expected.Component, actual.Component, "Component should match")
+					assert.Equal(t, expected.Stack, actual.Stack, "Stack should match")
+					assert.Equal(t, expected.ComponentType, actual.ComponentType, "ComponentType should match")
+					if expected.Settings == nil {
+						assert.Nil(t, actual.Settings, "Settings should be nil")
+					} else {
+						assert.Equal(t, expected.Settings, actual.Settings, "Settings should match")
+					}
+				}
 			}
 		})
 	}
 }
 
-// TestSortDeployments tests the sorting functionality of deployments
+// TestSortDeployments tests the sorting functionality of deployments.
 func TestSortDeployments(t *testing.T) {
 	deployments := []schema.Deployment{
 		{Component: "b", Stack: "stack2"},
@@ -415,7 +510,7 @@ func TestSortDeployments(t *testing.T) {
 	assert.Equal(t, expected, rowsData)
 }
 
-// TestDriftDetectionFiltering tests the drift detection filtering logic
+// TestDriftDetectionFiltering tests the drift detection filtering logic.
 func TestDriftDetectionFiltering(t *testing.T) {
 	deployments := []schema.Deployment{
 		{
