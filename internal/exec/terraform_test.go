@@ -565,12 +565,12 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			stackDir := filepath.Join(workDir, "stacks", "nonprod")
-			if err := os.MkdirAll(stackDir, 0755); err != nil {
+			if err := os.MkdirAll(stackDir, 0o755); err != nil {
 				t.Fatalf("Failed to create stack dir: %v", err)
 			}
 			stackFile := filepath.Join(stackDir, "component-1.yaml")
 			stackContent := fmt.Sprintf(`components:\n  terraform:\n    component-1:\n      settings:\n        pro:\n          enabled: %v\n      vars:\n        foo: component-1-a\n        bar: component-1-b\n        baz: component-1-c`, tc.proEnabled)
-			if err := os.WriteFile(stackFile, []byte(stackContent), 0644); err != nil {
+			if err := os.WriteFile(stackFile, []byte(stackContent), 0o644); err != nil {
 				t.Fatalf("Failed to write stack file: %v", err)
 			}
 			defer os.Remove(stackFile)
