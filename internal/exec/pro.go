@@ -221,7 +221,7 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 }
 
 // uploadDriftResult uploads the terraform results to the pro API.
-func uploadDriftResult(info schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+func uploadDriftResult(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
 	// Only upload if exit code is 0 (no changes) or 2 (changes)
 	if exitCode != 0 && exitCode != 2 {
 		return nil

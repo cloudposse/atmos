@@ -568,7 +568,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				// Use the default git repo implementation
 				gitRepo := &git.DefaultGitRepo{}
 
-				if err := uploadDriftResult(info, exitCode, client, gitRepo); err != nil {
+				if err := uploadDriftResult(&info, exitCode, client, gitRepo); err != nil {
 					return err
 				}
 			}

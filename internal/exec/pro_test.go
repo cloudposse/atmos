@@ -190,7 +190,7 @@ func TestUploadDriftResult(t *testing.T) {
 			}
 
 			// Call the function
-			err := uploadDriftResult(info, tc.exitCode, mockProClient, mockGitRepo)
+			err := uploadDriftResult(&info, tc.exitCode, mockProClient, mockGitRepo)
 
 			// Check results
 			if tc.expectedError {
