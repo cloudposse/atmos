@@ -41,7 +41,7 @@ func init() {
 }
 
 func ExecuteListDeploymentsCmd(cmd *cobra.Command, args []string) error {
-	info := schema.ConfigAndStacksInfo{}
+	info := &schema.ConfigAndStacksInfo{}
 	info.Command = "list"
 	info.SubCommand = "deployments"
 

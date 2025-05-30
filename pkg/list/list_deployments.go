@@ -5,49 +5,69 @@ import (
 	"os"
 	"sort"
 
-	log "github.com/charmbracelet/log"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/format"
-	"github.com/cloudposse/atmos/pkg/logger"
+	logger "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
+// processComponentConfig processes a single component configuration and returns a deployment if valid.
+func processComponentConfig(stackName, componentName, componentType string, componentConfig interface{}) *schema.Deployment {
+	componentConfigMap, ok := componentConfig.(map[string]any)
+	if !ok {
+		return nil
+	}
+	return createDeployment(stackName, componentName, componentType, componentConfigMap)
+}
+
+// processComponentType processes all components of a specific type in a stack.
+func processComponentType(stackName, componentType string, typeComponents interface{}) []schema.Deployment {
+	typeComponentsMap, ok := typeComponents.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	var deployments []schema.Deployment
+	for componentName, componentConfig := range typeComponentsMap {
+		if deployment := processComponentConfig(stackName, componentName, componentType, componentConfig); deployment != nil {
+			deployments = append(deployments, *deployment)
+		}
+	}
+	return deployments
+}
+
+// processStackComponents processes all components in a stack.
+func processStackComponents(stackName string, stackConfig interface{}) []schema.Deployment {
+	stackConfigMap, ok := stackConfig.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	components, ok := stackConfigMap["components"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	var deployments []schema.Deployment
+	for componentType, typeComponents := range components {
+		if typeDeployments := processComponentType(stackName, componentType, typeComponents); typeDeployments != nil {
+			deployments = append(deployments, typeDeployments...)
+		}
+	}
+	return deployments
+}
+
 // collectDeployments collects all deployments from the stacks map.
 func collectDeployments(stacksMap map[string]interface{}) []schema.Deployment {
-	deployments := []schema.Deployment{}
+	var deployments []schema.Deployment
 	for stackName, stackConfig := range stacksMap {
-		stackConfigMap, ok := stackConfig.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		components, ok := stackConfigMap["components"].(map[string]any)
-		if !ok {
-			continue
-		}
-
-		for componentType, typeComponents := range components {
-			typeComponentsMap, ok := typeComponents.(map[string]any)
-			if !ok {
-				continue
-			}
-
-			for componentName, componentConfig := range typeComponentsMap {
-				componentConfigMap, ok := componentConfig.(map[string]any)
-				if !ok {
-					continue
-				}
-
-				deployment := createDeployment(stackName, componentName, componentType, componentConfigMap)
-				if deployment != nil {
-					deployments = append(deployments, *deployment)
-				}
-			}
+		if stackDeployments := processStackComponents(stackName, stackConfig); stackDeployments != nil {
+			deployments = append(deployments, stackDeployments...)
 		}
 	}
 	return deployments
@@ -165,27 +185,21 @@ func formatDeployments(deployments []schema.Deployment) string {
 }
 
 // uploadDeployments uploads deployments to Atmos Pro API.
-func uploadDeployments(deployments []schema.Deployment, atmosConfig schema.AtmosConfiguration) error {
+func uploadDeployments(deployments []schema.Deployment, log *logger.Logger) error {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		log.Error("Failed to get local git repo", "error", err)
+		log.Error(err)
 		return err
 	}
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		log.Error("Failed to get git repo info", "error", err)
+		log.Error(err)
 		return err
 	}
 
-	logger, err := logger.NewLoggerFromCliConfig(atmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(log)
 	if err != nil {
-		log.Error("Failed to create logger", "error", err)
-		return err
-	}
-
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
-	if err != nil {
-		log.Error("Failed to create Atmos Pro API client", "error", err)
+		log.Error(err)
 		return err
 	}
 
@@ -199,20 +213,26 @@ func uploadDeployments(deployments []schema.Deployment, atmosConfig schema.Atmos
 
 	err = apiClient.UploadDriftDetection(&req)
 	if err != nil {
-		log.Error("Failed to upload deployments", "error", err)
+		log.Error(err)
 		return err
 	}
 
-	logger.Info("Successfully uploaded deployments to Atmos Pro API.")
+	log.Info("Successfully uploaded deployments to Atmos Pro API.")
 	return nil
 }
 
 // ExecuteListDeploymentsCmd executes the list deployments command.
-func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	// Initialize CLI config
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
+	}
+
+	// Create logger
+	log, err := logger.NewLoggerFromCliConfig(atmosConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create logger: %w", err)
 	}
 
 	// Get drift detection filter
@@ -250,7 +270,7 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 		return nil
 	}
 
-	if err := uploadDeployments(deployments, atmosConfig); err != nil {
+	if err := uploadDeployments(deployments, log); err != nil {
 		return err
 	}
 
