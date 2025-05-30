@@ -1,7 +1,7 @@
 name: Tests
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [ opened, synchronize, reopened ]
     paths-ignore:
       - "README.md"
 
@@ -127,6 +127,9 @@ jobs:
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
+
+      - name: Install Helmfile
+        run: sudo apt-get -y install helmfile
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows'
@@ -517,7 +520,7 @@ jobs:
             }
 
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    needs: [ test, lint, mock, k3s, localstack, docker, validate ]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
