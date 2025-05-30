@@ -11,6 +11,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	git "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -565,7 +566,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				}
 
 				// Use the default git repo implementation
-				gitRepo := &DefaultGitRepo{}
+				gitRepo := &git.DefaultGitRepo{}
 
 				if err := uploadDriftResult(info, exitCode, client, gitRepo); err != nil {
 					return err
