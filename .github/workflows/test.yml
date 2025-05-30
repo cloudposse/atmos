@@ -20,7 +20,7 @@ on:
 env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
-  HELMFILE_VERSION: "1.1.0"
+  HELMFILE_VERSION: "v1.1.0"
 
 jobs:
   # ensure the code builds...
