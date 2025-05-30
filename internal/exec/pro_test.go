@@ -3,13 +3,15 @@ package exec
 import (
 	"testing"
 
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-// MockProAPIClient is a mock implementation of the pro API client
+// MockProAPIClient is a mock implementation of the pro API client.
 type MockProAPIClient struct {
 	mock.Mock
 }
@@ -17,6 +19,42 @@ type MockProAPIClient struct {
 func (m *MockProAPIClient) UploadDriftResultStatus(dto pro.DriftStatusUploadRequest) error {
 	args := m.Called(dto)
 	return args.Error(0)
+}
+
+// MockGitRepo is a mock implementation of the git repository
+type MockGitRepo struct {
+	mock.Mock
+}
+
+func (m *MockGitRepo) GetLocalRepo() (*gogit.Repository, error) {
+	args := m.Called()
+	return args.Get(0).(*gogit.Repository), args.Error(1)
+}
+
+func (m *MockGitRepo) GetRepoInfo(repo *gogit.Repository) (atmosgit.RepoInfo, error) {
+	args := m.Called(repo)
+	return args.Get(0).(atmosgit.RepoInfo), args.Error(1)
+}
+
+// Test helper function to create a test info with pro settings
+func createTestInfo(proEnabled bool) schema.ConfigAndStacksInfo {
+	info := schema.ConfigAndStacksInfo{
+		Stack:            "test-stack",
+		Component:        "test-component",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component",
+		SubCommand:       "plan",
+	}
+
+	if proEnabled {
+		info.ComponentSettingsSection = map[string]interface{}{
+			"pro": map[string]interface{}{
+				"enabled": true,
+			},
+		}
+	}
+
+	return info
 }
 
 func TestShouldUploadDriftResult(t *testing.T) {
@@ -75,6 +113,100 @@ func TestShouldUploadDriftResult(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := shouldUploadDriftResult(tc.info)
 			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestUploadDriftResult(t *testing.T) {
+	// Create mock clients
+	mockProClient := new(MockProAPIClient)
+	mockGitRepo := new(MockGitRepo)
+
+	// Create test repository and repo info
+	testRepo := &gogit.Repository{}
+	testRepoInfo := atmosgit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
+
+	// Set up mock expectations for git functions
+	mockGitRepo.On("GetLocalRepo").Return(testRepo, nil)
+	mockGitRepo.On("GetRepoInfo", testRepo).Return(testRepoInfo, nil)
+
+	// Test cases
+	testCases := []struct {
+		name          string
+		exitCode      int
+		proEnabled    bool
+		expectedError bool
+		expectedDrift bool
+	}{
+		{
+			name:          "drift detected",
+			exitCode:      2,
+			proEnabled:    true,
+			expectedError: false,
+			expectedDrift: true,
+		},
+		{
+			name:          "no drift",
+			exitCode:      0,
+			proEnabled:    true,
+			expectedError: false,
+			expectedDrift: false,
+		},
+		{
+			name:          "error exit code",
+			exitCode:      1,
+			proEnabled:    true,
+			expectedError: false,
+			expectedDrift: false,
+		},
+		{
+			name:          "pro disabled",
+			exitCode:      2,
+			proEnabled:    false,
+			expectedError: false,
+			expectedDrift: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create test info
+			info := createTestInfo(tc.proEnabled)
+
+			// Create test config
+			atmosConfig := schema.AtmosConfiguration{}
+
+			// Set up mock expectations for pro client
+			if tc.proEnabled && (tc.exitCode == 0 || tc.exitCode == 2) {
+				mockProClient.On("UploadDriftResultStatus", mock.MatchedBy(func(dto pro.DriftStatusUploadRequest) bool {
+					return dto.HasDrift == tc.expectedDrift &&
+						dto.Stack == info.Stack &&
+						dto.Component == info.Component &&
+						dto.RepoURL == testRepoInfo.RepoUrl &&
+						dto.RepoName == testRepoInfo.RepoName &&
+						dto.RepoOwner == testRepoInfo.RepoOwner &&
+						dto.RepoHost == testRepoInfo.RepoHost
+				})).Return(nil)
+			}
+
+			// Call the function
+			err := uploadDriftResultWithClient(atmosConfig, info, tc.exitCode, mockProClient, mockGitRepo)
+
+			// Check results
+			if tc.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Verify mock expectations
+			mockProClient.AssertExpectations(t)
+			mockGitRepo.AssertExpectations(t)
 		})
 	}
 }

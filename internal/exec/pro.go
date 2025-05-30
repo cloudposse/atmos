@@ -3,12 +3,12 @@ package exec
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/git"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +26,23 @@ type ProLockCmdArgs struct {
 
 type ProUnlockCmdArgs struct {
 	ProLockUnlockCmdArgs
+}
+
+// GitRepoInterface defines the interface for git repository operations
+type GitRepoInterface interface {
+	GetLocalRepo() (*gogit.Repository, error)
+	GetRepoInfo(repo *gogit.Repository) (atmosgit.RepoInfo, error)
+}
+
+// DefaultGitRepo is the default implementation of GitRepoInterface
+type DefaultGitRepo struct{}
+
+func (d *DefaultGitRepo) GetLocalRepo() (*gogit.Repository, error) {
+	return atmosgit.GetLocalRepo()
+}
+
+func (d *DefaultGitRepo) GetRepoInfo(repo *gogit.Repository) (atmosgit.RepoInfo, error) {
+	return atmosgit.GetRepoInfo(repo)
 }
 
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
@@ -126,12 +143,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	repo, err := git.GetLocalRepo()
+	repo, err := atmosgit.GetLocalRepo()
 	if err != nil {
 		return err
 	}
 
-	repoInfo, err := git.GetRepoInfo(repo)
+	repoInfo, err := atmosgit.GetRepoInfo(repo)
 	if err != nil {
 		return err
 	}
@@ -171,12 +188,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	repo, err := git.GetLocalRepo()
+	repo, err := atmosgit.GetLocalRepo()
 	if err != nil {
 		return err
 	}
 
-	repoInfo, err := git.GetRepoInfo(repo)
+	repoInfo, err := atmosgit.GetRepoInfo(repo)
 	if err != nil {
 		return err
 	}
@@ -203,60 +220,69 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// shouldUploadDriftResult checks if the upload flag is set for the `plan` command.
-func shouldUploadDriftResult(info *schema.ConfigAndStacksInfo) bool {
-	// Only supported for Terraform Plan command
-	if info.SubCommand == "plan" {
-		// Do not upload the result if pro isn't enabled
-		if proSettings, ok := info.ComponentSettingsSection["pro"].(map[string]any); !ok || proSettings["enabled"] != true {
-			log.Warn("Pro is not enabled. Skipping upload of Terraform result.")
-			return false
-		}
-		return true
+// uploadDriftResultWithClient uploads the terraform results to the pro API
+// It takes a mock client for testing purposes
+func uploadDriftResultWithClient(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo GitRepoInterface) error {
+	// Get the local repository
+	repo, err := gitRepo.GetLocalRepo()
+	if err != nil {
+		return err
 	}
-	return false
+
+	// Get repository info
+	repoInfo, err := gitRepo.GetRepoInfo(repo)
+	if err != nil {
+		return err
+	}
+
+	// Create the DTO
+	dto := pro.DriftStatusUploadRequest{
+		RepoURL:   repoInfo.RepoUrl,
+		RepoName:  repoInfo.RepoName,
+		RepoOwner: repoInfo.RepoOwner,
+		RepoHost:  repoInfo.RepoHost,
+		Stack:     info.Stack,
+		Component: info.Component,
+		HasDrift:  exitCode == 2,
+	}
+
+	// Upload the drift result status
+	return client.UploadDriftResultStatus(dto)
 }
 
-// uploadDriftResult uploads the Terraform result to the pro API if the exit code indicates changes or no changes.
+// uploadDriftResult uploads the terraform results to the pro API
 func uploadDriftResult(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, exitCode int) error {
-	// Only upload if exit code is 0 (no changes) or 2 (has changes)
-	if exitCode == 0 || exitCode == 2 {
-		logger, err := l.NewLoggerFromCliConfig(atmosConfig)
-		if err != nil {
-			return err
-		}
+	// Only upload if exit code is 0 (no changes) or 2 (changes)
+	if exitCode != 0 && exitCode != 2 {
+		return nil
+	}
 
-		apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
-		if err != nil {
-			return err
-		}
+	// Initialize the API client
+	client, err := pro.NewAtmosProAPIClientFromEnv(nil)
+	if err != nil {
+		return err
+	}
 
-		repo, err := git.GetLocalRepo()
-		if err != nil {
-			return err
-		}
+	// Use the default git repo implementation
+	gitRepo := &DefaultGitRepo{}
 
-		repoInfo, err := git.GetRepoInfo(repo)
-		if err != nil {
-			return err
-		}
+	// Upload the drift result
+	return uploadDriftResultWithClient(atmosConfig, info, exitCode, client, gitRepo)
+}
 
-		dto := pro.DriftStatusUploadRequest{
-			AtmosProRunID: "", // TODO
-			GitSHA:        "", // TODO
-			RepoURL:       repoInfo.RepoUrl,
-			RepoName:      repoInfo.RepoName,
-			RepoOwner:     repoInfo.RepoOwner,
-			RepoHost:      repoInfo.RepoHost,
-			Component:     info.Component,
-			Stack:         info.Stack,
-			HasDrift:      exitCode == 2,
-		}
+// shouldUploadDriftResult determines if drift results should be uploaded
+func shouldUploadDriftResult(info *schema.ConfigAndStacksInfo) bool {
+	// Only upload for plan command
+	if info.SubCommand != "plan" {
+		return false
+	}
 
-		err = apiClient.UploadDriftResultStatus(dto)
-		if err != nil {
-			return err
+	// Check if pro is enabled
+	if proSettings, ok := info.ComponentSettingsSection["pro"].(map[string]interface{}); ok {
+		if enabled, ok := proSettings["enabled"].(bool); ok && enabled {
+			return true
 		}
 	}
-	return nil
+
+	return false
 }
