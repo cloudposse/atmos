@@ -1,6 +1,8 @@
 package git
 
 import (
+	"fmt"
+
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	giturl "github.com/kubescape/go-git-url"
@@ -102,4 +104,31 @@ func GetRepoInfo(localRepo *git.Repository) (RepoInfo, error) {
 	}
 
 	return response, nil
+}
+
+// GitRepoInterface defines the interface for git repository operations.
+type GitRepoInterface interface {
+	GetLocalRepo() (*RepoInfo, error)
+	GetRepoInfo(repo *RepoInfo) (RepoInfo, error)
+}
+
+// DefaultGitRepo is the default implementation of GitRepoInterface.
+type DefaultGitRepo struct{}
+
+// GetLocalRepo returns information about the local git repository.
+func (d *DefaultGitRepo) GetLocalRepo() (*RepoInfo, error) {
+	repo, err := GetLocalRepo()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get local repository: %w", err)
+	}
+	info, err := GetRepoInfo(repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository info: %w", err)
+	}
+	return &info, nil
+}
+
+// GetRepoInfo returns the repository information for the given RepoInfo.
+func (d *DefaultGitRepo) GetRepoInfo(repo *RepoInfo) (RepoInfo, error) {
+	return *repo, nil
 }

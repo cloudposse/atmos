@@ -3,6 +3,7 @@ package pro
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,24 +15,24 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-const (
-	errFailedToCreateRequest      = "failed to create request: %w"
-	errFailedToMarshalPayload     = "failed to marshal payload: %w"
-	errFailedToCreateAuthRequest  = "failed to create authenticated request: %w"
-	errFailedToMakeRequest        = "failed to make request: %w"
-	errFailedToUploadStacks       = "failed to upload stacks, status: %s"
-	errFailedToMarshalRequestBody = "failed to marshal request body: %w"
-	errFailedToReadResponseBody   = "error reading response body: %s"
-	errFailedToUnmarshalJSON      = "error unmarshaling JSON: %s"
-	errFailedToLockStack          = "an error occurred while attempting to lock stack.\n\nError: %s\nContext:\n%s"
-	errFailedToUnlockStack        = "an error occurred while attempting to unlock stack.\n\nError: %s\nContext:\n%s"
-	errFailedToUploadDriftStatus  = "failed to upload drift status, status: %s"
-	errTokenNotSet                = "%s is not set"
+var (
+	ErrFailedToCreateRequest      = errors.New("failed to create request")
+	ErrFailedToMarshalPayload     = errors.New("failed to marshal payload")
+	ErrFailedToCreateAuthRequest  = errors.New("failed to create authenticated request")
+	ErrFailedToMakeRequest        = errors.New("failed to make request")
+	ErrFailedToUploadStacks       = errors.New("failed to upload stacks")
+	ErrFailedToMarshalRequestBody = errors.New("failed to marshal request body")
+	ErrFailedToReadResponseBody   = errors.New("error reading response body")
+	ErrFailedToUnmarshalJSON      = errors.New("error unmarshaling JSON")
+	ErrFailedToLockStack          = errors.New("an error occurred while attempting to lock stack")
+	ErrFailedToUnlockStack        = errors.New("an error occurred while attempting to unlock stack")
+	ErrFailedToUploadDriftStatus  = errors.New("failed to upload drift status")
+	ErrTokenNotSet                = errors.New("token is not set")
 )
 
 // AtmosProAPIClientInterface defines the interface for the AtmosProAPIClient.
 type AtmosProAPIClientInterface interface {
-	UploadDriftResultStatus(dto DriftStatusUploadRequest) error
+	UploadDriftResultStatus(dto *DriftStatusUploadRequest) error
 }
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.
@@ -68,7 +69,7 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, err
 
 	apiToken := os.Getenv(cfg.AtmosProTokenEnvVarName)
 	if apiToken == "" {
-		return nil, fmt.Errorf(errTokenNotSet, cfg.AtmosProTokenEnvVarName)
+		return nil, fmt.Errorf("%w: %s", ErrTokenNotSet, cfg.AtmosProTokenEnvVarName)
 	}
 
 	return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
@@ -77,7 +78,7 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, err
 func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrFailedToCreateRequest, err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIToken))
@@ -92,24 +93,24 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest
 
 	data, err := utils.ConvertToJSON(dto)
 	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
+		return fmt.Errorf("%w: %w", ErrFailedToMarshalPayload, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
 	if err != nil {
-		return fmt.Errorf(errFailedToCreateAuthRequest, err)
+		return fmt.Errorf("%w: %w", ErrFailedToCreateAuthRequest, err)
 	}
 
 	c.Logger.Trace(fmt.Sprintf("\nUploading the affected components and stacks to %s", url))
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf(errFailedToMakeRequest, err)
+		return fmt.Errorf("%w: %w", ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf("failed to upload stacks, status: %s", resp.Status)
+		return fmt.Errorf("%w: %s", ErrFailedToUploadStacks, resp.Status)
 	}
 	c.Logger.Trace(fmt.Sprintf("\nUploaded the affected components and stacks to %s", url))
 
@@ -123,30 +124,30 @@ func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, 
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(errFailedToMarshalRequestBody, err)
+		return LockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(errFailedToCreateAuthRequest, err)
+		return LockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(errFailedToMakeRequest, err)
+		return LockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(errFailedToReadResponseBody, err)
+		return LockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToReadResponseBody, err)
 	}
 
 	var responseData LockStackResponse
 
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(errFailedToUnmarshalJSON, err)
+		return LockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToUnmarshalJSON, err)
 	}
 
 	if !responseData.Success {
@@ -155,7 +156,7 @@ func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, 
 			context += fmt.Sprintf("  %s: %v\n", key, value)
 		}
 
-		return LockStackResponse{}, fmt.Errorf("an error occurred while attempting to lock stack.\n\nError: %s\nContext:\n%s", responseData.ErrorMessage, context)
+		return LockStackResponse{}, fmt.Errorf("%w\n\nError: %s\nContext:\n%s", ErrFailedToLockStack, responseData.ErrorMessage, context)
 	}
 
 	return responseData, nil
@@ -168,30 +169,30 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(errFailedToMarshalRequestBody, err)
+		return UnlockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "DELETE", url, bytes.NewBuffer(data))
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(errFailedToCreateAuthRequest, err)
+		return UnlockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(errFailedToMakeRequest, err)
+		return UnlockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(errFailedToReadResponseBody, err)
+		return UnlockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToReadResponseBody, err)
 	}
 
 	var responseData UnlockStackResponse
 
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(errFailedToUnmarshalJSON, err)
+		return UnlockStackResponse{}, fmt.Errorf("%w: %w", ErrFailedToUnmarshalJSON, err)
 	}
 
 	if !responseData.Success {
@@ -200,35 +201,35 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 			context += fmt.Sprintf("  %s: %v\n", key, value)
 		}
 
-		return UnlockStackResponse{}, fmt.Errorf("an error occurred while attempting to unlock stack.\n\nError: %s\nContext:\n%s", responseData.ErrorMessage, context)
+		return UnlockStackResponse{}, fmt.Errorf("%w\n\nError: %s\nContext:\n%s", ErrFailedToUnlockStack, responseData.ErrorMessage, context)
 	}
 
 	return responseData, nil
 }
 
 // UploadDriftResultStatus uploads the drift detection result status to the pro API.
-func (c *AtmosProAPIClient) UploadDriftResultStatus(dto DriftStatusUploadRequest) error {
+func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *DriftStatusUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/drift-status", c.BaseURL, c.BaseAPIEndpoint)
 	c.Logger.Trace(fmt.Sprintf("\nUploading drift status at %s", url))
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return fmt.Errorf(errFailedToMarshalRequestBody, err)
+		return fmt.Errorf("%w: %w", ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
-		return fmt.Errorf(errFailedToCreateAuthRequest, err)
+		return fmt.Errorf("%w: %w", ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf(errFailedToMakeRequest, err)
+		return fmt.Errorf("%w: %w", ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf(errFailedToUploadDriftStatus, resp.Status)
+		return fmt.Errorf("%w: %s", ErrFailedToUploadDriftStatus, resp.Status)
 	}
 
 	c.Logger.Trace(fmt.Sprintf("\nUploaded drift status at %s", url))

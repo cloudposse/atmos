@@ -167,7 +167,7 @@ func TestUploadDriftResultStatus(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err = apiClient.UploadDriftResultStatus(dto)
+	err = apiClient.UploadDriftResultStatus(&dto)
 	assert.NoError(t, err)
 
 	mockRoundTripper.AssertExpectations(t)
@@ -196,7 +196,7 @@ func TestUploadDriftResultStatus_Error(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err = apiClient.UploadDriftResultStatus(dto)
+	err = apiClient.UploadDriftResultStatus(&dto)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to upload drift status")
 

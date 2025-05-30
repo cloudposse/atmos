@@ -45,31 +45,6 @@ type ProUnlockCmdArgs struct {
 	ProLockUnlockCmdArgs
 }
 
-// GitRepoInterface defines the interface for git repository operations
-type GitRepoInterface interface {
-	GetLocalRepo() (*git.RepoInfo, error)
-	GetRepoInfo(repo *git.RepoInfo) (git.RepoInfo, error)
-}
-
-// DefaultGitRepo is the default implementation of GitRepoInterface
-type DefaultGitRepo struct{}
-
-func (d *DefaultGitRepo) GetLocalRepo() (*git.RepoInfo, error) {
-	repo, err := git.GetLocalRepo()
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrFailedToGetLocalRepo, err)
-	}
-	info, err := git.GetRepoInfo(repo)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrFailedToGetRepoInfo, err)
-	}
-	return &info, nil
-}
-
-func (d *DefaultGitRepo) GetRepoInfo(repo *git.RepoInfo) (git.RepoInfo, error) {
-	return *repo, nil
-}
-
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
@@ -246,7 +221,7 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 }
 
 // uploadDriftResult uploads the terraform results to the pro API.
-func uploadDriftResult(info schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo GitRepoInterface) error {
+func uploadDriftResult(info schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
 	// Only upload if exit code is 0 (no changes) or 2 (changes)
 	if exitCode != 0 && exitCode != 2 {
 		return nil
@@ -276,7 +251,7 @@ func uploadDriftResult(info schema.ConfigAndStacksInfo, exitCode int, client pro
 	}
 
 	// Upload the drift result status
-	if err := client.UploadDriftResultStatus(dto); err != nil {
+	if err := client.UploadDriftResultStatus(&dto); err != nil {
 		return fmt.Errorf("%w: %v", ErrFailedToUploadDrift, err)
 	}
 

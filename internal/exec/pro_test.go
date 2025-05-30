@@ -15,7 +15,7 @@ type MockProAPIClient struct {
 	mock.Mock
 }
 
-func (m *MockProAPIClient) UploadDriftResultStatus(dto pro.DriftStatusUploadRequest) error {
+func (m *MockProAPIClient) UploadDriftResultStatus(dto *pro.DriftStatusUploadRequest) error {
 	args := m.Called(dto)
 	return args.Error(0)
 }
