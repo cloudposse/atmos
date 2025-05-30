@@ -438,6 +438,78 @@ func TestExecuteTerraform_OpaValidation(t *testing.T) {
 	assert.ErrorContains(t, err, "the component can't be applied if the 'foo' variable is set to 'foo'")
 }
 
+func TestExecuteTerraform_Version(t *testing.T) {
+	tests := []struct {
+		name           string
+		workDir        string
+		expectedOutput string
+	}{
+		{
+			name:           "terraform version",
+			workDir:        "../../tests/fixtures/scenarios/atmos-terraform-version",
+			expectedOutput: "Terraform v",
+		},
+		{
+			name:           "tofu version",
+			workDir:        "../../tests/fixtures/scenarios/atmos-tofu-version",
+			expectedOutput: "OpenTofu v",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture the starting working directory
+			startingDir, err := os.Getwd()
+			if err != nil {
+				t.Fatalf("Failed to get the current working directory: %v", err)
+			}
+
+			defer func() {
+				// Change back to the original working directory after the test
+				if err := os.Chdir(startingDir); err != nil {
+					t.Fatalf("Failed to change back to the starting directory: %v", err)
+				}
+			}()
+
+			// Define the work directory and change to it
+			if err := os.Chdir(tt.workDir); err != nil {
+				t.Fatalf("Failed to change directory to %q: %v", tt.workDir, err)
+			}
+
+			// set info for ExecuteTerraform
+			info := schema.ConfigAndStacksInfo{
+				SubCommand: "version",
+			}
+
+			// Create a pipe to capture stdout to check if terraform is executed correctly
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			err = ExecuteTerraform(info)
+			if err != nil {
+				t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+			}
+
+			// Restore stdout
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Read the captured output
+			var buf bytes.Buffer
+			_, err = buf.ReadFrom(r)
+			if err != nil {
+				t.Fatalf("Failed to read from pipe: %v", err)
+			}
+			output := buf.String()
+
+			if !strings.Contains(output, tt.expectedOutput) {
+				t.Errorf("%s not found in the output", tt.expectedOutput)
+			}
+		})
+	}
+}
+
 // Helper Function to extract key-value pairs from a string.
 func extractKeyValuePairs(input string) map[string]string {
 	// Split the input into lines
