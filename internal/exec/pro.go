@@ -4,11 +4,10 @@ import (
 	"fmt"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	git "github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
-	gogit "github.com/go-git/go-git/v5"
 	"github.com/spf13/cobra"
 )
 
@@ -30,19 +29,27 @@ type ProUnlockCmdArgs struct {
 
 // GitRepoInterface defines the interface for git repository operations
 type GitRepoInterface interface {
-	GetLocalRepo() (*gogit.Repository, error)
-	GetRepoInfo(repo *gogit.Repository) (atmosgit.RepoInfo, error)
+	GetLocalRepo() (*git.RepoInfo, error)
+	GetRepoInfo(repo *git.RepoInfo) (git.RepoInfo, error)
 }
 
 // DefaultGitRepo is the default implementation of GitRepoInterface
 type DefaultGitRepo struct{}
 
-func (d *DefaultGitRepo) GetLocalRepo() (*gogit.Repository, error) {
-	return atmosgit.GetLocalRepo()
+func (d *DefaultGitRepo) GetLocalRepo() (*git.RepoInfo, error) {
+	repo, err := git.GetLocalRepo()
+	if err != nil {
+		return nil, err
+	}
+	info, err := git.GetRepoInfo(repo)
+	if err != nil {
+		return nil, err
+	}
+	return &info, nil
 }
 
-func (d *DefaultGitRepo) GetRepoInfo(repo *gogit.Repository) (atmosgit.RepoInfo, error) {
-	return atmosgit.GetRepoInfo(repo)
+func (d *DefaultGitRepo) GetRepoInfo(repo *git.RepoInfo) (git.RepoInfo, error) {
+	return *repo, nil
 }
 
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
@@ -143,12 +150,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	repo, err := atmosgit.GetLocalRepo()
+	repo, err := git.GetLocalRepo()
 	if err != nil {
 		return err
 	}
 
-	repoInfo, err := atmosgit.GetRepoInfo(repo)
+	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
 		return err
 	}
@@ -188,12 +195,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	repo, err := atmosgit.GetLocalRepo()
+	repo, err := git.GetLocalRepo()
 	if err != nil {
 		return err
 	}
 
-	repoInfo, err := atmosgit.GetRepoInfo(repo)
+	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
 		return err
 	}

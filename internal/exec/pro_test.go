@@ -3,10 +3,9 @@ package exec
 import (
 	"testing"
 
-	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	git "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
-	gogit "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -26,14 +25,14 @@ type MockGitRepo struct {
 	mock.Mock
 }
 
-func (m *MockGitRepo) GetLocalRepo() (*gogit.Repository, error) {
+func (m *MockGitRepo) GetLocalRepo() (*git.RepoInfo, error) {
 	args := m.Called()
-	return args.Get(0).(*gogit.Repository), args.Error(1)
+	return args.Get(0).(*git.RepoInfo), args.Error(1)
 }
 
-func (m *MockGitRepo) GetRepoInfo(repo *gogit.Repository) (atmosgit.RepoInfo, error) {
+func (m *MockGitRepo) GetRepoInfo(repo *git.RepoInfo) (git.RepoInfo, error) {
 	args := m.Called(repo)
-	return args.Get(0).(atmosgit.RepoInfo), args.Error(1)
+	return args.Get(0).(git.RepoInfo), args.Error(1)
 }
 
 // Test helper function to create a test info with pro settings
@@ -122,9 +121,8 @@ func TestUploadDriftResult(t *testing.T) {
 	mockProClient := new(MockProAPIClient)
 	mockGitRepo := new(MockGitRepo)
 
-	// Create test repository and repo info
-	testRepo := &gogit.Repository{}
-	testRepoInfo := atmosgit.RepoInfo{
+	// Create test repo info
+	testRepoInfo := &git.RepoInfo{
 		RepoUrl:   "https://github.com/test/repo",
 		RepoName:  "repo",
 		RepoOwner: "test",
@@ -132,8 +130,8 @@ func TestUploadDriftResult(t *testing.T) {
 	}
 
 	// Set up mock expectations for git functions
-	mockGitRepo.On("GetLocalRepo").Return(testRepo, nil)
-	mockGitRepo.On("GetRepoInfo", testRepo).Return(testRepoInfo, nil)
+	mockGitRepo.On("GetLocalRepo").Return(testRepoInfo, nil)
+	mockGitRepo.On("GetRepoInfo", testRepoInfo).Return(*testRepoInfo, nil)
 
 	// Test cases
 	testCases := []struct {
