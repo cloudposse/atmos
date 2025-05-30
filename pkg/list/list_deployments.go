@@ -17,6 +17,197 @@ import (
 	"golang.org/x/term"
 )
 
+// collectDeployments collects all deployments from the stacks map.
+func collectDeployments(stacksMap map[string]interface{}) []schema.Deployment {
+	deployments := []schema.Deployment{}
+	for stackName, stackConfig := range stacksMap {
+		stackConfigMap, ok := stackConfig.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		components, ok := stackConfigMap["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		for componentType, typeComponents := range components {
+			typeComponentsMap, ok := typeComponents.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			for componentName, componentConfig := range typeComponentsMap {
+				componentConfigMap, ok := componentConfig.(map[string]any)
+				if !ok {
+					continue
+				}
+
+				deployment := createDeployment(stackName, componentName, componentType, componentConfigMap)
+				if deployment != nil {
+					deployments = append(deployments, *deployment)
+				}
+			}
+		}
+	}
+	return deployments
+}
+
+// createDeployment creates a deployment from the component configuration.
+func createDeployment(stackName, componentName, componentType string, componentConfigMap map[string]any) *schema.Deployment {
+	deployment := &schema.Deployment{
+		Component:     componentName,
+		Stack:         stackName,
+		ComponentType: componentType,
+		Settings:      make(map[string]any),
+		Vars:          make(map[string]any),
+		Env:           make(map[string]any),
+		Backend:       make(map[string]any),
+		Metadata:      make(map[string]any),
+	}
+
+	if settings, ok := componentConfigMap["settings"].(map[string]any); ok {
+		deployment.Settings = settings
+	}
+	if vars, ok := componentConfigMap["vars"].(map[string]any); ok {
+		deployment.Vars = vars
+	}
+	if env, ok := componentConfigMap["env"].(map[string]any); ok {
+		deployment.Env = env
+	}
+	if backend, ok := componentConfigMap["backend"].(map[string]any); ok {
+		deployment.Backend = backend
+	}
+	if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
+		deployment.Metadata = metadata
+	}
+
+	// Skip abstract components
+	if componentType, ok := deployment.Metadata["type"].(string); ok && componentType == "abstract" {
+		return nil
+	}
+
+	return deployment
+}
+
+// filterDeployments filters deployments based on drift detection.
+func filterDeployments(deployments []schema.Deployment, driftEnabled bool) []schema.Deployment {
+	if !driftEnabled {
+		return deployments
+	}
+
+	filtered := []schema.Deployment{}
+	for _, deployment := range deployments {
+		if settings, ok := deployment.Settings["pro"].(map[string]any); ok {
+			if driftDetection, ok := settings["drift_detection"].(map[string]any); ok {
+				if enabled, ok := driftDetection["enabled"].(bool); ok && enabled {
+					filtered = append(filtered, deployment)
+				}
+			}
+		}
+	}
+	return filtered
+}
+
+// sortDeployments sorts deployments by stack and component.
+func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
+	type deploymentRow struct {
+		Component string
+		Stack     string
+	}
+	rowsData := make([]deploymentRow, 0, len(deployments))
+	for _, d := range deployments {
+		rowsData = append(rowsData, deploymentRow{Component: d.Component, Stack: d.Stack})
+	}
+	sort.Slice(rowsData, func(i, j int) bool {
+		if rowsData[i].Stack != rowsData[j].Stack {
+			return rowsData[i].Stack < rowsData[j].Stack
+		}
+		return rowsData[i].Component < rowsData[j].Component
+	})
+
+	var rows []map[string]interface{}
+	for _, row := range rowsData {
+		rows = append(rows, map[string]interface{}{
+			"Component": row.Component,
+			"Stack":     row.Stack,
+		})
+	}
+	return deployments
+}
+
+// formatDeployments formats the deployments for output.
+func formatDeployments(deployments []schema.Deployment) string {
+	var rows []map[string]interface{}
+	for _, d := range deployments {
+		rows = append(rows, map[string]interface{}{
+			"Component": d.Component,
+			"Stack":     d.Stack,
+		})
+	}
+
+	formatOpts := format.FormatOptions{
+		Format:        format.FormatTable,
+		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
+		CustomHeaders: []string{"Component", "Stack"},
+		MaxColumns:    0,
+	}
+
+	return format.CreateStyledTable(formatOpts.CustomHeaders, func() [][]string {
+		var tableRows [][]string
+		for _, row := range rows {
+			tableRows = append(tableRows, []string{
+				fmt.Sprintf("%v", row["Component"]),
+				fmt.Sprintf("%v", row["Stack"]),
+			})
+		}
+		return tableRows
+	}())
+}
+
+// uploadDeployments uploads deployments to Atmos Pro API.
+func uploadDeployments(deployments []schema.Deployment, atmosConfig schema.AtmosConfiguration) error {
+	repo, err := git.GetLocalRepo()
+	if err != nil {
+		log.Error("Failed to get local git repo", "error", err)
+		return err
+	}
+	repoInfo, err := git.GetRepoInfo(repo)
+	if err != nil {
+		log.Error("Failed to get git repo info", "error", err)
+		return err
+	}
+
+	logger, err := logger.NewLoggerFromCliConfig(atmosConfig)
+	if err != nil {
+		log.Error("Failed to create logger", "error", err)
+		return err
+	}
+
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
+	if err != nil {
+		log.Error("Failed to create Atmos Pro API client", "error", err)
+		return err
+	}
+
+	req := pro.DriftDetectionUploadRequest{
+		RepoURL:   repoInfo.RepoUrl,
+		RepoName:  repoInfo.RepoName,
+		RepoOwner: repoInfo.RepoOwner,
+		RepoHost:  repoInfo.RepoHost,
+		Stacks:    deployments,
+	}
+
+	err = apiClient.UploadDriftDetection(&req)
+	if err != nil {
+		log.Error("Failed to upload deployments", "error", err)
+		return err
+	}
+
+	logger.Info("Successfully uploaded deployments to Atmos Pro API.")
+	return nil
+}
+
 // ExecuteListDeploymentsCmd executes the list deployments command.
 func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	// Initialize CLI config
@@ -37,180 +228,31 @@ func ExecuteListDeploymentsCmd(info schema.ConfigAndStacksInfo, cmd *cobra.Comma
 		return err
 	}
 
-	// Get all deployments
-	deployments := []schema.Deployment{}
-	for stackName, stackConfig := range stacksMap {
-		stackConfigMap, ok := stackConfig.(map[string]any)
-		if !ok {
-			continue
-		}
+	// Collect deployments
+	deployments := collectDeployments(stacksMap)
 
-		// Get components from stack
-		components, ok := stackConfigMap["components"].(map[string]any)
-		if !ok {
-			continue
-		}
+	// Filter deployments if drift detection is enabled
+	deployments = filterDeployments(deployments, driftEnabled)
 
-		// Process each component type (terraform, helmfile)
-		for componentType, typeComponents := range components {
-			typeComponentsMap, ok := typeComponents.(map[string]any)
-			if !ok {
-				continue
-			}
-
-			// Process each component in the stack
-			for componentName, componentConfig := range typeComponentsMap {
-				componentConfigMap, ok := componentConfig.(map[string]any)
-				if !ok {
-					continue
-				}
-
-				// Create deployment
-				deployment := schema.Deployment{
-					Component:     componentName,
-					Stack:         stackName,
-					ComponentType: componentType,
-					Settings:      make(map[string]any),
-					Vars:          make(map[string]any),
-					Env:           make(map[string]any),
-					Backend:       make(map[string]any),
-					Metadata:      make(map[string]any),
-				}
-
-				// Copy component configuration
-				if settings, ok := componentConfigMap["settings"].(map[string]any); ok {
-					deployment.Settings = settings
-				}
-				if vars, ok := componentConfigMap["vars"].(map[string]any); ok {
-					deployment.Vars = vars
-				}
-				if env, ok := componentConfigMap["env"].(map[string]any); ok {
-					deployment.Env = env
-				}
-				if backend, ok := componentConfigMap["backend"].(map[string]any); ok {
-					deployment.Backend = backend
-				}
-				if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
-					deployment.Metadata = metadata
-				}
-
-				// Skip abstract components
-				if componentType, ok := deployment.Metadata["type"].(string); ok && componentType == "abstract" {
-					continue
-				}
-
-				// Filter by drift detection if enabled
-				if driftEnabled {
-					// Check settings.pro.drift_detection.enabled
-					if settings, ok := deployment.Settings["pro"].(map[string]any); ok {
-						if driftDetection, ok := settings["drift_detection"].(map[string]any); ok {
-							if enabled, ok := driftDetection["enabled"].(bool); ok && enabled {
-								deployments = append(deployments, deployment)
-							}
-						}
-					}
-				} else {
-					deployments = append(deployments, deployment)
-				}
-			}
-		}
-	}
-
-	// Sort deployments by stack, then by component
-	type deploymentRow struct {
-		Component string
-		Stack     string
-	}
-	rowsData := make([]deploymentRow, 0, len(deployments))
-	for _, d := range deployments {
-		rowsData = append(rowsData, deploymentRow{Component: d.Component, Stack: d.Stack})
-	}
-	// Sort
-	sort.Slice(rowsData, func(i, j int) bool {
-		if rowsData[i].Stack != rowsData[j].Stack {
-			return rowsData[i].Stack < rowsData[j].Stack
-		}
-		return rowsData[i].Component < rowsData[j].Component
-	})
-
-	// Convert to rows for formatter
-	var rows []map[string]interface{}
-	for _, row := range rowsData {
-		rows = append(rows, map[string]interface{}{
-			"Component": row.Component,
-			"Stack":     row.Stack,
-		})
-	}
-
-	// Create formatter options
-	formatOpts := format.FormatOptions{
-		Format:        format.FormatTable,
-		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
-		CustomHeaders: []string{"Component", "Stack"},
-		MaxColumns:    0,
-	}
+	// Sort deployments
+	deployments = sortDeployments(deployments)
 
 	// Format and print output
-	output := format.CreateStyledTable(formatOpts.CustomHeaders, func() [][]string {
-		var tableRows [][]string
-		for _, row := range rows {
-			tableRows = append(tableRows, []string{
-				fmt.Sprintf("%v", row["Component"]),
-				fmt.Sprintf("%v", row["Stack"]),
-			})
-		}
-		return tableRows
-	}())
+	output := formatDeployments(deployments)
 	fmt.Println(output)
 
 	// Upload deployments if requested
-	if upload {
-		// Gather repo info
-		repo, err := git.GetLocalRepo()
-		if err != nil {
-			log.Error("Failed to get local git repo", "error", err)
-			return err
-		}
-		repoInfo, err := git.GetRepoInfo(repo)
-		if err != nil {
-			log.Error("Failed to get git repo info", "error", err)
-			return err
-		}
+	if !upload {
+		return nil
+	}
 
-		// Get logger
-		logger, err := logger.NewLoggerFromCliConfig(atmosConfig)
-		if err != nil {
-			log.Error("Failed to create logger", "error", err)
-			return err
-		}
+	if !driftEnabled {
+		log.Info("Atmos Pro only supports uploading drift detection stacks at this time.\n\nTo upload drift detection stacks, use the --drift-enabled flag:\n  atmos list deployments --upload --drift-enabled")
+		return nil
+	}
 
-		// Create API client
-		apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
-		if err != nil {
-			log.Error("Failed to create Atmos Pro API client", "error", err)
-			return err
-		}
-
-		req := pro.DriftDetectionUploadRequest{
-			RepoURL:   repoInfo.RepoUrl,
-			RepoName:  repoInfo.RepoName,
-			RepoOwner: repoInfo.RepoOwner,
-			RepoHost:  repoInfo.RepoHost,
-			Stacks:    deployments,
-		}
-
-		if driftEnabled {
-			err = apiClient.UploadDriftDetection(req)
-			if err != nil {
-				log.Error("Failed to upload deployments", "error", err)
-				return err
-			}
-		} else {
-			log.Info("Atmos Pro only supports uploading drift detection stacks at this time.\n\nTo upload drift detection stacks, use the --drift-enabled flag:\n  atmos list deployments --upload --drift-enabled")
-			return nil
-		}
-
-		logger.Info("Successfully uploaded deployments to Atmos Pro API.")
+	if err := uploadDeployments(deployments, atmosConfig); err != nil {
+		return err
 	}
 
 	return nil

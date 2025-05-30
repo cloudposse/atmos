@@ -212,7 +212,7 @@ func TestUploadDriftDetection(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err = apiClient.UploadDriftDetection(dto)
+	err = apiClient.UploadDriftDetection(&dto)
 	assert.NoError(t, err)
 
 	mockRoundTripper.AssertExpectations(t)
@@ -285,7 +285,7 @@ func TestUploadDriftDetection_Error(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err = apiClient.UploadDriftDetection(dto)
+	err = apiClient.UploadDriftDetection(&dto)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to upload drift detection results")
 

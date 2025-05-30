@@ -3,6 +3,7 @@ package pro
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,11 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/utils"
+)
+
+// Error definitions
+var (
+	ErrDriftDetectionUpload = errors.New("failed to upload drift detection results")
 )
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API
@@ -96,8 +102,8 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest
 	return nil
 }
 
-// UploadDriftDetection uploads drift detection results to the API.
-func (c *AtmosProAPIClient) UploadDriftDetection(dto DriftDetectionUploadRequest) error {
+// UploadDriftDetection uploads drift detection data to the API.
+func (c *AtmosProAPIClient) UploadDriftDetection(dto *DriftDetectionUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/drift-detection", c.BaseURL, c.BaseAPIEndpoint)
 
 	data, err := utils.ConvertToJSON(dto)
@@ -121,7 +127,7 @@ func (c *AtmosProAPIClient) UploadDriftDetection(dto DriftDetectionUploadRequest
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf("failed to upload drift detection results, status: %s", resp.Status)
+		return fmt.Errorf("%w: status %s", ErrDriftDetectionUpload, resp.Status)
 	}
 	c.Logger.Trace(fmt.Sprintf("\nUploaded drift detection results to %s", url))
 
