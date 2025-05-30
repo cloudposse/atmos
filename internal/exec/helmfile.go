@@ -33,8 +33,24 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
+	// Add the `command` from `components.helmfile.command` from `atmos.yaml`.
+	if info.Command == "" {
+		if atmosConfig.Components.Helmfile.Command != "" {
+			info.Command = atmosConfig.Components.Helmfile.Command
+		} else {
+			info.Command = cfg.HelmfileComponentType
+		}
+	}
+
 	if info.SubCommand == "version" {
-		return ExecuteShellCommand(atmosConfig, "helmfile", []string{info.SubCommand}, "", nil, false, info.RedirectStdErr)
+		return ExecuteShellCommand(atmosConfig,
+			info.Command,
+			[]string{info.SubCommand},
+			"",
+			nil,
+			false,
+			info.RedirectStdErr,
+		)
 	}
 
 	info, err = ProcessStacks(atmosConfig, info, true, true, true, nil)
