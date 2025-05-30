@@ -62,3 +62,15 @@ type AffectedStacksUploadRequest struct {
 	RepoHost  string            `json:"repo_host"`
 	Stacks    []schema.Affected `json:"stacks"`
 }
+
+type DriftStatusUploadRequest struct {
+	AtmosProRunID string `json:"atmos_pro_run_id"`
+	GitSHA        string `json:"git_sha"`
+	RepoURL       string `json:"repo_url"`
+	RepoName      string `json:"repo_name"`
+	RepoOwner     string `json:"repo_owner"`
+	RepoHost      string `json:"repo_host"`
+	Component     string `json:"component"`
+	Stack         string `json:"stack"`
+	HasDrift      bool   `json:"has_drift"`
+}
