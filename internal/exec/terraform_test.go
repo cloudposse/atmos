@@ -587,10 +587,17 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-drift-results")
 			}
 
-			// Create a pipe to capture stdout
+			// Create a pipe to capture stdout and stderr
 			oldStdout := os.Stdout
+			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			os.Stderr = w
+
+			// Set the global logger output to the redirected os.Stderr
+			oldLogger := log.Default()
+			logger := log.New(w)
+			log.SetDefault(logger)
 
 			// Create a channel to signal when the pipe is closed
 			done := make(chan struct{})
@@ -610,8 +617,10 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 			}
 			output := buf.String()
 
-			// Restore stdout
+			// Restore stdout, stderr, and logger
 			os.Stdout = oldStdout
+			os.Stderr = oldStderr
+			log.SetDefault(oldLogger)
 
 			// Wait for the command to finish
 			<-done

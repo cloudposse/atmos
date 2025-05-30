@@ -20,7 +20,7 @@ func (m *MockProAPIClient) UploadDriftResultStatus(dto pro.DriftStatusUploadRequ
 	return args.Error(0)
 }
 
-// MockGitRepo is a mock implementation of the git repository
+// MockGitRepo is a mock implementation of the git repository.
 type MockGitRepo struct {
 	mock.Mock
 }
@@ -35,7 +35,7 @@ func (m *MockGitRepo) GetRepoInfo(repo *git.RepoInfo) (git.RepoInfo, error) {
 	return args.Get(0).(git.RepoInfo), args.Error(1)
 }
 
-// Test helper function to create a test info with pro settings
+// Test helper function to create a test info with pro settings.
 func createTestInfo(proEnabled bool) schema.ConfigAndStacksInfo {
 	info := schema.ConfigAndStacksInfo{
 		Stack:            "test-stack",
@@ -176,9 +176,6 @@ func TestUploadDriftResult(t *testing.T) {
 			// Create test info
 			info := createTestInfo(tc.proEnabled)
 
-			// Create test config
-			atmosConfig := schema.AtmosConfiguration{}
-
 			// Set up mock expectations for pro client
 			if tc.proEnabled && (tc.exitCode == 0 || tc.exitCode == 2) {
 				mockProClient.On("UploadDriftResultStatus", mock.MatchedBy(func(dto pro.DriftStatusUploadRequest) bool {
@@ -193,7 +190,7 @@ func TestUploadDriftResult(t *testing.T) {
 			}
 
 			// Call the function
-			err := uploadDriftResultWithClient(atmosConfig, info, tc.exitCode, mockProClient, mockGitRepo)
+			err := uploadDriftResult(info, tc.exitCode, mockProClient, mockGitRepo)
 
 			// Check results
 			if tc.expectedError {

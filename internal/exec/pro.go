@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 
 	log "github.com/charmbracelet/log"
@@ -10,6 +11,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
+)
+
+// Error variables for pro package
+var (
+	ErrComponentAndStackRequired = errors.New("both '--component' and '--stack' flag must be provided")
+	ErrFailedToGetLocalRepo      = errors.New("failed to get local repository")
+	ErrFailedToGetRepoInfo       = errors.New("failed to get repository info")
+	ErrFailedToCreateAPIClient   = errors.New("failed to create API client")
+	ErrFailedToLockStack         = errors.New("failed to lock stack")
+	ErrFailedToUnlockStack       = errors.New("failed to unlock stack")
+	ErrFailedToUploadDrift       = errors.New("failed to upload drift result")
+	ErrFailedToProcessArgs       = errors.New("failed to process command line arguments")
+	ErrFailedToInitConfig        = errors.New("failed to initialize CLI config")
+	ErrFailedToCreateLogger      = errors.New("failed to create logger")
+	ErrFailedToGetComponentFlag  = errors.New("failed to get component flag")
+	ErrFailedToGetStackFlag      = errors.New("failed to get stack flag")
 )
 
 type ProLockUnlockCmdArgs struct {
@@ -40,11 +57,11 @@ type DefaultGitRepo struct{}
 func (d *DefaultGitRepo) GetLocalRepo() (*git.RepoInfo, error) {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFailedToGetLocalRepo, err)
 	}
 	info, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrFailedToGetRepoInfo, err)
 	}
 	return &info, nil
 }
@@ -56,35 +73,35 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.RepoInfo) (git.RepoInfo, error) {
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf("%w: %v", ErrFailedToProcessArgs, err)
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf("%w: %v", ErrFailedToInitConfig, err)
 	}
 
 	logger, err := l.NewLoggerFromCliConfig(atmosConfig)
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf("%w: %v", ErrFailedToCreateLogger, err)
 	}
 
 	flags := cmd.Flags()
 
 	component, err := flags.GetString("component")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf("%w: %v", ErrFailedToGetComponentFlag, err)
 	}
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
-		return ProLockUnlockCmdArgs{}, err
+		return ProLockUnlockCmdArgs{}, fmt.Errorf("%w: %v", ErrFailedToGetStackFlag, err)
 	}
 
 	if component == "" || stack == "" {
-		return ProLockUnlockCmdArgs{}, fmt.Errorf("both '--component' and '--stack' flag must be provided")
+		return ProLockUnlockCmdArgs{}, ErrComponentAndStackRequired
 	}
 
 	result := ProLockUnlockCmdArgs{
@@ -153,12 +170,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -173,12 +190,12 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToCreateAPIClient, err)
 	}
 
 	lock, err := apiClient.LockStack(dto)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToLockStack, err)
 	}
 
 	a.Logger.Info("Stack successfully locked.\n")
@@ -198,12 +215,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	repo, err := git.GetLocalRepo()
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToGetLocalRepo, err)
 	}
 
 	repoInfo, err := git.GetRepoInfo(repo)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToGetRepoInfo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -215,12 +232,12 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToCreateAPIClient, err)
 	}
 
 	_, err = apiClient.UnlockStack(dto)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToUnlockStack, err)
 	}
 
 	a.Logger.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
@@ -228,19 +245,23 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// uploadDriftResultWithClient uploads the terraform results to the pro API
-// It takes a mock client for testing purposes
-func uploadDriftResultWithClient(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo GitRepoInterface) error {
+// uploadDriftResult uploads the terraform results to the pro API.
+func uploadDriftResult(info schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo GitRepoInterface) error {
+	// Only upload if exit code is 0 (no changes) or 2 (changes)
+	if exitCode != 0 && exitCode != 2 {
+		return nil
+	}
+
 	// Get the local repository
 	repo, err := gitRepo.GetLocalRepo()
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToGetLocalRepo, err)
 	}
 
 	// Get repository info
 	repoInfo, err := gitRepo.GetRepoInfo(repo)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrFailedToGetRepoInfo, err)
 	}
 
 	// Create the DTO
@@ -255,30 +276,14 @@ func uploadDriftResultWithClient(atmosConfig schema.AtmosConfiguration, info sch
 	}
 
 	// Upload the drift result status
-	return client.UploadDriftResultStatus(dto)
-}
-
-// uploadDriftResult uploads the terraform results to the pro API
-func uploadDriftResult(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, exitCode int) error {
-	// Only upload if exit code is 0 (no changes) or 2 (changes)
-	if exitCode != 0 && exitCode != 2 {
-		return nil
+	if err := client.UploadDriftResultStatus(dto); err != nil {
+		return fmt.Errorf("%w: %v", ErrFailedToUploadDrift, err)
 	}
 
-	// Initialize the API client
-	client, err := pro.NewAtmosProAPIClientFromEnv(nil)
-	if err != nil {
-		return err
-	}
-
-	// Use the default git repo implementation
-	gitRepo := &DefaultGitRepo{}
-
-	// Upload the drift result
-	return uploadDriftResultWithClient(atmosConfig, info, exitCode, client, gitRepo)
+	return nil
 }
 
-// shouldUploadDriftResult determines if drift results should be uploaded
+// shouldUploadDriftResult determines if drift results should be uploaded.
 func shouldUploadDriftResult(info *schema.ConfigAndStacksInfo) bool {
 	// Only upload for plan command
 	if info.SubCommand != "plan" {

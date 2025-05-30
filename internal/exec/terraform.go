@@ -11,6 +11,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -557,7 +558,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					exitCode = 1
 				}
 
-				if err := uploadDriftResult(atmosConfig, info, exitCode); err != nil {
+				// Initialize the API client
+				client, err := pro.NewAtmosProAPIClientFromEnv(nil)
+				if err != nil {
+					return err
+				}
+
+				// Use the default git repo implementation
+				gitRepo := &DefaultGitRepo{}
+
+				if err := uploadDriftResult(info, exitCode, client, gitRepo); err != nil {
 					return err
 				}
 			}
