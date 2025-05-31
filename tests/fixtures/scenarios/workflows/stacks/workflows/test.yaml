@@ -1,0 +1,33 @@
+workflows:
+  pass:
+    description: |
+      Run a command that will pass.
+    steps:
+      - command: terraform plan mock -s nonprod
+
+  fail:
+    description: |
+      Run a command that will fail.
+    steps:
+      - command: terraform plan mock -s idontexist
+
+  shell-failure:
+    description: |
+      Run a shell command that will fail.
+    steps:
+      - command: |
+          echo "This should fail"
+          exit 1
+        type: shell
+
+  no-steps:
+    description: |
+      A workflow with no steps.
+    steps: []
+
+  invalid-step-type:
+    description: |
+      A workflow with an invalid step type.
+    steps:
+      - command: echo "This should fail"
+        type: invalid
