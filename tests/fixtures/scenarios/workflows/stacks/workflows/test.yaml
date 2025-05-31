@@ -19,3 +19,15 @@ workflows:
           echo "This should fail"
           exit 1
         type: shell
+
+  no-steps:
+    description: |
+      A workflow with no steps.
+    steps: []
+
+  invalid-step-type:
+    description: |
+      A workflow with an invalid step type.
+    steps:
+      - command: echo "This should fail"
+        type: invalid

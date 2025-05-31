@@ -28,8 +28,9 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Step 'step1' failed:"
+        - "Failed command:"
         - "atmos terraform plan mock -s idontexist"
+        - "To resume the workflow from this step, run:"
         - "atmos workflow fail -f test --from-step step1"
       exit_code: 1
 
@@ -47,9 +48,73 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Step 'step1' failed:"
+        - "This should fail"
+        - "Step 'Step1' Failed"
+        - "Failed command:"
         - "echo \"This should fail\""
         - "exit 1"
         - "To resume the workflow from this step, run:"
         - "atmos workflow shell-failure -f test --from-step step1"
+      exit_code: 1
+
+  - name: atmos workflow no steps
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when workflow has no steps"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "no-steps"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "Workflow no-steps does not have any steps defined."
+        - "Please add steps to your workflow definition."
+      exit_code: 1
+
+  - name: atmos workflow invalid step type
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when step type is invalid"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "invalid-step-type"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Invalid Step Type"
+        - "Invalid workflow step type invalid"
+        - "## Available Step Types"
+        - "• atmos"
+        - "• shell"
+      exit_code: 1
+
+  - name: atmos workflow invalid from step
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when from-step is invalid"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pass"
+      - "--file"
+      - "test"
+      - "--from-step"
+      - "dne"
+    expect:
+      diff: []
+      stderr:
+        - "Invalid Step"
+        - "Invalid --from-step flag. Workflow pass does not have a step with the name dne"
+        - "## Available Steps"
+        - "• step1"
       exit_code: 1
