@@ -32,8 +32,8 @@ func ExecuteWorkflow(
 	if len(steps) == 0 {
 		u.PrintErrorMarkdownAndExit(
 			"Workflow Error",
-			fmt.Errorf("Workflow `%s` does not have any steps defined", workflow),
-			fmt.Sprintf("\nPlease add steps to your workflow definition"),
+			fmt.Errorf("workflow has no steps defined"),
+			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
 		)
 		return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 	}
@@ -65,9 +65,9 @@ func ExecuteWorkflow(
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
 			u.PrintErrorMarkdownAndExit(
-				"Invalid Step",
-				fmt.Errorf("Invalid `--from-step` flag. Workflow `%s` does not have a step with the name `%s`", workflow, fromStep),
-				fmt.Sprintf("\n## Available Steps\n%s", formatList(stepNames)),
+				"Workflow Error",
+				fmt.Errorf("invalid from-step flag"),
+				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, formatList(stepNames)),
 			)
 			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 		}
@@ -116,9 +116,9 @@ func ExecuteWorkflow(
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
 			u.PrintErrorMarkdownAndExit(
-				"Invalid Step Type",
-				fmt.Errorf("Invalid workflow step type `%s`", commandType),
-				fmt.Sprintf("\n## Available Step Types\n%s", formatList([]string{"atmos", "shell"})),
+				"Workflow Error",
+				fmt.Errorf("invalid workflow step type"),
+				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, formatList([]string{"atmos", "shell"})),
 			)
 			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 		}
@@ -143,9 +143,9 @@ func ExecuteWorkflow(
 			}
 
 			u.PrintErrorMarkdownAndExit(
-				fmt.Sprintf("Step '%s' Failed", step.Name),
-				fmt.Errorf("Failed command:\n```\n%s\n```\n", failedCmd),
-				fmt.Sprintf("To resume the workflow from this step, run:\n```\n%s\n```", resumeCommand),
+				"Workflow Error",
+				fmt.Errorf("workflow step execution failed"),
+				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
 			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 		}

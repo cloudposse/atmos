@@ -28,7 +28,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Failed command:"
+        - "Workflow Error"
+        - "workflow step execution failed"
+        - "## Explanation"
+        - "The following command failed to execute:"
         - "atmos terraform plan mock -s idontexist"
         - "To resume the workflow from this step, run:"
         - "atmos workflow fail -f test --from-step step1"
@@ -49,8 +52,10 @@ tests:
       diff: []
       stderr:
         - "This should fail"
-        - "Step 'Step1' Failed"
-        - "Failed command:"
+        - "Workflow Error"
+        - "workflow step execution failed"
+        - "## Explanation"
+        - "The following command failed to execute:"
         - "echo \"This should fail\""
         - "exit 1"
         - "To resume the workflow from this step, run:"
@@ -72,8 +77,9 @@ tests:
       diff: []
       stderr:
         - "Workflow Error"
-        - "Workflow no-steps does not have any steps defined."
-        - "Please add steps to your workflow definition."
+        - "workflow has no steps defined"
+        - "## Explanation"
+        - "Workflow no-steps is empty and requires at least one step to execute."
       exit_code: 1
 
   - name: atmos workflow invalid step type
@@ -90,11 +96,13 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Invalid Step Type"
-        - "Invalid workflow step type invalid"
-        - "## Available Step Types"
-        - "atmos"
-        - "shell"
+        - "Workflow Error"
+        - "invalid workflow step type"
+        - "## Explanation"
+        - "Step type invalid is not supported. Each step must specify a valid type."
+        - "### Available types:"
+        - "• atmos"
+        - "• shell"
       exit_code: 1
 
   - name: atmos workflow invalid from step
@@ -113,8 +121,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Invalid Step"
-        - "Invalid --from-step flag. Workflow pass does not have a step with the name dne"
-        - "## Available Steps"
-        - "step1"
+        - "Workflow Error"
+        - "invalid from-step flag"
+        - "## Explanation"
+        - "The --from-step flag was set to dne, but this step does not exist in workflow pass."
+        - "### Available steps:"
+        - "• step1"
       exit_code: 1
