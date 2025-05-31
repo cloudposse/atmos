@@ -449,7 +449,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 		return err
 	}
 
-	defer removeTempDir(*atmosConfig, tempDir)
+	defer removeTempDir(tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
@@ -507,7 +507,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 		return fmt.Errorf("Failed to create temp directory %w", err)
 	}
 
-	defer removeTempDir(*atmosConfig, tempDir)
+	defer removeTempDir(tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:

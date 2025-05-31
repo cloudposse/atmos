@@ -17,6 +17,7 @@ Available Commands:
   diff                           Show differences between the desired and actual state of Helm releases.
   generate                       Generate configurations for Helmfile components
   sync                           Synchronize the state of Helm releases with the desired state without making changes.
+  version                        Get Helmfile version
 
 
 Flags:

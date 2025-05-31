@@ -22,6 +22,8 @@ func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	info.CliArgs = []string{"describe", "dependents"}
+
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err

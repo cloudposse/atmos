@@ -342,7 +342,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 			return newInstallError(err, p.name)
 		}
 
-		defer removeTempDir(*atmosConfig, tempDir)
+		defer removeTempDir(tempDir)
 		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}

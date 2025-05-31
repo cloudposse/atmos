@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    component-1:
+      metadata:
+        component: mock
+      settings:
+        # Validation
+        # All validation steps must succeed to allow the component to be provisioned
+        validation:
+          validate-component-with-opa-policy:
+            schema_type: opa
+            # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
+            schema_path: "validate-component.rego"
+            description: Check 'component-1' configuration using OPA policy
+      vars:
+        foo: "foo"
+        bar: "bar"
+        baz: "baz"

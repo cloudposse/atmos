@@ -46,7 +46,7 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
 ```yaml
 components:
   terraform:
-    # Optional `command` specifies the executable to be called by `atmos` when running Terraform commands
+    # Optional `command` specifies the executable to be called by Atmos when running Terraform commands
     # If not defined, `terraform` is used
     # Examples:
     # command: terraform
@@ -72,12 +72,59 @@ components:
 
     # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE' ENV var, or '--auto-generate-backend-file' command-line argument
     auto_generate_backend_file: true
+
     init:
       # Can also be set using 'ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS' ENV var, or '--init-pass-vars' command-line argument
       pass_vars: false
 ```
 </File>
 
+<dl>
+    <dt>`command`</dt>
+    <dd>
+        Specifies the executable to be called by `atmos` when running Terraform/OpenTofu commands.
+        If not defined, `terraform` is used. Can also be set using `ATMOS_COMPONENTS_TERRAFORM_COMMAND` ENV var,
+        or `--terraform-command` command-line argument.
+
+        Example values: `terraform`, `/usr/local/bin/terraform`, `tofu`, `/usr/local/bin/tofu-1.7.1`.
+    </dd>
+
+    <dt>`base_path`</dt>
+    <dd>
+        Base path to the Terraform/OpenTofu components.
+
+        Example value: "components/terraform". Can also be set using `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` ENV var,
+        or `--terraform-dir` command-line argument.
+        Supports both absolute and relative paths.
+    </dd>
+
+    <dt>`apply_auto_approve`</dt>
+    <dd>
+        If set to `true`, Atmos automatically adds the `-auto-approve` option to instruct Terraform to apply the plan without
+        asking for confirmation when executing `terraform apply` command
+    </dd>
+
+    <dt>`deploy_run_init`</dt>
+    <dd>
+        If set to `true`, Atmos runs `terraform init` before executing [`atmos terraform deploy`](/cli/commands/terraform/deploy) command
+    </dd>
+
+    <dt>`init_run_reconfigure`</dt>
+    <dd>
+        If set to `true`, Atmos automatically adds the `-reconfigure` option to update the backend configuration when executing `terraform init` command
+    </dd>
+
+    <dt>`auto_generate_backend_file`</dt>
+    <dd>
+        If set to `true`, Atmos automatically generates the Terraform backend file from the component configuration when executing `terraform plan` and `terraform apply` commands
+    </dd>
+
+    <dt>`init.pass_vars`</dt>
+    <dd>
+        If set to `true`, Atmos automatically passes the generated varfile to the `tofu init` command using the `--var-file` flag.
+        [OpenTofu supports passing a varfile to `init`](https://opentofu.org/docs/cli/commands/init/#general-options) to dynamically configure backends
+    </dd>
+</dl>
 
 ## Helmfile Component Behavior
 
@@ -85,7 +132,7 @@ components:
 ```yaml
 components:
   helmfile:
-    # Optional `command` specifies the executable to be called by `atmos` when running Helmfile commands
+    # Optional `command` specifies the executable to be called by Atmos when running Helmfile commands
     # If not defined, `helmfile` is used
     # Examples:
     # command: helmfile
@@ -112,7 +159,6 @@ components:
 ```
 </File>
 
-
 <dl>
   <dt>`command`</dt>
   <dd>
@@ -125,6 +171,8 @@ components:
 
   <dt>`base_path`</dt>
   <dd>
+    Base path to the Helmfile components.
+
     Example value: "components/helmfile". Can also be set using `ATMOS_COMPONENTS_HELMFILE_BASE_PATH` ENV var, 
     or `--helmfile-dir` command-line argument. 
     Supports both absolute and relative paths.

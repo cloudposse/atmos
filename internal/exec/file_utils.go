@@ -18,7 +18,7 @@ const (
 	forwardSlash                = "/"
 )
 
-func removeTempDir(atmosConfig schema.AtmosConfiguration, path string) {
+func removeTempDir(path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
 		u.LogWarning(err.Error())

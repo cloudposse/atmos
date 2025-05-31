@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: nonprod
+
+components:
+  helmfile:
+    component-1:
+      vars:
+        foo: component-1-foo
+        bar: component-1-bar
+        baz: component-1-baz

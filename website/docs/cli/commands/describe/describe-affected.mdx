@@ -200,26 +200,129 @@ Affected components and stacks:
 
 ## Flags
 
-| Flag                               | Description                                                                                                                                                                                                                                                                                                                                                                                                  | Required |
-|:-----------------------------------|:-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------|
-| `--ref`                            | [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch                                                                                                                                                                                                                                                                                | no       |
-| `--sha`                            | Git commit SHA with which to compare the current working branch                                                                                                                                                                                                                                                                                                                                              | no       |
-| `--file`                           | If specified, write the result to the file                                                                                                                                                                                                                                                                                                                                                                   | no       |
-| `--format`                         | Specify the output format: `json` or `yaml` (`json` is default)                                                                                                                                                                                                                                                                                                                                              | no       |
-| `--ssh-key`                        | Path to PEM-encoded private key to clone private repos using SSH                                                                                                                                                                                                                                                                                                                                             | no       |
-| `--ssh-key-password`               | Encryption password for the PEM-encoded private key if the key contains<br/>a password-encrypted PEM block                                                                                                                                                                                                                                                                                                   | no       |
-| `--repo-path`                      | Path to the already cloned target repository with which to compare the current branch.<br/>Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`                                                                                                                                                                                                                                             | no       |
-| `--verbose`                        | Print more detailed output when cloning and checking out the target<br/>Git repository and processing the result                                                                                                                                                                                                                                                                                             | no       |
-| `--include-spacelift-admin-stacks` | Include the Spacelift admin stack of any stack<br/>that is affected by config changes                                                                                                                                                                                                                                                                                                                        | no       |
-| `--clone-target-ref`               | Clone the target reference with which to compare the current branch.<br/>`atmos describe affected --clone-target-ref=true`<br/><br/>If set to `false` (default), the target reference will be checked out instead<br/>This requires that the target reference is already cloned by Git,<br/>and the information about it exists in the `.git` directory                                                      | no       |
-| `--stack`                          | Only show results for the specific stack.<br/>`atmos describe affected --stack=plat-ue2-prod`                                                                                                                                                                                                                                                                                                                | no       |
-| `--include-dependents`             | Include the dependent components and stacks.<br/>`atmos describe affected --include-dependents=true`                                                                                                                                                                                                                                                                                                         | no       |
-| `--include-settings`               | Include the `settings` section for each affected component.<br/>`atmos describe affected --include-settings=true`                                                                                                                                                                                                                                                                                            | no       |
-| `--upload`                         | Upload the affected components and stacks to a specified HTTP endpoint.<br/><br/>`atmos describe affected --upload=true`<br/><br/>Atmos will perform an HTTP POST request<br/>to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,<br/>where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,<br/>and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable. | no       |
-| `--query`                          | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe affected --query=<yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                                                                                                                                                     | no       |
-| `--process-templates`              | Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe affected --process-templates=false`                                                                                                                                                                            |          | no       |
-| `--process-functions`              | Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe affected --process-functions=false`                                                                                                                                                                      |          | no       |
-| `--skip`                           | Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe affected --skip=terraform.output --skip=include`<br/>`atmos describe affected --skip=terraform.output,include`                                                  |          | no       |
+<dl>
+    <dt>`--ref`</dt>
+    <dd>
+        [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch
+    </dd>
+
+    <dt>`--sha`</dt>
+    <dd>
+        Git commit SHA with which to compare the current working branch
+    </dd>
+
+    <dt>`--file`</dt>
+    <dd>
+        If specified, write the result to the file
+    </dd>
+
+    <dt>`--format`</dt>
+    <dd>
+        Specify the output format: `json` or `yaml` (`json` is default)
+    </dd>
+
+    <dt>`--ssh-key`</dt>
+    <dd>
+        Path to PEM-encoded private key to clone private repos using SSH
+    </dd>
+
+    <dt>`--ssh-key-password`</dt>
+    <dd>
+        Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
+    </dd>
+
+    <dt>`--repo-path`</dt>
+    <dd>
+        Path to the already cloned target repository with which to compare the current branch. Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`
+    </dd>
+
+    <dt>`--verbose`</dt>
+    <dd>
+        Print more detailed output when cloning and checking out the target Git repository and processing the result
+    </dd>
+
+    <dt>`--include-spacelift-admin-stacks`</dt>
+    <dd>
+        Include the Spacelift admin stack of any stack that is affected by config changes
+    </dd>
+
+    <dt>`--clone-target-ref`</dt>
+    <dd>
+        Clone the target reference with which to compare the current branch.
+
+        `atmos describe affected --clone-target-ref=true`
+
+        If set to `false` (default), the target reference will be checked out instead.
+        This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory
+    </dd>
+
+    <dt>`--stack`</dt>
+    <dd>
+        Only show results for the specific stack.
+
+        `atmos describe affected --stack=plat-ue2-prod`
+    </dd>
+
+    <dt>`--include-dependents`</dt>
+    <dd>
+        Include the dependent components and stacks.
+
+        `atmos describe affected --include-dependents=true`
+    </dd>
+
+    <dt>`--include-settings`</dt>
+    <dd>
+        Include the `settings` section for each affected component.
+
+        `atmos describe affected --include-settings=true`
+    </dd>
+
+    <dt>`--query`</dt>
+    <dd>
+        Query the results of the command using `yq` expressions.
+
+        `atmos describe affected --query=<yq-expression>`
+
+        For more details, refer to [YQ - a lightweight and portable command-line YAML processor](https://mikefarah.gitbook.io/yq)
+    </dd>
+
+    <dt>`--process-templates`</dt>
+    <dd>
+        Enable/disable processing of all `Go` templates in Atmos stacks manifests when executing the command.
+        If the flag is not provided, it's set to `true` by default.
+
+        `atmos describe affected --process-templates=false`
+    </dd>
+
+    <dt>`--process-functions`</dt>
+    <dd>
+        Enable/disable processing of all Atmos YAML functions in Atmos stacks manifests when executing the command.
+        If the flag is not provided, it's set to `true` by default.
+
+        `atmos describe affected --process-functions=false`
+    </dd>
+
+    <dt>`--skip`</dt>
+    <dd>
+        Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing the command.
+        To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma:
+
+        `atmos describe affected --skip=terraform.output --skip=include`
+
+        `atmos describe affected --skip=terraform.output,include`
+    </dd>
+
+    <dt>`--upload`</dt>
+    <dd>
+        Upload the affected components and stacks to a specified HTTP endpoint.
+
+        `atmos describe affected --upload=true`
+
+        Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
+        where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
+        and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable
+    </dd>
+</dl>
 
 ## Output
 
@@ -237,6 +340,7 @@ Each object has the following schema:
   "spacelift_stack": ".....",
   "atlantis_project": ".....",
   "affected": ".....",
+  "affected_all": [],
   "file": ".....",
   "folder": ".....",
   "dependents": [],
@@ -247,242 +351,428 @@ Each object has the following schema:
 
 where:
 
-- `component` - the affected Atmos component
+<dl>
+    <dt>`component`</dt>
+    <dd>
+        The affected Atmos component.
+    </dd>
 
-- `component_type` - the type of the component (`terraform` or `helmfile`)
+    <dt>`component_type`</dt>
+    <dd>
+        The type of the component (`terraform` or `helmfile`).
+    </dd>
 
-- `component_path` - the filesystem path to the `terraform` or `helmfile` component
+    <dt>`component_path`</dt>
+    <dd>
+        The filesystem path to the `terraform` or `helmfile` component.
+    </dd>
 
-- `stack` - the affected Atmos stack
+    <dt>`stack`</dt>
+    <dd>
+        The affected Atmos stack.
+    </dd>
 
-- `stack_slug` - the Atmos stack slug (concatenation of the Atmos stack and Atmos component)
+    <dt>`stack_slug`</dt>
+    <dd>
+        The Atmos stack slug (concatenation of the Atmos stack and Atmos component).
+    </dd>
 
-- `spacelift_stack` - the affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
-  Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled` section
-  or via inheritance)
+    <dt>`spacelift_stack`</dt>
+    <dd>
+        The affected Spacelift stack. It will be included only if the Spacelift workspace is enabled for the Atmos component in the
+        Atmos stack in the `settings.spacelift.workspace_enabled` section (either directly in the component's `settings.spacelift.workspace_enabled` section
+        or via inheritance).
+    </dd>
 
-- `atlantis_project` - the affected Atlantis project name. It will be included only if the Atlantis integration is configured in
-  the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis) for more details
+    <dt>`atlantis_project`</dt>
+    <dd>
+        The affected Atlantis project name. It will be included only if the Atlantis integration is configured in
+        the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis) for more details.
+    </dd>
 
-- `file` - if the Atmos component depends on an external file, and the file was changed (see `affected.file` below),
-  the `file` attributes shows the modified file
+    <dt>`file`</dt>
+    <dd>
+        If the Atmos component depends on an external file, and the file was changed,
+        the `file` attributes shows the modified file.
+    </dd>
 
-- `folder` - if the Atmos component depends on an external folder, and any file in the folder was changed (see `affected.folder` below),
-  the `folder` attributes shows the modified folder
+    <dt>`folder`</dt>
+    <dd>
+        If the Atmos component depends on an external folder, and any file in the folder was changed,
+        the `folder` attributes shows the modified folder.
+    </dd>
 
-- `dependents` - list of components that depend on the current affected component. It will be populated only if the
-  command-line flag `--include-dependents=true` is passed (to take dependencies into account) and there are other components
-  that depend on the affected component in the stack.
-  Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` property is
-  hierarchical - each component in the list will also contain a `dependents` property if that component has dependent
-  components as well
+    <dt>`dependents`</dt>
+    <dd>
+        A list of components that depend on the current affected component. It will be populated only if the
+        command-line flag `--include-dependents=true` is passed (to take dependencies into account) and there are other components
+        that depend on the affected component in the stack.
+        Refer to [`atmos describe dependents`](/cli/commands/describe/dependents) for more details. The `dependents` property is
+        hierarchical - each component in the list will also contain a `dependents` property if that component has dependent
+        components as well.
+    </dd>
 
-- `settings` - the `settings` section of the component in the stack. It will be included only if the
-  command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
-  configuration information to [integrations](/integrations)
+    <dt>`settings`</dt>
+    <dd>
+        The `settings` section of the component in the stack. It will be included only if the
+        command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
+        configuration information to [integrations](/integrations).
+    </dd>
 
-- `included_in_dependents` - a boolean flag indicating if the affected component in the stack is also present in any of the `dependents`
-  properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
-  is passed. If `included_in_dependents` is set to `true`, it indicates that the affected component in the stack is also
-  present in any of the `dependents` lists in the dependency hierarchy of the other affected components.
-  This flag can be used to decide whether to plan/apply the affected component - you might skip planning/applying the component
-  since it's also a dependency of another affected component and will be triggered in the dependency order of the other
-  affected component
+    <dt>`included_in_dependents`</dt>
+    <dd>
+        A boolean flag indicating if the affected component in the stack is also present in any of the `dependents`
+        properties of the other affected components. It will be included only if the command-line flag `--include-dependents=true`
+        is passed. If `included_in_dependents` is set to `true`, it indicates that the affected component in the stack is also
+        present in any of the `dependents` lists in the dependency hierarchy of the other affected components.
+        This flag can be used to decide whether to plan/apply the affected component - you might skip planning/applying the component
+        since it's also a dependency of another affected component and will be triggered in the dependency order of the other
+        affected component.
+    </dd>
 
-- `affected` - shows what was changed for the component. The possible values are:
+    <dt>`affected`</dt>
+    <dd>
+        Shows the first (in the processing order) section that was changed. The possible values are:
 
-  - `stack.vars` - the `vars` component section in the stack config has been modified
+        <dl>
+            <dt>`stack.vars`</dt>
+            <dd>
+                The `vars` component section in the stack config has been modified.
+            </dd>
 
-  - `stack.env` - the `env` component section in the stack config has been modified
+            <dt>`stack.env`</dt>
+            <dd>
+                The `env` component section in the stack config has been modified.
+            </dd>
 
-  - `stack.settings` - the `settings` component section in the stack config has been modified
+            <dt>`stack.settings`</dt>
+            <dd>
+                The `settings` component section in the stack config has been modified.
+            </dd>
 
-  - `stack.metadata` - the `metadata` component section in the stack config has been modified
+            <dt>`stack.metadata`</dt>
+            <dd>
+                The `metadata` component section in the stack config has been modified.
+            </dd>
 
-  - `component` - the Terraform or Helmfile component that the Atmos component provisions has been changed
+            <dt>`component`</dt>
+            <dd>
+                The Terraform or Helmfile component that the Atmos component provisions has been changed.
+            </dd>
 
-  - `component.module` - the Terraform component is affected because it uses a local Terraform module (not from the Terraform registry, but from the
-    local filesystem), and that local module has been changed.
+            <dt>`component.module`</dt>
+            <dd>
+                The Terraform component is affected because it uses a local Terraform module (not from the Terraform registry, but from the
+                local filesystem), and that local module has been changed.
 
-    For example, let's suppose that we have a catalog of reusable Terraform modules in the `modules` folder (outside the `components` folder), and
-    we have defined the following `label` Terraform module in `modules/label`:
+                For example, let's suppose that we have a catalog of reusable Terraform modules in the `modules` folder (outside the `components` folder), and
+                we have defined the following `label` Terraform module in `modules/label`:
 
-    ```hcl title="modules/label"
-      module "label" {
-        source  = "cloudposse/label/null"
-        version = "0.25.0"
-        context = module.this.context
-      }
+                ```hcl title="modules/label"
+                  module "label" {
+                    source  = "cloudposse/label/null"
+                    version = "0.25.0"
+                    context = module.this.context
+                  }
 
-      output "label" {
-        value       = module.label
-        description = "Label outputs"
-      }
-    ```
+                  output "label" {
+                    value       = module.label
+                    description = "Label outputs"
+                  }
+                ```
 
-    We then use the Terraform module in the `components/terraform/top-level-component1` component:
+                We then use the Terraform module in the `components/terraform/top-level-component1` component:
 
-    ```hcl title="components/terraform/top-level-component1"
-      module "service_2_label" {
-        source  = "../../../modules/label"
-        context = module.this.context
-      }
+                ```hcl title="components/terraform/top-level-component1"
+                  module "service_2_label" {
+                    source  = "../../../modules/label"
+                    context = module.this.context
+                  }
 
-      output "service_2_id" {
-        value       = module.service_2_label.label.id
-        description = "Service 2 ID"
-      }
-    ```
+                  output "service_2_id" {
+                    value       = module.service_2_label.label.id
+                    description = "Service 2 ID"
+                  }
+                ```
 
-    The `label` module is not in the stack config of the `top-level-component1` component (not in the YAML stack config files), but Atmos
-    understands Terraform dependencies (using a Terraform parser from HashiCorp), and can automatically detect any changes to the module.
+                The `label` module is not in the stack config of the `top-level-component1` component (not in the YAML stack config files), but Atmos
+                understands Terraform dependencies (using a Terraform parser from HashiCorp), and can automatically detect any changes to the module.
 
-    For example, if you make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a
-    Terraform dependency of the `top-level-component1` component, Atmos will mark the component as affected with the `affected` attribute
-    set to `component.module`:
+                For example, if you make changes to any files in the folder `modules/label`, Atmos will detect the module changes, and since the module is a
+                Terraform dependency of the `top-level-component1` component, Atmos will mark the component as affected with the `affected` attribute
+                set to `component.module`:
 
-    ```json
-      [
-        {
-          "component": "top-level-component1",
-          "component_type": "terraform",
-          "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
-          "stack": "tenant1-ue2-staging",
-          "stack_slug": "tenant1-ue2-staging-top-level-component1",
-          "spacelift_stack": "tenant1-ue2-staging-top-level-component1",
-          "atlantis_project": "tenant1-ue2-staging-top-level-component1",
-          "affected": "component.module"
-        },
-        {
-          "component": "top-level-component1",
-          "component_type": "terraform",
-          "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
-          "stack": "tenant2-ue2-staging",
-          "stack_slug": "tenant2-ue2-staging-top-level-component1",
-          "spacelift_stack": "tenant2-ue2-staging-top-level-component1",
-          "atlantis_project": "tenant2-ue2-staging-top-level-component1",
-          "affected": "component.module"
-        }
-      ]
-    ```
+                ```json
+                  [
+                    {
+                      "component": "top-level-component1",
+                      "component_type": "terraform",
+                      "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
+                      "stack": "tenant1-ue2-staging",
+                      "stack_slug": "tenant1-ue2-staging-top-level-component1",
+                      "spacelift_stack": "tenant1-ue2-staging-top-level-component1",
+                      "atlantis_project": "tenant1-ue2-staging-top-level-component1",
+                      "affected": "component.module",
+                      "affected_all": [
+                        "component.module"
+                      ]
+                    },
+                    {
+                      "component": "top-level-component1",
+                      "component_type": "terraform",
+                      "component_path": "tests/fixtures/scenarios/complete/components/terraform/top-level-component1",
+                      "stack": "tenant2-ue2-staging",
+                      "stack_slug": "tenant2-ue2-staging-top-level-component1",
+                      "spacelift_stack": "tenant2-ue2-staging-top-level-component1",
+                      "atlantis_project": "tenant2-ue2-staging-top-level-component1",
+                      "affected": "component.module",
+                      "affected_all": [
+                        "component.module"
+                      ]
+                    }
+                  ]
+                ```
+            </dd>
 
-  - `stack.settings.spacelift.admin_stack_selector` - the Atmos component for the Spacelift admin stack.
-    This will be included only if all the following is true:
+            <dt>`stack.settings.spacelift.admin_stack_selector`</dt>
+            <dd>
+                The Atmos component for the Spacelift admin stack.
 
-    - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
+                This will be included only if all of the following is true:
 
-    - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_selector` pointing to the Spacelift admin
-      stack that manages the components. For example:
+                - The `atmos describe affected` is executed with the `--include-spacelift-admin-stacks=true` flag
 
-      ```yaml title="stacks/orgs/cp/tenant1/_defaults.yaml"
-      settings:
-        spacelift:
-          # All Spacelift child stacks for the `tenant1` tenant are managed by the
-          # `tenant1-ue2-prod-infrastructure-tenant1` Spacelift admin stack.
-          # The `admin_stack_selector` attribute is used to find the affected Spacelift
-          # admin stack for each affected Atmos stack
-          # when executing the command
-          # `atmos describe affected --include-spacelift-admin-stacks=true`
-          admin_stack_selector:
-            component: infrastructure-tenant1
-            tenant: tenant1
-            environment: ue2
-            stage: prod
-      ```
+                - Any of the affected Atmos components has configured the section `settings.spacelift.admin_stack_selector` pointing to the Spacelift admin
+                  stack that manages the components.
 
-    - The Spacelift admin stack is enabled by `settings.spacelift.workspace_enabled` set to `true`. For example:
 
-      ```yaml title="stacks/catalog/terraform/spacelift/infrastructure-tenant1.yaml"
-      components:
-        terraform:
-          infrastructure-tenant1:
-            metadata:
-              component: spacelift
-              inherits:
-                - spacelift-defaults
-            settings:
-              spacelift:
-                workspace_enabled: true
-      ```
+                  For example:
 
-  - `file` - an external file on the local filesystem that the Atmos component depends on was changed.
+                  ```yaml title="stacks/orgs/cp/tenant1/_defaults.yaml"
+                  settings:
+                    spacelift:
+                      # All Spacelift child stacks for the `tenant1` tenant are managed by the
+                      # `tenant1-ue2-prod-infrastructure-tenant1` Spacelift admin stack.
+                      # The `admin_stack_selector` attribute is used to find the affected Spacelift
+                      # admin stack for each affected Atmos stack
+                      # when executing the command
+                      # `atmos describe affected --include-spacelift-admin-stacks=true`
+                      admin_stack_selector:
+                        component: infrastructure-tenant1
+                        tenant: tenant1
+                        environment: ue2
+                        stage: prod
+                  ```
 
-    Dependencies on external files (not in the component's folder) are defined using the `file` attribute in the `settings.depends_on` map.
-    For example:
+                - The Spacelift admin stack is enabled by `settings.spacelift.workspace_enabled` set to `true`.
 
-    ```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
-    components:
-      terraform:
-        top-level-component3:
-          metadata:
-            component: "top-level-component1"
-          settings:
-            depends_on:
-              1:
-                file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-    ```
 
-    In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
-    `tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
-    the component `top-level-component3` will be included in the `atmos describe affected` command output. For example:
+                  For example:
 
-    ```json
-      [
-        {
-          "component": "top-level-component3",
-          "component_type": "terraform",
-          "component_path": "components/terraform/top-level-component1",
-          "stack": "tenant1-ue2-test-1",
-          "stack_slug": "tenant1-ue2-test-1-top-level-component3",
-          "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
-          "affected": "file",
-          "file": "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-        }
-      ]
-    ```
+                  ```yaml title="stacks/catalog/terraform/spacelift/infrastructure-tenant1.yaml"
+                  components:
+                    terraform:
+                      infrastructure-tenant1:
+                        metadata:
+                          component: spacelift
+                          inherits:
+                            - spacelift-defaults
+                        settings:
+                          spacelift:
+                            workspace_enabled: true
+                  ```
+            </dd>
 
-  - `folder` - any file in an external folder that the Atmos component depends on was changed.
+            <dt>`file`</dt>
+            <dd>
+                An external file on the local filesystem that the Atmos component depends on was changed.
 
-    Dependencies on external folders are defined using the `folder` attribute in the `settings.depends_on` map.
-    For example:
+                Dependencies on external files (not in the component's folder) are defined using the `file` attribute in the `settings.depends_on` map.
 
-    ```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
-    components:
-      terraform:
-        top-level-component3:
-          metadata:
-            component: "top-level-component1"
-          settings:
-            depends_on:
-              1:
-                file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-              2:
-                folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
-    ```
 
-    In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
-    `tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
-    the component `top-level-component3` will be included in the `atmos describe affected` command output. For example:
+                For example:
 
-    ```json
-      [
-        {
-          "component": "top-level-component3",
-          "component_type": "terraform",
-          "component_path": "components/terraform/top-level-component1",
-          "stack": "tenant1-ue2-test-1",
-          "stack_slug": "tenant1-ue2-test-1-top-level-component3",
-          "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
-          "affected": "folder",
-          "folder": "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
-        }
-      ]
-    ```
+                ```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
+                components:
+                  terraform:
+                    top-level-component3:
+                      metadata:
+                        component: "top-level-component1"
+                      settings:
+                        depends_on:
+                          1:
+                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                ```
+
+                In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
+                `tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
+                the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+
+                For example:
+
+                ```json
+                  [
+                    {
+                      "component": "top-level-component3",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/top-level-component1",
+                      "stack": "tenant1-ue2-test-1",
+                      "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+                      "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+                      "affected": "file",
+                      "affected_all": [
+                        "file"
+                      ],
+                      "file": "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                    }
+                  ]
+                ```
+            </dd>
+
+            <dt>`folder`</dt>
+            <dd>
+                Any file in an external folder that the Atmos component depends on was changed.
+
+                Dependencies on external folders are defined using the `folder` attribute in the `settings.depends_on` map.
+
+
+                For example:
+
+                ```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
+                components:
+                  terraform:
+                    top-level-component3:
+                      metadata:
+                        component: "top-level-component1"
+                      settings:
+                        depends_on:
+                          1:
+                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                          2:
+                            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                ```
+
+                In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
+                `tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
+                the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+
+                For example:
+
+                ```json
+                  [
+                    {
+                      "component": "top-level-component3",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/top-level-component1",
+                      "stack": "tenant1-ue2-test-1",
+                      "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+                      "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+                      "affected": "folder",
+                      "affected_all": [
+                        "folder"
+                      ],
+                      "folder": "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                    }
+                  ]
+                ```
+            </dd>
+        </dl>
+    </dd>
+
+    <dt>`affected_all`</dt>
+    <dd>
+        Shows all component sections and attributes that were changed.
+
+
+        For example, if you make changes to the `vars` and `settings` sections of the component `component-1` in the
+        `nonprod` stack, and execute `atmos describe affected`, you will get the following result:
+
+        ```json
+          [
+            {
+              "component": "component-1",
+              "component_type": "terraform",
+              "stack": "nonprod",
+              "stack_slug": "nonprod-component-1",
+              "affected": "stack.vars",
+              "affected_all": [
+                 "stack.vars",
+                 "stack.settings"
+              ]
+            }
+          ]
+        ```
+
+        If you create a new Terraform/Tofu component, configure a new Atmos component `component-1` in the
+        `nonprod` stack, and execute `atmos describe affected`, you will get the following result:
+
+        ```json
+        [
+          {
+            "component": "component-1",
+            "component_type": "terraform",
+            "stack": "nonprod",
+            "stack_slug": "nonprod-component-1",
+            "affected": "stack.metadata",
+            "affected_all": [
+              "component",
+              "stack.metadata",
+              "stack.vars",
+              "stack.env",
+              "stack.settings"
+            ]
+          }
+        ]
+        ```
+
+        where:
+
+            <dl>
+                <dt>`affected`</dt>
+                <dd>
+                    Shows that the Atmos component's `metadata` section was changed
+                    (since the component is new and the `metadata` section is the first section that Atmos processes).
+                </dd>
+
+                <dt>`affected_all`</dt>
+                <dd>
+                    Shows all the affected sections and attributes:
+                    <dl>
+                        <dt>`component`</dt>
+                        <dd>
+                            The Terraform component (Terraform configuration) was affected (since it was just added).
+                        </dd>
+                        <dt>`stack.metadata`</dt>
+                        <dd>
+                            The Atmos component's `metadata` section was changed.
+                        </dd>
+                        <dt>`stack.vars`</dt>
+                        <dd>
+                            The Atmos component's `vars` section was changed.
+                        </dd>
+                        <dt>`stack.env`</dt>
+                        <dd>
+                            The Atmos component's `env` section was changed.
+                        </dd>
+                        <dt>`stack.settings`</dt>
+                        <dd>
+                            The Atmos component's `settings` section was changed.
+                        </dd>
+                    </dl>
+                </dd>
+            </dl>
+    </dd>
+</dl>
 
 :::note
 
-Abstract Atmos components (where `metadata.type` is set to `abstract`) are not included in the output since they serve
-as blueprints for other Atmos components and are not meant to be provisioned.
+[Abstract Atmos components](/design-patterns/abstract-component) (`metadata.type` is set to `abstract`)
+are not included in the output since they serve as blueprints for other Atmos components and are not meant to be provisioned.
+
+[Disabled Atmos components](/core-concepts/stacks/define-components/#disabling-components-with-metadataenabled) (`metadata.enabled` is set to `false`)
+are also not included in the output since they are explicitly disabled.
 
 :::
 
@@ -499,7 +789,10 @@ as blueprints for other Atmos components and are not meant to be provisioned.
     "stack_slug": "tenant1-ue2-prod-infrastructure-tenant1",
     "spacelift_stack": "tenant1-ue2-prod-infrastructure-tenant1",
     "atlantis_project": "tenant1-ue2-prod-infrastructure-tenant1",
-    "affected": "stack.settings.spacelift.admin_stack_selector"
+    "affected": "stack.settings.spacelift.admin_stack_selector",
+    "affected_all": [
+        "stack.settings.spacelift.admin_stack_selector"
+    ]
   },
   {
     "component": "infrastructure-tenant2",
@@ -509,7 +802,10 @@ as blueprints for other Atmos components and are not meant to be provisioned.
     "stack_slug": "tenant2-ue2-prod-infrastructure-tenant2",
     "spacelift_stack": "tenant2-ue2-prod-infrastructure-tenant2",
     "atlantis_project": "tenant2-ue2-prod-infrastructure-tenant2",
-    "affected": "stack.settings.spacelift.admin_stack_selector"
+    "affected": "stack.settings.spacelift.admin_stack_selector",
+    "affected_all": [
+      "stack.settings.spacelift.admin_stack_selector"
+    ]
   },
   {
     "component": "test/test-component-override-2",
@@ -519,7 +815,10 @@ as blueprints for other Atmos components and are not meant to be provisioned.
     "stack_slug": "tenant1-ue2-dev-test-test-component-override-2",
     "spacelift_stack": "tenant1-ue2-dev-new-component",
     "atlantis_project": "tenant1-ue2-dev-new-component",
-    "affected": "stack.vars"
+    "affected": "stack.vars",
+    "affected_all": [
+      "stack.vars"
+    ]
   },
   {
     "component": "infra/vpc",
@@ -529,7 +828,10 @@ as blueprints for other Atmos components and are not meant to be provisioned.
     "stack_slug": "tenant1-ue2-staging-infra-vpc",
     "spacelift_stack": "tenant1-ue2-staging-infra-vpc",
     "atlantis_project": "tenant1-ue2-staging-infra-vpc",
-    "affected": "component"
+    "affected": "component",
+    "affected_all": [
+      "component"
+    ]
   },
   {
     "component": "test/test-component-override-3",
@@ -538,7 +840,10 @@ as blueprints for other Atmos components and are not meant to be provisioned.
     "stack": "tenant1-ue2-prod",
     "stack_slug": "tenant1-ue2-prod-test-test-component-override-3",
     "atlantis_project": "tenant1-ue2-prod-test-test-component-override-3",
-    "affected": "stack.env"
+    "affected": "stack.env",
+    "affected_all": [
+      "stack.env"
+    ]
   },
   {
     "component": "top-level-component3",
@@ -548,6 +853,10 @@ as blueprints for other Atmos components and are not meant to be provisioned.
     "stack_slug": "tenant1-ue2-test-1-top-level-component3",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
     "affected": "file",
+    "affected_all": [
+      "file",
+      "folder"
+    ]
     "file": "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
   },
   {
@@ -558,6 +867,10 @@ as blueprints for other Atmos components and are not meant to be provisioned.
     "stack_slug": "tenant1-ue2-test-1-top-level-component3",
     "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
     "affected": "folder",
+    "affected_all": [
+      "file",
+      "folder"
+    ]
     "folder": "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
   }
 ]

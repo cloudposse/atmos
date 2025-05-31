@@ -84,12 +84,37 @@ func parseJSON(data []byte) (any, error) {
 }
 
 func parseYAML(data []byte) (any, error) {
+	// First, unmarshal into a yaml.Node to preserve the original structure
+	var node yaml.Node
+	err := yaml.Unmarshal(data, &node)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process the node to ensure strings starting with '#' are properly handled
+	processYAMLNode(&node)
+
+	// Decode the processed node into a Go value
 	var v any
-	err := yaml.Unmarshal(data, &v)
+	err = node.Decode(&v)
 	if err != nil {
 		return nil, err
 	}
 	return v, nil
+}
+
+func processYAMLNode(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+
+	if node.Kind == yaml.ScalarNode && node.Tag == "!!str" && strings.HasPrefix(node.Value, "#") {
+		node.Style = yaml.SingleQuotedStyle
+	}
+
+	for _, child := range node.Content {
+		processYAMLNode(child)
+	}
 }
 
 func parseHCL(data []byte, filename string) (any, error) {

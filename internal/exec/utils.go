@@ -58,6 +58,7 @@ var commonFlags = []string{
 
 // ProcessComponentConfig processes component config sections
 func ProcessComponentConfig(
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
@@ -179,11 +180,14 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
 	configAndStacksInfo.BaseComponentPath = baseComponentName
-	configAndStacksInfo.Command = command
 	configAndStacksInfo.ComponentInheritanceChain = componentInheritanceChain
 	configAndStacksInfo.ComponentIsAbstract = componentIsAbstract
 	configAndStacksInfo.ComponentMetadataSection = componentMetadata
 	configAndStacksInfo.ComponentImportsSection = componentImportsSection
+
+	if command != "" {
+		configAndStacksInfo.Command = command
+	}
 
 	return nil
 }
@@ -338,6 +342,7 @@ func ProcessStacks(
 	// Check and process stacks
 	if atmosConfig.StackType == "Directory" {
 		err = ProcessComponentConfig(
+			&atmosConfig,
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
@@ -371,6 +376,7 @@ func ProcessStacks(
 		for stackName := range stacksMap {
 			// Check if we've found the component in the stack
 			err = ProcessComponentConfig(
+				&atmosConfig,
 				&configAndStacksInfo,
 				stackName,
 				stacksMap,
@@ -636,7 +642,16 @@ func ProcessStacks(
 
 	// Add command-line arguments and vars to the component section
 	// It will allow using them when validating with OPA policies or JSON Schema
-	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = configAndStacksInfo.AdditionalArgsAndFlags
+	args := append(configAndStacksInfo.CliArgs, configAndStacksInfo.AdditionalArgsAndFlags...)
+
+	var filteredArgs []string
+	for _, item := range args {
+		if item != "" {
+			filteredArgs = append(filteredArgs, item)
+		}
+	}
+
+	configAndStacksInfo.ComponentSection[cfg.CliArgsSectionName] = filteredArgs
 
 	cliVars, err := getCliVars(configAndStacksInfo.AdditionalArgsAndFlags)
 	if err != nil {

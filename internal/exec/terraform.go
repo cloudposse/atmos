@@ -36,6 +36,8 @@ var (
 
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
+	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
+
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
@@ -45,9 +47,18 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 
+	// Add the `command` from `components.terraform.command` from `atmos.yaml`.
+	if info.Command == "" {
+		if atmosConfig.Components.Terraform.Command != "" {
+			info.Command = atmosConfig.Components.Terraform.Command
+		} else {
+			info.Command = cfg.TerraformComponentType
+		}
+	}
+
 	if info.SubCommand == "version" {
 		return ExecuteShellCommand(atmosConfig,
-			"terraform",
+			info.Command,
 			[]string{info.SubCommand},
 			"",
 			nil,

@@ -155,7 +155,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 
 	if repoPath != "" {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
-			atmosConfig,
+			&atmosConfig,
 			repoPath,
 			verbose,
 			false,
@@ -167,7 +167,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		)
 	} else if cloneTargetRef {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
-			atmosConfig,
+			&atmosConfig,
 			ref,
 			sha,
 			sshKeyPath,
@@ -182,7 +182,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		)
 	} else {
 		affected, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
-			atmosConfig,
+			&atmosConfig,
 			ref,
 			sha,
 			verbose,

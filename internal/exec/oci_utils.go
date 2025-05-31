@@ -34,7 +34,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer removeTempDir(*atmosConfig, tempDir)
+	defer removeTempDir(tempDir)
 
 	ref, err := name.ParseReference(imageName)
 	if err != nil {

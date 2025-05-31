@@ -48,6 +48,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	info.ComponentFromArg = component
 	info.Stack = stack
 	info.ComponentType = "terraform"
+	info.CliArgs = []string{"terraform", "generate", "varfile"}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
