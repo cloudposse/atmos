@@ -87,8 +87,11 @@ linters-settings:
     no-unaliased: true # Prevents using `github.com/charmbracelet/log` without an alias
     no-extra-aliases: false # Disallows unnecessary aliasing
     alias:
+      # We prefer to use our own logger, but we still use the charmbracelet log in some places
       - pkg: github.com/charmbracelet/log
         alias: log # Enforce 'log' as the only allowed alias
+      - pkg: github.com/cloudposse/atmos/pkg/logger
+        alias: logger # Enforce 'logger' as the only allowed alias
 
   revive:
     rules:
