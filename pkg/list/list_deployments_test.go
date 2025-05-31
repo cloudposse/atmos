@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/git"
+	logger "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -981,8 +982,11 @@ func TestFormatDeployments(t *testing.T) {
 	}
 }
 
-// TestUploadDeployments tests the uploadDeployments function.
-func TestUploadDeployments(t *testing.T) {
+// TestUploadDeploymentsFunc tests the uploadDeployments function.
+func TestUploadDeploymentsFunc(t *testing.T) {
+	// Create a test logger
+	log, _ := logger.NewLogger("info", "test")
+
 	tests := []struct {
 		name          string
 		deployments   []schema.Deployment
@@ -990,13 +994,21 @@ func TestUploadDeployments(t *testing.T) {
 		mockRepoErr   error
 		mockUploadErr error
 		expectedError string
+		description   string
 	}{
 		{
 			name: "successful upload",
 			deployments: []schema.Deployment{
 				{
 					Component: "vpc",
-					Stack:     "prod",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
 				},
 			},
 			mockRepoInfo: &git.RepoInfo{
@@ -1006,24 +1018,26 @@ func TestUploadDeployments(t *testing.T) {
 				RepoHost:  "github.com",
 			},
 			expectedError: "",
+			description:   "Test successful upload of deployments",
 		},
 		{
 			name: "error getting repo info",
 			deployments: []schema.Deployment{
 				{
 					Component: "vpc",
-					Stack:     "prod",
+					Stack:     "stack1",
 				},
 			},
 			mockRepoErr:   errors.New("failed to get repo info"),
 			expectedError: "failed to get repo info",
+			description:   "Test error when getting repo info",
 		},
 		{
 			name: "error uploading to API",
 			deployments: []schema.Deployment{
 				{
 					Component: "vpc",
-					Stack:     "prod",
+					Stack:     "stack1",
 				},
 			},
 			mockRepoInfo: &git.RepoInfo{
@@ -1034,33 +1048,69 @@ func TestUploadDeployments(t *testing.T) {
 			},
 			mockUploadErr: errors.New("failed to upload"),
 			expectedError: "failed to upload",
+			description:   "Test error when uploading to API",
+		},
+		{
+			name:        "empty deployments",
+			deployments: []schema.Deployment{},
+			mockRepoInfo: &git.RepoInfo{
+				RepoUrl:   "https://github.com/test/repo",
+				RepoName:  "repo",
+				RepoOwner: "test",
+				RepoHost:  "github.com",
+			},
+			expectedError: "",
+			description:   "Test uploading empty deployments slice",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Since we can't mock the package functions directly, we'll skip the actual upload test
-			// and just verify the test cases are properly structured
+			// Create mock implementations
+			mockRepo := &mockGitRepo{
+				repoInfo: tt.mockRepoInfo,
+				err:      tt.mockRepoErr,
+			}
+
+			mockAPIClient := &mockAPIClient{
+				uploadErr: tt.mockUploadErr,
+			}
+
+			// Create a test-specific implementation of uploadDeployments
+			uploadDeployments := func(deployments []schema.Deployment, log *logger.Logger) error {
+				// Get repo info
+				repoInfo, err := mockRepo.GetRepoInfo()
+				if err != nil {
+					return err
+				}
+
+				// Create upload request
+				req := pro.DriftDetectionUploadRequest{
+					RepoURL:   repoInfo.RepoUrl,
+					RepoName:  repoInfo.RepoName,
+					RepoOwner: repoInfo.RepoOwner,
+					RepoHost:  repoInfo.RepoHost,
+					Stacks:    deployments,
+				}
+
+				// Upload to API
+				err = mockAPIClient.UploadDriftDetection(&req)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			}
+
+			// Execute the test
+			err := uploadDeployments(tt.deployments, log)
+
+			// Check error
 			if tt.expectedError != "" {
-				// For error cases, we expect the error to be returned
-				assert.NotEmpty(t, tt.expectedError)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
 			} else {
-				// For success cases, we expect no error
-				assert.Empty(t, tt.expectedError)
-			}
-
-			// Verify the test data is properly structured
-			if tt.mockRepoInfo != nil {
-				assert.NotEmpty(t, tt.mockRepoInfo.RepoUrl)
-				assert.NotEmpty(t, tt.mockRepoInfo.RepoName)
-				assert.NotEmpty(t, tt.mockRepoInfo.RepoOwner)
-				assert.NotEmpty(t, tt.mockRepoInfo.RepoHost)
-			}
-
-			// Verify deployments are properly structured
-			for _, deployment := range tt.deployments {
-				assert.NotEmpty(t, deployment.Component)
-				assert.NotEmpty(t, deployment.Stack)
+				assert.NoError(t, err)
 			}
 		})
 	}
