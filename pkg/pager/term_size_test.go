@@ -15,7 +15,6 @@ func TestGetTerminalSize(t *testing.T) {
 		terminalSizer = MockTerminalSizer{Width: 80, Height: 24}
 
 		size, err := getTerminalSize()
-
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -45,7 +44,6 @@ func TestGetTerminalSize(t *testing.T) {
 		terminalSizer = MockTerminalSizer{Width: 65535, Height: 65535}
 
 		size, err := getTerminalSize()
-
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
