@@ -1,6 +1,8 @@
 package pager
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -11,27 +13,36 @@ type PageCreator interface {
 }
 
 type pageCreator struct {
-	newTeaProgram func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
+	newTeaProgram       func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
+	contentFitsTerminal func(content string) bool
 }
 
 func New() PageCreator {
 	return &pageCreator{
-		newTeaProgram: tea.NewProgram,
+		newTeaProgram:       tea.NewProgram,
+		contentFitsTerminal: ContentFitsTerminal,
 	}
 }
 
 func (p *pageCreator) Run(title, content string) error {
-	if _, err := p.newTeaProgram(
-		&model{
-			title:    title,
-			content:  content,
-			ready:    false,
-			viewport: viewport.New(0, 0),
-		},
-		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
-		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
-	).Run(); err != nil {
-		return err
+	// Count visible lines (taking word wrapping into account)
+	contentFits := p.contentFitsTerminal(content)
+	// If content exceeds terminal height, use pager
+	if !contentFits {
+		if _, err := p.newTeaProgram(
+			&model{
+				title:    title,
+				content:  content,
+				ready:    false,
+				viewport: viewport.New(0, 0),
+			},
+			tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
+			tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
+		).Run(); err != nil {
+			return err
+		}
+	} else {
+		fmt.Print(content)
 	}
 	return nil
 }
