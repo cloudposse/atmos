@@ -90,7 +90,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 	result := exec.DescribeAffectedCmdArgs{
 		CLIConfig: &atmosConfig,
 	}
-	setFlagValueInCliArgs(flags, &result)
+	setDescribeAffectedFlagValueInCliArgs(flags, &result)
 
 	if result.Format != "yaml" && result.Format != "json" {
 		return exec.DescribeAffectedCmdArgs{}, exec.ErrInvalidFormat
@@ -102,7 +102,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 	return result, nil
 }
 
-func setFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffectedCmdArgs) {
+func setDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffectedCmdArgs) {
 	flagsKeyValue := map[string]any{
 		"ref":                            &describe.Ref,
 		"sha":                            &describe.SHA,
