@@ -93,8 +93,8 @@ tests:
         - "Invalid Step Type"
         - "Invalid workflow step type invalid"
         - "## Available Step Types"
-        - "• atmos"
-        - "• shell"
+        - "atmos"
+        - "shell"
       exit_code: 1
 
   - name: atmos workflow invalid from step
@@ -116,5 +116,5 @@ tests:
         - "Invalid Step"
         - "Invalid --from-step flag. Workflow pass does not have a step with the name dne"
         - "## Available Steps"
-        - "• step1"
+        - "step1"
       exit_code: 1
