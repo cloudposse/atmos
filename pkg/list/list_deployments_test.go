@@ -1065,3 +1065,428 @@ func TestUploadDeployments(t *testing.T) {
 		})
 	}
 }
+
+// TestCollectDeployments tests the collectDeployments function.
+func TestCollectDeployments(t *testing.T) {
+	tests := []struct {
+		name        string
+		stacksMap   map[string]interface{}
+		expected    []schema.Deployment
+		description string
+	}{
+		{
+			name: "valid stacks with multiple components",
+			stacksMap: map[string]interface{}{
+				"stack1": map[string]interface{}{
+					"components": map[string]interface{}{
+						"terraform": map[string]interface{}{
+							"vpc": map[string]interface{}{
+								"settings": map[string]interface{}{
+									"pro": map[string]interface{}{
+										"drift_detection": map[string]interface{}{
+											"enabled": true,
+										},
+									},
+								},
+								"metadata": map[string]interface{}{
+									"type": "real",
+								},
+							},
+						},
+						"helmfile": map[string]interface{}{
+							"app": map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"type": "real",
+								},
+							},
+						},
+					},
+				},
+				"stack2": map[string]interface{}{
+					"components": map[string]interface{}{
+						"terraform": map[string]interface{}{
+							"db": map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"type": "real",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []schema.Deployment{
+				{
+					Component:     "vpc",
+					Stack:         "stack1",
+					ComponentType: "terraform",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+					Metadata: map[string]interface{}{
+						"type": "real",
+					},
+				},
+				{
+					Component:     "app",
+					Stack:         "stack1",
+					ComponentType: "helmfile",
+					Settings:      map[string]interface{}{},
+					Metadata: map[string]interface{}{
+						"type": "real",
+					},
+				},
+				{
+					Component:     "db",
+					Stack:         "stack2",
+					ComponentType: "terraform",
+					Settings:      map[string]interface{}{},
+					Metadata: map[string]interface{}{
+						"type": "real",
+					},
+				},
+			},
+			description: "Test collecting deployments from multiple stacks with different component types",
+		},
+		{
+			name:        "empty stacks map",
+			stacksMap:   map[string]interface{}{},
+			expected:    []schema.Deployment{},
+			description: "Test with empty stacks map",
+		},
+		{
+			name: "stack with invalid components",
+			stacksMap: map[string]interface{}{
+				"stack1": map[string]interface{}{
+					"components": "not-a-map",
+				},
+			},
+			expected:    []schema.Deployment{},
+			description: "Test with invalid components type",
+		},
+		{
+			name: "stack with missing components",
+			stacksMap: map[string]interface{}{
+				"stack1": map[string]interface{}{
+					"other": "value",
+				},
+			},
+			expected:    []schema.Deployment{},
+			description: "Test with missing components field",
+		},
+		{
+			name: "stack with abstract components",
+			stacksMap: map[string]interface{}{
+				"stack1": map[string]interface{}{
+					"components": map[string]interface{}{
+						"terraform": map[string]interface{}{
+							"abstract-vpc": map[string]interface{}{
+								"metadata": map[string]interface{}{
+									"type": "abstract",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected:    []schema.Deployment{},
+			description: "Test with abstract components that should be filtered out",
+		},
+		{
+			name: "stack with invalid component config",
+			stacksMap: map[string]interface{}{
+				"stack1": map[string]interface{}{
+					"components": map[string]interface{}{
+						"terraform": map[string]interface{}{
+							"vpc": "not-a-map",
+						},
+					},
+				},
+			},
+			expected:    []schema.Deployment{},
+			description: "Test with invalid component configuration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := collectDeployments(tt.stacksMap)
+
+			// Sort both actual and expected deployments for order-insensitive comparison
+			sortedResult := sortDeployments(result)
+			sortedExpected := sortDeployments(tt.expected)
+
+			assert.Equal(t, len(sortedExpected), len(sortedResult),
+				"Number of deployments should match for test case: %s", tt.description)
+
+			for i, expected := range sortedExpected {
+				actual := sortedResult[i]
+				assert.Equal(t, expected.Component, actual.Component,
+					"Component should match for test case: %s", tt.description)
+				assert.Equal(t, expected.Stack, actual.Stack,
+					"Stack should match for test case: %s", tt.description)
+				assert.Equal(t, expected.ComponentType, actual.ComponentType,
+					"ComponentType should match for test case: %s", tt.description)
+				assert.Equal(t, expected.Settings, actual.Settings,
+					"Settings should match for test case: %s", tt.description)
+				assert.Equal(t, expected.Metadata, actual.Metadata,
+					"Metadata should match for test case: %s", tt.description)
+			}
+		})
+	}
+}
+
+// TestFilterDeployments tests the filterDeployments function.
+func TestFilterDeployments(t *testing.T) {
+	tests := []struct {
+		name         string
+		deployments  []schema.Deployment
+		driftEnabled bool
+		expected     []schema.Deployment
+		description  string
+	}{
+		{
+			name: "drift detection enabled - filter enabled deployments",
+			deployments: []schema.Deployment{
+				{
+					Component: "vpc",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+				{
+					Component: "app",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": false,
+							},
+						},
+					},
+				},
+				{
+					Component: "db",
+					Stack:     "stack1",
+					Settings:  map[string]interface{}{},
+				},
+			},
+			driftEnabled: true,
+			expected: []schema.Deployment{
+				{
+					Component: "vpc",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+			},
+			description: "Test filtering deployments with drift detection enabled",
+		},
+		{
+			name: "drift detection disabled - return all deployments",
+			deployments: []schema.Deployment{
+				{
+					Component: "vpc",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+				{
+					Component: "app",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": false,
+							},
+						},
+					},
+				},
+			},
+			driftEnabled: false,
+			expected: []schema.Deployment{
+				{
+					Component: "vpc",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+				{
+					Component: "app",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": false,
+							},
+						},
+					},
+				},
+			},
+			description: "Test returning all deployments when drift detection is disabled",
+		},
+		{
+			name:         "empty deployments",
+			deployments:  []schema.Deployment{},
+			driftEnabled: true,
+			expected:     []schema.Deployment{},
+			description:  "Test with empty deployments slice",
+		},
+		{
+			name: "deployments without pro settings",
+			deployments: []schema.Deployment{
+				{
+					Component: "vpc",
+					Stack:     "stack1",
+					Settings:  map[string]interface{}{},
+				},
+				{
+					Component: "app",
+					Stack:     "stack1",
+					Settings:  map[string]interface{}{},
+				},
+			},
+			driftEnabled: true,
+			expected:     []schema.Deployment{},
+			description:  "Test with deployments that don't have pro settings",
+		},
+		{
+			name: "deployments with invalid drift detection settings",
+			deployments: []schema.Deployment{
+				{
+					Component: "vpc",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": "not-a-map",
+						},
+					},
+				},
+				{
+					Component: "app",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": "not-a-bool",
+							},
+						},
+					},
+				},
+			},
+			driftEnabled: true,
+			expected:     []schema.Deployment{},
+			description:  "Test with deployments that have invalid drift detection settings",
+		},
+		{
+			name: "multiple enabled deployments",
+			deployments: []schema.Deployment{
+				{
+					Component: "vpc",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+				{
+					Component: "app",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+				{
+					Component: "db",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": false,
+							},
+						},
+					},
+				},
+			},
+			driftEnabled: true,
+			expected: []schema.Deployment{
+				{
+					Component: "vpc",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+				{
+					Component: "app",
+					Stack:     "stack1",
+					Settings: map[string]interface{}{
+						"pro": map[string]interface{}{
+							"drift_detection": map[string]interface{}{
+								"enabled": true,
+							},
+						},
+					},
+				},
+			},
+			description: "Test filtering multiple deployments with drift detection enabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterDeployments(tt.deployments, tt.driftEnabled)
+
+			// Sort both actual and expected deployments for order-insensitive comparison
+			sortedResult := sortDeployments(result)
+			sortedExpected := sortDeployments(tt.expected)
+
+			assert.Equal(t, len(sortedExpected), len(sortedResult),
+				"Number of deployments should match for test case: %s", tt.description)
+
+			for i, expected := range sortedExpected {
+				actual := sortedResult[i]
+				assert.Equal(t, expected.Component, actual.Component,
+					"Component should match for test case: %s", tt.description)
+				assert.Equal(t, expected.Stack, actual.Stack,
+					"Stack should match for test case: %s", tt.description)
+				assert.Equal(t, expected.Settings, actual.Settings,
+					"Settings should match for test case: %s", tt.description)
+			}
+		})
+	}
+}
