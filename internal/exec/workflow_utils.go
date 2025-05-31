@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
