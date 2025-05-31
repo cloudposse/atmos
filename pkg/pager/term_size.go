@@ -1,0 +1,160 @@
+package pager
+
+import (
+	"os"
+	"strings"
+
+	"golang.org/x/term"
+)
+
+// TermSize represents terminal dimensions
+type TermSize struct {
+	Width  uint16
+	Height uint16
+}
+
+// Interface for testability
+type TerminalSizer interface {
+	GetSize(fd int) (width, height int, err error)
+}
+
+// Real implementation
+type RealTerminalSizer struct{}
+
+func (r RealTerminalSizer) GetSize(fd int) (width, height int, err error) {
+	return term.GetSize(fd)
+}
+
+// Mock implementation for testing
+type MockTerminalSizer struct {
+	Width  int
+	Height int
+	Error  error
+}
+
+func (m MockTerminalSizer) GetSize(fd int) (width, height int, err error) {
+	if m.Error != nil {
+		return 0, 0, m.Error
+	}
+	return m.Width, m.Height, nil
+}
+
+// Global variable for dependency injection in tests
+var terminalSizer TerminalSizer = RealTerminalSizer{}
+
+// getTerminalSize gets the current terminal dimensions
+func getTerminalSize() (TermSize, error) {
+	w, h, errno := terminalSizer.GetSize(int(os.Stdout.Fd()))
+	if errno != nil {
+		return TermSize{}, errno
+	}
+	return TermSize{
+		Width:  uint16(w),
+		Height: uint16(h),
+	}, nil
+}
+
+// ContentFitsTerminal checks if the given string content fits within terminal dimensions
+func ContentFitsTerminal(content string) bool {
+	termSize, err := getTerminalSize()
+	if err != nil {
+		// If we can't get terminal size, assume it doesn't fit
+		return false
+	}
+
+	// Split content into lines
+	lines := strings.Split(content, "\n")
+
+	// Check height: number of lines should not exceed terminal height
+	if len(lines) > int(termSize.Height) {
+		return false
+	}
+
+	// Check width: find the longest line and compare with terminal width
+	maxWidth := 0
+	for _, line := range lines {
+		// Handle potential tab characters and other special characters
+		lineWidth := getDisplayWidth(line)
+		if lineWidth > maxWidth {
+			maxWidth = lineWidth
+		}
+	}
+	// Content fits if max line width doesn't exceed terminal width
+	return maxWidth <= int(termSize.Width)
+}
+
+// getDisplayWidth calculates the display width of a string
+// This handles tabs, ANSI escape sequences, and other special characters
+func getDisplayWidth(s string) int {
+	width := 0
+	tabWidth := 8 // Standard tab width
+	i := 0
+	runes := []rune(s)
+
+	for i < len(runes) {
+		r := runes[i]
+
+		switch r {
+		case '\t':
+			// Tab aligns to next multiple of tabWidth
+			width = ((width / tabWidth) + 1) * tabWidth
+			i++
+		case '\r':
+			// Carriage return resets to beginning of line
+			width = 0
+			i++
+		case '\033': // ESC character - start of ANSI escape sequence
+			// Skip the entire ANSI escape sequence
+			i = skipAnsiSequence(runes, i)
+		default:
+			// Count printable characters
+			if r >= 32 && r < 127 {
+				width++
+			} else if r > 127 {
+				// Basic handling for Unicode - most characters are width 1
+				// For more accurate width calculation, you might want to use a library
+				// like github.com/mattn/go-runewidth
+				width++
+			}
+			// Control characters (0-31) don't add to width
+			i++
+		}
+	}
+
+	return width
+}
+
+// skipAnsiSequence skips over ANSI escape sequences and returns the next index
+func skipAnsiSequence(runes []rune, start int) int {
+	if start >= len(runes) || runes[start] != '\033' {
+		return start + 1
+	}
+
+	i := start + 1
+
+	// Handle common ANSI escape sequences
+	if i < len(runes) && runes[i] == '[' {
+		// CSI sequence: ESC [ parameters letter
+		i++ // skip '['
+
+		// Skip parameters (digits, semicolons, spaces)
+		for i < len(runes) {
+			r := runes[i]
+			if (r >= '0' && r <= '9') || r == ';' || r == ' ' || r == '?' || r == '!' {
+				i++
+			} else {
+				// Final character of CSI sequence
+				i++
+				break
+			}
+		}
+	} else if i < len(runes) && (runes[i] == '(' || runes[i] == ')') {
+		// Character set sequences: ESC ( or ESC )
+		i += 2 // skip the sequence
+	} else {
+		// Other escape sequences, skip next character
+		i++
+	}
+
+	return i
+}
