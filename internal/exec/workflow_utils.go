@@ -32,8 +32,8 @@ func ExecuteWorkflow(
 	if len(steps) == 0 {
 		u.PrintErrorMarkdownAndExit(
 			"Workflow Error",
-			fmt.Errorf("Workflow `%s` does not have any steps defined.", workflow),
-			fmt.Sprintf("\nPlease add steps to your workflow definition."),
+			fmt.Errorf("Workflow `%s` does not have any steps defined", workflow),
+			fmt.Sprintf("\nPlease add steps to your workflow definition"),
 		)
 		return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 	}
