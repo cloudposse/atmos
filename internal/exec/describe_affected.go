@@ -181,7 +181,7 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 			return err
 		}
 
-		err = viewWithScroll(&viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
+		err = viewWithScroll(&viewWithScrollProps{d.pageCreator, term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
 		if err != nil {
 			return err
 		}
