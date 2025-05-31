@@ -24,7 +24,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
-			schema.Affected{
+			{
 				Stack: "test-stack",
 			},
 		}, nil, nil, "", nil
