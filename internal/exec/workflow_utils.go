@@ -10,9 +10,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	log "github.com/charmbracelet/log"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/config"
-	logger "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -50,13 +50,7 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
-	// Create a logger instance
-	l, err := logger.NewLoggerFromCliConfig(atmosConfig)
-	if err != nil {
-		return err
-	}
-
-	l.Info(fmt.Sprintf("Executing the workflow %s from %s", workflow, workflowPath))
+	u.PrintfMessageToTUI("Executing the workflow", "workflow", workflow, "path", workflowPath)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
@@ -85,7 +79,7 @@ func ExecuteWorkflow(
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
 
-		l.Debug(fmt.Sprintf("Executing workflow step %d: %s, %s", stepIdx, step.Name, command))
+		log.Debug("Executing workflow step", "step", stepIdx, "name", step.Name, "command", command)
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -118,7 +112,7 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				l.Debug(fmt.Sprintf("Stack: %s", finalStack))
+				log.Debug("Using stack", "stack", finalStack)
 			}
 
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
@@ -131,7 +125,7 @@ func ExecuteWorkflow(
 		}
 
 		if err != nil {
-			l.Debug(fmt.Sprintf("Workflow failed: %s", err))
+			log.Debug("Workflow failed", "error", err)
 
 			workflowFileName := filepath.Base(workflowPath)
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
