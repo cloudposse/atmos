@@ -127,7 +127,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			workflow.ErrWorkflowNoWorkflow,
 			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, workflow.FormatList(validWorkflows)),
 		)
-		return fmt.Errorf("no workflow exists with the name '%s'", workflowName)
+		return workflow.ErrWorkflowNoWorkflow
 	} else {
 		workflowDefinition = i
 	}
