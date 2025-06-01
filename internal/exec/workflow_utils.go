@@ -11,10 +11,20 @@ import (
 	"github.com/samber/lo"
 
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
+	"github.com/cloudposse/atmos/pkg/config"
 	logger "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+// Static error definitions
+var (
+	WorkflowErrTitle           = "Workflow Error"
+	ErrWorkflowNoSteps         = errors.New("workflow has no steps defined")
+	ErrInvalidWorkflowStepType = errors.New("invalid workflow step type")
+	ErrInvalidFromStep         = errors.New("invalid from-step flag")
+	ErrWorkflowStepFailed      = errors.New("workflow step execution failed")
 )
 
 // ExecuteWorkflow executes an Atmos workflow
@@ -31,8 +41,8 @@ func ExecuteWorkflow(
 
 	if len(steps) == 0 {
 		u.PrintErrorMarkdownAndExit(
-			"Workflow Error",
-			fmt.Errorf("workflow has no steps defined"),
+			WorkflowErrTitle,
+			ErrWorkflowNoSteps,
 			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
 		)
 		return nil // This line will never be reached due to PrintErrorMarkdownAndExit
@@ -47,7 +57,7 @@ func ExecuteWorkflow(
 		return err
 	}
 
-	l.Debug(fmt.Sprintf("Executing the workflow: workflow=%s file=%s", workflow, workflowPath))
+	l.Info(fmt.Sprintf("Executing the workflow %s from %s", workflow, workflowPath))
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
@@ -65,8 +75,8 @@ func ExecuteWorkflow(
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
 			u.PrintErrorMarkdownAndExit(
-				"Workflow Error",
-				fmt.Errorf("invalid from-step flag"),
+				WorkflowErrTitle,
+				ErrInvalidFromStep,
 				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, formatList(stepNames)),
 			)
 			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
@@ -77,7 +87,7 @@ func ExecuteWorkflow(
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
 
-		l.Debug(fmt.Sprintf("Executing workflow step: step=%d command=%s", stepIdx, command))
+		l.Debug(fmt.Sprintf("Executing workflow step %d: %s, %s", stepIdx, step.Name, command))
 
 		if commandType == "" {
 			commandType = "atmos"
@@ -110,41 +120,41 @@ func ExecuteWorkflow(
 
 			if finalStack != "" {
 				args = append(args, []string{"-s", finalStack}...)
-				l.Debug(fmt.Sprintf("Stack: stack=%s", finalStack))
+				l.Debug(fmt.Sprintf("Stack: %s", finalStack))
 			}
 
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
 			u.PrintErrorMarkdownAndExit(
-				"Workflow Error",
-				fmt.Errorf("invalid workflow step type"),
+				WorkflowErrTitle,
+				ErrInvalidWorkflowStepType,
 				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, formatList([]string{"atmos", "shell"})),
 			)
 			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 		}
 
 		if err != nil {
-			l.Debug(fmt.Sprintf("Workflow failed: workflow=%s path=%s step=%s command=%s error=%v",
-				workflow, workflowPath, step.Name, command, err))
+			l.Debug(fmt.Sprintf("Workflow failed: %s", err))
 
 			workflowFileName := filepath.Base(workflowPath)
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
 			resumeCommand := fmt.Sprintf(
-				"atmos workflow %s -f %s --from-step %s",
+				"%s workflow %s -f %s --from-step %s",
+				config.AtmosCommand,
 				workflow,
 				workflowFileName,
 				step.Name,
 			)
 
 			failedCmd := command
-			if commandType == "atmos" {
-				failedCmd = "atmos " + command
+			if commandType == config.AtmosCommand {
+				failedCmd = config.AtmosCommand + " " + command
 			}
 
 			u.PrintErrorMarkdownAndExit(
-				"Workflow Error",
-				fmt.Errorf("workflow step execution failed"),
+				WorkflowErrTitle,
+				ErrWorkflowStepFailed,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
 			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
