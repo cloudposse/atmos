@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -25,6 +26,10 @@ func New() PageCreator {
 }
 
 func (p *pageCreator) Run(title, content string) error {
+	if !term.IsTTYSupportForStdout() {
+		fmt.Print(content)
+		return nil
+	}
 	// Count visible lines (taking word wrapping into account)
 	contentFits := p.contentFitsTerminal(content)
 	// If content exceeds terminal height, use pager
