@@ -268,7 +268,7 @@ func TestSkipAnsiSequenceEdgeCases(t *testing.T) {
 	})
 }
 
-// Benchmark tests
+// Benchmark tests.
 func BenchmarkGetDisplayWidth(b *testing.B) {
 	testStrings := []string{
 		"Simple text",
@@ -300,7 +300,7 @@ func BenchmarkContentFitsTerminal(b *testing.B) {
 	}
 }
 
-// Integration test
+// Integration test.
 func TestIntegration(t *testing.T) {
 	// Save original sizer
 	originalSizer := terminalSizer
