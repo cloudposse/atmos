@@ -18,12 +18,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExitHandler defines the interface for handling program exits
+// ExitHandler defines the interface for handling program exits.
 type ExitHandler interface {
 	PrintErrorAndExit(title string, err error, message string)
 }
 
-// DefaultExitHandler implements the ExitHandler interface for production use
+// DefaultExitHandler implements the ExitHandler interface for production use.
 type DefaultExitHandler struct{}
 
 func (h *DefaultExitHandler) PrintErrorAndExit(title string, err error, message string) {
@@ -104,7 +104,7 @@ func ExecuteWorkflow(
 		var err error
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(atmosConfig, command, commandName, ".", []string{}, dryRun)
+			err = ExecuteShell(&atmosConfig, command, commandName, ".", []string{}, dryRun)
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
@@ -131,7 +131,7 @@ func ExecuteWorkflow(
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
-			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
+			err = ExecuteShellCommand(&atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
 			exitHandler.PrintErrorAndExit(
 				WorkflowErrTitle,

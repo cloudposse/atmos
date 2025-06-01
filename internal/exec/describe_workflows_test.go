@@ -46,11 +46,10 @@ workflows:
 }
 
 // createTestWorkflowFile creates a workflow file in the specified directory with the given content.
-func createTestWorkflowFile(t *testing.T, dir string, filename string, content string) string {
+func createTestWorkflowFile(t *testing.T, dir string, filename string, content string) {
 	workflowPath := filepath.Join(dir, filename)
 	err := os.WriteFile(workflowPath, []byte(content), 0o644)
 	require.NoError(t, err)
-	return workflowPath
 }
 
 // initTestConfig initializes the Atmos configuration for testing.

@@ -14,6 +14,46 @@ tests:
       diff: []
       exit_code: 0
 
+  - name: atmos workflow shell pass
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow passes with shell command"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-pass"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stdout:
+        - "This should pass"
+      exit_code: 0
+
+  - name: atmos workflow shell command not found
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when shell command is not found"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-command-not-found"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "workflow step execution failed"
+        - "## Explanation"
+        - "The following command failed to execute:"
+        - "nonexistentcommand"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow shell-command-not-found -f test --from-step step1"
+      exit_code: 1
+
   - name: atmos workflow failure
     enabled: true
     snapshot: true

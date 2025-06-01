@@ -11,6 +11,13 @@ workflows:
     steps:
       - command: terraform plan mock -s idontexist
 
+  shell-pass:
+    description: |
+      Run a shell command that will pass.
+    steps:
+      - command: echo "This should pass"
+        type: shell
+
   shell-failure:
     description: |
       Run a shell command that will fail.
@@ -18,6 +25,13 @@ workflows:
       - command: |
           echo "This should fail"
           exit 1
+        type: shell
+
+  shell-command-not-found:
+    description: |
+      Run a shell command that doesn't exist.
+    steps:
+      - command: nonexistentcommand
         type: shell
 
   no-steps:

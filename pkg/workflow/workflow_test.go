@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestExitHandler implements the ExitHandler interface for testing
+// TestExitHandler implements the ExitHandler interface for testing.
 type TestExitHandler struct {
 	LastError error
 }

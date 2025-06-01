@@ -9,11 +9,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/pkg/errors"
 )
 
-// ExecuteShell executes a shell command
+// Static error definitions.
+var (
+	ErrShellCommandFailed = errors.New("shell command failed")
+)
+
+// ExecuteShell executes a shell command.
 func ExecuteShell(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	command string,
 	commandName string,
 	workingDir string,
@@ -39,9 +45,9 @@ func ExecuteShell(
 	return nil
 }
 
-// ExecuteShellCommand executes a shell command with the given name and arguments
+// ExecuteShellCommand executes a shell command with the given name and arguments.
 func ExecuteShellCommand(
-	atmosConfig schema.AtmosConfiguration,
+	atmosConfig *schema.AtmosConfiguration,
 	commandName string,
 	args []string,
 	workingDir string,
