@@ -10,15 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestExitHandler implements the ExitHandler interface for testing.
-type TestExitHandler struct {
-	LastError error
-}
-
-func (h *TestExitHandler) PrintErrorAndExit(title string, err error, message string) {
-	h.LastError = err
-}
-
 func TestExecuteWorkflow(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 
@@ -180,7 +171,6 @@ func TestExecuteWorkflow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testExitHandler := &TestExitHandler{}
 			err := ExecuteWorkflow(
 				config,
 				tt.workflow,
@@ -189,7 +179,6 @@ func TestExecuteWorkflow(t *testing.T) {
 				tt.dryRun,
 				tt.commandLineStack,
 				tt.fromStep,
-				testExitHandler,
 			)
 
 			if tt.wantErr {
@@ -197,12 +186,8 @@ func TestExecuteWorkflow(t *testing.T) {
 				if tt.errMsg != "" {
 					assert.Contains(t, err.Error(), tt.errMsg)
 				}
-				if testExitHandler.LastError != nil {
-					assert.Contains(t, testExitHandler.LastError.Error(), tt.errMsg)
-				}
 			} else {
 				assert.NoError(t, err)
-				assert.Nil(t, testExitHandler.LastError)
 			}
 		})
 	}
