@@ -17,6 +17,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
@@ -248,9 +249,14 @@ func initCobraConfig() {
 		// Print a styled Atmos logo to the terminal
 		if command.Use != "atmos" || command.Flags().Changed("help") {
 			var buf bytes.Buffer
+			var err error
 			command.SetOut(&buf)
 			fmt.Println()
-			err := tuiUtils.PrintStyledTextToSpecifiedOutput(&buf, "ATMOS")
+			if term.IsTTYSupportForStdout() {
+				err = tuiUtils.PrintStyledTextToSpecifiedOutput(&buf, "ATMOS")
+			} else {
+				err = tuiUtils.PrintStyledText("ATMOS")
+			}
 			if err != nil {
 				u.LogErrorAndExit(err)
 			}
