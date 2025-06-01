@@ -12,7 +12,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/workflow"
 )
 
 // ExecuteWorkflowCmd executes an Atmos workflow
@@ -35,7 +34,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	// If the `workflow` argument is not passed, start the workflow UI
 	if len(args) != 1 {
-		workflowFile, workflowName, fromStep, err = workflow.ExecuteWorkflowUI(atmosConfig)
+		workflowFile, workflowName, fromStep, err = ExecuteWorkflowUI(atmosConfig)
 		if err != nil {
 			return err
 		}
@@ -124,15 +123,15 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		sort.Strings(validWorkflows)
 		u.PrintErrorMarkdownAndExit(
 			"Workflow Error",
-			workflow.ErrWorkflowNoWorkflow,
-			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, workflow.FormatList(validWorkflows)),
+			ErrWorkflowNoWorkflow,
+			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, FormatList(validWorkflows)),
 		)
-		return workflow.ErrWorkflowNoWorkflow
+		return ErrWorkflowNoWorkflow
 	} else {
 		workflowDefinition = i
 	}
 
-	err = workflow.ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
+	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
 	if err != nil {
 		return err
 	}

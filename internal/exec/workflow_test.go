@@ -1,4 +1,4 @@
-package workflow
+package exec
 
 import (
 	"os"
@@ -11,7 +11,7 @@ import (
 )
 
 func TestExecuteWorkflow(t *testing.T) {
-	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	stacksPath := "../../../tests/fixtures/scenarios/workflows"
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
@@ -61,7 +61,7 @@ func TestExecuteWorkflow(t *testing.T) {
 		},
 		{
 			name:         "empty workflow",
-			workflow:     "empty-workflow",
+			workflow:     "no-steps",
 			workflowPath: workflowPath,
 			workflowDef: &schema.WorkflowDefinition{
 				Steps: []schema.WorkflowStep{},

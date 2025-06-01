@@ -1,4 +1,4 @@
-package workflow
+package exec
 
 import (
 	"fmt"
@@ -41,7 +41,7 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		u.PrintErrorMarkdownAndExit(
+		u.PrintErrorMarkdown(
 			WorkflowErrTitle,
 			ErrWorkflowNoSteps,
 			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
@@ -70,7 +70,7 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			u.PrintErrorMarkdownAndExit(
+			u.PrintErrorMarkdown(
 				WorkflowErrTitle,
 				ErrInvalidFromStep,
 				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
@@ -92,7 +92,7 @@ func ExecuteWorkflow(
 		var err error
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(&atmosConfig, command, commandName, ".", []string{}, dryRun)
+			err = ExecuteShell(atmosConfig, command, commandName, ".", []string{}, dryRun)
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
@@ -119,9 +119,9 @@ func ExecuteWorkflow(
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
-			err = ExecuteShellCommand(&atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
+			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
-			u.PrintErrorMarkdownAndExit(
+			u.PrintErrorMarkdown(
 				WorkflowErrTitle,
 				ErrInvalidWorkflowStepType,
 				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
@@ -148,7 +148,7 @@ func ExecuteWorkflow(
 				failedCmd = config.AtmosCommand + " " + command
 			}
 
-			u.PrintErrorMarkdownAndExit(
+			u.PrintErrorMarkdown(
 				WorkflowErrTitle,
 				ErrWorkflowStepFailed,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),

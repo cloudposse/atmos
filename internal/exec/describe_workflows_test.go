@@ -10,7 +10,6 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/workflow"
 )
 
 // setupTestWorkflowEnvironment creates a temporary test environment with the necessary directory structure and configuration files.
@@ -133,7 +132,7 @@ workflows:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			listResult, mapResult, allResult, err := workflow.ExecuteDescribeWorkflows(tt.config)
+			listResult, mapResult, allResult, err := ExecuteDescribeWorkflows(tt.config)
 
 			if tt.wantErr {
 				assert.Error(t, err)
