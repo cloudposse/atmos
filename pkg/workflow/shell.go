@@ -34,6 +34,8 @@ func ExecuteShell(
 		return fmt.Errorf("error executing shell command '%s': %v\nOutput: %s", command, err, string(output))
 	}
 
+	// Print the command output
+	fmt.Print(string(output))
 	return nil
 }
 
@@ -61,5 +63,7 @@ func ExecuteShellCommand(
 		return fmt.Errorf("error executing command '%s %s': %v\nOutput: %s", commandName, strings.Join(args, " "), err, string(output))
 	}
 
+	// Print the command output
+	fmt.Print(string(output))
 	return nil
 }
