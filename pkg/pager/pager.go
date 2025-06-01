@@ -14,19 +14,21 @@ type PageCreator interface {
 }
 
 type pageCreator struct {
-	newTeaProgram       func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
-	contentFitsTerminal func(content string) bool
+	newTeaProgram         func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
+	contentFitsTerminal   func(content string) bool
+	isTTYSupportForStdout func() bool
 }
 
 func New() PageCreator {
 	return &pageCreator{
-		newTeaProgram:       tea.NewProgram,
-		contentFitsTerminal: ContentFitsTerminal,
+		newTeaProgram:         tea.NewProgram,
+		contentFitsTerminal:   ContentFitsTerminal,
+		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 	}
 }
 
 func (p *pageCreator) Run(title, content string) error {
-	if !term.IsTTYSupportForStdout() {
+	if !p.isTTYSupportForStdout() {
 		fmt.Print(content)
 		return nil
 	}

@@ -8,7 +8,9 @@ import (
 )
 
 const (
-	tabWidth = 8 // Standard tab width
+	tabWidth          = 8 // Standard tab width
+	printableASCIIMin = 32
+	printableASCIIMax = 127
 )
 
 // TermSize represents terminal dimensions.
@@ -110,9 +112,9 @@ func getDisplayWidth(s string) int {
 			i = skipAnsiSequence(runes, i)
 		default:
 			// Count printable characters
-			if r >= 32 && r < 127 {
+			if r >= printableASCIIMin && r < printableASCIIMax {
 				width++
-			} else if r > 127 {
+			} else if r > printableASCIIMax {
 				// Basic handling for Unicode - most characters are width 1
 				// For more accurate width calculation, you might want to use a library
 				// like github.com/mattn/go-runewidth
