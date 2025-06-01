@@ -14,11 +14,12 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/workflow"
 )
 
 // ExecuteWorkflowCmd executes an Atmos workflow
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
-	var workflow string
+	var workflowName string
 	var workflowFile string
 	var fromStep string
 
@@ -36,17 +37,17 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	// If the `workflow` argument is not passed, start the workflow UI
 	if len(args) != 1 {
-		workflowFile, workflow, fromStep, err = ExecuteWorkflowUI(atmosConfig)
+		workflowFile, workflowName, fromStep, err = workflow.ExecuteWorkflowUI(atmosConfig)
 		if err != nil {
 			return err
 		}
-		if workflowFile == "" || workflow == "" {
+		if workflowFile == "" || workflowName == "" {
 			return nil
 		}
 	}
 
-	if workflow == "" {
-		workflow = args[0]
+	if workflowName == "" {
+		workflowName = args[0]
 	}
 
 	flags := cmd.Flags()
@@ -116,8 +117,8 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	workflowConfig = workflowManifest.Workflows
 
-	if i, ok := workflowConfig[workflow]; !ok {
-		errorMarkdown := fmt.Sprintf("No workflow exists with the name `%s`\n\nAvailable workflows are:", workflow)
+	if i, ok := workflowConfig[workflowName]; !ok {
+		errorMarkdown := fmt.Sprintf("No workflow exists with the name `%s`\n\nAvailable workflows are:", workflowName)
 		validWorkflows := []string{}
 		for w := range maps.Keys(workflowConfig) {
 			validWorkflows = append(validWorkflows, fmt.Sprintf("\n- %s", w))
@@ -130,7 +131,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowDefinition = i
 	}
 
-	err = ExecuteWorkflow(atmosConfig, workflow, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
+	err = workflow.ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep, &workflow.DefaultExitHandler{})
 	if err != nil {
 		return err
 	}

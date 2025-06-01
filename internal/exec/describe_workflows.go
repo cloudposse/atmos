@@ -6,6 +6,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -56,7 +57,7 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	describeWorkflowsList, describeWorkflowsMap, describeWorkflowsAll, err := ExecuteDescribeWorkflows(atmosConfig)
+	describeWorkflowsList, describeWorkflowsMap, describeWorkflowsAll, err := workflow.ExecuteDescribeWorkflows(atmosConfig)
 	if err != nil {
 		return err
 	}

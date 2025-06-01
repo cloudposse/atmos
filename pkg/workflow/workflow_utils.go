@@ -1,4 +1,4 @@
-package exec
+package workflow
 
 import (
 	"fmt"
@@ -18,6 +18,18 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// ExitHandler defines the interface for handling program exits
+type ExitHandler interface {
+	PrintErrorAndExit(title string, err error, message string)
+}
+
+// DefaultExitHandler implements the ExitHandler interface for production use
+type DefaultExitHandler struct{}
+
+func (h *DefaultExitHandler) PrintErrorAndExit(title string, err error, message string) {
+	u.PrintErrorMarkdownAndExit(title, err, message)
+}
+
 // Static error definitions.
 var (
 	WorkflowErrTitle           = "Workflow Error"
@@ -36,15 +48,17 @@ func ExecuteWorkflow(
 	dryRun bool,
 	commandLineStack string,
 	fromStep string,
+	exitHandler ExitHandler,
 ) error {
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		u.PrintErrorMarkdownAndExit(
+		exitHandler.PrintErrorAndExit(
 			WorkflowErrTitle,
 			ErrWorkflowNoSteps,
 			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
 		)
+		return ErrWorkflowNoSteps
 	}
 
 	// Check if the workflow steps have the `name` attribute
@@ -68,11 +82,12 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			u.PrintErrorMarkdownAndExit(
+			exitHandler.PrintErrorAndExit(
 				WorkflowErrTitle,
 				ErrInvalidFromStep,
 				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, formatList(stepNames)),
 			)
+			return ErrInvalidFromStep
 		}
 	}
 
@@ -118,11 +133,12 @@ func ExecuteWorkflow(
 
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
-			u.PrintErrorMarkdownAndExit(
+			exitHandler.PrintErrorAndExit(
 				WorkflowErrTitle,
 				ErrInvalidWorkflowStepType,
 				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, formatList([]string{"atmos", "shell"})),
 			)
+			return ErrInvalidWorkflowStepType
 		}
 
 		if err != nil {
@@ -144,11 +160,12 @@ func ExecuteWorkflow(
 				failedCmd = config.AtmosCommand + " " + command
 			}
 
-			u.PrintErrorMarkdownAndExit(
+			exitHandler.PrintErrorAndExit(
 				WorkflowErrTitle,
 				ErrWorkflowStepFailed,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
+			return ErrWorkflowStepFailed
 		}
 	}
 
