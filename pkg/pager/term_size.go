@@ -135,27 +135,38 @@ func skipAnsiSequence(runes []rune, start int) int {
 	}
 
 	i := start + 1
+	if i >= len(runes) {
+		return i
+	}
 
-	switch {
-	case i < len(runes) && runes[i] == '[':
-		// CSI sequence: ESC [ parameters letter
-		i++ // skip '['
-
-		// Skip parameters (digits, semicolons, spaces)
-		for i < len(runes) {
-			r := runes[i]
-			if !((r >= '0' && r <= '9') || r == ';' || r == ' ' || r == '?' || r == '!') {
-				// Final character of CSI sequence
-				i++
-				break
-			}
-			i++
-		}
-	case i < len(runes) && (runes[i] == '(' || runes[i] == ')'):
-		i += 2
+	switch runes[i] {
+	case '[':
+		return skipCSISequence(runes, i)
+	case '(', ')':
+		return i + 2
 	default:
+		return i + 1
+	}
+}
+
+// skipCSISequence handles CSI (Control Sequence Introducer) sequences.
+func skipCSISequence(runes []rune, start int) int {
+	i := start + 1 // skip '['
+
+	// Skip parameters until we find the final character
+	for i < len(runes) && isCSIParameter(runes[i]) {
+		i++
+	}
+
+	// Skip the final character if present
+	if i < len(runes) {
 		i++
 	}
 
 	return i
+}
+
+// isCSIParameter checks if a rune is a valid CSI parameter character.
+func isCSIParameter(r rune) bool {
+	return (r >= '0' && r <= '9') || r == ';' || r == ' ' || r == '?' || r == '!'
 }

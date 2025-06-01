@@ -210,7 +210,7 @@ func TestSkipAnsiSequence(t *testing.T) {
 		expected int
 	}{
 		{"not ESC character", "Hello", 0, 1},
-		{"ESC at end", "\033", 0, 2},
+		{"ESC at end", "\033", 0, 1},
 		{"simple CSI sequence", "\033[H", 0, 3},
 		{"CSI with parameters", "\033[2J", 0, 4},
 		{"CSI with multiple params", "\033[1;31m", 0, 7},
