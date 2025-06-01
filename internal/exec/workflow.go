@@ -3,11 +3,9 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -118,15 +116,18 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	workflowConfig = workflowManifest.Workflows
 
 	if i, ok := workflowConfig[workflowName]; !ok {
-		errorMarkdown := fmt.Sprintf("No workflow exists with the name `%s`\n\nAvailable workflows are:", workflowName)
-		validWorkflows := []string{}
-		for w := range maps.Keys(workflowConfig) {
-			validWorkflows = append(validWorkflows, fmt.Sprintf("\n- %s", w))
+		validWorkflows := make([]string, 0, len(workflowConfig))
+		for w := range workflowConfig {
+			validWorkflows = append(validWorkflows, w)
 		}
 		// sorting so that the output is deterministic
 		sort.Strings(validWorkflows)
-		errorMarkdown += strings.Join(validWorkflows, "")
-		return fmt.Errorf("%s", errorMarkdown)
+		u.PrintErrorMarkdownAndExit(
+			"Workflow Error",
+			workflow.ErrWorkflowNoWorkflow,
+			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, workflow.FormatList(validWorkflows)),
+		)
+		return fmt.Errorf("no workflow exists with the name '%s'", workflowName)
 	} else {
 		workflowDefinition = i
 	}

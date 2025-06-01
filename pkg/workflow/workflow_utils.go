@@ -25,6 +25,7 @@ var (
 	ErrInvalidWorkflowStepType = errors.New("invalid workflow step type")
 	ErrInvalidFromStep         = errors.New("invalid from-step flag")
 	ErrWorkflowStepFailed      = errors.New("workflow step execution failed")
+	ErrWorkflowNoWorkflow      = errors.New("no workflow found")
 )
 
 // ExecuteWorkflow executes an Atmos workflow.
@@ -72,7 +73,7 @@ func ExecuteWorkflow(
 			u.PrintErrorMarkdownAndExit(
 				WorkflowErrTitle,
 				ErrInvalidFromStep,
-				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, formatList(stepNames)),
+				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
 			)
 			return ErrInvalidFromStep
 		}
@@ -123,7 +124,7 @@ func ExecuteWorkflow(
 			u.PrintErrorMarkdownAndExit(
 				WorkflowErrTitle,
 				ErrInvalidWorkflowStepType,
-				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, formatList([]string{"atmos", "shell"})),
+				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
 			)
 			return ErrInvalidWorkflowStepType
 		}
@@ -159,8 +160,8 @@ func ExecuteWorkflow(
 	return nil
 }
 
-// formatList formats a list of strings into a markdown bullet list.
-func formatList(items []string) string {
+// FormatList formats a list of strings into a markdown bullet list.
+func FormatList(items []string) string {
 	var result strings.Builder
 	for _, item := range items {
 		result.WriteString(fmt.Sprintf("- `%s`\n", item))
