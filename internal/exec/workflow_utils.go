@@ -18,7 +18,7 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// Static error definitions
+// Static error definitions.
 var (
 	WorkflowErrTitle           = "Workflow Error"
 	ErrWorkflowNoSteps         = errors.New("workflow has no steps defined")
@@ -27,7 +27,7 @@ var (
 	ErrWorkflowStepFailed      = errors.New("workflow step execution failed")
 )
 
-// ExecuteWorkflow executes an Atmos workflow
+// ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
 	workflow string,
@@ -45,7 +45,6 @@ func ExecuteWorkflow(
 			ErrWorkflowNoSteps,
 			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
 		)
-		return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 	}
 
 	// Check if the workflow steps have the `name` attribute
@@ -79,7 +78,6 @@ func ExecuteWorkflow(
 				ErrInvalidFromStep,
 				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, formatList(stepNames)),
 			)
-			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 		}
 	}
 
@@ -130,7 +128,6 @@ func ExecuteWorkflow(
 				ErrInvalidWorkflowStepType,
 				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, formatList([]string{"atmos", "shell"})),
 			)
-			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 		}
 
 		if err != nil {
@@ -157,7 +154,6 @@ func ExecuteWorkflow(
 				ErrWorkflowStepFailed,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
-			return nil // This line will never be reached due to PrintErrorMarkdownAndExit
 		}
 	}
 
