@@ -29,7 +29,6 @@ var (
 	ErrWorkflowFileNotFound    = errors.New("workflow file not found")
 	ErrInvalidWorkflowManifest = errors.New("invalid workflow manifest")
 
-	// KnownWorkflowErrors is a list of known workflow errors
 	KnownWorkflowErrors = []error{
 		ErrWorkflowNoSteps,
 		ErrInvalidWorkflowStepType,
