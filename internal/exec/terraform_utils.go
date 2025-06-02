@@ -2,10 +2,12 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
-	l "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -45,17 +47,17 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 
 	// Check if the file exists before attempting deletion
 	if _, err := os.Stat(filePath); err == nil {
-		l.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
+		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
 		if err := os.Remove(filePath); err != nil {
-			l.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
+			log.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", err)
 		} else {
-			l.Debug("Successfully deleted Terraform environment file.", "file", filePath)
+			log.Debug("Successfully deleted Terraform environment file.", "file", filePath)
 		}
 	} else if os.IsNotExist(err) {
-		l.Debug("Terraform environment file not found. No action needed.", "file", filePath)
+		log.Debug("Terraform environment file not found. No action needed.", "file", filePath)
 	} else {
-		l.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
+		log.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
 	}
 }
 
@@ -79,7 +81,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
 		backendFileName := filepath.Join(workingDir, "backend.tf.json")
 
-		l.Debug("Writing the backend config to file.", "file", backendFileName)
+		log.Debug("Writing the backend config to file.", "file", backendFileName)
 
 		if !info.DryRun {
 			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
@@ -102,7 +104,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")
 
-		l.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
+		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
 		if !info.DryRun {
 			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
@@ -154,7 +156,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	if info.ComponentBackendType == "http" {
 		// If workspaces are explicitly enabled for HTTP backend, log a warning.
 		if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && *atmosConfig.Components.Terraform.WorkspacesEnabled {
-			l.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
+			log.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
 				"backend", "http",
 				"component", info.Component)
 		}
@@ -167,4 +169,124 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	}
 
 	return true
+}
+
+// ExecuteTerraformAffected executes `atmos terraform --affected`
+func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
+	// Add these flags here because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
+	cmd.PersistentFlags().String("file", "", "")
+	cmd.PersistentFlags().String("format", "yaml", "")
+	cmd.PersistentFlags().Bool("verbose", false, "")
+	cmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
+	cmd.PersistentFlags().Bool("include-settings", false, "")
+	cmd.PersistentFlags().Bool("upload", false, "")
+	cmd.PersistentFlags().StringP("query", "q", "", "")
+
+	cliArgs, err := parseDescribeAffectedCliArgs(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	cliArgs.IncludeSpaceliftAdminStacks = false
+	cliArgs.IncludeSettings = false
+	cliArgs.Upload = false
+	cliArgs.OutputFile = ""
+	cliArgs.Query = ""
+
+	// https://atmos.tools/cli/commands/describe/affected
+	affectedList, _, _, _, err := ExecuteDescribeAffected(cliArgs)
+	if err != nil {
+		return err
+	}
+
+	affectedYaml, err := u.ConvertToYAML(affectedList)
+	if err != nil {
+		return err
+	}
+	log.Debug("Affected components:\n" + affectedYaml)
+
+	for _, affected := range affectedList {
+		err = executeTerraformAffectedComponent(affected, info, "", "", cliArgs)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// executeTerraformAffectedComponent recursively processes the affected components in the dependency order
+func executeTerraformAffectedComponent(
+	affected schema.Affected,
+	info schema.ConfigAndStacksInfo,
+	parentComponent string,
+	parentStack string,
+	args DescribeAffectedCmdArgs,
+) error {
+	// If the affected component is included as dependent in other components, don't process it now,
+	// it will be processed in the dependency order
+	if !affected.IncludedInDependents {
+		info.Component = affected.Component
+		info.ComponentFromArg = affected.Component
+		info.Stack = affected.Stack
+
+		if parentComponent != "" && parentStack != "" {
+			log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s' as dependency of component '%s' in stack '%s'",
+				info.SubCommand,
+				affected.Component,
+				affected.Stack,
+				parentComponent,
+				parentStack,
+			))
+		} else {
+			log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s'",
+				info.SubCommand,
+				affected.Component,
+				affected.Stack,
+			))
+		}
+
+		// Execute the terraform command for the affected component
+		//err := ExecuteTerraform(info)
+		//if err != nil {
+		//	return err
+		//}
+	} else if args.IncludeDependents {
+		if parentComponent != "" && parentStack != "" {
+			log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of component '%s' in stack '%s'",
+				info.SubCommand,
+				affected.Component,
+				affected.Stack,
+				parentComponent,
+				parentStack,
+			))
+		} else {
+			log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of another component",
+				info.SubCommand,
+				affected.Component,
+				affected.Stack,
+			))
+		}
+	}
+
+	if args.IncludeDependents {
+		for _, dep := range affected.Dependents {
+			affectedDep := schema.Affected{
+				Component:  dep.Component,
+				Stack:      dep.Stack,
+				Dependents: dep.Dependents,
+			}
+			err := executeTerraformAffectedComponent(affectedDep, info, affected.Component, affected.Stack, args)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// ExecuteTerraformAll executes `atmos terraform --all`
+func ExecuteTerraformAll(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
+	return nil
 }

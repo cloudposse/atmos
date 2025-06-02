@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	l "github.com/charmbracelet/log"
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -47,7 +47,7 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	}
 
 	if hooks.HasHooks() {
-		l.Info("running hooks", "event", event)
+		log.Info("running hooks", "event", event)
 		return hooks.RunAll(event, &atmosConfig, &info, cmd, args)
 	}
 
@@ -56,10 +56,11 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
 	info := getConfigAndStacksInfo("terraform", cmd, args)
+
 	if info.NeedHelp {
 		err := actualCmd.Usage()
 		if err != nil {
-			u.LogErrorAndExit(err)
+			log.Fatal(err)
 		}
 		return nil
 	}
@@ -84,6 +85,27 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
 	info.Skip = skip
+
+	if info.Affected && info.All {
+		err = errors.New("only one of '--affected' or '--all' flag can be specified")
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
+	if info.Affected {
+		err = e.ExecuteTerraformAffected(cmd, args, info)
+		if err != nil {
+			u.PrintErrorMarkdownAndExit("", err, "")
+		}
+		return nil
+	}
+
+	if info.All {
+		err = e.ExecuteTerraformAll(cmd, args, info)
+		if err != nil {
+			u.PrintErrorMarkdownAndExit("", err, "")
+		}
+		return nil
+	}
 
 	err = e.ExecuteTerraform(info)
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences

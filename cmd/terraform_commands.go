@@ -5,9 +5,10 @@ import (
 	"log"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/spf13/cobra"
 )
 
 // getTerraformCommands returns an array of statically defined Terraform commands with flags
@@ -274,6 +275,18 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands")
 
+	// Flags related to `--affected` (similar to `atmos describe affected`)
+	// These flags are only used then executing `atmos terraform plan/apply/deploy --affected`
+	parentCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos terraform <sub-command> --affected --repo-path <path_to_already_cloned_repo>")
+	parentCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos terraform <sub-command> --affected --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details")
+	parentCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos terraform <sub-command> --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")
+	parentCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH: atmos terraform <sub-command> --affected --ssh-key <path_to_ssh_key>")
+	parentCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block: atmos terraform <sub-command> --affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>")
+	parentCmd.PersistentFlags().Bool("include-dependents", false, "Include the dependent components and process them in the dependency order: atmos terraform <sub-command> --affected --include-dependents=true")
+	parentCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos terraform <sub-command> --affected --clone-target-ref=true\n"+
+		"If set to 'false' (default), the target reference will be checked out instead\n"+
+		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")
+
 	commands := getTerraformCommands()
 
 	for _, cmd := range commands {
@@ -302,14 +315,22 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 }
 
 var commandMaps = map[string]func(cmd *cobra.Command){
+	"plan": func(cmd *cobra.Command) {
+		cmd.PersistentFlags().Bool("affected", false, "Plan the affected components")
+		cmd.PersistentFlags().Bool("all", false, "Plan all components in all stacks")
+	},
 	"deploy": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("deploy-run-init", false, "If set atmos will run `terraform init` before executing the command")
 		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
 		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
+		cmd.PersistentFlags().Bool("affected", false, "Deploy the affected components")
+		cmd.PersistentFlags().Bool("all", false, "Deploy all components in all stacks")
 	},
 	"apply": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
 		cmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
+		cmd.PersistentFlags().Bool("affected", false, "Apply the affected components")
+		cmd.PersistentFlags().Bool("all", false, "Apply all components in all stacks")
 	},
 	"clean": func(cmd *cobra.Command) {
 		cmd.PersistentFlags().Bool("everything", false, "If set atmos will also delete the Terraform state files and directories for the component.")
