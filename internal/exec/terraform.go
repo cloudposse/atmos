@@ -446,44 +446,49 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Run `terraform workspace` before executing other terraform commands
 	// only if the `TF_WORKSPACE` environment variable is not set by the caller
-	if info.SubCommand != "init" && info.ComponentBackendType != "http" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		tfWorkspaceEnvVar := os.Getenv("TF_WORKSPACE")
+	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
 
-		if tfWorkspaceEnvVar == "" {
-			workspaceSelectRedirectStdErr := "/dev/stdout"
+		// Don't use workspace commands in http backend
+		if info.ComponentBackendType != "http" {
 
-			// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
-			if info.RedirectStdErr != "" {
-				workspaceSelectRedirectStdErr = info.RedirectStdErr
-			}
+			tfWorkspaceEnvVar := os.Getenv("TF_WORKSPACE")
 
-			err = ExecuteShellCommand(
-				atmosConfig,
-				info.Command,
-				[]string{"workspace", "select", info.TerraformWorkspace},
-				componentPath,
-				info.ComponentEnvList,
-				info.DryRun,
-				workspaceSelectRedirectStdErr,
-			)
-			if err != nil {
-				var osErr *osexec.ExitError
-				ok := errors.As(err, &osErr)
-				if !ok || osErr.ExitCode() != 1 {
-					// err is not a non-zero exit code or err is not exit code 1, which we are expecting
-					return err
+			if tfWorkspaceEnvVar == "" {
+				workspaceSelectRedirectStdErr := "/dev/stdout"
+
+				// If `--redirect-stderr` flag is not passed, always redirect `stderr` to `stdout` for `terraform workspace select` command
+				if info.RedirectStdErr != "" {
+					workspaceSelectRedirectStdErr = info.RedirectStdErr
 				}
+
 				err = ExecuteShellCommand(
 					atmosConfig,
 					info.Command,
-					[]string{"workspace", "new", info.TerraformWorkspace},
+					[]string{"workspace", "select", info.TerraformWorkspace},
 					componentPath,
 					info.ComponentEnvList,
 					info.DryRun,
-					info.RedirectStdErr,
+					workspaceSelectRedirectStdErr,
 				)
 				if err != nil {
-					return err
+					var osErr *osexec.ExitError
+					ok := errors.As(err, &osErr)
+					if !ok || osErr.ExitCode() != 1 {
+						// err is not a non-zero exit code or err is not exit code 1, which we are expecting
+						return err
+					}
+					err = ExecuteShellCommand(
+						atmosConfig,
+						info.Command,
+						[]string{"workspace", "new", info.TerraformWorkspace},
+						componentPath,
+						info.ComponentEnvList,
+						info.DryRun,
+						info.RedirectStdErr,
+					)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
