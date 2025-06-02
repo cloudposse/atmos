@@ -196,3 +196,4 @@ tests:
         - "shell-failure"
         - "shell-pass"
       exit_code: 1
+

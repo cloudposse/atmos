@@ -53,7 +53,6 @@ func ExecuteWorkflow(
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
 	log.Debug("Executing workflow", "workflow", workflow, "path", workflowPath)
-	u.PrintfMessageToTUI("Executing workflow '%s' from '%s'...\n\n", workflow, workflowPath)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
@@ -119,6 +118,7 @@ func ExecuteWorkflow(
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
+			u.PrintfMessageToTUI("Executing command: `atmos %s`\n", command)
 			err = ExecuteShellCommand(atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
 		} else {
 			u.PrintErrorMarkdown(

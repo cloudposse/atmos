@@ -26,7 +26,6 @@ workflows:
           echo "This should fail"
           exit 1
         type: shell
-
   shell-command-not-found:
     description: |
       Run a shell command that doesn't exist.
@@ -45,3 +44,4 @@ workflows:
     steps:
       - command: echo "This should fail"
         type: invalid
+
