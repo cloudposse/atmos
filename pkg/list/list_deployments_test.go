@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/git"
-	logger "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -984,9 +983,6 @@ func TestFormatDeployments(t *testing.T) {
 
 // TestUploadDeploymentsFunc tests the uploadDeployments function.
 func TestUploadDeploymentsFunc(t *testing.T) {
-	// Create a test logger
-	log, _ := logger.NewLogger("info", "test")
-
 	tests := []struct {
 		name          string
 		deployments   []schema.Deployment
@@ -1077,7 +1073,7 @@ func TestUploadDeploymentsFunc(t *testing.T) {
 			}
 
 			// Create a test-specific implementation of uploadDeployments
-			uploadDeployments := func(deployments []schema.Deployment, log *logger.Logger) error {
+			uploadDeployments := func(deployments []schema.Deployment) error {
 				// Get repo info
 				repoInfo, err := mockRepo.GetRepoInfo()
 				if err != nil {
@@ -1103,7 +1099,7 @@ func TestUploadDeploymentsFunc(t *testing.T) {
 			}
 
 			// Execute the test
-			err := uploadDeployments(tt.deployments, log)
+			err := uploadDeployments(tt.deployments)
 
 			// Check error
 			if tt.expectedError != "" {
