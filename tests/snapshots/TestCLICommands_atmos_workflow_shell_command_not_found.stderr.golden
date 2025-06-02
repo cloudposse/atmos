@@ -1,5 +1,3 @@
-Executing workflow 'shell-command-not-found' from 'stacks/workflows/test.yaml'...
-
 "nonexistentcommand": executable file not found in $PATH
 
 # Workflow Error                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
