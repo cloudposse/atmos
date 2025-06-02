@@ -121,7 +121,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		}
 		// sorting so that the output is deterministic
 		sort.Strings(validWorkflows)
-		u.PrintErrorMarkdownAndExit(
+		u.PrintErrorMarkdown(
 			"Workflow Error",
 			ErrWorkflowNoWorkflow,
 			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, FormatList(validWorkflows)),
