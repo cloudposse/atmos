@@ -302,4 +302,3 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 
 	return selectedWorkflowFile, selectedWorkflow, selectedWorkflowStep, nil
 }
-
