@@ -26,7 +26,30 @@ var (
 	ErrInvalidFromStep         = errors.New("invalid from-step flag")
 	ErrWorkflowStepFailed      = errors.New("workflow step execution failed")
 	ErrWorkflowNoWorkflow      = errors.New("no workflow found")
+	ErrWorkflowFileNotFound    = errors.New("workflow file not found")
+	ErrInvalidWorkflowManifest = errors.New("invalid workflow manifest")
+
+	// KnownWorkflowErrors is a list of known workflow errors
+	KnownWorkflowErrors = []error{
+		ErrWorkflowNoSteps,
+		ErrInvalidWorkflowStepType,
+		ErrInvalidFromStep,
+		ErrWorkflowStepFailed,
+		ErrWorkflowNoWorkflow,
+		ErrWorkflowFileNotFound,
+		ErrInvalidWorkflowManifest,
+	}
 )
+
+// IsKnownWorkflowError returns true if the error matches any known workflow error.
+func IsKnownWorkflowError(err error) bool {
+	for _, knownErr := range KnownWorkflowErrors {
+		if errors.Is(err, knownErr) {
+			return true
+		}
+	}
+	return false
+}
 
 // ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(

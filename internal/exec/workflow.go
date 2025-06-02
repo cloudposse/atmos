@@ -91,7 +91,12 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		return fmt.Errorf("the workflow manifest file '%s' does not exist", workflowPath)
+		u.PrintErrorMarkdown(
+			WorkflowErrTitle,
+			ErrWorkflowFileNotFound,
+			fmt.Sprintf("\n## Explanation\nThe workflow manifest file '%s' does not exist.", workflowPath),
+		)
+		return ErrWorkflowFileNotFound
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
@@ -109,7 +114,12 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if workflowManifest.Workflows == nil {
-		return fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
+		u.PrintErrorMarkdown(
+			WorkflowErrTitle,
+			ErrInvalidWorkflowManifest,
+			fmt.Sprintf("\n## Explanation\nThe workflow manifest '%s' must be a map with the top-level 'workflows:' key.", workflowPath),
+		)
+		return ErrInvalidWorkflowManifest
 	}
 
 	workflowConfig = workflowManifest.Workflows

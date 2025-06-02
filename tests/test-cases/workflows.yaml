@@ -197,3 +197,43 @@ tests:
         - "shell-pass"
       exit_code: 1
 
+  - name: atmos workflow invalid manifest
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when workflow manifest is invalid"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pass"
+      - "--file"
+      - "test-invalid"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "invalid workflow manifest"
+        - "## Explanation"
+        - "The workflow manifest 'stacks/workflows/test-invalid.yaml' must be a map with the top-level 'workflows:' key."
+      exit_code: 1
+
+  - name: atmos workflow file not found
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when workflow file doesn't exist"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pass"
+      - "--file"
+      - "dne"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "workflow file not found"
+        - "## Explanation"
+        - "The workflow manifest file 'stacks/workflows/dne.yaml' does not exist."
+      exit_code: 1
+
