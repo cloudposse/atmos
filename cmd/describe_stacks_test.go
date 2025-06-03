@@ -17,7 +17,7 @@ func TestDescribeStacksRunnable(t *testing.T) {
 	defer ctrl.Finish()
 	mockExec := exec.NewMockDescribeStacksExec(ctrl)
 	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	run := getRunnableDescribeStacksCmd(
+	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 			return schema.ConfigAndStacksInfo{}, nil
@@ -32,7 +32,7 @@ func TestDescribeStacksRunnable(t *testing.T) {
 			return nil
 		},
 		mockExec,
-	)
+	})
 	run(describeStacksCmd, []string{})
 }
 

@@ -35,7 +35,7 @@ func (m *MockDescribeStacksExec) EXPECT() *MockDescribeStacksExecMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *MockDescribeStacksExec) Execute(atmosConfig schema.AtmosConfiguration, args *DescribeStacksArgs) error {
+func (m *MockDescribeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", atmosConfig, args)
 	ret0, _ := ret[0].(error)
