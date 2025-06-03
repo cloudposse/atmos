@@ -23,7 +23,11 @@ func TestDescribeAffected(t *testing.T) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
-		return []schema.Affected{}, nil, nil, "", nil
+		return []schema.Affected{
+			{
+				Stack: "test-stack",
+			},
+		}, nil, nil, "", nil
 	}
 	d.atmosConfig = &schema.AtmosConfiguration{}
 	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool) error {
@@ -58,6 +62,17 @@ func TestDescribeAffected(t *testing.T) {
 	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
 	err = d.Execute(&DescribeAffectedCmdArgs{
 		Format: "yaml",
+	})
+	assert.NoError(t, err)
+	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
+	err = d.Execute(&DescribeAffectedCmdArgs{
+		Format:   "json",
+		RepoPath: "repo/path",
+	})
+	assert.NoError(t, err)
+	err = d.Execute(&DescribeAffectedCmdArgs{
+		Format: "json",
+		Query:  ".0.stack",
 	})
 	assert.NoError(t, err)
 }
