@@ -125,7 +125,7 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 			setDescribeAffectedFlagValueInCliArgs(fs, gotDescribe)
 			tt.expected.CLIConfig = &schema.AtmosConfiguration{}
 
-      // Assert the describe struct matches the expected values
+			// Assert the describe struct matches the expected values
 			assert.Equal(t, tt.expected, gotDescribe, "Describe struct does not match expected")
 		})
 	}
