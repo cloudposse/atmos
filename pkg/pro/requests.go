@@ -6,6 +6,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// GitHubOIDCResponse represents the response from GitHub's OIDC token endpoint.
+type GitHubOIDCResponse struct {
+	Value string `json:"value"`
+}
+
+// GitHubOIDCAuthRequest represents the request to exchange OIDC token for Atmos token.
+type GitHubOIDCAuthRequest struct {
+	Token       string `json:"token"`
+	WorkspaceID string `json:"workspaceId"`
+}
+
+// GitHubOIDCAuthResponse represents the response from Atmos Pro's OIDC auth endpoint.
+type GitHubOIDCAuthResponse struct {
+	Token string `json:"token"`
+}
+
 type LockStackRequest struct {
 	Key         string                 `json:"key"`
 	TTL         int32                  `json:"ttl"`
