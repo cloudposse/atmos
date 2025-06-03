@@ -45,7 +45,6 @@ type getRunnableDescribeStacksCmdProps struct {
 func getRunnableDescribeStacksCmd(
 	g getRunnableDescribeStacksCmdProps,
 ) func(cmd *cobra.Command, args []string) {
-
 	return func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
 		g.checkAtmosConfig()
