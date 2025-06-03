@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"net/http/httptest"
 
 	"github.com/cloudposse/atmos/pkg/logger"
 )
@@ -142,4 +145,105 @@ func TestUnlockStack_Error(t *testing.T) {
 	assert.False(t, response.Success)
 
 	mockRoundTripper.AssertExpectations(t)
+}
+
+func TestNewAtmosProAPIClientFromEnv_OIDC(t *testing.T) {
+	// Save original env vars and restore them after the test
+	originalEnvVars := map[string]string{
+		"ACTIONS_ID_TOKEN_REQUEST_URL":   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+		"ACTIONS_ID_TOKEN_REQUEST_TOKEN": os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+		"ATMOS_PRO_WORKSPACE_ID":         os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+		"ATMOS_PRO_TOKEN":                os.Getenv("ATMOS_PRO_TOKEN"),
+		"ATMOS_PRO_BASE_URL":             os.Getenv("ATMOS_PRO_BASE_URL"),
+		"ATMOS_PRO_ENDPOINT":             os.Getenv("ATMOS_PRO_ENDPOINT"),
+	}
+	defer func() {
+		for k, v := range originalEnvVars {
+			if v != "" {
+				os.Setenv(k, v)
+			} else {
+				os.Unsetenv(k)
+			}
+		}
+	}()
+
+	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
+	assert.Nil(t, err)
+
+	// Test successful OIDC authentication
+	t.Run("successful OIDC authentication", func(t *testing.T) {
+		// Set up test servers
+		githubOIDCServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"value": "github-oidc-token"}`))
+		}))
+		defer githubOIDCServer.Close()
+
+		atmosAPIServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/auth/github-oidc" {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"token": "atmos-token"}`))
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+		defer atmosAPIServer.Close()
+
+		// Set up mock environment
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", githubOIDCServer.URL+"?audience=app.cloudposse.com")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+		os.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
+		os.Setenv("ATMOS_PRO_BASE_URL", atmosAPIServer.URL)
+		os.Setenv("ATMOS_PRO_ENDPOINT", "api")
+		os.Unsetenv("ATMOS_PRO_TOKEN")
+
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
+		assert.NoError(t, err)
+		assert.NotNil(t, client)
+		assert.Equal(t, "atmos-token", client.APIToken)
+	})
+
+	// Test fallback to API token when OIDC fails
+	t.Run("fallback to API token", func(t *testing.T) {
+		// Set up test server for OIDC (returns unauthorized)
+		githubOIDCServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error": "invalid token"}`))
+		}))
+		defer githubOIDCServer.Close()
+
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", githubOIDCServer.URL+"?audience=app.cloudposse.com")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "invalid-token")
+		os.Setenv("ATMOS_PRO_TOKEN", "fallback-token")
+		os.Setenv("ATMOS_PRO_BASE_URL", "http://localhost")
+		os.Setenv("ATMOS_PRO_ENDPOINT", "api")
+		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
+
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
+		assert.NoError(t, err)
+		assert.NotNil(t, client)
+		assert.Equal(t, "fallback-token", client.APIToken)
+	})
+
+	// Test failure when both OIDC and API token are missing
+	t.Run("both auth methods fail", func(t *testing.T) {
+		// Set up test server for OIDC (returns unauthorized)
+		githubOIDCServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error": "invalid token"}`))
+		}))
+		defer githubOIDCServer.Close()
+
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", githubOIDCServer.URL+"?audience=app.cloudposse.com")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "invalid-token")
+		os.Setenv("ATMOS_PRO_BASE_URL", "http://localhost")
+		os.Setenv("ATMOS_PRO_ENDPOINT", "api")
+		os.Unsetenv("ATMOS_PRO_TOKEN")
+		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
+
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
+		assert.Error(t, err)
+		assert.Nil(t, client)
+		assert.Contains(t, err.Error(), "OIDC authentication failed and ATMOS_PRO_TOKEN is not set")
+	})
 }
