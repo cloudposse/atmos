@@ -46,7 +46,7 @@ func TestPageCreator_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Track whether newTeaProgram was called and capture the model
+			// Track whether newTeaProgram was called and capture the model.
 			teaProgramCalled := false
 			var capturedModel *model
 			var capturedOpts []tea.ProgramOption
