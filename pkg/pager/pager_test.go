@@ -68,7 +68,7 @@ func TestPageCreator_Run(t *testing.T) {
 
 					// Create a real tea.Program but with a simple model that won't actually run
 					// Since we're mocking the function, we control what gets returned
-					return tea.NewProgram(&simpleTestModel{})
+					return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))
 				},
 				contentFitsTerminal: func(content string) bool {
 					assert.Equal(t, tt.content, content)
@@ -124,7 +124,7 @@ func TestPageCreator_Run_WithError(t *testing.T) {
 		newTeaProgram: func(model tea.Model, opts ...tea.ProgramOption) *tea.Program {
 			// Create a program that will cause an error when Run() is called
 			// We simulate this by returning a program with a model that returns an error
-			return tea.NewProgram(&errorTestModel{err: expectedErr})
+			return tea.NewProgram(&errorTestModel{err: expectedErr}, tea.WithInput(nil), tea.WithOutput(nil))
 		},
 		contentFitsTerminal: func(content string) bool {
 			return false // Force pager usage
@@ -183,7 +183,7 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 		newTeaProgram: func(modelObj tea.Model, opts ...tea.ProgramOption) *tea.Program {
 			capturedModel = modelObj.(*model)
 			capturedOpts = opts
-			return tea.NewProgram(&simpleTestModel{})
+			return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))
 		},
 		contentFitsTerminal: func(content string) bool {
 			return false // Force pager usage
@@ -236,7 +236,7 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 			pc := &pageCreator{
 				newTeaProgram: func(model tea.Model, opts ...tea.ProgramOption) *tea.Program {
 					teaProgramCalled = true
-					return tea.NewProgram(&simpleTestModel{})
+					return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))
 				},
 				contentFitsTerminal: func(content string) bool {
 					return tc.contentFits
