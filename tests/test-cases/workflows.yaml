@@ -214,7 +214,7 @@ tests:
         - "Workflow Error"
         - "invalid workflow manifest"
         - "## Explanation"
-        - "The workflow manifest 'stacks/workflows/test-invalid.yaml' must be a map with the top-level 'workflows:' key."
+        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the top-level workflows: key."
       exit_code: 1
 
   - name: atmos workflow file not found
@@ -234,6 +234,6 @@ tests:
         - "Workflow Error"
         - "workflow file not found"
         - "## Explanation"
-        - "The workflow manifest file 'stacks/workflows/dne.yaml' does not exist."
+        - "The workflow manifest file stacks/workflows/dne.yaml does not exist."
       exit_code: 1
 
