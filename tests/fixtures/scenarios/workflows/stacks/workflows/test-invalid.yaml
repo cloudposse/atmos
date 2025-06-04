@@ -1,0 +1,7 @@
+# This intentionally contains an invalid workflow manifest to test error handling.
+workflowstypo:
+  pass:
+    description: |
+      Run a command that will pass.
+    steps:
+      - command: terraform plan mock -s nonprod
