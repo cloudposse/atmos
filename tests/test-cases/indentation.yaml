@@ -12,6 +12,7 @@ tests:
       - "config"
       - "-f"
       - "yaml"
+      - "--pager=more"
     expect:
       diff:
         - "github_token"

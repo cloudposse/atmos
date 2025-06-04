@@ -25,7 +25,7 @@ components:
         component: mock
       vars:
         foo: !terraform.output component-1 foo
-        bar: !terraform.output component-1 .bar
+        bar: !terraform.output component-1 bar
         baz: !terraform.output component-1 {{ .stack }} baz
 
     component-3:
