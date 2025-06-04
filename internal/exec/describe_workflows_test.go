@@ -34,13 +34,9 @@ workflows:
 	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
 	require.NoError(t, err)
 
-	// Set environment variables
-	err = os.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
-	require.NoError(t, err)
-	err = os.Setenv("ATMOS_BASE_PATH", tmpDir)
-	require.NoError(t, err)
-
-	cleanup := func() { os.RemoveAll(tmpDir) }
+	cleanup := func() {
+		os.RemoveAll(tmpDir)
+	}
 	return tmpDir, cleanup
 }
 
