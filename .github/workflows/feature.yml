@@ -1,0 +1,100 @@
+name: "Build and Publish Feature Branch"
+
+on:
+  workflow_dispatch:
+
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  attestations: write
+  contents: write
+  id-token: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  build:
+    name: "Build and push Docker image for Atmos CLI"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout source code at current commit"
+        uses: actions/checkout@v4
+
+      - name: "Set version"
+        id: version
+        run: |
+          # Get branch name and remove refs/heads/ prefix
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "version=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: "Docker Build"
+        id: build
+        uses: cloudposse/github-action-docker-build-push@main
+        with:
+          registry: ghcr.io
+          organization: "${{ github.event.repository.owner.login }}"
+          repository: "${{ github.event.repository.name }}"
+          login: "${{ github.actor }}"
+          password: "${{ secrets.GITHUB_TOKEN }}"
+          platforms: linux/amd64,linux/arm64
+          file: Dockerfile
+          build-args: |
+            ATMOS_VERSION=${{ steps.version.outputs.version }}
+
+      - name: "Verify Image"
+        run: |
+          docker pull ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag}}
+
+      - name: "Job Summary"
+        run: |
+          echo "## Docker Image Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          docker inspect ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag}}  >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+      tag: ${{ steps.build.outputs.tag }}
+
+  publish:
+    name: "Publish Feature Branch"
+    needs: [ build ]
+    runs-on: ubuntu-latest
+    environment: release # required to access GPG key
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+    
+      - name: Install Git & GPG
+        run: |-
+          sudo apt-get update && sudo apt-get install -y git gnupg2
+    
+      - name: Checkout
+        uses: actions/checkout@v4
+   
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+    
+      - name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PRIVATE_KEY_PASSPHRASE }}
+        
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          workdir: .
+          version: ${{ needs.build.outputs.tag }}
+          args: release --config .goreleaser.yml --clean --timeout 180m
+        env:
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          GITHUB_TOKEN: ${{ steps.github-app.outputs.token }}
