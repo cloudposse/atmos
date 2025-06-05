@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/agiledragon/gomonkey/v2 v2.13.0
 	github.com/alecthomas/chroma v0.10.0
-	github.com/alicebob/miniredis/v2 v2.34.0
+	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.36.3
@@ -56,7 +56,7 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.16.0
-	github.com/open-policy-agent/opa v1.5.0
+	github.com/open-policy-agent/opa v1.5.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
@@ -74,7 +74,7 @@ require (
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/term v0.32.0
 	golang.org/x/text v0.25.0
-	google.golang.org/api v0.235.0
+	google.golang.org/api v0.236.0
 	google.golang.org/grpc v1.72.2
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
@@ -106,7 +106,6 @@ require (
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/alecthomas/participle/v2 v2.1.4 // indirect
-	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/apparentlymart/go-cidr v1.1.0 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
@@ -327,7 +326,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/genproto v0.0.0-20250505200425-f936aa4a68b2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250505200425-f936aa4a68b2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
