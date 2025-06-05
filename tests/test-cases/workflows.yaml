@@ -1,0 +1,239 @@
+tests:
+  - name: atmos workflow success
+    enabled: true
+    snapshot: false
+    description: "Ensure atmos workflow passes"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pass"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: atmos workflow shell pass
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow passes with shell command"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-pass"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stdout:
+        - "This should pass"
+      exit_code: 0
+
+  - name: atmos workflow shell command not found
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when shell command is not found"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-command-not-found"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "workflow step execution failed"
+        - "## Explanation"
+        - "The following command failed to execute:"
+        - "nonexistentcommand"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow shell-command-not-found -f test --from-step step1"
+      exit_code: 1
+
+  - name: atmos workflow failure
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns command on failure"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "fail"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "workflow step execution failed"
+        - "## Explanation"
+        - "The following command failed to execute:"
+        - "atmos terraform plan mock -s idontexist"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow fail -f test --from-step step1"
+      exit_code: 1
+
+  - name: atmos workflow failure on shell command
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns command on failure"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-failure"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "This should fail"
+        - "Workflow Error"
+        - "workflow step execution failed"
+        - "## Explanation"
+        - "The following command failed to execute:"
+        - "echo \"This should fail\""
+        - "exit 1"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow shell-failure -f test --from-step step1"
+      exit_code: 1
+
+  - name: atmos workflow no steps
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when workflow has no steps"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "no-steps"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "workflow has no steps defined"
+        - "## Explanation"
+        - "Workflow no-steps is empty and requires at least one step to execute."
+      exit_code: 1
+
+  - name: atmos workflow invalid step type
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when step type is invalid"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "invalid-step-type"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "invalid workflow step type"
+        - "## Explanation"
+        - "Step type invalid is not supported. Each step must specify a valid type."
+        - "### Available types:"
+        - "atmos"
+        - "shell"
+      exit_code: 1
+
+  - name: atmos workflow invalid from step
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when from-step is invalid"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pass"
+      - "--file"
+      - "test"
+      - "--from-step"
+      - "dne"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "invalid from-step flag"
+        - "## Explanation"
+        - "The --from-step flag was set to dne, but this step does not exist in workflow pass."
+        - "### Available steps:"
+        - "step1"
+      exit_code: 1
+
+  - name: atmos workflow not found
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when workflow doesn't exist"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "no-workflow-exists"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "no workflow found"
+        - "## Explanation"
+        - "No workflow exists with the name no-workflow-exists"
+        - "### Available workflows:"
+        - "fail"
+        - "invalid-step-type"
+        - "no-steps"
+        - "pass"
+        - "shell-command-not-found"
+        - "shell-failure"
+        - "shell-pass"
+      exit_code: 1
+
+  - name: atmos workflow invalid manifest
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when workflow manifest is invalid"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pass"
+      - "--file"
+      - "test-invalid"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "invalid workflow manifest"
+        - "## Explanation"
+        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the top-level workflows: key."
+      exit_code: 1
+
+  - name: atmos workflow file not found
+    enabled: true
+    snapshot: true
+    description: "Ensure atmos workflow returns error when workflow file doesn't exist"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "pass"
+      - "--file"
+      - "dne"
+    expect:
+      diff: []
+      stderr:
+        - "Workflow Error"
+        - "workflow file not found"
+        - "## Explanation"
+        - "The workflow manifest file stacks/workflows/dne.yaml does not exist."
+      exit_code: 1
+

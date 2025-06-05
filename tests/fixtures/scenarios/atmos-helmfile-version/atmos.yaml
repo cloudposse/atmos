@@ -1,0 +1,18 @@
+base_path: "./"
+
+components:
+  helmfile:
+    command: helmfile
+    base_path: "../../components/helmfile"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

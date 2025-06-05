@@ -1,13 +1,8 @@
 package exec
 
 import (
-	"bytes"
-	"io"
 	"os"
 	"testing"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/cobra"
 
 	"github.com/stretchr/testify/assert"
 
@@ -15,72 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestExecuteWorkflowCmd(t *testing.T) {
-	stacksPath := "../../tests/fixtures/scenarios/atmos-overrides-section"
-
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	expectedOutput := `atmos describe component c1 -s prod
-atmos describe component c1 -s staging
-atmos describe component c1 -s dev
-atmos describe component c1 -s sandbox
-atmos describe component c1 -s test
-`
-
-	cmd := &cobra.Command{
-		Use:   "workflow",
-		Short: "Run predefined tasks using workflows",
-		Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
-
-		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-		Run: func(cmd *cobra.Command, args []string) {
-			err := ExecuteWorkflowCmd(cmd, args)
-			if err != nil {
-				u.PrintErrorMarkdownAndExit("", err, "")
-			}
-		},
-	}
-
-	cmd.DisableFlagParsing = false
-	cmd.PersistentFlags().StringP("file", "f", "", "Specify the workflow file to run")
-	cmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
-	cmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
-	cmd.PersistentFlags().String("stack", "", "Execute the workflow for the specified stack")
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
-	// Execute the command
-	cmd.SetArgs([]string{"--file", "workflows", "show-all-describe-component-commands"})
-	err = cmd.Execute()
-	assert.NoError(t, err, "'atmos workflow' command should execute without error")
-
-	// Close the writer and restore stdout
-	err = w.Close()
-	assert.NoError(t, err, "'atmos workflow' command should execute without error")
-
-	os.Stdout = oldStdout
-
-	// Read captured output
-	var output bytes.Buffer
-	_, err = io.Copy(&output, r)
-	assert.NoError(t, err, "'atmos workflow' command should execute without error")
-
-	// Check if output contains expected markdown content
-	assert.Contains(t, output.String(), expectedOutput, "'atmos workflow' output should contain information about workflows")
-}
-
 func TestExecuteWorkflow(t *testing.T) {
-	stacksPath := "../tests/fixtures/scenarios/atmos-overrides-section"
-	workflowPath := "../tests/fixtures/scenarios/atmos-overrides-section/stacks/workflows/workflows.yaml"
+	stacksPath := "../../../tests/fixtures/scenarios/workflows"
 
 	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
@@ -88,60 +19,282 @@ func TestExecuteWorkflow(t *testing.T) {
 	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
 	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
 
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	workflowsDir := stacksPath + "/stacks/workflows"
+	workflowPath := workflowsDir + "/test.yaml"
 
-	expectedOutput := `atmos describe component c1 -s prod
-atmos describe component c1 -s staging
-atmos describe component c1 -s dev
-atmos describe component c1 -s sandbox
-atmos describe component c1 -s test
-`
-
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	assert.NoError(t, err, "'InitCliConfig' should execute without error")
 
-	workflowDefinition := schema.WorkflowDefinition{
-		Steps: []schema.WorkflowStep{
-			{
-				Type:    "shell",
-				Command: "echo atmos describe component c1 -s prod",
+	tests := []struct {
+		name             string
+		workflow         string
+		workflowPath     string
+		workflowDef      *schema.WorkflowDefinition
+		dryRun           bool
+		commandLineStack string
+		fromStep         string
+		wantErr          bool
+		errMsg           string
+	}{
+		{
+			name:         "valid workflow execution",
+			workflow:     "test-workflow",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+					{
+						Name:    "step2",
+						Type:    "shell",
+						Command: "echo 'Step 2'",
+					},
+				},
 			},
-			{
-				Type:    "shell",
-				Command: "echo atmos describe component c1 -s staging",
+			dryRun:           false,
+			commandLineStack: "",
+			fromStep:         "",
+			wantErr:          false,
+		},
+		{
+			name:         "empty workflow",
+			workflow:     "no-steps",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{},
 			},
-			{
-				Type:    "shell",
-				Command: "echo atmos describe component c1 -s dev",
+			dryRun:           false,
+			commandLineStack: "",
+			fromStep:         "",
+			wantErr:          true,
+			errMsg:           "workflow has no steps defined",
+		},
+		{
+			name:         "invalid step type",
+			workflow:     "invalid-step",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "invalid",
+						Command: "echo 'Step 1'",
+					},
+				},
 			},
-			{
-				Type:    "shell",
-				Command: "echo atmos describe component c1 -s sandbox",
+			dryRun:           false,
+			commandLineStack: "",
+			fromStep:         "",
+			wantErr:          true,
+			errMsg:           "invalid workflow step type",
+		},
+		{
+			name:         "invalid from-step",
+			workflow:     "test-workflow",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+				},
 			},
-			{
-				Type:    "shell",
-				Command: "echo atmos describe component c1 -s test",
+			dryRun:           false,
+			commandLineStack: "",
+			fromStep:         "nonexistent-step",
+			wantErr:          true,
+			errMsg:           "invalid from-step flag",
+		},
+		{
+			name:         "failing shell command",
+			workflow:     "failing-workflow",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "shell",
+						Command: "exit 1",
+					},
+				},
+			},
+			dryRun:           false,
+			commandLineStack: "",
+			fromStep:         "",
+			wantErr:          true,
+			errMsg:           "workflow step execution failed",
+		},
+		{
+			name:         "failing atmos command",
+			workflow:     "failing-atmos-workflow",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "atmos",
+						Command: "invalid-command",
+					},
+				},
+			},
+			dryRun:           false,
+			commandLineStack: "",
+			fromStep:         "",
+			wantErr:          true,
+			errMsg:           "workflow step execution failed",
+		},
+		{
+			name:         "workflow with stack override",
+			workflow:     "stack-workflow",
+			workflowPath: workflowPath,
+			workflowDef: &schema.WorkflowDefinition{
+				Stack: "prod",
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+				},
+			},
+			dryRun:           false,
+			commandLineStack: "dev",
+			fromStep:         "",
+			wantErr:          false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ExecuteWorkflow(
+				config,
+				tt.workflow,
+				tt.workflowPath,
+				tt.workflowDef,
+				tt.dryRun,
+				tt.commandLineStack,
+				tt.fromStep,
+			)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCheckAndGenerateWorkflowStepNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *schema.WorkflowDefinition
+		expected *schema.WorkflowDefinition
+	}{
+		{
+			name: "steps with names",
+			input: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+					{
+						Name:    "step2",
+						Type:    "shell",
+						Command: "echo 'Step 2'",
+					},
+				},
+			},
+			expected: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+					{
+						Name:    "step2",
+						Type:    "shell",
+						Command: "echo 'Step 2'",
+					},
+				},
+			},
+		},
+		{
+			name: "steps without names",
+			input: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+					{
+						Type:    "shell",
+						Command: "echo 'Step 2'",
+					},
+				},
+			},
+			expected: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "step1",
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+					{
+						Name:    "step2",
+						Type:    "shell",
+						Command: "echo 'Step 2'",
+					},
+				},
+			},
+		},
+		{
+			name: "mixed steps",
+			input: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "custom-step",
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+					{
+						Type:    "shell",
+						Command: "echo 'Step 2'",
+					},
+				},
+			},
+			expected: &schema.WorkflowDefinition{
+				Steps: []schema.WorkflowStep{
+					{
+						Name:    "custom-step",
+						Type:    "shell",
+						Command: "echo 'Step 1'",
+					},
+					{
+						Name:    "step2",
+						Type:    "shell",
+						Command: "echo 'Step 2'",
+					},
+				},
 			},
 		},
 	}
 
-	err = ExecuteWorkflow(atmosConfig, "show-all-describe-component-commands", workflowPath, &workflowDefinition, false, "", "")
-	assert.NoError(t, err, "'ExecuteWorkflow' should execute without error")
-
-	// Close the writer and restore stdout
-	err = w.Close()
-	assert.NoError(t, err, "'ExecuteWorkflow' command should execute without error")
-
-	os.Stdout = oldStdout
-
-	// Read captured output
-	var output bytes.Buffer
-	_, err = io.Copy(&output, r)
-	assert.NoError(t, err, "'ExecuteWorkflow' should execute without error")
-
-	// Check if output contains expected markdown content
-	assert.Contains(t, output.String(), expectedOutput, "'ExecuteWorkflow' output should contain information workflows")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checkAndGenerateWorkflowStepNames(tt.input)
+			assert.Equal(t, tt.expected, tt.input)
+		})
+	}
 }
