@@ -182,6 +182,8 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	cmd.PersistentFlags().Bool("upload", false, "")
 	cmd.PersistentFlags().StringP("query", "q", "", "")
 
+	props, err := parseDescribeAffectedCliArgs(cmd, args)
+
 	cliArgs, err := parseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
 		return err

@@ -114,6 +114,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
 	var err error
+
 	switch {
 	case a.RepoPath != "":
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRepoPath(
@@ -159,6 +160,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 	if err != nil {
 		return err
 	}
+
 	// Add dependent components and stacks for each affected component
 	if len(affected) > 0 && a.IncludeDependents {
 		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings)
