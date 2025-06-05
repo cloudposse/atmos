@@ -2,8 +2,7 @@ package cmd
 
 import (
 	_ "embed"
-	"fmt"
-	"strings"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -43,15 +42,13 @@ var workflowCmd = &cobra.Command{
 		// Execute the workflow command
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
-			// Format common error messages
-			if strings.Contains(err.Error(), "does not exist") {
-				u.PrintErrorMarkdownAndExit("File Not Found", fmt.Errorf("`%v` was not found", workflowFile), "")
-			} else if strings.Contains(err.Error(), "No workflow exists with the name") {
-				u.PrintErrorMarkdownAndExit("Invalid Workflow Name", err, "")
-			} else {
-				// For other errors, use the standard error handler
-				u.PrintErrorMarkdownAndExit("", err, "")
+			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
+			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
+			if e.IsKnownWorkflowError(err) {
+				os.Exit(1)
 			}
+			// For unknown errors, print and exit
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 	},
 }

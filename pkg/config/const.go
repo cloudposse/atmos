@@ -1,6 +1,7 @@
 package config
 
 const (
+	AtmosCommand         = "atmos"
 	CliConfigFileName    = "atmos"
 	DotCliConfigFileName = ".atmos"
 
