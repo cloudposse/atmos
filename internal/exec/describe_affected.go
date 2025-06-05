@@ -2,12 +2,12 @@ package exec
 
 import (
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	l "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	l "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
