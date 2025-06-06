@@ -527,9 +527,15 @@ jobs:
 
   release:
     needs: [ test, lint, mock, k3s, localstack, docker, validate ]
-    if: github.event_name == 'push'
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
+    if: |
+      github.event_name == 'push' || 
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release/feature'))
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@autorelease-fetch-tags-only
     with:
       publish: false
+      prerelease: true
       format: binary
     secrets: inherit
+
+
+
