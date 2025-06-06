@@ -1,6 +1,7 @@
 package atlantis
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,9 +75,9 @@ func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
-	stacksPath := "../../tests/fixtures/scenarios/complete"
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+	// Clear any existing environment variables that might interfere
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	os.Unsetenv("ATMOS_BASE_PATH")
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
