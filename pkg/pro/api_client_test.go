@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-
-	"net/http/httptest"
 
 	"github.com/cloudposse/atmos/pkg/logger"
 )
