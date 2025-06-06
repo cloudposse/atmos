@@ -69,28 +69,27 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, err
 	}
 
 	var apiToken string
-	var err error
 
-	// Try OIDC authentication first
 	oidcToken, err := getGitHubOIDCToken()
-	if err == nil {
-		// Get workspace ID from environment
-		workspaceID := viper.GetString(cfg.AtmosProWorkspaceIDEnvVarName)
-		if workspaceID == "" {
-			return nil, fmt.Errorf("%w: %s", ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
-		}
-
-		// Exchange OIDC token for Atmos token
-		apiToken, err = exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrOIDCTokenExchangeFailed, err)
-		}
-	} else {
+	if err != nil {
 		// Fall back to API token from environment
 		apiToken = viper.GetString(cfg.AtmosProTokenEnvVarName)
 		if apiToken == "" {
 			return nil, fmt.Errorf("%w: %s", ErrOIDCAuthFailedNoToken, cfg.AtmosProTokenEnvVarName)
 		}
+		return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
+	}
+
+	// Get workspace ID from environment
+	workspaceID := viper.GetString(cfg.AtmosProWorkspaceIDEnvVarName)
+	if workspaceID == "" {
+		return nil, fmt.Errorf("%w: %s", ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
+	}
+
+	// Exchange OIDC token for Atmos token
+	apiToken, err = exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrOIDCTokenExchangeFailed, err)
 	}
 
 	return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
@@ -232,7 +231,7 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 	return responseData, nil
 }
 
-// getGitHubOIDCToken retrieves an OIDC token from GitHub Actions
+// getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
 func getGitHubOIDCToken() (string, error) {
 	requestURL := viper.GetString("ACTIONS_ID_TOKEN_REQUEST_URL")
 	requestToken := viper.GetString("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
@@ -251,8 +250,7 @@ func getGitHubOIDCToken() (string, error) {
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", requestToken))
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrFailedToGetOIDCToken, err)
 	}
@@ -291,8 +289,7 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrFailedToExchangeOIDCToken, err)
 	}
