@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
@@ -148,6 +149,10 @@ func TestUnlockStack_Error(t *testing.T) {
 }
 
 func TestNewAtmosProAPIClientFromEnv_OIDC(t *testing.T) {
+	// Initialize Viper
+	viper.SetConfigType("yaml")
+	viper.AutomaticEnv()
+
 	// Save original env vars and restore them after the test
 	originalEnvVars := map[string]string{
 		"ACTIONS_ID_TOKEN_REQUEST_URL":   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
@@ -165,6 +170,7 @@ func TestNewAtmosProAPIClientFromEnv_OIDC(t *testing.T) {
 				os.Unsetenv(k)
 			}
 		}
+		viper.Reset()
 	}()
 
 	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
@@ -197,6 +203,10 @@ func TestNewAtmosProAPIClientFromEnv_OIDC(t *testing.T) {
 		os.Setenv("ATMOS_PRO_ENDPOINT", "api")
 		os.Unsetenv("ATMOS_PRO_TOKEN")
 
+		// Reset Viper for this test case
+		viper.Reset()
+		viper.AutomaticEnv()
+
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.NoError(t, err)
 		assert.NotNil(t, client)
@@ -218,6 +228,10 @@ func TestNewAtmosProAPIClientFromEnv_OIDC(t *testing.T) {
 		os.Setenv("ATMOS_PRO_BASE_URL", "http://localhost")
 		os.Setenv("ATMOS_PRO_ENDPOINT", "api")
 		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
+
+		// Reset Viper for this test case
+		viper.Reset()
+		viper.AutomaticEnv()
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.NoError(t, err)
@@ -241,9 +255,13 @@ func TestNewAtmosProAPIClientFromEnv_OIDC(t *testing.T) {
 		os.Unsetenv("ATMOS_PRO_TOKEN")
 		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 
+		// Reset Viper for this test case
+		viper.Reset()
+		viper.AutomaticEnv()
+
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
 		assert.Nil(t, client)
-		assert.Contains(t, err.Error(), "OIDC authentication failed and ATMOS_PRO_TOKEN is not set")
+		assert.Contains(t, err.Error(), "OIDC authentication failed and API token is not set: ATMOS_PRO_TOKEN")
 	})
 }
