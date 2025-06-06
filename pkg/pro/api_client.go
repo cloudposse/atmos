@@ -68,16 +68,16 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, err
 		baseAPIEndpoint = cfg.AtmosProDefaultEndpoint
 	}
 
-	var apiToken string
+	// First, check if the API key is set via environment variable
+	apiToken := viper.GetString(cfg.AtmosProTokenEnvVarName)
+	if apiToken != "" {
+		return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
+	}
 
+	// If API key is not set, attempt to use GitHub OIDC token exchange
 	oidcToken, err := getGitHubOIDCToken()
 	if err != nil {
-		// Fall back to API token from environment
-		apiToken = viper.GetString(cfg.AtmosProTokenEnvVarName)
-		if apiToken == "" {
-			return nil, fmt.Errorf("%w: %s", ErrOIDCAuthFailedNoToken, cfg.AtmosProTokenEnvVarName)
-		}
-		return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
+		return nil, fmt.Errorf("%w: %s", ErrOIDCAuthFailedNoToken, cfg.AtmosProTokenEnvVarName)
 	}
 
 	// Get workspace ID from environment
