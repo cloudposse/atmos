@@ -1,7 +1,6 @@
 package atlantis
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -75,13 +74,15 @@ func TestExecuteAtlantisGenerateRepoConfig2(t *testing.T) {
 }
 
 func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../tests/fixtures/scenarios/complete",
-	// which will be wrong for the remote repo which is cloned into a temp dir.
-	// Set the correct base path for the cloned remote repo
-	atmosConfig.BasePath = filepath.ToSlash("./tests/fixtures/scenarios/complete")
+	// Set the correct base path for the test fixture
+	atmosConfig.BasePath = "./tests/fixtures/scenarios/complete"
 
 	err = e.ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		atmosConfig,
