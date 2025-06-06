@@ -6,122 +6,74 @@ import (
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+type DescribeStacksArgs struct {
+	Query                string
+	FilterByStack        string
+	Components           []string
+	ComponentTypes       []string
+	Sections             []string
+	IgnoreMissingFiles   bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	IncludeEmptyStacks   bool
+	Skip                 []string
+	Format               string
+	File                 string
+}
+
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+type DescribeStacksExec interface {
+	Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error
+}
+
+type describeStacksExec struct {
+	pageCreator           pager.PageCreator
+	isTTYSupportForStdout func() bool
+	printOrWriteToFile    func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
+	executeDescribeStacks func(
+		atmosConfig schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+	) (map[string]any, error)
+}
+
+func NewDescribeStacksExec() DescribeStacksExec {
+	return &describeStacksExec{
+		pageCreator:           pager.New(),
+		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		printOrWriteToFile:    printOrWriteToFile,
+		executeDescribeStacks: ExecuteDescribeStacks,
+	}
+}
+
 // ExecuteDescribeStacksCmd executes `describe stacks` command.
-func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	info.CliArgs = []string{"describe", "stacks"}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	err = ValidateStacks(atmosConfig)
-	if err != nil {
-		return err
-	}
-
-	flags := cmd.Flags()
-
-	filterByStack, err := flags.GetString("stack")
-	if err != nil {
-		return err
-	}
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-
-	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
-	}
-
-	if format == "" {
-		format = "yaml"
-	}
-
-	file, err := flags.GetString("file")
-	if err != nil {
-		return err
-	}
-
-	includeEmptyStacks, err := flags.GetBool("include-empty-stacks")
-	if err != nil {
-		return err
-	}
-
-	componentsCsv, err := flags.GetString("components")
-	if err != nil {
-		return err
-	}
-
-	var components []string
-	if componentsCsv != "" {
-		components = strings.Split(componentsCsv, ",")
-	}
-
-	componentTypesCsv, err := flags.GetString("component-types")
-	if err != nil {
-		return err
-	}
-
-	var componentTypes []string
-	if componentTypesCsv != "" {
-		componentTypes = strings.Split(componentTypesCsv, ",")
-	}
-
-	sectionsCsv, err := flags.GetString("sections")
-	if err != nil {
-		return err
-	}
-	var sections []string
-	if sectionsCsv != "" {
-		sections = strings.Split(sectionsCsv, ",")
-	}
-
-	processTemplates, err := flags.GetBool("process-templates")
-	if err != nil {
-		return err
-	}
-
-	processYamlFunctions, err := flags.GetBool("process-functions")
-	if err != nil {
-		return err
-	}
-
-	query, err := flags.GetString("query")
-	if err != nil {
-		return err
-	}
-
-	skip, err := flags.GetStringSlice("skip")
-	if err != nil {
-		return err
-	}
-
-	finalStacksMap, err := ExecuteDescribeStacks(
-		atmosConfig,
-		filterByStack,
-		components,
-		componentTypes,
-		sections,
+func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error {
+	finalStacksMap, err := d.executeDescribeStacks(
+		*atmosConfig,
+		args.FilterByStack,
+		args.Components,
+		args.ComponentTypes,
+		args.Sections,
 		false,
-		processTemplates,
-		processYamlFunctions,
-		includeEmptyStacks,
-		skip,
+		args.ProcessTemplates,
+		args.ProcessYamlFunctions,
+		args.IncludeEmptyStacks,
+		args.Skip,
 	)
 	if err != nil {
 		return err
@@ -129,8 +81,8 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 
 	var res any
 
-	if query != "" {
-		res, err = u.EvaluateYqExpression(&atmosConfig, finalStacksMap, query)
+	if args.Query != "" {
+		res, err = u.EvaluateYqExpression(atmosConfig, finalStacksMap, args.Query)
 		if err != nil {
 			return err
 		}
@@ -138,12 +90,16 @@ func ExecuteDescribeStacksCmd(cmd *cobra.Command, args []string) error {
 		res = finalStacksMap
 	}
 
-	err = printOrWriteToFile(&atmosConfig, format, file, res)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return viewWithScroll(&viewWithScrollProps{
+		pageCreator:           pager.New(),
+		isTTYSupportForStdout: d.isTTYSupportForStdout,
+		printOrWriteToFile:    d.printOrWriteToFile,
+		atmosConfig:           atmosConfig,
+		displayName:           "Stacks",
+		format:                args.Format,
+		file:                  args.File,
+		res:                   res,
+	})
 }
 
 // ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
