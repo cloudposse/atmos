@@ -536,4 +536,3 @@ jobs:
       prerelease: true
       format: binary
     secrets: inherit
-
