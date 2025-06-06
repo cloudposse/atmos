@@ -276,10 +276,8 @@ func ResolveRelativePath(path string, basePath string) string {
 		return filepath.FromSlash(relativePath)
 	}
 
-	// For non-relative paths, ensure we're using the correct path separator for the OS
-	// and that the path is properly joined with the base path
-	joinedPath := filepath.Join(filepath.Dir(normalizedBasePath), normalizedPath)
-	return filepath.FromSlash(joinedPath)
+	// For non-relative paths, return as-is in original format
+	return path
 }
 
 // GetLineEnding returns the appropriate line ending for the current platform
