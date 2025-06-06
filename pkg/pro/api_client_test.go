@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // MockRoundTripper is an implementation of http.RoundTripper for testing purposes.
@@ -140,6 +141,153 @@ func TestUnlockStack_Error(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Internal Server Error")
 	assert.False(t, response.Success)
+
+	mockRoundTripper.AssertExpectations(t)
+}
+
+func TestUploadDriftDetection(t *testing.T) {
+	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
+	assert.Nil(t, err)
+
+	mockRoundTripper := new(MockRoundTripper)
+	httpClient := &http.Client{Transport: mockRoundTripper}
+	apiClient := &AtmosProAPIClient{
+		Logger:          mockLogger,
+		BaseURL:         "http://localhost",
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      httpClient,
+	}
+
+	dto := DriftDetectionUploadRequest{
+		RepoURL:   "https://github.com/org/repo",
+		RepoName:  "repo",
+		RepoOwner: "org",
+		RepoHost:  "github.com",
+		Stacks: []schema.Deployment{
+			{
+				Component:     "vpc",
+				Stack:         "tenant1-ue2-dev",
+				ComponentType: "terraform",
+				Settings: map[string]any{
+					"pro": map[string]any{
+						"drift_detection": map[string]any{
+							"enabled": true,
+						},
+					},
+				},
+				Vars: map[string]any{
+					"environment": "dev",
+					"tenant":      "tenant1",
+					"region":      "ue2",
+					"cidr_block":  "10.0.0.0/16",
+				},
+			},
+			{
+				Component:     "eks",
+				Stack:         "tenant1-ue2-dev",
+				ComponentType: "terraform",
+				Settings: map[string]any{
+					"pro": map[string]any{
+						"drift_detection": map[string]any{
+							"enabled": true,
+						},
+					},
+				},
+				Vars: map[string]any{
+					"environment":        "dev",
+					"tenant":             "tenant1",
+					"region":             "ue2",
+					"cluster_name":       "tenant1-ue2-dev",
+					"kubernetes_version": "1.27",
+				},
+			},
+		},
+	}
+
+	mockResponse := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString(`{"success": true}`)),
+	}
+
+	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
+
+	err = apiClient.UploadDriftDetection(&dto)
+	assert.NoError(t, err)
+
+	mockRoundTripper.AssertExpectations(t)
+}
+
+func TestUploadDriftDetection_Error(t *testing.T) {
+	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
+	assert.Nil(t, err)
+
+	mockRoundTripper := new(MockRoundTripper)
+	httpClient := &http.Client{Transport: mockRoundTripper}
+	apiClient := &AtmosProAPIClient{
+		Logger:          mockLogger,
+		BaseURL:         "http://localhost",
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      httpClient,
+	}
+
+	dto := DriftDetectionUploadRequest{
+		RepoURL:   "https://github.com/org/repo",
+		RepoName:  "repo",
+		RepoOwner: "org",
+		RepoHost:  "github.com",
+		Stacks: []schema.Deployment{
+			{
+				Component:     "vpc",
+				Stack:         "tenant1-ue2-dev",
+				ComponentType: "terraform",
+				Settings: map[string]any{
+					"pro": map[string]any{
+						"drift_detection": map[string]any{
+							"enabled": true,
+						},
+					},
+				},
+				Vars: map[string]any{
+					"environment": "dev",
+					"tenant":      "tenant1",
+					"region":      "ue2",
+					"cidr_block":  "10.0.0.0/16",
+				},
+			},
+			{
+				Component:     "eks",
+				Stack:         "tenant1-ue2-dev",
+				ComponentType: "terraform",
+				Settings: map[string]any{
+					"pro": map[string]any{
+						"drift_detection": map[string]any{
+							"enabled": true,
+						},
+					},
+				},
+				Vars: map[string]any{
+					"environment":        "dev",
+					"tenant":             "tenant1",
+					"region":             "ue2",
+					"cluster_name":       "tenant1-ue2-dev",
+					"kubernetes_version": "1.27",
+				},
+			},
+		},
+	}
+
+	mockResponse := &http.Response{
+		StatusCode: http.StatusInternalServerError,
+		Body:       io.NopCloser(bytes.NewBufferString(`{"success": false, "errorMessage": "Internal Server Error"}`)),
+	}
+
+	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
+
+	err = apiClient.UploadDriftDetection(&dto)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to upload drift detection results")
 
 	mockRoundTripper.AssertExpectations(t)
 }

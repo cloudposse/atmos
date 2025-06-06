@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-// AtmosProAPIClient represents the client to interact with the AtmosPro API
+// AtmosProAPIClient represents the client to interact with the AtmosPro API.
 type AtmosProAPIClient struct {
 	APIToken        string
 	BaseAPIEndpoint string
@@ -23,7 +23,7 @@ type AtmosProAPIClient struct {
 	Logger          *logger.Logger
 }
 
-// NewAtmosProAPIClient creates a new instance of AtmosProAPIClient
+// NewAtmosProAPIClient creates a new instance of AtmosProAPIClient.
 func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiToken string) *AtmosProAPIClient {
 	return &AtmosProAPIClient{
 		Logger:          logger,
@@ -34,7 +34,7 @@ func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiTo
 	}
 }
 
-// NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables
+// NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables.
 func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, error) {
 	baseURL := os.Getenv(cfg.AtmosProBaseUrlEnvVarName)
 	if baseURL == "" {
@@ -66,7 +66,7 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 	return req, nil
 }
 
-// UploadAffectedStacks uploads information about affected stacks
+// UploadAffectedStacks uploads information about affected stacks.
 func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
@@ -92,6 +92,38 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest
 		return fmt.Errorf("failed to upload stacks, status: %s", resp.Status)
 	}
 	c.Logger.Trace(fmt.Sprintf("\nUploaded the affected components and stacks to %s", url))
+
+	return nil
+}
+
+// UploadDriftDetection uploads drift detection data to the API.
+func (c *AtmosProAPIClient) UploadDriftDetection(dto *DriftDetectionUploadRequest) error {
+	url := fmt.Sprintf("%s/%s/drift-detection", c.BaseURL, c.BaseAPIEndpoint)
+
+	data, err := utils.ConvertToJSON(dto)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	c.Logger.Debug(fmt.Sprintf("Uploading drift detection DTO: %s", data))
+
+	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
+	if err != nil {
+		return fmt.Errorf("failed to create authenticated request: %w", err)
+	}
+
+	c.Logger.Trace(fmt.Sprintf("\nUploading drift detection results to %s", url))
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("failed to upload drift detection results, status: %s", resp.Status)
+	}
+	c.Logger.Trace(fmt.Sprintf("\nUploaded drift detection results to %s", url))
 
 	return nil
 }
