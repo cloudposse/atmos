@@ -81,7 +81,8 @@ func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
 	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "../../tests/fixtures/scenarios/complete",
 	// which will be wrong for the remote repo which is cloned into a temp dir.
 	// Set the correct base path for the cloned remote repo
-	atmosConfig.BasePath = filepath.ToSlash("./tests/fixtures/scenarios/complete")
+	// Convert forward-slash literal to native separators
+	atmosConfig.BasePath = filepath.FromSlash("./tests/fixtures/scenarios/complete")
 
 	err = e.ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 		atmosConfig,
