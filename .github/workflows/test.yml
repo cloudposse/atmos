@@ -535,3 +535,4 @@ jobs:
       publish: false
       format: binary
     secrets: inherit
+
