@@ -3,6 +3,11 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+
 	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -10,10 +15,6 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	cp "github.com/otiai10/copy"
-	"os"
-	"path/filepath"
-	"reflect"
-	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/git"
