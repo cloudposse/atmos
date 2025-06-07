@@ -178,7 +178,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 
 	/*
 		Do not use `defer removeTempDir(tempDir)` right after the temp dir is created, instead call `removeTempDir(tempDir)` at the end of the main function:
-		 - On Windows, there are race conditions
+		 - On Windows, there are race conditions when using `defer` and goroutines
 		 - We defer removeTempDir(tempDir) right after creating the temp dir
 		 - We `git clone` a repo into it
 		 - We then start goroutines that read files from the temp dir
