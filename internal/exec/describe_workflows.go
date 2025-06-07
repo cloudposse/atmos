@@ -34,7 +34,7 @@ func NewDescribeWorkflowsExec() DescribeWorkflowsExec {
 	}
 }
 
-// ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command
+// ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command.
 func (d *describeWorkflowsExec) Execute(atmosConfig *schema.AtmosConfiguration, describeWorkflowsArgs *DescribeWorkflowsArgs) error {
 	outputType := describeWorkflowsArgs.OutputType
 	query := describeWorkflowsArgs.Query

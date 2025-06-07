@@ -50,44 +50,49 @@ func init() {
 }
 
 func flagsToDescribeWorkflowsArgs(flags *pflag.FlagSet, describe *exec.DescribeWorkflowsArgs) error {
-	var err error
-	flagsKeyValue := map[string]any{
-		"format": &describe.Format,
-		"output": &describe.OutputType,
-		"query":  &describe.Query,
+	if err := setStringFlagIfChanged(flags, "format", &describe.Format); err != nil {
+		return err
+	}
+	if err := setStringFlagIfChanged(flags, "output", &describe.OutputType); err != nil {
+		return err
+	}
+	if err := setStringFlagIfChanged(flags, "query", &describe.Query); err != nil {
+		return err
 	}
 
-	for k := range flagsKeyValue {
-		if !flags.Changed(k) {
-			continue
+	if err := validateAndSetDefaults(describe); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func setStringFlagIfChanged(flags *pflag.FlagSet, name string, target *string) error {
+	if flags.Changed(name) {
+		val, err := flags.GetString(name)
+		if err != nil {
+			return err
 		}
-		switch v := flagsKeyValue[k].(type) {
-		case *string:
-			*v, err = flags.GetString(k)
-		default:
-			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
-		}
-		checkFlagError(err)
+		*target = val
 	}
-	format := describe.Format
-	outputType := describe.OutputType
+	return nil
+}
 
-	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
-	}
+var ErrInvalidOutputType = fmt.Errorf("invalid output type specified. Valid values are 'list', 'map', and 'all'")
+var ErrInvalidFormat = fmt.Errorf("invalid format specified. Valid values are 'yaml' and 'json'")
 
-	if format == "" {
-		format = "yaml"
+func validateAndSetDefaults(describe *exec.DescribeWorkflowsArgs) error {
+	if describe.Format == "" {
+		describe.Format = "yaml"
+	} else if describe.Format != "yaml" && describe.Format != "json" {
+		return ErrInvalidFormat
 	}
 
-	if outputType != "" && outputType != "list" && outputType != "map" && outputType != "all" {
-		return fmt.Errorf("invalid '--output' flag '%s'. Valid values are 'list' (default), 'map' and 'all'", outputType)
+	if describe.OutputType == "" {
+		describe.OutputType = "list"
+	} else if describe.OutputType != "list" && describe.OutputType != "map" && describe.OutputType != "all" {
+		return ErrInvalidOutputType
 	}
 
-	if outputType == "" {
-		outputType = "list"
-	}
-	describe.Format = format
-	describe.OutputType = outputType
 	return nil
 }
