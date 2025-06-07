@@ -71,12 +71,12 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// https://github.com/src-d/go-git/issues/604
 
 	// Create a temp dir to clone the remote repo to
-	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+	tempDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
 
-	defer removeTempDir(tempDir)
+	// defer removeTempDir(tempDir)
 
 	log.Debug("Cloning repo into temp directory", "repo", localRepoInfo.RepoUrl, "dir", tempDir)
 
