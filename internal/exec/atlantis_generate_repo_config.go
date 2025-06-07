@@ -412,7 +412,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 					// 'stacks' filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, stackSlug) {
-
 					// Generate an atlantis project for the component in the stack
 					// Replace the context tokens
 					var whenModified []string
