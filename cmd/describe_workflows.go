@@ -78,8 +78,10 @@ func setStringFlagIfChanged(flags *pflag.FlagSet, name string, target *string) e
 	return nil
 }
 
-var ErrInvalidOutputType = fmt.Errorf("invalid output type specified. Valid values are 'list', 'map', and 'all'")
-var ErrInvalidFormat = fmt.Errorf("invalid format specified. Valid values are 'yaml' and 'json'")
+var (
+	ErrInvalidOutputType = fmt.Errorf("invalid output type specified. Valid values are 'list', 'map', and 'all'")
+	ErrInvalidFormat     = fmt.Errorf("invalid format specified. Valid values are 'yaml' and 'json'")
+)
 
 func validateAndSetDefaults(describe *exec.DescribeWorkflowsArgs) error {
 	if describe.Format == "" {
