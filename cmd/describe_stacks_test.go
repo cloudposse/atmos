@@ -123,40 +123,4 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.describe, "Describe struct does not match expected")
 		})
 	}
-
-	// Test panic for unsupported type
-	t.Run("Unsupported flag type", func(t *testing.T) {
-		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-		fs.Int("invalid", 0, "Invalid flag") // Int type is not supported
-		fs.Set("invalid", "42")
-
-		defer func() {
-			if r := recover(); r != nil {
-				expected := "unsupported type *int for flag invalid"
-				if fmt.Sprintf("%v", r) != expected {
-					t.Errorf("Expected panic message %q, got %v", expected, r)
-				}
-			} else {
-				t.Error("Expected panic but none occurred")
-			}
-		}()
-
-		// Override flagsKeyValue to include an int type
-		originalFlagsKeyValue := map[string]any{
-			"invalid": new(int),
-		}
-		for k, v := range originalFlagsKeyValue {
-			if !fs.Changed(k) {
-				continue
-			}
-			switch v := v.(type) {
-			case *string:
-				*v, _ = fs.GetString(k)
-			case *bool:
-				*v, _ = fs.GetBool(k)
-			default:
-				panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
-			}
-		}
-	})
 }
