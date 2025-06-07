@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -18,21 +19,47 @@ var describeStacksCmd = &cobra.Command{
 	Long:               "This command shows the configuration details for Atmos stacks and the components within those stacks.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
+		checkAtmosConfig,
+		exec.ProcessCommandLineArgs,
+		cfg.InitCliConfig, exec.ValidateStacks,
+		setCliArgsForDescribeStackCli,
+		exec.NewDescribeStacksExec(),
+	}),
+}
+
+type getRunnableDescribeStacksCmdProps struct {
+	checkAtmosConfig       func(opts ...AtmosValidateOption)
+	processCommandLineArgs func(
+		componentType string,
+		cmd *cobra.Command,
+		args []string,
+		additionalArgsAndFlags []string,
+	) (schema.ConfigAndStacksInfo, error)
+	initCliConfig                 func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
+	validateStacks                func(atmosConfig schema.AtmosConfiguration) error
+	setCliArgsForDescribeStackCli func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error
+	newDescribeStacksExec         exec.DescribeStacksExec
+}
+
+func getRunnableDescribeStacksCmd(
+	g getRunnableDescribeStacksCmdProps,
+) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
 		// Check Atmos configuration
-		checkAtmosConfig()
-		info, err := exec.ProcessCommandLineArgs("", cmd, args, nil)
+		g.checkAtmosConfig()
+		info, err := g.processCommandLineArgs("", cmd, args, nil)
 		printErrorAndExit(err)
-		atmosConfig, err := cfg.InitCliConfig(info, true)
+		atmosConfig, err := g.initCliConfig(info, true)
 		printErrorAndExit(err)
-		err = exec.ValidateStacks(atmosConfig)
+		err = g.validateStacks(atmosConfig)
 		printErrorAndExit(err)
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
 		printErrorAndExit(err)
-		err = exec.NewDescribeStacksExec().Execute(atmosConfig, describe)
+		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
 		printErrorAndExit(err)
-	},
+	}
 }
 
 func printErrorAndExit(err error) {
@@ -67,17 +94,20 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		case *bool:
 			*v, err = flags.GetBool(k)
 		case *[]string:
-			*v, err = flags.GetStringArray(k)
+			*v, err = flags.GetStringSlice(k)
 		default:
 			panic(fmt.Sprintf("unsupported type %T for flag %s", v, k))
 		}
 		checkFlagError(err)
 	}
+	return validateFormat(describe)
+}
+
+func validateFormat(describe *exec.DescribeStacksArgs) error {
 	format := describe.Format
 	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
+		return exec.ErrInvalidFormat
 	}
-
 	if format == "" {
 		format = "yaml"
 	}

@@ -3,6 +3,7 @@ package exec
 import (
 	"testing"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -15,17 +16,21 @@ func TestDescribeAffected(t *testing.T) {
 	d.IsTTYSupportForStdout = func() bool {
 		return false
 	}
-	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig schema.AtmosConfiguration, targetRefPath string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
-	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig schema.AtmosConfiguration, ref, sha string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
-		return []schema.Affected{}, nil, nil, "", nil
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, verbose, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		return []schema.Affected{
+			{
+				Stack: "test-stack",
+			},
+		}, nil, nil, "", nil
 	}
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -59,4 +64,49 @@ func TestDescribeAffected(t *testing.T) {
 		Format: "yaml",
 	})
 	assert.NoError(t, err)
+	mockPager.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil)
+	err = d.Execute(&DescribeAffectedCmdArgs{
+		Format:   "json",
+		RepoPath: "repo/path",
+	})
+	assert.NoError(t, err)
+	err = d.Execute(&DescribeAffectedCmdArgs{
+		Format: "json",
+		Query:  ".0.stack",
+	})
+	assert.NoError(t, err)
+}
+
+func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/atmos-describe-affected"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	// We are using `atmos.yaml` from this dir. This `atmos.yaml` has set base_path: "./",
+	// which will be wrong for the remote repo which is cloned into a temp dir.
+	// Set the correct base path for the cloned remote repo
+	atmosConfig.BasePath = "./tests/fixtures/scenarios/atmos-describe-affected"
+
+	// Point to the same local repository
+	// This will compare this local repository with itself as the remote target, which should result in an empty `affected` list
+	repoPath := "../../"
+
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		false,
+		true,
+		"",
+		false,
+		false,
+		nil,
+	)
+	assert.Nil(t, err)
+
+	// The `affected` list should be empty, since the local repo is compared with itself.
+	assert.Equal(t, 0, len(affected))
 }

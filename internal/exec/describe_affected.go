@@ -14,7 +14,7 @@ import (
 )
 
 type DescribeAffectedCmdArgs struct {
-	CLIConfig                   schema.AtmosConfiguration
+	CLIConfig                   *schema.AtmosConfiguration
 	CloneTargetRef              bool
 	Format                      string
 	IncludeDependents           bool
@@ -43,7 +43,7 @@ type DescribeAffectedExec interface {
 type describeAffectedExec struct {
 	atmosConfig                               *schema.AtmosConfiguration
 	executeDescribeAffectedWithTargetRepoPath func(
-		atmosConfig schema.AtmosConfiguration,
+		atmosConfig *schema.AtmosConfiguration,
 		targetRefPath string,
 		verbose bool,
 		includeSpaceliftAdminStacks bool,
@@ -54,7 +54,7 @@ type describeAffectedExec struct {
 		skip []string,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
-		atmosConfig schema.AtmosConfiguration,
+		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
 		sshKeyPath string,
@@ -68,7 +68,7 @@ type describeAffectedExec struct {
 		skip []string,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
-		atmosConfig schema.AtmosConfiguration,
+		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
 		verbose bool,
@@ -80,7 +80,7 @@ type describeAffectedExec struct {
 		skip []string,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
-		atmosConfig schema.AtmosConfiguration,
+		atmosConfig *schema.AtmosConfiguration,
 		affected *[]schema.Affected,
 		includeSettings bool,
 	) error
@@ -181,7 +181,7 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 			return err
 		}
 
-		err = viewWithScroll(&viewWithScrollProps{pager.New(), term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
+		err = viewWithScroll(&viewWithScrollProps{d.pageCreator, term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
 		if err != nil {
 			return err
 		}

@@ -37,7 +37,7 @@ func getRunnableDescribeAffectedCmd(
 		checkAtmosConfig()
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		checkErrorAndExit(err)
-		err = newDescribeAffectedExec(&props.CLIConfig).Execute(&props)
+		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
 		checkErrorAndExit(err)
 	}
 }
@@ -81,16 +81,14 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
 		return exec.DescribeAffectedCmdArgs{}, err
 	}
-
 	if err := exec.ValidateStacks(atmosConfig); err != nil {
 		return exec.DescribeAffectedCmdArgs{}, err
 	}
-
 	// Process flags
 	flags := cmd.Flags()
 
 	result := exec.DescribeAffectedCmdArgs{
-		CLIConfig: atmosConfig,
+		CLIConfig: &atmosConfig,
 	}
 	setDescribeAffectedFlagValueInCliArgs(flags, &result)
 

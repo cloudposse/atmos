@@ -11,7 +11,7 @@ import (
 
 func TestDescribeStacksExec(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	d := &DescribeStacksExec{
+	d := &describeStacksExec{
 		pageCreator: pager.NewMockPageCreator(ctrl),
 		isTTYSupportForStdout: func() bool {
 			return false
@@ -25,6 +25,6 @@ func TestDescribeStacksExec(t *testing.T) {
 			}, nil
 		},
 	}
-	err := d.Execute(schema.AtmosConfiguration{}, &DescribeStacksArgs{})
+	err := d.Execute(&schema.AtmosConfiguration{}, &DescribeStacksArgs{})
 	assert.NoError(t, err)
 }

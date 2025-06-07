@@ -1,143 +1,145 @@
 package exec
 
 import (
-	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/pager"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Mock interfaces for dependencies
-//go:generate mockgen -destination=mock_pager.go -package=exec github.com/cloudposse/atmos/pkg/pager PageCreator
-//go:generate mockgen -destination=mock_term.go -package=exec github.com/cloudposse/atmos/internal/tui/templates/term IsTTYSupportForStdout
+// setupTestWorkflowEnvironment creates a temporary test environment with the necessary directory structure and configuration files.
+// It returns the temporary directory path and a cleanup function.
+func setupTestWorkflowEnvironment(t *testing.T) (string, func()) {
+	tmpDir, err := os.MkdirTemp("", "workflow_test")
+	require.NoError(t, err)
 
-func TestDescribeWorkflowsExec_Execute(t *testing.T) {
-	// Setup mock controller
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	atmosConfig := &schema.AtmosConfiguration{}
-	// Create mocks
-	mockPagerCreator := pager.NewMockPageCreator(ctrl)
+	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
+	err = os.MkdirAll(workflowsDir, 0o755)
+	require.NoError(t, err)
 
-	// Mock data
-	describeWorkflowsList := []schema.DescribeWorkflowsItem{
-		{File: "workflow1.yaml"},
-		{Workflow: "workflow1"},
-	}
-	describeWorkflowsMap := map[string][]string{
-		"stack1": {"workflow1", "workflow2"},
-	}
-	describeWorkflowsAll := map[string]schema.WorkflowManifest{
-		"workflow1": {Name: "workflow1", Workflows: schema.WorkflowConfig{}},
-	}
-	query := ".workflow1"
-	format := "yaml"
+	atmosConfig := `
+base_path: ""
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+workflows:
+  base_path: "stacks/workflows"
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
+	require.NoError(t, err)
 
-	// Define test cases
+	cleanup := func() {
+		os.RemoveAll(tmpDir)
+	}
+	return tmpDir, cleanup
+}
+
+// createTestWorkflowFile creates a workflow file in the specified directory with the given content.
+func createTestWorkflowFile(t *testing.T, dir string, filename string, content string) {
+	workflowPath := filepath.Join(dir, filename)
+	err := os.WriteFile(workflowPath, []byte(content), 0o644)
+	require.NoError(t, err)
+}
+
+// initTestConfig initializes the Atmos configuration for testing.
+func initTestConfig(t *testing.T) schema.AtmosConfiguration {
+	config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	return config
+}
+
+func TestExecuteDescribeWorkflows(t *testing.T) {
+	// Setup test environment
+	tmpDir, cleanup := setupTestWorkflowEnvironment(t)
+	defer cleanup()
+
+	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
+
+	// Create test workflow files
+	workflow1Content := `
+workflows:
+  test-workflow-1:
+    description: "Test workflow 1"
+    steps:
+      - name: "step1"
+        type: "shell"
+        command: "echo 'Step 1'"
+`
+	createTestWorkflowFile(t, workflowsDir, "workflow1.yaml", workflow1Content)
+
+	workflow2Content := `
+workflows:
+  test-workflow-2:
+    description: "Test workflow 2"
+    steps:
+      - name: "step1"
+        type: "shell"
+        command: "echo 'Step 1'"
+`
+	createTestWorkflowFile(t, workflowsDir, "workflow2.yaml", workflow2Content)
+
+	// Initialize Atmos config
+	config := initTestConfig(t)
+
+	// Update config with the correct base path
+	config.BasePath = tmpDir
+	config.Workflows.BasePath = "stacks/workflows"
+
 	tests := []struct {
-		name                     string
-		args                     DescribeWorkflowsArgs
-		executeWorkflowsResult   []schema.DescribeWorkflowsItem
-		executeWorkflowsMap      map[string][]string
-		executeWorkflowsAll      map[string]schema.WorkflowManifest
-		executeWorkflowsErr      error
-		queryResult              interface{}
-		queryErr                 error
-		printOrWriteErr          error
-		isTTYSupport             bool
-		expectedErr              error
-		expectedPrintOrWriteData interface{}
+		name          string
+		config        schema.AtmosConfiguration
+		wantErr       bool
+		errMsg        string
+		wantWorkflows int
 	}{
 		{
-			name: "Successful execution with list output",
-			args: DescribeWorkflowsArgs{
-				OutputType: "list",
-				Format:     format,
-				Query:      "",
-			},
-			executeWorkflowsResult:   describeWorkflowsList,
-			executeWorkflowsMap:      describeWorkflowsMap,
-			executeWorkflowsAll:      describeWorkflowsAll,
-			executeWorkflowsErr:      nil,
-			isTTYSupport:             true,
-			expectedPrintOrWriteData: describeWorkflowsList,
-			expectedErr:              nil,
+			name:          "valid workflows",
+			config:        config,
+			wantErr:       false,
+			wantWorkflows: 2,
 		},
 		{
-			name: "Successful execution with map output",
-			args: DescribeWorkflowsArgs{
-				OutputType: "map",
-				Format:     format,
-				Query:      "",
+			name: "missing workflows base path",
+			config: schema.AtmosConfiguration{
+				Workflows: schema.Workflows{
+					BasePath: "",
+				},
 			},
-			executeWorkflowsResult:   describeWorkflowsList,
-			executeWorkflowsMap:      describeWorkflowsMap,
-			executeWorkflowsAll:      describeWorkflowsAll,
-			executeWorkflowsErr:      nil,
-			isTTYSupport:             true,
-			expectedPrintOrWriteData: describeWorkflowsMap,
-			expectedErr:              nil,
+			wantErr: true,
+			errMsg:  "'workflows.base_path' must be configured in 'atmos.yaml'",
 		},
 		{
-			name: "Successful execution with default output and query",
-			args: DescribeWorkflowsArgs{
-				OutputType: "",
-				Format:     format,
-				Query:      query,
+			name: "nonexistent workflows directory",
+			config: schema.AtmosConfiguration{
+				Workflows: schema.Workflows{
+					BasePath: "nonexistent",
+				},
 			},
-			executeWorkflowsResult:   describeWorkflowsList,
-			executeWorkflowsMap:      describeWorkflowsMap,
-			executeWorkflowsAll:      describeWorkflowsAll,
-			executeWorkflowsErr:      nil,
-			isTTYSupport:             true,
-			expectedPrintOrWriteData: map[string]interface{}{"Steps": []interface{}{map[string]interface{}{"Command": "step1"}}},
-			expectedErr:              nil,
-		},
-		{
-			name: "Error in executeDescribeWorkflows",
-			args: DescribeWorkflowsArgs{
-				OutputType: "list",
-				Format:     format,
-				Query:      "",
-			},
-			executeWorkflowsErr: errors.New("failed to execute workflows"),
-			isTTYSupport:        true,
-			expectedErr:         errors.New("failed to execute workflows"),
+			wantErr: true,
+			errMsg:  "the workflow directory 'nonexistent' does not exist",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup mock functions
-			executeDescribeWorkflows := func(_ schema.AtmosConfiguration) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
-				return tt.executeWorkflowsResult, tt.executeWorkflowsMap, tt.executeWorkflowsAll, tt.executeWorkflowsErr
-			}
+			listResult, mapResult, allResult, err := ExecuteDescribeWorkflows(tt.config)
 
-			printOrWriteToFile := func(_ *schema.AtmosConfiguration, _, _ string, data interface{}) error {
-				assert.Equal(t, tt.expectedPrintOrWriteData, data, "Unexpected data passed to printOrWriteToFile")
-				return tt.printOrWriteErr
-			}
-			mockPagerCreator.EXPECT().Run(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-			// Setup describeWorkflowsExec with mocks
-			d := &describeWorkflowsExec{
-				printOrWriteToFile:       printOrWriteToFile,
-				IsTTYSupportForStdout:    func() bool { return tt.isTTYSupport },
-				executeDescribeWorkflows: executeDescribeWorkflows,
-				pagerCreator:             mockPagerCreator,
-			}
-
-			// Execute the method
-			err := d.Execute(atmosConfig, &tt.args)
-
-			// Assert results
-			if tt.expectedErr != nil {
-				assert.Error(t, err, "Expected an error")
-				assert.EqualError(t, err, tt.expectedErr.Error(), "Unexpected error message")
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
 			} else {
-				assert.NoError(t, err, "Unexpected error")
+				assert.NoError(t, err)
+				assert.Len(t, listResult, tt.wantWorkflows)
+				assert.Len(t, mapResult, tt.wantWorkflows)
+				assert.Len(t, allResult, tt.wantWorkflows)
 			}
 		})
 	}
