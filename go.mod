@@ -27,7 +27,7 @@ require (
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.3.0
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
-	github.com/go-git/go-git/v5 v5.16.0
+	github.com/go-git/go-git/v5 v5.16.1
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-yaml v1.18.0
 	github.com/gofrs/flock v0.12.1

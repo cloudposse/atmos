@@ -1,11 +1,11 @@
 package exec
 
 import (
-	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -500,14 +500,14 @@ specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` se
 	fileName := outputPath
 	if fileName == "" {
 		fileName = atmosConfig.Integrations.Atlantis.Path
-		u.LogDebug(fmt.Sprintf("Using 'atlantis.path: %s' from 'atmos.yaml'", fileName))
+		log.Debug("Using 'atlantis.path' from 'atmos.yaml'", "path", fileName)
 	} else {
-		u.LogDebug(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
+		log.Debug("Using '--output-path' command-line argument", "path", fileName)
 	}
 
 	// If the path is empty, dump to 'stdout'
 	if fileName != "" {
-		u.LogDebug(fmt.Sprintf("Writing atlantis repo config file to '%s'\n", fileName))
+		log.Debug("Writing Atlantis repo config", "file", fileName)
 
 		fileAbsolutePath, err := filepath.Abs(fileName)
 		if err != nil {
