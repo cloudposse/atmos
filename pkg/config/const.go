@@ -91,7 +91,7 @@ const (
 	AtmosProTokenEnvVarName       = "ATMOS_PRO_TOKEN"
 	AtmosProWorkspaceIDEnvVarName = "ATMOS_PRO_WORKSPACE_ID"
 	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
-	AtmosProDefaultEndpoint       = "api"
+	AtmosProDefaultEndpoint       = "api/v1"
 
 	TerraformDefaultWorkspace = "default"
 
