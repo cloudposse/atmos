@@ -93,7 +93,7 @@ func TestExecuteAtlantisGenerateRepoConfigAffectedOnly(t *testing.T) {
 		"",
 		"",
 		false,
-		true,
+		false,
 		"",
 	)
 
