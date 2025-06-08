@@ -9,6 +9,8 @@ import (
 	giturl "github.com/kubescape/go-git-url"
 
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -212,7 +214,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return err
 	}
 
-	req := pro.AffectedStacksUploadRequest{
+	req := dtos.UploadAffectedStacksRequest{
 		HeadSHA:   headHead.Hash().String(),
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
