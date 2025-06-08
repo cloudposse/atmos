@@ -6,9 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
-	"time"
 
 	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5"
@@ -71,12 +69,10 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	// https://github.com/src-d/go-git/issues/604
 
 	// Create a temp dir to clone the remote repo to
-	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+	tempDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
-
-	defer removeTempDir(tempDir)
 
 	log.Debug("Cloning repo into temp directory", "repo", localRepoInfo.RepoUrl, "dir", tempDir)
 
@@ -178,6 +174,17 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		return nil, nil, nil, "", err
 	}
 
+	/*
+		Do not use `defer removeTempDir(tempDir)` right after the temp dir is created, instead call `removeTempDir(tempDir)` at the end of the main function:
+		 - On Windows, there are race conditions when using `defer` and goroutines
+		 - We defer removeTempDir(tempDir) right after creating the temp dir
+		 - We `git clone` a repo into it
+		 - We then start goroutines that read files from the temp dir
+		 - Meanwhile, when the main function exits, defer removeTempDir(...) runs
+		 - On Windows, open file handles in goroutines make directory deletion flaky or fail entirely (and possibly prematurely delete files while goroutines are mid-read)
+	*/
+	removeTempDir(tempDir)
+
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
 }
 
@@ -210,12 +217,10 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	}
 
 	// Create a temp dir for the target ref
-	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
+	tempDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
-
-	defer removeTempDir(tempDir)
 
 	// Copy the local repo into the temp directory
 	log.Debug("Copying the local repo into temp directory", "dir", tempDir)
@@ -334,6 +339,17 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
+
+	/*
+		Do not use `defer removeTempDir(tempDir)` right after the temp dir is created, instead call `removeTempDir(tempDir)` at the end of the main function:
+		 - On Windows, there are race conditions when using `defer` and goroutines
+		 - We defer removeTempDir(tempDir) right after creating the temp dir
+		 - We `git clone` a repo into it
+		 - We then start goroutines that read files from the temp dir
+		 - Meanwhile, when the main function exits, defer removeTempDir(...) runs
+		 - On Windows, open file handles in goroutines make directory deletion flaky or fail entirely (and possibly prematurely delete files while goroutines are mid-read)
+	*/
+	removeTempDir(tempDir)
 
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
 }
