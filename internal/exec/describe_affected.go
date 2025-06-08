@@ -193,10 +193,12 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	log.Debug("\nAffected components and stacks: \n")
+
 	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
 	if err != nil {
 		return err
 	}
+
 	if !args.Upload {
 		return nil
 	}
@@ -206,10 +208,6 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return err
 	}
 	logger, err := l.NewLoggerFromCliConfig(*d.atmosConfig)
-	if err != nil {
-		return err
-	}
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
 	if err != nil {
 		return err
 	}
@@ -223,8 +221,15 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		RepoHost:  gitURL.GetHostName(),
 		Stacks:    affected,
 	}
+	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	return apiClient.UploadAffectedStacks(req)
+	log.Debug("Creating API client")
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
+	if err != nil {
+		return err
+	}
+
+	return apiClient.UploadAffectedStacks(&req)
 }
 
 type viewWithScrollProps struct {

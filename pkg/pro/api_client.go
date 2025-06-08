@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
@@ -29,7 +30,7 @@ var (
 	ErrFailedToUnlockStack         = errors.New("an error occurred while attempting to unlock stack")
 	ErrOIDCWorkspaceIDRequired     = errors.New("workspace ID environment variable is required for OIDC authentication")
 	ErrOIDCTokenExchangeFailed     = errors.New("failed to exchange OIDC token for Atmos token")
-	ErrOIDCAuthFailedNoToken       = errors.New("OIDC authentication failed and API token is not set")
+	ErrOIDCAuthFailedNoToken       = errors.New("OIDC authentication failed")
 	ErrNotInGitHubActions          = errors.New("not running in GitHub Actions or missing OIDC token environment variables")
 	ErrFailedToGetOIDCToken        = errors.New("failed to get OIDC token")
 	ErrFailedToDecodeOIDCResponse  = errors.New("failed to decode OIDC token response")
@@ -68,22 +69,26 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, err
 	if baseURL == "" {
 		baseURL = cfg.AtmosProDefaultBaseUrl
 	}
+	log.Debug("Using baseURL", "baseURL", baseURL)
 
 	baseAPIEndpoint := viper.GetString(cfg.AtmosProEndpointEnvVarName)
 	if baseAPIEndpoint == "" {
 		baseAPIEndpoint = cfg.AtmosProDefaultEndpoint
 	}
+	log.Debug("Using baseAPIEndpoint", "baseAPIEndpoint", baseAPIEndpoint)
 
 	// First, check if the API key is set via environment variable
 	apiToken := viper.GetString(cfg.AtmosProTokenEnvVarName)
 	if apiToken != "" {
+		log.Debug("Creating API client with API token from environment variable")
 		return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
 	}
 
 	// If API key is not set, attempt to use GitHub OIDC token exchange
 	oidcToken, err := getGitHubOIDCToken()
 	if err != nil {
-		return nil, fmt.Errorf(ErrFormatString, ErrOIDCAuthFailedNoToken, cfg.AtmosProTokenEnvVarName)
+		log.Debug("Error while getting GitHub OIDC token", "err", err)
+		return nil, fmt.Errorf("error while getting GitHub OIDC token: %w", err)
 	}
 
 	// Get workspace ID from environment
@@ -95,7 +100,7 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, err
 	// Exchange OIDC token for Atmos token
 	apiToken, err = exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrOIDCTokenExchangeFailed, err)
+		return nil, fmt.Errorf(ErrFormatString, ErrOIDCTokenExchangeFailed, err)
 	}
 
 	return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
@@ -113,11 +118,11 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 	return req, nil
 }
 
-// UploadAffectedStacks uploads information about affected stacks
-func (c *AtmosProAPIClient) UploadAffectedStacks(dto dtos.UploadAffectedStacksRequest) error {
+// UploadAffectedStacks uploads information about affected stacks.
+func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
 	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
-	data, err := utils.ConvertToJSON(dto)
+	data, err := utils.ConvertToJSON(*dto)
 	if err != nil {
 		return fmt.Errorf(ErrFormatString, ErrFailedToMarshalPayload, err)
 	}
@@ -247,9 +252,10 @@ func getGitHubOIDCToken() (string, error) {
 	}
 
 	// Add audience parameter to the request URL
-	requestURL = fmt.Sprintf("%s&audience=atmos-pro.com", requestURL)
+	requestOIDCTokenURL := fmt.Sprintf("%s&audience=atmos-pro.com", requestURL)
+	log.Debug("requestOIDCTokenURL", "requestOIDCTokenURL", requestOIDCTokenURL)
 
-	req, err := http.NewRequest("GET", requestURL, nil)
+	req, err := http.NewRequest("GET", requestOIDCTokenURL, nil)
 	if err != nil {
 		return "", fmt.Errorf(ErrFormatString, ErrFailedToCreateRequest, err)
 	}
@@ -258,11 +264,13 @@ func getGitHubOIDCToken() (string, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		log.Debug("got error", "err", err)
 		return "", fmt.Errorf(ErrFormatString, ErrFailedToGetOIDCToken, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Debug("got error", "resp.StatusCode", resp.StatusCode)
 		return "", fmt.Errorf(ErrFormatString, ErrFailedToGetOIDCToken, resp.Status)
 	}
 
