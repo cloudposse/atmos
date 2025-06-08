@@ -11,6 +11,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/viper"
 )
@@ -37,7 +38,8 @@ var (
 )
 
 const (
-	ErrFormatString = "%w: %s"
+	ErrFormatString        = "%w: %s"
+	DefaultHTTPTimeoutSecs = 30
 )
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.
@@ -49,18 +51,18 @@ type AtmosProAPIClient struct {
 	Logger          *logger.Logger
 }
 
-// NewAtmosProAPIClient creates a new instance of AtmosProAPIClient
+// NewAtmosProAPIClient creates a new instance of AtmosProAPIClient.
 func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiToken string) *AtmosProAPIClient {
 	return &AtmosProAPIClient{
 		Logger:          logger,
 		BaseURL:         baseURL,
 		BaseAPIEndpoint: baseAPIEndpoint,
 		APIToken:        apiToken,
-		HTTPClient:      &http.Client{Timeout: 30 * time.Second},
+		HTTPClient:      &http.Client{Timeout: DefaultHTTPTimeoutSecs * time.Second},
 	}
 }
 
-// NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables
+// NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables.
 func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, error) {
 	baseURL := viper.GetString(cfg.AtmosProBaseUrlEnvVarName)
 	if baseURL == "" {
@@ -112,7 +114,7 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 }
 
 // UploadAffectedStacks uploads information about affected stacks
-func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest) error {
+func (c *AtmosProAPIClient) UploadAffectedStacks(dto dtos.UploadAffectedStacksRequest) error {
 	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
 	data, err := utils.ConvertToJSON(dto)
@@ -141,39 +143,39 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto AffectedStacksUploadRequest
 	return nil
 }
 
-// LockStack locks a specific stack
-func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, error) {
+// LockStack locks a specific stack..
+func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
 	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
 	}
 
 	// Create an instance of the struct
-	var responseData LockStackResponse
+	var responseData dtos.LockStackResponse
 
 	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		return LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
 	}
 
 	if !responseData.Success {
@@ -182,45 +184,45 @@ func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, 
 			context += fmt.Sprintf("  %s: %v\n", key, value)
 		}
 
-		return LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToLockStack, responseData.ErrorMessage)
+		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToLockStack, responseData.ErrorMessage)
 	}
 
 	return responseData, nil
 }
 
-// UnlockStack unlocks a specific stack
-func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResponse, error) {
+// UnlockStack unlocks a specific stack.
+func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
 	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "DELETE", url, bytes.NewBuffer(data))
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
 	}
 
 	// Create an instance of the struct
-	var responseData UnlockStackResponse
+	var responseData dtos.UnlockStackResponse
 
 	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		return UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
 	}
 
 	if !responseData.Success {
@@ -229,7 +231,7 @@ func (c *AtmosProAPIClient) UnlockStack(dto UnlockStackRequest) (UnlockStackResp
 			context += fmt.Sprintf("  %s: %v\n", key, value)
 		}
 
-		return UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnlockStack, responseData.ErrorMessage)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnlockStack, responseData.ErrorMessage)
 	}
 
 	return responseData, nil
@@ -245,7 +247,7 @@ func getGitHubOIDCToken() (string, error) {
 	}
 
 	// Add audience parameter to the request URL
-	requestURL = fmt.Sprintf("%s&audience=app.cloudposse.com", requestURL)
+	requestURL = fmt.Sprintf("%s&audience=atmos-pro.com", requestURL)
 
 	req, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
@@ -264,7 +266,7 @@ func getGitHubOIDCToken() (string, error) {
 		return "", fmt.Errorf(ErrFormatString, ErrFailedToGetOIDCToken, resp.Status)
 	}
 
-	var tokenResp GitHubOIDCResponse
+	var tokenResp dtos.GetGitHubOIDCResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return "", fmt.Errorf(ErrFormatString, ErrFailedToDecodeOIDCResponse, err)
 	}
@@ -276,7 +278,7 @@ func getGitHubOIDCToken() (string, error) {
 func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID string) (string, error) {
 	url := fmt.Sprintf("%s/%s/auth/github-oidc", baseURL, baseAPIEndpoint)
 
-	reqBody := GitHubOIDCAuthRequest{
+	reqBody := dtos.ExchangeGitHubOIDCTokenRequest{
 		Token:       oidcToken,
 		WorkspaceID: workspaceID,
 	}
@@ -303,10 +305,14 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 		return "", fmt.Errorf(ErrFormatString, ErrFailedToExchangeOIDCToken, resp.Status)
 	}
 
-	var tokenResp GitHubOIDCAuthResponse
+	var tokenResp dtos.ExchangeGitHubOIDCTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return "", fmt.Errorf(ErrFormatString, ErrFailedToDecodeTokenResponse, err)
 	}
 
-	return tokenResp.Token, nil
+	if !tokenResp.Success {
+		return "", fmt.Errorf(ErrFormatString, ErrFailedToExchangeOIDCToken, tokenResp.ErrorMessage)
+	}
+
+	return tokenResp.Data.Token, nil
 }
