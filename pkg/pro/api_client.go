@@ -36,6 +36,7 @@ var (
 	ErrFailedToDecodeOIDCResponse  = errors.New("failed to decode OIDC token response")
 	ErrFailedToExchangeOIDCToken   = errors.New("failed to exchange OIDC token")
 	ErrFailedToDecodeTokenResponse = errors.New("failed to decode token response")
+	ErrFailedToGetGitHubOIDCToken  = errors.New("failed to get GitHub OIDC token")
 )
 
 const (
@@ -88,7 +89,7 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger, atmosConfig *schema.Atmo
 	oidcToken, err := getGitHubOIDCToken(atmosConfig.Settings.Pro.GithubOIDC)
 	if err != nil {
 		log.Debug("Error while getting GitHub OIDC token", "err", err)
-		return nil, fmt.Errorf("error while getting GitHub OIDC token: %w", err)
+		return nil, fmt.Errorf(ErrFormatString, ErrFailedToGetGitHubOIDCToken, err)
 	}
 
 	// Get workspace ID from environment
@@ -148,7 +149,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 	return nil
 }
 
-// LockStack locks a specific stack
+// LockStack locks a specific stack.
 func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
 	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
