@@ -13,8 +13,8 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -64,35 +64,35 @@ func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiTo
 }
 
 // NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables.
-func NewAtmosProAPIClientFromEnv(logger *logger.Logger) (*AtmosProAPIClient, error) {
-	baseURL := viper.GetString(cfg.AtmosProBaseUrlEnvVarName)
+func NewAtmosProAPIClientFromEnv(logger *logger.Logger, atmosConfig *schema.AtmosConfiguration) (*AtmosProAPIClient, error) {
+	baseURL := atmosConfig.Settings.Pro.BaseURL
 	if baseURL == "" {
 		baseURL = cfg.AtmosProDefaultBaseUrl
 	}
 	log.Debug("Using baseURL", "baseURL", baseURL)
 
-	baseAPIEndpoint := viper.GetString(cfg.AtmosProEndpointEnvVarName)
+	baseAPIEndpoint := atmosConfig.Settings.Pro.Endpoint
 	if baseAPIEndpoint == "" {
 		baseAPIEndpoint = cfg.AtmosProDefaultEndpoint
 	}
 	log.Debug("Using baseAPIEndpoint", "baseAPIEndpoint", baseAPIEndpoint)
 
 	// First, check if the API key is set via environment variable
-	apiToken := viper.GetString(cfg.AtmosProTokenEnvVarName)
+	apiToken := atmosConfig.Settings.Pro.Token
 	if apiToken != "" {
 		log.Debug("Creating API client with API token from environment variable")
 		return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
 	}
 
 	// If API key is not set, attempt to use GitHub OIDC token exchange
-	oidcToken, err := getGitHubOIDCToken()
+	oidcToken, err := getGitHubOIDCToken(atmosConfig.Settings.Pro.GithubOIDC)
 	if err != nil {
 		log.Debug("Error while getting GitHub OIDC token", "err", err)
 		return nil, fmt.Errorf("error while getting GitHub OIDC token: %w", err)
 	}
 
 	// Get workspace ID from environment
-	workspaceID := viper.GetString(cfg.AtmosProWorkspaceIDEnvVarName)
+	workspaceID := atmosConfig.Settings.Pro.WorkspaceID
 	if workspaceID == "" {
 		return nil, fmt.Errorf(ErrFormatString, ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
 	}
@@ -243,9 +243,9 @@ func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.Unloc
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
-func getGitHubOIDCToken() (string, error) {
-	requestURL := viper.GetString("settings.pro.github_oidc.request_url")
-	requestToken := viper.GetString("settings.pro.github_oidc.request_token")
+func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, error) {
+	requestURL := githubOIDCSettings.RequestURL
+	requestToken := githubOIDCSettings.RequestToken
 
 	if requestURL == "" || requestToken == "" {
 		return "", ErrNotInGitHubActions
