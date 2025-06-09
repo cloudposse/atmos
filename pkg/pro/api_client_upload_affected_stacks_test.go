@@ -53,7 +53,7 @@ func TestUploadAffectedStacks_Success(t *testing.T) {
 		},
 	}
 
-	err = client.UploadAffectedStacks(dto)
+	err = client.UploadAffectedStacks(&dto)
 	assert.NoError(t, err)
 }
 
@@ -110,7 +110,7 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 				Stacks:  []schema.Affected{},
 			}
 
-			err = client.UploadAffectedStacks(dto)
+			err = client.UploadAffectedStacks(&dto)
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, tc.expectedError)
 		})
@@ -135,7 +135,7 @@ func TestUploadAffectedStacks_NetworkError(t *testing.T) {
 		Stacks:  []schema.Affected{},
 	}
 
-	err = client.UploadAffectedStacks(dto)
+	err = client.UploadAffectedStacks(&dto)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrFailedToMakeRequest)
 }
@@ -159,7 +159,7 @@ func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
 		Stacks:  []schema.Affected{},
 	}
 
-	err = client.UploadAffectedStacks(dto)
+	err = client.UploadAffectedStacks(&dto)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrFailedToCreateAuthRequest)
 }

@@ -182,7 +182,7 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
 		assert.Nil(t, client)
-		assert.ErrorIs(t, err, ErrOIDCAuthFailedNoToken)
+		assert.ErrorIs(t, err, ErrFailedToGetOIDCToken)
 	})
 
 	t.Run("OIDC token exchange fails", func(t *testing.T) {
@@ -229,6 +229,6 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
 		assert.Nil(t, client)
-		assert.ErrorIs(t, err, ErrOIDCAuthFailedNoToken)
+		assert.ErrorIs(t, err, ErrNotInGitHubActions)
 	})
 }
