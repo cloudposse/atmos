@@ -1,6 +1,7 @@
 package config
 
 const (
+	AtmosCommand         = "atmos"
 	CliConfigFileName    = "atmos"
 	DotCliConfigFileName = ".atmos"
 
@@ -85,11 +86,12 @@ const (
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro
-	AtmosProBaseUrlEnvVarName  = "ATMOS_PRO_BASE_URL"
-	AtmosProEndpointEnvVarName = "ATMOS_PRO_ENDPOINT"
-	AtmosProTokenEnvVarName    = "ATMOS_PRO_TOKEN"
-	AtmosProDefaultBaseUrl     = "https://app.cloudposse.com"
-	AtmosProDefaultEndpoint    = "api"
+	AtmosProBaseUrlEnvVarName     = "ATMOS_PRO_BASE_URL"
+	AtmosProEndpointEnvVarName    = "ATMOS_PRO_ENDPOINT"
+	AtmosProTokenEnvVarName       = "ATMOS_PRO_TOKEN"
+	AtmosProWorkspaceIDEnvVarName = "ATMOS_PRO_WORKSPACE_ID"
+	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
+	AtmosProDefaultEndpoint       = "api/v1"
 
 	TerraformDefaultWorkspace = "default"
 
