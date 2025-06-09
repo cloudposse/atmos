@@ -224,7 +224,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	log.Debug("Preparing upload affected stacks request", "req", req)
 
 	log.Debug("Creating API client")
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger, d.atmosConfig)
 	if err != nil {
 		return err
 	}
