@@ -27,7 +27,7 @@ require (
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.3.0
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
-	github.com/go-git/go-git/v5 v5.16.1
+	github.com/go-git/go-git/v5 v5.16.2
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-yaml v1.18.0
 	github.com/gofrs/flock v0.12.1
@@ -73,9 +73,6 @@ require (
 	github.com/zclconf/go-cty v1.16.3
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/term v0.32.0
-	golang.org/x/text v0.25.0
-	google.golang.org/api v0.236.0
-	google.golang.org/grpc v1.72.2
 	golang.org/x/text v0.26.0
 	google.golang.org/api v0.236.0
 	google.golang.org/grpc v1.73.0
