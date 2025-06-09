@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/git"
-	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -28,7 +28,7 @@ type mockAPIClient struct {
 	uploadErr error
 }
 
-func (m *mockAPIClient) UploadDriftDetection(req *pro.DriftDetectionUploadRequest) error {
+func (m *mockAPIClient) UploadDriftDetection(req *dtos.DriftDetectionUploadRequest) error {
 	return m.uploadErr
 }
 
@@ -445,7 +445,7 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 				// Upload to API if needed
 				if tt.upload && tt.driftEnabled {
 					apiClient := &mockAPIClient{uploadErr: tt.mockUploadErr}
-					req := pro.DriftDetectionUploadRequest{
+					req := dtos.DriftDetectionUploadRequest{
 						RepoURL:   repoInfo.RepoUrl,
 						RepoName:  repoInfo.RepoName,
 						RepoOwner: repoInfo.RepoOwner,
@@ -1081,7 +1081,7 @@ func TestUploadDeploymentsFunc(t *testing.T) {
 				}
 
 				// Create upload request
-				req := pro.DriftDetectionUploadRequest{
+				req := dtos.DriftDetectionUploadRequest{
 					RepoURL:   repoInfo.RepoUrl,
 					RepoName:  repoInfo.RepoName,
 					RepoOwner: repoInfo.RepoOwner,

@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	logger "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -208,13 +209,20 @@ func uploadDeployments(deployments []schema.Deployment, log *logger.Logger) erro
 		return err
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(log)
+	// Initialize CLI config for API client
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
 
-	req := pro.DriftDetectionUploadRequest{
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(log, &atmosConfig)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	req := dtos.DriftDetectionUploadRequest{
 		RepoURL:   repoInfo.RepoUrl,
 		RepoName:  repoInfo.RepoName,
 		RepoOwner: repoInfo.RepoOwner,

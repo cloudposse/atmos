@@ -148,40 +148,8 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 	return nil
 }
 
-// UploadDriftDetection uploads drift detection data to the API.
-func (c *AtmosProAPIClient) UploadDriftDetection(dto *DriftDetectionUploadRequest) error {
-	url := fmt.Sprintf("%s/%s/drift-detection", c.BaseURL, c.BaseAPIEndpoint)
-
-	data, err := utils.ConvertToJSON(dto)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	c.Logger.Debug(fmt.Sprintf("Uploading drift detection DTO: %s", data))
-
-	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
-	if err != nil {
-		return fmt.Errorf("failed to create authenticated request: %w", err)
-	}
-
-	c.Logger.Trace(fmt.Sprintf("\nUploading drift detection results to %s", url))
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf("failed to upload drift detection results, status: %s", resp.Status)
-	}
-	c.Logger.Trace(fmt.Sprintf("\nUploaded drift detection results to %s", url))
-
-	return nil
-}
-
 // LockStack locks a specific stack
-func (c *AtmosProAPIClient) LockStack(dto LockStackRequest) (LockStackResponse, error) {
+func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
 	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
 
