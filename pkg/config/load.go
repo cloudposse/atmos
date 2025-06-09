@@ -101,11 +101,15 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 
-	// Atmos Pro
-	bindEnv(v, AtmosProBaseUrlEnvVarName, AtmosProBaseUrlEnvVarName)
-	bindEnv(v, AtmosProEndpointEnvVarName, AtmosProEndpointEnvVarName)
-	bindEnv(v, AtmosProTokenEnvVarName, AtmosProTokenEnvVarName)
-	bindEnv(v, AtmosProWorkspaceIDEnvVarName, AtmosProWorkspaceIDEnvVarName)
+	// Atmos Pro settings
+	bindEnv(v, "settings.pro.base_url", "ATMOS_PRO_BASE_URL")
+	bindEnv(v, "settings.pro.endpoint", "ATMOS_PRO_ENDPOINT")
+	bindEnv(v, "settings.pro.token", "ATMOS_PRO_TOKEN")
+	bindEnv(v, "settings.pro.workspace_id", "ATMOS_PRO_WORKSPACE_ID")
+
+	// GitHub OIDC for Atmos Pro
+	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
@@ -126,6 +130,10 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", true)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
+
+	// Atmos Pro defaults
+	v.SetDefault("settings.pro.base_url", AtmosProDefaultBaseUrl)
+	v.SetDefault("settings.pro.endpoint", AtmosProDefaultEndpoint)
 }
 
 // loadConfigSources delegates reading configs from each source,
@@ -372,47 +380,4 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 	}
 
 	return nil
-}
-
-// SetupGlobalViperEnv configures the global viper instance to read environment variables
-// This ensures that global viper.GetString() calls work properly throughout the application.
-func SetupGlobalViperEnv() {
-	setEnvGlobal()
-}
-
-// setEnvGlobal configures environment variable bindings for the global viper instance.
-func setEnvGlobal() {
-	// Use the global viper instance functions
-	bindEnvGlobal("settings.github_token", "GITHUB_TOKEN")
-	bindEnvGlobal("settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")
-	bindEnvGlobal("settings.atmos_github_token", "ATMOS_GITHUB_TOKEN")
-
-	bindEnvGlobal("settings.bitbucket_token", "BITBUCKET_TOKEN")
-	bindEnvGlobal("settings.atmos_bitbucket_token", "ATMOS_BITBUCKET_TOKEN")
-	bindEnvGlobal("settings.inject_bitbucket_token", "ATMOS_INJECT_BITBUCKET_TOKEN")
-	bindEnvGlobal("settings.bitbucket_username", "BITBUCKET_USERNAME")
-
-	bindEnvGlobal("settings.gitlab_token", "GITLAB_TOKEN")
-	bindEnvGlobal("settings.inject_gitlab_token", "ATMOS_INJECT_GITLAB_TOKEN")
-	bindEnvGlobal("settings.atmos_gitlab_token", "ATMOS_GITLAB_TOKEN")
-
-	bindEnvGlobal("settings.terminal.pager", "ATMOS_PAGER", "PAGER")
-	bindEnvGlobal("settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
-
-	// Atmos Pro
-	bindEnvGlobal(AtmosProBaseUrlEnvVarName, AtmosProBaseUrlEnvVarName)
-	bindEnvGlobal(AtmosProEndpointEnvVarName, AtmosProEndpointEnvVarName)
-	bindEnvGlobal(AtmosProTokenEnvVarName, AtmosProTokenEnvVarName)
-	bindEnvGlobal(AtmosProWorkspaceIDEnvVarName, AtmosProWorkspaceIDEnvVarName)
-
-	// GitHub OIDC
-	bindEnvGlobal("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
-	bindEnvGlobal("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-}
-
-// bindEnvGlobal binds environment variables to the global viper instance.
-func bindEnvGlobal(key ...string) {
-	if err := viper.BindEnv(key...); err != nil {
-		panic(err)
-	}
 }

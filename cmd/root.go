@@ -135,10 +135,6 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
-	// Configure the global viper instance to read environment variables
-	// This must be done before any viper.GetString() calls throughout the application
-	cfg.SetupGlobalViperEnv()
-
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config
