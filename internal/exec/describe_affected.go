@@ -9,6 +9,8 @@ import (
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -193,10 +195,12 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	log.Debug("\nAffected components and stacks: \n")
+
 	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
 	if err != nil {
 		return err
 	}
+
 	if !args.Upload {
 		return nil
 	}
@@ -209,12 +213,8 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	if err != nil {
 		return err
 	}
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
-	if err != nil {
-		return err
-	}
 
-	req := pro.AffectedStacksUploadRequest{
+	req := dtos.UploadAffectedStacksRequest{
 		HeadSHA:   headHead.Hash().String(),
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
@@ -223,8 +223,15 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		RepoHost:  gitURL.GetHostName(),
 		Stacks:    affected,
 	}
+	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	return apiClient.UploadAffectedStacks(req)
+	log.Debug("Creating API client")
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger)
+	if err != nil {
+		return err
+	}
+
+	return apiClient.UploadAffectedStacks(&req)
 }
 
 type viewWithScrollProps struct {

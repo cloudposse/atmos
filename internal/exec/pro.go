@@ -7,6 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/spf13/cobra"
 )
 
@@ -137,7 +138,7 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 	owner := repoInfo.RepoOwner
 	repoName := repoInfo.RepoName
 
-	dto := pro.LockStackRequest{
+	dto := dtos.LockStackRequest{
 		Key:         fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
 		TTL:         a.LockTTL,
 		LockMessage: a.LockMessage,
@@ -182,7 +183,7 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	owner := repoInfo.RepoOwner
 	repoName := repoInfo.RepoName
 
-	dto := pro.UnlockStackRequest{
+	dto := dtos.UnlockStackRequest{
 		Key: fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
 	}
 

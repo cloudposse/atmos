@@ -100,6 +100,10 @@ func setEnv(v *viper.Viper) {
 
 	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
+
+	// GitHub OIDC
+	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {
