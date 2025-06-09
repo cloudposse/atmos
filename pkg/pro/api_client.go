@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	log "github.com/charmbracelet/log"
@@ -244,8 +245,8 @@ func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.Unloc
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
 func getGitHubOIDCToken() (string, error) {
-	requestURL := viper.GetString("ACTIONS_ID_TOKEN_REQUEST_URL")
-	requestToken := viper.GetString("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	requestURL := os.Getenv("ATMOS_GITHUB_OIDC_REQUEST_URL")
+	requestToken := os.Getenv("ATMOS_GITHUB_OIDC_REQUEST_TOKEN")
 
 	if requestURL == "" || requestToken == "" {
 		return "", ErrNotInGitHubActions
