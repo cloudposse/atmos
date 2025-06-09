@@ -59,6 +59,9 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		viper.Reset()
 		viper.AutomaticEnv()
+		// Add GitHub OIDC bindings like the main application
+		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.NoError(t, err)
@@ -79,6 +82,9 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		viper.Reset()
 		viper.AutomaticEnv()
+		// Add GitHub OIDC bindings like the main application
+		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.NoError(t, err)
@@ -131,6 +137,9 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		viper.Reset()
 		viper.AutomaticEnv()
+		// Add GitHub OIDC bindings like the main application
+		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.NoError(t, err)
@@ -156,6 +165,9 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		viper.Reset()
 		viper.AutomaticEnv()
+		// Add GitHub OIDC bindings like the main application
+		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
@@ -178,6 +190,9 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		viper.Reset()
 		viper.AutomaticEnv()
+		// Add GitHub OIDC bindings like the main application
+		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
@@ -209,6 +224,9 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		viper.Reset()
 		viper.AutomaticEnv()
+		// Add GitHub OIDC bindings like the main application
+		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
@@ -225,6 +243,9 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 
 		viper.Reset()
 		viper.AutomaticEnv()
+		// Add GitHub OIDC bindings like the main application
+		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
