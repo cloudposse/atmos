@@ -36,10 +36,10 @@ func TestGetGitHubOIDCToken_Success(t *testing.T) {
 	os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", server.URL+"?token=dummy")
 	os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
 
-	// Setup viper like the main application does
+	// Bind environment variables like the main application does
 	viper.Reset()
-	viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-	viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 	token, err := getGitHubOIDCToken()
 	assert.NoError(t, err)
@@ -86,9 +86,10 @@ func TestGetGitHubOIDCToken_MissingEnvironmentVariables(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setupEnv()
+			// Bind environment variables like the main application does
 			viper.Reset()
-			viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-			viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+			viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+			viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 			token, err := getGitHubOIDCToken()
 			assert.Error(t, err)
@@ -118,9 +119,10 @@ func TestGetGitHubOIDCToken_HTTPErrors(t *testing.T) {
 	t.Run("http error response", func(t *testing.T) {
 		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", server.URL+"?token=dummy")
 		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+		// Bind environment variables like the main application does
 		viper.Reset()
-		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 		token, err := getGitHubOIDCToken()
 		assert.Error(t, err)
@@ -142,9 +144,10 @@ func TestGetGitHubOIDCToken_NetworkError(t *testing.T) {
 	// Use an invalid URL to simulate network error
 	os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "http://invalid-host-that-does-not-exist:12345?token=dummy")
 	os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+	// Bind environment variables like the main application does
 	viper.Reset()
-	viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-	viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+	viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 	token, err := getGitHubOIDCToken()
 	assert.Error(t, err)

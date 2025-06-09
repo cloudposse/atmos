@@ -244,8 +244,8 @@ func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.Unloc
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
 func getGitHubOIDCToken() (string, error) {
-	requestURL := viper.GetString("settings.pro.github_oidc.request_url")
-	requestToken := viper.GetString("settings.pro.github_oidc.request_token")
+	requestURL := viper.GetString("ACTIONS_ID_TOKEN_REQUEST_URL")
+	requestToken := viper.GetString("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 	if requestURL == "" || requestToken == "" {
 		return "", ErrNotInGitHubActions

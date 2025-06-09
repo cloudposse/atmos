@@ -58,10 +58,13 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 
 		viper.Reset()
-		viper.AutomaticEnv()
-		// Add GitHub OIDC bindings like the main application
-		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		// Bind environment variables like the main application does
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.NoError(t, err)
@@ -81,10 +84,13 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 
 		viper.Reset()
-		viper.AutomaticEnv()
-		// Add GitHub OIDC bindings like the main application
-		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		// Bind environment variables like the main application does
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.NoError(t, err)
@@ -136,10 +142,13 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		os.Unsetenv("ATMOS_PRO_TOKEN")
 
 		viper.Reset()
-		viper.AutomaticEnv()
-		// Add GitHub OIDC bindings like the main application
-		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		// Bind environment variables like the main application does
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.NoError(t, err)
@@ -164,10 +173,13 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		os.Unsetenv("ATMOS_PRO_TOKEN")
 
 		viper.Reset()
-		viper.AutomaticEnv()
-		// Add GitHub OIDC bindings like the main application
-		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		// Bind environment variables like the main application does
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
@@ -189,10 +201,13 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		os.Unsetenv("ATMOS_PRO_TOKEN")
 
 		viper.Reset()
-		viper.AutomaticEnv()
-		// Add GitHub OIDC bindings like the main application
-		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		// Bind environment variables like the main application does
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
@@ -223,10 +238,13 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		os.Unsetenv("ATMOS_PRO_TOKEN")
 
 		viper.Reset()
-		viper.AutomaticEnv()
-		// Add GitHub OIDC bindings like the main application
-		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		// Bind environment variables like the main application does
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
@@ -242,10 +260,13 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 		os.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
 
 		viper.Reset()
-		viper.AutomaticEnv()
-		// Add GitHub OIDC bindings like the main application
-		viper.BindEnv("settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
-		viper.BindEnv("settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		// Bind environment variables like the main application does
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_URL")
+		viper.BindEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
 		client, err := NewAtmosProAPIClientFromEnv(mockLogger)
 		assert.Error(t, err)
