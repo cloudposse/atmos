@@ -375,12 +375,12 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 }
 
 // SetupGlobalViperEnv configures the global viper instance to read environment variables
-// This ensures that global viper.GetString() calls work properly throughout the application
+// This ensures that global viper.GetString() calls work properly throughout the application.
 func SetupGlobalViperEnv() {
 	setEnvGlobal()
 }
 
-// setEnvGlobal configures environment variable bindings for the global viper instance
+// setEnvGlobal configures environment variable bindings for the global viper instance.
 func setEnvGlobal() {
 	// Use the global viper instance functions
 	bindEnvGlobal("settings.github_token", "GITHUB_TOKEN")
@@ -410,7 +410,7 @@ func setEnvGlobal() {
 	bindEnvGlobal("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 }
 
-// bindEnvGlobal binds environment variables to the global viper instance
+// bindEnvGlobal binds environment variables to the global viper instance.
 func bindEnvGlobal(key ...string) {
 	if err := viper.BindEnv(key...); err != nil {
 		panic(err)
