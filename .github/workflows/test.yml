@@ -532,7 +532,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release/feature'))
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@autorelease-fetch-tags-only
     with:
-      publish: false
+      publish: true
       prerelease: true
       format: binary
     secrets: inherit
