@@ -11,9 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	ErrFailedToUploadDriftDetection = errors.New("failed to upload drift detection results")
-)
+var ErrFailedToUploadDriftDetection = errors.New("failed to upload drift detection results")
 
 // UploadDriftDetection uploads drift detection data to the API.
 func (c *AtmosProAPIClient) UploadDriftDetection(dto *dtos.DriftDetectionUploadRequest) error {
