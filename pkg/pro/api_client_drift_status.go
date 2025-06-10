@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"net/http"
 
+	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
 // UploadDriftResultStatus uploads the drift detection result status to the pro API.
 func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *DriftStatusUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/drift-status", c.BaseURL, c.BaseAPIEndpoint)
-	c.Logger.Trace(fmt.Sprintf("\nUploading drift status at %s", url))
+	log.Debug(fmt.Sprintf("\nUploading drift status at %s", url))
 
 	data, err := json.Marshal(dto)
 	if err != nil {
@@ -34,7 +35,7 @@ func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *DriftStatusUploadReques
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDriftStatus, resp.Status)
 	}
 
-	c.Logger.Trace(fmt.Sprintf("\nUploaded drift status at %s", url))
+	log.Debug(fmt.Sprintf("\nUploaded drift status at %s", url))
 
 	return nil
 }

@@ -259,14 +259,14 @@ func shouldUploadDriftResult(info *schema.ConfigAndStacksInfo) bool {
 		return false
 	}
 
-	// Check if pro is enabled
+	// Check if pro is enabled in component settings
 	if proSettings, ok := info.ComponentSettingsSection["pro"].(map[string]interface{}); ok {
 		if enabled, ok := proSettings["enabled"].(bool); ok && enabled {
 			return true
 		}
 	}
 
-	// Create logger from atmos config
+	// Log warning if pro is not enabled
 	log.Warn("Pro is not enabled. Skipping upload of Terraform result.")
 
 	return false

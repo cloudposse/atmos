@@ -1,0 +1,14 @@
+=== RUN   TestExecuteTerraform_DriftResults
+=== RUN   TestExecuteTerraform_DriftResults/drift_results_enabled_and_pro_enabled
+    terraform_test.go:609: Failed to process component config: could not find the stack 'nonprod'
+=== RUN   TestExecuteTerraform_DriftResults/drift_results_enabled_but_pro_disabled
+    terraform_test.go:609: Failed to process component config: could not find the stack 'nonprod'
+=== RUN   TestExecuteTerraform_DriftResults/drift_results_disabled
+    terraform_test.go:609: Failed to process component config: could not find the stack 'nonprod'
+--- FAIL: TestExecuteTerraform_DriftResults (0.01s)
+    --- FAIL: TestExecuteTerraform_DriftResults/drift_results_enabled_and_pro_enabled (0.00s)
+    --- FAIL: TestExecuteTerraform_DriftResults/drift_results_enabled_but_pro_disabled (0.00s)
+    --- FAIL: TestExecuteTerraform_DriftResults/drift_results_disabled (0.00s)
+FAIL
+FAIL	github.com/cloudposse/atmos/internal/exec	0.794s
+FAIL

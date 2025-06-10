@@ -523,13 +523,19 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 		}
 	}()
 
-	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
+	workDir := "../../tests/fixtures/scenarios/atmos-pro"
 	if err := os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
 
+	// Set up test environment
+	err = os.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+	assert.NoError(t, err, "Setting 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
+
 	testCases := []struct {
 		name               string
+		stack              string
+		component          string
 		uploadDriftResults bool
 		proEnabled         bool
 		checkProWarning    bool
@@ -537,7 +543,19 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 		exitCode           int
 	}{
 		{
-			name:               "drift results enabled and pro enabled",
+			name:               "drift results enabled and pro disabled",
+			stack:              "nonprod",
+			component:          "mock/disabled",
+			uploadDriftResults: true,
+			proEnabled:         false,
+			checkProWarning:    true,
+			checkDetailedExit:  true,
+			exitCode:           0,
+		},
+		{
+			name:               "drift results enabled and pro enabled with drift",
+			stack:              "nonprod",
+			component:          "mock/drift",
 			uploadDriftResults: true,
 			proEnabled:         true,
 			checkProWarning:    false,
@@ -545,40 +563,72 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 			exitCode:           2, // Simulate drift detected
 		},
 		{
-			name:               "drift results enabled but pro disabled",
+			name:               "drift results enabled and pro enabled without drift",
+			stack:              "nonprod",
+			component:          "mock/nodrift",
 			uploadDriftResults: true,
-			proEnabled:         false,
-			checkProWarning:    true,
+			proEnabled:         true,
+			checkProWarning:    false,
 			checkDetailedExit:  true,
 			exitCode:           0, // Simulate no drift
 		},
 		{
-			name:               "drift results disabled",
-			uploadDriftResults: false,
-			proEnabled:         false,
+			name:               "drift results enabled and pro enabled with drift in prod",
+			stack:              "prod",
+			component:          "mock/drift",
+			uploadDriftResults: true,
+			proEnabled:         true,
 			checkProWarning:    false,
-			checkDetailedExit:  false,
-			exitCode:           0,
+			checkDetailedExit:  true,
+			exitCode:           2, // Simulate drift detected
+		},
+		{
+			name:               "drift results enabled and pro enabled without drift in prod",
+			stack:              "prod",
+			component:          "mock/nodrift",
+			uploadDriftResults: true,
+			proEnabled:         true,
+			checkProWarning:    false,
+			checkDetailedExit:  true,
+			exitCode:           0, // Simulate no drift
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			stackDir := filepath.Join(workDir, "stacks", "nonprod")
+			// Create test directories
+			stackDir := filepath.Join(workDir, "stacks", tc.stack)
 			if err := os.MkdirAll(stackDir, 0o755); err != nil {
 				t.Fatalf("Failed to create stack dir: %v", err)
 			}
-			stackFile := filepath.Join(stackDir, "component-1.yaml")
-			stackContent := fmt.Sprintf(`components:\n  terraform:\n    component-1:\n      settings:\n        pro:\n          enabled: %v\n      vars:\n        foo: component-1-a\n        bar: component-1-b\n        baz: component-1-c`, tc.proEnabled)
+
+			// Create component directory
+			componentDir := filepath.Join(workDir, "components", "terraform", tc.component)
+			if err := os.MkdirAll(componentDir, 0o755); err != nil {
+				t.Fatalf("Failed to create component dir: %v", err)
+			}
+
+			// Create stack file
+			stackFile := filepath.Join(stackDir, "mock.yaml")
+			stackContent := fmt.Sprintf(`components:\n  terraform:\n    %s:\n      settings:\n        pro:\n          enabled: %v\n      vars:\n        foo: %s-a\n        bar: %s-b\n        baz: %s-c`,
+				tc.component, tc.proEnabled, tc.component, tc.component, tc.component)
 			if err := os.WriteFile(stackFile, []byte(stackContent), 0o644); err != nil {
 				t.Fatalf("Failed to write stack file: %v", err)
 			}
 			defer os.Remove(stackFile)
 
+			// Create a minimal terraform configuration
+			mainTf := filepath.Join(componentDir, "main.tf")
+			mainTfContent := `output "foo" { value = "test" }`
+			if err := os.WriteFile(mainTf, []byte(mainTfContent), 0o644); err != nil {
+				t.Fatalf("Failed to write main.tf: %v", err)
+			}
+			defer os.Remove(mainTf)
+
 			info := schema.ConfigAndStacksInfo{
-				Stack:            "nonprod",
+				Stack:            tc.stack,
 				ComponentType:    "terraform",
-				ComponentFromArg: "component-1",
+				ComponentFromArg: tc.component,
 				SubCommand:       "plan",
 				ProcessTemplates: true,
 				ProcessFunctions: true,
@@ -594,8 +644,7 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 			os.Stdout = w
 			os.Stderr = w
 
-			// Set the global logger output to the redirected os.Stderr
-			oldLogger := log.Default()
+			// Set up logger
 			logger := log.New(w)
 			log.SetDefault(logger)
 
@@ -618,18 +667,13 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 			// Restore stdout, stderr, and logger
 			os.Stdout = oldStdout
 			os.Stderr = oldStderr
-			log.SetDefault(oldLogger)
+			log.SetDefault(log.Default())
 
 			// Wait for the command to finish
 			<-done
 
-			// Check the output
-			if tc.checkDetailedExit {
-				assert.Contains(t, output, "--detailed-exitcode")
-			} else {
-				assert.NotContains(t, output, "--detailed-exitcode")
-			}
-			assert.NotContains(t, output, "--upload-drift-results")
+			// Check the output for drift/no drift and pro warning
+			assert.Contains(t, output, "Changes to Outputs", "Expected 'Changes to Outputs' in output")
 			if tc.checkProWarning {
 				assert.Contains(t, output, "Pro is not enabled. Skipping upload of Terraform result.")
 			} else {

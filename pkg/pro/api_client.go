@@ -139,7 +139,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
-	c.Logger.Trace(fmt.Sprintf("\nUploading the affected components and stacks to %s", url))
+	c.Logger.Debug(fmt.Sprintf("\nUploading the affected components and stacks to %s", url))
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
