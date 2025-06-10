@@ -59,6 +59,9 @@ func flagsToDescribeWorkflowsArgs(flags *pflag.FlagSet, describe *exec.DescribeW
 	if err := setStringFlagIfChanged(flags, "query", &describe.Query); err != nil {
 		return err
 	}
+	if err := setStringFlagIfChanged(flags, "pager", &describe.Pager); err != nil {
+		return err
+	}
 
 	if err := validateAndSetDefaults(describe); err != nil {
 		return err
