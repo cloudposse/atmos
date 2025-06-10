@@ -227,14 +227,14 @@ func uploadDriftResult(info *schema.ConfigAndStacksInfo, exitCode int, client pr
 		return nil
 	}
 
-	// Get the local repository
-	repo, err := gitRepo.GetLocalRepo()
+	// Get the git repository
+	localRepo, err := git.GetLocalRepo()
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetLocalRepo, err)
 	}
 
 	// Get repository info
-	repoInfo, err := gitRepo.GetRepoInfo(repo)
+	repoInfo, err := gitRepo.GetRepoInfo(localRepo)
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetRepoInfo, err)
 	}
