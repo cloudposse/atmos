@@ -30,7 +30,7 @@ func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *DriftStatusUploadReques
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDriftStatus, resp.Status)
 	}
 

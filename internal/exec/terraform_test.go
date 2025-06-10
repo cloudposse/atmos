@@ -603,11 +603,9 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
+				defer w.Close()
 				_ = ExecuteTerraform(info)
 			}()
-
-			// Close the write end of the pipe
-			w.Close()
 
 			// Read the output
 			var buf bytes.Buffer
