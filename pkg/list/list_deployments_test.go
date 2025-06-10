@@ -2,6 +2,8 @@ package list
 
 import (
 	"errors"
+	"os"
+	"regexp"
 	"sort"
 	"testing"
 
@@ -935,50 +937,64 @@ func TestProcessStackComponents(t *testing.T) {
 	}
 }
 
-// TestFormatDeployments tests the formatDeployments function.
+func stripANSI(input string) string {
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	return ansi.ReplaceAllString(input, "")
+}
+
 func TestFormatDeployments(t *testing.T) {
 	tests := []struct {
 		name        string
 		deployments []schema.Deployment
-		expected    string
+		expectedTTY string
+		expectedCSV string
 	}{
 		{
 			name:        "empty deployments",
 			deployments: []schema.Deployment{},
-			expected:    "Component,Stack\n",
+			expectedTTY: "┏━━━━━━━━━━━┳━━━━━━━┓\n┃ Component ┃ Stack ┃\n┣━━━━━━━━━━━╋━━━━━━━┫\n┗━━━━━━━━━━━┻━━━━━━━┛\n",
+			expectedCSV: "Component,Stack\n",
 		},
 		{
-			name: "single deployment",
-			deployments: []schema.Deployment{
-				{
-					Component: "vpc",
-					Stack:     "prod",
-				},
-			},
-			expected: "Component,Stack\nvpc,prod\n",
+			name:        "single deployment",
+			deployments: []schema.Deployment{{Component: "vpc", Stack: "prod"}},
+			expectedTTY: "┏━━━━━━━━━━━┳━━━━━━━┓\n┃ Component ┃ Stack ┃\n┣━━━━━━━━━━━╋━━━━━━━┫\n┃ vpc       ┃ prod  ┃\n┗━━━━━━━━━━━┻━━━━━━━┛\n",
+			expectedCSV: "Component,Stack\nvpc,prod\n",
 		},
 		{
-			name: "multiple deployments",
-			deployments: []schema.Deployment{
-				{
-					Component: "vpc",
-					Stack:     "prod",
-				},
-				{
-					Component: "app",
-					Stack:     "dev",
-				},
-			},
-			expected: "Component,Stack\nvpc,prod\napp,dev\n",
+			name:        "multiple deployments",
+			deployments: []schema.Deployment{{Component: "vpc", Stack: "prod"}, {Component: "app", Stack: "dev"}},
+			expectedTTY: "┏━━━━━━━━━━━┳━━━━━━━┓\n┃ Component ┃ Stack ┃\n┣━━━━━━━━━━━╋━━━━━━━┫\n┃ vpc       ┃ prod  ┃\n┃ app       ┃ dev   ┃\n┗━━━━━━━━━━━┻━━━━━━━┛\n",
+			expectedCSV: "Component,Stack\nvpc,prod\napp,dev\n",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := formatDeployments(tt.deployments)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+	// Test non-TTY (CSV)
+	t.Run("non-TTY (CSV)", func(t *testing.T) {
+		oldStdout := os.Stdout
+		_, w, _ := os.Pipe()
+		os.Stdout = w
+		defer func() { os.Stdout = oldStdout }()
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := formatDeployments(tt.deployments)
+				assert.Equal(t, tt.expectedCSV, result)
+			})
+		}
+	})
+
+	// Test TTY (styled table)
+	t.Run("TTY (styled table)", func(t *testing.T) {
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// TTY: let os.Stdout be real, but strip ANSI for comparison
+				result := formatDeployments(tt.deployments)
+				stripped := stripANSI(result)
+				assert.Equal(t, tt.expectedTTY, stripped)
+			})
+		}
+	})
 }
 
 // TestUploadDeploymentsFunc tests the uploadDeployments function.

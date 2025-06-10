@@ -227,16 +227,10 @@ func uploadDriftResult(info *schema.ConfigAndStacksInfo, exitCode int, client pr
 		return nil
 	}
 
-	// Get the git repository
-	localRepo, err := git.GetLocalRepo()
+	// Get the git repository info
+	repoInfo, err := gitRepo.GetLocalRepo()
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetLocalRepo, err)
-	}
-
-	// Get repository info
-	repoInfo, err := gitRepo.GetRepoInfo(localRepo)
-	if err != nil {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetRepoInfo, err)
 	}
 
 	// Create the DTO
