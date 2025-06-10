@@ -907,10 +907,15 @@ func TestFormatDeployments(t *testing.T) {
 
 	// Test non-TTY (CSV)
 	t.Run("non-TTY (CSV)", func(t *testing.T) {
+		// Save original stdout and create a pipe
 		oldStdout := os.Stdout
-		_, w, _ := os.Pipe()
+		r, w, _ := os.Pipe()
 		os.Stdout = w
-		defer func() { os.Stdout = oldStdout }()
+		defer func() {
+			os.Stdout = oldStdout
+			r.Close()
+			w.Close()
+		}()
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -922,9 +927,20 @@ func TestFormatDeployments(t *testing.T) {
 
 	// Test TTY (styled table)
 	t.Run("TTY (styled table)", func(t *testing.T) {
+		// Save original stdout
+		oldStdout := os.Stdout
+		defer func() { os.Stdout = oldStdout }()
+
+		// Create a pipe to simulate TTY
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+		defer func() {
+			r.Close()
+			w.Close()
+		}()
+
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				// TTY: let os.Stdout be real, but strip ANSI for comparison
 				result := formatDeployments(tt.deployments)
 				stripped := stripANSI(result)
 

@@ -6,11 +6,11 @@ import (
 	"sort"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/format"
-	logger "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -165,14 +165,6 @@ func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
 
 // formatDeployments formats the deployments for output.
 func formatDeployments(deployments []schema.Deployment) string {
-	// Create data map for formatter
-	data := make(map[string]interface{})
-	for _, d := range deployments {
-		data[d.Component] = map[string]interface{}{
-			stackHeader: d.Stack,
-		}
-	}
-
 	formatOpts := format.FormatOptions{
 		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
 		CustomHeaders: []string{componentHeader, stackHeader},
@@ -189,17 +181,18 @@ func formatDeployments(deployments []schema.Deployment) string {
 		return output.String()
 	}
 
-	// For TTY mode, create a styled table
+	// For TTY mode, create a styled table with only Component and Stack columns
 	var tableRows [][]string
 	for _, d := range deployments {
-		tableRows = append(tableRows, []string{d.Component, d.Stack})
+		row := []string{d.Component, d.Stack}
+		tableRows = append(tableRows, row)
 	}
 
 	return format.CreateStyledTable(formatOpts.CustomHeaders, tableRows)
 }
 
 // uploadDeployments uploads deployments to Atmos Pro API.
-func uploadDeployments(deployments []schema.Deployment, log *logger.Logger) error {
+func uploadDeployments(deployments []schema.Deployment) error {
 	repo, err := git.GetLocalRepo()
 	if err != nil {
 		log.Error(err)
@@ -218,7 +211,7 @@ func uploadDeployments(deployments []schema.Deployment, log *logger.Logger) erro
 		return err
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(log, &atmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(nil, &atmosConfig)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -242,23 +235,6 @@ func uploadDeployments(deployments []schema.Deployment, log *logger.Logger) erro
 	return nil
 }
 
-// initializeConfig initializes the CLI configuration and logger.
-func initializeConfig(info *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, *logger.Logger, error) {
-	// Initialize CLI config
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
-	if err != nil {
-		return schema.AtmosConfiguration{}, nil, err
-	}
-
-	// Create logger
-	log, err := logger.NewLoggerFromCliConfig(atmosConfig)
-	if err != nil {
-		return schema.AtmosConfiguration{}, nil, fmt.Errorf("failed to create logger: %w", err)
-	}
-
-	return atmosConfig, log, nil
-}
-
 // processDeployments collects, filters, and sorts deployments.
 func processDeployments(atmosConfig schema.AtmosConfiguration, driftEnabled bool) ([]schema.Deployment, error) {
 	// Get all stacks
@@ -279,26 +255,10 @@ func processDeployments(atmosConfig schema.AtmosConfiguration, driftEnabled bool
 	return deployments, nil
 }
 
-// handleOutput formats and prints the deployments.
-func handleOutput(deployments []schema.Deployment) {
-	output := formatDeployments(deployments)
-	u.PrintfMessageToTUI("%s", output)
-}
-
-// handleUpload handles the upload of deployments to Atmos Pro API.
-func handleUpload(deployments []schema.Deployment, driftEnabled bool, log *logger.Logger) error {
-	if !driftEnabled {
-		log.Info("Atmos Pro only supports uploading drift detection stacks at this time.\n\nTo upload drift detection stacks, use the --drift-enabled flag:\n  atmos list deployments --upload --drift-enabled")
-		return nil
-	}
-
-	return uploadDeployments(deployments, log)
-}
-
 // ExecuteListDeploymentsCmd executes the list deployments command.
 func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
-	// Initialize configuration
-	atmosConfig, log, err := initializeConfig(info)
+	// Inline initializeConfig
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
@@ -313,12 +273,18 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 		return err
 	}
 
-	// Handle output
-	handleOutput(deployments)
+	// Inline handleOutput
+	output := formatDeployments(deployments)
+	u.PrintfMessageToTUI("%s", output)
 
 	// Handle upload if requested
 	if upload {
-		return handleUpload(deployments, driftEnabled, log)
+		if !driftEnabled {
+			log.Info("Atmos Pro only supports uploading drift detection stacks at this time.\n\nTo upload drift detection stacks, use the --drift-enabled flag:\n  atmos list deployments --upload --drift-enabled")
+			return nil
+		}
+
+		return uploadDeployments(deployments)
 	}
 
 	return nil
