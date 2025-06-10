@@ -252,10 +252,11 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	}
 
 	// Get drift detection filter
-	driftEnabled := cmd.Flags().Changed("drift-enabled")
-
-	// Get upload flag
-	upload := cmd.Flags().Changed("upload")
+ 	// Get drift detection filter value
+ 	driftEnabled, _ := cmd.Flags().GetBool("drift-enabled")
+ 
+ 	// Get upload flag value
+ 	upload, _ := cmd.Flags().GetBool("upload")
 
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
