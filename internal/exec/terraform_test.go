@@ -644,9 +644,11 @@ func TestExecuteTerraform_DriftResults(t *testing.T) {
 			os.Stdout = w
 			os.Stderr = w
 
-			// Set up logger
+			// Save original logger and set up test logger
+			originalLogger := log.Default()
 			logger := log.New(w)
 			log.SetDefault(logger)
+			defer log.SetDefault(originalLogger)
 
 			// Create a channel to signal when the pipe is closed
 			done := make(chan struct{})

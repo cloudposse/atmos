@@ -159,12 +159,12 @@ func sortDeployments(deployments []schema.Deployment) []schema.Deployment {
 
 // formatDeployments formats the deployments for output.
 func formatDeployments(deployments []schema.Deployment) string {
-	var rows []map[string]interface{}
+	// Create data map for formatter
+	data := make(map[string]interface{})
 	for _, d := range deployments {
-		rows = append(rows, map[string]interface{}{
-			"Component": d.Component,
-			"Stack":     d.Stack,
-		})
+		data[d.Component] = map[string]interface{}{
+			"Stack": d.Stack,
+		}
 	}
 
 	formatOpts := format.FormatOptions{
@@ -174,23 +174,20 @@ func formatDeployments(deployments []schema.Deployment) string {
 		MaxColumns:    0,
 	}
 
-	// Create table rows
-	var tableRows [][]string
-	for _, row := range rows {
-		tableRows = append(tableRows, []string{
-			fmt.Sprintf("%v", row["Component"]),
-			fmt.Sprintf("%v", row["Stack"]),
-		})
-	}
-
-	// If not in a TTY environment, output plain rows
+	// If not in a TTY environment, output CSV
 	if !formatOpts.TTY {
 		var output strings.Builder
 		output.WriteString("Component,Stack\n")
-		for _, row := range tableRows {
-			output.WriteString(fmt.Sprintf("%s,%s\n", row[0], row[1]))
+		for _, d := range deployments {
+			output.WriteString(fmt.Sprintf("%s,%s\n", d.Component, d.Stack))
 		}
 		return output.String()
+	}
+
+	// For TTY mode, create a styled table
+	var tableRows [][]string
+	for _, d := range deployments {
+		tableRows = append(tableRows, []string{d.Component, d.Stack})
 	}
 
 	return format.CreateStyledTable(formatOpts.CustomHeaders, tableRows)
