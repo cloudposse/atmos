@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"regexp"
-	"sort"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -133,7 +132,6 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 		},
 	}
 
-	// Test cases
 	tests := []struct {
 		name                 string
 		info                 schema.ConfigAndStacksInfo
@@ -330,13 +328,13 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 					Component:     "vpc",
 					Stack:         "stack1",
 					ComponentType: "terraform",
-					Settings:      nil,
+					Settings:      map[string]interface{}{},
 				},
 				{
 					Component:     "vpc",
 					Stack:         "stack2",
 					ComponentType: "terraform",
-					Settings:      nil,
+					Settings:      map[string]interface{}{},
 				},
 			},
 		},
@@ -366,73 +364,14 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 					return err
 				}
 
-				// Collect deployments from stacks
-				var processedDeployments []schema.Deployment
-				for stackName, stackConfig := range stacks {
-					stackConfigMap, ok := stackConfig.(map[string]any)
-					if !ok {
-						continue
-					}
-
-					components, ok := stackConfigMap["components"].(map[string]any)
-					if !ok {
-						continue
-					}
-
-					for componentType, typeComponents := range components {
-						typeComponentsMap, ok := typeComponents.(map[string]any)
-						if !ok {
-							continue
-						}
-
-						for componentName, componentConfig := range typeComponentsMap {
-							componentConfigMap, ok := componentConfig.(map[string]any)
-							if !ok {
-								continue
-							}
-
-							deployment := &schema.Deployment{
-								Component:     componentName,
-								Stack:         stackName,
-								ComponentType: componentType,
-							}
-
-							if settings, ok := componentConfigMap["settings"].(map[string]any); ok {
-								deployment.Settings = settings
-							}
-							if vars, ok := componentConfigMap["vars"].(map[string]any); ok {
-								deployment.Vars = vars
-							}
-							if env, ok := componentConfigMap["env"].(map[string]any); ok {
-								deployment.Env = env
-							}
-							if backend, ok := componentConfigMap["backend"].(map[string]any); ok {
-								deployment.Backend = backend
-							}
-							if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
-								deployment.Metadata = metadata
-							}
-
-							// Skip abstract components
-							if componentType, ok := deployment.Metadata["type"].(string); ok && componentType == "abstract" {
-								continue
-							}
-
-							processedDeployments = append(processedDeployments, *deployment)
-						}
-					}
-				}
+				// Collect deployments using the existing helper function
+				processedDeployments := collectDeployments(stacks)
 
 				// Filter deployments if drift detection is enabled
-				processedDeployments = filterDeploymentsByDriftDetection(processedDeployments, tt.driftEnabled)
+				processedDeployments = filterDeployments(processedDeployments, tt.driftEnabled)
 
 				// Sort deployments
-				sort.Slice(processedDeployments, func(i, j int) bool {
-					if processedDeployments[i].Stack != processedDeployments[j].Stack {
-						return processedDeployments[i].Stack < processedDeployments[j].Stack
-					}
-					return processedDeployments[i].Component < processedDeployments[j].Component
-				})
+				processedDeployments = sortDeployments(processedDeployments)
 
 				// Get repo info if needed
 				var repoInfo *git.RepoInfo
@@ -487,7 +426,7 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 					assert.Equal(t, expected.Stack, actual.Stack, "Stack should match")
 					assert.Equal(t, expected.ComponentType, actual.ComponentType, "ComponentType should match")
 					if expected.Settings == nil {
-						assert.Nil(t, actual.Settings, "Settings should be nil")
+						assert.Empty(t, actual.Settings, "Settings should be empty map")
 					} else {
 						assert.Equal(t, expected.Settings, actual.Settings, "Settings should match")
 					}
