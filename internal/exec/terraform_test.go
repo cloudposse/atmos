@@ -2,7 +2,9 @@ package exec
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -505,6 +507,135 @@ func TestExecuteTerraform_Version(t *testing.T) {
 
 			if !strings.Contains(output, tt.expectedOutput) {
 				t.Errorf("%s not found in the output", tt.expectedOutput)
+			}
+		})
+	}
+}
+
+func TestExecuteTerraform_DriftResults(t *testing.T) {
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	workDir := "../../tests/fixtures/scenarios/stack-templates-2"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	testCases := []struct {
+		name               string
+		uploadDriftResults bool
+		proEnabled         bool
+		checkProWarning    bool
+		checkDetailedExit  bool
+		exitCode           int
+	}{
+		{
+			name:               "drift results enabled and pro enabled",
+			uploadDriftResults: true,
+			proEnabled:         true,
+			checkProWarning:    false,
+			checkDetailedExit:  true,
+			exitCode:           2, // Simulate drift detected
+		},
+		{
+			name:               "drift results enabled but pro disabled",
+			uploadDriftResults: true,
+			proEnabled:         false,
+			checkProWarning:    true,
+			checkDetailedExit:  true,
+			exitCode:           0, // Simulate no drift
+		},
+		{
+			name:               "drift results disabled",
+			uploadDriftResults: false,
+			proEnabled:         false,
+			checkProWarning:    false,
+			checkDetailedExit:  false,
+			exitCode:           0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stackDir := filepath.Join(workDir, "stacks", "nonprod")
+			if err := os.MkdirAll(stackDir, 0o755); err != nil {
+				t.Fatalf("Failed to create stack dir: %v", err)
+			}
+			stackFile := filepath.Join(stackDir, "component-1.yaml")
+			stackContent := fmt.Sprintf(`components:\n  terraform:\n    component-1:\n      settings:\n        pro:\n          enabled: %v\n      vars:\n        foo: component-1-a\n        bar: component-1-b\n        baz: component-1-c`, tc.proEnabled)
+			if err := os.WriteFile(stackFile, []byte(stackContent), 0o644); err != nil {
+				t.Fatalf("Failed to write stack file: %v", err)
+			}
+			defer os.Remove(stackFile)
+
+			info := schema.ConfigAndStacksInfo{
+				Stack:            "nonprod",
+				ComponentType:    "terraform",
+				ComponentFromArg: "component-1",
+				SubCommand:       "plan",
+				ProcessTemplates: true,
+				ProcessFunctions: true,
+			}
+			if tc.uploadDriftResults {
+				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-drift-results")
+			}
+
+			// Create a pipe to capture stdout and stderr
+			oldStdout := os.Stdout
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+			os.Stderr = w
+
+			// Set the global logger output to the redirected os.Stderr
+			oldLogger := log.Default()
+			logger := log.New(w)
+			log.SetDefault(logger)
+
+			// Create a channel to signal when the pipe is closed
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_ = ExecuteTerraform(info)
+			}()
+
+			// Close the write end of the pipe
+			w.Close()
+
+			// Read the output
+			var buf bytes.Buffer
+			_, err = buf.ReadFrom(r)
+			if err != nil {
+				t.Fatalf("Failed to read from pipe: %v", err)
+			}
+			output := buf.String()
+
+			// Restore stdout, stderr, and logger
+			os.Stdout = oldStdout
+			os.Stderr = oldStderr
+			log.SetDefault(oldLogger)
+
+			// Wait for the command to finish
+			<-done
+
+			// Check the output
+			if tc.checkDetailedExit {
+				assert.Contains(t, output, "--detailed-exitcode")
+			} else {
+				assert.NotContains(t, output, "--detailed-exitcode")
+			}
+			assert.NotContains(t, output, "--upload-drift-results")
+			if tc.checkProWarning {
+				assert.Contains(t, output, "Pro is not enabled. Skipping upload of Terraform result.")
+			} else {
+				assert.NotContains(t, output, "Pro is not enabled. Skipping upload of Terraform result.")
 			}
 		})
 	}

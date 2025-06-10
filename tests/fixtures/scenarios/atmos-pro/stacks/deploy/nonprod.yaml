@@ -31,3 +31,14 @@ components:
         foo: "foo nonprod override"
         bar: "bar nonprod override"
 
+    mock/disabled:
+      metadata:
+        component: mock
+        inherits:
+          - mock
+      settings:
+        pro:
+          enabled: false
+      vars:
+        foo: "foo nonprod override"
+        bar: "bar nonprod override"

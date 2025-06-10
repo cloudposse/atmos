@@ -37,12 +37,18 @@ var (
 	ErrFailedToExchangeOIDCToken   = errors.New("failed to exchange OIDC token")
 	ErrFailedToDecodeTokenResponse = errors.New("failed to decode token response")
 	ErrFailedToGetGitHubOIDCToken  = errors.New("failed to get GitHub OIDC token")
+	ErrFailedToUploadDriftStatus   = errors.New("failed to upload drift status")
 )
 
 const (
 	ErrFormatString        = "%w: %s"
 	DefaultHTTPTimeoutSecs = 30
 )
+
+// AtmosProAPIClientInterface defines the interface for the AtmosProAPIClient.
+type AtmosProAPIClientInterface interface {
+	UploadDriftResultStatus(dto *DriftStatusUploadRequest) error
+}
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.
 type AtmosProAPIClient struct {
@@ -67,6 +73,7 @@ func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiTo
 // NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables.
 func NewAtmosProAPIClientFromEnv(logger *logger.Logger, atmosConfig *schema.AtmosConfiguration) (*AtmosProAPIClient, error) {
 	baseURL := atmosConfig.Settings.Pro.BaseURL
+
 	if baseURL == "" {
 		baseURL = cfg.AtmosProDefaultBaseUrl
 	}
@@ -178,7 +185,6 @@ func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStack
 	// Create an instance of the struct
 	var responseData dtos.LockStackResponse
 
-	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
 		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
@@ -191,6 +197,7 @@ func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStack
 		}
 
 		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToLockStack, responseData.ErrorMessage)
+
 	}
 
 	return responseData, nil
@@ -225,10 +232,9 @@ func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.Unloc
 	// Create an instance of the struct
 	var responseData dtos.UnlockStackResponse
 
-	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
+
 	}
 
 	if !responseData.Success {

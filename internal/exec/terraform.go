@@ -11,6 +11,8 @@ import (
 	log "github.com/charmbracelet/log"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	git "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,6 +23,7 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
+	detailedExitCodeFlag      = "--detailed-exitcode"
 )
 
 // ErrHTTPBackendWorkspaces is returned when attempting to use workspace commands with an HTTP backend.
@@ -384,6 +387,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Prepare the terraform command
 	allArgsAndFlags := strings.Fields(info.SubCommand)
+	uploadDriftResultsFlag := false
 
 	switch info.SubCommand {
 	case "plan":
@@ -393,6 +397,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, outFlag) &&
 			!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
+		}
+		// Check if the upload-drift-results flag is set in the command line arguments
+		uploadDriftResultsFlag = u.SliceContainsString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDriftResultsFlag)
+		if uploadDriftResultsFlag {
+			if !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
+				allArgsAndFlags = append(allArgsAndFlags, []string{detailedExitCodeFlag}...)
+			}
+			// Remove the upload-drift-results flag from the command line arguments
+			info.AdditionalArgsAndFlags = u.SliceRemoveString(info.AdditionalArgsAndFlags, "--"+cfg.UploadDriftResultsFlag)
 		}
 	case "destroy":
 		allArgsAndFlags = append(allArgsAndFlags, []string{varFileFlag, varFile}...)
@@ -540,6 +553,30 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr,
 		)
 		if err != nil {
+			// For Terraform Plan, we need to return the result to the pro API if upload flag is set
+			if uploadDriftResultsFlag && shouldUploadDriftResult(&info) {
+				var exitCode int
+				var osErr *osexec.ExitError
+				if errors.As(err, &osErr) {
+					exitCode = osErr.ExitCode()
+				} else {
+					exitCode = 1
+				}
+
+				// Initialize the API client
+				client, err := pro.NewAtmosProAPIClientFromEnv(nil, &atmosConfig)
+				if err != nil {
+					return err
+				}
+
+				// Use the default git repo implementation
+				gitRepo := &git.DefaultGitRepo{}
+
+				if err := uploadDriftResult(&info, exitCode, client, gitRepo); err != nil {
+					return err
+				}
+			}
+			// For other commands or failure, return the error as is
 			return err
 		}
 	}
