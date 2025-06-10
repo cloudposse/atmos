@@ -8,13 +8,15 @@ import (
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 )
 
 type ProLockUnlockCmdArgs struct {
-	Component string
-	Logger    *l.Logger
-	Stack     string
+	Component   string
+	Logger      *l.Logger
+	Stack       string
+	AtmosConfig schema.AtmosConfiguration
 }
 
 type ProLockCmdArgs struct {
@@ -62,9 +64,10 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 	}
 
 	result := ProLockUnlockCmdArgs{
-		Component: component,
-		Logger:    logger,
-		Stack:     stack,
+		Component:   component,
+		Logger:      logger,
+		Stack:       stack,
+		AtmosConfig: atmosConfig,
 	}
 
 	return result, nil
@@ -145,7 +148,7 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		Properties:  nil,
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
 	if err != nil {
 		return err
 	}
@@ -187,7 +190,7 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		Key: fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
 	if err != nil {
 		return err
 	}
