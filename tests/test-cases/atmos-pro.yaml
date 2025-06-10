@@ -16,6 +16,7 @@ tests:
       exit_code: 0
       stdout:
         - "Component.*Stack"
+        - "mock/disabled.*nonprod"
         - "mock/drift.*nonprod"
         - "mock/nodrift.*nonprod"
         - "mock/drift.*prod"
@@ -34,11 +35,12 @@ tests:
     expect:
       exit_code: 0
       stdout:
-        - "Component.*Stack"
-        - "mock/drift.*nonprod"
-        - "mock/nodrift.*nonprod"
-        - "mock/drift.*prod"
-        - "mock/nodrift.*prod"
+        - "Component,Stack"
+        - "mock/disabled,nonprod"
+        - "mock/drift,nonprod"
+        - "mock/nodrift,nonprod"
+        - "mock/drift,prod"
+        - "mock/nodrift,prod"
 
   - name: atmos list deployments drift enabled
     snapshot: true
@@ -58,6 +60,7 @@ tests:
       exit_code: 0
       stdout:
         - "Component.*Stack"
+        - "mock/disabled.*nonprod"
         - "mock/drift.*nonprod"
         - "mock/drift.*prod"
         - !not "mock/nodrift.*nonprod"
@@ -77,8 +80,7 @@ tests:
     expect:
       exit_code: 0
       stdout:
-        - "Component.*Stack"
-        - "mock/drift.*nonprod"
-        - "mock/drift.*prod"
-        - !not "mock/nodrift.*nonprod"
-        - !not "mock/nodrift.*prod"
+        - "Component,Stack"
+        - "mock/disabled,nonprod"
+        - "mock/drift,nonprod"
+        - "mock/drift,prod"

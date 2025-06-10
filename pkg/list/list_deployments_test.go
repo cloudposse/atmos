@@ -473,7 +473,8 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 			if tt.expectedError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
-			} else {
+			}
+			if tt.expectedError == "" {
 				assert.NoError(t, err)
 			}
 
@@ -1127,7 +1128,8 @@ func TestUploadDeploymentsFunc(t *testing.T) {
 			if tt.expectedError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
-			} else {
+			}
+			if tt.expectedError == "" {
 				assert.NoError(t, err)
 			}
 		})
