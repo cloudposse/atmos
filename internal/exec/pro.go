@@ -9,10 +9,7 @@ import (
 	git "github.com/cloudposse/atmos/pkg/git"
 	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
-<<<<<<< HEAD
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-=======
->>>>>>> feat/atmos-plan-upload
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 )
