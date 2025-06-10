@@ -234,7 +234,6 @@ func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.Unloc
 
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-
 	}
 
 	if !responseData.Success {
