@@ -41,7 +41,6 @@ var (
 )
 
 const (
-	ErrFormatString        = "%w: %s"
 	DefaultHTTPTimeoutSecs = 30
 )
 
@@ -96,19 +95,19 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger, atmosConfig *schema.Atmo
 	oidcToken, err := getGitHubOIDCToken(atmosConfig.Settings.Pro.GithubOIDC)
 	if err != nil {
 		log.Debug("Error while getting GitHub OIDC token", "err", err)
-		return nil, fmt.Errorf(ErrFormatString, ErrFailedToGetGitHubOIDCToken, err)
+		return nil, fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetGitHubOIDCToken, err)
 	}
 
 	// Get workspace ID from environment
 	workspaceID := atmosConfig.Settings.Pro.WorkspaceID
 	if workspaceID == "" {
-		return nil, fmt.Errorf(ErrFormatString, ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
+		return nil, fmt.Errorf(cfg.ErrFormatString, ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
 	}
 
 	// Exchange OIDC token for Atmos token
 	apiToken, err = exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID)
 	if err != nil {
-		return nil, fmt.Errorf(ErrFormatString, ErrOIDCTokenExchangeFailed, err)
+		return nil, fmt.Errorf(cfg.ErrFormatString, ErrOIDCTokenExchangeFailed, err)
 	}
 
 	return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
@@ -117,7 +116,7 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger, atmosConfig *schema.Atmo
 func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return nil, fmt.Errorf(ErrFormatString, ErrFailedToCreateRequest, err)
+		return nil, fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateRequest, err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIToken))
@@ -132,24 +131,24 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 
 	data, err := utils.ConvertToJSON(*dto)
 	if err != nil {
-		return fmt.Errorf(ErrFormatString, ErrFailedToMarshalPayload, err)
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToMarshalPayload, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
 	if err != nil {
-		return fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
 	c.Logger.Trace(fmt.Sprintf("\nUploading the affected components and stacks to %s", url))
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf(ErrFormatString, ErrFailedToUploadStacks, resp.Status)
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadStacks, resp.Status)
 	}
 	c.Logger.Trace(fmt.Sprintf("\nUploaded the affected components and stacks to %s", url))
 
@@ -163,31 +162,32 @@ func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStack
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToReadResponseBody, err)
 	}
 
 	// Create an instance of the struct
 	var responseData dtos.LockStackResponse
 
+	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnmarshalJSON, err)
+		return dtos.LockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToUnmarshalJSON, err)
 	}
 
 	if !responseData.Success {
@@ -196,7 +196,7 @@ func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStack
 			context += fmt.Sprintf("  %s: %v\n", key, value)
 		}
 
-		return dtos.LockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToLockStack, responseData.ErrorMessage)
+		return dtos.LockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToLockStack, responseData.ErrorMessage)
 
 	}
 
@@ -210,31 +210,32 @@ func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.Unloc
 
 	data, err := json.Marshal(dto)
 	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := getAuthenticatedRequest(c, "DELETE", url, bytes.NewBuffer(data))
 	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToCreateAuthRequest, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToMakeRequest, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToMakeRequest, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToReadResponseBody, err)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToReadResponseBody, err)
 	}
 
 	// Create an instance of the struct
 	var responseData dtos.UnlockStackResponse
 
+	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal(body, &responseData)
 	if err != nil {
-
+		return dtos.UnlockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToUnmarshalJSON, err)
 	}
 
 	if !responseData.Success {
@@ -243,7 +244,7 @@ func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.Unloc
 			context += fmt.Sprintf("  %s: %v\n", key, value)
 		}
 
-		return dtos.UnlockStackResponse{}, fmt.Errorf(ErrFormatString, ErrFailedToUnlockStack, responseData.ErrorMessage)
+		return dtos.UnlockStackResponse{}, fmt.Errorf(cfg.ErrFormatString, ErrFailedToUnlockStack, responseData.ErrorMessage)
 	}
 
 	return responseData, nil
@@ -264,7 +265,7 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 
 	req, err := http.NewRequest("GET", requestOIDCTokenURL, nil)
 	if err != nil {
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToCreateRequest, err)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateRequest, err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", requestToken))
@@ -272,18 +273,18 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Debug("got error", "err", err)
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToGetOIDCToken, err)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetOIDCToken, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Debug("got error", "resp.StatusCode", resp.StatusCode)
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToGetOIDCToken, resp.Status)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToGetOIDCToken, resp.Status)
 	}
 
 	var tokenResp dtos.GetGitHubOIDCResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToDecodeOIDCResponse, err)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToDecodeOIDCResponse, err)
 	}
 
 	return tokenResp.Value, nil
@@ -300,33 +301,33 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToMarshalRequestBody, err)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToMarshalRequestBody, err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToCreateRequest, err)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateRequest, err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToExchangeOIDCToken, err)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToExchangeOIDCToken, resp.Status)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, resp.Status)
 	}
 
 	var tokenResp dtos.ExchangeGitHubOIDCTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToDecodeTokenResponse, err)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToDecodeTokenResponse, err)
 	}
 
 	if !tokenResp.Success {
-		return "", fmt.Errorf(ErrFormatString, ErrFailedToExchangeOIDCToken, tokenResp.ErrorMessage)
+		return "", fmt.Errorf(cfg.ErrFormatString, ErrFailedToExchangeOIDCToken, tokenResp.ErrorMessage)
 	}
 
 	return tokenResp.Data.Token, nil

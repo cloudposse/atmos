@@ -98,4 +98,7 @@ const (
 
 	ComponentStr = "component"
 	StackStr     = "stack"
+
+	// Error format string
+	ErrFormatString = "%w: %s"
 )
