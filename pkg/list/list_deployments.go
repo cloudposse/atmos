@@ -236,9 +236,9 @@ func uploadDeployments(deployments []schema.Deployment) error {
 }
 
 // processDeployments collects, filters, and sorts deployments.
-func processDeployments(atmosConfig schema.AtmosConfiguration, driftEnabled bool) ([]schema.Deployment, error) {
+func processDeployments(atmosConfig *schema.AtmosConfiguration, driftEnabled bool) ([]schema.Deployment, error) {
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(*atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	upload, _ := cmd.Flags().GetBool("upload")
 
 	// Process deployments
-	deployments, err := processDeployments(atmosConfig, driftEnabled)
+	deployments, err := processDeployments(&atmosConfig, driftEnabled)
 	if err != nil {
 		return err
 	}

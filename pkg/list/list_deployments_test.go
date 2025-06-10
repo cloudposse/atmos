@@ -43,37 +43,6 @@ func (m *mockDescribeStacks) Execute(config *schema.AtmosConfiguration, stack st
 	return m.stacks, m.err
 }
 
-// isDriftDetectionEnabled checks if drift detection is enabled for a deployment.
-func isDriftDetectionEnabled(deployment *schema.Deployment) bool {
-	settings, ok := deployment.Settings["pro"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	driftDetection, ok := settings["drift_detection"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	enabled, ok := driftDetection["enabled"].(bool)
-	return ok && enabled
-}
-
-// filterDeploymentsByDriftDetection filters deployments based on drift detection setting.
-func filterDeploymentsByDriftDetection(deployments []schema.Deployment, driftEnabled bool) []schema.Deployment {
-	if !driftEnabled {
-		return deployments
-	}
-
-	filtered := make([]schema.Deployment, 0, len(deployments))
-	for _, deployment := range deployments {
-		if isDriftDetectionEnabled(&deployment) {
-			filtered = append(filtered, deployment)
-		}
-	}
-	return filtered
-}
-
 // TestExecuteListDeploymentsCmd tests the ExecuteListDeploymentsCmd function.
 func TestExecuteListDeploymentsCmd(t *testing.T) {
 	// Create a new command for testing.
