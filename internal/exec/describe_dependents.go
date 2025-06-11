@@ -66,7 +66,6 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		describeDependentsExecProps.Stack,
 		false,
 	)
-
 	if err != nil {
 		return err
 	}
