@@ -37,6 +37,9 @@ func getRunnableDescribeWorkflowsCmd(
 		describeWorkflowArgs := &exec.DescribeWorkflowsArgs{}
 		err = flagsToDescribeWorkflowsArgs(cmd.Flags(), describeWorkflowArgs)
 		checkErrorAndExit(err)
+		pager, err := cmd.Flags().GetString("pager")
+		checkFlagNotPresentError(err)
+		atmosConfig.Settings.Terminal.Pager = pager
 		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
 		checkErrorAndExit(err)
 	}
