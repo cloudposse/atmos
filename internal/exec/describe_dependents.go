@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/pager"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/mitchellh/mapstructure"
@@ -14,6 +16,83 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+type DescribeDependentsExecProps struct {
+	File      string
+	Format    string
+	Query     string
+	Stack     string
+	Component string
+}
+
+type DescribeDependentsExec interface {
+	Execute(describeDependentsExecProps *DescribeDependentsExecProps) error
+}
+
+type describeDependentsExec struct {
+	atmosConfig               *schema.AtmosConfiguration
+	executeDescribeDependents func(
+		atmosConfig schema.AtmosConfiguration,
+		component string,
+		stack string,
+		includeSettings bool,
+	) ([]schema.Dependent, error)
+	viewWithScroll        func(v *viewWithScrollProps) error
+	newPageCreator        pager.PageCreator
+	isTTYSupportForStdout func() bool
+	printOrWriteToFile    func(
+		atmosConfig *schema.AtmosConfiguration,
+		format string,
+		file string,
+		data any,
+	) error
+}
+
+func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeDependentsExec {
+	return &describeDependentsExec{
+		executeDescribeDependents: ExecuteDescribeDependents,
+		viewWithScroll:            viewWithScroll,
+		newPageCreator:            pager.New(),
+		isTTYSupportForStdout:     term.IsTTYSupportForStdout,
+		printOrWriteToFile:        printOrWriteToFile,
+		atmosConfig:               atmosConfig,
+	}
+}
+
+func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDependentsExecProps) error {
+	dependents, err := d.executeDescribeDependents(
+		*d.atmosConfig,
+		describeDependentsExecProps.Component,
+		describeDependentsExecProps.Stack,
+		false,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	var res any
+
+	if describeDependentsExecProps.Query != "" {
+		res, err = u.EvaluateYqExpression(d.atmosConfig, dependents, describeDependentsExecProps.Query)
+		if err != nil {
+			return err
+		}
+	} else {
+		res = dependents
+	}
+
+	return d.viewWithScroll(&viewWithScrollProps{
+		atmosConfig:           d.atmosConfig,
+		format:                describeDependentsExecProps.Format,
+		file:                  describeDependentsExecProps.File,
+		res:                   res,
+		pageCreator:           d.newPageCreator,
+		isTTYSupportForStdout: d.isTTYSupportForStdout,
+		displayName:           fmt.Sprintf("Dependents of '%s' in stack '%s'", describeDependentsExecProps.Component, describeDependentsExecProps.Stack),
+		printOrWriteToFile:    d.printOrWriteToFile,
+	})
+}
 
 // ExecuteDescribeDependentsCmd executes `describe dependents` command
 func ExecuteDescribeDependentsCmd(cmd *cobra.Command, args []string) error {
