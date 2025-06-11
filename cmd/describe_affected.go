@@ -37,11 +37,11 @@ func getRunnableDescribeAffectedCmd(
 		checkAtmosConfig()
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		checkErrorAndExit(err)
-		if cmd.Flags().Changed("pager") {
-			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
-			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-		}
-
+    if cmd.Flags().Changed("pager") {
+        // TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
+        props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
+        checkErrorAndExit(err)
+    }
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
 		checkErrorAndExit(err)
 	}
