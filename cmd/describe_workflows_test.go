@@ -89,6 +89,7 @@ func TestDescribeWorklows(t *testing.T) {
 		},
 		describeWorkflowsMock,
 	)
+	describeWorkflowsCmd.Flags().StringP("pager", "p", "", "Specify a pager to use for output (e.g., `less`, `more`)")
 	run(describeWorkflowsCmd, []string{})
 	ctrl.Finish()
 }
