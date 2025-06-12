@@ -535,6 +535,7 @@ jobs:
       publish: true
       prerelease: true
       format: binary
+      environment: 'feature-releases'
     secrets: inherit
 
     
