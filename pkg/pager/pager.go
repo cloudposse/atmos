@@ -19,6 +19,7 @@ type pageCreator struct {
 	isTTYSupportForStdout func() bool
 }
 
+// New returns a PageCreator that displays content in a terminal pager if needed, using default implementations for terminal checks and pager UI.
 func New() PageCreator {
 	return &pageCreator{
 		newTeaProgram:         tea.NewProgram,

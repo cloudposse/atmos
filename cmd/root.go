@@ -218,6 +218,8 @@ func init() {
 	initCobraConfig()
 }
 
+// initCobraConfig configures the root Cobra command with custom output, usage, flag error, and help behaviors for the Atmos CLI.
+// It sets up styled terminal output, enhanced help and usage display with paging, and integrates example content and update checks.
 func initCobraConfig() {
 	RootCmd.SetOut(os.Stdout)
 	styles := boa.DefaultStyles()

@@ -48,7 +48,8 @@ func (m MockTerminalSizer) GetSize(fd int) (width, height int, err error) {
 // Global variable for dependency injection in tests.
 var terminalSizer TerminalSizer = RealTerminalSizer{}
 
-// getTerminalSize gets the current terminal dimensions.
+// getTerminalSize returns the current terminal's width and height.
+// It retrieves the terminal size using the configured TerminalSizer and returns an error if the size cannot be determined.
 func getTerminalSize() (TermSize, error) {
 	w, h, errno := terminalSizer.GetSize(int(os.Stdout.Fd()))
 	if errno != nil {
@@ -60,7 +61,7 @@ func getTerminalSize() (TermSize, error) {
 	}, nil
 }
 
-// ContentFitsTerminal checks if the given string content fits within terminal dimensions.
+// ContentFitsTerminal returns true if the provided content fits within the current terminal's width and height, accounting for special characters and ANSI escape sequences.
 func ContentFitsTerminal(content string) bool {
 	termSize, err := getTerminalSize()
 	if err != nil {
@@ -89,7 +90,9 @@ func ContentFitsTerminal(content string) bool {
 	return maxWidth <= termSize.Width
 }
 
-// This handles tabs, ANSI escape sequences, and other special characters.
+// getDisplayWidth returns the display width of a string, accounting for tabs, carriage returns, and ANSI escape sequences.
+// Tabs are expanded to the next tab stop, carriage returns reset the width to zero, and ANSI escape sequences are ignored.
+// Printable ASCII and most Unicode characters are counted as width 1, while control characters do not contribute to the width.
 func getDisplayWidth(s string) int {
 	width := 0
 	i := 0
@@ -128,7 +131,7 @@ func getDisplayWidth(s string) int {
 	return width
 }
 
-// skipAnsiSequence skips over ANSI escape sequences and returns the next index.
+// skipAnsiSequence returns the index immediately after an ANSI escape sequence starting at the given position in the rune slice.
 func skipAnsiSequence(runes []rune, start int) int {
 	if start >= len(runes) || runes[start] != '\033' {
 		return start + 1
@@ -149,7 +152,7 @@ func skipAnsiSequence(runes []rune, start int) int {
 	}
 }
 
-// skipCSISequence handles CSI (Control Sequence Introducer) sequences.
+// skipCSISequence skips over a CSI (Control Sequence Introducer) ANSI escape sequence in a slice of runes, starting at the '[' character, and returns the index immediately after the sequence.
 func skipCSISequence(runes []rune, start int) int {
 	i := start + 1 // skip '['
 
@@ -166,7 +169,7 @@ func skipCSISequence(runes []rune, start int) int {
 	return i
 }
 
-// isCSIParameter checks if a rune is a valid CSI parameter character.
+// isCSIParameter returns true if the rune is a valid parameter character in an ANSI CSI sequence.
 func isCSIParameter(r rune) bool {
 	return (r >= '0' && r <= '9') || r == ';' || r == ' ' || r == '?' || r == '!'
 }
