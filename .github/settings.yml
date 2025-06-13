@@ -11,7 +11,7 @@ environments:
       custom_branches:
         - name: "**/*"
           type: branch
-
+          
   - name: demo
     deployment_branch_policy:
       custom_branches:
@@ -22,3 +22,4 @@ labels:
   - name: release/feature
     color: '#d73a4a'
     description: Create release from this PR
+
