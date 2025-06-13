@@ -11,6 +11,7 @@ type DescribeWorkflowsArgs struct {
 	Format     string
 	OutputType string
 	Query      string
+	Pager      string
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -36,6 +37,11 @@ func NewDescribeWorkflowsExec() DescribeWorkflowsExec {
 
 // ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command.
 func (d *describeWorkflowsExec) Execute(atmosConfig *schema.AtmosConfiguration, describeWorkflowsArgs *DescribeWorkflowsArgs) error {
+	// Set the pager value from args
+	if describeWorkflowsArgs.Pager != "" {
+		atmosConfig.Settings.Terminal.Pager = describeWorkflowsArgs.Pager
+	}
+
 	outputType := describeWorkflowsArgs.OutputType
 	query := describeWorkflowsArgs.Query
 	format := describeWorkflowsArgs.Format
