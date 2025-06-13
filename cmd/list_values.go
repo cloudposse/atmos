@@ -172,6 +172,7 @@ func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, *fl.ProcessingFla
 		return nil, nil, fmt.Errorf(ErrFmtWrapErr, ErrGettingCommonFlags, err)
 	}
 
+
 	// Get additional flags
 	abstractFlag, err := cmd.Flags().GetBool("abstract")
 	if err != nil {
@@ -282,7 +283,7 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	// Initialize Atmos config and get stacks
-	_, stacksMap, err := initAtmosAndDescribeStacksForList(componentName, processingFlags)
+	atmosConfig, stacksMap, err := initAtmosAndDescribeStacksForList(componentName, processingFlags)
 	if err != nil {
 		return "", err
 	}
@@ -299,8 +300,19 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		"processTemplates", processingFlags.Templates,
 		"processYamlFunctions", processingFlags.Functions)
 
-	// Filter and list component values across stacks
-	output, err := l.FilterAndListValues(stacksMap, filterOptions)
+	var listConfig schema.ListConfig
+	if filterOptions.Query == ".vars" {
+		varsFlag := getBoolFlagWithDefault(cmd, "vars", false)
+		if varsFlag || cmd.Name() == "vars" {
+			listConfig = atmosConfig.Vars
+		} else {
+			listConfig = atmosConfig.Values
+		}
+	} else {
+		listConfig = atmosConfig.Values
+	}
+
+	output, err := l.FilterAndListValuesWithColumns(stacksMap, filterOptions, listConfig)
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {

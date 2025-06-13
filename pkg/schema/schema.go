@@ -35,6 +35,10 @@ type AtmosConfiguration struct {
 	Describe                      Describe               `yaml:"describe,omitempty" json:"describe,omitempty" mapstructure:"describe"`
 	StoresConfig                  store.StoresConfig     `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor                 `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
+	Values                        ListConfig             `yaml:"values,omitempty" json:"values,omitempty" mapstructure:"values"`
+	Vars                          ListConfig             `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"`
+	SettingsList                  ListConfig             `yaml:"settings_list,omitempty" json:"settings_list,omitempty" mapstructure:"settings_list"`
+	Metadata                      ListConfig             `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 	Initialized                   bool                   `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	StacksBaseAbsolutePath        string                 `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string               `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
@@ -305,16 +309,18 @@ type Helmfile struct {
 }
 
 type Components struct {
-	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Terraform Terraform  `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile  Helmfile   `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	List      ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 type Stacks struct {
-	BasePath      string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
-	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
-	NameTemplate  string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	BasePath      string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	IncludedPaths []string   `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
+	ExcludedPaths []string   `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+	NamePattern   string     `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NameTemplate  string     `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	List          ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 type Workflows struct {

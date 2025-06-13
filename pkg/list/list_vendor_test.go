@@ -677,3 +677,102 @@ func TestApplyVendorFilters(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildVendorRowsWithTemplates tests the template processing in buildVendorRows
+func TestBuildVendorRowsWithTemplates(t *testing.T) {
+	vendorInfos := []VendorInfo{
+		{
+			Component: "vpc",
+			Type:      "terraform",
+			Manifest:  "vendor.d/vpc.yaml",
+			Folder:    "components/terraform/vpc",
+		},
+		{
+			Component: "eks",
+			Type:      "helmfile",
+			Manifest:  "vendor.d/eks.yaml",
+			Folder:    "components/helmfile/eks",
+		},
+	}
+
+	testCases := []struct {
+		name        string
+		columns     []schema.ListColumnConfig
+		expected    []map[string]interface{}
+		description string
+	}{
+		{
+			name: "default columns with templates",
+			columns: []schema.ListColumnConfig{
+				{Name: "Component", Value: "{{ .atmos_component }}"},
+				{Name: "Type", Value: "{{ .atmos_vendor_type }}"},
+				{Name: "Manifest", Value: "{{ .atmos_vendor_file }}"},
+				{Name: "Target", Value: "{{ .atmos_vendor_target }}"},
+			},
+			expected: []map[string]interface{}{
+				{
+					"Component": "vpc",
+					"Type":      "terraform",
+					"Manifest":  "vendor.d/vpc.yaml",
+					"Target":    "components/terraform/vpc",
+				},
+				{
+					"Component": "eks",
+					"Type":      "helmfile",
+					"Manifest":  "vendor.d/eks.yaml",
+					"Target":    "components/helmfile/eks",
+				},
+			},
+			description: "should process templates correctly",
+		},
+		{
+			name: "custom columns with complex templates",
+			columns: []schema.ListColumnConfig{
+				{Name: "Name", Value: "{{ .atmos_component }}"},
+				{Name: "Path", Value: "{{ .atmos_vendor_type }}/{{ .atmos_component }}"},
+				{Name: "Source", Value: "{{ .atmos_vendor_file }}"},
+			},
+			expected: []map[string]interface{}{
+				{
+					"Name":   "vpc",
+					"Path":   "terraform/vpc",
+					"Source": "vendor.d/vpc.yaml",
+				},
+				{
+					"Name":   "eks",
+					"Path":   "helmfile/eks",
+					"Source": "vendor.d/eks.yaml",
+				},
+			},
+			description: "should handle complex template expressions",
+		},
+		{
+			name: "mixed static and template columns",
+			columns: []schema.ListColumnConfig{
+				{Name: "Component", Value: "{{ .atmos_component }}"},
+				{Name: "Status", Value: "Active"},
+				{Name: "Type", Value: "{{ .atmos_vendor_type }}"},
+			},
+			expected: []map[string]interface{}{
+				{
+					"Component": "vpc",
+					"Status":    "Active",
+					"Type":      "terraform",
+				},
+				{
+					"Component": "eks",
+					"Status":    "Active",
+					"Type":      "helmfile",
+				},
+			},
+			description: "should handle both static and template values",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := buildVendorRows(vendorInfos, tc.columns)
+			assert.ElementsMatch(t, tc.expected, actual, tc.description)
+		})
+	}
+}

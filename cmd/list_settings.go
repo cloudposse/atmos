@@ -110,17 +110,17 @@ func initSettingsParams(cmd *cobra.Command, args []string) (*SettingsParams, err
 }
 
 // getStacksMapForSettings initializes the Atmos config and returns the stacks map.
-func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilter string) (map[string]interface{}, error) {
+func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilter string) (schema.AtmosConfiguration, map[string]interface{}, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, &listerrors.InitConfigError{Cause: err}
+		return schema.AtmosConfiguration{}, nil, &listerrors.InitConfigError{Cause: err}
 	}
 
 	// Check if component exists
 	if componentFilter != "" {
 		if !listutils.CheckComponentExists(&atmosConfig, componentFilter) {
-			return nil, &listerrors.ComponentDefinitionNotFoundError{Component: componentFilter}
+			return schema.AtmosConfiguration{}, nil, &listerrors.ComponentDefinitionNotFoundError{Component: componentFilter}
 		}
 	}
 
@@ -128,10 +128,10 @@ func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilte
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false,
 		processingFlags.Templates, processingFlags.Functions, false, nil)
 	if err != nil {
-		return nil, &listerrors.DescribeStacksError{Cause: err}
+		return schema.AtmosConfiguration{}, nil, &listerrors.DescribeStacksError{Cause: err}
 	}
 
-	return stacksMap, nil
+	return atmosConfig, stacksMap, nil
 }
 
 func listSettings(cmd *cobra.Command, args []string) (string, error) {
@@ -141,7 +141,7 @@ func listSettings(cmd *cobra.Command, args []string) (string, error) {
 		return "", err
 	}
 
-	stacksMap, err := getStacksMapForSettings(params.ProcessingFlags, params.ComponentFilter)
+	atmosConfig, stacksMap, err := getStacksMapForSettings(params.ProcessingFlags, params.ComponentFilter)
 	if err != nil {
 		return "", err
 	}
@@ -153,7 +153,9 @@ func listSettings(cmd *cobra.Command, args []string) (string, error) {
 		"processYamlFunctions", params.ProcessingFlags.Functions)
 
 	filterOptions := setupSettingsOptions(*params.CommonFlags, params.ComponentFilter)
-	output, err := l.FilterAndListValues(stacksMap, filterOptions)
+		listConfig := atmosConfig.SettingsList
+	
+	output, err := l.FilterAndListValuesWithColumns(stacksMap, filterOptions, listConfig)
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {

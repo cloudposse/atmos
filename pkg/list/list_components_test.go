@@ -2,6 +2,7 @@ package list
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -286,4 +288,124 @@ func TestFilterAndListComponentsIntegration(t *testing.T) {
 		assert.True(t, errors.Is(err, ErrStackNotFound))
 		assert.Contains(t, err.Error(), "non-existent-stack")
 	})
+}
+
+// TestListComponentsWithColumns tests the custom columns functionality for components
+func TestListComponentsWithColumns(t *testing.T) {
+	stacksMap := map[string]any{
+		"test-stack": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{
+							"component": "vpc",
+						},
+					},
+					"eks": map[string]any{
+						"metadata": map[string]any{
+							"component": "eks",
+						},
+					},
+					"rds": map[string]any{
+						"metadata": map[string]any{
+							"component": "rds",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	atmosConfig := schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	tests := []struct {
+		name        string
+		stackFlag   string
+		listConfig  schema.ListConfig
+		format      string
+		delimiter   string
+		validate    func(t *testing.T, output string)
+		description string
+	}{
+		{
+			name:      "default columns with JSON format",
+			stackFlag: "",
+			listConfig: schema.ListConfig{
+				Columns: []schema.ListColumnConfig{
+					{Name: "Component", Value: "{{ .component_name }}"},
+					{Name: "Type", Value: "{{ .component_type }}"},
+					{Name: "Path", Value: "{{ .component_path }}"},
+				},
+			},
+			format:    "json",
+			delimiter: "\t",
+			validate: func(t *testing.T, output string) {
+				assert.Contains(t, output, "\"Component\":")
+				assert.Contains(t, output, "\"Type\":")
+				assert.Contains(t, output, "\"Path\":")
+				assert.Contains(t, output, "vpc")
+				assert.Contains(t, output, "eks")
+				assert.Contains(t, output, "rds")
+				assert.Contains(t, output, "terraform")
+				assert.Contains(t, output, "components/terraform")
+			},
+			description: "should output JSON with default columns",
+		},
+		{
+			name:      "custom columns with templates",
+			stackFlag: "test-stack",
+			listConfig: schema.ListConfig{
+				Columns: []schema.ListColumnConfig{
+					{Name: "Name", Value: "{{ .component_name }}"},
+					{Name: "FullPath", Value: "{{ .component_path }}/main.tf"},
+					{Name: "Status", Value: "Active"},
+				},
+			},
+			format:    "csv",
+			delimiter: ",",
+			validate: func(t *testing.T, output string) {
+				lines := strings.Split(strings.TrimSpace(output), utils.GetLineEnding())
+				assert.GreaterOrEqual(t, len(lines), 2)
+				assert.Equal(t, "Name,FullPath,Status", lines[0])
+				for i := 1; i < len(lines); i++ {
+					fields := strings.Split(lines[i], ",")
+					if len(fields) == 3 {
+						assert.Equal(t, "Active", fields[2])
+						assert.Contains(t, fields[1], "/main.tf")
+					}
+				}
+			},
+			description: "should handle custom columns with templates and static values",
+		},
+		{
+			name:      "default simple list format",
+			stackFlag: "",
+			listConfig: schema.ListConfig{},
+			format:    "",
+			delimiter: "\t",
+			validate: func(t *testing.T, output string) {
+				lines := strings.Split(strings.TrimSpace(output), utils.GetLineEnding())
+				assert.Equal(t, 3, len(lines))
+				components := []string{"eks", "rds", "vpc"}
+				for _, comp := range components {
+					assert.Contains(t, output, comp)
+				}
+			},
+			description: "should return simple list format when no format specified",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := FilterAndListComponentsWithColumns(tt.stackFlag, stacksMap, tt.listConfig, tt.format, tt.delimiter, atmosConfig)
+			assert.NoError(t, err)
+			tt.validate(t, output)
+		})
+	}
 }

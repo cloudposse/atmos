@@ -21,7 +21,6 @@ var listComponentsCmd = &cobra.Command{
 	Long:  "List Atmos components, with options to filter results by specific stacks.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check Atmos configuration
 		checkAtmosConfig()
 		output, err := listComponents(cmd)
 		if err != nil {
@@ -36,6 +35,8 @@ var listComponentsCmd = &cobra.Command{
 func init() {
 	AddStackCompletion(listComponentsCmd)
 	listCmd.AddCommand(listComponentsCmd)
+	listComponentsCmd.Flags().StringP("format", "f", "", "Output format: table, json, yaml, csv, tsv")
+	listComponentsCmd.Flags().StringP("delimiter", "d", "", "Delimiter for CSV/TSV output")
 }
 
 func listComponents(cmd *cobra.Command) ([]string, error) {
@@ -57,6 +58,25 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}
 
-	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
-	return output, err
+	listConfig := atmosConfig.Components.List
+
+	if len(listConfig.Columns) == 0 {
+		listConfig.Columns = l.GetDefaultColumns("components")
+	}
+
+	format, err := flags.GetString("format")
+	if err != nil {
+		format = ""
+	}
+
+	delimiter, err := flags.GetString("delimiter")
+	if err != nil {
+		delimiter = "\t"
+	}
+
+	output, err := l.FilterAndListComponentsWithColumns(stackFlag, stacksMap, listConfig, format, delimiter, atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	return []string{output}, nil
 }

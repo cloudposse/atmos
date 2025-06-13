@@ -37,6 +37,8 @@ func init() {
 	listStacksCmd.DisableFlagParsing = false
 	listStacksCmd.PersistentFlags().StringP("component", "c", "", "List all stacks that contain the specified component.")
 	listCmd.AddCommand(listStacksCmd)
+	listStacksCmd.Flags().StringP("format", "f", "", "Output format: table, json, yaml, csv, tsv")
+	listStacksCmd.Flags().StringP("delimiter", "d", "", "Delimiter for CSV/TSV output")
 }
 
 func listStacks(cmd *cobra.Command) ([]string, error) {
@@ -50,7 +52,21 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error describing stacks: %v", err)
 	}
-
-	output, err := l.FilterAndListStacks(stacksMap, componentFlag)
-	return output, err
+	listConfig := atmosConfig.Stacks.List
+	format, err := cmd.Flags().GetString("format")
+	if err != nil {
+		format = ""
+	}
+	delimiter, err := cmd.Flags().GetString("delimiter")
+	if err != nil {
+		delimiter = "\t"
+	}
+	if delimiter == "" {
+		delimiter = "\t"
+	}
+	output, err := l.FilterAndListStacksWithColumns(stacksMap, componentFlag, listConfig, format, delimiter, atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	return []string{output}, nil
 }

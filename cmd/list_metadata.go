@@ -149,7 +149,14 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 		"stackPattern", params.CommonFlags.Stack, "templates", params.ProcessingFlags.Templates)
 
 	filterOptions := setupMetadataOptions(*params.CommonFlags, params.ComponentFilter)
-	output, err := l.FilterAndListValues(stacksMap, filterOptions)
+
+	listConfig := atmosConfig.Metadata
+
+	if len(listConfig.Columns) == 0 {
+		listConfig.Columns = l.GetDefaultColumns("metadata")
+	}
+
+	output, err := l.FilterAndListValuesWithColumns(stacksMap, filterOptions, listConfig)
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {

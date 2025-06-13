@@ -29,17 +29,30 @@ var (
 func buildVendorRows(vendorInfos []VendorInfo, columns []schema.ListColumnConfig) []map[string]interface{} {
 	var rows []map[string]interface{}
 	for _, vi := range vendorInfos {
-		row := make(map[string]interface{})
-		for _, col := range columns {
-			switch col.Name {
-			case ColumnNameComponent:
-				row[col.Name] = vi.Component
-			case ColumnNameType:
-				row[col.Name] = vi.Type
-			case ColumnNameManifest:
-				row[col.Name] = vi.Manifest
-			case ColumnNameFolder:
-				row[col.Name] = vi.Folder
+		templateData := map[string]interface{}{
+			"atmos_component":     vi.Component,
+			"atmos_vendor_type":   vi.Type,
+			"atmos_vendor_file":   vi.Manifest,
+			"atmos_vendor_target": vi.Folder,
+		}
+		row, err := ProcessCustomColumns(columns, templateData)
+		if err != nil {
+			row = make(map[string]interface{})
+			for _, col := range columns {
+				switch col.Name {
+				case ColumnNameComponent:
+					row[col.Name] = vi.Component
+				case ColumnNameType:
+					row[col.Name] = vi.Type
+				case ColumnNameManifest:
+					row[col.Name] = vi.Manifest
+				case ColumnNameFolder:
+					row[col.Name] = vi.Folder
+				default:
+					if val, err := ProcessColumnTemplate(col.Value, templateData); err == nil {
+						row[col.Name] = val
+					}
+				}
 			}
 		}
 		rows = append(rows, row)

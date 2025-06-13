@@ -212,13 +212,13 @@ workflows:
 				var foundNetworking bool
 				var foundValidation bool
 				for _, w := range workflows {
-					if w["file"] == "Networking" && w["name"] == "plan-all-vpc" {
+					if w["File"] == "Networking" && w["Workflow"] == "plan-all-vpc" {
 						foundNetworking = true
-						assert.Equal(t, "Run terraform plan on all vpc components", w["description"])
+						assert.Equal(t, "Run terraform plan on all vpc components", w["Description"])
 					}
-					if w["file"] == "Validation" && w["name"] == "validate-all" {
+					if w["File"] == "Validation" && w["Workflow"] == "validate-all" {
 						foundValidation = true
-						assert.Equal(t, "Validate all components", w["description"])
+						assert.Equal(t, "Validate all components", w["Description"])
 					}
 				}
 				assert.True(t, foundNetworking, "Networking workflow not found")
@@ -346,9 +346,9 @@ func TestListWorkflowsWithFile(t *testing.T) {
 				err := json.Unmarshal([]byte(output), &workflows)
 				assert.NoError(t, err)
 				assert.Len(t, workflows, 1)
-				assert.Equal(t, "example", workflows[0]["file"])
-				assert.Equal(t, "test-1", workflows[0]["name"])
-				assert.Equal(t, "Test workflow", workflows[0]["description"])
+				assert.Equal(t, "example", workflows[0]["File"])
+				assert.Equal(t, "test-1", workflows[0]["Workflow"])
+				assert.Equal(t, "Test workflow", workflows[0]["Description"])
 			},
 		},
 		{
@@ -367,6 +367,106 @@ func TestListWorkflowsWithFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output, err := FilterAndListWorkflows(testWorkflowFile, listConfig, tt.format, tt.delimiter)
+			assert.NoError(t, err)
+			tt.validate(t, output)
+		})
+	}
+}
+
+// TestListWorkflowsCustomColumns tests the custom columns functionality for workflows
+func TestListWorkflowsCustomColumns(t *testing.T) {
+	// Create a temporary directory for test files
+	tempDir, err := os.MkdirTemp("", "atmos-test-workflows-custom")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// Create a test workflow file
+	testWorkflowFile := filepath.Join(tempDir, "test-workflow.yaml")
+	testWorkflow := schema.WorkflowManifest{
+		Name: "test-manifest",
+		Workflows: map[string]schema.WorkflowDefinition{
+			"test-workflow": {
+				Description: "A test workflow",
+			},
+			"another-workflow": {
+				Description: "Another test workflow",
+			},
+		},
+	}
+	testWorkflowBytes, err := yaml.Marshal(testWorkflow)
+	require.NoError(t, err)
+	err = os.WriteFile(testWorkflowFile, testWorkflowBytes, 0o644)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		listConfig  schema.ListConfig
+		format      string
+		delimiter   string
+		validate    func(t *testing.T, output string)
+		description string
+	}{
+		{
+			name: "custom columns with templates",
+			listConfig: schema.ListConfig{
+				Columns: []schema.ListColumnConfig{
+					{Name: "Name", Value: "{{ .workflow_name }}"},
+					{Name: "Manifest", Value: "{{ .workflow_file }}"},
+					{Name: "Details", Value: "{{ .workflow_name }}: {{ .workflow_description }}"},
+				},
+			},
+			format:    "json",
+			delimiter: "\t",
+			validate: func(t *testing.T, output string) {
+				var workflows []map[string]interface{}
+				err := json.Unmarshal([]byte(output), &workflows)
+				assert.NoError(t, err)
+				assert.Len(t, workflows, 2)
+				
+				// Check first workflow
+				found := false
+				for _, w := range workflows {
+					if w["Name"] == "test-workflow" {
+						found = true
+						assert.Equal(t, "test-manifest", w["Manifest"])
+						assert.Equal(t, "test-workflow: A test workflow", w["Details"])
+					}
+				}
+				assert.True(t, found, "test-workflow not found")
+			},
+			description: "should process custom column templates correctly",
+		},
+		{
+			name: "custom columns with static values",
+			listConfig: schema.ListConfig{
+				Columns: []schema.ListColumnConfig{
+					{Name: "Workflow", Value: "{{ .workflow_name }}"},
+					{Name: "Status", Value: "Active"},
+					{Name: "Type", Value: "Terraform"},
+				},
+			},
+			format:    "csv",
+			delimiter: ",",
+			validate: func(t *testing.T, output string) {
+				lines := strings.Split(strings.TrimSpace(output), utils.GetLineEnding())
+				assert.Len(t, lines, 3) // Header + 2 workflows
+				assert.Equal(t, "Workflow,Status,Type", lines[0])
+				
+				// Check that all rows have static values
+				for i := 1; i < len(lines); i++ {
+					fields := strings.Split(lines[i], ",")
+					assert.Len(t, fields, 3)
+					assert.Equal(t, "Active", fields[1])
+					assert.Equal(t, "Terraform", fields[2])
+				}
+			},
+			description: "should handle static values in custom columns",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := FilterAndListWorkflows(testWorkflowFile, tt.listConfig, tt.format, tt.delimiter)
 			assert.NoError(t, err)
 			tt.validate(t, output)
 		})

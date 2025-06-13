@@ -41,20 +41,27 @@ func ValidateFormat(format string) error {
 	return fmt.Errorf("invalid format '%s'. Supported formats are: %s", format, strings.Join(validFormats, ", "))
 }
 
+// WorkflowData represents workflow information for template processing
+type WorkflowData struct {
+	File        string
+	Name        string
+	Description string
+}
+
 // Extracts workflows from a workflow manifest
-func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, error) {
-	var rows [][]string
+func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([]WorkflowData, error) {
+	var workflows []WorkflowData
 	if manifest.Workflows == nil {
-		return rows, nil
+		return workflows, nil
 	}
 	for workflowName, workflow := range manifest.Workflows {
-		rows = append(rows, []string{
-			manifest.Name,
-			workflowName,
-			workflow.Description,
+		workflows = append(workflows, WorkflowData{
+			File:        manifest.Name,
+			Name:        workflowName,
+			Description: workflow.Description,
 		})
 	}
-	return rows, nil
+	return workflows, nil
 }
 
 // FilterAndListWorkflows filters and lists workflows based on the given file
@@ -70,11 +77,12 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 		format = listConfig.Format
 	}
 
-	// Parse columns configuration
-	header := []string{"File", "Workflow", "Description"}
+	// Parse columns configuration - use custom columns if provided, otherwise defaults
+	columns := GetColumnsWithDefaults(listConfig.Columns, "workflows")
+	header := ExtractHeaders(columns)
 
 	// Get all workflows from manifests
-	var rows [][]string
+	var workflowDatas []WorkflowData
 
 	// If a specific file is provided, validate and load it
 	if fileFlag != "" {
@@ -98,11 +106,11 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 			return "", fmt.Errorf("error parsing workflow file: %w", err)
 		}
 
-		manifestRows, err := getWorkflowsFromManifest(manifest)
+		manifestWorkflows, err := getWorkflowsFromManifest(manifest)
 		if err != nil {
 			return "", fmt.Errorf("error processing manifest: %w", err)
 		}
-		rows = append(rows, manifestRows...)
+		workflowDatas = append(workflowDatas, manifestWorkflows...)
 	} else {
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
@@ -147,44 +155,68 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 				return "", fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
 			}
 
-			manifestRows, err := getWorkflowsFromManifest(manifest)
+			manifestWorkflows, err := getWorkflowsFromManifest(manifest)
 			if err != nil {
 				return "", fmt.Errorf("error processing manifest: %w", err)
 			}
-			rows = append(rows, manifestRows...)
+			workflowDatas = append(workflowDatas, manifestWorkflows...)
 		}
 	}
 
 	// Remove duplicates and sort
-	rows = lo.UniqBy(rows, func(row []string) string {
-		return strings.Join(row, delimiter)
+	workflowDatas = lo.UniqBy(workflowDatas, func(w WorkflowData) string {
+		return fmt.Sprintf("%s:%s", w.File, w.Name)
 	})
-	sort.Slice(rows, func(i, j int) bool {
-		return strings.Join(rows[i], delimiter) < strings.Join(rows[j], delimiter)
+	sort.Slice(workflowDatas, func(i, j int) bool {
+		if workflowDatas[i].File != workflowDatas[j].File {
+			return workflowDatas[i].File < workflowDatas[j].File
+		}
+		return workflowDatas[i].Name < workflowDatas[j].Name
 	})
 
-	if len(rows) == 0 {
+	if len(workflowDatas) == 0 {
 		return "No workflows found", nil
+	}
+
+	// Process workflows with custom columns
+	var rows [][]string
+	for _, workflow := range workflowDatas {
+		templateData := map[string]interface{}{
+			"workflow_file":        workflow.File,
+			"workflow_name":        workflow.Name,
+			"workflow_description": workflow.Description,
+		}
+		
+		var row []string
+		for _, col := range columns {
+			value, err := ProcessColumnTemplate(col.Value, templateData)
+			if err != nil {
+				value = ""
+			}
+			row = append(row, value)
+		}
+		rows = append(rows, row)
 	}
 
 	// Handle different output formats
 	switch format {
 	case "json":
-		// Convert to JSON format
-		type workflow struct {
-			File        string `json:"file"`
-			Name        string `json:"name"`
-			Description string `json:"description"`
+		// Convert to JSON format using custom columns
+		var jsonData []map[string]interface{}
+		for _, workflow := range workflowDatas {
+			// Create template data
+			templateData := map[string]interface{}{
+				"workflow_file":        workflow.File,
+				"workflow_name":        workflow.Name,
+				"workflow_description": workflow.Description,
+			}
+			
+			row, err := ProcessCustomColumns(columns, templateData)
+			if err == nil {
+				jsonData = append(jsonData, row)
+			}
 		}
-		var workflows []workflow
-		for _, row := range rows {
-			workflows = append(workflows, workflow{
-				File:        row[0],
-				Name:        row[1],
-				Description: row[2],
-			})
-		}
-		jsonBytes, err := json.MarshalIndent(workflows, "", "  ")
+		jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
 		if err != nil {
 			return "", fmt.Errorf("error formatting JSON output: %w", err)
 		}

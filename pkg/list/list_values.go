@@ -1,6 +1,9 @@
 package list
 
 import (
+	"bytes"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -9,7 +12,8 @@ import (
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
-	"github.com/cloudposse/atmos/pkg/list/format"
+	listformat "github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -73,10 +77,10 @@ type FilterOptions struct {
 func FilterAndListValues(stacksMap map[string]interface{}, options *FilterOptions) (string, error) {
 	// Set default format if not specified
 	if options.FormatStr == "" {
-		options.FormatStr = string(format.FormatTable)
+		options.FormatStr = string(listformat.FormatTable)
 	}
 
-	if err := format.ValidateFormat(options.FormatStr); err != nil {
+	if err := listformat.ValidateFormat(options.FormatStr); err != nil {
 		return "", err
 	}
 
@@ -565,16 +569,16 @@ func formatResultForDisplay(result interface{}) interface{} {
 
 // formatOutput formats the output based on the specified format.
 func formatOutput(values map[string]interface{}, formatStr, delimiter string, maxColumns int) (string, error) {
-	formatter, err := format.NewFormatter(format.Format(formatStr))
+	formatter, err := listformat.NewFormatter(listformat.Format(formatStr))
 	if err != nil {
 		return "", err
 	}
 
-	options := format.FormatOptions{
+	options := listformat.FormatOptions{
 		MaxColumns: maxColumns,
 		Delimiter:  delimiter,
 		TTY:        term.IsTTYSupportForStdout(),
-		Format:     format.Format(formatStr),
+		Format:     listformat.Format(formatStr),
 	}
 
 	return formatter.Format(values, options)
@@ -582,5 +586,252 @@ func formatOutput(values map[string]interface{}, formatStr, delimiter string, ma
 
 // ValidateFormat validates the output format.
 func ValidateValuesFormat(formatStr string) error {
-	return format.ValidateFormat(formatStr)
+	return listformat.ValidateFormat(formatStr)
+}
+
+// FilterAndListValuesWithColumns filters and lists component values with custom column support
+func FilterAndListValuesWithColumns(stacksMap map[string]interface{}, options *FilterOptions, listConfig schema.ListConfig) (string, error) {
+	if options == nil {
+		return "", errors.New("options cannot be nil")
+	}
+
+	if options.FormatStr == "" {
+		if listConfig.Format != "" {
+			options.FormatStr = listConfig.Format
+		} else {
+			options.FormatStr = string(listformat.FormatTable)
+		}
+	}
+
+	if err := listformat.ValidateFormat(options.FormatStr); err != nil {
+		return "", err
+	}
+
+	extractedValues, err := extractComponentValuesFromAllStacks(stacksMap, options.Component, options.ComponentFilter, options.IncludeAbstract)
+	if err != nil {
+		return "", err
+	}
+
+	filteredValues, err := applyFilters(extractedValues, options.StackPattern, options.MaxColumns)
+	if err != nil {
+		return "", err
+	}
+
+	queriedValues, err := applyQuery(filteredValues, options.Query, options.Component)
+	if err != nil {
+		return "", err
+	}
+
+	columns := GetColumnsWithDefaults(listConfig.Columns, "values")
+
+	return formatOutputWithColumns(queriedValues, columns, options.FormatStr, options.Delimiter, options.MaxColumns)
+}
+
+// formatOutputWithColumns formats the output with custom column support
+func formatOutputWithColumns(values map[string]interface{}, columns []schema.ListColumnConfig, formatStr, delimiter string, maxColumns int) (string, error) {
+	switch formatStr {
+	case "json":
+		return formatJSONOutputWithColumns(values, columns)
+	case "csv", "tsv":
+		if formatStr == "tsv" {
+			delimiter = "\t"
+		}
+		return formatDelimitedOutputWithColumns(values, columns, delimiter)
+	case "table", "":
+		return formatTableOutputWithColumns(values, columns)
+	default:
+		return formatOutput(values, formatStr, delimiter, maxColumns)
+	}
+}
+
+// formatJSONOutputWithColumns formats values as JSON with custom columns
+func formatJSONOutputWithColumns(values map[string]interface{}, columns []schema.ListColumnConfig) (string, error) {
+	var jsonData []map[string]interface{}
+
+	var stackNames []string
+	for stackName := range values {
+		stackNames = append(stackNames, stackName)
+	}
+	sort.Strings(stackNames)
+
+	for _, stackName := range stackNames {
+		stackData := values[stackName]
+
+		switch v := stackData.(type) {
+		case map[string]interface{}:
+			var keys []string
+			for key := range v {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+
+			for _, key := range keys {
+				value := v[key]
+				templateData := map[string]interface{}{
+					"stack_name": stackName,
+					"key":        key,
+					"value":      value,
+				}
+				row, err := ProcessCustomColumns(columns, templateData)
+				if err == nil {
+					jsonData = append(jsonData, row)
+				}
+			}
+		default:
+			templateData := map[string]interface{}{
+				"stack_name": stackName,
+				"value":      stackData,
+			}
+			row, err := ProcessCustomColumns(columns, templateData)
+			if err == nil {
+				jsonData = append(jsonData, row)
+			}
+		}
+	}
+
+	jsonBytes, err := json.MarshalIndent(jsonData, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("error formatting JSON output: %w", err)
+	}
+	return string(jsonBytes), nil
+}
+
+// formatDelimitedOutputWithColumns formats values as CSV/TSV with custom columns
+func formatDelimitedOutputWithColumns(values map[string]interface{}, columns []schema.ListColumnConfig, delimiter string) (string, error) {
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+
+	if len(delimiter) > 0 {
+		writer.Comma = rune(delimiter[0])
+	}
+
+	header := ExtractHeaders(columns)
+	if err := writer.Write(header); err != nil {
+		return "", fmt.Errorf("error writing header: %w", err)
+	}
+
+	var stackNames []string
+	for stackName := range values {
+		stackNames = append(stackNames, stackName)
+	}
+	sort.Strings(stackNames)
+
+	for _, stackName := range stackNames {
+		stackData := values[stackName]
+
+		switch v := stackData.(type) {
+		case map[string]interface{}:
+			var keys []string
+			for key := range v {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+
+			for _, key := range keys {
+				value := v[key]
+				templateData := map[string]interface{}{
+					"stack_name": stackName,
+					"key":        key,
+					"value":      value,
+				}
+
+				var row []string
+				for _, col := range columns {
+					val, err := ProcessColumnTemplate(col.Value, templateData)
+					if err != nil {
+						val = ""
+					}
+					row = append(row, val)
+				}
+				if err := writer.Write(row); err != nil {
+					return "", fmt.Errorf("error writing row: %w", err)
+				}
+			}
+		default:
+			templateData := map[string]interface{}{
+				"stack_name": stackName,
+				"value":      stackData,
+			}
+
+			var row []string
+			for _, col := range columns {
+				val, err := ProcessColumnTemplate(col.Value, templateData)
+				if err != nil {
+					val = ""
+				}
+				row = append(row, val)
+			}
+			if err := writer.Write(row); err != nil {
+				return "", fmt.Errorf("error writing row: %w", err)
+			}
+		}
+	}
+
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return "", fmt.Errorf("error flushing CSV writer: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// formatTableOutputWithColumns formats values as a table with custom columns
+func formatTableOutputWithColumns(values map[string]interface{}, columns []schema.ListColumnConfig) (string, error) {
+	header := ExtractHeaders(columns)
+	var rows [][]string
+
+	var stackNames []string
+	for stackName := range values {
+		stackNames = append(stackNames, stackName)
+	}
+	sort.Strings(stackNames)
+
+	for _, stackName := range stackNames {
+		stackData := values[stackName]
+
+		switch v := stackData.(type) {
+		case map[string]interface{}:
+			var keys []string
+			for key := range v {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+
+			for _, key := range keys {
+				value := v[key]
+				templateData := map[string]interface{}{
+					"stack_name": stackName,
+					"key":        key,
+					"value":      fmt.Sprintf("%v", value),
+				}
+
+				var row []string
+				for _, col := range columns {
+					val, err := ProcessColumnTemplate(col.Value, templateData)
+					if err != nil {
+						val = ""
+					}
+					row = append(row, val)
+				}
+				rows = append(rows, row)
+			}
+		default:
+			templateData := map[string]interface{}{
+				"stack_name": stackName,
+				"value":      fmt.Sprintf("%v", stackData),
+			}
+
+			var row []string
+			for _, col := range columns {
+				val, err := ProcessColumnTemplate(col.Value, templateData)
+				if err != nil {
+					val = ""
+				}
+				row = append(row, val)
+			}
+			rows = append(rows, row)
+		}
+	}
+
+	return listformat.CreateStyledTable(header, rows), nil
 }
