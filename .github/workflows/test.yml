@@ -537,6 +537,3 @@ jobs:
       format: binary
       environment: 'feature-releases'
     secrets: inherit
-
-
-
