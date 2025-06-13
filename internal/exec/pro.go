@@ -136,7 +136,7 @@ func parseUnlockCliArgs(cmd *cobra.Command, args []string) (ProUnlockCmdArgs, er
 	return result, nil
 }
 
-// ExecuteProLockCommand executes `atmos pro lock` command
+// ExecuteProLockCommand executes `atmos pro lock` command.
 func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 	a, err := parseLockCliArgs(cmd, args)
 	if err != nil {
@@ -163,7 +163,7 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		Properties:  nil,
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAPIClient, err)
 	}
@@ -205,7 +205,7 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		Key: fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(a.Logger, &a.AtmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAPIClient, err)
 	}

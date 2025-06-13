@@ -11,7 +11,6 @@ import (
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -55,13 +54,11 @@ type AtmosProAPIClient struct {
 	BaseAPIEndpoint string
 	BaseURL         string
 	HTTPClient      *http.Client
-	Logger          *logger.Logger
 }
 
 // NewAtmosProAPIClient creates a new instance of AtmosProAPIClient.
-func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiToken string) *AtmosProAPIClient {
+func NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken string) *AtmosProAPIClient {
 	return &AtmosProAPIClient{
-		Logger:          logger,
 		BaseURL:         baseURL,
 		BaseAPIEndpoint: baseAPIEndpoint,
 		APIToken:        apiToken,
@@ -70,7 +67,7 @@ func NewAtmosProAPIClient(logger *logger.Logger, baseURL, baseAPIEndpoint, apiTo
 }
 
 // NewAtmosProAPIClientFromEnv creates a new AtmosProAPIClient from environment variables.
-func NewAtmosProAPIClientFromEnv(logger *logger.Logger, atmosConfig *schema.AtmosConfiguration) (*AtmosProAPIClient, error) {
+func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*AtmosProAPIClient, error) {
 	baseURL := atmosConfig.Settings.Pro.BaseURL
 
 	if baseURL == "" {
@@ -88,7 +85,7 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger, atmosConfig *schema.Atmo
 	apiToken := atmosConfig.Settings.Pro.Token
 	if apiToken != "" {
 		log.Debug("Creating API client with API token from environment variable")
-		return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
+		return NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken), nil
 	}
 
 	// If API key is not set, attempt to use GitHub OIDC token exchange
@@ -110,7 +107,7 @@ func NewAtmosProAPIClientFromEnv(logger *logger.Logger, atmosConfig *schema.Atmo
 		return nil, fmt.Errorf(cfg.ErrFormatString, ErrOIDCTokenExchangeFailed, err)
 	}
 
-	return NewAtmosProAPIClient(logger, baseURL, baseAPIEndpoint, apiToken), nil
+	return NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken), nil
 }
 
 func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.Reader) (*http.Request, error) {
@@ -139,7 +136,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
-	c.Logger.Debug(fmt.Sprintf("\nUploading the affected components and stacks to %s", url))
+	log.Debug(fmt.Sprintf("\nUploading the affected components and stacks to %s", url))
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -150,7 +147,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadStacks, resp.Status)
 	}
-	c.Logger.Trace(fmt.Sprintf("\nUploaded the affected components and stacks to %s", url))
+	log.Debug(fmt.Sprintf("\nUploaded the affected components and stacks to %s", url))
 
 	return nil
 }
@@ -158,7 +155,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 // LockStack locks a specific stack.
 func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
-	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
+	log.Debug(fmt.Sprintf("\nLocking stack at %s", url))
 
 	data, err := json.Marshal(dto)
 	if err != nil {
@@ -206,7 +203,7 @@ func (c *AtmosProAPIClient) LockStack(dto dtos.LockStackRequest) (dtos.LockStack
 // UnlockStack unlocks a specific stack.
 func (c *AtmosProAPIClient) UnlockStack(dto dtos.UnlockStackRequest) (dtos.UnlockStackResponse, error) {
 	url := fmt.Sprintf("%s/%s/locks", c.BaseURL, c.BaseAPIEndpoint)
-	c.Logger.Trace(fmt.Sprintf("\nLocking stack at %s", url))
+	log.Debug(fmt.Sprintf("\nLocking stack at %s", url))
 
 	data, err := json.Marshal(dto)
 	if err != nil {

@@ -3,7 +3,6 @@ package exec
 import (
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	l "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
@@ -207,7 +206,9 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	if err != nil {
 		return err
 	}
-	logger, err := l.NewLoggerFromCliConfig(*d.atmosConfig)
+
+	log.Debug("Creating API client")
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(d.atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -221,13 +222,8 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		RepoHost:  gitURL.GetHostName(),
 		Stacks:    affected,
 	}
-	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	log.Debug("Creating API client")
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(logger, d.atmosConfig)
-	if err != nil {
-		return err
-	}
+	log.Debug("Preparing upload affected stacks request", "req", req)
 
 	return apiClient.UploadAffectedStacks(&req)
 }

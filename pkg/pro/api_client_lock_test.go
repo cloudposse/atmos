@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
@@ -38,15 +37,11 @@ func TestLockStack_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{
@@ -95,15 +90,11 @@ func TestLockStack_HTTPErrors(t *testing.T) {
 			}))
 			defer server.Close()
 
-			mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-			assert.NoError(t, err)
-
 			client := &AtmosProAPIClient{
 				BaseURL:         server.URL,
 				BaseAPIEndpoint: "api",
 				APIToken:        "test-token",
 				HTTPClient:      http.DefaultClient,
-				Logger:          mockLogger,
 			}
 
 			dto := dtos.LockStackRequest{Key: "test-key"}
@@ -117,15 +108,12 @@ func TestLockStack_HTTPErrors(t *testing.T) {
 }
 
 func TestLockStack_NetworkError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
 
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{Key: "test-key"}
@@ -143,15 +131,11 @@ func TestLockStack_InvalidJSONResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{Key: "test-key"}
@@ -163,8 +147,6 @@ func TestLockStack_InvalidJSONResponse(t *testing.T) {
 }
 
 func TestLockStack_ReadBodyError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
 
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
@@ -174,7 +156,6 @@ func TestLockStack_ReadBodyError(t *testing.T) {
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      httpClient,
-		Logger:          mockLogger,
 	}
 
 	// Mock response with body that will fail to read
@@ -197,8 +178,6 @@ func TestLockStack_ReadBodyError(t *testing.T) {
 }
 
 func TestLockStack_RequestCreationError(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
 
 	// Use an invalid URL that would cause http.NewRequest to fail
 	client := &AtmosProAPIClient{
@@ -206,7 +185,6 @@ func TestLockStack_RequestCreationError(t *testing.T) {
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{Key: "test-key"}
@@ -231,15 +209,11 @@ func TestLockStack_SuccessFalseWithContext(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.NoError(t, err)
-
 	client := &AtmosProAPIClient{
 		BaseURL:         server.URL,
 		BaseAPIEndpoint: "api",
 		APIToken:        "test-token",
 		HTTPClient:      http.DefaultClient,
-		Logger:          mockLogger,
 	}
 
 	dto := dtos.LockStackRequest{Key: "test-key"}

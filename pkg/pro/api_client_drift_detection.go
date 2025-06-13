@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -22,14 +23,14 @@ func (c *AtmosProAPIClient) UploadDriftDetection(dto *dtos.DriftDetectionUploadR
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToMarshalPayload, err)
 	}
 
-	c.Logger.Debug(fmt.Sprintf("Uploading drift detection DTO: %s", data))
+	log.Debug(fmt.Sprintf("Uploading drift detection DTO: %s", data))
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
-	c.Logger.Trace(fmt.Sprintf("\nUploading drift detection results to %s", url))
+	log.Debug(fmt.Sprintf("\nUploading drift detection results to %s", url))
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -40,7 +41,7 @@ func (c *AtmosProAPIClient) UploadDriftDetection(dto *dtos.DriftDetectionUploadR
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDriftDetection, resp.Status)
 	}
-	c.Logger.Trace(fmt.Sprintf("\nUploaded drift detection results to %s", url))
+	log.Debug(fmt.Sprintf("\nUploaded drift detection results to %s", url))
 
 	return nil
 }

@@ -211,7 +211,7 @@ func uploadDeployments(deployments []schema.Deployment) error {
 		return err
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(nil, &atmosConfig)
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
 	if err != nil {
 		log.Error(err)
 		return err

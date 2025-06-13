@@ -564,7 +564,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				}
 
 				// Initialize the API client
-				client, err := pro.NewAtmosProAPIClientFromEnv(nil, &atmosConfig)
+				client, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
 				if err != nil {
 					return err
 				}
