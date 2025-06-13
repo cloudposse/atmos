@@ -25,6 +25,7 @@ type DescribeDependentsExecProps struct {
 	Component string
 }
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeDependentsExec interface {
 	Execute(describeDependentsExecProps *DescribeDependentsExecProps) error
 }
@@ -37,25 +38,22 @@ type describeDependentsExec struct {
 		stack string,
 		includeSettings bool,
 	) ([]schema.Dependent, error)
-	viewWithScroll        func(v *viewWithScrollProps) error
 	newPageCreator        pager.PageCreator
 	isTTYSupportForStdout func() bool
-	printOrWriteToFile    func(
+	evaluateYqExpression  func(
 		atmosConfig *schema.AtmosConfiguration,
-		format string,
-		file string,
 		data any,
-	) error
+		yq string,
+	) (any, error)
 }
 
 func NewDescribeDependentsExec(atmosConfig *schema.AtmosConfiguration) DescribeDependentsExec {
 	return &describeDependentsExec{
 		executeDescribeDependents: ExecuteDescribeDependents,
-		viewWithScroll:            viewWithScroll,
 		newPageCreator:            pager.New(),
 		isTTYSupportForStdout:     term.IsTTYSupportForStdout,
-		printOrWriteToFile:        printOrWriteToFile,
 		atmosConfig:               atmosConfig,
+		evaluateYqExpression:      u.EvaluateYqExpression,
 	}
 }
 
@@ -73,7 +71,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 	var res any
 
 	if describeDependentsExecProps.Query != "" {
-		res, err = u.EvaluateYqExpression(d.atmosConfig, dependents, describeDependentsExecProps.Query)
+		res, err = d.evaluateYqExpression(d.atmosConfig, dependents, describeDependentsExecProps.Query)
 		if err != nil {
 			return err
 		}
@@ -81,7 +79,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		res = dependents
 	}
 
-	return d.viewWithScroll(&viewWithScrollProps{
+	return viewWithScroll(&viewWithScrollProps{
 		atmosConfig:           d.atmosConfig,
 		format:                describeDependentsExecProps.Format,
 		file:                  describeDependentsExecProps.File,
@@ -89,7 +87,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 		pageCreator:           d.newPageCreator,
 		isTTYSupportForStdout: d.isTTYSupportForStdout,
 		displayName:           fmt.Sprintf("Dependents of '%s' in stack '%s'", describeDependentsExecProps.Component, describeDependentsExecProps.Stack),
-		printOrWriteToFile:    d.printOrWriteToFile,
+		printOrWriteToFile:    printOrWriteToFile,
 	})
 }
 
