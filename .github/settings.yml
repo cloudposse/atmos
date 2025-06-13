@@ -11,6 +11,13 @@ environments:
       custom_branches:
         - name: "**/*"
           type: branch
+
+  - name: demo
+    deployment_branch_policy:
+      custom_branches:
+        - name: "**/*"
+          type: branch
+
 labels:
   - name: release/feature
     color: '#d73a4a'
