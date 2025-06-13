@@ -11,3 +11,7 @@ environments:
       custom_branches:
         - name: "*"
           type: branch
+        - name: "*/*"
+          type: branch
+        - name: "*/**/*"
+          type: branch
