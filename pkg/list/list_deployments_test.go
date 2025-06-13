@@ -356,11 +356,11 @@ func TestExecuteListDeploymentsCmd(t *testing.T) {
 				if tt.upload && tt.driftEnabled {
 					apiClient := &mockAPIClient{uploadErr: tt.mockUploadErr}
 					req := dtos.DriftDetectionUploadRequest{
-						RepoURL:   repoInfo.RepoUrl,
-						RepoName:  repoInfo.RepoName,
-						RepoOwner: repoInfo.RepoOwner,
-						RepoHost:  repoInfo.RepoHost,
-						Stacks:    processedDeployments,
+						RepoURL:     repoInfo.RepoUrl,
+						RepoName:    repoInfo.RepoName,
+						RepoOwner:   repoInfo.RepoOwner,
+						RepoHost:    repoInfo.RepoHost,
+						Deployments: processedDeployments,
 					}
 					err := apiClient.UploadDriftDetection(&req)
 					if err != nil {
@@ -1029,11 +1029,11 @@ func TestUploadDeploymentsFunc(t *testing.T) {
 
 				// Create upload request
 				req := dtos.DriftDetectionUploadRequest{
-					RepoURL:   repoInfo.RepoUrl,
-					RepoName:  repoInfo.RepoName,
-					RepoOwner: repoInfo.RepoOwner,
-					RepoHost:  repoInfo.RepoHost,
-					Stacks:    deployments,
+					RepoURL:     repoInfo.RepoUrl,
+					RepoName:    repoInfo.RepoName,
+					RepoOwner:   repoInfo.RepoOwner,
+					RepoHost:    repoInfo.RepoHost,
+					Deployments: deployments,
 				}
 
 				// Upload to API

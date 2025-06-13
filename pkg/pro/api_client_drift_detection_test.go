@@ -33,7 +33,7 @@ func TestUploadDriftDetection(t *testing.T) {
 		RepoName:  "repo",
 		RepoOwner: "org",
 		RepoHost:  "github.com",
-		Stacks: []schema.Deployment{
+		Deployments: []schema.Deployment{
 			{
 				Component:     "vpc",
 				Stack:         "tenant1-ue2-dev",
@@ -106,7 +106,7 @@ func TestUploadDriftDetection_Error(t *testing.T) {
 		RepoName:  "repo",
 		RepoOwner: "org",
 		RepoHost:  "github.com",
-		Stacks: []schema.Deployment{
+		Deployments: []schema.Deployment{
 			{
 				Component:     "vpc",
 				Stack:         "tenant1-ue2-dev",

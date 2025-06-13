@@ -218,11 +218,11 @@ func uploadDeployments(deployments []schema.Deployment) error {
 	}
 
 	req := dtos.DriftDetectionUploadRequest{
-		RepoURL:   repoInfo.RepoUrl,
-		RepoName:  repoInfo.RepoName,
-		RepoOwner: repoInfo.RepoOwner,
-		RepoHost:  repoInfo.RepoHost,
-		Stacks:    deployments,
+		RepoURL:     repoInfo.RepoUrl,
+		RepoName:    repoInfo.RepoName,
+		RepoOwner:   repoInfo.RepoOwner,
+		RepoHost:    repoInfo.RepoHost,
+		Deployments: deployments,
 	}
 
 	err = apiClient.UploadDriftDetection(&req)
