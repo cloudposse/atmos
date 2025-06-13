@@ -109,7 +109,6 @@ func TestUnlockStack_HTTPErrors(t *testing.T) {
 }
 
 func TestUnlockStack_NetworkError(t *testing.T) {
-
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
@@ -148,7 +147,6 @@ func TestUnlockStack_InvalidJSONResponse(t *testing.T) {
 }
 
 func TestUnlockStack_ReadBodyError(t *testing.T) {
-
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 
@@ -179,7 +177,6 @@ func TestUnlockStack_ReadBodyError(t *testing.T) {
 }
 
 func TestUnlockStack_RequestCreationError(t *testing.T) {
-
 	// Use an invalid URL that would cause http.NewRequest to fail
 	client := &AtmosProAPIClient{
 		BaseURL:         "://invalid-url", // Malformed URL

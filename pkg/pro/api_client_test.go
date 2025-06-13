@@ -24,7 +24,6 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
-
 	// Save original env vars
 	originalEnvVars := map[string]string{
 		"ACTIONS_ID_TOKEN_REQUEST_URL":   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
