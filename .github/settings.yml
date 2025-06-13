@@ -9,5 +9,5 @@ environments:
   - name: feature-releases
     deployment_branch_policy:
       custom_branches:
-        - name: "*"
+        - name: "**/*"
           type: branch
