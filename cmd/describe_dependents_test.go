@@ -25,7 +25,7 @@ func TestDescribeDependents(t *testing.T) {
 		func(atmosConfig *schema.AtmosConfiguration) exec.DescribeDependentsExec {
 			return describeDependentsMock
 		})
-	run(describeDependentsCmd, []string{})
+	run(describeDependentsCmd, []string{"component"})
 }
 
 func TestSetFlagInDescribeDependents(t *testing.T) {
