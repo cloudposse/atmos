@@ -48,6 +48,7 @@ func getRunnableDescribeDependentsCmd(
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
 			checkErrorAndExit(err)
 		}
+		describe.Component = args[0]
 		err = newDescribeDependentsExec(&atmosConfig).Execute(describe)
 		checkErrorAndExit(err)
 	}
