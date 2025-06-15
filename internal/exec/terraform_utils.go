@@ -171,9 +171,9 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	return true
 }
 
-// ExecuteTerraformAffected executes `atmos terraform --affected`
+// ExecuteTerraformAffected executes `atmos terraform <command> --affected`
 func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
-	// Add these flags here because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
+	// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
 	cmd.PersistentFlags().String("file", "", "")
 	cmd.PersistentFlags().String("format", "yaml", "")
 	cmd.PersistentFlags().Bool("verbose", false, "")
@@ -181,8 +181,6 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	cmd.PersistentFlags().Bool("include-settings", false, "")
 	cmd.PersistentFlags().Bool("upload", false, "")
 	cmd.PersistentFlags().StringP("query", "q", "", "")
-
-	props, err := parseDescribeAffectedCliArgs(cmd, args)
 
 	cliArgs, err := parseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
@@ -288,7 +286,12 @@ func executeTerraformAffectedComponent(
 	return nil
 }
 
-// ExecuteTerraformAll executes `atmos terraform --all`
+// ExecuteTerraformAll executes `atmos terraform <command> --all`
 func ExecuteTerraformAll(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
+	return nil
+}
+
+// ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression`
+func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
 	return nil
 }
