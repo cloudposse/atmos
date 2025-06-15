@@ -276,7 +276,8 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands")
 
 	// Flags related to `--affected` (similar to `atmos describe affected`)
-	// These flags are only used then executing `atmos terraform plan/apply/deploy --affected`
+	// These flags are only used then executing `atmos terraform <command> --affected`
+	parentCmd.PersistentFlags().StringP("query", "q", "", "Execute `atmos terraform <command>` on the components returned by the `yq` expression")
 	parentCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch: atmos terraform <sub-command> --affected --repo-path <path_to_already_cloned_repo>")
 	parentCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch: atmos terraform <sub-command> --affected --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details")
 	parentCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch: atmos terraform <sub-command> --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073")

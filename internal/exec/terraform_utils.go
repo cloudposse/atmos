@@ -115,8 +115,8 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 	return nil
 }
 
-// needProcessTemplatesAndYamlFunctions checks if a Terraform command
-// requires the `Go` templates and Atmos YAML functions to be processed
+// needProcessTemplatesAndYamlFunctions checks if a Terraform command.
+// requires the `Go` templates and Atmos YAML functions to be processed.
 func needProcessTemplatesAndYamlFunctions(command string) bool {
 	commandsThatNeedFuncProcessing := []string{
 		"init",
@@ -171,7 +171,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	return true
 }
 
-// ExecuteTerraformAffected executes `atmos terraform <command> --affected`
+// ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
 func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
 	// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
 	cmd.PersistentFlags().String("file", "", "")
@@ -180,23 +180,71 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	cmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
 	cmd.PersistentFlags().Bool("include-settings", false, "")
 	cmd.PersistentFlags().Bool("upload", false, "")
-	cmd.PersistentFlags().StringP("query", "q", "", "")
 
-	cliArgs, err := parseDescribeAffectedCliArgs(cmd, args)
+	a, err := ParseDescribeAffectedCliArgs(cmd, args)
 	if err != nil {
 		return err
 	}
 
-	cliArgs.IncludeSpaceliftAdminStacks = false
-	cliArgs.IncludeSettings = false
-	cliArgs.Upload = false
-	cliArgs.OutputFile = ""
-	cliArgs.Query = ""
+	a.IncludeSpaceliftAdminStacks = false
+	a.IncludeSettings = false
+	a.Upload = false
+	a.OutputFile = ""
 
-	// https://atmos.tools/cli/commands/describe/affected
-	affectedList, _, _, _, err := ExecuteDescribeAffected(cliArgs)
+	var affectedList []schema.Affected
+
+	switch {
+	case a.RepoPath != "":
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
+			a.CLIConfig,
+			a.RepoPath,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	case a.CloneTargetRef:
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.SSHKeyPath,
+			a.SSHKeyPassword,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	default:
+		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
+			a.CLIConfig,
+			a.Ref,
+			a.SHA,
+			a.Verbose,
+			a.IncludeSpaceliftAdminStacks,
+			a.IncludeSettings,
+			a.Stack,
+			a.ProcessTemplates,
+			a.ProcessYamlFunctions,
+			a.Skip,
+		)
+	}
 	if err != nil {
 		return err
+	}
+
+	// Add dependent components and stacks for each affected component
+	if len(affectedList) > 0 && a.IncludeDependents {
+		err = addDependentsToAffected(a.CLIConfig, &affectedList, a.IncludeSettings)
+		if err != nil {
+			return err
+		}
 	}
 
 	affectedYaml, err := u.ConvertToYAML(affectedList)
@@ -206,7 +254,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	log.Debug("Affected components:\n" + affectedYaml)
 
 	for _, affected := range affectedList {
-		err = executeTerraformAffectedComponent(affected, info, "", "", cliArgs)
+		err = executeTerraformAffectedComponent(affected, info, "", "", a)
 		if err != nil {
 			return err
 		}
@@ -215,7 +263,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	return nil
 }
 
-// executeTerraformAffectedComponent recursively processes the affected components in the dependency order
+// executeTerraformAffectedComponent recursively processes the affected components in the dependency order.
 func executeTerraformAffectedComponent(
 	affected schema.Affected,
 	info schema.ConfigAndStacksInfo,
@@ -286,12 +334,12 @@ func executeTerraformAffectedComponent(
 	return nil
 }
 
-// ExecuteTerraformAll executes `atmos terraform <command> --all`
+// ExecuteTerraformAll executes `atmos terraform <command> --all`.
 func ExecuteTerraformAll(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression`
+// ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression`.
 func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
 	return nil
 }
