@@ -172,7 +172,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 }
 
 // ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
-func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
+func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
 	// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
 	cmd.PersistentFlags().String("file", "", "")
 	cmd.PersistentFlags().String("format", "yaml", "")
@@ -254,7 +254,15 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	log.Debug("Affected components:\n" + affectedYaml)
 
 	for _, affected := range affectedList {
-		err = executeTerraformAffectedComponent(affected, info, "", "", a)
+		err = executeTerraformAffectedComponentInDepOrder(info,
+			affected.Component,
+			affected.Stack,
+			"",
+			"",
+			affected.IncludedInDependents,
+			affected.Dependents,
+			&a,
+		)
 		if err != nil {
 			return err
 		}
@@ -263,34 +271,36 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info schema.Con
 	return nil
 }
 
-// executeTerraformAffectedComponent recursively processes the affected components in the dependency order.
-func executeTerraformAffectedComponent(
-	affected schema.Affected,
-	info schema.ConfigAndStacksInfo,
+// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
+func executeTerraformAffectedComponentInDepOrder(
+	info *schema.ConfigAndStacksInfo,
+	affectedComponent string,
+	affectedStack string,
 	parentComponent string,
 	parentStack string,
-	args DescribeAffectedCmdArgs,
+	affectedComponentIncludedInDependents bool,
+	dependents []schema.Dependent,
+	args *DescribeAffectedCmdArgs,
 ) error {
-	// If the affected component is included as dependent in other components, don't process it now,
-	// it will be processed in the dependency order
-	if !affected.IncludedInDependents {
-		info.Component = affected.Component
-		info.ComponentFromArg = affected.Component
-		info.Stack = affected.Stack
+	// If the affected component is included as dependent in other components, don't process it now; it will be processed in the dependency order
+	if affectedComponentIncludedInDependents {
+		info.Component = affectedComponent
+		info.ComponentFromArg = affectedComponent
+		info.Stack = affectedStack
 
 		if parentComponent != "" && parentStack != "" {
 			log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s' as dependency of component '%s' in stack '%s'",
 				info.SubCommand,
-				affected.Component,
-				affected.Stack,
+				affectedComponent,
+				affectedStack,
 				parentComponent,
 				parentStack,
 			))
 		} else {
 			log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s'",
 				info.SubCommand,
-				affected.Component,
-				affected.Stack,
+				affectedComponent,
+				affectedStack,
 			))
 		}
 
@@ -303,28 +313,31 @@ func executeTerraformAffectedComponent(
 		if parentComponent != "" && parentStack != "" {
 			log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of component '%s' in stack '%s'",
 				info.SubCommand,
-				affected.Component,
-				affected.Stack,
+				affectedComponent,
+				affectedStack,
 				parentComponent,
 				parentStack,
 			))
 		} else {
 			log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of another component",
 				info.SubCommand,
-				affected.Component,
-				affected.Stack,
+				affectedComponent,
+				affectedStack,
 			))
 		}
 	}
 
 	if args.IncludeDependents {
-		for _, dep := range affected.Dependents {
-			affectedDep := schema.Affected{
-				Component:  dep.Component,
-				Stack:      dep.Stack,
-				Dependents: dep.Dependents,
-			}
-			err := executeTerraformAffectedComponent(affectedDep, info, affected.Component, affected.Stack, args)
+		for _, dep := range dependents {
+			err := executeTerraformAffectedComponentInDepOrder(info,
+				dep.Component,
+				dep.Stack,
+				affectedComponent,
+				affectedStack,
+				affectedComponentIncludedInDependents,
+				dep.Dependents,
+				args,
+			)
 			if err != nil {
 				return err
 			}
@@ -335,11 +348,11 @@ func executeTerraformAffectedComponent(
 }
 
 // ExecuteTerraformAll executes `atmos terraform <command> --all`.
-func ExecuteTerraformAll(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
+func ExecuteTerraformAll(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression`.
-func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info schema.ConfigAndStacksInfo) error {
+func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
 	return nil
 }

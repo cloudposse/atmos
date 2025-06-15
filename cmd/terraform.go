@@ -104,7 +104,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	}
 
 	if info.Affected {
-		err = e.ExecuteTerraformAffected(cmd, args, info)
+		err = e.ExecuteTerraformAffected(cmd, args, &info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
@@ -112,7 +112,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	}
 
 	if info.All {
-		err = e.ExecuteTerraformAll(cmd, args, info)
+		err = e.ExecuteTerraformAll(cmd, args, &info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
@@ -120,7 +120,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	}
 
 	if info.Query != "" {
-		err = e.ExecuteTerraformQuery(cmd, args, info)
+		err = e.ExecuteTerraformQuery(cmd, args, &info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
