@@ -367,6 +367,10 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	processYamlFunctions bool,
 	skip []string,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	if verbose {
+		atmosConfig.Logs.Level = u.LogLevelDebug
+	}
+
 	localRepo, err := g.GetLocalRepo()
 	if err != nil {
 		return nil, nil, nil, "", err
