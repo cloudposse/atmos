@@ -427,7 +427,9 @@ func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.Confi
 		return err
 	}
 
-	res, err := u.EvaluateYqExpression(&atmosConfig, stacks, info.Query)
+	query := fmt.Sprintf("map_values(.components.terraform |= with_entries(select(.value%s))) | with_entries(select(.value.components.terraform != {}))", info.Query)
+
+	res, err := u.EvaluateYqExpression(&atmosConfig, stacks, query)
 	if err != nil {
 		return err
 	}
