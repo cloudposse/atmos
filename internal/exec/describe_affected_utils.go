@@ -487,10 +487,14 @@ func executeDescribeAffected(
 	}
 
 	// Update paths to point to the cloned remote repo dir
+	currentStacksBaseAbsolutePath := atmosConfig.StacksBaseAbsolutePath
+	currentStacksTerraformDirAbsolutePath := atmosConfig.TerraformDirAbsolutePath
+	currentStacksHelmfileDirAbsolutePath := atmosConfig.HelmfileDirAbsolutePath
+	currentStacksStackConfigFilesAbsolutePaths := atmosConfig.StackConfigFilesAbsolutePaths
+
 	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath)
 	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
 	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
-
 	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinAbsolutePathWithPaths(
 		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
 		atmosConfig.StackConfigFilesRelativePaths,
@@ -514,6 +518,12 @@ func executeDescribeAffected(
 	if err != nil {
 		return nil, nil, nil, err
 	}
+
+	// Restore atmosConfig
+	atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
+	atmosConfig.TerraformDirAbsolutePath = currentStacksTerraformDirAbsolutePath
+	atmosConfig.HelmfileDirAbsolutePath = currentStacksHelmfileDirAbsolutePath
+	atmosConfig.StackConfigFilesAbsolutePaths = currentStacksStackConfigFilesAbsolutePaths
 
 	log.Debug("Getting current working repo commit object")
 
