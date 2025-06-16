@@ -190,6 +190,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 	a.IncludeSettings = false
 	a.Upload = false
 	a.OutputFile = ""
+	a.Verbose = false
 
 	var affectedList []schema.Affected
 
@@ -251,7 +252,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 	if err != nil {
 		return err
 	}
-	log.Debug("Affected components:\n" + affectedYaml)
+	log.Debug("Affected", "components", affectedYaml)
 
 	for _, affected := range affectedList {
 		err = executeTerraformAffectedComponentInDepOrder(info,
