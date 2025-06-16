@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"os"
 	"path/filepath"
 
@@ -330,7 +331,8 @@ func executeTerraformAffectedComponentInDepOrder(
 
 	if args.IncludeDependents {
 		for _, dep := range dependents {
-			err := executeTerraformAffectedComponentInDepOrder(info,
+			err := executeTerraformAffectedComponentInDepOrder(
+				info,
 				dep.Component,
 				dep.Stack,
 				affectedComponent,
@@ -350,10 +352,59 @@ func executeTerraformAffectedComponentInDepOrder(
 
 // ExecuteTerraformAll executes `atmos terraform <command> --all`.
 func ExecuteTerraformAll(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return err
+	}
+
+	stacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+	)
+	if err != nil {
+		return err
+	}
+
+	u.PrintAsYAML(&atmosConfig, stacks)
 	return nil
 }
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression`.
 func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return err
+	}
+
+	stacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+	)
+	if err != nil {
+		return err
+	}
+
+	res, err := u.EvaluateYqExpression(&atmosConfig, stacks, info.Query)
+	if err != nil {
+		return err
+	}
+
+	u.PrintAsYAML(&atmosConfig, res)
 	return nil
 }

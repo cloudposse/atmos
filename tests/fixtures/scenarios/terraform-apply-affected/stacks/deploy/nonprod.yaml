@@ -11,16 +11,22 @@ components:
         component: mock
       vars:
         foo: foo-component-1
+        tags:
+          team: network
     component-2:
       metadata:
         component: mock
       vars:
         bar: bar-component-2
+        tags:
+          team: network
     component-3:
       metadata:
         component: mock
       vars:
         baz: baz-component-3
+        tags:
+          team: eks
       settings:
         depends_on:
           1:
@@ -32,6 +38,8 @@ components:
         foo: foo-component-4
         bar: bar-component-4
         baz: baz-component-4
+        tags:
+          team: eks
       settings:
         depends_on:
           1:
@@ -43,11 +51,15 @@ components:
         component: mock
       vars:
         foo: foo-component-5
+        tags:
+          team: data
     component-6:
       metadata:
         component: mock
       vars:
         foo: foo-component-6
+        tags:
+          team: data
       settings:
         depends_on:
           1:
