@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -26,6 +27,7 @@ var workflowCmd = &cobra.Command{
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				u.LogErrorAndExit(err)
 			}
 			return
@@ -42,6 +44,7 @@ var workflowCmd = &cobra.Command{
 		// Execute the workflow command
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
 			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
 			if e.IsKnownWorkflowError(err) {
@@ -50,6 +53,7 @@ var workflowCmd = &cobra.Command{
 			// For unknown errors, print and exit
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
+		telemetry.CaptureCmd(cmd)
 	},
 }
 

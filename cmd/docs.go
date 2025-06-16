@@ -14,6 +14,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -37,6 +38,7 @@ var docsCmd = &cobra.Command{
 
 			atmosConfig, err := cfg.InitCliConfig(info, true)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 
@@ -67,6 +69,7 @@ var docsCmd = &cobra.Command{
 			componentPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, info.Component)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				u.PrintErrorMarkdownAndExit("", err, "")
 			}
 			if !componentPathExists {
@@ -76,14 +79,17 @@ var docsCmd = &cobra.Command{
 			readmePath := filepath.Join(componentPath, "README.md")
 			if _, err := os.Stat(readmePath); err != nil {
 				if os.IsNotExist(err) {
+					telemetry.CaptureCmdFailure(cmd)
 					u.LogErrorAndExit(fmt.Errorf("No README found for component: %s", info.Component))
 				} else {
+					telemetry.CaptureCmdFailure(cmd)
 					u.LogErrorAndExit(fmt.Errorf("Component %s not found", info.Component))
 				}
 			}
 
 			readmeContent, err := os.ReadFile(readmePath)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				u.LogErrorAndExit(err)
 			}
 
@@ -94,6 +100,7 @@ var docsCmd = &cobra.Command{
 				glamour.WithWordWrap(screenWidth),
 			)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				u.LogErrorAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err))
 			}
 
@@ -109,8 +116,10 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err := u.DisplayDocs(componentDocs, pager); err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				u.LogErrorAndExit(fmt.Errorf("failed to display documentation: %w", err))
 			}
+			telemetry.CaptureCmd(cmd)
 
 			return
 		}
@@ -133,10 +142,11 @@ var docsCmd = &cobra.Command{
 			}
 
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				u.LogErrorAndExit(err)
 			}
 		}
-
+		telemetry.CaptureCmd(cmd)
 		fmt.Printf("Opening default browser to '%v'.\n", atmosDocsURL)
 	},
 }

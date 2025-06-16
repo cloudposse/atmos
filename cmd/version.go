@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 var checkFlag bool
@@ -18,6 +19,7 @@ var versionCmd = &cobra.Command{
 		exec.NewVersionExec().Execute(checkFlag)
 		// Check for the cache and print update message
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+		telemetry.CaptureCmd(cmd)
 	},
 }
 

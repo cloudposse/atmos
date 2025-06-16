@@ -16,7 +16,8 @@ import (
 )
 
 type CacheConfig struct {
-	LastChecked int64 `mapstructure:"last_checked"`
+	LastChecked     int64  `mapstructure:"last_checked"`
+	AtmosInstanceId string `mapstructure:"atmos_instance_id"`
 }
 
 func GetCacheFilePath() (string, error) {

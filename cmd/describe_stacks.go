@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -49,21 +50,23 @@ func getRunnableDescribeStacksCmd(
 		// Check Atmos configuration
 		g.checkAtmosConfig()
 		info, err := g.processCommandLineArgs("", cmd, args, nil)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
 		atmosConfig, err := g.initCliConfig(info, true)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
 		err = g.validateStacks(atmosConfig)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
-		printErrorAndExit(err)
+		printErrorAndExit(err, cmd)
+		telemetry.CaptureCmd(cmd)
 	}
 }
 
-func printErrorAndExit(err error) {
+func printErrorAndExit(err error, cmd *cobra.Command) {
 	if err != nil {
+		telemetry.CaptureCmdFailure(cmd)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 }

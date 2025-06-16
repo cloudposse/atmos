@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 
@@ -39,9 +39,15 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {
+			telemetry.CaptureCmdFailure(cmd)
 			showUsageAndExit(cmd, args)
 		}
-		runMainLogic()
+		err := runMainLogic()
+		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
+			u.LogErrorAndExit(err)
+		}
+		telemetry.CaptureCmd(cmd)
 	},
 }
 
@@ -142,25 +148,25 @@ func replaceAtmosConfigInConfig(cmd *cobra.Command, atmosConfig schema.AtmosConf
 }
 
 // runMainLogic contains the main logic
-func runMainLogic() {
+func runMainLogic() error {
 	config := *currentConfig
 	u.LogDebug(config.String())
 	u.LogTrace(fmt.Sprintf("Exclude Regexp: %s", config.GetExcludesAsRegularExpression()))
 
 	if err := checkVersion(config); err != nil {
-		u.LogErrorAndExit(err)
+		return err
 	}
 
 	filePaths, err := files.GetFiles(config)
 	if err != nil {
-		u.LogErrorAndExit(err)
+		return err
 	}
 
 	if config.DryRun {
 		for _, file := range filePaths {
 			u.LogInfo(file)
 		}
-		os.Exit(0)
+		return nil
 	}
 
 	errors := validation.ProcessValidation(filePaths, config)
@@ -168,9 +174,10 @@ func runMainLogic() {
 	errorCount := er.GetErrorCount(errors)
 	if errorCount != 0 {
 		er.PrintErrors(errors, config)
-		os.Exit(1)
+		return fmt.Errorf("errors found")
 	}
 	u.PrintMessage("No errors found")
+	return nil
 }
 
 func checkVersion(config config.Config) error {

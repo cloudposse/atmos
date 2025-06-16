@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // docsGenerateCmd is the subcommand under docs that groups generation operations.
@@ -18,12 +19,15 @@ Supports native terraform-docs injection.`,
 	ValidArgs: []string{"readme"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 {
+			telemetry.CaptureCmdFailure(cmd)
 			return ErrInvalidArguments
 		}
 		err := e.ExecuteDocsGenerateCmd(cmd, args)
 		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
 			return err
 		}
+		telemetry.CaptureCmd(cmd)
 		return nil
 	},
 }

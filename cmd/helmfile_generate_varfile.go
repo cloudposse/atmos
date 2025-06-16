@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,8 +22,10 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
 		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
 			u.LogErrorAndExit(err)
 		}
+		telemetry.CaptureCmd(cmd)
 	},
 }
 
@@ -33,6 +36,7 @@ func init() {
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
+		telemetry.CaptureCmdFailure(helmfileGenerateVarfileCmd)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 

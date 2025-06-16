@@ -5,6 +5,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
@@ -56,16 +57,20 @@ and are compliant with expected formats, reducing configuration drift and runtim
 		}
 
 		if key == "" && schema != "" {
+			telemetry.CaptureCmdFailure(cmd)
 			log.Error("key not provided for the schema to be used")
 			u.OsExit(1)
 		}
 
 		if err := exec.NewAtmosValidatorExecutor(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
 			if errors.Is(err, exec.ErrInvalidYAML) {
+				telemetry.CaptureCmdFailure(cmd)
 				u.OsExit(1)
 			}
-			u.PrintErrorMarkdownAndExit("", err, "")
+			telemetry.CaptureCmdFailure(cmd)
+			u.LogErrorAndExit(err)
 		}
+		telemetry.CaptureCmd(cmd)
 	},
 }
 

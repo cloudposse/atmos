@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -17,8 +18,10 @@ var describeWorkflowsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := e.ExecuteDescribeWorkflowsCmd(cmd, args)
 		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
+		telemetry.CaptureCmd(cmd)
 	},
 }
 

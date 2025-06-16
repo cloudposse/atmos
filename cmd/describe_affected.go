@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -36,14 +37,16 @@ func getRunnableDescribeAffectedCmd(
 		// Check Atmos configuration
 		checkAtmosConfig()
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
-		checkErrorAndExit(err)
+		checkErrorAndExit(err, cmd)
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
-		checkErrorAndExit(err)
+		checkErrorAndExit(err, cmd)
+		telemetry.CaptureCmd(cmd)
 	}
 }
 
-func checkErrorAndExit(err error) {
+func checkErrorAndExit(err error, cmd *cobra.Command) {
 	if err != nil {
+		telemetry.CaptureCmdFailure(cmd)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 }

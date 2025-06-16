@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,8 +22,10 @@ var proLockCmd = &cobra.Command{
 
 		err := e.ExecuteProLockCommand(cmd, args)
 		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
+		telemetry.CaptureCmd(cmd)
 	},
 }
 

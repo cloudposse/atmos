@@ -10,6 +10,7 @@ import (
 	"time"
 
 	log "github.com/charmbracelet/log"
+	"github.com/gruntwork-io/go-commons/version"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 
@@ -17,9 +18,9 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/go-git/go-git/v5"
 )
 
@@ -185,10 +186,13 @@ func processCommandAliases(
 					}
 
 					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
+
 					err = e.ExecuteShell(atmosConfig, commandToRun, commandToRun, currentDirPath, nil, false)
 					if err != nil {
+						telemetry.CaptureCmdFailure(cmd)
 						log.Fatal(err)
 					}
+					telemetry.CaptureCmd(cmd)
 				},
 			}
 
@@ -224,6 +228,7 @@ func preCustomCommand(
 				)
 			}
 			u.LogInfo(sb.String())
+			telemetry.CaptureCmdFailure(cmd)
 			os.Exit(1)
 		} else {
 			// truly invalid, nothing to do
@@ -258,6 +263,7 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
+		telemetry.CaptureCmdFailure(cmd)
 		u.LogErrorAndExit(errors.New(sb.String()))
 	}
 
@@ -273,6 +279,7 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
+				telemetry.CaptureCmdFailure(cmd)
 				u.LogErrorAndExit(errors.New(sb.String()))
 			}
 		}
@@ -286,6 +293,7 @@ func preCustomCommand(
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
 		_ = cmd.Help()
+		telemetry.CaptureCmdFailure(cmd)
 		os.Exit(0)
 	}
 }
@@ -337,12 +345,14 @@ func executeCustomCommand(
 			if fl.Type == "" || fl.Type == "string" {
 				providedFlag, err := flags.GetString(fl.Name)
 				if err != nil {
+					telemetry.CaptureCmdFailure(cmd)
 					log.Fatal(err)
 				}
 				flagsData[fl.Name] = providedFlag
 			} else if fl.Type == "bool" {
 				boolFlag, err := flags.GetBool(fl.Name)
 				if err != nil {
+					telemetry.CaptureCmdFailure(cmd)
 					log.Fatal(err)
 				}
 				flagsData[fl.Name] = boolFlag
@@ -362,6 +372,7 @@ func executeCustomCommand(
 			// Process Go templates in the command's 'component_config.component'
 			component, err := e.ProcessTmpl(fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				log.Fatal(err)
 			}
 			if component == "" || component == "<no value>" {
@@ -372,6 +383,7 @@ func executeCustomCommand(
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := e.ProcessTmpl(fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				log.Fatal(err)
 			}
 			if stack == "" || stack == "<no value>" {
@@ -382,6 +394,7 @@ func executeCustomCommand(
 			// Get the config for the component in the stack
 			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				log.Fatal(err)
 			}
 			data["ComponentConfig"] = componentConfig
@@ -399,6 +412,7 @@ func executeCustomCommand(
 				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
 					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
 					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
+				telemetry.CaptureCmdFailure(cmd)
 				log.Fatal(err)
 			}
 
@@ -407,6 +421,7 @@ func executeCustomCommand(
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
 				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, nil, false)
 				if err != nil {
+					telemetry.CaptureCmdFailure(cmd)
 					log.Fatal(err)
 				}
 				value = strings.TrimRight(res, "\r\n")
@@ -414,6 +429,7 @@ func executeCustomCommand(
 				// Process Go templates in the values of the command's ENV vars
 				value, err = e.ProcessTmpl(fmt.Sprintf("env-var-%d", i), value, data, false)
 				if err != nil {
+					telemetry.CaptureCmdFailure(cmd)
 					log.Fatal(err)
 				}
 			}
@@ -421,6 +437,7 @@ func executeCustomCommand(
 			envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", key, value))
 			err = os.Setenv(key, value)
 			if err != nil {
+				telemetry.CaptureCmdFailure(cmd)
 				log.Fatal(err)
 			}
 		}
@@ -436,6 +453,7 @@ func executeCustomCommand(
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(fmt.Sprintf("step-%d", i), step, data, false)
 		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
 			log.Fatal(err)
 		}
 
@@ -443,9 +461,11 @@ func executeCustomCommand(
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 		err = e.ExecuteShell(atmosConfig, commandToRun, commandName, currentDirPath, envVarsList, false)
 		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
 			log.Fatal(err)
 		}
 	}
+	telemetry.CaptureCmd(cmd)
 }
 
 // Extracts native arguments (everything after "--") signifying the end of Atmos-specific arguments.

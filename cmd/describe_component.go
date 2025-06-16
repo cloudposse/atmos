@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -21,27 +22,28 @@ var describeComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		if len(args) != 1 {
+			telemetry.CaptureCmdFailure(cmd)
 			return errors.New("invalid arguments. The command requires one argument `component`")
 		}
 
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 		format, err := flags.GetString("format")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 		file, err := flags.GetString("file")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 		processTemplates, err := flags.GetBool("process-templates")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 		query, err := flags.GetString("query")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 		skip, err := flags.GetStringSlice("skip")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 		pager, err := flags.GetString("pager")
-		checkFlagNotPresentError(err)
+		checkFlagNotPresentError(err, cmd)
 
 		component := args[0]
 
@@ -57,8 +59,10 @@ var describeComponentCmd = &cobra.Command{
 			File:                 file,
 		})
 		if err != nil {
+			telemetry.CaptureCmdFailure(cmd)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
+		telemetry.CaptureCmd(cmd)
 		return nil
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
@@ -83,8 +87,9 @@ func init() {
 
 // We prefer to panic because this is a developer error.
 // checkFlagNotPresentError checks if the error is nil.
-func checkFlagNotPresentError(err error) {
+func checkFlagNotPresentError(err error, cmd *cobra.Command) {
 	if err != nil {
+		telemetry.CaptureCmdFailure(cmd)
 		panic(err)
 	}
 }

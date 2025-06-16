@@ -10,6 +10,7 @@ import (
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -36,6 +37,7 @@ func ExecuteAtmosCmd() error {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
+		telemetry.CaptureCmdFailureString("atmos")
 		return err
 	}
 
@@ -43,6 +45,7 @@ func ExecuteAtmosCmd() error {
 	// Don't process `Go` templates and YAML functions in Atmos stack manifests since we just need to display the stack and component names in the TUI
 	stacksMap, err := ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
+		telemetry.CaptureCmdFailureString("atmos")
 		return err
 	}
 
@@ -83,6 +86,7 @@ func ExecuteAtmosCmd() error {
 	app, err := tui.Execute(commands, stacksComponentsMap, componentsStacksMap)
 	fmt.Println()
 	if err != nil {
+		telemetry.CaptureCmdFailureString("atmos")
 		return err
 	}
 
@@ -106,35 +110,43 @@ func ExecuteAtmosCmd() error {
 	if selectedCommand == "describe component" {
 		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true, nil)
 		if err != nil {
+			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
 			return err
 		}
 		err = u.PrintAsYAML(&atmosConfig, data)
 		if err != nil {
+			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
 			return err
 		}
+		telemetry.CaptureCmdString(fmt.Sprintf("atmos %s", selectedCommand))
 		return nil
 	}
 
 	if selectedCommand == "describe dependents" {
 		data, err := ExecuteDescribeDependents(atmosConfig, selectedComponent, selectedStack, false)
 		if err != nil {
+			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
 			return err
 		}
 		err = u.PrintAsYAML(&atmosConfig, data)
 		if err != nil {
+			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
 			return err
 		}
+		telemetry.CaptureCmdString(fmt.Sprintf("atmos %s", selectedCommand))
 		return nil
 	}
 
 	if selectedCommand == "validate component" {
 		_, err = ExecuteValidateComponent(atmosConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
 		if err != nil {
+			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
 			return err
 		}
 
 		m := fmt.Sprintf("component '%s' in stack '%s' validated successfully\n", selectedComponent, selectedStack)
 		u.PrintMessageInColor(m, theme.Colors.Success)
+		telemetry.CaptureCmdString(fmt.Sprintf("atmos %s", selectedCommand))
 		return nil
 	}
 
@@ -151,9 +163,12 @@ func ExecuteAtmosCmd() error {
 		configAndStacksInfo.ProcessFunctions = true
 		err = ExecuteTerraform(configAndStacksInfo)
 		if err != nil {
+			u.LogDebug(fmt.Sprintf("Error executing Terraform command: %v", atmosConfig.Settings.Telemetry.Enabled))
+			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
+
 			return err
 		}
 	}
-
+	telemetry.CaptureCmdString(fmt.Sprintf("atmos %s", selectedCommand))
 	return nil
 }
