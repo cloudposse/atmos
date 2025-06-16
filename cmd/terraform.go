@@ -112,7 +112,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		u.PrintErrorMarkdownAndExit("", ErrInvalidTerraformFlags, "")
 	}
 
-	if info.Stack != "" {
+	if info.Stack != "" || len(info.Components) > 0 {
 		err = e.ExecuteTerraformStack(cmd, args, &info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
