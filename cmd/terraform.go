@@ -23,7 +23,7 @@ var terraformCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
-var ErrInvalidTerraformFlags = errors.New("only one of '--affected', '--all' or '--query' flag can be specified at a time")
+var ErrInvalidTerraformFlags = errors.New("only one of '--affected', '--all', '--stack' or '--query' flag can be specified at a time")
 
 func init() {
 	// https://github.com/spf13/cobra/issues/739
@@ -84,9 +84,15 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 
+	components, err := flags.GetStringSlice("components")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
 	info.Skip = skip
+	info.Components = components
 
 	queryFlags := 0
 	if info.Affected {
@@ -98,9 +104,20 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	if info.Query != "" {
 		queryFlags++
 	}
+	if info.Stack != "" {
+		queryFlags++
+	}
 
 	if queryFlags > 1 {
-		u.PrintErrorMarkdownAndExit("", ErrInvalidTerraformFlags, "Only one of --affected, --all, or --query flag can be specified at a time.")
+		u.PrintErrorMarkdownAndExit("", ErrInvalidTerraformFlags, "")
+	}
+
+	if info.Stack != "" {
+		err = e.ExecuteTerraformStack(cmd, args, &info)
+		if err != nil {
+			u.PrintErrorMarkdownAndExit("", err, "")
+		}
+		return nil
 	}
 
 	if info.Affected {

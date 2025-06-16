@@ -501,6 +501,7 @@ type ConfigAndStacksInfo struct {
 	CliArgs                       []string
 	Affected                      bool
 	All                           bool
+	Components                    []string
 }
 
 // Workflows

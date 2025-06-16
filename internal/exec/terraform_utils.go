@@ -377,6 +377,33 @@ func ExecuteTerraformAll(cmd *cobra.Command, args []string, info *schema.ConfigA
 	return nil
 }
 
+// ExecuteTerraformStack executes `atmos terraform <command> --stack <stack>`.
+func ExecuteTerraformStack(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return err
+	}
+
+	stacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		info.Stack,
+		info.Components,
+		[]string{cfg.TerraformComponentType},
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+	)
+	if err != nil {
+		return err
+	}
+
+	u.PrintAsYAML(&atmosConfig, stacks)
+	return nil
+}
+
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression`.
 func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
@@ -386,9 +413,9 @@ func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.Confi
 
 	stacks, err := ExecuteDescribeStacks(
 		atmosConfig,
-		"",
-		nil,
-		nil,
+		info.Stack,
+		info.Components,
+		[]string{cfg.TerraformComponentType},
 		nil,
 		false,
 		info.ProcessTemplates,
