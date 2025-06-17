@@ -22,13 +22,14 @@ import (
 
 var (
 	// defaultConfigFileNames determines the file names where the config is located
-	defaultConfigFileNames = []string{".editorconfig", ".editorconfig-checker.json", ".ecrc"}
-	initEditorConfig       bool
-	currentConfig          *config.Config
-	cliConfig              config.Config
-	configFilePaths        []string
-	tmpExclude             string
-	format                 string
+	defaultConfigFileNames    = []string{".editorconfig", ".editorconfig-checker.json", ".ecrc"}
+	initEditorConfig          bool
+	currentConfig             *config.Config
+	cliConfig                 config.Config
+	configFilePaths           []string
+	tmpExclude                string
+	format                    string
+	ValidationConfigHasErrors = errors.New("errors found")
 )
 
 var editorConfigCmd *cobra.Command = &cobra.Command{
@@ -176,7 +177,7 @@ func runMainLogic() error {
 	errorCount := er.GetErrorCount(errs)
 	if errorCount != 0 {
 		er.PrintErrors(errs, config)
-		return errors.New("errors found")
+		return ValidationConfigHasErrors
 	}
 	u.PrintMessage("No errors found")
 	return nil
