@@ -95,7 +95,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 
 	if info.Affected &&
-		(info.All || len(info.Components) > 0 || info.Query != "" || info.Stack != "" || info.Component != "") {
+		(info.All || len(info.Components) > 0 || info.Query != "" || info.Stack != "" || info.ComponentFromArg != "") {
 		u.PrintErrorMarkdownAndExit("", ErrInvalidTerraformFlags, "")
 	}
 
@@ -113,7 +113,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// `--components c1,c2`
 	// `--query <yq-expression>`
 	// `--stack` (and the `component` argument is not passed)
-	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.Component == "") {
+	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
 		err = e.ExecuteTerraformQuery(&info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
