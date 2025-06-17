@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
@@ -33,6 +34,8 @@ func ExecuteAtmosCmd() error {
 		"describe component",
 		"describe dependents",
 	}
+
+	const telemetryCommandFormat = "atmos %s"
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -110,37 +113,37 @@ func ExecuteAtmosCmd() error {
 	if selectedCommand == "describe component" {
 		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true, nil)
 		if err != nil {
-			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
+			telemetry.CaptureCmdFailureString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 			return err
 		}
 		err = u.PrintAsYAML(&atmosConfig, data)
 		if err != nil {
-			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
+			telemetry.CaptureCmdFailureString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 			return err
 		}
-		telemetry.CaptureCmdString(fmt.Sprintf("atmos %s", selectedCommand))
+		telemetry.CaptureCmdString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 		return nil
 	}
 
 	if selectedCommand == "describe dependents" {
 		data, err := ExecuteDescribeDependents(atmosConfig, selectedComponent, selectedStack, false)
 		if err != nil {
-			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
+			telemetry.CaptureCmdFailureString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 			return err
 		}
 		err = u.PrintAsYAML(&atmosConfig, data)
 		if err != nil {
-			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
+			telemetry.CaptureCmdFailureString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 			return err
 		}
-		telemetry.CaptureCmdString(fmt.Sprintf("atmos %s", selectedCommand))
+		telemetry.CaptureCmdString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 		return nil
 	}
 
 	if selectedCommand == "validate component" {
 		_, err = ExecuteValidateComponent(atmosConfig, schema.ConfigAndStacksInfo{}, selectedComponent, selectedStack, "", "", nil, 0)
 		if err != nil {
-			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
+			telemetry.CaptureCmdFailureString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 			return err
 		}
 
@@ -163,12 +166,13 @@ func ExecuteAtmosCmd() error {
 		configAndStacksInfo.ProcessFunctions = true
 		err = ExecuteTerraform(configAndStacksInfo)
 		if err != nil {
-			u.LogDebug(fmt.Sprintf("Error executing Terraform command: %v", atmosConfig.Settings.Telemetry.Enabled))
-			telemetry.CaptureCmdFailureString(fmt.Sprintf("atmos %s", selectedCommand))
+			log.Debug(fmt.Sprintf("Error executing Terraform command: %v", atmosConfig.Settings.Telemetry.Enabled))
+
+			telemetry.CaptureCmdFailureString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 
 			return err
 		}
 	}
-	telemetry.CaptureCmdString(fmt.Sprintf("atmos %s", selectedCommand))
+	telemetry.CaptureCmdString(fmt.Sprintf(telemetryCommandFormat, selectedCommand))
 	return nil
 }

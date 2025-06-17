@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -45,7 +46,7 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 		err := runMainLogic()
 		if err != nil {
 			telemetry.CaptureCmdFailure(cmd)
-			u.LogErrorAndExit(err)
+			log.Fatal(err)
 		}
 		telemetry.CaptureCmd(cmd)
 	},

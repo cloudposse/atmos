@@ -242,7 +242,7 @@ type AtmosSettings struct {
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
 }
 
-// TelemetrySettings contains configuration for telemetry collection
+// TelemetrySettings contains configuration for telemetry collection.
 type TelemetrySettings struct {
 	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`

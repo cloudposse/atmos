@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/google/uuid"
 	"github.com/gruntwork-io/go-commons/version"
 	"github.com/posthog/posthog-go"
@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	DefaultTelemetryToken = "phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS"
-	DefaultEventName      = "command"
+	DefaultTelemetryToken    = "phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS"
+	DefaultTelemetryEndpoint = "https://us.i.posthog.com"
+	DefaultEventName         = "command"
 )
 
 type Telemetry struct {
@@ -25,10 +26,11 @@ type Telemetry struct {
 	distinctId string
 }
 
-func NewTelemetry(isEnabled bool, token string, distinctId string) *Telemetry {
+func NewTelemetry(isEnabled bool, token string, endpoint string, distinctId string) *Telemetry {
 	return &Telemetry{
 		isEnabled:  isEnabled,
 		token:      token,
+		endpoint:   endpoint,
 		distinctId: distinctId,
 	}
 }
@@ -42,7 +44,7 @@ func (t *Telemetry) CaptureEvent(eventName string, properties map[string]interfa
 		Endpoint: t.endpoint,
 	})
 	if err != nil {
-		u.LogWarning(fmt.Sprintf("Could not create PostHog client: %s", err))
+		log.Warn(fmt.Sprintf("Could not create PostHog client: %s", err))
 		return
 	}
 	defer client.Close()
@@ -57,11 +59,14 @@ func (t *Telemetry) CaptureEvent(eventName string, properties map[string]interfa
 		propertiesMap.Set(k, v)
 	}
 
-	client.Enqueue(posthog.Capture{
+	err = client.Enqueue(posthog.Capture{
 		DistinctId: t.distinctId,
 		Event:      eventName,
 		Properties: propertiesMap,
 	})
+	if err != nil {
+		log.Debug(fmt.Sprintf("Could not enqueue event: %s", err))
+	}
 }
 
 func (t *Telemetry) CaptureError(eventName string, properties map[string]interface{}) {
@@ -69,7 +74,13 @@ func (t *Telemetry) CaptureError(eventName string, properties map[string]interfa
 		return
 	}
 
-	client := posthog.New(t.token)
+	client, err := posthog.NewWithConfig(t.token, posthog.Config{
+		Endpoint: t.endpoint,
+	})
+	if err != nil {
+		log.Warn(fmt.Sprintf("Could not create PostHog client: %s", err))
+		return
+	}
 	defer client.Close()
 
 	propertiesMap := posthog.NewProperties().
@@ -82,11 +93,14 @@ func (t *Telemetry) CaptureError(eventName string, properties map[string]interfa
 		propertiesMap.Set(k, v)
 	}
 
-	client.Enqueue(posthog.Capture{
+	err = client.Enqueue(posthog.Capture{
 		DistinctId: t.distinctId,
 		Event:      eventName,
 		Properties: propertiesMap,
 	})
+	if err != nil {
+		log.Debug(fmt.Sprintf("Could not enqueue event: %s", err))
+	}
 }
 
 // InitializeTelemetry initializes a new Telemetry client.
@@ -99,7 +113,7 @@ func InitializeTelemetry() *Telemetry {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(fmt.Sprintf("Could not load cache: %s", err))
+		log.Warn(fmt.Sprintf("Could not load cache: %s", err))
 		return nil
 	}
 
@@ -107,7 +121,7 @@ func InitializeTelemetry() *Telemetry {
 		cacheCfg.AtmosInstanceId = uuid.New().String()
 	}
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		u.LogWarning(fmt.Sprintf("Unable to save cache: %s", saveErr))
+		log.Warn(fmt.Sprintf("Unable to save cache: %s", saveErr))
 	}
 	token := DefaultTelemetryToken
 
@@ -115,17 +129,25 @@ func InitializeTelemetry() *Telemetry {
 		token = atmosConfig.Settings.Telemetry.Token
 	}
 
-	return NewTelemetry(atmosConfig.Settings.Telemetry.Enabled, token, cacheCfg.AtmosInstanceId)
+	endpoint := DefaultTelemetryEndpoint
+
+	if atmosConfig.Settings.Telemetry.Endpoint != "" {
+		endpoint = atmosConfig.Settings.Telemetry.Endpoint
+	}
+
+	return NewTelemetry(atmosConfig.Settings.Telemetry.Enabled, token, endpoint, cacheCfg.AtmosInstanceId)
 }
 
 func CaptureCmdString(cmdString string) {
-	telemetry := InitializeTelemetry()
-	telemetry.CaptureEvent(DefaultEventName, map[string]interface{}{"command": cmdString})
+	if t := InitializeTelemetry(); t != nil {
+		t.CaptureEvent(DefaultEventName, map[string]interface{}{"command": cmdString})
+	}
 }
 
 func CaptureCmdFailureString(cmdString string) {
-	telemetry := InitializeTelemetry()
-	telemetry.CaptureError(DefaultEventName, map[string]interface{}{"command": cmdString})
+	if t := InitializeTelemetry(); t != nil {
+		t.CaptureError(DefaultEventName, map[string]interface{}{"command": cmdString})
+	}
 }
 
 func CaptureCmd(cmd *cobra.Command) {
