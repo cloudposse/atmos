@@ -3,13 +3,13 @@ package exec
 import (
 	"errors"
 	"fmt"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"os"
 	"path/filepath"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -351,13 +351,12 @@ func executeTerraformAffectedComponentInDepOrder(
 }
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
-func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
+func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
 
-	var stacks any
 	var stack string
 	var components []string
 
@@ -366,7 +365,7 @@ func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.Confi
 		components = info.Components
 	}
 
-	stacks, err = ExecuteDescribeStacks(
+	stacks, err := ExecuteDescribeStacks(
 		atmosConfig,
 		stack,
 		components,
@@ -382,15 +381,52 @@ func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.Confi
 		return err
 	}
 
-	if info.Query != "" {
-		query := fmt.Sprintf("map_values(.components.terraform |= with_entries(select(.value%s))) | with_entries(select(.value.components.terraform != {}))", info.Query)
+	for stackName, stackSection := range stacks {
+		if stackSectionMap, ok := stackSection.(map[string]any); ok {
+			if componentsSection, ok := stackSectionMap[cfg.ComponentsSectionName].(map[string]any); ok {
+				if terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any); ok {
+					for componentName, compSection := range terraformSection {
+						if componentSection, ok := compSection.(map[string]any); ok {
+							if metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
+								// Skip abstract components
+								if metadataType, ok := metadataSection["type"].(string); ok {
+									if metadataType == "abstract" {
+										continue
+									}
+								}
+								// Skip disabled components
+								if !isComponentEnabled(metadataSection, componentName) {
+									continue
+								}
 
-		stacks, err = u.EvaluateYqExpression(&atmosConfig, stacks, query)
-		if err != nil {
-			return err
+								if info.Query != "" {
+									queryResult, err := u.EvaluateYqExpression(&atmosConfig, componentSection, info.Query)
+									if err != nil {
+										return err
+									}
+									if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
+										log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it didn't match the query '%s'",
+											info.SubCommand,
+											componentName,
+											stackName,
+											info.Query,
+										))
+										continue
+									}
+								}
+
+								log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s'",
+									info.SubCommand,
+									componentName,
+									stackName,
+								))
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
-	u.PrintAsYAML(&atmosConfig, stacks)
 	return nil
 }

@@ -114,13 +114,14 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	// `--query <yq-expression>`
 	// `--stack` (and the `component` argument is not passed)
 	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.Component == "") {
-		err = e.ExecuteTerraformQuery(cmd, args, &info)
+		err = e.ExecuteTerraformQuery(&info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 		return nil
 	}
 
+	// Execute `atmos terraform <sub-command> <component> --stack <stack>`
 	err = e.ExecuteTerraform(info)
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
 	// So if we get here, it means there were no differences or there was an error
