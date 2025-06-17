@@ -7,7 +7,7 @@ import (
 )
 
 func TestTelemetry(t *testing.T) {
-	telemetry := NewTelemetry(true, DefaultTelemetryToken, "test-user-2")
+	telemetry := NewTelemetry(true, DefaultTelemetryToken, DefaultTelemetryEndpoint, "test-user-2")
 
 	telemetry.CaptureEvent("test-snippet", posthog.NewProperties().
 		Set("plan", "Enterprise").
