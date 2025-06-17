@@ -291,10 +291,9 @@ func executeTerraformAffectedComponentInDepOrder(
 		info.Stack = affectedStack
 
 		command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
-		dependency := fmt.Sprintf("component '%s' in stack '%s'", parentComponent, parentStack)
 
 		if parentComponent != "" && parentStack != "" {
-			log.Debug("Executing", "command", command, "dependency of", dependency)
+			log.Debug("Executing", "command", command, "dependency of", parentComponent, "in stack", parentStack)
 		} else {
 			log.Debug("Executing", "command", command)
 		}
