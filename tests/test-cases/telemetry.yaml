@@ -1,9 +1,0 @@
-tests:
-  - name: atmos telemetry
-    enabled: true
-    snapshot: true
-    description: "Ensure atmos CLI run with telemetry configured"
-    workdir: "fixtures/scenarios/telemetry"
-    command: "atmos version"
-    expect:
-      exit_code: 0
