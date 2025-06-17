@@ -91,7 +91,6 @@ func (t *Telemetry) CaptureError(eventName string, properties map[string]interfa
 
 // InitializeTelemetry initializes a new Telemetry client.
 func InitializeTelemetry() *Telemetry {
-
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	if err != nil {
 		return nil

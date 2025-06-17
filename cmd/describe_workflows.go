@@ -8,8 +8,8 @@ import (
 
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/telemetry"  
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // describeWorkflowsCmd executes 'atmos describe workflows' CLI commands
@@ -43,7 +43,7 @@ func getRunnableDescribeWorkflowsCmd(
 		atmosConfig.Settings.Terminal.Pager = pager
 		err = describeWorkflowsExec.Execute(&atmosConfig, describeWorkflowArgs)
 		checkErrorAndExit(err, cmd)
-    telemetry.CaptureCmd(cmd)
+		telemetry.CaptureCmd(cmd)
 	}
 }
 
