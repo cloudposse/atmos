@@ -99,7 +99,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		u.PrintErrorMarkdownAndExit("", ErrInvalidTerraformFlags, "")
 	}
 
-	// Execute `atmos terraform --affected`
+	// Execute `atmos terraform <sub-command> --affected`
 	if info.Affected {
 		err = e.ExecuteTerraformAffected(cmd, args, &info)
 		if err != nil {
@@ -108,7 +108,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		return nil
 	}
 
-	// Execute `atmos terraform` with the filters if any of the following flags are specified:
+	// Execute `atmos terraform <sub-command>` with the filters if any of the following flags are specified:
 	// `--all`
 	// `--components c1,c2`
 	// `--query <yq-expression>`

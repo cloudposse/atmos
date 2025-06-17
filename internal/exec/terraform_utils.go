@@ -284,26 +284,19 @@ func executeTerraformAffectedComponentInDepOrder(
 	dependents []schema.Dependent,
 	args *DescribeAffectedCmdArgs,
 ) error {
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
+	dependency := fmt.Sprintf("component %s in stack %s", parentComponent, parentStack)
+
 	// If the affected component is included as dependent in other components, don't process it now; it will be processed in the dependency order
 	if !affectedComponentIncludedInDependents {
 		info.Component = affectedComponent
 		info.ComponentFromArg = affectedComponent
 		info.Stack = affectedStack
 
-		if parentComponent == "" || parentStack == "" {
-			log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s'",
-				info.SubCommand,
-				affectedComponent,
-				affectedStack,
-			))
+		if parentComponent != "" && parentStack != "" {
+			log.Debug("Executing", "command", command, "dependency of", dependency)
 		} else {
-			log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s' as dependency of component '%s' in stack '%s'",
-				info.SubCommand,
-				affectedComponent,
-				affectedStack,
-				parentComponent,
-				parentStack,
-			))
+			log.Debug("Executing", "command", command)
 		}
 
 		// Execute the terraform command for the affected component
@@ -311,22 +304,6 @@ func executeTerraformAffectedComponentInDepOrder(
 		//if err != nil {
 		//	return err
 		//}
-	} else if args.IncludeDependents {
-		if parentComponent != "" && parentStack != "" {
-			log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of component '%s' in stack '%s'",
-				info.SubCommand,
-				affectedComponent,
-				affectedStack,
-				parentComponent,
-				parentStack,
-			))
-		} else {
-			log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it's a dependency of another component",
-				info.SubCommand,
-				affectedComponent,
-				affectedStack,
-			))
-		}
 	}
 
 	if args.IncludeDependents {
@@ -399,27 +376,20 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 									continue
 								}
 
+								command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
+
 								if info.Query != "" {
 									queryResult, err := u.EvaluateYqExpression(&atmosConfig, componentSection, info.Query)
 									if err != nil {
 										return err
 									}
 									if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
-										log.Debug(fmt.Sprintf("Skipping 'atmos terraform %s %s -s %s' because it didn't match the query '%s'",
-											info.SubCommand,
-											componentName,
-											stackName,
-											info.Query,
-										))
+										log.Debug("Skipping the component because the query criteria not satisfied", "command", command, "query", info.Query)
 										continue
 									}
 								}
 
-								log.Debug(fmt.Sprintf("Executing 'atmos terraform %s %s -s %s'",
-									info.SubCommand,
-									componentName,
-									stackName,
-								))
+								log.Debug("Executing", "command", command)
 							}
 						}
 					}
