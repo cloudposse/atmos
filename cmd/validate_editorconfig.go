@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -170,12 +171,12 @@ func runMainLogic() error {
 		return nil
 	}
 
-	errors := validation.ProcessValidation(filePaths, config)
+	errs := validation.ProcessValidation(filePaths, config)
 	u.LogDebug(fmt.Sprintf("%d files checked", len(filePaths)))
-	errorCount := er.GetErrorCount(errors)
+	errorCount := er.GetErrorCount(errs)
 	if errorCount != 0 {
-		er.PrintErrors(errors, config)
-		return fmt.Errorf("errors found")
+		er.PrintErrors(errs, config)
+		return errors.New("errors found")
 	}
 	u.PrintMessage("No errors found")
 	return nil
