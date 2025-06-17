@@ -284,14 +284,14 @@ func executeTerraformAffectedComponentInDepOrder(
 	dependents []schema.Dependent,
 	args *DescribeAffectedCmdArgs,
 ) error {
-	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
-	dependency := fmt.Sprintf("component %s in stack %s", parentComponent, parentStack)
-
 	// If the affected component is included as dependent in other components, don't process it now; it will be processed in the dependency order
 	if !affectedComponentIncludedInDependents {
 		info.Component = affectedComponent
 		info.ComponentFromArg = affectedComponent
 		info.Stack = affectedStack
+
+		command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
+		dependency := fmt.Sprintf("component '%s' in stack '%s'", parentComponent, parentStack)
 
 		if parentComponent != "" && parentStack != "" {
 			log.Debug("Executing", "command", command, "dependency of", dependency)
