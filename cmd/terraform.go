@@ -23,7 +23,7 @@ var terraformCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
-var ErrInvalidTerraformFlags = errors.New("only one of '--affected', '--all' or '--query' flag can be specified at a time")
+var ErrInvalidTerraformFlags = errors.New("the `--affected` flag can't be used with the `component` argument and with the `--all`, `--query` or `--stack` flags")
 
 func init() {
 	// https://github.com/spf13/cobra/issues/739
@@ -94,24 +94,12 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Skip = skip
 	info.Components = components
 
-	queryFlags := 0
-	if info.Affected {
-		queryFlags++
-	}
-	if info.All {
-		queryFlags++
-	}
-	if info.Query != "" {
-		queryFlags++
-	}
-	if info.Stack != "" {
-		queryFlags++
-	}
-
-	if queryFlags > 1 {
+	if info.Affected &&
+		(info.All || len(info.Components) > 0 || info.Query != "" || info.Stack != "" || info.Component != "") {
 		u.PrintErrorMarkdownAndExit("", ErrInvalidTerraformFlags, "")
 	}
 
+	// Execute `atmos terraform --affected`
 	if info.Affected {
 		err = e.ExecuteTerraformAffected(cmd, args, &info)
 		if err != nil {
@@ -120,7 +108,12 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		return nil
 	}
 
-	if info.All || info.Stack != "" || len(info.Components) > 0 || info.Query != "" {
+	// Execute `atmos terraform` with the filters if any of the following flags are specified:
+	// `--all`
+	// `--components c1,c2`
+	// `--query <yq-expression>`
+	// `--stack` (and the `component` argument is not passed)
+	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.Component == "") {
 		err = e.ExecuteTerraformQuery(cmd, args, &info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
