@@ -350,71 +350,26 @@ func executeTerraformAffectedComponentInDepOrder(
 	return nil
 }
 
-// ExecuteTerraformAll executes `atmos terraform <command> --all`.
-func ExecuteTerraformAll(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
-	if err != nil {
-		return err
-	}
-
-	stacks, err := ExecuteDescribeStacks(
-		atmosConfig,
-		"",
-		nil,
-		nil,
-		nil,
-		false,
-		info.ProcessTemplates,
-		info.ProcessFunctions,
-		false,
-		info.Skip,
-	)
-	if err != nil {
-		return err
-	}
-
-	u.PrintAsYAML(&atmosConfig, stacks)
-	return nil
-}
-
-// ExecuteTerraformStack executes `atmos terraform <command> --stack <stack>`.
-func ExecuteTerraformStack(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
-	if err != nil {
-		return err
-	}
-
-	stacks, err := ExecuteDescribeStacks(
-		atmosConfig,
-		info.Stack,
-		info.Components,
-		[]string{cfg.TerraformComponentType},
-		nil,
-		false,
-		info.ProcessTemplates,
-		info.ProcessFunctions,
-		false,
-		info.Skip,
-	)
-	if err != nil {
-		return err
-	}
-
-	u.PrintAsYAML(&atmosConfig, stacks)
-	return nil
-}
-
-// ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression`.
+// ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
 func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
 
-	stacks, err := ExecuteDescribeStacks(
+	var stacks any
+	var stack string
+	var components []string
+
+	if !info.All {
+		stack = info.Stack
+		components = info.Components
+	}
+
+	stacks, err = ExecuteDescribeStacks(
 		atmosConfig,
-		info.Stack,
-		info.Components,
+		stack,
+		components,
 		[]string{cfg.TerraformComponentType},
 		nil,
 		false,
@@ -427,13 +382,15 @@ func ExecuteTerraformQuery(cmd *cobra.Command, args []string, info *schema.Confi
 		return err
 	}
 
-	query := fmt.Sprintf("map_values(.components.terraform |= with_entries(select(.value%s))) | with_entries(select(.value.components.terraform != {}))", info.Query)
+	if info.Query != "" {
+		query := fmt.Sprintf("map_values(.components.terraform |= with_entries(select(.value%s))) | with_entries(select(.value.components.terraform != {}))", info.Query)
 
-	res, err := u.EvaluateYqExpression(&atmosConfig, stacks, query)
-	if err != nil {
-		return err
+		stacks, err = u.EvaluateYqExpression(&atmosConfig, stacks, query)
+		if err != nil {
+			return err
+		}
 	}
 
-	u.PrintAsYAML(&atmosConfig, res)
+	u.PrintAsYAML(&atmosConfig, stacks)
 	return nil
 }
