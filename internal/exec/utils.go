@@ -1045,12 +1045,10 @@ func processArgsAndFlags(
 
 		if arg == cfg.AffectedFlag {
 			info.Affected = true
-			info.SubCommand = inputArgsAndFlags[0]
 		}
 
 		if arg == cfg.AllFlag {
 			info.All = true
-			info.SubCommand = inputArgsAndFlags[0]
 		}
 
 		for _, f := range commonFlags {
@@ -1085,6 +1083,10 @@ func processArgsAndFlags(
 			info.SubCommand = additionalArgsAndFlags[0]
 		}
 		return info, nil
+	}
+
+	if len(additionalArgsAndFlags) == 1 && info.SubCommand == "" {
+		info.SubCommand = additionalArgsAndFlags[0]
 	}
 
 	if len(additionalArgsAndFlags) > 1 {
