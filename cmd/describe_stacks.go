@@ -58,6 +58,12 @@ func getRunnableDescribeStacksCmd(
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
 		printErrorAndExit(err, cmd)
+		if cmd.Flags().Changed("pager") {
+			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
+			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
+  		printErrorAndExit(err, cmd)    
+		}
+
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
 		printErrorAndExit(err, cmd)
 		telemetry.CaptureCmd(cmd)
