@@ -70,15 +70,15 @@ tests:
       diff: []
       stderr:
         - ".*You're not inside a git repository. Atmos feels lonely outside - bring it home!.*"
-      exit_code: 1 # We expect a non-zero exit code because the dir doesnt have an atmos config
+      exit_code: 1 # We expect a non-zero exit code because the dir doesn't have an atmos config
 
   # We need to test from outside a git repo. 
   # We also need to provide a static path to the atmos config that can we used both in GHA and locally.
   # To do so, we can change up 1 directory outside that atmos project and assume the project is named "atmos".
-  - name: atmos doesnt warn if not in git repo with atmos config
+  - name: atmos doesn't warn if not in git repo with atmos config
     enabled: true
     snapshot: true
-    description: "Test that atmos doesnt warn if not run inside of a git repo but has an atmos config"
+    description: "Test that atmos doesn't warn if not run inside of a git repo but has an atmos config"
     workdir: "../../"
     command: "atmos"
     args:
@@ -96,10 +96,10 @@ tests:
         - "^$"
       exit_code: 0
 
-  - name: atmos doesnt warn if in git repo with atmos config
+  - name: atmos doesn't warn if in git repo with atmos config
     enabled: true
     snapshot: true
-    description: "Test that atmos doesnt warn if run inside of a git repo with an atmos config"
+    description: "Test that atmos doesn't warn if run inside of a git repo with an atmos config"
     workdir: "fixtures/scenarios/complete"
     command: "atmos"
     args:
@@ -116,10 +116,10 @@ tests:
         - "^$"
       exit_code: 0
 
-  - name: atmos doesnt warn if in git repo with no atmos config
+  - name: atmos doesn't warn if in git repo with no atmos config
     enabled: true
     snapshot: true
-    description: "Test that atmos doesnt warn if run inside of a git repo with no atmos config"
+    description: "Test that atmos doesn't warn if run inside of a git repo with no atmos config"
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
     args: []
