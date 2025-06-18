@@ -124,20 +124,21 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 		})
 	}
 }
+
 func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 	tests := []struct {
-		name                     string
-		validateFunc             func(opts ...AtmosValidateOption)
-		processStacksFunc        func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error)
-		processConfigFunc        func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
-		validateConfigFunc       func(atmosConfig schema.AtmosConfiguration) error
-		setCliArgsFunc           func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error
-		mockExecSetup            func(*exec.MockDescribeStacksExec)
-		expectedError            bool
-		expectedExecuteCalls     int
+		name                 string
+		validateFunc         func(opts ...AtmosValidateOption)
+		processStacksFunc    func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error)
+		processConfigFunc    func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
+		validateConfigFunc   func(atmosConfig schema.AtmosConfiguration) error
+		setCliArgsFunc       func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error
+		mockExecSetup        func(*exec.MockDescribeStacksExec)
+		expectedError        bool
+		expectedExecuteCalls int
 	}{
 		{
-			name: "ProcessStacks returns error",
+			name:         "ProcessStacks returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, fmt.Errorf("process stacks error")
@@ -158,7 +159,7 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			expectedExecuteCalls: 0,
 		},
 		{
-			name: "ProcessConfig returns error",
+			name:         "ProcessConfig returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
@@ -179,7 +180,7 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			expectedExecuteCalls: 0,
 		},
 		{
-			name: "ValidateConfig returns error",
+			name:         "ValidateConfig returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
@@ -200,7 +201,7 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			expectedExecuteCalls: 0,
 		},
 		{
-			name: "SetCliArgs returns error",
+			name:         "SetCliArgs returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
@@ -221,7 +222,7 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			expectedExecuteCalls: 0,
 		},
 		{
-			name: "MockExec Execute returns error",
+			name:         "MockExec Execute returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
@@ -269,10 +270,10 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 
 func TestSetFlagValueInDescribeStacksCliArgsEdgeCases(t *testing.T) {
 	tests := []struct {
-		name         string
-		setFlags     func(*pflag.FlagSet)
-		describe     *exec.DescribeStacksArgs
-		expected     *exec.DescribeStacksArgs
+		name     string
+		setFlags func(*pflag.FlagSet)
+		describe *exec.DescribeStacksArgs
+		expected *exec.DescribeStacksArgs
 	}{
 		{
 			name: "All flags set with multiple values",
@@ -331,10 +332,10 @@ func TestSetFlagValueInDescribeStacksCliArgsEdgeCases(t *testing.T) {
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
-				Format:              "yaml",
-				ProcessTemplates:    false,
+				Format:               "yaml",
+				ProcessTemplates:     false,
 				ProcessYamlFunctions: false,
-				IncludeEmptyStacks:  false,
+				IncludeEmptyStacks:   false,
 			},
 		},
 		{
@@ -360,14 +361,14 @@ func TestSetFlagValueInDescribeStacksCliArgsEdgeCases(t *testing.T) {
 				})
 			},
 			describe: &exec.DescribeStacksArgs{
-				Format:         "yaml",
-				FilterByStack:  "old-stack",
-				File:           "existing-file.yaml",
+				Format:        "yaml",
+				FilterByStack: "old-stack",
+				File:          "existing-file.yaml",
 			},
 			expected: &exec.DescribeStacksArgs{
-				Format:         "json",
-				FilterByStack:  "new-stack",
-				File:           "existing-file.yaml",
+				Format:        "json",
+				FilterByStack: "new-stack",
+				File:          "existing-file.yaml",
 			},
 		},
 		{
@@ -503,32 +504,32 @@ func TestDescribeStacksRunnableWithDifferentArgs(t *testing.T) {
 		setupMockExec func(*exec.MockDescribeStacksExec)
 	}{
 		{
-			name: "No arguments",
-			args: []string{},
+			name:          "No arguments",
+			args:          []string{},
 			expectedCalls: 1,
 			setupMockExec: func(mockExec *exec.MockDescribeStacksExec) {
 				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
-			name: "With single argument",
-			args: []string{"stack-name"},
+			name:          "With single argument",
+			args:          []string{"stack-name"},
 			expectedCalls: 1,
 			setupMockExec: func(mockExec *exec.MockDescribeStacksExec) {
 				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
-			name: "With multiple arguments",
-			args: []string{"stack-name", "component-name", "extra-arg"},
+			name:          "With multiple arguments",
+			args:          []string{"stack-name", "component-name", "extra-arg"},
 			expectedCalls: 1,
 			setupMockExec: func(mockExec *exec.MockDescribeStacksExec) {
 				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 			},
 		},
 		{
-			name: "With empty string arguments",
-			args: []string{"", ""},
+			name:          "With empty string arguments",
+			args:          []string{"", ""},
 			expectedCalls: 1,
 			setupMockExec: func(mockExec *exec.MockDescribeStacksExec) {
 				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
@@ -591,8 +592,8 @@ func TestDescribeStacksCompleteFlow(t *testing.T) {
 			},
 			expectedDescribeArgs: func() *exec.DescribeStacksArgs {
 				return &exec.DescribeStacksArgs{
-					Format:              "yaml",
-					ProcessTemplates:    true,
+					Format:               "yaml",
+					ProcessTemplates:     true,
 					ProcessYamlFunctions: true,
 				}
 			},
