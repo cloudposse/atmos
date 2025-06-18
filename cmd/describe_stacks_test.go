@@ -124,20 +124,21 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 		})
 	}
 }
+
 func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 	tests := []struct {
-		name                    string
-		validateFunc            func(opts ...AtmosValidateOption)
-		processConfigFunc       func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error)
-		processStacksFunc       func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
-		validateConfigFunc      func(atmosConfig schema.AtmosConfiguration) error
-		setCliArgsFunc          func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error
-		mockExecuteFunc         func(mockExec *exec.MockDescribeStacksExec)
-		expectedPanic           bool
-		expectExecuteCalled     bool
+		name                string
+		validateFunc        func(opts ...AtmosValidateOption)
+		processConfigFunc   func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error)
+		processStacksFunc   func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
+		validateConfigFunc  func(atmosConfig schema.AtmosConfiguration) error
+		setCliArgsFunc      func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error
+		mockExecuteFunc     func(mockExec *exec.MockDescribeStacksExec)
+		expectedPanic       bool
+		expectExecuteCalled bool
 	}{
 		{
-			name: "ProcessConfig returns error",
+			name:         "ProcessConfig returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, fmt.Errorf("config processing failed")
@@ -158,7 +159,7 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			expectExecuteCalled: false,
 		},
 		{
-			name: "ProcessStacks returns error",
+			name:         "ProcessStacks returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
@@ -179,7 +180,7 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			expectExecuteCalled: false,
 		},
 		{
-			name: "ValidateConfig returns error",
+			name:         "ValidateConfig returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
@@ -200,7 +201,7 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			expectExecuteCalled: false,
 		},
 		{
-			name: "SetCliArgs returns error",
+			name:         "SetCliArgs returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
@@ -221,7 +222,7 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			expectExecuteCalled: false,
 		},
 		{
-			name: "Execute returns error",
+			name:         "Execute returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
 			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
