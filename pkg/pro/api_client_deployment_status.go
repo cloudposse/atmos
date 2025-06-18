@@ -33,7 +33,7 @@ func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUpl
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDriftStatus, resp.Status)
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDeploymentStatus, resp.Status)
 	}
 
 	log.Debug(fmt.Sprintf("\nUploaded deployment status at %s", url))

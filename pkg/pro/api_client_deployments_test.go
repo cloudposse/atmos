@@ -147,7 +147,7 @@ func TestUploadDeployments_Error(t *testing.T) {
 
 	err := apiClient.UploadDeployments(&dto)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to upload drift detection results")
+	assert.Contains(t, err.Error(), "failed to upload deployment status")
 
 	mockRoundTripper.AssertExpectations(t)
 }

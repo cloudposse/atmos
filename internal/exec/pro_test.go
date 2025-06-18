@@ -16,7 +16,7 @@ type MockProAPIClient struct {
 	mock.Mock
 }
 
-func (m *MockProAPIClient) UploadDriftResultStatus(dto *dtos.DeploymentStatusUploadRequest) error {
+func (m *MockProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error {
 	args := m.Called(dto)
 	return args.Error(0)
 }
@@ -57,7 +57,7 @@ func createTestInfo(proEnabled bool) schema.ConfigAndStacksInfo {
 	return info
 }
 
-func TestShouldUploadDriftResult(t *testing.T) {
+func TestShouldUploadDeploymentStatus(t *testing.T) {
 	testCases := []struct {
 		name     string
 		info     *schema.ConfigAndStacksInfo
@@ -111,13 +111,13 @@ func TestShouldUploadDriftResult(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := shouldUploadDriftResult(tc.info)
+			result := shouldUploadDeploymentStatus(tc.info)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
 }
 
-func TestUploadDriftResult(t *testing.T) {
+func TestUploadDeploymentStatus(t *testing.T) {
 	// Create mock clients
 	mockProClient := new(MockProAPIClient)
 	mockGitRepo := new(MockGitRepo)
@@ -178,11 +178,11 @@ func TestUploadDriftResult(t *testing.T) {
 
 			// Set up mock expectations for pro client
 			if tc.proEnabled && (tc.exitCode == 0 || tc.exitCode == 2) {
-				mockProClient.On("UploadDriftResultStatus", mock.AnythingOfType("dtos.DeploymentStatusUploadRequest")).Return(nil)
+				mockProClient.On("UploadDeploymentStatus", mock.AnythingOfType("*dtos.DeploymentStatusUploadRequest")).Return(nil)
 			}
 
 			// Call the function
-			err := uploadDriftResult(&info, tc.exitCode, mockProClient, mockGitRepo)
+			err := uploadDeploymentStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
 
 			// Check results
 			if tc.expectedError {

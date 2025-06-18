@@ -2,7 +2,6 @@ package pro
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -11,8 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
-
-var ErrFailedToUploadDriftDetection = errors.New("failed to upload drift detection results")
 
 // UploadDeployments uploads drift detection data to the API.
 func (c *AtmosProAPIClient) UploadDeployments(dto *dtos.DeploymentsUploadRequest) error {
@@ -39,7 +36,7 @@ func (c *AtmosProAPIClient) UploadDeployments(dto *dtos.DeploymentsUploadRequest
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDriftDetection, resp.Status)
+		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDeploymentStatus, resp.Status)
 	}
 	log.Debug(fmt.Sprintf("\nUploaded deployments to %s", url))
 

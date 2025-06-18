@@ -220,8 +220,8 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// uploadDriftResult uploads the terraform results to the pro API.
-func uploadDriftResult(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+// uploadDeploymentStatus uploads the terraform results to the pro API.
+func uploadDeploymentStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
 	// Only upload if exit code is 0 (no changes) or 2 (changes)
 	if exitCode != 0 && exitCode != 2 {
 		return nil
@@ -244,16 +244,16 @@ func uploadDriftResult(info *schema.ConfigAndStacksInfo, exitCode int, client pr
 		HasDrift:  exitCode == 2,
 	}
 
-	// Upload the drift result status
-	if err := client.UploadDriftResultStatus(&dto); err != nil {
-		return fmt.Errorf(cfg.ErrFormatString, pro.ErrFailedToUploadDriftStatus, err)
+	// Upload the deployment status
+	if err := client.UploadDeploymentStatus(&dto); err != nil {
+		return fmt.Errorf(cfg.ErrFormatString, pro.ErrFailedToUploadDeploymentStatus, err)
 	}
 
 	return nil
 }
 
-// shouldUploadDriftResult determines if drift results should be uploaded.
-func shouldUploadDriftResult(info *schema.ConfigAndStacksInfo) bool {
+// shouldUploadDeploymentStatus determines if deployment status should be uploaded.
+func shouldUploadDeploymentStatus(info *schema.ConfigAndStacksInfo) bool {
 	// Only upload for plan command
 	if info.SubCommand != "plan" {
 		return false

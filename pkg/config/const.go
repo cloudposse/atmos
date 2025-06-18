@@ -92,7 +92,7 @@ const (
 	AtmosProWorkspaceIDEnvVarName = "ATMOS_PRO_WORKSPACE_ID"
 	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
 	AtmosProDefaultEndpoint       = "api/v1"
-	UploadDriftResultsFlag        = "upload-drift-results"
+	UploadDeploymentStatusFlag    = "upload-deployment-status"
 
 	TerraformDefaultWorkspace = "default"
 

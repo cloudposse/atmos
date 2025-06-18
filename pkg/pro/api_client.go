@@ -17,26 +17,27 @@ import (
 )
 
 var (
-	ErrFailedToCreateRequest       = errors.New("failed to create request")
-	ErrFailedToMarshalPayload      = errors.New("failed to marshal payload")
-	ErrFailedToCreateAuthRequest   = errors.New("failed to create authenticated request")
-	ErrFailedToMakeRequest         = errors.New("failed to make request")
-	ErrFailedToUploadStacks        = errors.New("failed to upload stacks")
-	ErrFailedToMarshalRequestBody  = errors.New("failed to marshal request body")
-	ErrFailedToReadResponseBody    = errors.New("error reading response body")
-	ErrFailedToUnmarshalJSON       = errors.New("error unmarshaling JSON")
-	ErrFailedToLockStack           = errors.New("an error occurred while attempting to lock stack")
-	ErrFailedToUnlockStack         = errors.New("an error occurred while attempting to unlock stack")
-	ErrOIDCWorkspaceIDRequired     = errors.New("workspace ID environment variable is required for OIDC authentication")
-	ErrOIDCTokenExchangeFailed     = errors.New("failed to exchange OIDC token for Atmos token")
-	ErrOIDCAuthFailedNoToken       = errors.New("OIDC authentication failed")
-	ErrNotInGitHubActions          = errors.New("not running in GitHub Actions or missing OIDC token environment variables")
-	ErrFailedToGetOIDCToken        = errors.New("failed to get OIDC token")
-	ErrFailedToDecodeOIDCResponse  = errors.New("failed to decode OIDC token response")
-	ErrFailedToExchangeOIDCToken   = errors.New("failed to exchange OIDC token")
-	ErrFailedToDecodeTokenResponse = errors.New("failed to decode token response")
-	ErrFailedToGetGitHubOIDCToken  = errors.New("failed to get GitHub OIDC token")
-	ErrFailedToUploadDriftStatus   = errors.New("failed to upload drift status")
+	ErrFailedToCreateRequest          = errors.New("failed to create request")
+	ErrFailedToMarshalPayload         = errors.New("failed to marshal payload")
+	ErrFailedToCreateAuthRequest      = errors.New("failed to create authenticated request")
+	ErrFailedToMakeRequest            = errors.New("failed to make request")
+	ErrFailedToUploadStacks           = errors.New("failed to upload stacks")
+	ErrFailedToMarshalRequestBody     = errors.New("failed to marshal request body")
+	ErrFailedToReadResponseBody       = errors.New("error reading response body")
+	ErrFailedToUnmarshalJSON          = errors.New("error unmarshaling JSON")
+	ErrFailedToLockStack              = errors.New("an error occurred while attempting to lock stack")
+	ErrFailedToUnlockStack            = errors.New("an error occurred while attempting to unlock stack")
+	ErrOIDCWorkspaceIDRequired        = errors.New("workspace ID environment variable is required for OIDC authentication")
+	ErrOIDCTokenExchangeFailed        = errors.New("failed to exchange OIDC token for Atmos token")
+	ErrOIDCAuthFailedNoToken          = errors.New("OIDC authentication failed")
+	ErrNotInGitHubActions             = errors.New("not running in GitHub Actions or missing OIDC token environment variables")
+	ErrFailedToGetOIDCToken           = errors.New("failed to get OIDC token")
+	ErrFailedToDecodeOIDCResponse     = errors.New("failed to decode OIDC token response")
+	ErrFailedToExchangeOIDCToken      = errors.New("failed to exchange OIDC token")
+	ErrFailedToDecodeTokenResponse    = errors.New("failed to decode token response")
+	ErrFailedToGetGitHubOIDCToken     = errors.New("failed to get GitHub OIDC token")
+	ErrFailedToUploadDeployments      = errors.New("failed to upload deployments")
+	ErrFailedToUploadDeploymentStatus = errors.New("failed to upload deployment status")
 )
 
 const (
@@ -45,7 +46,7 @@ const (
 
 // AtmosProAPIClientInterface defines the interface for the AtmosProAPIClient.
 type AtmosProAPIClientInterface interface {
-	UploadDriftResultStatus(dto *dtos.DeploymentStatusUploadRequest) error
+	UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error
 }
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.
