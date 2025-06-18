@@ -45,7 +45,7 @@ const (
 
 // AtmosProAPIClientInterface defines the interface for the AtmosProAPIClient.
 type AtmosProAPIClientInterface interface {
-	UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error
+	UploadDriftResultStatus(dto *dtos.DeploymentStatusUploadRequest) error
 }
 
 // AtmosProAPIClient represents the client to interact with the AtmosPro API.

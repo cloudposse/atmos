@@ -6,18 +6,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
 // --- Mocks
-
-type mockGitRepo struct {
-	info *git.RepoInfo
-	err  error
-}
-
-func (m *mockGitRepo) GetRepoInfo() (*git.RepoInfo, error) { return m.info, m.err }
 
 type mockAPI struct {
 	captured *dtos.DeploymentsUploadRequest

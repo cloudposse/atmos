@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestFilterProEnabledDeployments ensures only deployments with settings.pro.enabled == true are returned
+// TestFilterProEnabledDeployments ensures only deployments with settings.pro.enabled == true are returned.
 func TestFilterProEnabledDeployments(t *testing.T) {
 	deployments := []schema.Deployment{
 		{

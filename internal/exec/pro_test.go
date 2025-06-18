@@ -16,7 +16,7 @@ type MockProAPIClient struct {
 	mock.Mock
 }
 
-func (m *MockProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error {
+func (m *MockProAPIClient) UploadDriftResultStatus(dto *dtos.DeploymentStatusUploadRequest) error {
 	args := m.Called(dto)
 	return args.Error(0)
 }
@@ -178,7 +178,7 @@ func TestUploadDriftResult(t *testing.T) {
 
 			// Set up mock expectations for pro client
 			if tc.proEnabled && (tc.exitCode == 0 || tc.exitCode == 2) {
-				mockProClient.On("UploadDeploymentStatus", mock.AnythingOfType("dtos.DeploymentStatusUploadRequest")).Return(nil)
+				mockProClient.On("UploadDriftResultStatus", mock.AnythingOfType("dtos.DeploymentStatusUploadRequest")).Return(nil)
 			}
 
 			// Call the function

@@ -245,7 +245,7 @@ func uploadDriftResult(info *schema.ConfigAndStacksInfo, exitCode int, client pr
 	}
 
 	// Upload the drift result status
-	if err := client.UploadDeploymentStatus(&dto); err != nil {
+	if err := client.UploadDriftResultStatus(&dto); err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, pro.ErrFailedToUploadDriftStatus, err)
 	}
 
