@@ -298,11 +298,13 @@ func executeTerraformAffectedComponentInDepOrder(
 			log.Debug("Executing", "command", command)
 		}
 
-		// Execute the terraform command for the affected component
-		//err := ExecuteTerraform(info)
-		//if err != nil {
-		//	return err
-		//}
+		if !info.DryRun {
+			// Execute the terraform command for the affected component
+			// err := ExecuteTerraform(info)
+			// if err != nil {
+			//	return err
+			// }
+		}
 	}
 
 	if args.IncludeDependents {
@@ -313,7 +315,7 @@ func executeTerraformAffectedComponentInDepOrder(
 				dep.Stack,
 				affectedComponent,
 				affectedStack,
-				affectedComponentIncludedInDependents,
+				dep.IncludedInDependents,
 				dep.Dependents,
 				args,
 			)
@@ -389,6 +391,14 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 								}
 
 								log.Debug("Executing", "command", command)
+
+								if !info.DryRun {
+									// Execute the terraform command for the affected component
+									// err := ExecuteTerraform(info)
+									// if err != nil {
+									//	return err
+									// }
+								}
 							}
 						}
 					}

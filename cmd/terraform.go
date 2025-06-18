@@ -89,10 +89,16 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 
+	dryRun, err := flags.GetBool("dry-run")
+	if err != nil {
+		u.PrintErrorMarkdownAndExit("", err, "")
+	}
+
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
 	info.Skip = skip
 	info.Components = components
+	info.DryRun = dryRun
 
 	if info.Affected &&
 		(info.All || len(info.Components) > 0 || info.Query != "" || info.ComponentFromArg != "") {

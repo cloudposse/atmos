@@ -288,6 +288,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")
 	parentCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific components")
+	parentCmd.PersistentFlags().Bool("dry-run", false, "Simulate the command without making any changes")
 
 	commands := getTerraformCommands()
 
