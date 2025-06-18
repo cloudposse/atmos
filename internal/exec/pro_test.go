@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
-	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +16,7 @@ type MockProAPIClient struct {
 	mock.Mock
 }
 
-func (m *MockProAPIClient) UploadDriftResultStatus(dto *pro.DriftStatusUploadRequest) error {
+func (m *MockProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error {
 	args := m.Called(dto)
 	return args.Error(0)
 }
@@ -178,7 +178,7 @@ func TestUploadDriftResult(t *testing.T) {
 
 			// Set up mock expectations for pro client
 			if tc.proEnabled && (tc.exitCode == 0 || tc.exitCode == 2) {
-				mockProClient.On("UploadDriftResultStatus", mock.AnythingOfType("*pro.DriftStatusUploadRequest")).Return(nil)
+				mockProClient.On("UploadDeploymentStatus", mock.AnythingOfType("dtos.DeploymentStatusUploadRequest")).Return(nil)
 			}
 
 			// Call the function

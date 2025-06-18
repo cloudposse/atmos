@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-func TestUploadDriftResultStatus(t *testing.T) {
+func TestUploadDeploymentStatus(t *testing.T) {
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -20,7 +21,7 @@ func TestUploadDriftResultStatus(t *testing.T) {
 		HTTPClient:      httpClient,
 	}
 
-	dto := DriftStatusUploadRequest{}
+	dto := dtos.DeploymentStatusUploadRequest{}
 
 	mockResponse := &http.Response{
 		StatusCode: http.StatusOK,
@@ -29,13 +30,13 @@ func TestUploadDriftResultStatus(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err := apiClient.UploadDriftResultStatus(&dto)
+	err := apiClient.UploadDeploymentStatus(&dto)
 	assert.NoError(t, err)
 
 	mockRoundTripper.AssertExpectations(t)
 }
 
-func TestUploadDriftResultStatus_Error(t *testing.T) {
+func TestUploadDeploymentStatus_Error(t *testing.T) {
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -45,7 +46,7 @@ func TestUploadDriftResultStatus_Error(t *testing.T) {
 		HTTPClient:      httpClient,
 	}
 
-	dto := DriftStatusUploadRequest{}
+	dto := dtos.DeploymentStatusUploadRequest{}
 
 	mockResponse := &http.Response{
 		StatusCode: http.StatusInternalServerError,
@@ -54,7 +55,7 @@ func TestUploadDriftResultStatus_Error(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err := apiClient.UploadDriftResultStatus(&dto)
+	err := apiClient.UploadDeploymentStatus(&dto)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to upload drift status")
 

@@ -11,8 +11,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
-// UploadDriftResultStatus uploads the drift detection result status to the pro API.
-func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *dtos.DeploymentStatusUploadRequest) error {
+// UploadDeploymentStatus uploads the drift detection result status to the pro API.
+func (c *AtmosProAPIClient) UploadDeploymentStatus(dto *dtos.DeploymentStatusUploadRequest) error {
 	url := fmt.Sprintf("%s/%s/deployments", c.BaseURL, c.BaseAPIEndpoint)
 	log.Debug(fmt.Sprintf("\nUploading drift status at %s", url))
 
