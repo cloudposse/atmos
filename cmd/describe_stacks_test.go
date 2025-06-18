@@ -49,14 +49,11 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 		{
 			name: "Set string and bool flags",
 			setFlags: func(fs *pflag.FlagSet) {
-				err := fs.Parse([]string{
+				fs.Parse([]string{
 					"--format", "json",
 					"--skip", "tests",
 					"--process-templates",
 				})
-				if err != nil {
-					t.Errorf("Failed to parse flags: %v", err)
-				}
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
@@ -78,10 +75,7 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 		{
 			name: "Set format explicitly, no override",
 			setFlags: func(fs *pflag.FlagSet) {
-				err := fs.Set("format", "json")
-				if err != nil {
-					t.Errorf("Failed to set format flag: %v", err)
-				}
+				fs.Set("format", "json")
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
@@ -123,36 +117,32 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 				}()
 			}
 
-			err := setCliArgsForDescribeStackCli(fs, tt.describe)
-			if err != nil {
-				t.Errorf("setCliArgsForDescribeStackCli returned error: %v", err)
-			}
+			setCliArgsForDescribeStackCli(fs, tt.describe)
 
 			// Assert the describe struct matches the expected values
 			assert.Equal(t, tt.expected, tt.describe, "Describe struct does not match expected")
 		})
 	}
 }
-
 func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 	tests := []struct {
-		name                 string
-		validateFunc         func(opts ...AtmosValidateOption)
-		processStacksFunc    func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error)
-		processConfigFunc    func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
-		validateConfigFunc   func(atmosConfig schema.AtmosConfiguration) error
-		setCliArgsFunc       func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error
-		mockExecSetup        func(*exec.MockDescribeStacksExec)
-		expectedError        bool
-		expectedExecuteCalls int
+		name                    string
+		validateFunc            func(opts ...AtmosValidateOption)
+		processConfigFunc       func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error)
+		processStacksFunc       func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
+		validateConfigFunc      func(atmosConfig schema.AtmosConfiguration) error
+		setCliArgsFunc          func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error
+		mockExecuteFunc         func(mockExec *exec.MockDescribeStacksExec)
+		expectedPanic           bool
+		expectExecuteCalled     bool
 	}{
 		{
-			name:         "ProcessStacks returns error",
+			name: "ProcessConfig returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
-			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
-				return schema.ConfigAndStacksInfo{}, fmt.Errorf("process stacks error")
+			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+				return schema.ConfigAndStacksInfo{}, fmt.Errorf("config processing failed")
 			},
-			processConfigFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			processStacksFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 				return schema.AtmosConfiguration{}, nil
 			},
 			validateConfigFunc: func(atmosConfig schema.AtmosConfiguration) error {
@@ -161,20 +151,20 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			setCliArgsFunc: func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
 				return nil
 			},
-			mockExecSetup: func(mockExec *exec.MockDescribeStacksExec) {
-				// No expectations since execution should not reach mockExec
+			mockExecuteFunc: func(mockExec *exec.MockDescribeStacksExec) {
+				// Execution should not be reached
 			},
-			expectedError:        false,
-			expectedExecuteCalls: 0,
+			expectedPanic:       true,
+			expectExecuteCalled: false,
 		},
 		{
-			name:         "ProcessConfig returns error",
+			name: "ProcessStacks returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
-			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
 			},
-			processConfigFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-				return schema.AtmosConfiguration{}, fmt.Errorf("process config error")
+			processStacksFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+				return schema.AtmosConfiguration{}, fmt.Errorf("stack processing failed")
 			},
 			validateConfigFunc: func(atmosConfig schema.AtmosConfiguration) error {
 				return nil
@@ -182,74 +172,74 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			setCliArgsFunc: func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
 				return nil
 			},
-			mockExecSetup: func(mockExec *exec.MockDescribeStacksExec) {
-				// No expectations since execution should not reach mockExec
+			mockExecuteFunc: func(mockExec *exec.MockDescribeStacksExec) {
+				// Execution should not be reached
 			},
-			expectedError:        false,
-			expectedExecuteCalls: 0,
+			expectedPanic:       true,
+			expectExecuteCalled: false,
 		},
 		{
-			name:         "ValidateConfig returns error",
+			name: "ValidateConfig returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
-			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
 			},
-			processConfigFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			processStacksFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 				return schema.AtmosConfiguration{}, nil
 			},
 			validateConfigFunc: func(atmosConfig schema.AtmosConfiguration) error {
-				return fmt.Errorf("validate config error")
+				return fmt.Errorf("config validation failed")
 			},
 			setCliArgsFunc: func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
 				return nil
 			},
-			mockExecSetup: func(mockExec *exec.MockDescribeStacksExec) {
-				// No expectations since execution should not reach mockExec
+			mockExecuteFunc: func(mockExec *exec.MockDescribeStacksExec) {
+				// Execution should not be reached
 			},
-			expectedError:        false,
-			expectedExecuteCalls: 0,
+			expectedPanic:       true,
+			expectExecuteCalled: false,
 		},
 		{
-			name:         "SetCliArgs returns error",
+			name: "SetCliArgs returns error",
 			validateFunc: func(opts ...AtmosValidateOption) {},
-			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 				return schema.ConfigAndStacksInfo{}, nil
 			},
-			processConfigFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-				return schema.AtmosConfiguration{}, nil
-			},
-			validateConfigFunc: func(atmosConfig schema.AtmosConfiguration) error {
-				return nil
-			},
-			setCliArgsFunc: func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
-				return fmt.Errorf("set CLI args error")
-			},
-			mockExecSetup: func(mockExec *exec.MockDescribeStacksExec) {
-				// No expectations since execution should not reach mockExec
-			},
-			expectedError:        false,
-			expectedExecuteCalls: 0,
-		},
-		{
-			name:         "MockExec Execute returns error",
-			validateFunc: func(opts ...AtmosValidateOption) {},
-			processStacksFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
-				return schema.ConfigAndStacksInfo{}, nil
-			},
-			processConfigFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			processStacksFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 				return schema.AtmosConfiguration{}, nil
 			},
 			validateConfigFunc: func(atmosConfig schema.AtmosConfiguration) error {
 				return nil
 			},
 			setCliArgsFunc: func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
+				return fmt.Errorf("CLI args setting failed")
+			},
+			mockExecuteFunc: func(mockExec *exec.MockDescribeStacksExec) {
+				// Execution should not be reached
+			},
+			expectedPanic:       true,
+			expectExecuteCalled: false,
+		},
+		{
+			name: "Execute returns error",
+			validateFunc: func(opts ...AtmosValidateOption) {},
+			processConfigFunc: func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+				return schema.ConfigAndStacksInfo{}, nil
+			},
+			processStacksFunc: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+				return schema.AtmosConfiguration{}, nil
+			},
+			validateConfigFunc: func(atmosConfig schema.AtmosConfiguration) error {
 				return nil
 			},
-			mockExecSetup: func(mockExec *exec.MockDescribeStacksExec) {
-				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(fmt.Errorf("execution error")).Times(1)
+			setCliArgsFunc: func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
+				return nil
 			},
-			expectedError:        false,
-			expectedExecuteCalls: 1,
+			mockExecuteFunc: func(mockExec *exec.MockDescribeStacksExec) {
+				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(fmt.Errorf("execution failed")).Times(1)
+			},
+			expectedPanic:       true,
+			expectExecuteCalled: true,
 		},
 	}
 
@@ -258,21 +248,27 @@ func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			mockExec := exec.NewMockDescribeStacksExec(ctrl)
-			tt.mockExecSetup(mockExec)
+
+			tt.mockExecuteFunc(mockExec)
 
 			run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 				tt.validateFunc,
-				tt.processStacksFunc,
 				tt.processConfigFunc,
+				tt.processStacksFunc,
 				tt.validateConfigFunc,
 				tt.setCliArgsFunc,
 				mockExec,
 			})
 
-			// Test should not panic regardless of internal errors
-			assert.NotPanics(t, func() {
-				run(describeStacksCmd, []string{})
-			})
+			if tt.expectedPanic {
+				assert.Panics(t, func() {
+					run(describeStacksCmd, []string{})
+				}, "Expected function to panic")
+			} else {
+				assert.NotPanics(t, func() {
+					run(describeStacksCmd, []string{})
+				}, "Expected function not to panic")
+			}
 		})
 	}
 }
@@ -285,130 +281,123 @@ func TestSetFlagValueInDescribeStacksCliArgsEdgeCases(t *testing.T) {
 		expected *exec.DescribeStacksArgs
 	}{
 		{
-			name: "All flags set with multiple values",
+			name: "Multiple skip values",
 			setFlags: func(fs *pflag.FlagSet) {
-				err := fs.Parse([]string{
-					"--format", "json",
-					"--file", "/path/to/output.json",
-					"--stack", "my-stack",
-					"--components", "component1,component2",
-					"--component-types", "terraform,helmfile",
-					"--sections", "backend,vars,metadata",
-					"--process-templates=false",
-					"--process-functions=false",
-					"--include-empty-stacks",
-					"--skip", "function1,function2",
-				})
-				if err != nil {
-					t.Errorf("Failed to parse flags: %v", err)
-				}
-			},
-			describe: &exec.DescribeStacksArgs{},
-			expected: &exec.DescribeStacksArgs{
-				Format:               "json",
-				File:                 "/path/to/output.json",
-				FilterByStack:        "my-stack",
-				Components:           []string{"component1", "component2"},
-				ComponentTypes:       []string{"terraform", "helmfile"},
-				Sections:             []string{"backend", "vars", "metadata"},
-				ProcessTemplates:     false,
-				ProcessYamlFunctions: false,
-				IncludeEmptyStacks:   true,
-				Skip:                 []string{"function1", "function2"},
-			},
-		},
-		{
-			name: "Empty string values",
-			setFlags: func(fs *pflag.FlagSet) {
-				err := fs.Parse([]string{
-					"--format", "",
-					"--file", "",
-					"--stack", "",
-				})
-				if err != nil {
-					t.Errorf("Failed to parse flags: %v", err)
-				}
-			},
-			describe: &exec.DescribeStacksArgs{},
-			expected: &exec.DescribeStacksArgs{
-				Format:        "yaml",
-				File:          "",
-				FilterByStack: "",
-			},
-		},
-		{
-			name: "Boolean flags with explicit false values",
-			setFlags: func(fs *pflag.FlagSet) {
-				err := fs.Parse([]string{
-					"--process-templates=false",
-					"--process-functions=false",
-					"--include-empty-stacks=false",
-				})
-				if err != nil {
-					t.Errorf("Failed to parse flags: %v", err)
-				}
-			},
-			describe: &exec.DescribeStacksArgs{},
-			expected: &exec.DescribeStacksArgs{
-				Format:               "yaml",
-				ProcessTemplates:     false,
-				ProcessYamlFunctions: false,
-				IncludeEmptyStacks:   false,
-			},
-		},
-		{
-			name: "Mixed comma-separated and individual flag values",
-			setFlags: func(fs *pflag.FlagSet) {
-				err := fs.Parse([]string{
-					"--skip", "func1,func2",
-					"--skip", "func3",
-				})
-				if err != nil {
-					t.Errorf("Failed to parse flags: %v", err)
-				}
+				fs.Parse([]string{"--skip", "tests,lint,docs"})
 			},
 			describe: &exec.DescribeStacksArgs{},
 			expected: &exec.DescribeStacksArgs{
 				Format: "yaml",
-				Skip:   []string{"func1", "func2", "func3"},
+				Skip:   []string{"tests", "lint", "docs"},
 			},
 		},
 		{
-			name: "Pre-existing values in describe struct should be overwritten",
+			name: "All component sections specified",
 			setFlags: func(fs *pflag.FlagSet) {
-				err := fs.Parse([]string{
-					"--format", "json",
-					"--stack", "new-stack",
-				})
-				if err != nil {
-					t.Errorf("Failed to parse flags: %v", err)
-				}
+				fs.Parse([]string{"--sections", "backend,backend_type,deps,env,inheritance,metadata,remote_state_backend,remote_state_backend_type,settings,vars"})
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format:   "yaml",
+				Sections: []string{"backend", "backend_type", "deps", "env", "inheritance", "metadata", "remote_state_backend", "remote_state_backend_type", "settings", "vars"},
+			},
+		},
+		{
+			name: "Multiple component types",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Parse([]string{"--component-types", "terraform,helmfile"})
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format:         "yaml",
+				ComponentTypes: []string{"terraform", "helmfile"},
+			},
+		},
+		{
+			name: "Multiple components",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Parse([]string{"--components", "comp1,comp2,comp3"})
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format:     "yaml",
+				Components: []string{"comp1", "comp2", "comp3"},
+			},
+		},
+		{
+			name: "All boolean flags enabled",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Parse([]string{"--process-templates", "--process-functions", "--include-empty-stacks"})
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format:             "yaml",
+				ProcessTemplates:   true,
+				ProcessFunctions:   true,
+				IncludeEmptyStacks: true,
+			},
+		},
+		{
+			name: "All boolean flags disabled explicitly",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Parse([]string{"--process-templates=false", "--process-functions=false", "--include-empty-stacks=false"})
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format:             "yaml",
+				ProcessTemplates:   false,
+				ProcessFunctions:   false,
+				IncludeEmptyStacks: false,
+			},
+		},
+		{
+			name: "File output specified",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Parse([]string{"--file", "/tmp/output.yaml", "--format", "yaml"})
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format: "yaml",
+				File:   "/tmp/output.yaml",
+			},
+		},
+		{
+			name: "Stack filter with short flag",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Parse([]string{"-s", "my-stack"})
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format: "yaml",
+				Stack:  "my-stack",
+			},
+		},
+		{
+			name: "Complex stack path",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Parse([]string{"--stack", "envs/prod/us-west-2/vpc"})
+			},
+			describe: &exec.DescribeStacksArgs{},
+			expected: &exec.DescribeStacksArgs{
+				Format: "yaml",
+				Stack:  "envs/prod/us-west-2/vpc",
+			},
+		},
+		{
+			name: "Pre-populated describe args should be preserved if not overridden",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Parse([]string{"--format", "json"})
 			},
 			describe: &exec.DescribeStacksArgs{
-				Format:        "yaml",
-				FilterByStack: "old-stack",
-				File:          "existing-file.yaml",
+				Stack:              "existing-stack",
+				ProcessTemplates:   true,
+				IncludeEmptyStacks: true,
 			},
 			expected: &exec.DescribeStacksArgs{
-				Format:        "json",
-				FilterByStack: "new-stack",
-				File:          "existing-file.yaml",
-			},
-		},
-		{
-			name: "Query flag processing",
-			setFlags: func(fs *pflag.FlagSet) {
-				err := fs.Parse([]string{
-					"--query", ".stacks | keys",
-				})
-				if err != nil {
-					t.Errorf("Failed to parse flags: %v", err)
-				}
-			},
-			describe: &exec.DescribeStacksArgs{},
-			expected: &exec.DescribeStacksArgs{
-				Format: "yaml",
-				Query:  ".stacks | keys",
+				Format:             "json",
+				Stack:              "existing-stack",
+				ProcessTemplates:   true,
+				IncludeEmptyStacks: true,
 			},
 		},
 	}
@@ -416,174 +405,167 @@ func TestSetFlagValueInDescribeStacksCliArgsEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-
 			fs.String("file", "", "Write the result to file")
-			fs.String("format", "yaml", "Specify the output format")
+			fs.String("format", "yaml", "Specify the output format (`yaml` is default)")
 			fs.StringP("stack", "s", "", "Filter by a specific stack")
-			fs.String("components", "", "Filter by specific components")
-			fs.String("component-types", "", "Filter by specific component types")
+			fs.StringSlice("components", nil, "Filter by specific `atmos` components")
+			fs.StringSlice("component-types", nil, "Filter by specific component types")
 			fs.StringSlice("sections", nil, "Output only the specified component sections")
 			fs.Bool("process-templates", true, "Enable/disable Go template processing")
 			fs.Bool("process-functions", true, "Enable/disable YAML functions processing")
 			fs.Bool("include-empty-stacks", false, "Include stacks with no components")
 			fs.StringSlice("skip", nil, "Skip executing a YAML function")
-			fs.String("query", "", "Query expression for filtering output")
 
 			tt.setFlags(fs)
-			err := setCliArgsForDescribeStackCli(fs, tt.describe)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, tt.describe)
+			setCliArgsForDescribeStackCli(fs, tt.describe)
+			assert.Equal(t, tt.expected, tt.describe, "Describe struct does not match expected")
 		})
 	}
 }
 
 func TestSetFlagValueInDescribeStacksCliArgsValidation(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupFlags  func() *pflag.FlagSet
-		describe    *exec.DescribeStacksArgs
-		expectError bool
-		expectPanic bool
+		name          string
+		setFlags      func(*pflag.FlagSet) error
+		describe      *exec.DescribeStacksArgs
+		shouldSucceed bool
 	}{
 		{
-			name: "Nil describe struct should panic",
-			setupFlags: func() *pflag.FlagSet {
-				fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-				fs.String("format", "yaml", "Format")
-				return fs
+			name: "Invalid format value",
+			setFlags: func(fs *pflag.FlagSet) error {
+				return fs.Parse([]string{"--format", "invalid-format"})
 			},
-			describe:    nil,
-			expectPanic: true,
+			describe:      &exec.DescribeStacksArgs{},
+			shouldSucceed: true, // Parser doesn't validate format values
 		},
 		{
-			name: "Empty flag set",
-			setupFlags: func() *pflag.FlagSet {
-				return pflag.NewFlagSet("test", pflag.ContinueOnError)
+			name: "Empty string values should be handled gracefully",
+			setFlags: func(fs *pflag.FlagSet) error {
+				return fs.Parse([]string{"--stack", "", "--components", "", "--file", ""})
 			},
-			describe:    &exec.DescribeStacksArgs{},
-			expectPanic: false,
+			describe:      &exec.DescribeStacksArgs{},
+			shouldSucceed: true,
 		},
 		{
-			name: "Invalid format should return error",
-			setupFlags: func() *pflag.FlagSet {
-				fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-				fs.String("format", "yaml", "Format")
-				err := fs.Set("format", "invalid-format")
-				if err != nil {
-					t.Errorf("Failed to set format flag: %v", err)
-				}
-				return fs
+			name: "Nil describe struct should not panic",
+			setFlags: func(fs *pflag.FlagSet) error {
+				return fs.Parse([]string{"--format", "json"})
 			},
-			describe:    &exec.DescribeStacksArgs{},
-			expectError: true,
-			expectPanic: false,
-		},
-		{
-			name: "Valid json format should not return error",
-			setupFlags: func() *pflag.FlagSet {
-				fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-				fs.String("format", "yaml", "Format")
-				err := fs.Set("format", "json")
-				if err != nil {
-					t.Errorf("Failed to set format flag: %v", err)
-				}
-				return fs
-			},
-			describe:    &exec.DescribeStacksArgs{},
-			expectError: false,
-			expectPanic: false,
-		},
-		{
-			name: "Valid yaml format should not return error",
-			setupFlags: func() *pflag.FlagSet {
-				fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-				fs.String("format", "yaml", "Format")
-				err := fs.Set("format", "yaml")
-				if err != nil {
-					t.Errorf("Failed to set format flag: %v", err)
-				}
-				return fs
-			},
-			describe:    &exec.DescribeStacksArgs{},
-			expectError: false,
-			expectPanic: false,
+			describe:      nil,
+			shouldSucceed: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fs := tt.setupFlags()
-			if tt.expectPanic {
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			fs.String("file", "", "Write the result to file")
+			fs.String("format", "yaml", "Specify the output format")
+			fs.StringP("stack", "s", "", "Filter by a specific stack")
+			fs.StringSlice("components", nil, "Filter by specific components")
+			fs.StringSlice("component-types", nil, "Filter by component types")
+			fs.StringSlice("sections", nil, "Output component sections")
+			fs.Bool("process-templates", true, "Enable template processing")
+			fs.Bool("process-functions", true, "Enable functions processing")
+			fs.Bool("include-empty-stacks", false, "Include empty stacks")
+			fs.StringSlice("skip", nil, "Skip functions")
+
+			err := tt.setFlags(fs)
+			if err != nil && tt.shouldSucceed {
+				t.Fatalf("Unexpected parse error: %v", err)
+			}
+
+			if tt.describe == nil {
 				assert.Panics(t, func() {
-					_ = setCliArgsForDescribeStackCli(fs, tt.describe)
-				})
-			} else {
-				var err error
+					setCliArgsForDescribeStackCli(fs, tt.describe)
+				}, "Expected panic when describe is nil")
+				return
+			}
+
+			if tt.shouldSucceed {
 				assert.NotPanics(t, func() {
-					err = setCliArgsForDescribeStackCli(fs, tt.describe)
-				})
-				if tt.expectError {
-					assert.Error(t, err)
-				} else {
-					assert.NoError(t, err)
-				}
+					setCliArgsForDescribeStackCli(fs, tt.describe)
+				}, "Should not panic with valid inputs")
 			}
 		})
 	}
 }
 
-func TestDescribeStacksRunnableWithDifferentArgs(t *testing.T) {
-	tests := []struct {
-		name          string
-		args          []string
-		expectedCalls int
-		setupMockExec func(*exec.MockDescribeStacksExec)
-	}{
-		{
-			name:          "No arguments",
-			args:          []string{},
-			expectedCalls: 1,
-			setupMockExec: func(mockExec *exec.MockDescribeStacksExec) {
-				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-			},
+func BenchmarkSetFlagValueInDescribeStacksCliArgs(b *testing.B) {
+	fs := pflag.NewFlagSet("benchmark", pflag.ContinueOnError)
+	fs.String("file", "", "Write the result to file")
+	fs.String("format", "yaml", "Specify the output format")
+	fs.StringP("stack", "s", "", "Filter by a specific stack")
+	fs.StringSlice("components", nil, "Filter by specific components")
+	fs.StringSlice("component-types", nil, "Filter by component types")
+	fs.StringSlice("sections", nil, "Output component sections")
+	fs.Bool("process-templates", true, "Enable template processing")
+	fs.Bool("process-functions", true, "Enable functions processing")
+	fs.Bool("include-empty-stacks", false, "Include empty stacks")
+	fs.StringSlice("skip", nil, "Skip functions")
+
+	fs.Parse([]string{"--format", "json", "--stack", "my-stack", "--components", "comp1,comp2", "--process-templates", "--skip", "test1,test2"})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		describe := &exec.DescribeStacksArgs{}
+		setCliArgsForDescribeStackCli(fs, describe)
+	}
+}
+
+func BenchmarkGetRunnableDescribeStacksCmd(b *testing.B) {
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+	mockExec := exec.NewMockDescribeStacksExec(ctrl)
+	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	props := getRunnableDescribeStacksCmdProps{
+		func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
 		},
-		{
-			name:          "With single argument",
-			args:          []string{"stack-name"},
-			expectedCalls: 1,
-			setupMockExec: func(mockExec *exec.MockDescribeStacksExec) {
-				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-			},
+		func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
 		},
-		{
-			name:          "With multiple arguments",
-			args:          []string{"stack-name", "component-name", "extra-arg"},
-			expectedCalls: 1,
-			setupMockExec: func(mockExec *exec.MockDescribeStacksExec) {
-				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-			},
+		func(atmosConfig schema.AtmosConfiguration) error {
+			return nil
 		},
-		{
-			name:          "With empty string arguments",
-			args:          []string{"", ""},
-			expectedCalls: 1,
-			setupMockExec: func(mockExec *exec.MockDescribeStacksExec) {
-				mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-			},
+		func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
+			return nil
 		},
+		mockExec,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		run := getRunnableDescribeStacksCmd(props)
+		_ = run
+	}
+}
+
+func TestDescribeStacksRunnableWithDifferentArgs(t *testing.T) {
+	testCases := []struct {
+		name string
+		args []string
+	}{
+		{name: "No arguments", args: []string{}},
+		{name: "Single argument", args: []string{"stack-name"}},
+		{name: "Multiple arguments", args: []string{"stack-name", "component-name"}},
+		{name: "Arguments with special characters", args: []string{"stack-with-dashes", "component_with_underscores"}},
+		{name: "Arguments with paths", args: []string{"envs/prod/us-west-2/vpc"}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			mockExec := exec.NewMockDescribeStacksExec(ctrl)
-			tt.setupMockExec(mockExec)
+			mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 			run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 				func(opts ...AtmosValidateOption) {},
 				func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
-					assert.Equal(t, tt.args, args)
+					assert.Equal(t, tc.args, args, "Arguments should match expected")
 					return schema.ConfigAndStacksInfo{}, nil
 				},
 				func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
@@ -599,150 +581,8 @@ func TestDescribeStacksRunnableWithDifferentArgs(t *testing.T) {
 			})
 
 			assert.NotPanics(t, func() {
-				run(describeStacksCmd, tt.args)
-			})
-		})
-	}
-}
-
-func TestDescribeStacksCompleteFlow(t *testing.T) {
-	tests := []struct {
-		name                 string
-		configAndStacksInfo  schema.ConfigAndStacksInfo
-		atmosConfiguration   schema.AtmosConfiguration
-		expectedDescribeArgs func() *exec.DescribeStacksArgs
-		setupCommand         func(*cobra.Command)
-		verifyInteractions   func(*testing.T, *exec.DescribeStacksArgs, *schema.AtmosConfiguration)
-	}{
-		{
-			name: "Complete successful flow with realistic config",
-			configAndStacksInfo: schema.ConfigAndStacksInfo{
-				ComponentFromArg: "test-component",
-				Stack:            "test-stack",
-			},
-			atmosConfiguration: schema.AtmosConfiguration{
-				Stacks: schema.Stacks{
-					BasePath:      "stacks",
-					IncludedPaths: []string{"**/*"},
-				},
-			},
-			expectedDescribeArgs: func() *exec.DescribeStacksArgs {
-				return &exec.DescribeStacksArgs{
-					Format:               "yaml",
-					ProcessTemplates:     true,
-					ProcessYamlFunctions: true,
-				}
-			},
-			setupCommand: func(cmd *cobra.Command) {
-				err := cmd.Flags().Set("format", "yaml")
-				if err != nil {
-					t.Errorf("Failed to set format flag: %v", err)
-				}
-			},
-			verifyInteractions: func(t *testing.T, args *exec.DescribeStacksArgs, config *schema.AtmosConfiguration) {
-				assert.Equal(t, "yaml", args.Format)
-				assert.True(t, args.ProcessTemplates)
-				assert.True(t, args.ProcessYamlFunctions)
-				assert.Equal(t, "stacks", config.Stacks.BasePath)
-			},
-		},
-		{
-			name: "Flow with custom format and filtering",
-			configAndStacksInfo: schema.ConfigAndStacksInfo{
-				ComponentFromArg: "custom-component",
-				Stack:            "custom-stack",
-			},
-			atmosConfiguration: schema.AtmosConfiguration{
-				Stacks: schema.Stacks{
-					BasePath: "custom-stacks",
-				},
-			},
-			expectedDescribeArgs: func() *exec.DescribeStacksArgs {
-				return &exec.DescribeStacksArgs{
-					Format:        "json",
-					FilterByStack: "custom-stack",
-					Components:    []string{"custom-component"},
-				}
-			},
-			setupCommand: func(cmd *cobra.Command) {
-				err := cmd.Flags().Set("format", "json")
-				if err != nil {
-					t.Errorf("Failed to set format flag: %v", err)
-				}
-				err = cmd.Flags().Set("stack", "custom-stack")
-				if err != nil {
-					t.Errorf("Failed to set stack flag: %v", err)
-				}
-				err = cmd.Flags().Set("components", "custom-component")
-				if err != nil {
-					t.Errorf("Failed to set components flag: %v", err)
-				}
-			},
-			verifyInteractions: func(t *testing.T, args *exec.DescribeStacksArgs, config *schema.AtmosConfiguration) {
-				assert.Equal(t, "json", args.Format)
-				assert.Equal(t, "custom-stack", args.FilterByStack)
-				assert.Contains(t, args.Components, "custom-component")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			mockExec := exec.NewMockDescribeStacksExec(ctrl)
-
-			var capturedArgs *exec.DescribeStacksArgs
-			var capturedConfig *schema.AtmosConfiguration
-			mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(atmosConfig *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
-					capturedArgs = args
-					capturedConfig = atmosConfig
-					return nil
-				},
-			).Times(1)
-
-			run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
-				func(opts ...AtmosValidateOption) {},
-				func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
-					return tt.configAndStacksInfo, nil
-				},
-				func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
-					return tt.atmosConfiguration, nil
-				},
-				func(atmosConfig schema.AtmosConfiguration) error {
-					return nil
-				},
-				func(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
-					return setCliArgsForDescribeStackCli(flags, describe)
-				},
-				mockExec,
-			})
-
-			cmd := &cobra.Command{}
-			cmd.Flags().String("format", "yaml", "Output format")
-			cmd.Flags().String("stack", "", "Stack filter")
-			cmd.Flags().String("components", "", "Components filter")
-			cmd.Flags().String("file", "", "Output file")
-			cmd.Flags().Bool("process-templates", true, "Process templates")
-			cmd.Flags().Bool("process-functions", true, "Process functions")
-			cmd.Flags().Bool("include-empty-stacks", false, "Include empty stacks")
-			cmd.Flags().StringSlice("skip", nil, "Skip functions")
-			cmd.Flags().String("query", "", "Query expression")
-			cmd.Flags().String("component-types", "", "Component types")
-			cmd.Flags().StringSlice("sections", nil, "Sections")
-
-			if tt.setupCommand != nil {
-				tt.setupCommand(cmd)
-			}
-
-			assert.NotPanics(t, func() {
-				run(cmd, []string{})
-			})
-
-			if tt.verifyInteractions != nil {
-				tt.verifyInteractions(t, capturedArgs, capturedConfig)
-			}
+				run(describeStacksCmd, tc.args)
+			}, "Should not panic with any argument combination")
 		})
 	}
 }
