@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	log "github.com/charmbracelet/log"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -28,7 +30,11 @@ func NewVersionExec() *versionExec {
 	}
 }
 
-func (v versionExec) Execute(checkFlag bool) {
+func (v versionExec) Execute(checkFlag bool, format string) {
+	if format != "" {
+		v.displayVersionInFormat(format)
+		return
+	}
 	// Print a styled Atmos logo to the terminal
 	v.printMessage("")
 	err := v.printStyledText("ATMOS")
@@ -44,6 +50,34 @@ func (v versionExec) Execute(checkFlag bool) {
 
 	if checkFlag {
 		v.checkRelease()
+	}
+}
+
+type Version struct {
+	Version string `json:"version" yaml:"version"`
+	OS      string `json:"os" yaml:"os"`
+	Arch    string `json:"arch" yaml:"arch"`
+}
+
+func (v versionExec) displayVersionInFormat(format string) {
+	version := Version{
+		Version: version.Version,
+		OS:      runtime.GOOS,
+		Arch:    runtime.GOARCH,
+	}
+	switch format {
+	case "json":
+		if data, err := json.MarshalIndent(version, " ", " "); err == nil {
+			fmt.Println(string(data))
+		}
+	case "yaml":
+		if data, err := yaml.Marshal(version); err == nil {
+			fmt.Println(string(data))
+		}
+	}
+	if format != "json" && format != "yaml" {
+		log.Error("Invalid format specified. Supported formats are: json, yaml")
+		return
 	}
 }
 
