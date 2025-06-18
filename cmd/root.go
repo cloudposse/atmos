@@ -40,7 +40,6 @@ var RootCmd = &cobra.Command{
 		helpFlag := cmd.Flags().Changed("help")
 
 		isHelpRequested := isHelpCommand || helpFlag
-
 		if isHelpRequested {
 			// Do not silence usage or errors when help is invoked
 			cmd.SilenceUsage = false
@@ -211,6 +210,7 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 	// Set custom usage template
+
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
 		u.LogErrorAndExit(err)
@@ -268,6 +268,7 @@ func initCobraConfig() {
 			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+
 	})
 }
 

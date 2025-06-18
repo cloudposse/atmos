@@ -68,8 +68,9 @@ and are compliant with expected formats, reducing configuration drift and runtim
 				u.OsExit(1)
 			}
 			telemetry.CaptureCmdFailure(cmd)
-			log.Fatal(err)
+			u.PrintErrorMarkdownAndExit("", err, "")
 		}
+
 		telemetry.CaptureCmd(cmd)
 	},
 }
