@@ -3,7 +3,11 @@
 This repository is a Golang CLI project.
 
 ## Developer workflow
-- Format code with `gofumpt` and `goimports`.
+- Format code with:
+
+```sh
+gofumpt -w . && goimports -w .
+```
 - Run `go mod tidy`, `make lint`, and `make testacc-cover` before committing.
 - Update `docs/` and `README.md` when CLI behaviour changes.
 
