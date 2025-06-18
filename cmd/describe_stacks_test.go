@@ -124,20 +124,21 @@ func TestSetFlagValueInDescribeStacksCliArgs(t *testing.T) {
 		})
 	}
 }
+
 func TestDescribeStacksRunnableWithErrors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	tests := []struct {
-		name                string
-		setupMock           func(*exec.MockDescribeStacksExec)
-		validateFunc        func(...AtmosValidateOption)
-		parseArgsFunc       func(string, *cobra.Command, []string, []string) (schema.ConfigAndStacksInfo, error)
-		processFunc         func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error)
-		validateConfigFunc  func(schema.AtmosConfiguration) error
-		setCliArgsFunc      func(*pflag.FlagSet, *exec.DescribeStacksArgs) error
-		args                []string
-		expectError         bool
+		name               string
+		setupMock          func(*exec.MockDescribeStacksExec)
+		validateFunc       func(...AtmosValidateOption)
+		parseArgsFunc      func(string, *cobra.Command, []string, []string) (schema.ConfigAndStacksInfo, error)
+		processFunc        func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error)
+		validateConfigFunc func(schema.AtmosConfiguration) error
+		setCliArgsFunc     func(*pflag.FlagSet, *exec.DescribeStacksArgs) error
+		args               []string
+		expectError        bool
 	}{
 		{
 			name: "Execute returns error",
