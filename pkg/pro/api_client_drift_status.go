@@ -8,11 +8,12 @@ import (
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
 // UploadDriftResultStatus uploads the drift detection result status to the pro API.
-func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *DriftStatusUploadRequest) error {
-	url := fmt.Sprintf("%s/%s/drift-status", c.BaseURL, c.BaseAPIEndpoint)
+func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *dtos.DeploymentStatusUploadRequest) error {
+	url := fmt.Sprintf("%s/%s/deployments", c.BaseURL, c.BaseAPIEndpoint)
 	log.Debug(fmt.Sprintf("\nUploading drift status at %s", url))
 
 	data, err := json.Marshal(dto)
@@ -20,7 +21,7 @@ func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *DriftStatusUploadReques
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToMarshalRequestBody, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
+	req, err := getAuthenticatedRequest(c, "PATCH", url, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
@@ -35,7 +36,7 @@ func (c *AtmosProAPIClient) UploadDriftResultStatus(dto *DriftStatusUploadReques
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDriftStatus, resp.Status)
 	}
 
-	log.Debug(fmt.Sprintf("\nUploaded drift status at %s", url))
+	log.Debug(fmt.Sprintf("\nUploaded deployment status at %s", url))
 
 	return nil
 }

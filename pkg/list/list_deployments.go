@@ -118,19 +118,14 @@ func createDeployment(stackName, componentName, componentType string, componentC
 	return deployment
 }
 
-// filterDeployments filters deployments based on drift detection.
-func filterDeployments(deployments []schema.Deployment, driftEnabled bool) []schema.Deployment {
-	if !driftEnabled {
-		return deployments
-	}
-
-	filtered := []schema.Deployment{}
+// filterProEnabledDeployments returns only deployments that have Atmos Pro explicitly enabled
+// via settings.pro.enabled == true.
+func filterProEnabledDeployments(deployments []schema.Deployment) []schema.Deployment {
+	filtered := make([]schema.Deployment, 0, len(deployments))
 	for _, deployment := range deployments {
 		if settings, ok := deployment.Settings["pro"].(map[string]any); ok {
-			if driftDetection, ok := settings["drift_detection"].(map[string]any); ok {
-				if enabled, ok := driftDetection["enabled"].(bool); ok && enabled {
-					filtered = append(filtered, deployment)
-				}
+			if enabled, ok := settings["enabled"].(bool); ok && enabled {
+				filtered = append(filtered, deployment)
 			}
 		}
 	}
@@ -217,7 +212,7 @@ func uploadDeployments(deployments []schema.Deployment) error {
 		return err
 	}
 
-	req := dtos.DriftDetectionUploadRequest{
+	req := dtos.DeploymentsUploadRequest{
 		RepoURL:     repoInfo.RepoUrl,
 		RepoName:    repoInfo.RepoName,
 		RepoOwner:   repoInfo.RepoOwner,
@@ -225,7 +220,7 @@ func uploadDeployments(deployments []schema.Deployment) error {
 		Deployments: deployments,
 	}
 
-	err = apiClient.UploadDriftDetection(&req)
+	err = apiClient.UploadDeployments(&req)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -236,7 +231,7 @@ func uploadDeployments(deployments []schema.Deployment) error {
 }
 
 // processDeployments collects, filters, and sorts deployments.
-func processDeployments(atmosConfig *schema.AtmosConfiguration, driftEnabled bool) ([]schema.Deployment, error) {
+func processDeployments(atmosConfig *schema.AtmosConfiguration) ([]schema.Deployment, error) {
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(*atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
 	if err != nil {
@@ -245,9 +240,6 @@ func processDeployments(atmosConfig *schema.AtmosConfiguration, driftEnabled boo
 
 	// Collect deployments
 	deployments := collectDeployments(stacksMap)
-
-	// Filter deployments if drift detection is enabled
-	deployments = filterDeployments(deployments, driftEnabled)
 
 	// Sort deployments
 	deployments = sortDeployments(deployments)
@@ -264,11 +256,10 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 	}
 
 	// Get flags
-	driftEnabled, _ := cmd.Flags().GetBool("drift-enabled")
 	upload, _ := cmd.Flags().GetBool("upload")
 
 	// Process deployments
-	deployments, err := processDeployments(&atmosConfig, driftEnabled)
+	deployments, err := processDeployments(&atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -279,12 +270,8 @@ func ExecuteListDeploymentsCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comm
 
 	// Handle upload if requested
 	if upload {
-		if !driftEnabled {
-			log.Info("Atmos Pro only supports uploading drift detection stacks at this time.\n\nTo upload drift detection stacks, use the --drift-enabled flag:\n  atmos list deployments --upload --drift-enabled")
-			return nil
-		}
-
-		return uploadDeployments(deployments)
+		proDeployments := filterProEnabledDeployments(deployments)
+		return uploadDeployments(proDeployments)
 	}
 
 	return nil

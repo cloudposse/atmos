@@ -13,7 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestUploadDriftDetection(t *testing.T) {
+func TestUploadDeployments(t *testing.T) {
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -23,7 +23,7 @@ func TestUploadDriftDetection(t *testing.T) {
 		HTTPClient:      httpClient,
 	}
 
-	dto := dtos.DriftDetectionUploadRequest{
+	dto := dtos.DeploymentsUploadRequest{
 		RepoURL:   "https://github.com/org/repo",
 		RepoName:  "repo",
 		RepoOwner: "org",
@@ -76,13 +76,13 @@ func TestUploadDriftDetection(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err := apiClient.UploadDriftDetection(&dto)
+	err := apiClient.UploadDeployments(&dto)
 	assert.NoError(t, err)
 
 	mockRoundTripper.AssertExpectations(t)
 }
 
-func TestUploadDriftDetection_Error(t *testing.T) {
+func TestUploadDeployments_Error(t *testing.T) {
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -92,7 +92,7 @@ func TestUploadDriftDetection_Error(t *testing.T) {
 		HTTPClient:      httpClient,
 	}
 
-	dto := dtos.DriftDetectionUploadRequest{
+	dto := dtos.DeploymentsUploadRequest{
 		RepoURL:   "https://github.com/org/repo",
 		RepoName:  "repo",
 		RepoOwner: "org",
@@ -145,7 +145,7 @@ func TestUploadDriftDetection_Error(t *testing.T) {
 
 	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
 
-	err := apiClient.UploadDriftDetection(&dto)
+	err := apiClient.UploadDeployments(&dto)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to upload drift detection results")
 

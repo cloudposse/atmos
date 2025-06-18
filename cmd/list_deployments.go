@@ -33,7 +33,6 @@ func init() {
 	fl.AddCommonListFlags(listDeploymentsCmd)
 
 	// Add deployment-specific flags
-	listDeploymentsCmd.Flags().Bool("drift-enabled", false, "Filter deployments with drift detection enabled")
 	listDeploymentsCmd.Flags().Bool("upload", false, "Upload deployments to pro API")
 
 	// Add the command to the list command

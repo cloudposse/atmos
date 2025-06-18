@@ -234,7 +234,7 @@ func uploadDriftResult(info *schema.ConfigAndStacksInfo, exitCode int, client pr
 	}
 
 	// Create the DTO
-	dto := pro.DriftStatusUploadRequest{
+	dto := dtos.DeploymentStatusUploadRequest{
 		RepoURL:   repoInfo.RepoUrl,
 		RepoName:  repoInfo.RepoName,
 		RepoOwner: repoInfo.RepoOwner,

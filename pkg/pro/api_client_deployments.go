@@ -14,23 +14,23 @@ import (
 
 var ErrFailedToUploadDriftDetection = errors.New("failed to upload drift detection results")
 
-// UploadDriftDetection uploads drift detection data to the API.
-func (c *AtmosProAPIClient) UploadDriftDetection(dto *dtos.DriftDetectionUploadRequest) error {
-	url := fmt.Sprintf("%s/%s/drift-detection", c.BaseURL, c.BaseAPIEndpoint)
+// UploadDeployments uploads drift detection data to the API.
+func (c *AtmosProAPIClient) UploadDeployments(dto *dtos.DeploymentsUploadRequest) error {
+	url := fmt.Sprintf("%s/%s/deployments", c.BaseURL, c.BaseAPIEndpoint)
 
 	data, err := utils.ConvertToJSON(dto)
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToMarshalPayload, err)
 	}
 
-	log.Debug(fmt.Sprintf("Uploading drift detection DTO: %s", data))
+	log.Debug(fmt.Sprintf("Uploading deployments DTO: %s", data))
 
 	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
 	if err != nil {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToCreateAuthRequest, err)
 	}
 
-	log.Debug(fmt.Sprintf("\nUploading drift detection results to %s", url))
+	log.Debug(fmt.Sprintf("\nUploading deployments to %s", url))
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -41,7 +41,7 @@ func (c *AtmosProAPIClient) UploadDriftDetection(dto *dtos.DriftDetectionUploadR
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf(cfg.ErrFormatString, ErrFailedToUploadDriftDetection, resp.Status)
 	}
-	log.Debug(fmt.Sprintf("\nUploaded drift detection results to %s", url))
+	log.Debug(fmt.Sprintf("\nUploaded deployments to %s", url))
 
 	return nil
 }
