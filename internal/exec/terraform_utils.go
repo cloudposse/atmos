@@ -408,6 +408,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 									info.Component = componentName
 									info.ComponentFromArg = componentName
 									info.Stack = stackName
+									info.StackFromArg = stackName
 
 									err = ExecuteTerraform(*info)
 									if err != nil {
