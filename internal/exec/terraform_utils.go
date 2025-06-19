@@ -262,8 +262,8 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 			affected.Stack,
 			"",
 			"",
-			affected.IncludedInDependents,
-			[]schema.Dependent{},
+			false,
+			nil,
 			&a,
 		)
 		if err != nil {
@@ -301,6 +301,13 @@ func executeTerraformAffectedComponentInDepOrder(
 	dependents []schema.Dependent,
 	args *DescribeAffectedCmdArgs,
 ) error {
+	var logFunc func(msg interface{}, keyvals ...interface{})
+	if info.DryRun {
+		logFunc = log.Info
+	} else {
+		logFunc = log.Debug
+	}
+
 	// If the affected component is included as dependent in other components, don't process it now; it will be processed in the dependency order
 	if !affectedComponentIncludedInDependents {
 		info.Component = affectedComponent
@@ -310,9 +317,9 @@ func executeTerraformAffectedComponentInDepOrder(
 		command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
 
 		if parentComponent != "" && parentStack != "" {
-			log.Debug("Executing", "command", command, "dependency of", parentComponent, "in stack", parentStack)
+			logFunc("Executing", "command", command, "dependency of component", parentComponent, "in stack", parentStack)
 		} else {
-			log.Debug("Executing", "command", command)
+			logFunc("Executing", "command", command)
 		}
 
 		if !info.DryRun {
@@ -322,9 +329,7 @@ func executeTerraformAffectedComponentInDepOrder(
 			//	return err
 			// }
 		}
-	}
-
-	if args.IncludeDependents {
+	} else if args.IncludeDependents {
 		for _, dep := range dependents {
 			err := executeTerraformAffectedComponentInDepOrder(
 				info,
@@ -358,6 +363,13 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	if !info.All {
 		stack = info.Stack
 		components = info.Components
+	}
+
+	var logFunc func(msg interface{}, keyvals ...interface{})
+	if info.DryRun {
+		logFunc = log.Info
+	} else {
+		logFunc = log.Debug
 	}
 
 	stacks, err := ExecuteDescribeStacks(
@@ -402,12 +414,12 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 										return err
 									}
 									if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
-										log.Debug("Skipping the component because the query criteria not satisfied", "command", command, "query", info.Query)
+										logFunc("Skipping the component because the query criteria not satisfied", "command", command, "query", info.Query)
 										continue
 									}
 								}
 
-								log.Debug("Executing", "command", command)
+								logFunc("Executing", "command", command)
 
 								if !info.DryRun {
 									// Execute the terraform command for the affected component
