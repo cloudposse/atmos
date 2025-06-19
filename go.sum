@@ -1334,8 +1334,6 @@ github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0/go.mod h1:hgWBS7lorOAVIJEQMi4Zs
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3/go.mod h1:o//XUCC/F+yRGJoPO/VU0GSB0f8Nhgmxx0VIRUvaC0w=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1 h1:e9Rjr40Z98/clHv5Yg79Is0NtosR5LXRvdr7o/6NwbA=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1/go.mod h1:tIxuGz/9mpox++sgp9fJjHO0+q1X9/UOWd798aAm22M=
-github.com/gruntwork-io/go-commons v0.17.2 h1:14dsCJ7M5Vv2X3BIPKeG9Kdy6vTMGhM8L4WZazxfTuY=
-github.com/gruntwork-io/go-commons v0.17.2/go.mod h1:zs7Q2AbUKuTarBPy19CIxJVUX/rBamfW8IwuWKniWkE=
 github.com/hairyhenderson/go-fsimpl v0.0.0-20220529183339-9deae3e35047 h1:nSSfN9G8O8XXDqB3aDEHJ8K+0llYYToNlTcWOe1Pti8=
 github.com/hairyhenderson/go-fsimpl v0.0.0-20220529183339-9deae3e35047/go.mod h1:30RY4Ey+bg+BGKBufZE2IEmxk7hok9U9mjdgZYomwN4=
 github.com/hairyhenderson/gomplate/v3 v3.11.8 h1:T63wLRk+Y9C601ChYa/+FZ30XT/UEWydMDZhOOJM3K0=
