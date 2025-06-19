@@ -37,7 +37,6 @@ require (
 	github.com/google/go-github/v59 v59.0.0
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.14.2
-	github.com/gruntwork-io/go-commons v0.17.2
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
 	github.com/hashicorp/go-getter v1.7.8
 	github.com/hashicorp/hcl v1.0.0
