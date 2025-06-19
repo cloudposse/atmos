@@ -1,62 +1,46 @@
 package exec
 
 import (
-	"fmt"
-
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/spf13/cobra"
 )
 
-// ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command
-func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
-	if err != nil {
-		return err
+type DescribeWorkflowsArgs struct {
+	Format     string
+	OutputType string
+	Query      string
+}
+
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+type DescribeWorkflowsExec interface {
+	Execute(*schema.AtmosConfiguration, *DescribeWorkflowsArgs) error
+}
+
+type describeWorkflowsExec struct {
+	printOrWriteToFile       func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error
+	IsTTYSupportForStdout    func() bool
+	pagerCreator             pager.PageCreator
+	executeDescribeWorkflows func(atmosConfig schema.AtmosConfiguration) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error)
+}
+
+func NewDescribeWorkflowsExec() DescribeWorkflowsExec {
+	return &describeWorkflowsExec{
+		printOrWriteToFile:       printOrWriteToFile,
+		IsTTYSupportForStdout:    term.IsTTYSupportForStdout,
+		executeDescribeWorkflows: ExecuteDescribeWorkflows,
+		pagerCreator:             pager.New(),
 	}
+}
 
-	info.CliArgs = []string{"describe", "workflows"}
+// ExecuteDescribeWorkflowsCmd executes `atmos describe workflows` CLI command.
+func (d *describeWorkflowsExec) Execute(atmosConfig *schema.AtmosConfiguration, describeWorkflowsArgs *DescribeWorkflowsArgs) error {
+	outputType := describeWorkflowsArgs.OutputType
+	query := describeWorkflowsArgs.Query
+	format := describeWorkflowsArgs.Format
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	flags := cmd.Flags()
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-
-	if format != "" && format != "yaml" && format != "json" {
-		return fmt.Errorf("invalid '--format' flag '%s'. Valid values are 'yaml' (default) and 'json'", format)
-	}
-
-	if format == "" {
-		format = "yaml"
-	}
-
-	outputType, err := flags.GetString("output")
-	if err != nil {
-		return err
-	}
-
-	if outputType != "" && outputType != "list" && outputType != "map" && outputType != "all" {
-		return fmt.Errorf("invalid '--output' flag '%s'. Valid values are 'list' (default), 'map' and 'all'", outputType)
-	}
-
-	if outputType == "" {
-		outputType = "list"
-	}
-
-	query, err := flags.GetString("query")
-	if err != nil {
-		return err
-	}
-
-	describeWorkflowsList, describeWorkflowsMap, describeWorkflowsAll, err := ExecuteDescribeWorkflows(atmosConfig)
+	describeWorkflowsList, describeWorkflowsMap, describeWorkflowsAll, err := d.executeDescribeWorkflows(*atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -72,13 +56,22 @@ func ExecuteDescribeWorkflowsCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if query != "" {
-		res, err = u.EvaluateYqExpression(&atmosConfig, res, query)
+		res, err = u.EvaluateYqExpression(atmosConfig, res, query)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = printOrWriteToFile(&atmosConfig, format, "", res)
+	err = viewWithScroll(&viewWithScrollProps{
+		pageCreator:           d.pagerCreator,
+		isTTYSupportForStdout: d.IsTTYSupportForStdout,
+		printOrWriteToFile:    d.printOrWriteToFile,
+		atmosConfig:           atmosConfig,
+		displayName:           "Describe Workflows",
+		format:                format,
+		file:                  "",
+		res:                   res,
+	})
 	if err != nil {
 		return err
 	}

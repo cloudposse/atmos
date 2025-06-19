@@ -91,7 +91,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 	}
 
 	return viewWithScroll(&viewWithScrollProps{
-		pageCreator:           pager.New(),
+		pageCreator:           d.pageCreator,
 		isTTYSupportForStdout: d.isTTYSupportForStdout,
 		printOrWriteToFile:    d.printOrWriteToFile,
 		atmosConfig:           atmosConfig,

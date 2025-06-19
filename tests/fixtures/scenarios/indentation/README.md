@@ -1,4 +1,4 @@
-# Identation
+# Indentation
 
 This is a basic test case for indentation.
 We use this for the tests in `tests/test-cases/indentation.yaml`
