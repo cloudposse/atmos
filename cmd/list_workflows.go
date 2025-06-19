@@ -23,21 +23,21 @@ var listWorkflowsCmd = &cobra.Command{
 
 		fileFlag, err := flags.GetString("file")
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `file` flag: %v", err), "")
 			return
 		}
 
 		formatFlag, err := flags.GetString("format")
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `format` flag: %v", err), "")
 			return
 		}
 
 		delimiterFlag, err := flags.GetString("delimiter")
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintInvalidUsageErrorAndExit(fmt.Errorf("Error getting the `delimiter` flag: %v", err), "")
 			return
 		}
@@ -45,14 +45,14 @@ var listWorkflowsCmd = &cobra.Command{
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("Error initializing CLI config", err, "")
 			return
 		}
 
 		output, err := l.FilterAndListWorkflows(fileFlag, atmosConfig.Workflows.List, formatFlag, delimiterFlag)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 			return
 		}

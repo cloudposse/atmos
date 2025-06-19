@@ -95,7 +95,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 			u.PrintErrorMarkdown("", err, "")
 			return err
 		}
-		telemetry.CaptureCmdFailure(actualCmd)
+		telemetry.CaptureCmd(actualCmd, err)
 		// For other errors, continue with existing behavior
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}

@@ -23,7 +23,7 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 		checkAtmosConfig()
 		err := e.ExecuteAtlantisGenerateRepoConfigCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			utils.PrintErrorMarkdownAndExit("", err, "")
 		}
 		telemetry.CaptureCmd(cmd)

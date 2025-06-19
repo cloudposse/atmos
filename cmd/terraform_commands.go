@@ -293,7 +293,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 			err := terraformRun(parentCmd, cmd_, args)
 			if err != nil {
-				telemetry.CaptureCmdFailure(cmd)
+				telemetry.CaptureCmd(cmd, err)
 				// Let the main function handle errors like ErrPlanHasDiff
 				// by simply propagating them without exiting here
 				return
@@ -324,7 +324,7 @@ var commandMaps = map[string]func(cmd *cobra.Command){
 		cmd.PersistentFlags().String("new", "", "Path to the new Terraform plan file (optional)")
 		err := cmd.MarkPersistentFlagRequired("orig")
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			//nolint:revive // intentional exit for initialization error
 			log.Fatalf("Error marking 'orig' flag as required: %v", err)
 		}

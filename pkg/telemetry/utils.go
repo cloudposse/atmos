@@ -2,11 +2,14 @@ package telemetry
 
 import (
 	"fmt"
+	"runtime"
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/google/uuid"
+	"github.com/posthog/posthog-go"
 	"github.com/spf13/cobra"
 )
 
@@ -48,22 +51,35 @@ func GetTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 	return NewTelemetry(enabled, token, endpoint, distinctId, clientProvider)
 }
 
-func CaptureCmdString(cmdString string, provider ...TelemetryClientProvider) {
+func captureCmdString(cmdString string, err error, provider ...TelemetryClientProvider) {
 	if t := GetTelemetryFromConfig(provider...); t != nil {
-		t.CaptureEvent(CommandEventName, map[string]interface{}{"command": cmdString})
+		properties := posthog.NewProperties().
+			Set("version", version.Version).
+			Set("os", runtime.GOOS).
+			Set("arch", runtime.GOARCH).
+			Set("error", err != nil).
+			Set("command", cmdString)
+
+		t.Capture(CommandEventName, properties)
 	}
 }
 
-func CaptureCmdFailureString(cmdString string, provider ...TelemetryClientProvider) {
-	if t := GetTelemetryFromConfig(provider...); t != nil {
-		t.CaptureError(CommandEventName, map[string]interface{}{"command": cmdString})
+func captureCmd(cmd *cobra.Command, err error, provider ...TelemetryClientProvider) {
+	captureCmdString(cmd.CommandPath(), err, provider...)
+}
+
+func CaptureCmdString(cmdString string, err ...error) {
+	var inErr error
+	if len(err) > 0 {
+		inErr = err[0]
 	}
+	captureCmdString(cmdString, inErr)
 }
 
-func CaptureCmd(cmd *cobra.Command, provider ...TelemetryClientProvider) {
-	CaptureCmdString(cmd.CommandPath(), provider...)
-}
-
-func CaptureCmdFailure(cmd *cobra.Command, provider ...TelemetryClientProvider) {
-	CaptureCmdFailureString(cmd.CommandPath(), provider...)
+func CaptureCmd(cmd *cobra.Command, err ...error) {
+	var inErr error
+	if len(err) > 0 {
+		inErr = err[0]
+	}
+	captureCmd(cmd, inErr)
 }

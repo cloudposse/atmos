@@ -22,7 +22,7 @@ var terraformGenerateBackendCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateBackendCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 		telemetry.CaptureCmd(cmd)
@@ -34,7 +34,7 @@ func init() {
 	AddStackCompletion(terraformGenerateBackendCmd)
 	err := terraformGenerateBackendCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		telemetry.CaptureCmdFailure(terraformGenerateBackendCmd)
+		telemetry.CaptureCmd(terraformGenerateBackendCmd, err)
 		u.LogErrorAndExit(err)
 	}
 

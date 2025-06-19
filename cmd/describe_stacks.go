@@ -72,7 +72,7 @@ func getRunnableDescribeStacksCmd(
 
 func printErrorAndExit(err error, cmd *cobra.Command) {
 	if err != nil {
-		telemetry.CaptureCmdFailure(cmd)
+		telemetry.CaptureCmd(cmd, err)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 }

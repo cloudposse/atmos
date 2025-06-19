@@ -25,7 +25,7 @@ var validateComponentCmd = &cobra.Command{
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
@@ -46,7 +46,7 @@ func init() {
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		telemetry.CaptureCmdFailure(validateComponentCmd)
+		telemetry.CaptureCmd(validateComponentCmd, err)
 		u.LogErrorAndExit(err)
 	}
 

@@ -19,12 +19,12 @@ Supports native terraform-docs injection.`,
 	ValidArgs: []string{"readme"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, ErrInvalidArguments)
 			return ErrInvalidArguments
 		}
 		err := e.ExecuteDocsGenerateCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 		telemetry.CaptureCmd(cmd)

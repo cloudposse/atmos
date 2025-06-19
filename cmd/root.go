@@ -54,11 +54,11 @@ var RootCmd = &cobra.Command{
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
-					telemetry.CaptureCmdFailure(cmd)
+					telemetry.CaptureCmd(cmd, err)
 					u.LogWarning(err.Error())
 				}
 			} else {
-				telemetry.CaptureCmdFailure(cmd)
+				telemetry.CaptureCmd(cmd, err)
 				u.LogErrorAndExit(err)
 			}
 		}
@@ -71,7 +71,7 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 

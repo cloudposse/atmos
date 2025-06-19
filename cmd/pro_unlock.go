@@ -22,7 +22,7 @@ var proUnlockCmd = &cobra.Command{
 
 		err := e.ExecuteProUnlockCommand(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 		telemetry.CaptureCmd(cmd)

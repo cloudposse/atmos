@@ -2,10 +2,8 @@ package telemetry
 
 import (
 	"fmt"
-	"runtime"
 
 	log "github.com/charmbracelet/log"
-	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/posthog/posthog-go"
 )
 
@@ -61,31 +59,4 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 	}
 	log.Debug("Telemetry event captured")
 	return true
-}
-
-func (t *Telemetry) defaultProperties() posthog.Properties {
-	return posthog.NewProperties().
-		Set("version", version.Version).
-		Set("os", runtime.GOOS).
-		Set("arch", runtime.GOARCH)
-}
-
-func (t *Telemetry) CaptureEvent(eventName string, properties map[string]interface{}) bool {
-	propertiesMap := t.defaultProperties().Set("error", false)
-
-	for k, v := range properties {
-		propertiesMap.Set(k, v)
-	}
-
-	return t.Capture(eventName, propertiesMap)
-}
-
-func (t *Telemetry) CaptureError(eventName string, properties map[string]interface{}) bool {
-	propertiesMap := t.defaultProperties().Set("error", true)
-
-	for k, v := range properties {
-		propertiesMap.Set(k, v)
-	}
-
-	return t.Capture(eventName, propertiesMap)
 }

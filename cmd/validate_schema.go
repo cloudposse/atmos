@@ -57,17 +57,17 @@ and are compliant with expected formats, reducing configuration drift and runtim
 		}
 
 		if key == "" && schema != "" {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, errors.New("key not provided for the schema to be used"))
 			log.Error("key not provided for the schema to be used")
 			u.OsExit(1)
 		}
 
 		if err := exec.NewAtmosValidatorExecutor(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
 			if errors.Is(err, exec.ErrInvalidYAML) {
-				telemetry.CaptureCmdFailure(cmd)
+				telemetry.CaptureCmd(cmd, err)
 				u.OsExit(1)
 			}
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 

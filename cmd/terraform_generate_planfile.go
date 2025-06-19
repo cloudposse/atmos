@@ -22,7 +22,7 @@ var terraformGeneratePlanfileCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGeneratePlanfileCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 		telemetry.CaptureCmd(cmd)
@@ -38,7 +38,7 @@ func init() {
 
 	err := terraformGeneratePlanfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		telemetry.CaptureCmdFailure(terraformGeneratePlanfileCmd)
+		telemetry.CaptureCmd(terraformGeneratePlanfileCmd, err)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 

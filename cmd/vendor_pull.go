@@ -22,7 +22,7 @@ var vendorPullCmd = &cobra.Command{
 
 		err := e.ExecuteVendorPullCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 		telemetry.CaptureCmd(cmd)

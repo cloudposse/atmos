@@ -36,7 +36,7 @@ var listSettingsCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listSettings(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 

@@ -22,7 +22,7 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 		telemetry.CaptureCmd(cmd)
@@ -36,7 +36,7 @@ func init() {
 
 	err := terraformGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		telemetry.CaptureCmdFailure(terraformGenerateVarfileCmd)
+		telemetry.CaptureCmd(terraformGenerateVarfileCmd, err)
 		u.LogErrorAndExit(err)
 	}
 

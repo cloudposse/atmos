@@ -35,7 +35,7 @@ var listMetadataCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listMetadata(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 

@@ -42,12 +42,12 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd)
 			showUsageAndExit(cmd, args)
 		}
 		err := runMainLogic()
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			log.Fatal(err)
 		}
 		telemetry.CaptureCmd(cmd)

@@ -27,7 +27,7 @@ var workflowCmd = &cobra.Command{
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
-				telemetry.CaptureCmdFailure(cmd)
+				telemetry.CaptureCmd(cmd, err)
 				u.LogErrorAndExit(err)
 			}
 			return
@@ -44,7 +44,7 @@ var workflowCmd = &cobra.Command{
 		// Execute the workflow command
 		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
 			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
 			if e.IsKnownWorkflowError(err) {

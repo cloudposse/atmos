@@ -22,7 +22,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.LogErrorAndExit(err)
 		}
 		telemetry.CaptureCmd(cmd)
@@ -36,7 +36,7 @@ func init() {
 
 	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		telemetry.CaptureCmdFailure(helmfileGenerateVarfileCmd)
+		telemetry.CaptureCmd(helmfileGenerateVarfileCmd, err)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 

@@ -32,7 +32,7 @@ func runCompletion(cmd *cobra.Command, args []string) {
 	}
 
 	if err != nil {
-		telemetry.CaptureCmdFailure(cmd)
+		telemetry.CaptureCmd(cmd, err)
 		u.LogErrorAndExit(err)
 	}
 	telemetry.CaptureCmd(cmd)

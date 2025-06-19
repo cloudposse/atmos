@@ -27,7 +27,7 @@ var listStacksCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listStacks(cmd)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
 			return
 		}

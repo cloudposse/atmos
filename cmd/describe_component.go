@@ -22,8 +22,9 @@ var describeComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		if len(args) != 1 {
-			telemetry.CaptureCmdFailure(cmd)
-			return errors.New("invalid arguments. The command requires one argument `component`")
+			err := errors.New("invalid arguments. The command requires one argument `component`")
+			telemetry.CaptureCmd(cmd, err)
+			return err
 		}
 
 		flags := cmd.Flags()
@@ -59,7 +60,7 @@ var describeComponentCmd = &cobra.Command{
 			File:                 file,
 		})
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 		telemetry.CaptureCmd(cmd)
@@ -89,7 +90,7 @@ func init() {
 // checkFlagNotPresentError checks if the error is nil.
 func checkFlagNotPresentError(err error, cmd *cobra.Command) {
 	if err != nil {
-		telemetry.CaptureCmdFailure(cmd)
+		telemetry.CaptureCmd(cmd, err)
 		panic(err)
 	}
 }

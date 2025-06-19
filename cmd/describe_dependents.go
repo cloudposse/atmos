@@ -22,7 +22,7 @@ var describeDependentsCmd = &cobra.Command{
 
 		err := e.ExecuteDescribeDependentsCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmdFailure(cmd)
+			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 		telemetry.CaptureCmd(cmd)
@@ -38,7 +38,7 @@ func init() {
 
 	err := describeDependentsCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		telemetry.CaptureCmdFailure(describeDependentsCmd)
+		telemetry.CaptureCmd(describeDependentsCmd, err)
 		u.LogErrorAndExit(err)
 	}
 

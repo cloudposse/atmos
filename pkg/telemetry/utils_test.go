@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -78,7 +79,7 @@ func TestCaptureCmdString(t *testing.T) {
 			Set("command", "test-cmd"),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
-	CaptureCmdString("test-cmd", mockClientProvider.NewMockClient)
+	captureCmdString("test-cmd", nil, mockClientProvider.NewMockClient)
 }
 
 func TestCaptureCmdErrorString(t *testing.T) {
@@ -109,7 +110,7 @@ func TestCaptureCmdErrorString(t *testing.T) {
 			Set("command", "test-cmd"),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
-	CaptureCmdFailureString("test-cmd", mockClientProvider.NewMockClient)
+	captureCmdString("test-cmd", errors.New("test-error"), mockClientProvider.NewMockClient)
 }
 
 func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
@@ -124,7 +125,7 @@ func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
-	CaptureCmdString("test-cmd", mockClientProvider.NewMockClient)
+	captureCmdString("test-cmd", nil, mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
@@ -140,7 +141,7 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
-	CaptureCmdFailureString("test-cmd", mockClientProvider.NewMockClient)
+	captureCmdString("test-cmd", errors.New("test-error"), mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
@@ -228,7 +229,7 @@ func TestCaptureCmd(t *testing.T) {
 			Set("command", cmd.CommandPath()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
-	CaptureCmd(cmd, mockClientProvider.NewMockClient)
+	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
 }
 
 func TestCaptureCmdError(t *testing.T) {
@@ -263,7 +264,7 @@ func TestCaptureCmdError(t *testing.T) {
 			Set("command", cmd.CommandPath()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
-	CaptureCmdFailure(cmd, mockClientProvider.NewMockClient)
+	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
 }
 
 func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
@@ -282,7 +283,7 @@ func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
 	}
 
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
-	CaptureCmd(cmd, mockClientProvider.NewMockClient)
+	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
 
@@ -302,6 +303,6 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 	}
 
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
-	CaptureCmdFailure(cmd, mockClientProvider.NewMockClient)
+	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 }
