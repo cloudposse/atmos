@@ -5,7 +5,7 @@ import (
 	"runtime"
 
 	log "github.com/charmbracelet/log"
-	"github.com/gruntwork-io/go-commons/version"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/posthog/posthog-go"
 )
 
@@ -35,6 +35,7 @@ func NewTelemetry(isEnabled bool, token string, endpoint string, distinctId stri
 
 func (t *Telemetry) Capture(eventName string, properties map[string]interface{}) bool {
 	if !t.isEnabled || t.token == "" {
+		log.Debug("Telemetry is disabled, skipping capture")
 		return false
 	}
 
@@ -42,7 +43,7 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 		Endpoint: t.endpoint,
 	})
 	if err != nil {
-		log.Warn(fmt.Sprintf("Could not create PostHog client: %s", err))
+		log.Error(fmt.Sprintf("Could not create PostHog client: %s", err))
 		return false
 	}
 	defer client.Close()
@@ -55,16 +56,16 @@ func (t *Telemetry) Capture(eventName string, properties map[string]interface{})
 		Properties: properties,
 	})
 	if err != nil {
-		log.Debug(fmt.Sprintf("Could not enqueue event: %s", err))
+		log.Error(fmt.Sprintf("Could not enqueue event: %s", err))
 		return false
 	}
-
+	log.Debug("Telemetry event captured")
 	return true
 }
 
 func (t *Telemetry) defaultProperties() posthog.Properties {
 	return posthog.NewProperties().
-		Set("version", version.GetVersion()).
+		Set("version", version.Version).
 		Set("os", runtime.GOOS).
 		Set("arch", runtime.GOARCH)
 }

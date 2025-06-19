@@ -10,7 +10,7 @@ import (
 	"time"
 
 	log "github.com/charmbracelet/log"
-	"github.com/gruntwork-io/go-commons/version"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 

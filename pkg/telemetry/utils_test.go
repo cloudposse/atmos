@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"testing"
 
+	"math/rand/v2"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
 	"github.com/golang/mock/gomock"
@@ -15,7 +17,6 @@ import (
 	"github.com/posthog/posthog-go"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/exp/rand"
 )
 
 func TestGetTelemetryFromConfig(t *testing.T) {
@@ -58,7 +59,7 @@ func TestCaptureCmdString(t *testing.T) {
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.AtmosInstanceId = atmosInstanceId
+	cacheCfg.InstallationId = atmosInstanceId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -89,7 +90,7 @@ func TestCaptureCmdErrorString(t *testing.T) {
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.AtmosInstanceId = atmosInstanceId
+	cacheCfg.InstallationId = atmosInstanceId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -154,7 +155,7 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.AtmosInstanceId = atmosInstanceId
+	cacheCfg.InstallationId = atmosInstanceId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -205,7 +206,7 @@ func TestCaptureCmd(t *testing.T) {
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.AtmosInstanceId = atmosInstanceId
+	cacheCfg.InstallationId = atmosInstanceId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -215,7 +216,7 @@ func TestCaptureCmd(t *testing.T) {
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
 
 	cmd := &cobra.Command{
-		Use: fmt.Sprintf("test-cmd-%d", rand.Intn(10000)),
+		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 	mockClient.EXPECT().Enqueue(posthog.Capture{
 		DistinctId: atmosInstanceId,
@@ -235,7 +236,7 @@ func TestCaptureCmdError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	cmd := &cobra.Command{
-		Use: fmt.Sprintf("test-cmd-%d", rand.Intn(10000)),
+		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
 	atmosInstanceId := uuid.New().String()
@@ -243,7 +244,7 @@ func TestCaptureCmdError(t *testing.T) {
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.AtmosInstanceId = atmosInstanceId
+	cacheCfg.InstallationId = atmosInstanceId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -278,7 +279,7 @@ func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	cmd := &cobra.Command{
-		Use: fmt.Sprintf("test-cmd-%d", rand.Intn(10000)),
+		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
@@ -298,7 +299,7 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
 	cmd := &cobra.Command{
-		Use: fmt.Sprintf("test-cmd-%d", rand.Intn(10000)),
+		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")

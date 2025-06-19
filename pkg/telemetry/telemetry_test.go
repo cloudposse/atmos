@@ -6,12 +6,13 @@ import (
 	"runtime"
 	"testing"
 
+	"math/rand/v2"
+
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
 	"github.com/golang/mock/gomock"
 	"github.com/gruntwork-io/go-commons/version"
 	"github.com/posthog/posthog-go"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/exp/rand"
 )
 
 const (
@@ -19,9 +20,9 @@ const (
 )
 
 func TestTelemetryConstructor(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -56,9 +57,9 @@ func TestTelemetryConstructor(t *testing.T) {
 }
 
 func TestTelemetryCaptureEventMethod(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -99,9 +100,9 @@ func TestTelemetryCaptureEventMethod(t *testing.T) {
 }
 
 func TestTelemetryDisabledCaptureEventMethod(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := false
 
 	ctrl := gomock.NewController(t)
@@ -143,8 +144,8 @@ func TestTelemetryDisabledCaptureEventMethod(t *testing.T) {
 
 func TestTelemetryEmptyTokenCaptureEventMethod(t *testing.T) {
 	token := ""
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -185,9 +186,9 @@ func TestTelemetryEmptyTokenCaptureEventMethod(t *testing.T) {
 }
 
 func TestTelemetryProviderErrorCaptureEventMethod(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -228,9 +229,9 @@ func TestTelemetryProviderErrorCaptureEventMethod(t *testing.T) {
 }
 
 func TestTelemetryEnqueueErrorCaptureEventMethod(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -273,7 +274,7 @@ func TestTelemetryEnqueueErrorCaptureEventMethod(t *testing.T) {
 func TestTelemetryPosthogIntegrationCaptureEventMethod(t *testing.T) {
 	token := TestPosthogIntegrationToken
 	endpoint := "https://us.i.posthog.com/"
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	var realPosthogClient posthog.Client
@@ -329,8 +330,8 @@ func TestTelemetryPosthogIntegrationCaptureEventMethod(t *testing.T) {
 
 func TestTelemetryPosthogIntegrationWrongEndpointCaptureEventMethod(t *testing.T) {
 	token := TestPosthogIntegrationToken
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/wrong/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/wrong/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	var realPosthogClient posthog.Client
@@ -387,9 +388,9 @@ func TestTelemetryPosthogIntegrationWrongEndpointCaptureEventMethod(t *testing.T
 }
 
 func TestTelemetryCaptureErrorMethod(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -430,9 +431,9 @@ func TestTelemetryCaptureErrorMethod(t *testing.T) {
 }
 
 func TestTelemetryDisabledCaptureErrorMethod(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := false
 
 	ctrl := gomock.NewController(t)
@@ -474,8 +475,8 @@ func TestTelemetryDisabledCaptureErrorMethod(t *testing.T) {
 
 func TestTelemetryEmptyTokenCaptureErrorMethod(t *testing.T) {
 	token := ""
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -516,9 +517,9 @@ func TestTelemetryEmptyTokenCaptureErrorMethod(t *testing.T) {
 }
 
 func TestTelemetryProviderErrorCaptureErrorMethod(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -559,9 +560,9 @@ func TestTelemetryProviderErrorCaptureErrorMethod(t *testing.T) {
 }
 
 func TestTelemetryEnqueueErrorCaptureErrorMethod(t *testing.T) {
-	token := fmt.Sprintf("phc_test_token_%d", rand.Intn(10000))
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	token := fmt.Sprintf("phc_test_token_%d", rand.IntN(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	ctrl := gomock.NewController(t)
@@ -604,7 +605,7 @@ func TestTelemetryEnqueueErrorCaptureErrorMethod(t *testing.T) {
 func TestTelemetryPosthogIntegrationCaptureErrorMethod(t *testing.T) {
 	token := TestPosthogIntegrationToken
 	endpoint := "https://us.i.posthog.com/"
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	var realPosthogClient posthog.Client
@@ -660,8 +661,8 @@ func TestTelemetryPosthogIntegrationCaptureErrorMethod(t *testing.T) {
 
 func TestTelemetryPosthogIntegrationWrongEndpointCaptureErrorMethod(t *testing.T) {
 	token := TestPosthogIntegrationToken
-	endpoint := fmt.Sprintf("https://us.i.posthog.com/wrong/%d", rand.Intn(10000))
-	distinctId := fmt.Sprintf("test-user-%d", rand.Intn(10000))
+	endpoint := fmt.Sprintf("https://us.i.posthog.com/wrong/%d", rand.IntN(10000))
+	distinctId := fmt.Sprintf("test-user-%d", rand.IntN(10000))
 	enabled := true
 
 	var realPosthogClient posthog.Client

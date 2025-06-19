@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	DefaultEventName = "command"
+	CommandEventName = "command"
 )
 
 // GetTelemetryFromConfig initializes a new Telemetry client.
@@ -29,8 +29,8 @@ func GetTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 		return nil
 	}
 
-	if cacheCfg.AtmosInstanceId == "" {
-		cacheCfg.AtmosInstanceId = uuid.New().String()
+	if cacheCfg.InstallationId == "" {
+		cacheCfg.InstallationId = uuid.New().String()
 	}
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
 		log.Warn(fmt.Sprintf("Unable to save cache: %s", saveErr))
@@ -39,7 +39,7 @@ func GetTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 	enabled := atmosConfig.Settings.Telemetry.Enabled
 	token := atmosConfig.Settings.Telemetry.Token
 	endpoint := atmosConfig.Settings.Telemetry.Endpoint
-	distinctId := cacheCfg.AtmosInstanceId
+	distinctId := cacheCfg.InstallationId
 	clientProvider := PosthogClientProvider
 	if len(provider) > 0 {
 		clientProvider = provider[0]
@@ -50,13 +50,13 @@ func GetTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 
 func CaptureCmdString(cmdString string, provider ...TelemetryClientProvider) {
 	if t := GetTelemetryFromConfig(provider...); t != nil {
-		t.CaptureEvent(DefaultEventName, map[string]interface{}{"command": cmdString})
+		t.CaptureEvent(CommandEventName, map[string]interface{}{"command": cmdString})
 	}
 }
 
 func CaptureCmdFailureString(cmdString string, provider ...TelemetryClientProvider) {
 	if t := GetTelemetryFromConfig(provider...); t != nil {
-		t.CaptureError(DefaultEventName, map[string]interface{}{"command": cmdString})
+		t.CaptureError(CommandEventName, map[string]interface{}{"command": cmdString})
 	}
 }
 
