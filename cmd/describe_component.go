@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -22,29 +21,27 @@ var describeComponentCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		if len(args) != 1 {
-			err := errors.New("invalid arguments. The command requires one argument `component`")
-			telemetry.CaptureCmd(cmd, err)
-			return err
+			return errors.New("invalid arguments. The command requires one argument `component`")
 		}
 
 		flags := cmd.Flags()
 
 		stack, err := flags.GetString("stack")
-		checkFlagNotPresentError(err, cmd)
+		checkFlagNotPresentError(err)
 		format, err := flags.GetString("format")
-		checkFlagNotPresentError(err, cmd)
+		checkFlagNotPresentError(err)
 		file, err := flags.GetString("file")
-		checkFlagNotPresentError(err, cmd)
+		checkFlagNotPresentError(err)
 		processTemplates, err := flags.GetBool("process-templates")
-		checkFlagNotPresentError(err, cmd)
+		checkFlagNotPresentError(err)
 		processYamlFunctions, err := flags.GetBool("process-functions")
-		checkFlagNotPresentError(err, cmd)
+		checkFlagNotPresentError(err)
 		query, err := flags.GetString("query")
-		checkFlagNotPresentError(err, cmd)
+		checkFlagNotPresentError(err)
 		skip, err := flags.GetStringSlice("skip")
-		checkFlagNotPresentError(err, cmd)
+		checkFlagNotPresentError(err)
 		pager, err := flags.GetString("pager")
-		checkFlagNotPresentError(err, cmd)
+		checkFlagNotPresentError(err)
 
 		component := args[0]
 
@@ -60,10 +57,8 @@ var describeComponentCmd = &cobra.Command{
 			File:                 file,
 		})
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
-		telemetry.CaptureCmd(cmd)
 		return nil
 	},
 	ValidArgsFunction: ComponentsArgCompletion,
@@ -88,9 +83,8 @@ func init() {
 
 // We prefer to panic because this is a developer error.
 // checkFlagNotPresentError checks if the error is nil.
-func checkFlagNotPresentError(err error, cmd *cobra.Command) {
+func checkFlagNotPresentError(err error) {
 	if err != nil {
-		telemetry.CaptureCmd(cmd, err)
 		panic(err)
 	}
 }

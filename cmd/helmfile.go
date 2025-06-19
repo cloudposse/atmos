@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -34,8 +33,6 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) {
 	info.CliArgs = []string{"helmfile", commandName}
 	err := e.ExecuteHelmfile(info)
 	if err != nil {
-		telemetry.CaptureCmd(cmd, err)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
-	telemetry.CaptureCmd(cmd)
 }

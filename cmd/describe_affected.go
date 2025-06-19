@@ -10,7 +10,6 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -37,21 +36,19 @@ func getRunnableDescribeAffectedCmd(
 		// Check Atmos configuration
 		checkAtmosConfig()
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
-		checkErrorAndExit(err, cmd)
+		checkErrorAndExit(err)
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			checkErrorAndExit(err, cmd)
+			checkErrorAndExit(err)
 		}
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
-		checkErrorAndExit(err, cmd)
-		telemetry.CaptureCmd(cmd)
+		checkErrorAndExit(err)
 	}
 }
 
-func checkErrorAndExit(err error, cmd *cobra.Command) {
+func checkErrorAndExit(err error) {
 	if err != nil {
-		telemetry.CaptureCmd(cmd, err)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 }

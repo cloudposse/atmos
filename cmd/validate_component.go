@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -25,13 +24,11 @@ var validateComponentCmd = &cobra.Command{
 
 		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
 		m := fmt.Sprintf("component `%s` in stack `%s` validated successfully\n", component, stack)
 		u.PrintMessageInColor(m, theme.Colors.Success)
-		telemetry.CaptureCmd(cmd)
 	},
 }
 
@@ -46,7 +43,6 @@ func init() {
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		telemetry.CaptureCmd(validateComponentCmd, err)
 		u.LogErrorAndExit(err)
 	}
 

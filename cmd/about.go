@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -20,7 +19,6 @@ var aboutCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		utils.PrintfMarkdown("%s", aboutMarkdown)
-		telemetry.CaptureCmd(cmd)
 		return nil
 	},
 }

@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -23,10 +22,8 @@ var vendorDiffCmd = &cobra.Command{
 
 		err := e.ExecuteVendorDiffCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
-		telemetry.CaptureCmd(cmd)
 	},
 }
 

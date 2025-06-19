@@ -9,7 +9,6 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -50,29 +49,27 @@ func getRunnableDescribeStacksCmd(
 		// Check Atmos configuration
 		g.checkAtmosConfig()
 		info, err := g.processCommandLineArgs("", cmd, args, nil)
-		printErrorAndExit(err, cmd)
+		printErrorAndExit(err)
 		atmosConfig, err := g.initCliConfig(info, true)
-		printErrorAndExit(err, cmd)
+		printErrorAndExit(err)
 		err = g.validateStacks(atmosConfig)
-		printErrorAndExit(err, cmd)
+		printErrorAndExit(err)
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
-		printErrorAndExit(err, cmd)
+		printErrorAndExit(err)
 		if cmd.Flags().Changed("pager") {
 			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
 			atmosConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
-			printErrorAndExit(err, cmd)
 		}
 
+		printErrorAndExit(err)
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
-		printErrorAndExit(err, cmd)
-		telemetry.CaptureCmd(cmd)
+		printErrorAndExit(err)
 	}
 }
 
-func printErrorAndExit(err error, cmd *cobra.Command) {
+func printErrorAndExit(err error) {
 	if err != nil {
-		telemetry.CaptureCmd(cmd, err)
 		u.PrintErrorMarkdownAndExit("", err, "")
 	}
 }

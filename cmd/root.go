@@ -20,7 +20,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -39,6 +39,7 @@ var RootCmd = &cobra.Command{
 		helpFlag := cmd.Flags().Changed("help")
 
 		isHelpRequested := isHelpCommand || helpFlag
+
 		if isHelpRequested {
 			// Do not silence usage or errors when help is invoked
 			cmd.SilenceUsage = false
@@ -54,11 +55,9 @@ var RootCmd = &cobra.Command{
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
-					telemetry.CaptureCmd(cmd, err)
 					u.LogWarning(err.Error())
 				}
 			} else {
-				telemetry.CaptureCmd(cmd, err)
 				u.LogErrorAndExit(err)
 			}
 		}
@@ -71,7 +70,6 @@ var RootCmd = &cobra.Command{
 		fmt.Println()
 		err := tuiUtils.PrintStyledText("ATMOS")
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
@@ -142,7 +140,7 @@ func Execute() error {
 	// Here we need the custom commands from the config
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	u.InitializeMarkdown(atmosConfig)
+	utils.InitializeMarkdown(atmosConfig)
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
 			log.Debug("warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
@@ -209,7 +207,6 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
 	// Set custom usage template
-
 	err := templates.SetCustomUsageFunc(RootCmd)
 	if err != nil {
 		u.LogErrorAndExit(err)

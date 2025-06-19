@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -32,10 +31,8 @@ func runCompletion(cmd *cobra.Command, args []string) {
 	}
 
 	if err != nil {
-		telemetry.CaptureCmd(cmd, err)
 		u.LogErrorAndExit(err)
 	}
-	telemetry.CaptureCmd(cmd)
 }
 
 func init() {

@@ -16,7 +16,6 @@ import (
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -56,7 +55,6 @@ var listValuesCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 {
-			telemetry.CaptureCmd(cmd, ErrInvalidArguments)
 			return ErrInvalidArguments
 		}
 
@@ -64,12 +62,10 @@ var listValuesCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listValues(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 
 		u.PrintMessage(output)
-		telemetry.CaptureCmd(cmd)
 		return nil
 	},
 }
@@ -92,7 +88,6 @@ var listVarsCmd = &cobra.Command{
 
 		// Set the query flag to .vars
 		if err := cmd.Flags().Set("query", ".vars"); err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			return fmt.Errorf("failed to set query flag: %w", err)
 		}
 
@@ -100,14 +95,12 @@ var listVarsCmd = &cobra.Command{
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
-				telemetry.CaptureCmd(cmd, err)
 				log.Info(fmt.Sprintf("No vars found for component '%s'", componentVarsNotFoundErr.Component))
 				return nil
 			}
 
 			var noValuesErr *listerrors.NoValuesFoundError
 			if errors.As(err, &noValuesErr) {
-				telemetry.CaptureCmd(cmd, err)
 				log.Info(fmt.Sprintf("No values found for component '%s' with query '.vars'", args[0]))
 				return nil
 			}
@@ -116,7 +109,6 @@ var listVarsCmd = &cobra.Command{
 		}
 
 		u.PrintMessage(output)
-		telemetry.CaptureCmd(cmd)
 		return nil
 	},
 }

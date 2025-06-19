@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 
 	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -35,12 +34,10 @@ var listMetadataCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listMetadata(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			return err
 		}
 
 		utils.PrintMessage(output)
-		telemetry.CaptureCmd(cmd)
 		return nil
 	},
 }

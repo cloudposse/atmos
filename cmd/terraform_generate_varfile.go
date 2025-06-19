@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -22,10 +21,8 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 
 		err := e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
-		telemetry.CaptureCmd(cmd)
 	},
 }
 
@@ -36,7 +33,6 @@ func init() {
 
 	err := terraformGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
-		telemetry.CaptureCmd(terraformGenerateVarfileCmd, err)
 		u.LogErrorAndExit(err)
 	}
 

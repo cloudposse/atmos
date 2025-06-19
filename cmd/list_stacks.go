@@ -10,7 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -27,12 +26,10 @@ var listStacksCmd = &cobra.Command{
 		checkAtmosConfig()
 		output, err := listStacks(cmd)
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("Error filtering stacks", err, "")
 			return
 		}
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
-		telemetry.CaptureCmd(cmd)
 	},
 }
 

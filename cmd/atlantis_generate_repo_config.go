@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -23,10 +22,8 @@ var atlantisGenerateRepoConfigCmd = &cobra.Command{
 		checkAtmosConfig()
 		err := e.ExecuteAtlantisGenerateRepoConfigCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			utils.PrintErrorMarkdownAndExit("", err, "")
 		}
-		telemetry.CaptureCmd(cmd)
 	},
 }
 

@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -23,12 +22,10 @@ var ValidateStacksCmd = &cobra.Command{
 
 		err := e.ExecuteValidateStacksCmd(cmd, args)
 		if err != nil {
-			telemetry.CaptureCmd(cmd, err)
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}
 
 		u.PrintMessageInColor("all stacks validated successfully\n", theme.Colors.Success)
-		telemetry.CaptureCmd(cmd)
 	},
 }
 
