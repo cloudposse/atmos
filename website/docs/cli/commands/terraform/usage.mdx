@@ -30,28 +30,53 @@ The term "Terraform" is used in this documentation to refer to generic concepts 
 HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
 :::
 
-## Single-Component Usage
+## Single-Component Commands Usage
 
 ```shell
+# Execute `terraform <command>` on a `component` in a `stack`
 atmos terraform <command> <component> -s <stack> [options]
 atmos terraform <command> <component> --stack <stack> [options]
 ```
 
-## Multi-Component (Bulk Operations) Usage
+## Multi-Component Commands (Bulk Operations) Usage
 
 ```shell
-atmos terraform plan --stack prod
-atmos terraform plan --components component-1,component-2
-atmos terraform plan --stack prod --components component-1,component-2
-atmos terraform plan --all
-atmos terraform plan --all --stack prod
-atmos terraform plan --affected
-atmos terraform plan --affected --include-dependents=true
-atmos terraform plan --affected --stack prod
-atmos terraform plan --affected --include-dependents=true --stack prod
-atmos terraform plan --query '.vars.tags.team == "data"'
-atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
-atmos terraform plan --query '.settings.context.accoun_id == 12345'
+# Execute `terraform <command>` on all components in the stack `prod`
+atmos terraform <command> --stack prod
+
+# Execute `terraform <command>` on components `component-1` and `component-2` in all stacks
+atmos terraform <command> --components component-1,component-2
+
+# Execute `terraform <command>` on components `component-1` and `component-2` in the stack `prod`
+atmos terraform <command> --stack prod --components component-1,component-2
+
+# Execute `terraform <command>` on all components in all stacks
+atmos terraform <command> --all
+
+# Execute `terraform <command>` on all components in the stack `prod`
+atmos terraform <command> --all --stack prod
+
+# Execute `terraform <command>` on all affected components in all stacks
+# https://atmos.tools/cli/commands/describe/affected
+atmos terraform <command> --affected
+
+# Execute `terraform <command>` on all affected components in all stacks and process all dependencies in the dependency order
+atmos terraform <command> --affected --include-dependents=true
+
+# Execute `terraform <command>` on all affected components in the stack `prod`
+atmos terraform <command> --affected --stack prod
+
+# Execute `terraform <command>` on all affected components in the stack `prod` and process all dependencies in the dependency order
+atmos terraform <command> --affected --include-dependents=true --stack prod
+
+# Execute `terraform <command>` on all components that have `vars.tags.team == "data"`, in all stacks
+atmos terraform <command> --query '.vars.tags.team == "data"'
+
+# Execute `terraform <command>` on all components that have `vars.tags.team == "eks"`, in the stack `prod`
+atmos terraform <command> --query '.vars.tags.team == "eks"' --stack prod
+
+# Execute `terraform <command>` on all components that have `settings.context.accoun_id == 12345`, in all stacks
+atmos terraform <command> --query '.settings.context.accoun_id == 12345'
 ```
 
 <br />
@@ -252,7 +277,7 @@ All native `terraform` flags are supported.
 
 :::
 
-## Multi-Component (Bulk Operations) Examples
+## Multi-Component Commands (Bulk Operations) Examples
 
 ## Subcommands
 
