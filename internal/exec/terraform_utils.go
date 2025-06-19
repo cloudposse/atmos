@@ -315,7 +315,7 @@ func executeTerraformAffectedComponentInDepOrder(
 				dep.Stack,
 				affectedComponent,
 				affectedStack,
-				dep.IncludedInDependents,
+				false,
 				dep.Dependents,
 				args,
 			)
