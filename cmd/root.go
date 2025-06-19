@@ -268,7 +268,6 @@ func initCobraConfig() {
 			}
 		}
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
-
 	})
 }
 
