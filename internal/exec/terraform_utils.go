@@ -405,8 +405,11 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 								logFunc("Executing", "command", command)
 
 								if !info.DryRun {
-									// Execute the terraform command for the affected component
-									err := ExecuteTerraform(*info)
+									info.Component = componentName
+									info.ComponentFromArg = componentName
+									info.Stack = stackName
+
+									err = ExecuteTerraform(*info)
 									if err != nil {
 										return err
 									}
