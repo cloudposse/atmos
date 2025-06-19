@@ -3,10 +3,9 @@ package telemetry
 import (
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"runtime"
 	"testing"
-
-	"math/rand/v2"
 
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
 	"github.com/cloudposse/atmos/pkg/version"
