@@ -110,6 +110,11 @@ func setEnv(v *viper.Viper) {
 	// GitHub OIDC for Atmos Pro
 	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
 	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+
+	// Telemetry settings
+	bindEnv(v, "settings.telemetry.enabled", "ATMOS_TELEMETRY_ENABLED")
+	bindEnv(v, "settings.telemetry.token", "ATMOS_TELEMETRY_TOKEN")
+	bindEnv(v, "settings.telemetry.endpoint", "ATMOS_TELEMETRY_ENDPOINT")
 }
 
 func bindEnv(v *viper.Viper, key ...string) {

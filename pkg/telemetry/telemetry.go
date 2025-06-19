@@ -33,7 +33,7 @@ func NewTelemetry(isEnabled bool, token string, endpoint string, distinctId stri
 	}
 }
 
-func (t *Telemetry) CaptureEvent(eventName string, properties map[string]interface{}) bool {
+func (t *Telemetry) Capture(eventName string, properties map[string]interface{}) bool {
 	if !t.isEnabled || t.token == "" {
 		return false
 	}
@@ -47,22 +47,12 @@ func (t *Telemetry) CaptureEvent(eventName string, properties map[string]interfa
 	}
 	defer client.Close()
 
-	propertiesMap := posthog.NewProperties().
-		Set("error", false).
-		Set("version", version.GetVersion()).
-		Set("os", runtime.GOOS).
-		Set("arch", runtime.GOARCH)
-
-	for k, v := range properties {
-		propertiesMap.Set(k, v)
-	}
-
 	// TODO: PostHog Enqueue always returns nil, but we still check errors
 	// to handle them if posthog go lib will return them in the future
 	err = client.Enqueue(posthog.Capture{
 		DistinctId: t.distinctId,
 		Event:      eventName,
-		Properties: propertiesMap,
+		Properties: properties,
 	})
 	if err != nil {
 		log.Debug(fmt.Sprintf("Could not enqueue event: %s", err))
@@ -72,39 +62,29 @@ func (t *Telemetry) CaptureEvent(eventName string, properties map[string]interfa
 	return true
 }
 
-func (t *Telemetry) CaptureError(eventName string, properties map[string]interface{}) bool {
-	if !t.isEnabled || t.token == "" {
-		return false
-	}
-
-	client, err := posthog.NewWithConfig(t.token, posthog.Config{
-		Endpoint: t.endpoint,
-	})
-	if err != nil {
-		log.Warn(fmt.Sprintf("Could not create PostHog client: %s", err))
-		return false
-	}
-	defer client.Close()
-
-	propertiesMap := posthog.NewProperties().
-		Set("error", true).
+func (t *Telemetry) defaultProperties() posthog.Properties {
+	return posthog.NewProperties().
 		Set("version", version.GetVersion()).
 		Set("os", runtime.GOOS).
 		Set("arch", runtime.GOARCH)
+}
+
+func (t *Telemetry) CaptureEvent(eventName string, properties map[string]interface{}) bool {
+	propertiesMap := t.defaultProperties().Set("error", false)
 
 	for k, v := range properties {
 		propertiesMap.Set(k, v)
 	}
 
-	err = client.Enqueue(posthog.Capture{
-		DistinctId: t.distinctId,
-		Event:      eventName,
-		Properties: propertiesMap,
-	})
-	if err != nil {
-		log.Debug(fmt.Sprintf("Could not enqueue event: %s", err))
-		return false
+	return t.Capture(eventName, propertiesMap)
+}
+
+func (t *Telemetry) CaptureError(eventName string, properties map[string]interface{}) bool {
+	propertiesMap := t.defaultProperties().Set("error", true)
+
+	for k, v := range properties {
+		propertiesMap.Set(k, v)
 	}
 
-	return true
+	return t.Capture(eventName, propertiesMap)
 }

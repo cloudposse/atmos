@@ -78,6 +78,7 @@ func SaveCache2(cfg CacheConfig) error {
 	return withCacheFileLock(cacheFile, func() error {
 		v := viper.New()
 		v.Set("last_checked", cfg.LastChecked)
+		v.Set("atmos_instance_id", cfg.AtmosInstanceId)
 		if err := v.WriteConfigAs(cacheFile); err != nil {
 			return errors.Wrap(err, "failed to write cache file")
 		}
@@ -93,6 +94,7 @@ func SaveCache(cfg CacheConfig) error {
 
 	v := viper.New()
 	v.Set("last_checked", cfg.LastChecked)
+	v.Set("atmos_instance_id", cfg.AtmosInstanceId)
 	if err := v.WriteConfigAs(cacheFile); err != nil {
 		return errors.Wrap(err, "failed to write cache file")
 	}

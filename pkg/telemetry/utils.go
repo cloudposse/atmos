@@ -11,15 +11,14 @@ import (
 )
 
 const (
-	DefaultTelemetryToken    = "phc_7s7MrHWxPR2if1DHHDrKBRgx7SvlaoSM59fIiQueexS"
-	DefaultTelemetryEndpoint = "https://us.i.posthog.com"
-	DefaultEventName         = "command"
+	DefaultEventName = "command"
 )
 
 // GetTelemetryFromConfig initializes a new Telemetry client.
 func GetTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
+		log.Warn(fmt.Sprintf("Could not load config: %s", err))
 		return nil
 	}
 
@@ -36,24 +35,17 @@ func GetTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
 		log.Warn(fmt.Sprintf("Unable to save cache: %s", saveErr))
 	}
-	token := DefaultTelemetryToken
 
-	if atmosConfig.Settings.Telemetry.Token != "" {
-		token = atmosConfig.Settings.Telemetry.Token
-	}
-
-	endpoint := DefaultTelemetryEndpoint
-
-	if atmosConfig.Settings.Telemetry.Endpoint != "" {
-		endpoint = atmosConfig.Settings.Telemetry.Endpoint
-	}
-
-	var clientProvider = PosthogClientProvider
+	enabled := atmosConfig.Settings.Telemetry.Enabled
+	token := atmosConfig.Settings.Telemetry.Token
+	endpoint := atmosConfig.Settings.Telemetry.Endpoint
+	distinctId := cacheCfg.AtmosInstanceId
+	clientProvider := PosthogClientProvider
 	if len(provider) > 0 {
 		clientProvider = provider[0]
 	}
 
-	return NewTelemetry(atmosConfig.Settings.Telemetry.Enabled, token, endpoint, cacheCfg.AtmosInstanceId, clientProvider)
+	return NewTelemetry(enabled, token, endpoint, distinctId, clientProvider)
 }
 
 func CaptureCmdString(cmdString string, provider ...TelemetryClientProvider) {
