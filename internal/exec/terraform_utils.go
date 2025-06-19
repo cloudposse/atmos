@@ -262,7 +262,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 			affected.Stack,
 			"",
 			"",
-			false,
+			true,
 			nil,
 			&a,
 		)
@@ -278,7 +278,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 			affected.Stack,
 			"",
 			"",
-			true,
+			false,
 			affected.Dependents,
 			&a,
 		)
@@ -297,7 +297,7 @@ func executeTerraformAffectedComponentInDepOrder(
 	affectedStack string,
 	parentComponent string,
 	parentStack string,
-	affectedComponentIncludedInDependents bool,
+	processAffectedComponents bool,
 	dependents []schema.Dependent,
 	args *DescribeAffectedCmdArgs,
 ) error {
@@ -309,7 +309,7 @@ func executeTerraformAffectedComponentInDepOrder(
 	}
 
 	// If the affected component is included as dependent in other components, don't process it now; it will be processed in the dependency order
-	if !affectedComponentIncludedInDependents {
+	if processAffectedComponents {
 		info.Component = affectedComponent
 		info.ComponentFromArg = affectedComponent
 		info.Stack = affectedStack
@@ -330,6 +330,22 @@ func executeTerraformAffectedComponentInDepOrder(
 			// }
 		}
 	} else if args.IncludeDependents {
+		for _, dep := range dependents {
+			err := executeTerraformAffectedComponentInDepOrder(
+				info,
+				dep.Component,
+				dep.Stack,
+				affectedComponent,
+				affectedStack,
+				true,
+				nil,
+				args,
+			)
+			if err != nil {
+				return err
+			}
+		}
+
 		for _, dep := range dependents {
 			err := executeTerraformAffectedComponentInDepOrder(
 				info,
