@@ -63,7 +63,11 @@ func processTarHeader(header *tar.Header, tarReader *tar.Reader, extractPath str
 	case tar.TypeReg:
 		return createFileFromTar(filePath, tarReader, header)
 	default:
-		log.Warnf("Unsupported file type: %v in %s", header.Typeflag, header.Name)
+		log.Warn(
+			"Unsupported file type",
+			"type", header.Typeflag,
+			"file", header.Name,
+		)
 	}
 
 	return nil

@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,14 +22,18 @@ const (
 func removeTempDir(path string) {
 	err := os.RemoveAll(path)
 	if err != nil {
-		u.LogWarning(err.Error())
+		log.Warn(err.Error())
 	}
 }
 
 func closeFile(fileName string, file io.ReadCloser) {
 	err := file.Close()
 	if err != nil {
-		u.LogError(fmt.Errorf("error closing the file '%s': %v", fileName, err))
+		log.Error(
+			"error closing the file",
+			"file", fileName,
+			"error", err,
+		)
 	}
 }
 

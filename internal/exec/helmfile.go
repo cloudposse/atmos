@@ -283,7 +283,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	// Cleanup
 	err = os.Remove(varFilePath)
 	if err != nil {
-		u.LogWarning(err.Error())
+		log.Warn(err.Error())
 	}
 
 	return nil
