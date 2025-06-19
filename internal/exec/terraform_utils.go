@@ -307,10 +307,10 @@ func executeTerraformAffectedComponentInDepOrder(
 
 	if !info.DryRun {
 		// Execute the terraform command for the affected component
-		// err := ExecuteTerraform(info)
-		// if err != nil {
-		//	return err
-		// }
+		err := ExecuteTerraform(*info)
+		if err != nil {
+			return err
+		}
 	}
 
 	if args.IncludeDependents {
@@ -406,10 +406,10 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 
 								if !info.DryRun {
 									// Execute the terraform command for the affected component
-									// err := ExecuteTerraform(info)
-									// if err != nil {
-									//	return err
-									// }
+									err := ExecuteTerraform(*info)
+									if err != nil {
+										return err
+									}
 								}
 							}
 						}
