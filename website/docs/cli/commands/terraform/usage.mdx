@@ -12,27 +12,50 @@ Use these subcommands to interact with Terraform and OpenTofu.
 
 <Screengrab title="atmos terraform --help" slug="atmos-terraform--help" />
 
-# Usage
+Atmos Terraform/OpenTofu commands fall into two categories:
 
-Executes `terraform` commands.
+  - Single-Component Commands: operate on one component at a time
+
+  - Multi-Component Commands (Bulk Operations): operate on multiple components based on stack, set of components, query, or filters
+
+## Single-Component Usage
 
 ```shell
 atmos terraform <command> <component> -s <stack> [options]
 atmos terraform <command> <component> --stack <stack> [options]
 ```
 
+## Multi-Component (Bulk Operations) Usage
+
+```shell
+atmos terraform plan --stack prod
+atmos terraform plan --components component-1,component-2
+atmos terraform plan --stack prod --components component-1,component-2
+atmos terraform plan --all
+atmos terraform plan --all --stack prod
+atmos terraform plan --affected
+atmos terraform plan --affected --include-dependents=true
+atmos terraform plan --affected --stack prod
+atmos terraform plan --affected --include-dependents=true --stack prod
+atmos terraform plan --query '.vars.tags.team == "data"'
+atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
+```
+
 <br />
 
-Atmos supports all `terraform` commands and options described in [Terraform CLI reference](https://www.terraform.io/cli/commands).
+Atmos supports all Terraform and OpenTofu commands and options described in
+[Terraform CLI Overview](https://developer.hashicorp.com/terraform/cli/commands)
+and [OpenTofu Basic CLI Features](https://opentofu.org/docs/cli/commands/).
 
-In addition, the `component` argument and `stack` flag are required to generate variables and backend config for the component in the stack.
+In addition, for almost all `terraform` commands, the `component` argument and `stack` flag are required to generate
+variables and backend config for the component in the stack.
 
 :::note Disambiguation
 The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
 HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
 :::
 
-**Additions and differences from native Terraform and OpenTofu:**
+## Additions and differences from native Terraform and OpenTofu
 
 - before executing other `terraform` commands, Atmos runs `terraform init`
 
