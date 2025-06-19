@@ -106,7 +106,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	}
 
 	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
-	if info.Affected || (info.Stack != "" && info.ComponentFromArg == "") {
+	if info.Affected {
 		err = e.ExecuteTerraformAffected(cmd, args, &info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
