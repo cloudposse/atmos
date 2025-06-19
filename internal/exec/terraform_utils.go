@@ -255,6 +255,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 	}
 	log.Debug("Affected", "components", affectedYaml)
 
+	// Process the affected components that don't have dependencies.
 	for _, affected := range affectedList {
 		err = executeTerraformAffectedComponentInDepOrder(info,
 			affected.Component,
@@ -262,6 +263,22 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 			"",
 			"",
 			affected.IncludedInDependents,
+			[]schema.Dependent{},
+			&a,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Process the dependencies of the affected components.
+	for _, affected := range affectedList {
+		err = executeTerraformAffectedComponentInDepOrder(info,
+			affected.Component,
+			affected.Stack,
+			"",
+			"",
+			true,
 			affected.Dependents,
 			&a,
 		)
