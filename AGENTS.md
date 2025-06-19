@@ -14,3 +14,9 @@ gofumpt -w . && goimports -w .
 ## Pull requests
 - Keep PRs focused on a single logical change.
 - Follow `.github/PULL_REQUEST_TEMPLATE.md` for PR descriptions.
+
+## Testing
+- Always run `go test ./...` after changes. If the command fails due to network restrictions, note that in the PR description.
+
+## Spelling corrections
+- **Do not modify files under `tests/test-cases/` or `tests/testdata/` unless explicitly instructed.** These files contain golden snapshots and their content is sensitive to even minor changes.
