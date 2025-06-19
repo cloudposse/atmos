@@ -9,8 +9,8 @@ import (
 	"math/rand/v2"
 
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/golang/mock/gomock"
-	"github.com/gruntwork-io/go-commons/version"
 	"github.com/posthog/posthog-go"
 	"github.com/stretchr/testify/assert"
 )
@@ -39,7 +39,7 @@ func TestTelemetryConstructor(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -76,7 +76,7 @@ func TestTelemetryCaptureEventMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -119,7 +119,7 @@ func TestTelemetryDisabledCaptureEventMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -162,7 +162,7 @@ func TestTelemetryEmptyTokenCaptureEventMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -205,7 +205,7 @@ func TestTelemetryProviderErrorCaptureEventMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -248,7 +248,7 @@ func TestTelemetryEnqueueErrorCaptureEventMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -299,7 +299,7 @@ func TestTelemetryPosthogIntegrationCaptureEventMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -356,7 +356,7 @@ func TestTelemetryPosthogIntegrationWrongEndpointCaptureEventMethod(t *testing.T
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -407,7 +407,7 @@ func TestTelemetryCaptureErrorMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -450,7 +450,7 @@ func TestTelemetryDisabledCaptureErrorMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -493,7 +493,7 @@ func TestTelemetryEmptyTokenCaptureErrorMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -536,7 +536,7 @@ func TestTelemetryProviderErrorCaptureErrorMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -579,7 +579,7 @@ func TestTelemetryEnqueueErrorCaptureErrorMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -630,7 +630,7 @@ func TestTelemetryPosthogIntegrationCaptureErrorMethod(t *testing.T) {
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").
@@ -687,7 +687,7 @@ func TestTelemetryPosthogIntegrationWrongEndpointCaptureErrorMethod(t *testing.T
 		Event:      "test-snippet",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("plan", "Enterprise").

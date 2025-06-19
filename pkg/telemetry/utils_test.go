@@ -11,9 +11,9 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	"github.com/gruntwork-io/go-commons/version"
 	"github.com/posthog/posthog-go"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -54,12 +54,12 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 func TestCaptureCmdString(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	atmosInstanceId := uuid.New().String()
+	installationId := uuid.New().String()
 
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.InstallationId = atmosInstanceId
+	cacheCfg.InstallationId = installationId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -69,11 +69,11 @@ func TestCaptureCmdString(t *testing.T) {
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
 
 	mockClient.EXPECT().Enqueue(posthog.Capture{
-		DistinctId: atmosInstanceId,
+		DistinctId: installationId,
 		Event:      "command",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("command", "test-cmd"),
@@ -85,12 +85,12 @@ func TestCaptureCmdString(t *testing.T) {
 func TestCaptureCmdErrorString(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	atmosInstanceId := uuid.New().String()
+	installationId := uuid.New().String()
 
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.InstallationId = atmosInstanceId
+	cacheCfg.InstallationId = installationId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -100,11 +100,11 @@ func TestCaptureCmdErrorString(t *testing.T) {
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
 
 	mockClient.EXPECT().Enqueue(posthog.Capture{
-		DistinctId: atmosInstanceId,
+		DistinctId: installationId,
 		Event:      "command",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("command", "test-cmd"),
@@ -150,12 +150,12 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 	token := uuid.New().String()
 	endpoint := uuid.New().String()
 
-	atmosInstanceId := uuid.New().String()
+	installationId := uuid.New().String()
 
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.InstallationId = atmosInstanceId
+	cacheCfg.InstallationId = installationId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -181,7 +181,7 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 	assert.Equal(t, telemetry.isEnabled, enabled)
 	assert.Equal(t, telemetry.token, token)
 	assert.Equal(t, telemetry.endpoint, endpoint)
-	assert.Equal(t, telemetry.distinctId, atmosInstanceId)
+	assert.Equal(t, telemetry.distinctId, installationId)
 	assert.NotNil(t, telemetry.clientProvider)
 }
 
@@ -201,12 +201,12 @@ func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 func TestCaptureCmd(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	atmosInstanceId := uuid.New().String()
+	installationId := uuid.New().String()
 
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.InstallationId = atmosInstanceId
+	cacheCfg.InstallationId = installationId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -219,11 +219,11 @@ func TestCaptureCmd(t *testing.T) {
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 	mockClient.EXPECT().Enqueue(posthog.Capture{
-		DistinctId: atmosInstanceId,
+		DistinctId: installationId,
 		Event:      "command",
 		Properties: posthog.NewProperties().
 			Set("error", false).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("command", cmd.CommandPath()),
@@ -239,12 +239,12 @@ func TestCaptureCmdError(t *testing.T) {
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
 
-	atmosInstanceId := uuid.New().String()
+	installationId := uuid.New().String()
 
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
-	cacheCfg.InstallationId = atmosInstanceId
+	cacheCfg.InstallationId = installationId
 	saveErr := cfg.SaveCache(cacheCfg)
 	assert.NoError(t, saveErr)
 
@@ -254,11 +254,11 @@ func TestCaptureCmdError(t *testing.T) {
 	mockClientProvider.EXPECT().NewMockClient(gomock.Any(), gomock.Any()).Return(mockClient, nil).Times(1)
 
 	mockClient.EXPECT().Enqueue(posthog.Capture{
-		DistinctId: atmosInstanceId,
+		DistinctId: installationId,
 		Event:      "command",
 		Properties: posthog.NewProperties().
 			Set("error", true).
-			Set("version", version.GetVersion()).
+			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
 			Set("command", cmd.CommandPath()),
