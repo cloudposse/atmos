@@ -18,6 +18,18 @@ Atmos Terraform/OpenTofu commands fall into two categories:
 
   - Multi-Component Commands (Bulk Operations): operate on multiple components based on stack, set of components, query, or filters
 
+Atmos supports all Terraform and OpenTofu commands and options described in
+[Terraform CLI Overview](https://developer.hashicorp.com/terraform/cli/commands)
+and [OpenTofu Basic CLI Features](https://opentofu.org/docs/cli/commands/).
+
+In addition, for the Single-Component commands, the `component` argument and `stack` flag are required to generate
+variables and backend config for the component in the stack.
+
+:::note Disambiguation
+The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
+HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
+:::
+
 ## Single-Component Usage
 
 ```shell
@@ -39,21 +51,10 @@ atmos terraform plan --affected --stack prod
 atmos terraform plan --affected --include-dependents=true --stack prod
 atmos terraform plan --query '.vars.tags.team == "data"'
 atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
+atmos terraform plan --query '.settings.context.accoun_id == 12345'
 ```
 
 <br />
-
-Atmos supports all Terraform and OpenTofu commands and options described in
-[Terraform CLI Overview](https://developer.hashicorp.com/terraform/cli/commands)
-and [OpenTofu Basic CLI Features](https://opentofu.org/docs/cli/commands/).
-
-In addition, for almost all `terraform` commands, the `component` argument and `stack` flag are required to generate
-variables and backend config for the component in the stack.
-
-:::note Disambiguation
-The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
-HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/core-concepts/projects/configuration/opentofu).
-:::
 
 ## Additions and differences from native Terraform and OpenTofu
 
@@ -250,6 +251,8 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 All native `terraform` flags are supported.
 
 :::
+
+## Multi-Component (Bulk Operations) Examples
 
 ## Subcommands
 
