@@ -255,35 +255,21 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 	}
 	log.Debug("Affected", "components", affectedYaml)
 
-	// Process the affected components that don't have dependencies.
 	for _, affected := range affectedList {
-		err = executeTerraformAffectedComponentInDepOrder(info,
-			affected.Component,
-			affected.Stack,
-			"",
-			"",
-			true,
-			nil,
-			&a,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Process the dependencies of the affected components.
-	for _, affected := range affectedList {
-		err = executeTerraformAffectedComponentInDepOrder(info,
-			affected.Component,
-			affected.Stack,
-			"",
-			"",
-			false,
-			affected.Dependents,
-			&a,
-		)
-		if err != nil {
-			return err
+		// If the affected component is included in the dependencies of any other component, don't process it now,
+		// it will be processed in the dependency order.
+		if !affected.IncludedInDependents {
+			err = executeTerraformAffectedComponentInDepOrder(info,
+				affected.Component,
+				affected.Stack,
+				"",
+				"",
+				affected.Dependents,
+				&a,
+			)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -297,7 +283,6 @@ func executeTerraformAffectedComponentInDepOrder(
 	affectedStack string,
 	parentComponent string,
 	parentStack string,
-	processAffectedComponents bool,
 	dependents []schema.Dependent,
 	args *DescribeAffectedCmdArgs,
 ) error {
@@ -308,28 +293,27 @@ func executeTerraformAffectedComponentInDepOrder(
 		logFunc = log.Debug
 	}
 
-	// If the affected component is included as dependent in other components, don't process it now; it will be processed in the dependency order
-	if processAffectedComponents {
-		info.Component = affectedComponent
-		info.ComponentFromArg = affectedComponent
-		info.Stack = affectedStack
+	info.Component = affectedComponent
+	info.ComponentFromArg = affectedComponent
+	info.Stack = affectedStack
 
-		command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
 
-		if parentComponent != "" && parentStack != "" {
-			logFunc("Executing", "command", command, "dependency of component", parentComponent, "in stack", parentStack)
-		} else {
-			logFunc("Executing", "command", command)
-		}
+	if parentComponent != "" && parentStack != "" {
+		logFunc("Executing", "command", command, "dependency of component", parentComponent, "in stack", parentStack)
+	} else {
+		logFunc("Executing", "command", command)
+	}
 
-		if !info.DryRun {
-			// Execute the terraform command for the affected component
-			// err := ExecuteTerraform(info)
-			// if err != nil {
-			//	return err
-			// }
-		}
-	} else if args.IncludeDependents {
+	if !info.DryRun {
+		// Execute the terraform command for the affected component
+		// err := ExecuteTerraform(info)
+		// if err != nil {
+		//	return err
+		// }
+	}
+
+	if args.IncludeDependents {
 		for _, dep := range dependents {
 			err := executeTerraformAffectedComponentInDepOrder(
 				info,
@@ -337,23 +321,6 @@ func executeTerraformAffectedComponentInDepOrder(
 				dep.Stack,
 				affectedComponent,
 				affectedStack,
-				true,
-				nil,
-				args,
-			)
-			if err != nil {
-				return err
-			}
-		}
-
-		for _, dep := range dependents {
-			err := executeTerraformAffectedComponentInDepOrder(
-				info,
-				dep.Component,
-				dep.Stack,
-				affectedComponent,
-				affectedStack,
-				false,
 				dep.Dependents,
 				args,
 			)
