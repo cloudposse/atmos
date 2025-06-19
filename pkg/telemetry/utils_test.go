@@ -2,12 +2,11 @@ package telemetry
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"runtime"
 	"strconv"
 	"testing"
-
-	"math/rand/v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
