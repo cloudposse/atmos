@@ -25,7 +25,7 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 	return buf.String(), nil
 }
 
-// PrintStyledText prints a styled text to the terminal
+// PrintStyledText prints styled text to the terminal using the "ANSI Regular.flf" font if color output is supported.
 func PrintStyledText(text string) error {
 	// Check if the terminal supports colors
 	if supportscolor.Stdout().SupportsColor {
@@ -34,11 +34,14 @@ func PrintStyledText(text string) error {
 	return nil
 }
 
+// PrintStyledTextToSpecifiedOutput writes styled text to the specified output writer using the "ANSI Regular.flf" font.
+// Returns an error if writing fails.
 func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	return figurine.Write(out, text, "ANSI Regular.flf")
 }
 
-// RenderMarkdown renders markdown text with terminal styling
+// RenderMarkdown converts a markdown string into styled terminal output using a custom style and word wrapping based on terminal width.
+// Returns the rendered terminal string or an error if rendering fails.
 func RenderMarkdown(markdownText string, style string) (string, error) {
 	if markdownText == "" {
 		return "", fmt.Errorf("empty markdown input")
