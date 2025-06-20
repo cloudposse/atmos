@@ -52,6 +52,9 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 }
 
 func TestCaptureCmdString(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	ctrl := gomock.NewController(t)
 
 	atmosProWorkspaceID := fmt.Sprintf("ws_%s", uuid.New().String())
@@ -94,6 +97,9 @@ func TestCaptureCmdString(t *testing.T) {
 }
 
 func TestCaptureCmdErrorString(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	ctrl := gomock.NewController(t)
 
 	installationId := uuid.New().String()
@@ -129,6 +135,9 @@ func TestCaptureCmdErrorString(t *testing.T) {
 }
 
 func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	ctrl := gomock.NewController(t)
 
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
@@ -145,6 +154,9 @@ func TestCaptureCmdStringDisabledWithEnvvar(t *testing.T) {
 }
 
 func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	ctrl := gomock.NewController(t)
 
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
@@ -161,6 +173,9 @@ func TestCaptureCmdFailureStringDisabledWithEnvvar(t *testing.T) {
 }
 
 func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	enabled := false
 	token := uuid.New().String()
 	endpoint := uuid.New().String()
@@ -201,6 +216,9 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 }
 
 func TestGetTelemetryFromConfigIntergration(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	enabled := true
 
 	telemetry := getTelemetryFromConfig()
@@ -214,6 +232,9 @@ func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 }
 
 func TestCaptureCmd(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	ctrl := gomock.NewController(t)
 
 	installationId := uuid.New().String()
@@ -255,6 +276,9 @@ func TestCaptureCmd(t *testing.T) {
 }
 
 func TestCaptureCmdError(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	ctrl := gomock.NewController(t)
 
 	cmd := &cobra.Command{
@@ -303,6 +327,9 @@ func TestCaptureCmdError(t *testing.T) {
 }
 
 func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	ctrl := gomock.NewController(t)
 
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
@@ -323,6 +350,9 @@ func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
 }
 
 func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	ctrl := gomock.NewController(t)
 
 	mockClientProvider := mock_telemetry.NewMockTelemetryClientProviderMock(ctrl)
@@ -343,6 +373,9 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 }
 
 func TestTelemetryWarningMessage(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -364,6 +397,9 @@ https://atmos.tools/cli/telemetry
 }
 
 func TestTelemetryWarningMessageShown(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -376,6 +412,9 @@ func TestTelemetryWarningMessageShown(t *testing.T) {
 }
 
 func TestTelemetryWarningMessageHideForCI(t *testing.T) {
+	currentEnvVars := preserveCIEnvVars()
+	defer restoreCIEnvVars(currentEnvVars)
+
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 

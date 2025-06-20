@@ -302,12 +302,14 @@ func TestCiProvider(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			currentEnvVars := preserveCIEnvVars()
+			defer restoreCIEnvVars(currentEnvVars)
+
 			// Save original environment variables
 			originalEnv := make(map[string]string)
 			for key := range tc.envVars {
 				if val := os.Getenv(key); val != "" {
 					originalEnv[key] = val
-					os.Unsetenv(key)
 				}
 			}
 
@@ -370,7 +372,10 @@ func TestIsCI(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Save original environment variables
+			currentEnvVars := preserveCIEnvVars()
+			defer restoreCIEnvVars(currentEnvVars)
+
+			// Save original environment variables.
 			originalEnv := make(map[string]string)
 			for key := range tc.envVars {
 				if val := os.Getenv(key); val != "" {
@@ -443,4 +448,36 @@ func TestHelperFunctions(t *testing.T) {
 		assert.False(t, isEnvVarEquals("MATCH_VAR", "unexpected"))
 		assert.False(t, isEnvVarEquals("NON_EXISTENT_VAR", "any"))
 	})
+}
+
+func preserveCIEnvVars() map[string]string {
+	envVars := make(map[string]string)
+	for key := range ciProvidersEnvVarsExists {
+		if isEnvVarExists(key) {
+			envVars[key] = os.Getenv(key)
+			os.Unsetenv(key)
+		}
+	}
+
+	for _, values := range ciProvidersEnvVarsEquals {
+		for valueKey := range values {
+			if isEnvVarExists(valueKey) {
+				envVars[valueKey] = os.Getenv(valueKey)
+				os.Unsetenv(valueKey)
+			}
+		}
+	}
+
+	if isEnvVarExists("CI") {
+		envVars["CI"] = os.Getenv("CI")
+		os.Unsetenv("CI")
+	}
+
+	return envVars
+}
+
+func restoreCIEnvVars(envVars map[string]string) {
+	for key, value := range envVars {
+		os.Setenv(key, value)
+	}
 }
