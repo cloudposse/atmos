@@ -5,66 +5,102 @@ vars:
 
 components:
   terraform:
-    # Test 'terraform apply --affected'
-    component-1:
+    vpc:
       metadata:
         component: mock
       vars:
-        foo: foo-component-1
         tags:
+          # Team `network` manages the `vpc` component
           team: network
-    component-2:
+    eks/cluster:
       metadata:
         component: mock
       vars:
-        bar: bar-component-2
         tags:
-          team: network
-    component-3:
-      metadata:
-        component: mock
-      vars:
-        baz: baz-component-3
-        tags:
+          # Team `eks` manages the `eks/cluster` component
           team: eks
       settings:
         depends_on:
+          # `eks/cluster` depends on the `vpc` component
           1:
-            component: component-1
-    component-4:
+            component: vpc
+    eks/external-dns:
       metadata:
         component: mock
       vars:
-        foo: foo-component-4
-        bar: bar-component-4
-        baz: baz-component-4
         tags:
+          # Team `eks` manages the `eks/external-dns` component
           team: eks
       settings:
         depends_on:
+          # `eks/external-dns` depends on the `eks/cluster` component
           1:
-            component: component-2
-          2:
-            component: component-3
-    component-5:
+            component: eks/cluster
+    eks/karpenter:
       metadata:
         component: mock
       vars:
-        foo: foo-component-5
         tags:
-          team: data
-    component-6:
-      metadata:
-        component: mock
-      vars:
-        foo: foo-component-6
-        tags:
-          team: data
+          # Team `eks` manages the `eks/karpenter` component
+          team: eks
       settings:
         depends_on:
+          # `eks/karpenter` depends on the `eks/cluster` component
           1:
-            component: component-1
+            component: eks/cluster
+    eks/karpenter-node-pool:
+      metadata:
+        component: mock
+      vars:
+        tags:
+          # Team `eks` manages the `eks/karpenter-node-pool` component
+          team: eks
+      settings:
+        # `eks/karpenter-node-pool` depends on the `eks/cluster` and `eks/karpenter` components
+        depends_on:
+          1:
+            component: eks/cluster
           2:
-            component: component-4
+            component: eks/karpenter
+    eks/istio/base:
+      metadata:
+        component: mock
+      vars:
+        tags:
+          # Team `istio` manages the `eks/istio/base` component
+          team: istio
+      settings:
+        # `eks/istio/base` depends on the `eks/cluster` component
+        depends_on:
+          1:
+            component: eks/cluster
+    eks/istio/istiod:
+      metadata:
+        component: mock
+      vars:
+        tags:
+          # Team `istio` manages the `eks/istio/istiod` component
+          team: istio
+      settings:
+        # `eks/istio/istiod` depends on the `eks/cluster` and `eks/istio/base` components
+        depends_on:
+          1:
+            component: eks/cluster
+          2:
+            component: eks/istio/base
+    eks/istio/test-app:
+      metadata:
+        component: mock
+      vars:
+        tags:
+          # Team `istio` manages the `eks/istio/test-app` component
+          team: istio
+      settings:
+        # `eks/istio/test-app` depends on the `eks/cluster`, `eks/istio/istiod` and `eks/istio/base` components
+        depends_on:
+          1:
+            component: eks/cluster
+          2:
+            component: eks/istio/istiod
           3:
-            component: component-5
+            component: eks/istio/base
