@@ -54,6 +54,8 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 func TestCaptureCmdString(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
+	atmosProWorkspaceID := fmt.Sprintf("ws_%s", uuid.New().String())
+
 	installationId := uuid.New().String()
 
 	cacheCfg, err := cfg.LoadCache()
@@ -76,10 +78,19 @@ func TestCaptureCmdString(t *testing.T) {
 			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
-			Set("command", "test-cmd"),
+			Set("command", "test-cmd").
+			Set("ci", true).
+			Set("ci_provider", "").
+			Set("atmos_pro_workspace_id", atmosProWorkspaceID).
+			Set("is_docker", isDocker()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
+
+	os.Setenv("CI", "true")
+	os.Setenv("ATMOS_PRO_WORKSPACE_ID", atmosProWorkspaceID)
 	captureCmdString("test-cmd", nil, mockClientProvider.NewMockClient)
+	os.Unsetenv("CI")
+	os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 }
 
 func TestCaptureCmdErrorString(t *testing.T) {
@@ -107,7 +118,11 @@ func TestCaptureCmdErrorString(t *testing.T) {
 			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
-			Set("command", "test-cmd"),
+			Set("command", "test-cmd").
+			Set("ci", false).
+			Set("ci_provider", "").
+			Set("atmos_pro_workspace_id", "").
+			Set("is_docker", isDocker()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
 	captureCmdString("test-cmd", errors.New("test-error"), mockClientProvider.NewMockClient)
@@ -226,10 +241,17 @@ func TestCaptureCmd(t *testing.T) {
 			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
-			Set("command", cmd.CommandPath()),
+			Set("command", cmd.CommandPath()).
+			Set("ci", true).
+			Set("ci_provider", "JENKINS").
+			Set("atmos_pro_workspace_id", "").
+			Set("is_docker", isDocker()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
+
+	os.Setenv("JENKINS_URL", "https://jenkins.example.com")
 	captureCmd(cmd, nil, mockClientProvider.NewMockClient)
+	os.Unsetenv("JENKINS_URL")
 }
 
 func TestCaptureCmdError(t *testing.T) {
@@ -238,6 +260,8 @@ func TestCaptureCmdError(t *testing.T) {
 	cmd := &cobra.Command{
 		Use: fmt.Sprintf("test-cmd-%d", rand.IntN(10000)),
 	}
+
+	atmosProWorkspaceID := fmt.Sprintf("ws_%s", uuid.New().String())
 
 	installationId := uuid.New().String()
 
@@ -261,10 +285,21 @@ func TestCaptureCmdError(t *testing.T) {
 			Set("version", version.Version).
 			Set("os", runtime.GOOS).
 			Set("arch", runtime.GOARCH).
-			Set("command", cmd.CommandPath()),
+			Set("command", cmd.CommandPath()).
+			Set("ci", true).
+			Set("ci_provider", "GITHUB_ACTIONS").
+			Set("atmos_pro_workspace_id", atmosProWorkspaceID).
+			Set("is_docker", isDocker()),
 	}).Return(nil).Times(1)
 	mockClient.EXPECT().Close().Return(nil).Times(1)
+
+	os.Setenv("CI", "true")
+	os.Setenv("GITHUB_ACTIONS", "true")
+	os.Setenv("ATMOS_PRO_WORKSPACE_ID", atmosProWorkspaceID)
 	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
+	os.Unsetenv("CI")
+	os.Unsetenv("GITHUB_ACTIONS")
+	os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 }
 
 func TestCaptureCmdDisabledWithEnvvar(t *testing.T) {
