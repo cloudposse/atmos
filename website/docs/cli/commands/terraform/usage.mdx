@@ -457,22 +457,155 @@ components:
 ```
 </File>
 
-Execute the following Multi-Component commands (Bulk Operations) and review what each command does:
+Execute the following Multi-Component commands (in the `dry-run` mode) and review what each command does:
 
-<Terminal title="atmos terraform apply --all --dry-run">
+<Terminal title="atmos terraform plan --all --dry-run">
 ```shell
-INFO Executing command="atmos terraform apply component-6 -s nonprod"
-INFO Executing command="atmos terraform apply component-1 -s nonprod"
-INFO Executing command="atmos terraform apply component-2 -s nonprod"
-INFO Executing command="atmos terraform apply component-3 -s nonprod"
-INFO Executing command="atmos terraform apply component-4 -s nonprod"
-INFO Executing command="atmos terraform apply component-5 -s nonprod"
-INFO Executing command="atmos terraform apply component-3 -s prod"
-INFO Executing command="atmos terraform apply component-4 -s prod"
-INFO Executing command="atmos terraform apply component-5 -s prod"
-INFO Executing command="atmos terraform apply component-6 -s prod"
-INFO Executing command="atmos terraform apply component-1 -s prod"
-INFO Executing command="atmos terraform apply component-2 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s nonprod"
+INFO Executing command="atmos terraform plan component-1 -s nonprod"
+INFO Executing command="atmos terraform plan component-2 -s nonprod"
+INFO Executing command="atmos terraform plan component-3 -s nonprod"
+INFO Executing command="atmos terraform plan component-4 -s nonprod"
+INFO Executing command="atmos terraform plan component-5 -s nonprod"
+INFO Executing command="atmos terraform plan component-3 -s prod"
+INFO Executing command="atmos terraform plan component-4 -s prod"
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod"
+INFO Executing command="atmos terraform plan component-1 -s prod"
+INFO Executing command="atmos terraform plan component-2 -s prod"
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --all --stack prod --dry-run">
+```shell
+INFO Executing command="atmos terraform plan component-3 -s prod"
+INFO Executing command="atmos terraform plan component-4 -s prod"
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod"
+INFO Executing command="atmos terraform plan component-1 -s prod"
+INFO Executing command="atmos terraform plan component-2 -s prod"
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --stack prod --dry-run">
+```shell
+INFO Executing command="atmos terraform plan component-3 -s prod"
+INFO Executing command="atmos terraform plan component-4 -s prod"
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod"
+INFO Executing command="atmos terraform plan component-1 -s prod"
+INFO Executing command="atmos terraform plan component-2 -s prod"
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --stack prod --components component-1,component-2 --dry-run">
+```shell
+INFO Executing command="atmos terraform plan component-1 -s prod"
+INFO Executing command="atmos terraform plan component-2 -s prod"
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --query '.vars.tags.team == &quot;data&quot;' --dry-run">
+```shell
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-2 -s nonprod" query=".vars.tags.team == \"data\""
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-3 -s nonprod" query=".vars.tags.team == \"data\""
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-4 -s nonprod" query=".vars.tags.team == \"data\""
+INFO Executing command="atmos terraform plan component-5 -s nonprod"
+INFO Executing command="atmos terraform plan component-6 -s nonprod"
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-1 -s nonprod" query=".vars.tags.team == \"data\""
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-2 -s prod" query=".vars.tags.team == \"data\""
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-3 -s prod" query=".vars.tags.team == \"data\""
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-4 -s prod" query=".vars.tags.team == \"data\""
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod"
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-1 -s prod" query=".vars.tags.team == \"data\""
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --query '.vars.tags.team == &quot;data&quot;' --stack prod --dry-run">
+```shell
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-3 -s prod" query=".vars.tags.team == \"data\""
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-4 -s prod" query=".vars.tags.team == \"data\""
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod"
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-1 -s prod" query=".vars.tags.team == \"data\""
+INFO Skipping the component because the query criteria not satisfied command="atmos terraform plan component-2 -s prod" query=".vars.tags.team == \"data\""
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --affected --dry-run">
+```shell
+# Assuming that all the components in all stacks are affected, e.g. just added
+
+INFO Executing command="atmos terraform plan component-2 -s prod"
+INFO Executing command="atmos terraform plan component-3 -s prod"
+INFO Executing command="atmos terraform plan component-4 -s prod"
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod"
+INFO Executing command="atmos terraform plan component-1 -s prod"
+INFO Executing command="atmos terraform plan component-1 -s nonprod"
+INFO Executing command="atmos terraform plan component-2 -s nonprod"
+INFO Executing command="atmos terraform plan component-3 -s nonprod"
+INFO Executing command="atmos terraform plan component-4 -s nonprod"
+INFO Executing command="atmos terraform plan component-5 -s nonprod"
+INFO Executing command="atmos terraform plan component-6 -s nonprod"
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --affected --stack prod --dry-run">
+```shell
+# Assuming that all the components in the `prod` stack are affected, e.g. just added
+
+INFO Executing command="atmos terraform plan component-2 -s prod"
+INFO Executing command="atmos terraform plan component-3 -s prod"
+INFO Executing command="atmos terraform plan component-4 -s prod"
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod"
+INFO Executing command="atmos terraform plan component-1 -s prod"
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --affected --include-dependents=true --dry-run">
+```shell
+# Assuming that all the components in all stacks are affected, e.g. just added
+
+INFO Executing command="atmos terraform plan component-1 -s nonprod"
+INFO Executing command="atmos terraform plan component-6 -s nonprod" dependency of component=component-1 in stack=nonprod
+INFO Executing command="atmos terraform plan component-3 -s nonprod" dependency of component=component-1 in stack=nonprod
+INFO Executing command="atmos terraform plan component-4 -s nonprod" dependency of component=component-3 in stack=nonprod
+INFO Executing command="atmos terraform plan component-6 -s nonprod" dependency of component=component-4 in stack=nonprod
+INFO Executing command="atmos terraform plan component-2 -s nonprod"
+INFO Executing command="atmos terraform plan component-4 -s nonprod" dependency of component=component-2 in stack=nonprod
+INFO Executing command="atmos terraform plan component-6 -s nonprod" dependency of component=component-4 in stack=nonprod
+INFO Executing command="atmos terraform plan component-5 -s nonprod"
+INFO Executing command="atmos terraform plan component-6 -s nonprod" dependency of component=component-5 in stack=nonprod
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod" dependency of component=component-5 in stack=prod
+INFO Executing command="atmos terraform plan component-1 -s prod"
+INFO Executing command="atmos terraform plan component-3 -s prod" dependency of component=component-1 in stack=prod
+INFO Executing command="atmos terraform plan component-4 -s prod" dependency of component=component-3 in stack=prod
+INFO Executing command="atmos terraform plan component-6 -s prod" dependency of component=component-4 in stack=prod
+INFO Executing command="atmos terraform plan component-6 -s prod" dependency of component=component-1 in stack=prod
+INFO Executing command="atmos terraform plan component-2 -s prod"
+INFO Executing command="atmos terraform plan component-4 -s prod" dependency of component=component-2 in stack=prod
+INFO Executing command="atmos terraform plan component-6 -s prod" dependency of component=component-4 in stack=prod
+```
+</Terminal>
+
+<Terminal title="atmos terraform plan --affected --stack prod --include-dependents=true --dry-run">
+```shell
+# Assuming that all the components in the `prod` stack are affected, e.g. just added
+
+INFO Executing command="atmos terraform plan component-1 -s prod"
+INFO Executing command="atmos terraform plan component-3 -s prod" dependency of component=component-1 in stack=prod
+INFO Executing command="atmos terraform plan component-4 -s prod" dependency of component=component-3 in stack=prod
+INFO Executing command="atmos terraform plan component-6 -s prod" dependency of component=component-4 in stack=prod
+INFO Executing command="atmos terraform plan component-6 -s prod" dependency of component=component-1 in stack=prod
+INFO Executing command="atmos terraform plan component-2 -s prod"
+INFO Executing command="atmos terraform plan component-4 -s prod" dependency of component=component-2 in stack=prod
+INFO Executing command="atmos terraform plan component-6 -s prod" dependency of component=component-4 in stack=prod
+INFO Executing command="atmos terraform plan component-5 -s prod"
+INFO Executing command="atmos terraform plan component-6 -s prod" dependency of component=component-5 in stack=prod
 ```
 </Terminal>
 

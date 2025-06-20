@@ -340,14 +340,6 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	var stack string
-	var components []string
-
-	if !info.All {
-		stack = info.Stack
-		components = info.Components
-	}
-
 	var logFunc func(msg interface{}, keyvals ...interface{})
 	if info.DryRun {
 		logFunc = log.Info
@@ -357,8 +349,8 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 
 	stacks, err := ExecuteDescribeStacks(
 		atmosConfig,
-		stack,
-		components,
+		info.Stack,
+		info.Components,
 		[]string{cfg.TerraformComponentType},
 		nil,
 		false,
