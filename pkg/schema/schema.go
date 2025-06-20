@@ -246,7 +246,6 @@ type AtmosSettings struct {
 type TelemetrySettings struct {
 	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
-	Timeout  string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
 	Token    string `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
 }
 
