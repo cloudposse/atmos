@@ -6,6 +6,8 @@ import (
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/google/uuid"
 	"github.com/posthog/posthog-go"
@@ -15,12 +17,51 @@ import (
 // CommandEventName is the standard event name used for command telemetry
 const (
 	CommandEventName = "command"
+
+	// WarningMessage contains the standard telemetry warning message shown to users
+	// when telemetry is first enabled. It explains that Atmos collects anonymous
+	// usage data and provides a link for users to learn more or opt out.
+	WarningMessage = `
+Attention: Atmos now collects completely anonymous telemetry regarding usage.
+This information is used to shape Atmos roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://atmos.tools/cli/telemetry
+`
 )
 
-// GetTelemetryFromConfig initializes a new Telemetry client by loading configuration
+// CaptureCmdString is the public API for capturing command string telemetry.
+// It accepts an optional error parameter and handles the case where no error is provided.
+func CaptureCmdString(cmdString string, err ...error) {
+	var inErr error
+	if len(err) > 0 {
+		inErr = err[0]
+	}
+	captureCmdString(cmdString, inErr)
+}
+
+// CaptureCmd is the public API for capturing cobra command telemetry.
+// It accepts an optional error parameter and handles the case where no error is provided.
+func CaptureCmd(cmd *cobra.Command, err ...error) {
+	var inErr error
+	if len(err) > 0 {
+		inErr = err[0]
+	}
+	captureCmd(cmd, inErr)
+}
+
+// PrintWarningMessage displays the telemetry warning message if one is available.
+// It calls warningMessage() to get the message and prints it in warning color
+// if a message is returned.
+func PrintWarningMessage() {
+	if message := warningMessage(); message != "" {
+		utils.PrintMessageInColor(message, theme.Colors.Warning)
+	}
+}
+
+// getTelemetryFromConfig initializes a new Telemetry client by loading configuration
 // from the Atmos config file and cache. It handles installation ID generation
 // and provides optional dependency injection for testing via the provider parameter.
-func GetTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
+func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 	// Load Atmos configuration from config file
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
@@ -76,7 +117,7 @@ func atmosProWorkspaceID() string {
 // including system info, CI environment, and command details.
 func captureCmdString(cmdString string, err error, provider ...TelemetryClientProvider) {
 	// Get telemetry client from config
-	if t := GetTelemetryFromConfig(provider...); t != nil {
+	if t := getTelemetryFromConfig(provider...); t != nil {
 		// Build comprehensive properties for the telemetry event
 		properties := posthog.NewProperties().
 			Set("version", version.Version).                      // Atmos version
@@ -100,22 +141,28 @@ func captureCmd(cmd *cobra.Command, err error, provider ...TelemetryClientProvid
 	captureCmdString(cmd.CommandPath(), err, provider...)
 }
 
-// CaptureCmdString is the public API for capturing command string telemetry.
-// It accepts an optional error parameter and handles the case where no error is provided.
-func CaptureCmdString(cmdString string, err ...error) {
-	var inErr error
-	if len(err) > 0 {
-		inErr = err[0]
-	}
-	captureCmdString(cmdString, inErr)
-}
+// warningMessage returns a telemetry warning message if it hasn't been shown before.
+// It checks if telemetry is enabled and not running in CI, then loads the cache to
+// determine if the warning has been displayed previously. If not shown, it marks
+// the warning as shown in the cache and returns the warning message.
+func warningMessage() string {
+	// Only show warning if telemetry is enabled and not running in CI
+	if telemetry := getTelemetryFromConfig(); telemetry != nil && !isCI() {
+		// Load cache configuration to check if warning has been shown
+		cacheCfg, err := cfg.LoadCache()
+		if err != nil {
+			log.Warn("Could not load cache", "error", err)
+			return ""
+		}
 
-// CaptureCmd is the public API for capturing cobra command telemetry.
-// It accepts an optional error parameter and handles the case where no error is provided.
-func CaptureCmd(cmd *cobra.Command, err ...error) {
-	var inErr error
-	if len(err) > 0 {
-		inErr = err[0]
+		// If warning hasn't been shown yet, mark it as shown and return the message
+		if !cacheCfg.TelemetryWarningShown {
+			cacheCfg.TelemetryWarningShown = true
+			if err := cfg.SaveCache(cacheCfg); err != nil {
+				log.Warn("Could not save cache", "error", err)
+			}
+			return WarningMessage
+		}
 	}
-	captureCmd(cmd, inErr)
+	return ""
 }

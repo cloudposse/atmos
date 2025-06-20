@@ -32,7 +32,7 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 	mockClient.EXPECT().Enqueue(gomock.Any()).Return(nil).Times(0)
 	mockClient.EXPECT().Close().Return(nil).Times(0)
 
-	telemetryOne := GetTelemetryFromConfig(mockClientProvider.NewMockClient)
+	telemetryOne := getTelemetryFromConfig(mockClientProvider.NewMockClient)
 
 	assert.NotNil(t, telemetryOne)
 	assert.Equal(t, telemetryOne.isEnabled, enabled)
@@ -41,7 +41,7 @@ func TestGetTelemetryFromConfig(t *testing.T) {
 	assert.NotEmpty(t, telemetryOne.distinctId)
 	assert.NotNil(t, telemetryOne.clientProvider)
 
-	telemetryTwo := GetTelemetryFromConfig(mockClientProvider.NewMockClient)
+	telemetryTwo := getTelemetryFromConfig(mockClientProvider.NewMockClient)
 
 	assert.NotNil(t, telemetryTwo)
 	assert.Equal(t, telemetryTwo.isEnabled, telemetryOne.isEnabled)
@@ -187,7 +187,7 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 	os.Setenv("ATMOS_TELEMETRY_TOKEN", token)
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", strconv.FormatBool(enabled))
 	os.Setenv("ATMOS_TELEMETRY_ENDPOINT", endpoint)
-	telemetry := GetTelemetryFromConfig(mockClientProvider.NewMockClient)
+	telemetry := getTelemetryFromConfig(mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_TOKEN")
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
 	os.Unsetenv("ATMOS_TELEMETRY_ENDPOINT")
@@ -203,7 +203,7 @@ func TestGetTelemetryFromConfigTokenWithEnvvar(t *testing.T) {
 func TestGetTelemetryFromConfigIntergration(t *testing.T) {
 	enabled := true
 
-	telemetry := GetTelemetryFromConfig()
+	telemetry := getTelemetryFromConfig()
 
 	assert.NotNil(t, telemetry)
 	assert.Equal(t, telemetry.isEnabled, enabled)
@@ -340,4 +340,54 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 	os.Setenv("ATMOS_TELEMETRY_ENABLED", "false")
 	captureCmd(cmd, errors.New("test-error"), mockClientProvider.NewMockClient)
 	os.Unsetenv("ATMOS_TELEMETRY_ENABLED")
+}
+
+func TestTelemetryWarningMessage(t *testing.T) {
+
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryWarningShown = false
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	message1 := warningMessage()
+	assert.NotEmpty(t, message1)
+	assert.Equal(t, message1, `
+Attention: Atmos now collects completely anonymous telemetry regarding usage.
+This information is used to shape Atmos roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://atmos.tools/cli/telemetry
+`)
+
+	message2 := warningMessage()
+	assert.Empty(t, message2)
+}
+
+func TestTelemetryWarningMessageShown(t *testing.T) {
+
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryWarningShown = true
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	message := warningMessage()
+	assert.Empty(t, message)
+}
+
+func TestTelemetryWarningMessageHideForCI(t *testing.T) {
+
+	cacheCfg, err := cfg.LoadCache()
+	assert.NoError(t, err)
+
+	cacheCfg.TelemetryWarningShown = false
+	saveErr := cfg.SaveCache(cacheCfg)
+	assert.NoError(t, saveErr)
+
+	os.Setenv("CI", "true")
+	message := warningMessage()
+	assert.Empty(t, message)
+	os.Unsetenv("CI")
 }
