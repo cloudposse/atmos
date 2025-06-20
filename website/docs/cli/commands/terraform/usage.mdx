@@ -286,7 +286,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         atmos terraform plan --components <component-1>
         atmos terraform plan --components <component-1>,<component-2>
         atmos terraform apply --components <component-1> --components <component-2>
-        atmos terraform apply --components <component-1>,<component-2> --stack <stack>
+        atmos terraform apply --components <component-1>,<component-2> --stack <stack> --logs-level=Debug
         ```
     </dd>
 
@@ -298,7 +298,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         atmos terraform plan --all
         atmos terraform apply --all --stack <stack>
         atmos terraform apply --all --dry-run
-        atmos terraform deploy --all
+        atmos terraform deploy --all --logs-level=Debug
         ```
     </dd>
 
@@ -312,7 +312,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         atmos terraform plan --query '.vars.tags.team == "data"'
         atmos terraform apply --query '.vars.tags.team == "eks"' --stack <stack>
         atmos terraform apply --query '.settings.context.accoun_id == 12345'
-        atmos terraform deploy --query '.vars.tags.team == "data"' --dry-run
+        atmos terraform deploy --query '.vars.tags.team == "data"' --dry-run --logs-level=Debug
         ```
     </dd>
 
@@ -328,8 +328,63 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         atmos terraform apply --affected --dry-run
         atmos terraform apply --affected --clone-target-ref=true
         atmos terraform deploy --affected --include-dependents=true
+        atmos terraform apply --affected --include-dependents=true --dry-run --logs-level=Debug
+        ```
+    </dd>
+
+    <dt>`--include-dependents` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
+    <dd>
+        For each affected component, detect the dependent components and process them in the dependency order, recursively.
+
+        ```shell
+        atmos terraform plan --affected --include-dependents=true --logs-level=Debug
         atmos terraform apply --affected --include-dependents=true --dry-run
         ```
+    </dd>
+
+    <dt>`--ref` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
+    <dd>
+        [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch.
+
+        If the reference is a branch, the command will compare the current working branch with the branch.
+
+        If the reference is a tag, the command will compare the current working branch with the tag.
+
+        If the flags are not provided, the ref will be set automatically to the head to the default branch (`refs/remotes/origin/HEAD` Git ref, usually the `main` branch)
+    </dd>
+
+    <dt>`--sha` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
+    <dd>
+        Git commit SHA with which to compare the current working branch
+    </dd>
+
+    <dt>`--ssh-key` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
+    <dd>
+        Path to PEM-encoded private key to clone private repos using SSH
+    </dd>
+
+    <dt>`--ssh-key-password` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
+    <dd>
+        Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
+    </dd>
+
+    <dt>`--repo-path` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
+    <dd>
+        Path to the already cloned target repository with which to compare the current branch. Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`
+    </dd>
+
+    <dt>`--clone-target-ref` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
+    <dd>
+        Clone the target reference with which to compare the current branch.
+
+        ```shell
+        atmos terraform plan --affected --clone-target-ref=true
+        atmos terraform deploy --affected --clone-target-ref=true --dry-run
+        atmos terraform apply --affected --clone-target-ref=true --dry-run --logs-level=Debug
+        ```
+
+        If the flag is not passed or set to `false` (default), the target reference will be checked out instead.
+        This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory
     </dd>
 
 </dl>
