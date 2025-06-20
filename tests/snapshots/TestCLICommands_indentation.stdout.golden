@@ -45,10 +45,10 @@ settings:
       wrap: false
     no_color: false
     tab_width: 4
+  inject_github_token: true
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
-  inject_github_token: true
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks
 includeStackAbsolutePaths:
