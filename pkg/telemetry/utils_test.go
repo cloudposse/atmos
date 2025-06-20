@@ -343,7 +343,6 @@ func TestCaptureCmdFailureDisabledWithEnvvar(t *testing.T) {
 }
 
 func TestTelemetryWarningMessage(t *testing.T) {
-
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -365,7 +364,6 @@ https://atmos.tools/cli/telemetry
 }
 
 func TestTelemetryWarningMessageShown(t *testing.T) {
-
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
@@ -378,7 +376,6 @@ func TestTelemetryWarningMessageShown(t *testing.T) {
 }
 
 func TestTelemetryWarningMessageHideForCI(t *testing.T) {
-
 	cacheCfg, err := cfg.LoadCache()
 	assert.NoError(t, err)
 
