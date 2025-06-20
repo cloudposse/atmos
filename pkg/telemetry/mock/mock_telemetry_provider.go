@@ -12,8 +12,8 @@ package mock_telemetry
 import (
 	reflect "reflect"
 
-	posthog_go "github.com/posthog/posthog-go"
 	gomock "github.com/golang/mock/gomock"
+	posthog_go "github.com/posthog/posthog-go"
 )
 
 // MockTelemetryClientProviderMock is a mock of TelemetryClientProviderMock interface.
