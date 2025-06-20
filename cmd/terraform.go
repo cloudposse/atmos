@@ -48,7 +48,7 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error getting hooks: %w", err)
 	}
 
-	if hooks.HasHooks() {
+	if hooks != nil && hooks.HasHooks() {
 		log.Info("running hooks", "event", event)
 		return hooks.RunAll(event, &atmosConfig, &info, cmd, args)
 	}

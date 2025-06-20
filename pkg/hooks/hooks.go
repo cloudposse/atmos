@@ -22,6 +22,14 @@ func (h Hooks) HasHooks() bool {
 }
 
 func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
+	if info.ComponentFromArg == "" || info.Stack == "" {
+		return &Hooks{
+			config: atmosConfig,
+			info:   info,
+			items:  nil,
+		}, nil
+	}
+
 	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true, true, []string{})
 	if err != nil {
 		return &Hooks{}, fmt.Errorf("failed to execute describe component: %w", err)
