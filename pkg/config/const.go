@@ -85,16 +85,20 @@ const (
 
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
-	// Atmos Pro
+	// Atmos Pro.
 	AtmosProBaseUrlEnvVarName     = "ATMOS_PRO_BASE_URL"
 	AtmosProEndpointEnvVarName    = "ATMOS_PRO_ENDPOINT"
 	AtmosProTokenEnvVarName       = "ATMOS_PRO_TOKEN"
 	AtmosProWorkspaceIDEnvVarName = "ATMOS_PRO_WORKSPACE_ID"
 	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
 	AtmosProDefaultEndpoint       = "api/v1"
+	UploadDeploymentStatusFlag    = "upload-deployment-status"
 
 	TerraformDefaultWorkspace = "default"
 
 	ComponentStr = "component"
 	StackStr     = "stack"
+
+	// Error format string used for error wrapping.
+	ErrFormatString = "%w: %s"
 )

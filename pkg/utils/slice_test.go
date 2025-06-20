@@ -20,3 +20,44 @@ func TestSliceOfInterfacesToSliceOfStrings(t *testing.T) {
 	assert.Equal(t, input[1].(string), result[1])
 	assert.Equal(t, input[2].(string), result[2])
 }
+
+func TestSliceRemoveString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    []string
+		remove   string
+		expected []string
+	}{
+		{
+			name:     "remove existing string",
+			input:    []string{"a", "b", "c"},
+			remove:   "b",
+			expected: []string{"a", "c"},
+		},
+		{
+			name:     "remove non-existent string",
+			input:    []string{"a", "b", "c"},
+			remove:   "d",
+			expected: []string{"a", "b", "c"},
+		},
+		{
+			name:     "remove from empty slice",
+			input:    []string{},
+			remove:   "a",
+			expected: []string{},
+		},
+		{
+			name:     "remove with duplicates",
+			input:    []string{"a", "b", "a", "c"},
+			remove:   "a",
+			expected: []string{"b", "a", "c"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := SliceRemoveString(tc.input, tc.remove)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
