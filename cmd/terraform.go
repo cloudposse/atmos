@@ -98,7 +98,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.ProcessFunctions = processYamlFunctions
 	info.Skip = skip
 	info.Components = components
-	info.DryRun = dryRun
+	info.DryRun = dryRun == true
 
 	if info.Affected &&
 		(info.All || len(info.Components) > 0 || info.Query != "" || info.ComponentFromArg != "") {

@@ -190,26 +190,34 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 ## Arguments
 
 <dl>
-    <dt>`component` <em>(required)</em></dt>
+    <dt>`component` <em>(required for Multi-Component commands)</em></dt>
     <dd>
-        Atmos terraform component.
+        Atmos Terraform/OpenTofu component.
     </dd>
 </dl>
 
 ## Flags
 
 <dl>
-    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required for Multi-Component commands)</em></dt>
     <dd>
         Atmos stack.
+
+        ```shell
+        atmos terraform plan <component> -s <stack>
+        atmos terraform apply --all -s <stack>
+        ```
     </dd>
 
     <dt>`--dry-run` <em>(optional)</em></dt>
     <dd>
         Dry run.
+        Simulate the command without making any changes.
 
         ```shell
-        atmos terraform <command> <component> -s <stack> --dry-run=true
+        atmos terraform <command> <component> -s <stack> --dry-run
+        atmos terraform <command> --all --dry-run
+        atmos terraform <command> --affected --dry-run
         ```
     </dd>
 
@@ -269,11 +277,66 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         atmos terraform apply <component> -s <stack> --skip=terraform.output,include
         ```
     </dd>
+
+    <dt>`--components` <em>(optional)</em></dt>
+    <dd>
+        Execute the command on the specified components in all stacks or in a specific stack.
+
+        ```shell
+        atmos terraform plan --components <component-1>
+        atmos terraform plan --components <component-1>,<component-2>
+        atmos terraform apply --components <component-1> --components <component-2>
+        atmos terraform apply --components <component-1>,<component-2> --stack <stack>
+        ```
+    </dd>
+
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Execute the command on all components in all stacks or in a specific stack.
+
+        ```shell
+        atmos terraform plan --all
+        atmos terraform apply --all --stack <stack>
+        atmos terraform apply --all --dry-run
+        atmos terraform deploy --all
+        ```
+    </dd>
+
+    <dt>`--query` <em>(optional)</em></dt>
+    <dd>
+        Execute the command on the components filtered by a [YQ](https://mikefarah.gitbook.io/yq) expression, in all stacks or in a specific stack.
+
+        __NOTE__: All Atmos sections are available in the expression, e.g. `vars`, `settings`, `env`, `metadata`, `backend`, etc.
+
+        ```shell
+        atmos terraform plan --query '.vars.tags.team == "data"'
+        atmos terraform apply --query '.vars.tags.team == "eks"' --stack <stack>
+        atmos terraform apply --query '.settings.context.accoun_id == 12345'
+        atmos terraform deploy --query '.vars.tags.team == "data"' --dry-run
+        ```
+    </dd>
+
+    <dt>`--affected` <em>(optional)</em></dt>
+    <dd>
+        Execute the command on the components affected by the changes in the current branch, in all stacks or in a specific stack.
+
+        __NOTE__: When using the `--affected` flag, Atmos supports all the flags from the [`atmos describe affected`](/cli/commands/describe/affected) CLI command.
+
+        ```shell
+        atmos terraform plan --affected
+        atmos terraform apply --affected --stack <stack>
+        atmos terraform apply --affected --dry-run
+        atmos terraform apply --affected --clone-target-ref=true
+        atmos terraform deploy --affected --include-dependents=true
+        atmos terraform apply --affected --include-dependents=true --dry-run
+        ```
+    </dd>
+
 </dl>
 
 :::note
 
-All native `terraform` flags are supported.
+All native Terraform/OpenTofu flags are supported.
 
 :::
 
