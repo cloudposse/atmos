@@ -66,3 +66,20 @@ func TestPrintOrWriteToFile(t *testing.T) {
 	err = printOrWriteToFile(atmosConfigDefaultTabWidth, "yaml", "", testData)
 	assert.NoError(t, err)
 }
+
+func TestRemoveTempDirAndCloseFile(t *testing.T) {
+	dir, err := os.MkdirTemp("", "atmos-test-*")
+	assert.NoError(t, err)
+	filePath := filepath.Join(dir, "dummy.txt")
+	f, err := os.Create(filePath)
+	assert.NoError(t, err)
+
+	closeFile(filePath, f)
+	closeFile(filePath, f)
+
+	removeTempDir(dir)
+
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("expected temp dir to be removed")
+	}
+}

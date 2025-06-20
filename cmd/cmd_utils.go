@@ -574,7 +574,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Load the cache
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
-		u.LogWarning(fmt.Sprintf("Could not load cache: %s", err))
+		log.Warn("Could not load cache", "error", err)
 		return
 	}
 
@@ -587,12 +587,12 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Get the latest Atmos release from GitHub
 	latestReleaseTag, err := u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 	if err != nil {
-		u.LogWarning(fmt.Sprintf("Failed to retrieve latest Atmos release info: %s", err))
+		log.Warn("Failed to retrieve latest Atmos release info", "error", err)
 		return
 	}
 
 	if latestReleaseTag == "" {
-		u.LogWarning("No release information available")
+		log.Warn("No release information available")
 		return
 	}
 
@@ -608,7 +608,7 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 	// Update the cache to mark the current timestamp
 	cacheCfg.LastChecked = time.Now().Unix()
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		u.LogWarning(fmt.Sprintf("Unable to save cache: %s", saveErr))
+		log.Warn("Unable to save cache", "error", saveErr)
 	}
 }
 

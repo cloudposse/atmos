@@ -55,7 +55,7 @@ var RootCmd = &cobra.Command{
 			if errors.Is(err, cfg.NotFound) {
 				// For help commands or when help flag is set, we don't want to show the error
 				if !isHelpRequested {
-					u.LogWarning(err.Error())
+					log.Warn(err.Error())
 				}
 			} else {
 				u.LogErrorAndExit(err)
