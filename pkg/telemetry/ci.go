@@ -5,6 +5,60 @@ import (
 	"sort"
 )
 
+var (
+	// Map of CI providers that can be detected by checking if specific environment variables exist.
+	ciProvidersEnvVarsExists = map[string]string{
+		"AGOLA":              "AGOLA_GIT_REF",
+		"APPCIRCLE":          "AC_APPCIRCLE",
+		"APPVEYOR":           "APPVEYOR",
+		"CODEBUILD":          "CODEBUILD_BUILD_ARN",
+		"AZURE_PIPELINES":    "TF_BUILD",
+		"BAMBOO":             "bamboo_planKey",
+		"BITBUCKET":          "BITBUCKET_COMMIT",
+		"BITRISE":            "BITRISE_IO",
+		"BUDDY":              "BUDDY_WORKSPACE_ID",
+		"BUILDKITE":          "BUILDKITE",
+		"CIRCLE":             "CIRCLECI",
+		"CIRRUS":             "CIRRUS_CI",
+		"CODEFRESH":          "CF_BUILD_ID",
+		"DRONE":              "DRONE",
+		"DSARI":              "DSARI",
+		"EARTHLY":            "EARTHLY_CI",
+		"GERRIT":             "GERRIT_PROJECT",
+		"GITEA_ACTIONS":      "GITEA_ACTIONS",
+		"GITHUB_ACTIONS":     "GITHUB_ACTIONS",
+		"GITLAB":             "GITLAB_CI",
+		"GOCD":               "GO_PIPELINE_LABEL",
+		"GOOGLE_CLOUD_BUILD": "BUILDER_OUTPUT",
+		"HARNESS":            "HARNESS_BUILD_ID",
+		"HUDSON":             "HUDSON_URL",
+		"JENKINS":            "JENKINS_URL", // "JENKINS_URL" and "BUILD_ID"
+		"MAGNUM":             "MAGNUM",
+		"NEVERCODE":          "NEVERCODE",
+		"PROW":               "PROW_JOB_ID",
+		"SAIL":               "SAILCI",
+		"SEMAPHORE":          "SEMAPHORE",
+		"STRIDER":            "STRIDER",
+		"TASKCLUSTER":        "TASK_ID", // "TASK_ID"  &&  "RUN_ID"
+		"TEAMCITY":           "TEAMCITY_VERSION",
+		"TRAVIS":             "TRAVIS",
+		"VELA":               "VELA",
+	}
+
+	// Map of CI providers that can be detected by checking if environment variables equal specific values.
+	ciProvidersEnvVarsEquals = map[string]map[string]string{
+		"CODESHIP": {
+			"CI_NAME": "codeship",
+		},
+		"SOURCEHUT": {
+			"CI_NAME": "sourcehut",
+		},
+		"WOODPECKER": {
+			"CI": "woodpecker",
+		},
+	}
+)
+
 // Inspired by https://github.com/watson/ci-info .
 
 // isEnvVarExists checks if an environment variable exists and is not empty.
@@ -51,57 +105,6 @@ func applyAlphabeticalOrder[V string | map[string]string](table map[string]V, fi
 // ciProvider detects which CI/CD provider is currently running.
 // Returns the name of the detected provider or empty string if none found.
 func ciProvider() string {
-	// Map of CI providers that can be detected by checking if specific environment variables exist.
-	ciProvidersEnvVarsExists := map[string]string{
-		"AGOLA":              "AGOLA_GIT_REF",
-		"APPCIRCLE":          "AC_APPCIRCLE",
-		"APPVEYOR":           "APPVEYOR",
-		"CODEBUILD":          "CODEBUILD_BUILD_ARN",
-		"AZURE_PIPELINES":    "TF_BUILD",
-		"BAMBOO":             "bamboo_planKey",
-		"BITBUCKET":          "BITBUCKET_COMMIT",
-		"BITRISE":            "BITRISE_IO",
-		"BUDDY":              "BUDDY_WORKSPACE_ID",
-		"BUILDKITE":          "BUILDKITE",
-		"CIRCLE":             "CIRCLECI",
-		"CIRRUS":             "CIRRUS_CI",
-		"CODEFRESH":          "CF_BUILD_ID",
-		"DRONE":              "DRONE",
-		"DSARI":              "DSARI",
-		"EARTHLY":            "EARTHLY_CI",
-		"GERRIT":             "GERRIT_PROJECT",
-		"GITEA_ACTIONS":      "GITEA_ACTIONS",
-		"GITHUB_ACTIONS":     "GITHUB_ACTIONS",
-		"GITLAB":             "GITLAB_CI",
-		"GOCD":               "GO_PIPELINE_LABEL",
-		"GOOGLE_CLOUD_BUILD": "BUILDER_OUTPUT",
-		"HARNESS":            "HARNESS_BUILD_ID",
-		"HUDSON":             "HUDSON_URL",
-		"JENKINS":            "JENKINS_URL", // "JENKINS_URL" and "BUILD_ID"
-		"MAGNUM":             "MAGNUM",
-		"NEVERCODE":          "NEVERCODE",
-		"PROW":               "PROW_JOB_ID",
-		"SAIL":               "SAILCI",
-		"SEMAPHORE":          "SEMAPHORE",
-		"STRIDER":            "STRIDER",
-		"TASKCLUSTER":        "TASK_ID", // "TASK_ID"  &&  "RUN_ID"
-		"TEAMCITY":           "TEAMCITY_VERSION",
-		"TRAVIS":             "TRAVIS",
-		"VELA":               "VELA",
-	}
-
-	// Map of CI providers that can be detected by checking if environment variables equal specific values.
-	ciProvidersEnvVarsEquals := map[string]map[string]string{
-		"CODESHIP": {
-			"CI_NAME": "codeship",
-		},
-		"SOURCEHUT": {
-			"CI_NAME": "sourcehut",
-		},
-		"WOODPECKER": {
-			"CI": "woodpecker",
-		},
-	}
 
 	// First, check providers that can be detected by environment variable existence.
 	// Process in alphabetical order for consistent results.

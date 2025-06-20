@@ -5,7 +5,7 @@ import (
 	"github.com/posthog/posthog-go"
 )
 
-// TelemetryClientProvider is a function type that creates a PostHog client.
+// TelemetryClientProvider is a function type that creates a PostHog client
 // given a token and configuration. This allows for dependency injection
 // and easier testing by providing mock implementations.
 type TelemetryClientProvider func(string, posthog.Config) (posthog.Client, error)
@@ -43,9 +43,9 @@ func NewTelemetry(isEnabled bool, token string, endpoint string, distinctId stri
 // Capture sends a telemetry event to PostHog with the given event name and properties.
 // Returns true if the event was successfully captured, false otherwise.
 // The method handles various failure scenarios gracefully:
-// - Telemetry disabled or missing token
-// - Client creation failures
-// - Event enqueue failures
+// - Telemetry disabled or missing token.
+// - Client creation failures.
+// - Event enqueue failures.
 func (t *Telemetry) Capture(eventName string, properties map[string]interface{}) bool {
 	// Early return if telemetry is disabled or token is missing
 	if !t.isEnabled || t.token == "" {
