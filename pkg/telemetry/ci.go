@@ -5,41 +5,41 @@ import (
 	"sort"
 )
 
-// Inspired by https://github.com/watson/ci-info
+// Inspired by https://github.com/watson/ci-info .
 
-// isEnvVarExists checks if an environment variable exists and is not empty
+// isEnvVarExists checks if an environment variable exists and is not empty.
 func isEnvVarExists(key string) bool {
 	return os.Getenv(key) != ""
 }
 
-// isEnvVarEquals checks if an environment variable exists and equals the specified value
+// isEnvVarEquals checks if an environment variable exists and equals the specified value.
 func isEnvVarEquals(key string, value string) bool {
 	return isEnvVarExists(key) && os.Getenv(key) == value
 }
 
-// isEnvVarTrue checks if an environment variable exists and equals "true"
+// isEnvVarTrue checks if an environment variable exists and equals "true".
 func isEnvVarTrue(key string) bool {
 	return isEnvVarEquals(key, "true")
 }
 
-// isCI determines if the current environment is a CI/CD environment
-// Returns true if CI=true or if a specific CI provider is detected
+// isCI determines if the current environment is a CI/CD environment.
+// Returns true if CI=true or if a specific CI provider is detected.
 func isCI() bool {
 	return isEnvVarTrue("CI") || ciProvider() != ""
 }
 
-// applyAlphabeticalOrder is a generic function that processes a map in alphabetical order
-// It applies a filter function to each value and returns the first key where the filter returns true
-// V can be either string or map[string]string
+// applyAlphabeticalOrder is a generic function that processes a map in alphabetical order.
+// It applies a filter function to each value and returns the first key where the filter returns true.
+// V can be either string or map[string]string.
 func applyAlphabeticalOrder[V string | map[string]string](table map[string]V, filter func(V) bool) string {
 	// Extract all keys from the map
 	var keys []string
 	for key := range table {
 		keys = append(keys, key)
 	}
-	// Sort keys alphabetically for consistent ordering
+	// Sort keys alphabetically for consistent ordering.
 	sort.Strings(keys)
-	// Apply filter to each value in alphabetical order
+	// Apply filter to each value in alphabetical order.
 	for _, key := range keys {
 		if filter(table[key]) {
 			return key
@@ -48,10 +48,10 @@ func applyAlphabeticalOrder[V string | map[string]string](table map[string]V, fi
 	return ""
 }
 
-// ciProvider detects which CI/CD provider is currently running
-// Returns the name of the detected provider or empty string if none found
+// ciProvider detects which CI/CD provider is currently running.
+// Returns the name of the detected provider or empty string if none found.
 func ciProvider() string {
-	// Map of CI providers that can be detected by checking if specific environment variables exist
+	// Map of CI providers that can be detected by checking if specific environment variables exist.
 	ciProvidersEnvVarsExists := map[string]string{
 		"AGOLA":              "AGOLA_GIT_REF",
 		"APPCIRCLE":          "AC_APPCIRCLE",
@@ -90,7 +90,7 @@ func ciProvider() string {
 		"VELA":               "VELA",
 	}
 
-	// Map of CI providers that can be detected by checking if environment variables equal specific values
+	// Map of CI providers that can be detected by checking if environment variables equal specific values.
 	ciProvidersEnvVarsEquals := map[string]map[string]string{
 		"CODESHIP": {
 			"CI_NAME": "codeship",
@@ -103,13 +103,13 @@ func ciProvider() string {
 		},
 	}
 
-	// First, check providers that can be detected by environment variable existence
-	// Process in alphabetical order for consistent results
+	// First, check providers that can be detected by environment variable existence.
+	// Process in alphabetical order for consistent results.
 	if result := applyAlphabeticalOrder(ciProvidersEnvVarsExists, isEnvVarExists); result != "" {
 		return result
 	}
 
-	// Helper function to check if any environment variable in the map equals its expected value
+	// Helper function to check if any environment variable in the map equals its expected value.
 	checkEnvVarsEquals := func(key map[string]string) bool {
 		for envName, envValue := range key {
 			if isEnvVarEquals(envName, envValue) {
@@ -119,12 +119,12 @@ func ciProvider() string {
 		return false
 	}
 
-	// Then, check providers that require specific environment variable values
-	// Process in alphabetical order for consistent results
+	// Then, check providers that require specific environment variable values.
+	// Process in alphabetical order for consistent results.
 	if result := applyAlphabeticalOrder(ciProvidersEnvVarsEquals, checkEnvVarsEquals); result != "" {
 		return result
 	}
 
-	// No CI provider detected
+	// No CI provider detected.
 	return ""
 }

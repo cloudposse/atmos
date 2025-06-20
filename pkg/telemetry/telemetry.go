@@ -5,7 +5,7 @@ import (
 	"github.com/posthog/posthog-go"
 )
 
-// TelemetryClientProvider is a function type that creates a PostHog client
+// TelemetryClientProvider is a function type that creates a PostHog client.
 // given a token and configuration. This allows for dependency injection
 // and easier testing by providing mock implementations.
 type TelemetryClientProvider func(string, posthog.Config) (posthog.Client, error)

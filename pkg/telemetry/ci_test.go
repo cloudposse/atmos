@@ -307,6 +307,7 @@ func TestCiProvider(t *testing.T) {
 			for key := range tc.envVars {
 				if val := os.Getenv(key); val != "" {
 					originalEnv[key] = val
+					os.Unsetenv(key)
 				}
 			}
 
@@ -383,8 +384,8 @@ func TestIsCI(t *testing.T) {
 			}
 			sort.Strings(envVarsOrdered)
 			// Set test environment variables
-			for key := range envVarsOrdered {
-				os.Setenv(envVarsOrdered[key], tc.envVars[envVarsOrdered[key]])
+			for _, key := range envVarsOrdered {
+				os.Setenv(key, tc.envVars[key])
 			}
 
 			// Clean up environment variables after test

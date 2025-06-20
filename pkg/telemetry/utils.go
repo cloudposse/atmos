@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// CommandEventName is the standard event name used for command telemetry
+// CommandEventName is the standard event name used for command telemetry.
 const (
 	CommandEventName = "command"
 
@@ -69,29 +69,29 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 		return nil
 	}
 
-	// Load the cache to retrieve or generate installation ID
+	// Load the cache to retrieve or generate installation ID.
 	cacheCfg, err := cfg.LoadCache()
 	if err != nil {
 		log.Warn("Could not load cache", "error", err)
 		return nil
 	}
 
-	// Generate new installation ID if one doesn't exist
+	// Generate new installation ID if one doesn't exist.
 	if cacheCfg.InstallationId == "" {
 		cacheCfg.InstallationId = uuid.New().String()
 	}
-	// Save the cache with the installation ID
+	// Save the cache with the installation ID.
 	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
 		log.Warn("Unable to save cache", "error", saveErr)
 	}
 
-	// Extract telemetry settings from config
+	// Extract telemetry settings from config.
 	enabled := atmosConfig.Settings.Telemetry.Enabled
 	token := atmosConfig.Settings.Telemetry.Token
 	endpoint := atmosConfig.Settings.Telemetry.Endpoint
 	distinctId := cacheCfg.InstallationId
 
-	// Use provided client provider or default to PostHog provider
+	// Use provided client provider or default to PostHog provider.
 	clientProvider := PosthogClientProvider
 	if len(provider) > 0 {
 		clientProvider = provider[0]
@@ -147,22 +147,27 @@ func captureCmd(cmd *cobra.Command, err error, provider ...TelemetryClientProvid
 // the warning as shown in the cache and returns the warning message.
 func warningMessage() string {
 	// Only show warning if telemetry is enabled and not running in CI
-	if telemetry := getTelemetryFromConfig(); telemetry != nil && !isCI() {
-		// Load cache configuration to check if warning has been shown
-		cacheCfg, err := cfg.LoadCache()
-		if err != nil {
-			log.Warn("Could not load cache", "error", err)
-			return ""
-		}
-
-		// If warning hasn't been shown yet, mark it as shown and return the message
-		if !cacheCfg.TelemetryWarningShown {
-			cacheCfg.TelemetryWarningShown = true
-			if err := cfg.SaveCache(cacheCfg); err != nil {
-				log.Warn("Could not save cache", "error", err)
-			}
-			return WarningMessage
-		}
+	telemetry := getTelemetryFromConfig()
+	if telemetry == nil || isCI() {
+		return ""
 	}
-	return ""
+
+	// Load cache configuration to check if warning has been shown
+	cacheCfg, err := cfg.LoadCache()
+	if err != nil {
+		log.Warn("Could not load cache", "error", err)
+		return ""
+	}
+
+	// If warning has already been shown, return empty
+	if cacheCfg.TelemetryWarningShown {
+		return ""
+	}
+
+	// Mark warning as shown and return the message
+	cacheCfg.TelemetryWarningShown = true
+	if err := cfg.SaveCache(cacheCfg); err != nil {
+		log.Warn("Could not save cache", "error", err)
+	}
+	return WarningMessage
 }
