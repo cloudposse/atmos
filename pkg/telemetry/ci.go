@@ -105,7 +105,6 @@ func applyAlphabeticalOrder[V string | map[string]string](table map[string]V, fi
 // ciProvider detects which CI/CD provider is currently running.
 // Returns the name of the detected provider or empty string if none found.
 func ciProvider() string {
-
 	// First, check providers that can be detected by environment variable existence.
 	// Process in alphabetical order for consistent results.
 	if result := applyAlphabeticalOrder(ciProvidersEnvVarsExists, isEnvVarExists); result != "" {
