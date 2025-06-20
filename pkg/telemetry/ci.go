@@ -6,6 +6,8 @@ import (
 )
 
 var (
+	// Inspired by https://github.com/watson/ci-info .
+
 	// Map of CI providers that can be detected by checking if specific environment variables exist.
 	ciProvidersEnvVarsExists = map[string]string{
 		"AGOLA":              "AGOLA_GIT_REF",
@@ -58,8 +60,6 @@ var (
 		},
 	}
 )
-
-// Inspired by https://github.com/watson/ci-info .
 
 // isEnvVarExists checks if an environment variable exists and is not empty.
 func isEnvVarExists(key string) bool {
