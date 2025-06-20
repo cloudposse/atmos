@@ -65,17 +65,22 @@ atmos helmfile destroy echo-server --stack=tenant1-ue2-dev --redirect-stderr /de
 
 ## Arguments
 
-| Argument    | Description     | Required |
-|:------------|:----------------|:---------|
-| `component` | Atmos component | yes      |
 
+<dl>
+  <dt>`component`</dt>
+  <dd>Atmos component (required)</dd>
+</dl>
 ## Flags
+<dl>
+  <dt>`--stack` (`-s`)</dt>
+  <dd>Atmos stack (required)</dd>
 
-| Flag                | Description                                                                                                                                   | Alias | Required |
-|:--------------------|:----------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`           | Atmos stack                                                                                                                                   | `-s`  | yes      |
-| `--dry-run`         | Dry run                                                                                                                                       |       | no       |
-| `--redirect-stderr` | File descriptor to redirect `stderr` to.<br/>Errors can be redirected to any file or any standard file descriptor<br/>(including `/dev/null`) |       | no       |
+  <dt>`--dry-run`</dt>
+  <dd>Dry run</dd>
+
+  <dt>`--redirect-stderr`</dt>
+  <dd>File descriptor to redirect `stderr` to. Errors can be redirected to any file or standard descriptor (including `/dev/null`).</dd>
+</dl>
 
 :::note
 
