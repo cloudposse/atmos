@@ -5,6 +5,8 @@ sidebar_class_name: command
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 
 :::note Purpose
 Use these subcommands to interact with Terraform and OpenTofu.
@@ -32,14 +34,17 @@ HCL-based domain-specific language and its interpreter. Atmos works with [OpenTo
 
 ## Single-Component Commands Usage
 
+<Terminal>
 ```shell
 # Execute `terraform <command>` on a `component` in a `stack`
 atmos terraform <command> <component> -s <stack> [options]
 atmos terraform <command> <component> --stack <stack> [options]
 ```
+</Terminal>
 
 ## Multi-Component Commands (Bulk Operations) Usage
 
+<Terminal>
 ```shell
 # Execute `terraform <command>` on all components in the stack `prod`
 atmos terraform <command> --stack prod
@@ -78,6 +83,7 @@ atmos terraform <command> --query '.vars.tags.team == "eks"' --stack prod
 # Execute `terraform <command>` on all components that have `settings.context.accoun_id == 12345`, in all stacks
 atmos terraform <command> --query '.settings.context.accoun_id == 12345'
 ```
+</Terminal>
 
 <br />
 
@@ -148,6 +154,7 @@ Run `atmos terraform --help` to see all the available options
 
 ## Examples
 
+<Terminal>
 ```shell
 atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev
 atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev --skip-lock-file
@@ -186,6 +193,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev -- -refresh=false -l
 
 atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent "Acme/1.0 (Build 1234; arm64)"
 ```
+</Terminal>
 
 ## Arguments
 
@@ -396,6 +404,77 @@ All native Terraform/OpenTofu flags are supported.
 :::
 
 ## Multi-Component Commands (Bulk Operations) Examples
+
+Assume that the following Atmos stack manifests are configured in the `prod` and `nonprod` stacks,
+with [dependencies between the components](/core-concepts/stacks/dependencies/):
+
+<File title="`prod` and `nonprod` stacks">
+```yaml
+components:
+  terraform:
+    component-1:
+      vars:
+        tags:
+          team: network
+    component-2:
+      vars:
+        tags:
+          team: network
+    component-3:
+      vars:
+        tags:
+          team: eks
+      settings:
+        depends_on:
+          1:
+            component: component-1
+    component-4:
+      vars:
+        tags:
+          team: eks
+      settings:
+        depends_on:
+          1:
+            component: component-2
+          2:
+            component: component-3
+    component-5:
+      vars:
+        tags:
+          team: data
+    component-6:
+      vars:
+        tags:
+          team: data
+      settings:
+        depends_on:
+          1:
+            component: component-1
+          2:
+            component: component-4
+          3:
+            component: component-5
+```
+</File>
+
+Execute the following Multi-Component commands (Bulk Operations) and review what each command does:
+
+<Terminal title="atmos terraform apply --all --dry-run">
+```shell
+INFO Executing command="atmos terraform apply component-6 -s nonprod"
+INFO Executing command="atmos terraform apply component-1 -s nonprod"
+INFO Executing command="atmos terraform apply component-2 -s nonprod"
+INFO Executing command="atmos terraform apply component-3 -s nonprod"
+INFO Executing command="atmos terraform apply component-4 -s nonprod"
+INFO Executing command="atmos terraform apply component-5 -s nonprod"
+INFO Executing command="atmos terraform apply component-3 -s prod"
+INFO Executing command="atmos terraform apply component-4 -s prod"
+INFO Executing command="atmos terraform apply component-5 -s prod"
+INFO Executing command="atmos terraform apply component-6 -s prod"
+INFO Executing command="atmos terraform apply component-1 -s prod"
+INFO Executing command="atmos terraform apply component-2 -s prod"
+```
+</Terminal>
 
 ## Subcommands
 
