@@ -128,6 +128,11 @@
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",
       "github_oidc": {}
+    },
+    "telemetry": {
+      "enabled": true,
+      "endpoint": "https://us.i.posthog.com",
+      "token": "phc_5Z678901234567890123456789012345"
     }
   },
   "describe": {
