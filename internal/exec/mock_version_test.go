@@ -34,18 +34,18 @@ func (m *MockVersionExecutor) EXPECT() *MockVersionExecutorMockRecorder {
 }
 
 // GetLatestGitHubRepoRelease mocks base method.
-func (m *MockVersionExecutor) GetLatestGitHubRepoRelease(owner, repo string) (string, error) {
+func (m *MockVersionExecutor) GetLatestGitHubRepoRelease() (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLatestGitHubRepoRelease", owner, repo)
+	ret := m.ctrl.Call(m, "GetLatestGitHubRepoRelease")
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetLatestGitHubRepoRelease indicates an expected call of GetLatestGitHubRepoRelease.
-func (mr *MockVersionExecutorMockRecorder) GetLatestGitHubRepoRelease(owner, repo interface{}) *gomock.Call {
+func (mr *MockVersionExecutorMockRecorder) GetLatestGitHubRepoRelease() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestGitHubRepoRelease", reflect.TypeOf((*MockVersionExecutor)(nil).GetLatestGitHubRepoRelease), owner, repo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestGitHubRepoRelease", reflect.TypeOf((*MockVersionExecutor)(nil).GetLatestGitHubRepoRelease))
 }
 
 // PrintMessage mocks base method.

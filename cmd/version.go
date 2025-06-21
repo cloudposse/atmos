@@ -7,6 +7,7 @@ import (
 )
 
 var checkFlag bool
+var versionFormat string
 
 var versionCmd = &cobra.Command{
 	Use:     "version",
@@ -15,7 +16,9 @@ var versionCmd = &cobra.Command{
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		exec.NewVersionExec().Execute(checkFlag)
+		err := exec.NewVersionExec(&atmosConfig).Execute(checkFlag, versionFormat)
+		checkErrorAndExit(err)
+
 		// Check for the cache and print update message
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	},
@@ -23,5 +26,6 @@ var versionCmd = &cobra.Command{
 
 func init() {
 	versionCmd.Flags().BoolVarP(&checkFlag, "check", "c", false, "Run additional checks after displaying version info")
+	versionCmd.Flags().StringVar(&versionFormat, "format", "", "Specify the output format")
 	RootCmd.AddCommand(versionCmd)
 }

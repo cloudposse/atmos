@@ -3,6 +3,7 @@ package exec
 import (
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
@@ -14,7 +15,7 @@ import (
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type VersionExecutor interface {
 	PrintStyledText(text string) error
-	GetLatestGitHubRepoRelease(owner, repo string) (string, error)
+	GetLatestGitHubRepoRelease() (string, error)
 	PrintMessage(message string)
 	PrintMessageToUpgradeToAtmosLatestRelease(version string)
 }
@@ -31,6 +32,7 @@ func TestVersionExec_Execute(t *testing.T) {
 		latestRelease       string
 		printStyledTextErr  error
 		getLatestReleaseErr error
+		format              string
 	}{
 		{
 			name:      "Basic execution without check",
@@ -55,6 +57,12 @@ func TestVersionExec_Execute(t *testing.T) {
 			version:             "v1.0.0",
 			getLatestReleaseErr: errors.New("github error"),
 		},
+		{
+			name:      "Check format json works",
+			format:    "json",
+			checkFlag: false,
+			version:   "v1.0.0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -76,7 +84,7 @@ func TestVersionExec_Execute(t *testing.T) {
 				mockExec.EXPECT().PrintMessage(gomock.Any()).Times(3)
 
 				if tt.checkFlag {
-					mockExec.EXPECT().GetLatestGitHubRepoRelease("cloudposse", "atmos").
+					mockExec.EXPECT().GetLatestGitHubRepoRelease().
 						Return(tt.latestRelease, tt.getLatestReleaseErr)
 
 					if tt.getLatestReleaseErr == nil && tt.latestRelease != "" {
@@ -90,14 +98,15 @@ func TestVersionExec_Execute(t *testing.T) {
 
 			// Create test instance with mocks
 			v := versionExec{
-				printStyledText:                           mockExec.PrintStyledText,
-				getLatestGitHubRepoRelease:                mockExec.GetLatestGitHubRepoRelease,
-				printMessage:                              mockExec.PrintMessage,
+				atmosConfig:                &schema.AtmosConfiguration{},
+				printStyledText:            mockExec.PrintStyledText,
+				printMessage:               mockExec.PrintMessage,
+				getLatestGitHubRepoRelease: mockExec.GetLatestGitHubRepoRelease,
 				printMessageToUpgradeToAtmosLatestRelease: mockExec.PrintMessageToUpgradeToAtmosLatestRelease,
 			}
 
 			// Execute the function
-			v.Execute(tt.checkFlag)
+			v.Execute(tt.checkFlag, "")
 		})
 	}
 }
