@@ -171,7 +171,7 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 }
 
 // ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
-func ExecuteTerraformAffected(a DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+func ExecuteTerraformAffected(a *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
 	var affectedList []schema.Affected
 	var err error
 
@@ -245,7 +245,7 @@ func ExecuteTerraformAffected(a DescribeAffectedCmdArgs, info *schema.ConfigAndS
 				"",
 				"",
 				affected.Dependents,
-				&a,
+				a,
 			)
 			if err != nil {
 				return err

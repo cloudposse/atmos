@@ -1,13 +1,16 @@
 package exec
 
 import (
+	"bytes"
+	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Helper function to create bool pointer for testing.
+// Helper function to create a bool pointer for testing.
 func boolPtr(b bool) *bool {
 	return &b
 }
@@ -81,4 +84,69 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 			assert.Equal(t, tc.expectedEnabled, result, "Expected workspace enabled status to match")
 		})
 	}
+}
+
+func TestExecuteTerraformAffected(t *testing.T) {
+	// Capture the starting working directory
+	startingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get the current working directory: %v", err)
+	}
+
+	defer func() {
+		// Change back to the original working directory after the test
+		if err := os.Chdir(startingDir); err != nil {
+			t.Fatalf("Failed to change back to the starting directory: %v", err)
+		}
+	}()
+
+	// Define the work directory and change to it
+	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
+	}
+
+	// Create a pipe to capture stdout to check if terraform is executed correctly
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	stack := "prod"
+
+	a := DescribeAffectedCmdArgs{
+		CLIConfig: &schema.AtmosConfiguration{},
+		Stack:     stack,
+	}
+
+	info := schema.ConfigAndStacksInfo{
+		Stack:         stack,
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		Affected:      true,
+		DryRun:        true,
+	}
+
+	err = ExecuteTerraformAffected(&a, &info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraformAffected': %v", err)
+	}
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Read the captured output
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	output := buf.String()
+
+	t.Logf("Output: %s", output)
+
+	// Check the output
+	//if !strings.Contains(output, "foo   = \"component-1-a\"") {
+	//	t.Errorf("'foo' variable should be 'component-1-a'")
+	//}
 }
