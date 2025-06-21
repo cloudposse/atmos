@@ -40,7 +40,7 @@ type Requirement struct {
 var (
 	// Regex patterns to capture selector tokens.
 	reEquality  = regexp.MustCompile(`^([A-Za-z0-9_\-]+)\s*(=|!=)\s*([A-Za-z0-9_\-]+)$`)
-	reSet       = regexp.MustCompile(`^([A-Za-z0-9_\-]+)\s*(in|notin)\s*\(([^)]+)\)$`)
+	reSet       = regexp.MustCompile(`^([A-Za-z0-9_\-]+)\s*(in|notin)\s*\(([^)]*)\)$`)
 	reExists    = regexp.MustCompile(`^([A-Za-z0-9_\-]+)$`)
 	reNotExists = regexp.MustCompile(`^!([A-Za-z0-9_\-]+)$`)
 )
