@@ -722,6 +722,7 @@ func removeCacheFile() error {
 	}
 	return nil
 }
+
 func TestCLICommands(t *testing.T) {
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
