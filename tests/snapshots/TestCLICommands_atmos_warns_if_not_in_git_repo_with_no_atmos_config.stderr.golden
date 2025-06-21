@@ -1,2 +1,36 @@
 WARN You're not inside a git repository. Atmos feels lonely outside - bring it home!
 
+WARN Could not load cache
+  error=
+  │ mkdir .atmos: read-only file system
+  │ error creating cache directory
+  │ github.com/cloudposse/atmos/pkg/config.GetCacheFilePath
+  │ \t/absolute/path/to/repo/pkg/config/cache.go:34
+  │ github.com/cloudposse/atmos/pkg/config.LoadCache
+  │ \t/absolute/path/to/repo/pkg/config/cache.go:51
+  │ github.com/cloudposse/atmos/pkg/telemetry.getTelemetryFromConfig
+  │ \t/absolute/path/to/repo/pkg/telemetry/utils.go:73
+  │ github.com/cloudposse/atmos/pkg/telemetry.warningMessage
+  │ \t/absolute/path/to/repo/pkg/telemetry/utils.go:150
+  │ github.com/cloudposse/atmos/pkg/telemetry.PrintWarningMessage
+  │ \t/absolute/path/to/repo/pkg/telemetry/utils.go:56
+  │ github.com/cloudposse/atmos/cmd.printMessageForMissingAtmosConfig
+  │ \t/absolute/path/to/repo/cmd/cmd_utils.go:551
+  │ github.com/cloudposse/atmos/cmd.checkAtmosConfig
+  │ \t/absolute/path/to/repo/cmd/cmd_utils.go:515
+  │ github.com/cloudposse/atmos/cmd.init.func16
+  │ \t/absolute/path/to/repo/cmd/list_stacks.go:26
+  │ github.com/spf13/cobra.(*Command).execute
+  │ \t/Users/goruha/go/pkg/mod/github.com/spf13/cobra@v1.9.1/command.go:1019
+  │ github.com/spf13/cobra.(*Command).ExecuteC
+  │ \t/Users/goruha/go/pkg/mod/github.com/spf13/cobra@v1.9.1/command.go:1148
+  │ github.com/spf13/cobra.(*Command).Execute
+  │ \t/Users/goruha/go/pkg/mod/github.com/spf13/cobra@v1.9.1/command.go:1071
+  │ github.com/cloudposse/atmos/cmd.Execute
+  │ \t/absolute/path/to/repo/cmd/root.go:171
+  │ main.main
+  │ \t/absolute/path/to/repo/main.go:17
+  │ runtime.main
+  │ \t/Users/goruha/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.4.darwin-amd64/src/runtime/proc.go:283
+  │ runtime.goexit
+  │ \t/Users/goruha/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.4.darwin-amd64/src/runtime/asm_amd64.s:1700
