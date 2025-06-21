@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/mitchellh/mapstructure"
 	cp "github.com/otiai10/copy"
-	"github.com/samber/lo"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	g "github.com/cloudposse/atmos/pkg/git"
@@ -1538,25 +1537,14 @@ func addDependentsToDependents(
 	return nil
 }
 
-func processIncludedInDependencies(affected *[]schema.Affected) bool {
+func processIncludedInDependencies(affected *[]schema.Affected) {
 	for i := 0; i < len(*affected); i++ {
 		a := &((*affected)[i])
 		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
-
-		// Process dependencies
-		dependents := a.Dependents
-		for j := 0; j < len(dependents); j++ {
-			d := &((dependents)[j])
-			affectedDeps := lo.Map(dependents, func(ad schema.Dependent, _ int) schema.Affected {
-				return schema.Affected{
-					StackSlug:  ad.StackSlug,
-					Dependents: ad.Dependents,
-				}
-			})
-			d.IncludedInDependents = processIncludedInDependencies(&affectedDeps)
+		if !a.IncludedInDependents {
+			processPeerDependencies(&a.Dependents)
 		}
 	}
-	return false
 }
 
 func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stackSlug string, affectedIndex int) bool {
@@ -1567,7 +1555,6 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 
 		a := &((*affected)[i])
 
-		// Detect if the affected is included in any of its dependencies, recursively.
 		if len(a.Dependents) > 0 {
 			includedInDeps := processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
 			if includedInDeps {
@@ -1588,6 +1575,32 @@ func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, 
 
 		if len(d.Dependents) > 0 {
 			includedInDeps := processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
+			if includedInDeps {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func processPeerDependencies(dependents *[]schema.Dependent) {
+	for i := 0; i < len(*dependents); i++ {
+		d := &((*dependents)[i])
+		d.IncludedInDependents = processIncludedInDependenciesForPeerDependencies(&d.Dependents, d.StackSlug)
+		processPeerDependencies(&d.Dependents)
+	}
+}
+
+func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Dependent, stackSlug string) bool {
+	for i := 0; i < len(*dependents); i++ {
+		d := &((*dependents)[i])
+
+		if d.StackSlug == stackSlug {
+			return true
+		}
+
+		if len(d.Dependents) > 0 {
+			includedInDeps := processIncludedInDependenciesForPeerDependencies(&d.Dependents, stackSlug)
 			if includedInDeps {
 				return true
 			}
