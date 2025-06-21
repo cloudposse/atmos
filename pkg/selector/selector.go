@@ -1,9 +1,17 @@
 package selector
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+)
+
+var (
+	// Static errors for wrapping
+	ErrEmptySelector     = errors.New("selector string is empty")
+	ErrEmptySetValues    = errors.New("empty set values")
+	ErrInvalidExpression = errors.New("invalid selector expression")
 )
 
 // Operator represents a selector operator.
@@ -41,7 +49,7 @@ var (
 // Accepts comma-separated expressions. Whitespace is ignored around tokens.
 func Parse(selector string) ([]Requirement, error) {
 	if strings.TrimSpace(selector) == "" {
-		return nil, fmt.Errorf("selector string is empty")
+		return nil, ErrEmptySelector
 	}
 
 	parts := splitSelector(selector)
@@ -67,7 +75,7 @@ func Parse(selector string) ([]Requirement, error) {
 			}
 			vals := parseCSV(m[3])
 			if len(vals) == 0 {
-				return nil, fmt.Errorf("selector '%s': empty set values", p)
+				return nil, fmt.Errorf("selector '%s': %w", p, ErrEmptySetValues)
 			}
 			reqs = append(reqs, Requirement{Key: m[1], Operator: op, Values: vals})
 			continue
@@ -80,7 +88,7 @@ func Parse(selector string) ([]Requirement, error) {
 			reqs = append(reqs, Requirement{Key: m[1], Operator: OpNotExists})
 			continue
 		}
-		return nil, fmt.Errorf("invalid selector expression: '%s'", p)
+		return nil, fmt.Errorf("'%s': %w", p, ErrInvalidExpression)
 	}
 
 	return reqs, nil
