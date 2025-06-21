@@ -307,7 +307,7 @@ integrations:
 
   # Atmos Pro integration
   pro:
-    host: app.cloudposse.com
+    host: atmos-pro.com
     timeout: 3
     events:
       pull_request:

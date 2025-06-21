@@ -1,11 +1,11 @@
 package exec
 
 import (
-	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -282,7 +282,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 				continue
 			}
 
-			// Check if 'components' filter is provided
+			// Check if the 'components' filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
 
@@ -356,10 +356,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 				context := cfg.GetContextFromVars(varsSection)
 				context.Component = strings.Replace(componentName, "/", "-", -1)
 				context.ComponentPath = terraformComponentPath
-				contextPrefix, err := cfg.GetContextPrefix(stackConfigFileName, context, GetStackNamePattern(atmosConfig), stackConfigFileName)
-				if err != nil {
-					return err
-				}
 
 				// Base component is required to calculate terraform workspace for derived components
 				if terraformComponent != componentName {
@@ -388,15 +384,34 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				context.Workspace = workspace
 
-				// Check if 'stacks' filter is provided
+				// Stack slug
+				var stackSlug string
+				stackNameTemplate := GetStackNameTemplate(&atmosConfig)
+				stackNamePattern := GetStackNamePattern(atmosConfig)
+
+				switch {
+				case stackNameTemplate != "":
+					stackSlug, err = ProcessTmpl("atlantis-stack-name-template", stackNameTemplate, configAndStacksInfo.ComponentSection, false)
+					if err != nil {
+						return err
+					}
+				case stackNamePattern != "":
+					stackSlug, err = cfg.GetContextPrefix(stackConfigFileName, context, stackNamePattern, stackConfigFileName)
+					if err != nil {
+						return err
+					}
+				default:
+					return ErrMissingStackNameTemplateAndPattern
+				}
+
+				// Check if the 'stacks' filter is provided
 				if len(stacks) == 0 ||
 					// 'stacks' filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
 					u.SliceContainsString(stacks, stackConfigFileName) ||
 					// 'stacks' filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, contextPrefix) {
-
+					u.SliceContainsString(stacks, stackSlug) {
 					// Generate an atlantis project for the component in the stack
 					// Replace the context tokens
 					var whenModified []string
@@ -500,14 +515,14 @@ specified in the ` + "`" + `integrations.atlantis.config_templates` + "`" + ` se
 	fileName := outputPath
 	if fileName == "" {
 		fileName = atmosConfig.Integrations.Atlantis.Path
-		u.LogDebug(fmt.Sprintf("Using 'atlantis.path: %s' from 'atmos.yaml'", fileName))
+		log.Debug("Using 'atlantis.path' from 'atmos.yaml'", "path", fileName)
 	} else {
-		u.LogDebug(fmt.Sprintf("Using '--output-path %s' command-line argument", fileName))
+		log.Debug("Using '--output-path' command-line argument", "path", fileName)
 	}
 
 	// If the path is empty, dump to 'stdout'
 	if fileName != "" {
-		u.LogDebug(fmt.Sprintf("Writing atlantis repo config file to '%s'\n", fileName))
+		log.Debug("Writing Atlantis repo config", "file", fileName)
 
 		fileAbsolutePath, err := filepath.Abs(fileName)
 		if err != nil {

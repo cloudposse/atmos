@@ -1,15 +1,17 @@
 package pro
 
 import (
-	"bytes"
-	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // MockRoundTripper is an implementation of http.RoundTripper for testing purposes.
@@ -22,124 +24,324 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	return args.Get(0).(*http.Response), args.Error(1)
 }
 
-func TestLockStack(t *testing.T) {
+func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.Nil(t, err)
-
-	mockRoundTripper := new(MockRoundTripper)
-	httpClient := &http.Client{Transport: mockRoundTripper}
-	apiClient := &AtmosProAPIClient{
-		Logger:          mockLogger,
-		BaseURL:         "http://localhost",
-		BaseAPIEndpoint: "api",
-		APIToken:        "test-token",
-		HTTPClient:      httpClient,
-	}
-
-	dto := LockStackRequest{ /* populate fields */ }
-
-	mockResponse := &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(bytes.NewBufferString(`{"success": true}`)),
-	}
-
-	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
-
-	response, err := apiClient.LockStack(dto)
 	assert.NoError(t, err)
-	assert.True(t, response.Success)
 
-	mockRoundTripper.AssertExpectations(t)
-}
-
-func TestLockStack_Error(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.Nil(t, err)
-
-	mockRoundTripper := new(MockRoundTripper)
-	httpClient := &http.Client{Transport: mockRoundTripper}
-	apiClient := &AtmosProAPIClient{
-		Logger:          mockLogger,
-		BaseURL:         "http://localhost",
-		BaseAPIEndpoint: "api",
-		APIToken:        "test-token",
-		HTTPClient:      httpClient,
+	// Save original env vars
+	originalEnvVars := map[string]string{
+		"ACTIONS_ID_TOKEN_REQUEST_URL":   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+		"ACTIONS_ID_TOKEN_REQUEST_TOKEN": os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+		"ATMOS_PRO_WORKSPACE_ID":         os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+		"ATMOS_PRO_TOKEN":                os.Getenv("ATMOS_PRO_TOKEN"),
+		"ATMOS_PRO_BASE_URL":             os.Getenv("ATMOS_PRO_BASE_URL"),
+		"ATMOS_PRO_ENDPOINT":             os.Getenv("ATMOS_PRO_ENDPOINT"),
 	}
+	defer func() {
+		for k, v := range originalEnvVars {
+			if v != "" {
+				os.Setenv(k, v)
+			} else {
+				os.Unsetenv(k)
+			}
+		}
+		viper.Reset()
+	}()
 
-	dto := LockStackRequest{ /* populate fields */ }
+	t.Run("api token set - skip OIDC", func(t *testing.T) {
+		os.Setenv("ATMOS_PRO_BASE_URL", "https://api.atmos.example.com")
+		os.Setenv("ATMOS_PRO_ENDPOINT", "v1")
+		os.Setenv("ATMOS_PRO_TOKEN", "direct-api-token")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 
-	mockResponse := &http.Response{
-		StatusCode: http.StatusInternalServerError,
-		Body:       io.NopCloser(bytes.NewBufferString(`{"success": false, "errorMessage": "Internal Server Error"}`)),
-	}
+		viper.Reset()
+		// Bind environment variables like the main application does
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
-	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
+		// Create AtmosConfiguration with Pro settings populated from environment
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Pro: schema.ProSettings{
+					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+					GithubOIDC: schema.GithubOIDCSettings{
+						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+					},
+				},
+			},
+		}
 
-	response, err := apiClient.LockStack(dto)
-	assert.Error(t, err)
-	assert.False(t, response.Success)
-	assert.Contains(t, err.Error(), "Internal Server Error")
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		assert.NoError(t, err)
+		assert.NotNil(t, client)
+		assert.Equal(t, "direct-api-token", client.APIToken)
+		assert.Equal(t, "https://api.atmos.example.com", client.BaseURL)
+		assert.Equal(t, "v1", client.BaseAPIEndpoint)
+	})
 
-	mockRoundTripper.AssertExpectations(t)
-}
+	t.Run("api token set with defaults", func(t *testing.T) {
+		os.Setenv("ATMOS_PRO_TOKEN", "direct-api-token")
+		// Unset custom URLs to test defaults
+		os.Unsetenv("ATMOS_PRO_BASE_URL")
+		os.Unsetenv("ATMOS_PRO_ENDPOINT")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
 
-func TestUnlockStack(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.Nil(t, err)
+		viper.Reset()
+		// Bind environment variables like the main application does
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
-	mockRoundTripper := new(MockRoundTripper)
-	httpClient := &http.Client{Transport: mockRoundTripper}
-	apiClient := &AtmosProAPIClient{
-		Logger:          mockLogger,
-		BaseURL:         "http://localhost",
-		BaseAPIEndpoint: "api",
-		APIToken:        "test-token",
-		HTTPClient:      httpClient,
-	}
+		// Create AtmosConfiguration with Pro settings populated from environment
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Pro: schema.ProSettings{
+					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+					GithubOIDC: schema.GithubOIDCSettings{
+						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+					},
+				},
+			},
+		}
 
-	dto := UnlockStackRequest{}
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		assert.NoError(t, err)
+		assert.NotNil(t, client)
+		assert.Equal(t, "direct-api-token", client.APIToken)
+		assert.Equal(t, "https://atmos-pro.com", client.BaseURL) // Default
+		assert.Equal(t, "api/v1", client.BaseAPIEndpoint)        // Default
+	})
 
-	mockResponse := &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(bytes.NewBufferString(`{"success": true}`)),
-	}
+	t.Run("successful OIDC flow", func(t *testing.T) {
+		// Set up mock server for OIDC token request
+		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "Bearer test-request-token", r.Header.Get("Authorization"))
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
+		}))
+		defer oidcServer.Close()
 
-	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
+		// Set up mock server for token exchange
+		exchangeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"success": true, "data": {"token": "atmos-pro-token-456"}}`))
+		}))
+		defer exchangeServer.Close()
 
-	response, err := apiClient.UnlockStack(dto)
-	assert.NoError(t, err)
-	assert.True(t, response.Success)
+		// Unset API token to force OIDC flow
+		os.Unsetenv("ATMOS_PRO_TOKEN")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
+		os.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
+		os.Setenv("ATMOS_PRO_BASE_URL", exchangeServer.URL)
 
-	mockRoundTripper.AssertExpectations(t)
-}
+		viper.Reset()
+		// Bind environment variables like the main application does
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
-func TestUnlockStack_Error(t *testing.T) {
-	mockLogger, err := logger.NewLogger("test", "/dev/stdout")
-	assert.Nil(t, err)
+		// Create AtmosConfiguration with Pro settings populated from environment
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Pro: schema.ProSettings{
+					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+					GithubOIDC: schema.GithubOIDCSettings{
+						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+					},
+				},
+			},
+		}
 
-	mockRoundTripper := new(MockRoundTripper)
-	httpClient := &http.Client{Transport: mockRoundTripper}
-	apiClient := &AtmosProAPIClient{
-		Logger:          mockLogger,
-		BaseURL:         "http://localhost",
-		BaseAPIEndpoint: "api",
-		APIToken:        "test-token",
-		HTTPClient:      httpClient,
-	}
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		assert.NoError(t, err)
+		assert.NotNil(t, client)
+		assert.Equal(t, "atmos-pro-token-456", client.APIToken)
+	})
 
-	dto := UnlockStackRequest{}
+	t.Run("missing workspace ID for OIDC", func(t *testing.T) {
+		// Set up mock server for OIDC token request
+		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
+		}))
+		defer oidcServer.Close()
 
-	mockResponse := &http.Response{
-		StatusCode: http.StatusInternalServerError,
-		Body:       io.NopCloser(bytes.NewBufferString(`{"request":"1", "success": false, "errorMessage": "Internal Server Error"}`)),
-	}
+		// Unset API token and workspace ID to trigger error
+		os.Unsetenv("ATMOS_PRO_TOKEN")
+		os.Unsetenv("ATMOS_PRO_WORKSPACE_ID")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
 
-	mockRoundTripper.On("RoundTrip", mock.Anything).Return(mockResponse, nil)
+		viper.Reset()
+		// Bind environment variables like the main application does
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
-	response, err := apiClient.UnlockStack(dto)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Internal Server Error")
-	assert.False(t, response.Success)
+		// Create AtmosConfiguration with Pro settings populated from environment
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Pro: schema.ProSettings{
+					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+					GithubOIDC: schema.GithubOIDCSettings{
+						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+					},
+				},
+			},
+		}
 
-	mockRoundTripper.AssertExpectations(t)
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		assert.Error(t, err)
+		assert.Nil(t, client)
+		assert.Contains(t, err.Error(), "workspace ID environment variable is required")
+	})
+
+	t.Run("GitHub OIDC token fetch fails", func(t *testing.T) {
+		// Unset API token to force OIDC flow
+		os.Unsetenv("ATMOS_PRO_TOKEN")
+		// Unset OIDC env vars to trigger failure
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+
+		viper.Reset()
+		// Bind environment variables like the main application does
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
+
+		// Create AtmosConfiguration with Pro settings populated from environment
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Pro: schema.ProSettings{
+					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+					GithubOIDC: schema.GithubOIDCSettings{
+						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+					},
+				},
+			},
+		}
+
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		assert.Error(t, err)
+		assert.Nil(t, client)
+		assert.Contains(t, err.Error(), "not running in GitHub Actions")
+	})
+
+	t.Run("OIDC token exchange fails", func(t *testing.T) {
+		// Set up mock server for OIDC token request
+		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
+		}))
+		defer oidcServer.Close()
+
+		// Set up mock server for failed token exchange
+		exchangeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"success": false, "error": "unauthorized"}`))
+		}))
+		defer exchangeServer.Close()
+
+		// Unset API token to force OIDC flow
+		os.Unsetenv("ATMOS_PRO_TOKEN")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
+		os.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
+		os.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
+		os.Setenv("ATMOS_PRO_BASE_URL", exchangeServer.URL)
+
+		viper.Reset()
+		// Bind environment variables like the main application does
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
+
+		// Create AtmosConfiguration with Pro settings populated from environment
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Pro: schema.ProSettings{
+					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+					GithubOIDC: schema.GithubOIDCSettings{
+						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+					},
+				},
+			},
+		}
+
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		assert.Error(t, err)
+		assert.Nil(t, client)
+		assert.Contains(t, err.Error(), "failed to exchange OIDC token")
+	})
+
+	t.Run("no GitHub Actions environment", func(t *testing.T) {
+		// Unset all environment variables
+		os.Unsetenv("ATMOS_PRO_TOKEN")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+
+		viper.Reset()
+		// Bind environment variables like the main application does
+		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
+
+		// Create AtmosConfiguration with Pro settings populated from environment
+		atmosConfig := schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Pro: schema.ProSettings{
+					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+					GithubOIDC: schema.GithubOIDCSettings{
+						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+					},
+				},
+			},
+		}
+
+		client, err := NewAtmosProAPIClientFromEnv(mockLogger, &atmosConfig)
+		assert.Error(t, err)
+		assert.Nil(t, client)
+		assert.Contains(t, err.Error(), "not running in GitHub Actions")
+	})
 }

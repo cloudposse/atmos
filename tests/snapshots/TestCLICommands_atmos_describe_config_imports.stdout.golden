@@ -139,6 +139,9 @@ settings:
     link:
       color: ${colors.primary}
       underline: true
+  pro:
+    base_url: https://atmos-pro.com
+    endpoint: api/v1
   inject_github_token: true
 vendor:
   base_path: ./vendor.yaml
