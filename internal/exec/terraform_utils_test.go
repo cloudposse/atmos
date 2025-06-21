@@ -3,10 +3,12 @@ package exec
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -106,17 +108,11 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
 
-	oldStderr := os.Stderr
+	oldStd := os.Stderr
 	r, w, _ := os.Pipe()
-	os.Stdout = w
+	os.Stderr = w
 
 	stack := "prod"
-
-	a := DescribeAffectedCmdArgs{
-		CLIConfig:         &schema.AtmosConfiguration{},
-		Stack:             stack,
-		IncludeDependents: true,
-	}
 
 	info := schema.ConfigAndStacksInfo{
 		Stack:         stack,
@@ -126,13 +122,24 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 		DryRun:        true,
 	}
 
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		t.Fatalf("Failed to execute 'InitCliConfig': %v", err)
+	}
+
+	a := DescribeAffectedCmdArgs{
+		CLIConfig:         &atmosConfig,
+		Stack:             stack,
+		IncludeDependents: true,
+	}
+
 	err = ExecuteTerraformAffected(&a, &info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraformAffected': %v", err)
 	}
 
 	w.Close()
-	os.Stderr = oldStderr
+	os.Stderr = oldStd
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -142,5 +149,7 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	}
 	output := buf.String()
 
-	t.Logf("Output: %s", output)
+	if !strings.Contains(output, "Executing command=\"atmos terraform plan vpc -s prod\"") {
+		t.Errorf("Output shoucd contain 'Executing command=\"atmos terraform plan vpc -s prod\"'")
+	}
 }
