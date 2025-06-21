@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -591,6 +592,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
 
+	// Remove the cache file before running the test.
+	// This is to ensure that the test is not affected by the cache file.
+	err = removeCacheFile()
+	assert.NoError(t, err, "failed to remove cache file")
+
+	// Preserve the CI environment variables.
+	// This is to ensure that the test is not affected by the CI environment variables.
+	currentEnvVars := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(currentEnvVars)
+
 	// Prepare the command using the context
 	cmd := exec.CommandContext(ctx, binaryPath, tc.Args...)
 
@@ -605,11 +616,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	var stdout, stderr bytes.Buffer
 	var exitCode int
-
-	// Remove the cache file before running the test.
-	// This is to ensure that the test is not affected by the cache file.
-	err = removeCacheFile()
-	assert.NoError(t, err, "failed to remove cache file")
 
 	if tc.Tty {
 		// Run the command in TTY mode

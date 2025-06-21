@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"runtime"
+	"strings"
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -71,9 +72,13 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 
 	// Load the cache to retrieve or generate installation ID.
 	cacheCfg, err := cfg.LoadCache()
+	canCreateCache := true
 	if err != nil {
-		log.Warn("Could not load cache", "error", err)
-		return nil
+		if !strings.Contains(err.Error(), "read-only file system") {
+			log.Warn("Could not load cache", "error", err)
+			return nil
+		}
+		canCreateCache = false
 	}
 
 	// Generate new installation ID if one doesn't exist.
@@ -81,8 +86,10 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 		cacheCfg.InstallationId = uuid.New().String()
 	}
 	// Save the cache with the installation ID.
-	if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-		log.Warn("Unable to save cache", "error", saveErr)
+	if canCreateCache {
+		if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
+			log.Warn("Unable to save cache", "error", saveErr)
+		}
 	}
 
 	// Extract telemetry settings from config.
@@ -146,17 +153,26 @@ func captureCmd(cmd *cobra.Command, err error, provider ...TelemetryClientProvid
 // determine if the warning has been displayed previously. If not shown, it marks
 // the warning as shown in the cache and returns the warning message.
 func warningMessage() string {
-	// Only show warning if telemetry is enabled and not running in CI
+	// Do not show warning if running in CI
+	if isCI() {
+		return ""
+	}
+
+	// Only show warning if telemetry is enabled
 	telemetry := getTelemetryFromConfig()
-	if telemetry == nil || isCI() {
+	if telemetry == nil {
 		return ""
 	}
 
 	// Load cache configuration to check if warning has been shown
 	cacheCfg, err := cfg.LoadCache()
+	canCreateCache := true
 	if err != nil {
-		log.Warn("Could not load cache", "error", err)
-		return ""
+		if !strings.Contains(err.Error(), "read-only file system") {
+			log.Warn("Could not load cache", "error", err)
+			return ""
+		}
+		canCreateCache = false
 	}
 
 	// If warning has already been shown, return empty
@@ -166,8 +182,10 @@ func warningMessage() string {
 
 	// Mark warning as shown and return the message
 	cacheCfg.TelemetryWarningShown = true
-	if err := cfg.SaveCache(cacheCfg); err != nil {
-		log.Warn("Could not save cache", "error", err)
+	if canCreateCache {
+		if err := cfg.SaveCache(cacheCfg); err != nil {
+			log.Warn("Could not save cache", "error", err)
+		}
 	}
 	return WarningMessage
 }
