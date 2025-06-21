@@ -5,6 +5,10 @@ import (
 	"sort"
 )
 
+const (
+	ciEnvVar = "CI"
+)
+
 var (
 	// Inspired by https://github.com/watson/ci-info .
 
@@ -56,7 +60,7 @@ var (
 			"CI_NAME": "sourcehut",
 		},
 		"WOODPECKER": {
-			"CI": "woodpecker",
+			ciEnvVar: "woodpecker",
 		},
 	}
 )
@@ -80,7 +84,7 @@ func isEnvVarTrue(key string) bool {
 // isCI determines if the current environment is a CI/CD environment.
 // Returns true if CI=true or if a specific CI provider is detected.
 func isCI() bool {
-	return isEnvVarTrue("CI") || ciProvider() != ""
+	return isEnvVarTrue(ciEnvVar) || ciProvider() != ""
 }
 
 // PreserveCIEnvVars temporarily removes CI-related environment variables from the current process
@@ -116,9 +120,9 @@ func PreserveCIEnvVars() map[string]string {
 	}
 
 	// Preserve and unset the general CI environment variable
-	if isEnvVarExists("CI") {
-		envVars["CI"] = os.Getenv("CI")
-		os.Unsetenv("CI")
+	if isEnvVarExists(ciEnvVar) {
+		envVars[ciEnvVar] = os.Getenv(ciEnvVar)
+		os.Unsetenv(ciEnvVar)
 	}
 
 	return envVars
