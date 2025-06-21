@@ -714,7 +714,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 func removeCacheFile() error {
 	cacheFilePath, err := config.GetCacheFilePath()
 	// Ignore the error if the cache cannot be created because the directory is read-only.
-	if err != nil && !strings.Contains(err.Error(), "read-only file system") {
+	if err != nil {
+		if strings.Contains(err.Error(), "read-only file system") {
+			return nil
+		}
 		return err
 	}
 
