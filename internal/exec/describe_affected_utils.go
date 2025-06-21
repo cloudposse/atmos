@@ -1553,6 +1553,7 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 
 		a := &((*affected)[i])
 
+		// Detect if the affected is included in any of its dependencies, recursively.
 		if len(a.Dependents) > 0 {
 			includedInDeps := processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
 			if includedInDeps {
@@ -1564,6 +1565,7 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 }
 
 func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, stackSlug string) bool {
+	includedInDeps := false
 	for i := 0; i < len(*dependents); i++ {
 		d := &((*dependents)[i])
 
@@ -1572,13 +1574,11 @@ func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, 
 		}
 
 		if len(d.Dependents) > 0 {
-			includedInDeps := processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
-			if includedInDeps {
-				return true
-			}
+			includedInDeps = processIncludedInDependenciesForDependents(&d.Dependents, stackSlug)
+			d.IncludedInDependents = processIncludedInDependenciesForDependents(dependents, d.StackSlug)
 		}
 	}
-	return false
+	return includedInDeps
 }
 
 // isComponentEnabled checks if a component is enabled based on its metadata.

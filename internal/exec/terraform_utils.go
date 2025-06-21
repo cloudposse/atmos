@@ -256,7 +256,7 @@ func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.Co
 	log.Debug("Affected", "components", affectedYaml)
 
 	for _, affected := range affectedList {
-		// If the affected component is included in the dependencies of any other component, don't process it now,
+		// If the affected component is included in the dependencies of any other component, don't process it now;
 		// it will be processed in the dependency order.
 		if !affected.IncludedInDependents {
 			err = executeTerraformAffectedComponentInDepOrder(info,
