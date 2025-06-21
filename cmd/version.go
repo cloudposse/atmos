@@ -6,8 +6,10 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 )
 
-var checkFlag bool
-var versionFormat string
+var (
+	checkFlag     bool
+	versionFormat string
+)
 
 var versionCmd = &cobra.Command{
 	Use:     "version",
