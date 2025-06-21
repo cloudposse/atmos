@@ -28,6 +28,9 @@ Selects resources where the label key equals the specified value.
 # Select components where environment equals "prod"
 atmos list components --selector="environment=prod"
 
+# Using shorthand flag
+atmos list components -l "environment=prod"
+
 # Select components where team equals "platform"
 atmos describe stacks --selector="team=platform"
 ```
@@ -101,7 +104,7 @@ Multiple selector expressions can be combined using commas (`,`) which act as a 
 atmos list components --selector="environment=prod,team=platform"
 
 # Select components that are critical AND in production AND not deprecated
-atmos describe stacks --selector="critical=true,environment=prod,!deprecated"
+atmos describe stacks --selector="critical,environment=prod,!deprecated"
 
 # Complex combination with different operators
 atmos list components --selector="environment in (prod,staging),team!=legacy,critical"
