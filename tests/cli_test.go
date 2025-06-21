@@ -19,6 +19,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/creack/pty"
 	"github.com/go-git/go-git/v5"
 	"github.com/hexops/gotextdiff"
@@ -27,6 +28,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
@@ -604,6 +606,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	var stdout, stderr bytes.Buffer
 	var exitCode int
 
+	// Remove the cache file before running the test.
+	// This is to ensure that the test is not affected by the cache file.
+	err = removeCacheFile()
+	assert.NoError(t, err, "failed to remove cache file")
+
 	if tc.Tty {
 		// Run the command in TTY mode
 		ptyOutput, err := simulateTtyCommand(t, cmd, "")
@@ -704,6 +711,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 }
 
+func removeCacheFile() error {
+	cacheFilePath, err := config.GetCacheFilePath()
+	if err != nil {
+		return err
+	}
+	err = os.Remove(cacheFilePath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func TestCLICommands(t *testing.T) {
 	// Load test suite
 	testSuite, err := loadTestSuites("test-cases")
