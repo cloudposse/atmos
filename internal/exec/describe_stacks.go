@@ -84,25 +84,15 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 
 	// Apply label selector if provided
 	if args.Selector != "" {
-		reqs, perr := selector.Parse(args.Selector)
-		if perr != nil {
-			return perr
+		filteredMap, err := applyStackSelector(finalStacksMap, args.Selector)
+		if err != nil {
+			return err
 		}
-		filtered := make(map[string]any)
-		for sname, sdata := range finalStacksMap {
-			if smap, ok := sdata.(map[string]any); ok {
-				labels := selector.ExtractStackLabels(smap)
-				if selector.Matches(labels, reqs) {
-					filtered[sname] = sdata
-				}
-			}
-		}
-		finalStacksMap = filtered
-
-		if len(finalStacksMap) == 0 {
+		if len(filteredMap) == 0 {
 			log.Info("No stacks matched selector.")
 			return nil
 		}
+		finalStacksMap = filteredMap
 	}
 
 	var res any
@@ -702,4 +692,24 @@ func ExecuteDescribeStacks(
 	}
 
 	return finalStacksMap, nil
+}
+
+// applyStackSelector filters stacks based on label selector requirements.
+func applyStackSelector(stacksMap map[string]any, selectorStr string) (map[string]any, error) {
+	reqs, err := selector.Parse(selectorStr)
+	if err != nil {
+		return nil, err
+	}
+
+	filtered := make(map[string]any)
+	for sname, sdata := range stacksMap {
+		if smap, ok := sdata.(map[string]any); ok {
+			labels := selector.ExtractStackLabels(smap)
+			if selector.Matches(labels, reqs) {
+				filtered[sname] = sdata
+			}
+		}
+	}
+
+	return filtered, nil
 }

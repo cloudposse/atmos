@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	// Static errors for wrapping
+	// Static errors for wrapping.
 	ErrEmptySelector     = errors.New("selector string is empty")
 	ErrEmptySetValues    = errors.New("empty set values")
 	ErrInvalidExpression = errors.New("invalid selector expression")
@@ -60,38 +60,98 @@ func Parse(selector string) ([]Requirement, error) {
 		if p == "" {
 			continue
 		}
-		if m := reEquality.FindStringSubmatch(p); len(m) == 4 {
-			op := OpEqual
-			if m[2] == "!=" {
-				op = OpNotEqual
-			}
-			reqs = append(reqs, Requirement{Key: m[1], Operator: op, Values: []string{m[3]}})
-			continue
+
+		req, err := parseExpression(p)
+		if err != nil {
+			return nil, err
 		}
-		if m := reSet.FindStringSubmatch(p); len(m) == 4 {
-			op := OpIn
-			if m[2] == "notin" {
-				op = OpNotIn
-			}
-			vals := parseCSV(m[3])
-			if len(vals) == 0 {
-				return nil, fmt.Errorf("selector '%s': %w", p, ErrEmptySetValues)
-			}
-			reqs = append(reqs, Requirement{Key: m[1], Operator: op, Values: vals})
-			continue
-		}
-		if m := reExists.FindStringSubmatch(p); len(m) == 2 {
-			reqs = append(reqs, Requirement{Key: m[1], Operator: OpExists})
-			continue
-		}
-		if m := reNotExists.FindStringSubmatch(p); len(m) == 2 {
-			reqs = append(reqs, Requirement{Key: m[1], Operator: OpNotExists})
-			continue
-		}
-		return nil, fmt.Errorf("'%s': %w", p, ErrInvalidExpression)
+
+		reqs = append(reqs, req)
 	}
 
 	return reqs, nil
+}
+
+// parseExpression parses a single selector expression and returns a Requirement.
+func parseExpression(expr string) (Requirement, error) {
+	// Try equality/inequality patterns
+	if req, ok := parseEqualityExpression(expr); ok {
+		return req, nil
+	}
+
+	// Try set patterns (in/notin)
+	if req, err := parseSetExpression(expr); err == nil {
+		return req, nil
+	} else if !errors.Is(err, ErrInvalidExpression) {
+		return Requirement{}, err
+	}
+
+	// Try exists pattern
+	if req, ok := parseExistsExpression(expr); ok {
+		return req, nil
+	}
+
+	// Try not-exists pattern
+	if req, ok := parseNotExistsExpression(expr); ok {
+		return req, nil
+	}
+
+	return Requirement{}, fmt.Errorf("'%s': %w", expr, ErrInvalidExpression)
+}
+
+// parseEqualityExpression parses equality/inequality expressions (key=value, key!=value).
+func parseEqualityExpression(expr string) (Requirement, bool) {
+	m := reEquality.FindStringSubmatch(expr)
+	if len(m) != 4 {
+		return Requirement{}, false
+	}
+
+	op := OpEqual
+	if m[2] == "!=" {
+		op = OpNotEqual
+	}
+
+	return Requirement{Key: m[1], Operator: op, Values: []string{m[3]}}, true
+}
+
+// parseSetExpression parses set expressions (key in (a,b), key notin (a,b)).
+func parseSetExpression(expr string) (Requirement, error) {
+	m := reSet.FindStringSubmatch(expr)
+	if len(m) != 4 {
+		return Requirement{}, ErrInvalidExpression
+	}
+
+	op := OpIn
+	if m[2] == "notin" {
+		op = OpNotIn
+	}
+
+	vals := parseCSV(m[3])
+	if len(vals) == 0 {
+		return Requirement{}, fmt.Errorf("selector '%s': %w", expr, ErrEmptySetValues)
+	}
+
+	return Requirement{Key: m[1], Operator: op, Values: vals}, nil
+}
+
+// parseExistsExpression parses exists expressions (key).
+func parseExistsExpression(expr string) (Requirement, bool) {
+	m := reExists.FindStringSubmatch(expr)
+	if len(m) != 2 {
+		return Requirement{}, false
+	}
+
+	return Requirement{Key: m[1], Operator: OpExists}, true
+}
+
+// parseNotExistsExpression parses not-exists expressions (!key).
+func parseNotExistsExpression(expr string) (Requirement, bool) {
+	m := reNotExists.FindStringSubmatch(expr)
+	if len(m) != 2 {
+		return Requirement{}, false
+	}
+
+	return Requirement{Key: m[1], Operator: OpNotExists}, true
 }
 
 func splitSelector(sel string) []string {
@@ -147,25 +207,9 @@ func matchRequirement(labels map[string]string, r Requirement) bool {
 	case OpNotEqual:
 		return !exists || val != r.Values[0]
 	case OpIn:
-		if !exists {
-			return false
-		}
-		for _, v := range r.Values {
-			if val == v {
-				return true
-			}
-		}
-		return false
+		return matchInRequirement(val, exists, r.Values)
 	case OpNotIn:
-		if !exists {
-			return true
-		}
-		for _, v := range r.Values {
-			if val == v {
-				return false
-			}
-		}
-		return true
+		return matchNotInRequirement(val, exists, r.Values)
 	case OpExists:
 		return exists
 	case OpNotExists:
@@ -173,4 +217,30 @@ func matchRequirement(labels map[string]string, r Requirement) bool {
 	default:
 		return false
 	}
+}
+
+// matchInRequirement checks if the value exists and is in the provided set of values.
+func matchInRequirement(val string, exists bool, values []string) bool {
+	if !exists {
+		return false
+	}
+	for _, v := range values {
+		if val == v {
+			return true
+		}
+	}
+	return false
+}
+
+// matchNotInRequirement checks if the value doesn't exist or is not in the provided set of values.
+func matchNotInRequirement(val string, exists bool, values []string) bool {
+	if !exists {
+		return true
+	}
+	for _, v := range values {
+		if val == v {
+			return false
+		}
+	}
+	return true
 }

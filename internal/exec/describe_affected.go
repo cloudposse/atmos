@@ -185,21 +185,15 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	if a.Query == "" {
-		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
-			return err
-		}
-	} else {
-		res, err := u.EvaluateYqExpression(d.atmosConfig, affected, a.Query)
-		if err != nil {
-			return err
-		}
-
-		err = viewWithScroll(&viewWithScrollProps{d.pageCreator, term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
-		if err != nil {
-			return err
-		}
+		return d.uploadableQuery(a, repoUrl, headHead, baseHead, affected)
 	}
-	return nil
+
+	res, err := u.EvaluateYqExpression(d.atmosConfig, affected, a.Query)
+	if err != nil {
+		return err
+	}
+
+	return viewWithScroll(&viewWithScrollProps{d.pageCreator, term.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", a.Format, a.OutputFile, res})
 }
 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
