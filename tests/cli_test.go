@@ -716,6 +716,10 @@ func removeCacheFile() error {
 	if err != nil {
 		return err
 	}
+
+	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
+		return nil
+	}
 	err = os.Remove(cacheFilePath)
 	if err != nil {
 		return err
