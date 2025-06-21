@@ -2,7 +2,6 @@ package telemetry
 
 import (
 	"runtime"
-	"strings"
 
 	log "github.com/charmbracelet/log"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -70,33 +69,19 @@ func getTelemetryFromConfig(provider ...TelemetryClientProvider) *Telemetry {
 		return nil
 	}
 
-	// Load the cache to retrieve or generate installation ID.
-	cacheCfg, err := cfg.LoadCache()
-	canCreateCache := true
-	if err != nil {
-		if !strings.Contains(err.Error(), "read-only file system") {
-			log.Warn("Could not load cache", "error", err)
-			return nil
-		}
-		canCreateCache = false
-	}
-
-	// Generate new installation ID if one doesn't exist.
-	if cacheCfg.InstallationId == "" {
-		cacheCfg.InstallationId = uuid.New().String()
-	}
-	// Save the cache with the installation ID.
-	if canCreateCache {
-		if saveErr := cfg.SaveCache(cacheCfg); saveErr != nil {
-			log.Warn("Unable to save cache", "error", saveErr)
-		}
-	}
-
 	// Extract telemetry settings from config.
 	enabled := atmosConfig.Settings.Telemetry.Enabled
 	token := atmosConfig.Settings.Telemetry.Token
 	endpoint := atmosConfig.Settings.Telemetry.Endpoint
-	distinctId := cacheCfg.InstallationId
+	distinctId := getOrInitializeCacheValue(
+		func(cfg *cfg.CacheConfig) string {
+			return cfg.InstallationId
+		},
+		func(cfg *cfg.CacheConfig, value string) {
+			cfg.InstallationId = value
+		},
+		uuid.New().String(),
+	)
 
 	// Use provided client provider or default to PostHog provider.
 	clientProvider := PosthogClientProvider
@@ -164,28 +149,56 @@ func warningMessage() string {
 		return ""
 	}
 
-	// Load cache configuration to check if warning has been shown
-	cacheCfg, err := cfg.LoadCache()
-	canCreateCache := true
-	if err != nil {
-		if !strings.Contains(err.Error(), "read-only file system") {
-			log.Warn("Could not load cache", "error", err)
-			return ""
-		}
-		canCreateCache = false
-	}
+	TelemetryWarningShown := getOrInitializeCacheValue(
+		func(cfg *cfg.CacheConfig) bool {
+			return cfg.TelemetryWarningShown
+		},
+		func(cfg *cfg.CacheConfig, _ bool) {
+			cfg.TelemetryWarningShown = true
+		},
+		false,
+	)
 
 	// If warning has already been shown, return empty
-	if cacheCfg.TelemetryWarningShown {
+	if TelemetryWarningShown {
 		return ""
 	}
+	return WarningMessage
+}
 
-	// Mark warning as shown and return the message
-	cacheCfg.TelemetryWarningShown = true
+// getOrInitializeCacheValue retrieves a value from cache or initializes it with a default value if not present.
+// It uses getter and setter functions to access and modify the cache configuration, and saves the cache
+// if a new value needs to be initialized.
+//
+// Parameters:
+//   - getter: Function to retrieve the current value from cache configuration
+//   - setter: Function to set a new value in cache configuration
+//   - defaultValue: The default value to use if the current value is empty/zero
+//
+// Returns:
+//   - T: The current value from cache if it exists, otherwise the default value
+//
+// The function loads the cache configuration, checks if a value already exists using the getter.
+// If the value is empty/zero, it initializes it with the default value using the setter and saves
+// the updated cache. If cache operations fail, it logs a warning but continues execution.
+func getOrInitializeCacheValue[T comparable](getter func(cfg *cfg.CacheConfig) T, setter func(cfg *cfg.CacheConfig, value T), defaultValue T) T {
+	var emptyValue T
+
+	cacheCfg, err := cfg.LoadCache()
+	canCreateCache := err == nil
+
+	currentValue := getter(&cacheCfg)
+
+	if currentValue != emptyValue {
+		return currentValue
+	}
+
 	if canCreateCache {
+		setter(&cacheCfg, defaultValue)
 		if err := cfg.SaveCache(cacheCfg); err != nil {
 			log.Warn("Could not save cache", "error", err)
 		}
 	}
-	return WarningMessage
+
+	return defaultValue
 }
