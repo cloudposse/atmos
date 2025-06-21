@@ -107,7 +107,26 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 
 	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
 	if info.Affected {
-		err = e.ExecuteTerraformAffected(cmd, args, &info)
+		// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
+		cmd.PersistentFlags().String("file", "", "")
+		cmd.PersistentFlags().String("format", "yaml", "")
+		cmd.PersistentFlags().Bool("verbose", false, "")
+		cmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
+		cmd.PersistentFlags().Bool("include-settings", false, "")
+		cmd.PersistentFlags().Bool("upload", false, "")
+
+		a, err := e.ParseDescribeAffectedCliArgs(cmd, args)
+		if err != nil {
+			return err
+		}
+
+		a.IncludeSpaceliftAdminStacks = false
+		a.IncludeSettings = false
+		a.Upload = false
+		a.OutputFile = ""
+		a.Verbose = false
+
+		err = e.ExecuteTerraformAffected(a, &info)
 		if err != nil {
 			u.PrintErrorMarkdownAndExit("", err, "")
 		}

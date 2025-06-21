@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 
 	log "github.com/charmbracelet/log"
-	"github.com/spf13/cobra"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -173,27 +171,9 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 }
 
 // ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
-func ExecuteTerraformAffected(cmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
-	// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
-	cmd.PersistentFlags().String("file", "", "")
-	cmd.PersistentFlags().String("format", "yaml", "")
-	cmd.PersistentFlags().Bool("verbose", false, "")
-	cmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
-	cmd.PersistentFlags().Bool("include-settings", false, "")
-	cmd.PersistentFlags().Bool("upload", false, "")
-
-	a, err := ParseDescribeAffectedCliArgs(cmd, args)
-	if err != nil {
-		return err
-	}
-
-	a.IncludeSpaceliftAdminStacks = false
-	a.IncludeSettings = false
-	a.Upload = false
-	a.OutputFile = ""
-	a.Verbose = false
-
+func ExecuteTerraformAffected(a DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
 	var affectedList []schema.Affected
+	var err error
 
 	switch {
 	case a.RepoPath != "":
