@@ -315,17 +315,19 @@ func executeTerraformAffectedComponentInDepOrder(
 
 	if args.IncludeDependents {
 		for _, dep := range dependents {
-			err := executeTerraformAffectedComponentInDepOrder(
-				info,
-				dep.Component,
-				dep.Stack,
-				affectedComponent,
-				affectedStack,
-				dep.Dependents,
-				args,
-			)
-			if err != nil {
-				return err
+			if !dep.IncludedInDependents {
+				err := executeTerraformAffectedComponentInDepOrder(
+					info,
+					dep.Component,
+					dep.Stack,
+					affectedComponent,
+					affectedStack,
+					dep.Dependents,
+					args,
+				)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
