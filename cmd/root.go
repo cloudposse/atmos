@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -215,6 +217,8 @@ func init() {
 	initCobraConfig()
 }
 
+// initCobraConfig configures the root Cobra command with custom output, usage, flag error, and help behaviors for the Atmos CLI.
+// It sets up styled terminal output, enhanced help and usage display with paging, and integrates example content and update checks.
 func initCobraConfig() {
 	RootCmd.SetOut(os.Stdout)
 	styles := boa.DefaultStyles()
@@ -244,16 +248,19 @@ func initCobraConfig() {
 			showUsageAndExit(command, arguments)
 		}
 		// Print a styled Atmos logo to the terminal
-		fmt.Println()
 		if command.Use != "atmos" || command.Flags().Changed("help") {
-			err := tuiUtils.PrintStyledText("ATMOS")
-			if err != nil {
-				u.LogErrorAndExit(err)
-			}
-			if err := oldUsageFunc(command); err != nil {
-				u.LogErrorAndExit(err)
+			var buf bytes.Buffer
+			command.SetOut(&buf)
+			fmt.Println()
+			checkErrorAndExit(tuiUtils.PrintStyledTextToSpecifiedOutput(&buf, "ATMOS"))
+			checkErrorAndExit(oldUsageFunc(command))
+			if atmosConfig.Settings.Terminal.IsPagerEnabled() {
+				checkErrorAndExit(pager.New().Run("Atmos CLI Help", buf.String()))
+			} else {
+				fmt.Print(buf.String())
 			}
 		} else {
+			fmt.Println()
 			err := tuiUtils.PrintStyledText("ATMOS")
 			if err != nil {
 				u.LogErrorAndExit(err)
