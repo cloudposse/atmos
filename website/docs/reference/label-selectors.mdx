@@ -1,0 +1,250 @@
+---
+title: Label Selectors
+sidebar_position: 2
+sidebar_label: Label Selectors
+description: Label selector syntax reference for filtering components and stacks
+id: label-selectors
+---
+
+# Label Selectors
+
+Label selectors provide a powerful way to filter Atmos components and stacks based on their `metadata.labels`. The selector syntax is inspired by [Kubernetes label selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors) and supports multiple operators for flexible querying.
+
+## Syntax Overview
+
+Label selectors are expressions that allow you to filter resources based on their labels. They can be used with various Atmos commands via the `--selector` (`-l`) flag.
+
+## Supported Operators
+
+### Equality Operator (`=`)
+
+Selects resources where the label key equals the specified value.
+
+```bash
+# Select components where environment equals "prod"
+atmos list components --selector="environment=prod"
+
+# Select components where team equals "platform"
+atmos describe stacks --selector="team=platform"
+```
+
+### Inequality Operator (`!=`)
+
+Selects resources where the label key does not equal the specified value.
+
+```bash
+# Select components where environment is not "dev"
+atmos list components --selector="environment!=dev"
+
+# Select components where critical is not "true"
+atmos list stacks --selector="critical!=true"
+```
+
+### Set Inclusion Operator (`in`)
+
+Selects resources where the label key's value is in the specified set of values.
+
+```bash
+# Select components where environment is either "dev" or "staging"
+atmos list components --selector="environment in (dev,staging)"
+
+# Select components where team is in a specific set
+atmos describe affected --selector="team in (platform,security,networking)"
+```
+
+### Set Exclusion Operator (`notin`)
+
+Selects resources where the label key's value is not in the specified set of values.
+
+```bash
+# Select components where environment is not "dev" or "test"
+atmos list components --selector="environment notin (dev,test)"
+
+# Select components where team is not in maintenance groups
+atmos list stacks --selector="team notin (legacy,deprecated)"
+```
+
+### Existence Operator (key only)
+
+Selects resources that have the specified label key, regardless of its value.
+
+```bash
+# Select components that have a "critical" label (any value)
+atmos list components --selector="critical"
+
+# Select components that have a "backup" label
+atmos describe stacks --selector="backup"
+```
+
+### Non-existence Operator (`!`)
+
+Selects resources that do not have the specified label key.
+
+```bash
+# Select components that do not have a "deprecated" label
+atmos list components --selector="!deprecated"
+
+# Select components that do not have a "legacy" label
+atmos list stacks --selector="!legacy"
+```
+
+## Combining Selectors
+
+Multiple selector expressions can be combined using commas (`,`) which act as a logical AND operation.
+
+```bash
+# Select components where environment=prod AND team=platform
+atmos list components --selector="environment=prod,team=platform"
+
+# Select components that are critical AND in production AND not deprecated
+atmos describe stacks --selector="critical=true,environment=prod,!deprecated"
+
+# Complex combination with different operators
+atmos list components --selector="environment in (prod,staging),team!=legacy,critical"
+```
+
+## Practical Examples
+
+### Development Environment Filtering
+
+```bash
+# List all development components
+atmos list components --selector="environment=dev"
+
+# List all non-production components
+atmos list components --selector="environment!=prod"
+
+# List components in dev or staging environments
+atmos list components --selector="environment in (dev,staging)"
+```
+
+### Team-based Filtering
+
+```bash
+# List components managed by the platform team
+atmos describe stacks --selector="team=platform"
+
+# List components not managed by the legacy team
+atmos list components --selector="team!=legacy"
+
+# List components managed by core infrastructure teams
+atmos list components --selector="team in (platform,networking,security)"
+```
+
+### Operational Filtering
+
+```bash
+# List critical components
+atmos list components --selector="critical=true"
+
+# List components that have backup configured
+atmos describe stacks --selector="backup"
+
+# List components that are not deprecated
+atmos list components --selector="!deprecated"
+```
+
+### Complex Scenarios
+
+```bash
+# Production components that are critical and managed by platform team
+atmos describe affected --selector="environment=prod,critical=true,team=platform"
+
+# Non-deprecated components in staging or prod environments
+atmos list stacks --selector="environment in (staging,prod),!deprecated"
+
+# Components with monitoring but not in test environments
+atmos list components --selector="monitoring,environment notin (test,sandbox)"
+```
+
+## Label Inheritance
+
+When using selectors, it's important to understand how labels are inherited:
+
+1. **Stack-level labels** apply to all components in the stack
+2. **Component-level labels** override stack-level labels with the same key
+3. **Selectors evaluate the final merged labels** for each component
+
+**Example:**
+```yaml
+# Stack configuration
+metadata:
+  labels:
+    environment: dev
+    team: platform
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        labels:
+          environment: prod  # Overrides stack-level environment
+          critical: "true"   # Component-specific label
+      # Final labels: { environment: "prod", team: "platform", critical: "true" }
+
+    monitoring:
+      # Inherits stack-level labels only
+      # Final labels: { environment: "dev", team: "platform" }
+```
+
+```bash
+# This will match only the vpc component (environment=prod)
+atmos list components --selector="environment=prod"
+
+# This will match both components (team=platform from stack level)
+atmos list components --selector="team=platform"
+
+# This will match only the vpc component (has critical label)
+atmos list components --selector="critical"
+```
+
+## Error Handling
+
+### Invalid Syntax
+
+If a selector has invalid syntax, Atmos will return an error:
+
+```bash
+$ atmos list components --selector="environment="
+Error: invalid selector syntax: missing value after '='
+
+$ atmos list components --selector="environment in dev,staging"
+Error: invalid selector syntax: expected '(' after 'in'
+```
+
+### No Matches
+
+When no resources match the selector, Atmos returns an empty result with exit code 0:
+
+```bash
+$ atmos list components --selector="environment=nonexistent"
+No resources matched selector.
+```
+
+## Command Support
+
+The `--selector` flag is supported by the following commands:
+
+- [`atmos list components`](/cli/commands/list/components)
+- [`atmos list stacks`](/cli/commands/list/stacks)
+- [`atmos list values`](/cli/commands/list/values)
+- [`atmos list vars`](/cli/commands/list/vars)
+- [`atmos list settings`](/cli/commands/list/settings)
+- [`atmos list metadata`](/cli/commands/list/metadata)
+- [`atmos describe component`](/cli/commands/describe/component)
+- [`atmos describe stacks`](/cli/commands/describe/stacks)
+- [`atmos describe affected`](/cli/commands/describe/affected)
+
+## Best Practices
+
+1. **Use consistent label naming conventions** across your organization
+2. **Keep label values simple** - avoid spaces and special characters when possible
+3. **Document your labeling strategy** so teams understand the available labels
+4. **Use selectors with other flags** for more precise filtering (e.g., `--stack` + `--selector`)
+5. **Test complex selectors** on a small subset before applying to production workflows
+
+## Related Documentation
+
+- [Kubernetes Label Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors) - Original inspiration for the syntax
+- [Configuring Components: metadata.labels](/core-concepts/stacks/define-components#labeling-components-with-metadatalabels) - How to define labels
+- [CLI Commands](/cli/commands/) - Commands that support label selectors

@@ -38,64 +38,42 @@
   "additionalProperties": true,
   "oneOf": [
     {
-      "required": [
-        "workflows"
-      ]
+      "required": ["workflows"]
     },
     {
       "anyOf": [
         {
           "additionalProperties": true,
           "not": {
-            "required": [
-              "workflows"
-            ]
+            "required": ["workflows"]
           }
         },
         {
-          "required": [
-            "import"
-          ]
+          "required": ["import"]
         },
         {
-          "required": [
-            "terraform"
-          ]
+          "required": ["terraform"]
         },
         {
-          "required": [
-            "helmfile"
-          ]
+          "required": ["helmfile"]
         },
         {
-          "required": [
-            "vars"
-          ]
+          "required": ["vars"]
         },
         {
-          "required": [
-            "hooks"
-          ]
+          "required": ["hooks"]
         },
         {
-          "required": [
-            "env"
-          ]
+          "required": ["env"]
         },
         {
-          "required": [
-            "settings"
-          ]
+          "required": ["settings"]
         },
         {
-          "required": [
-            "components"
-          ]
+          "required": ["components"]
         },
         {
-          "required": [
-            "overrides"
-          ]
+          "required": ["overrides"]
         }
       ]
     }
@@ -137,9 +115,7 @@
                     "additionalProperties": true
                   }
                 },
-                "required": [
-                  "path"
-                ]
+                "required": ["path"]
               }
             ]
           }
@@ -401,10 +377,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "abstract",
-                "real"
-              ]
+              "enum": ["abstract", "real"]
             },
             "enabled": {
               "type": "boolean",
@@ -455,6 +428,13 @@
             "locked": {
               "type": "boolean",
               "description": "Flag to lock the component and prevent modifications while allowing read operations"
+            },
+            "labels": {
+              "type": "object",
+              "description": "Key-value labels for label selector filtering",
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           },
           "required": []
@@ -525,10 +505,7 @@
           "properties": {
             "schema_type": {
               "type": "string",
-              "enum": [
-                "jsonschema",
-                "opa"
-              ]
+              "enum": ["jsonschema", "opa"]
             },
             "schema_path": {
               "type": "string"
@@ -553,10 +530,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "schema_type",
-            "schema_path"
-          ]
+          "required": ["schema_type", "schema_path"]
         }
       ]
     },
@@ -843,19 +817,13 @@
           },
           "oneOf": [
             {
-              "required": [
-                "component"
-              ]
+              "required": ["component"]
             },
             {
-              "required": [
-                "file"
-              ]
+              "required": ["file"]
             },
             {
-              "required": [
-                "folder"
-              ]
+              "required": ["folder"]
             }
           ],
           "additionalProperties": false
@@ -1030,17 +998,13 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "command"
-                    ]
+                    "required": ["command"]
                   }
                 }
               ]
             }
           },
-          "required": [
-            "steps"
-          ]
+          "required": ["steps"]
         }
       ]
     },

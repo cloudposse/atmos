@@ -110,3 +110,46 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 	// The `affected` list should be empty, since the local repo is compared with itself.
 	assert.Equal(t, 0, len(affected))
 }
+
+func TestApplyAffectedSelectorFilter_Logic(t *testing.T) {
+	// Test the core selector logic without mocking FindStacksMap
+	// This tests the selector parsing and matching logic specifically
+	tests := []struct {
+		name        string
+		selector    string
+		expectError bool
+	}{
+		{
+			name:        "Invalid selector syntax",
+			selector:    "env=",
+			expectError: true,
+		},
+		{
+			name:        "Empty selector",
+			selector:    "",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exec := &describeAffectedExec{}
+			atmosConfig := &schema.AtmosConfiguration{}
+
+			// Test with empty affected list to focus on selector parsing
+			affected := []schema.Affected{}
+
+			result, err := exec.applyAffectedSelectorFilter(atmosConfig, affected, tt.selector)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				// For empty selectors, should return original list
+				if tt.selector == "" {
+					assert.NoError(t, err)
+					assert.Equal(t, affected, result)
+				}
+			}
+		})
+	}
+}

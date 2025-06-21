@@ -587,6 +587,7 @@ func ProcessStackConfig(
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
 	globalEnvSection := map[string]any{}
+	globalMetadataSection := map[string]any{}
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
@@ -633,6 +634,13 @@ func ProcessStackConfig(
 		globalEnvSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid 'env' section in the file '%s'", stackName)
+		}
+	}
+
+	if i, ok := config["metadata"]; ok {
+		globalMetadataSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid 'metadata' section in the file '%s'", stackName)
 		}
 	}
 
@@ -1654,6 +1662,11 @@ func ProcessStackConfig(
 
 	result := map[string]any{
 		"components": allComponents,
+	}
+
+	// Add global metadata section if it exists
+	if len(globalMetadataSection) > 0 {
+		result["metadata"] = globalMetadataSection
 	}
 
 	return result, nil

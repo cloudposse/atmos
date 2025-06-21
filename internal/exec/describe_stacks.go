@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/mitchellh/mapstructure"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/selector"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -27,6 +29,7 @@ type DescribeStacksArgs struct {
 	Skip                 []string
 	Format               string
 	File                 string
+	Selector             string
 }
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -77,6 +80,29 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 	)
 	if err != nil {
 		return err
+	}
+
+	// Apply label selector if provided
+	if args.Selector != "" {
+		reqs, perr := selector.Parse(args.Selector)
+		if perr != nil {
+			return perr
+		}
+		filtered := make(map[string]any)
+		for sname, sdata := range finalStacksMap {
+			if smap, ok := sdata.(map[string]any); ok {
+				labels := selector.ExtractStackLabels(smap)
+				if selector.Matches(labels, reqs) {
+					filtered[sname] = sdata
+				}
+			}
+		}
+		finalStacksMap = filtered
+
+		if len(finalStacksMap) == 0 {
+			log.Info("No stacks matched selector.")
+			return nil
+		}
 	}
 
 	var res any
@@ -285,6 +311,13 @@ func ExecuteDescribeStacks(
 						// Only create the stack entry if it doesn't exist
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
+
+							// Copy stack-level metadata from the original stacksMap
+							if stackData, ok := stackSection.(map[string]any); ok {
+								if metadata, exists := stackData["metadata"]; exists {
+									finalStacksMap[stackName].(map[string]any)["metadata"] = metadata
+								}
+							}
 						}
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
@@ -512,6 +545,13 @@ func ExecuteDescribeStacks(
 						// Only create the stack entry if it doesn't exist
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
+
+							// Copy stack-level metadata from the original stacksMap
+							if stackData, ok := stackSection.(map[string]any); ok {
+								if metadata, exists := stackData["metadata"]; exists {
+									finalStacksMap[stackName].(map[string]any)["metadata"] = metadata
+								}
+							}
 						}
 
 						configAndStacksInfo.Stack = stackName

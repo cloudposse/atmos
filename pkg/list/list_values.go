@@ -317,7 +317,9 @@ func buildMetadataExpression(componentFilter, componentType string) string {
 		// Use full component path and wrap in quotes for nested support
 		return fmt.Sprintf(".components.%s.\"%s\"", componentType, componentFilter)
 	}
-	return DotChar + KeyMetadata
+	// When no component filter is provided, collect metadata from all components
+	// This matches the documented behavior of showing component metadata across stacks
+	return ".components.terraform // .components.helmfile // {}"
 }
 
 func buildComponentYqExpression(component string, includeAbstract bool, componentType string) string {

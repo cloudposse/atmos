@@ -14,5 +14,6 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
+	listCmd.PersistentFlags().StringP("selector", "l", "", "Label selector to filter resources (e.g., 'env=prod,tier in (backend)')")
 	RootCmd.AddCommand(listCmd)
 }

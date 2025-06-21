@@ -130,3 +130,124 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestSetDescribeAffectedFlagValueInCliArgs(t *testing.T) {
+	tests := []struct {
+		name          string
+		setFlags      func(*pflag.FlagSet)
+		expected      *exec.DescribeAffectedCmdArgs
+		expectedPanic bool
+		panicMessage  string
+	}{
+		{
+			name: "Set string and bool flags",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Set("ref", "main")
+				fs.Set("sha", "abc123")
+				fs.Set("include-dependents", "true")
+				fs.Set("format", "yaml")
+			},
+			expected: &exec.DescribeAffectedCmdArgs{
+				Ref:               "main",
+				SHA:               "abc123",
+				IncludeDependents: true,
+				Format:            "yaml",
+			},
+		},
+		{
+			name: "Set Upload flag to true",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Set("upload", "true")
+			},
+			expected: &exec.DescribeAffectedCmdArgs{
+				Upload:            true,
+				IncludeDependents: true,
+				IncludeSettings:   true,
+				Format:            "json",
+			},
+		},
+		{
+			name: "Set selector flag",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Set("selector", "env=prod")
+			},
+			expected: &exec.DescribeAffectedCmdArgs{
+				Selector: "env=prod",
+				Format:   "json",
+			},
+		},
+		{
+			name: "No flags changed, set default format",
+			setFlags: func(fs *pflag.FlagSet) {
+				// No flags set
+			},
+			expected: &exec.DescribeAffectedCmdArgs{
+				Format: "json",
+			},
+		},
+		{
+			name: "Set format explicitly, no override",
+			setFlags: func(fs *pflag.FlagSet) {
+				fs.Set("format", "json")
+			},
+			expected: &exec.DescribeAffectedCmdArgs{
+				Format: "json",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a new flag set and add the flags
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			fs.String("ref", "", "ref flag")
+			fs.String("sha", "", "sha flag")
+			fs.String("repo-path", "", "repo-path flag")
+			fs.String("ssh-key", "", "ssh-key flag")
+			fs.String("ssh-key-password", "", "ssh-key-password flag")
+			fs.Bool("include-spacelift-admin-stacks", false, "include-spacelift-admin-stacks flag")
+			fs.Bool("include-dependents", false, "include-dependents flag")
+			fs.Bool("include-settings", false, "include-settings flag")
+			fs.Bool("upload", false, "upload flag")
+			fs.Bool("clone-target-ref", false, "clone-target-ref flag")
+			fs.Bool("process-templates", true, "process-templates flag")
+			fs.Bool("process-functions", true, "process-functions flag")
+			fs.StringSlice("skip", nil, "skip flag")
+			fs.String("pager", "", "pager flag")
+			fs.String("stack", "", "stack flag")
+			fs.String("format", "", "format flag")
+			fs.String("file", "", "file flag")
+			fs.String("query", "", "query flag")
+			fs.String("selector", "", "selector flag")
+
+			// Set the flags as specified in the test
+			tt.setFlags(fs)
+
+			// Create the args struct
+			args := &exec.DescribeAffectedCmdArgs{
+				CLIConfig: &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Pager: "",
+						},
+					},
+				},
+			}
+
+			if tt.expectedPanic {
+				assert.Panics(t, func() {
+					setDescribeAffectedFlagValueInCliArgs(fs, args)
+				}, tt.panicMessage)
+			} else {
+				setDescribeAffectedFlagValueInCliArgs(fs, args)
+				assert.Equal(t, tt.expected.Ref, args.Ref)
+				assert.Equal(t, tt.expected.SHA, args.SHA)
+				assert.Equal(t, tt.expected.IncludeDependents, args.IncludeDependents)
+				assert.Equal(t, tt.expected.IncludeSettings, args.IncludeSettings)
+				assert.Equal(t, tt.expected.Upload, args.Upload)
+				assert.Equal(t, tt.expected.Format, args.Format)
+				assert.Equal(t, tt.expected.Selector, args.Selector)
+			}
+		})
+	}
+}

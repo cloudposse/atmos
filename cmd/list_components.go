@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/selector"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -58,5 +60,50 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 	}
 
 	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
-	return output, err
+	if err != nil {
+		return nil, err
+	}
+
+	selectorFlag, _ := flags.GetString("selector")
+	if selectorFlag != "" {
+		reqs, perr := selector.Parse(selectorFlag)
+		if perr != nil {
+			return nil, perr
+		}
+		filtered := []string{}
+		for _, comp := range output {
+			// Iterate stacks to find component instance and evaluate labels
+			for _, sdata := range stacksMap {
+				smap, ok := sdata.(map[string]any)
+				if !ok {
+					continue
+				}
+				// look into components.terraform and helmfile
+				components, ok := smap["components"].(map[string]any)
+				if !ok {
+					continue
+				}
+				for _, ctype := range []string{"terraform", "helmfile"} {
+					if ctypeSection, ok := components[ctype].(map[string]any); ok {
+						if _, ok := ctypeSection[comp]; ok {
+							merged := selector.MergedLabels(smap, comp)
+							if selector.Matches(merged, reqs) {
+								filtered = append(filtered, comp)
+								goto NextComp
+							}
+						}
+					}
+				}
+			}
+		NextComp:
+		}
+		output = filtered
+	}
+
+	if len(output) == 0 {
+		log.Info("No components matched selector.")
+		return []string{}, nil
+	}
+
+	return output, nil
 }
