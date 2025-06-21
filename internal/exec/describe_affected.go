@@ -324,19 +324,19 @@ func (d *describeAffectedExec) applyAffectedSelectorFilter(atmosConfig *schema.A
 
 	var filtered []schema.Affected
 
-	for _, affectedItem := range affected {
+	for i := range affected {
 		// Extract labels for this affected component/stack
-		stackData, ok := stacksMap[affectedItem.Stack]
+		stackData, ok := stacksMap[affected[i].Stack]
 		if !ok {
 			continue
 		}
 
 		// Get merged labels (stack + component)
-		merged := selector.MergedLabels(stackData.(map[string]any), affectedItem.Component)
+		merged := selector.MergedLabels(stackData.(map[string]any), affected[i].Component)
 
 		// Check if the affected item matches the selector
 		if selector.Matches(merged, reqs) {
-			filtered = append(filtered, affectedItem)
+			filtered = append(filtered, affected[i])
 		}
 	}
 
