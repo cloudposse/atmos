@@ -86,7 +86,7 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 	}
 }
 
-func TestExecuteTerraformAffected(t *testing.T) {
+func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	// Capture the starting working directory
 	startingDir, err := os.Getwd()
 	if err != nil {
@@ -102,20 +102,20 @@ func TestExecuteTerraformAffected(t *testing.T) {
 
 	// Define the work directory and change to it
 	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
-	if err := os.Chdir(workDir); err != nil {
+	if err = os.Chdir(workDir); err != nil {
 		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
 	}
 
-	// Create a pipe to capture stdout to check if terraform is executed correctly
-	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
 	stack := "prod"
 
 	a := DescribeAffectedCmdArgs{
-		CLIConfig: &schema.AtmosConfiguration{},
-		Stack:     stack,
+		CLIConfig:         &schema.AtmosConfiguration{},
+		Stack:             stack,
+		IncludeDependents: true,
 	}
 
 	info := schema.ConfigAndStacksInfo{
@@ -131,9 +131,8 @@ func TestExecuteTerraformAffected(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraformAffected': %v", err)
 	}
 
-	// Restore stdout
 	w.Close()
-	os.Stdout = oldStdout
+	os.Stderr = oldStderr
 
 	// Read the captured output
 	var buf bytes.Buffer
@@ -144,9 +143,4 @@ func TestExecuteTerraformAffected(t *testing.T) {
 	output := buf.String()
 
 	t.Logf("Output: %s", output)
-
-	// Check the output
-	//if !strings.Contains(output, "foo   = \"component-1-a\"") {
-	//	t.Errorf("'foo' variable should be 'component-1-a'")
-	//}
 }
