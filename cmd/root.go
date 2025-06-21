@@ -17,7 +17,6 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/logger"
@@ -249,24 +248,14 @@ func initCobraConfig() {
 		// Print a styled Atmos logo to the terminal
 		if command.Use != "atmos" || command.Flags().Changed("help") {
 			var buf bytes.Buffer
-			var err error
 			command.SetOut(&buf)
 			fmt.Println()
-			if term.IsTTYSupportForStdout() {
-				err = tuiUtils.PrintStyledTextToSpecifiedOutput(&buf, "ATMOS")
+			checkErrorAndExit(tuiUtils.PrintStyledTextToSpecifiedOutput(&buf, "ATMOS"))
+			checkErrorAndExit(oldUsageFunc(command))
+			if atmosConfig.Settings.Terminal.IsPagerEnabled() {
+				checkErrorAndExit(pager.New().Run("Atmos CLI Help", buf.String()))
 			} else {
-				err = tuiUtils.PrintStyledText("ATMOS")
-			}
-			if err != nil {
-				u.LogErrorAndExit(err)
-			}
-			if err := oldUsageFunc(command); err != nil {
-				u.LogErrorAndExit(err)
-			}
-			pager := pager.New()
-			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
-				log.Error("Failed to run pager", "error", err)
-				utils.OsExit(1)
+				fmt.Print(buf.String())
 			}
 		} else {
 			fmt.Println()
