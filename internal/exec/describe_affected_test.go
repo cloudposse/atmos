@@ -143,12 +143,10 @@ func TestApplyAffectedSelectorFilter_Logic(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-			} else {
+			} else if tt.selector == "" {
 				// For empty selectors, should return original list
-				if tt.selector == "" {
-					assert.NoError(t, err)
-					assert.Equal(t, affected, result)
-				}
+				assert.NoError(t, err)
+				assert.Equal(t, affected, result)
 			}
 		})
 	}
