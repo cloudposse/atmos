@@ -167,21 +167,21 @@ func warningMessage() string {
 }
 
 // getOrInitializeCacheValue retrieves a value from cache or initializes it with a default value if not present.
-// It uses getter and setter functions to access and modify the cache configuration, and saves the cache
+// It uses getter and initializer functions to access and modify the cache configuration, and saves the cache
 // if a new value needs to be initialized.
 //
 // Parameters:
 //   - getter: Function to retrieve the current value from cache configuration
-//   - setter: Function to set a new value in cache configuration
+//   - initializer: Function to set a new value in cache configuration
 //   - defaultValue: The default value to use if the current value is empty/zero
 //
 // Returns:
 //   - T: The current value from cache if it exists, otherwise the default value
 //
 // The function loads the cache configuration, checks if a value already exists using the getter.
-// If the value is empty/zero, it initializes it with the default value using the setter and saves
+// If the value is empty/zero, it initializes it with the default value using the initializer and saves
 // the updated cache. If cache operations fail, it logs a warning but continues execution.
-func getOrInitializeCacheValue[T comparable](getter func(cfg *cfg.CacheConfig) T, setter func(cfg *cfg.CacheConfig, value T), defaultValue T) T {
+func getOrInitializeCacheValue[T comparable](getter func(cfg *cfg.CacheConfig) T, initializer func(cfg *cfg.CacheConfig, value T), defaultValue T) T {
 	var emptyValue T
 
 	cacheCfg, err := cfg.LoadCache()
@@ -194,7 +194,7 @@ func getOrInitializeCacheValue[T comparable](getter func(cfg *cfg.CacheConfig) T
 	}
 
 	if canCreateCache {
-		setter(&cacheCfg, defaultValue)
+		initializer(&cacheCfg, defaultValue)
 		if err := cfg.SaveCache(cacheCfg); err != nil {
 			log.Warn("Could not save cache", "error", err)
 		}
