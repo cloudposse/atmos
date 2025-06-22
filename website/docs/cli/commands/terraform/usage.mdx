@@ -506,22 +506,22 @@ Let's run the following Multi-Component commands in `dry-run` mode and review th
 
 > atmos terraform apply --all --dry-run
 
-INFO Executing command="atmos terraform apply eks/cluster -s nonprod"
-INFO Executing command="atmos terraform apply eks/external-dns -s nonprod"
-INFO Executing command="atmos terraform apply eks/istio/base -s nonprod"
-INFO Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
-INFO Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
-INFO Executing command="atmos terraform apply eks/karpenter -s nonprod"
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
-INFO Executing command="atmos terraform apply vpc -s nonprod"
-INFO Executing command="atmos terraform apply eks/karpenter -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-INFO Executing command="atmos terraform apply vpc -s prod"
-INFO Executing command="atmos terraform apply eks/cluster -s prod"
-INFO Executing command="atmos terraform apply eks/external-dns -s prod"
-INFO Executing command="atmos terraform apply eks/istio/base -s prod"
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod"
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod"
+Executing command="atmos terraform apply eks/cluster -s nonprod"
+Executing command="atmos terraform apply eks/external-dns -s nonprod"
+Executing command="atmos terraform apply eks/istio/base -s nonprod"
+Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
+Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
+Executing command="atmos terraform apply eks/karpenter -s nonprod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
+Executing command="atmos terraform apply vpc -s nonprod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
+Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
+Executing command="atmos terraform apply eks/external-dns -s prod"
+Executing command="atmos terraform apply eks/istio/base -s prod"
+Executing command="atmos terraform apply eks/istio/istiod -s prod"
+Executing command="atmos terraform apply eks/istio/test-app -s prod"
 ```
 </Terminal>
 
@@ -531,14 +531,14 @@ INFO Executing command="atmos terraform apply eks/istio/test-app -s prod"
 
 > atmos terraform apply --all --stack prod --dry-run
 
-INFO Executing command="atmos terraform apply eks/cluster -s prod"
-INFO Executing command="atmos terraform apply eks/external-dns -s prod"
-INFO Executing command="atmos terraform apply eks/istio/base -s prod"
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod"
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-INFO Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
+Executing command="atmos terraform apply eks/external-dns -s prod"
+Executing command="atmos terraform apply eks/istio/base -s prod"
+Executing command="atmos terraform apply eks/istio/istiod -s prod"
+Executing command="atmos terraform apply eks/istio/test-app -s prod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
+Executing command="atmos terraform apply vpc -s prod"
 ```
 </Terminal>
 
@@ -548,14 +548,14 @@ INFO Executing command="atmos terraform apply vpc -s prod"
 
 > atmos terraform apply --stack prod --dry-run
 
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-INFO Executing command="atmos terraform apply vpc -s prod"
-INFO Executing command="atmos terraform apply eks/cluster -s prod"
-INFO Executing command="atmos terraform apply eks/external-dns -s prod"
-INFO Executing command="atmos terraform apply eks/istio/base -s prod"
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod"
+Executing command="atmos terraform apply eks/istio/test-app -s prod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
+Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
+Executing command="atmos terraform apply eks/external-dns -s prod"
+Executing command="atmos terraform apply eks/istio/base -s prod"
+Executing command="atmos terraform apply eks/istio/istiod -s prod"
 ```
 </Terminal>
 
@@ -566,8 +566,8 @@ INFO Executing command="atmos terraform apply eks/istio/istiod -s prod"
 
 > atmos terraform apply --stack prod --components vpc,eks/cluster --dry-run
 
-INFO Executing command="atmos terraform apply vpc -s prod"
-INFO Executing command="atmos terraform apply eks/cluster -s prod"
+Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
 ```
 </Terminal>
 
@@ -578,21 +578,21 @@ INFO Executing command="atmos terraform apply eks/cluster -s prod"
 
 > atmos terraform apply --query '.vars.tags.team == "eks"' --dry-run
 
-INFO Executing command="atmos terraform apply eks/external-dns -s nonprod"
+Executing command="atmos terraform apply eks/external-dns -s nonprod"
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s nonprod" query=".vars.tags.team == \"eks\""
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s nonprod" query=".vars.tags.team == \"eks\""
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s nonprod" query=".vars.tags.team == \"eks\""
-INFO Executing command="atmos terraform apply eks/karpenter -s nonprod"
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
+Executing command="atmos terraform apply eks/karpenter -s nonprod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s nonprod" query=".vars.tags.team == \"eks\""
-INFO Executing command="atmos terraform apply eks/cluster -s nonprod"
+Executing command="atmos terraform apply eks/cluster -s nonprod"
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s prod" query=".vars.tags.team == \"eks\""
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s prod" query=".vars.tags.team == \"eks\""
-INFO Executing command="atmos terraform apply eks/karpenter -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s prod" query=".vars.tags.team == \"eks\""
-INFO Executing command="atmos terraform apply eks/cluster -s prod"
-INFO Executing command="atmos terraform apply eks/external-dns -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
+Executing command="atmos terraform apply eks/external-dns -s prod"
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s prod" query=".vars.tags.team == \"eks\""
 ```
 </Terminal>
@@ -607,11 +607,11 @@ INFO Skipping the component because the query criteria not satisfied command="at
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s prod" query=".vars.tags.team == \"eks\""
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s prod" query=".vars.tags.team == \"eks\""
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s prod" query=".vars.tags.team == \"eks\""
-INFO Executing command="atmos terraform apply eks/karpenter -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s prod" query=".vars.tags.team == \"eks\""
-INFO Executing command="atmos terraform apply eks/cluster -s prod"
-INFO Executing command="atmos terraform apply eks/external-dns -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
+Executing command="atmos terraform apply eks/external-dns -s prod"
 ```
 </Terminal>
 
@@ -623,22 +623,22 @@ INFO Executing command="atmos terraform apply eks/external-dns -s prod"
 
 > atmos terraform apply --affected --dry-run
 
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-INFO Executing command="atmos terraform apply vpc -s prod"
-INFO Executing command="atmos terraform apply eks/cluster -s prod"
-INFO Executing command="atmos terraform apply eks/external-dns -s prod"
-INFO Executing command="atmos terraform apply eks/istio/base -s prod"
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod"
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
-INFO Executing command="atmos terraform apply vpc -s nonprod"
-INFO Executing command="atmos terraform apply eks/cluster -s nonprod"
-INFO Executing command="atmos terraform apply eks/external-dns -s nonprod"
-INFO Executing command="atmos terraform apply eks/istio/base -s nonprod"
-INFO Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
-INFO Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
-INFO Executing command="atmos terraform apply eks/karpenter -s nonprod"
+Executing command="atmos terraform apply vpc -s nonprod"
+Executing command="atmos terraform apply eks/cluster -s nonprod"
+Executing command="atmos terraform apply eks/external-dns -s nonprod"
+Executing command="atmos terraform apply eks/istio/base -s nonprod"
+Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
+Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
+Executing command="atmos terraform apply eks/karpenter -s nonprod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
+Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
+Executing command="atmos terraform apply eks/external-dns -s prod"
+Executing command="atmos terraform apply eks/istio/base -s prod"
+Executing command="atmos terraform apply eks/istio/istiod -s prod"
+Executing command="atmos terraform apply eks/istio/test-app -s prod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```
 </Terminal>
 
@@ -650,14 +650,14 @@ INFO Executing command="atmos terraform apply eks/karpenter -s nonprod"
 
 > atmos terraform apply --affected --stack prod --dry-run
 
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-INFO Executing command="atmos terraform apply vpc -s prod"
-INFO Executing command="atmos terraform apply eks/cluster -s prod"
-INFO Executing command="atmos terraform apply eks/external-dns -s prod"
-INFO Executing command="atmos terraform apply eks/istio/base -s prod"
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod"
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod"
-INFO Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod"
+Executing command="atmos terraform apply eks/external-dns -s prod"
+Executing command="atmos terraform apply eks/istio/base -s prod"
+Executing command="atmos terraform apply eks/istio/istiod -s prod"
+Executing command="atmos terraform apply eks/istio/test-app -s prod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```
 </Terminal>
 
@@ -670,22 +670,22 @@ INFO Executing command="atmos terraform apply eks/karpenter -s prod"
 
 > atmos terraform apply --affected --include-dependents --dry-run
 
-INFO Executing command="atmos terraform apply vpc -s nonprod"
-INFO Executing command="atmos terraform apply eks/cluster -s nonprod" dependency of component=vpc in stack=nonprod
-INFO Executing command="atmos terraform apply eks/karpenter -s nonprod" dependency of component=eks/cluster in stack=nonprod
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod" dependency of component=eks/karpenter in stack=nonprod
-INFO Executing command="atmos terraform apply eks/external-dns -s nonprod" dependency of component=eks/cluster in stack=nonprod
-INFO Executing command="atmos terraform apply eks/istio/base -s nonprod" dependency of component=eks/cluster in stack=nonprod
-INFO Executing command="atmos terraform apply eks/istio/istiod -s nonprod" dependency of component=eks/istio/base in stack=nonprod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dependency of component=eks/istio/istiod in stack=nonprod
-INFO Executing command="atmos terraform apply vpc -s prod"
-INFO Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
-INFO Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
-INFO Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
+Executing command="atmos terraform apply vpc -s nonprod"
+Executing command="atmos terraform apply eks/cluster -s nonprod" dependency of component=vpc in stack=nonprod
+Executing command="atmos terraform apply eks/karpenter -s nonprod" dependency of component=eks/cluster in stack=nonprod
+Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod" dependency of component=eks/karpenter in stack=nonprod
+Executing command="atmos terraform apply eks/external-dns -s nonprod" dependency of component=eks/cluster in stack=nonprod
+Executing command="atmos terraform apply eks/istio/base -s nonprod" dependency of component=eks/cluster in stack=nonprod
+Executing command="atmos terraform apply eks/istio/istiod -s nonprod" dependency of component=eks/istio/base in stack=nonprod
+Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dependency of component=eks/istio/istiod in stack=nonprod
+Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
+Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
+Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
+Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
+Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
+Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
 ```
 </Terminal>
 
@@ -698,14 +698,14 @@ INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" d
 
 > atmos terraform apply --affected --stack prod --include-dependents --dry-run
 
-INFO Executing command="atmos terraform apply vpc -s prod"
-INFO Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
-INFO Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
-INFO Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
+Executing command="atmos terraform apply vpc -s prod"
+Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
+Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
+Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
+Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
+Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
+Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
 ```
 </Terminal>
 
