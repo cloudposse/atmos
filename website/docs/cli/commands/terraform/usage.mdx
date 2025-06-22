@@ -345,7 +345,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
     <dd>
         For each directly affected component, detect the dependent components and process them in the dependency order, recursively.
         Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
-        or configs, but they are configured as [dependencies](/core-concepts/stacks/dependencies/) of component that are modified.
+        or configs, but they are configured as [dependencies](/core-concepts/stacks/dependencies/) of the components that are modified.
 
         ```shell
         atmos terraform plan --affected --include-dependents --logs-level=Debug
@@ -640,27 +640,15 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```shell
 # Execute the `terraform apply` command on all components affected by the changes
 # in the current branch, in all stacks, in dependency order.
-# Assume that all the components in all stacks are affected (e.g. just added).
+# Assume that the components `vpc` and `eks/cluster` in all stacks are affected (e.g. just added).
 
 > atmos terraform apply --affected --dry-run
 
 Executing command="atmos terraform apply vpc -s nonprod"
 Executing command="atmos terraform apply eks/cluster -s nonprod"
-Executing command="atmos terraform apply eks/external-dns -s nonprod"
-Executing command="atmos terraform apply eks/istio/base -s nonprod"
-Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
-Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
-Executing command="atmos terraform apply eks/karpenter -s nonprod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
 
 Executing command="atmos terraform apply vpc -s prod"
 Executing command="atmos terraform apply eks/cluster -s prod"
-Executing command="atmos terraform apply eks/external-dns -s prod"
-Executing command="atmos terraform apply eks/istio/base -s prod"
-Executing command="atmos terraform apply eks/istio/istiod -s prod"
-Executing command="atmos terraform apply eks/istio/test-app -s prod"
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```
 </Terminal>
 
@@ -668,27 +656,24 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```shell
 # Execute the `terraform apply` command on all components affected by the changes
 # in the current branch, in the `prod` stack, in dependency order.
-# Assume that all the components in the `prod` stack are affected (e.g. just added).
+# Assume that the components `vpc` and `eks/cluster` in the `prod` stack are affected (e.g. just added).
 
 > atmos terraform apply --affected --stack prod --dry-run
 
 Executing command="atmos terraform apply vpc -s prod"
 Executing command="atmos terraform apply eks/cluster -s prod"
-Executing command="atmos terraform apply eks/external-dns -s prod"
-Executing command="atmos terraform apply eks/istio/base -s prod"
-Executing command="atmos terraform apply eks/istio/istiod -s prod"
-Executing command="atmos terraform apply eks/istio/test-app -s prod"
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```
 </Terminal>
 
 <Terminal title="atmos terraform apply --affected --include-dependents --dry-run">
 ```shell
-# Execute the `terraform apply` command on all components affected by the changes
-# in the current branch, in all stacks,
-# and recursively process all the dependent components in dependency order.
-# Assume that all the components in all stacks are affected (e.g. just added).
+# Execute the `terraform apply` command on all the components affected by the changes
+# in the current branch, in all stacks.
+# For each directly affected component, detect the dependent components and process
+# them in the dependency order, recursively.
+# Dependents are components that are indirectly affected, meaning that nothing in the
+# current branch modifies their code or configs, but they are configured as
+# dependencies of the components that are modified.
 
 > atmos terraform apply --affected --include-dependents --dry-run
 
@@ -714,10 +699,13 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" depend
 
 <Terminal title="atmos terraform apply --affected --stack prod --include-dependents --dry-run">
 ```shell
-# Execute the `terraform apply` command on all components affected by the changes
-# in the current branch, in the `prod` stack,
-# and recursively process all the dependent components in dependency order.
-# Assume that all the components in the `prod` stack are affected (e.g. just added).
+# Execute the `terraform apply` command on all the components affected by the changes
+# in the current branch, in the `prod` stack.
+# For each directly affected component, detect the dependent components and process
+# them in the dependency order, recursively.
+# Dependents are components that are indirectly affected, meaning that nothing in the
+# current branch modifies their code or configs, but they are configured as
+# dependencies of the components that are modified.
 
 > atmos terraform apply --affected --stack prod --include-dependents --dry-run
 
