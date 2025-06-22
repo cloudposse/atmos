@@ -326,7 +326,8 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
     <dt>`--affected` <em>(optional)</em></dt>
     <dd>
-        Execute the command on the components affected by the changes in the current branch, in all stacks or in a specific stack.
+        Execute the command on all the directly affected components, in all stacks or in a specific stack,
+        in dependency order (if [component dependencies](/core-concepts/stacks/dependencies/) are configured).
 
         __NOTE__: When using the `--affected` flag, Atmos supports all the flags from the [`atmos describe affected`](/cli/commands/describe/affected) CLI command.
 
@@ -342,11 +343,14 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
     <dt>`--include-dependents` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
     <dd>
-        For each affected component, detect the dependent components and process them in the dependency order, recursively.
+        For each directly affected component, detect the dependent components and process them in the dependency order, recursively.
+        Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
+        or configs, but they are configured as [dependencies](/core-concepts/stacks/dependencies/) of component that are modified.
 
         ```shell
         atmos terraform plan --affected --include-dependents --logs-level=Debug
         atmos terraform apply --affected --include-dependents --dry-run
+        atmos terraform apply --affected --include-dependents --stack prod --dry-run
         ```
     </dd>
 
@@ -506,6 +510,7 @@ Let's run the following Multi-Component commands in `dry-run` mode and review th
 
 > atmos terraform apply --all --dry-run
 
+Executing command="atmos terraform apply vpc -s nonprod"
 Executing command="atmos terraform apply eks/cluster -s nonprod"
 Executing command="atmos terraform apply eks/external-dns -s nonprod"
 Executing command="atmos terraform apply eks/istio/base -s nonprod"
@@ -513,15 +518,14 @@ Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
 Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
 Executing command="atmos terraform apply eks/karpenter -s nonprod"
 Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
-Executing command="atmos terraform apply vpc -s nonprod"
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 Executing command="atmos terraform apply vpc -s prod"
 Executing command="atmos terraform apply eks/cluster -s prod"
 Executing command="atmos terraform apply eks/external-dns -s prod"
 Executing command="atmos terraform apply eks/istio/base -s prod"
 Executing command="atmos terraform apply eks/istio/istiod -s prod"
 Executing command="atmos terraform apply eks/istio/test-app -s prod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```
 </Terminal>
 
@@ -531,6 +535,7 @@ Executing command="atmos terraform apply eks/istio/test-app -s prod"
 
 > atmos terraform apply --all --stack prod --dry-run
 
+Executing command="atmos terraform apply vpc -s prod"
 Executing command="atmos terraform apply eks/cluster -s prod"
 Executing command="atmos terraform apply eks/external-dns -s prod"
 Executing command="atmos terraform apply eks/istio/base -s prod"
@@ -538,7 +543,6 @@ Executing command="atmos terraform apply eks/istio/istiod -s prod"
 Executing command="atmos terraform apply eks/istio/test-app -s prod"
 Executing command="atmos terraform apply eks/karpenter -s prod"
 Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-Executing command="atmos terraform apply vpc -s prod"
 ```
 </Terminal>
 
@@ -548,20 +552,20 @@ Executing command="atmos terraform apply vpc -s prod"
 
 > atmos terraform apply --stack prod --dry-run
 
-Executing command="atmos terraform apply eks/istio/test-app -s prod"
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 Executing command="atmos terraform apply vpc -s prod"
 Executing command="atmos terraform apply eks/cluster -s prod"
 Executing command="atmos terraform apply eks/external-dns -s prod"
 Executing command="atmos terraform apply eks/istio/base -s prod"
 Executing command="atmos terraform apply eks/istio/istiod -s prod"
+Executing command="atmos terraform apply eks/istio/test-app -s prod"
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```
 </Terminal>
 
 <Terminal title="atmos terraform apply --stack prod --components vpc,eks/cluster --dry-run">
 ```shell
-# Execute the `terraform apply` command on the `component-1` and `component-2` components
+# Execute the `terraform apply` command on the `vpc` and `eks/cluster` components
 # in the `prod` stack.
 
 > atmos terraform apply --stack prod --components vpc,eks/cluster --dry-run
@@ -578,22 +582,23 @@ Executing command="atmos terraform apply eks/cluster -s prod"
 
 > atmos terraform apply --query '.vars.tags.team == "eks"' --dry-run
 
+Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s nonprod" query=".vars.tags.team == \"eks\""
+Executing command="atmos terraform apply eks/cluster -s nonprod"
 Executing command="atmos terraform apply eks/external-dns -s nonprod"
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s nonprod" query=".vars.tags.team == \"eks\""
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s nonprod" query=".vars.tags.team == \"eks\""
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s nonprod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s nonprod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s nonprod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s nonprod" query=".vars.tags.team == \"eks\""
 Executing command="atmos terraform apply eks/karpenter -s nonprod"
 Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s nonprod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/cluster -s nonprod"
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s prod" query=".vars.tags.team == \"eks\""
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s prod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s prod" query=".vars.tags.team == \"eks\""
+
+Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s prod" query=".vars.tags.team == \"eks\""
 Executing command="atmos terraform apply eks/cluster -s prod"
 Executing command="atmos terraform apply eks/external-dns -s prod"
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s prod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s prod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s prod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s prod" query=".vars.tags.team == \"eks\""
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```
 </Terminal>
 
@@ -604,22 +609,22 @@ INFO Skipping the component because the query criteria not satisfied command="at
 
 > atmos terraform apply --query '.vars.tags.team == "eks"' --stack prod --dry-run
 
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s prod" query=".vars.tags.team == \"eks\""
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s prod" query=".vars.tags.team == \"eks\""
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s prod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-INFO Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s prod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s prod" query=".vars.tags.team == \"eks\""
 Executing command="atmos terraform apply eks/cluster -s prod"
 Executing command="atmos terraform apply eks/external-dns -s prod"
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s prod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s prod" query=".vars.tags.team == \"eks\""
+Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s prod" query=".vars.tags.team == \"eks\""
+Executing command="atmos terraform apply eks/karpenter -s prod"
+Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```
 </Terminal>
 
 <Terminal title="atmos terraform apply --affected --dry-run">
 ```shell
 # Execute the `terraform apply` command on all components affected by the changes
-# in the current branch, in all stacks.
-# Assume that all the components in all stacks are affected, e.g. just added.
+# in the current branch, in all stacks, in dependency order.
+# Assume that all the components in all stacks are affected (e.g. just added).
 
 > atmos terraform apply --affected --dry-run
 
@@ -631,6 +636,7 @@ Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
 Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
 Executing command="atmos terraform apply eks/karpenter -s nonprod"
 Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
+
 Executing command="atmos terraform apply vpc -s prod"
 Executing command="atmos terraform apply eks/cluster -s prod"
 Executing command="atmos terraform apply eks/external-dns -s prod"
@@ -645,8 +651,8 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 <Terminal title="atmos terraform apply --affected --stack prod --dry-run">
 ```shell
 # Execute the `terraform apply` command on all components affected by the changes
-# in the current branch, in the `prod` stack.
-# Assume that all the components in the `prod` stack are affected, e.g. just added.
+# in the current branch, in the `prod` stack, in dependency order.
+# Assume that all the components in the `prod` stack are affected (e.g. just added).
 
 > atmos terraform apply --affected --stack prod --dry-run
 
@@ -665,8 +671,8 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
 ```shell
 # Execute the `terraform apply` command on all components affected by the changes
 # in the current branch, in all stacks,
-# and recursively process all the dependent components in the dependency order.
-# Assume that all the components in all stacks are affected, e.g. just added.
+# and recursively process all the dependent components in dependency order.
+# Assume that all the components in all stacks are affected (e.g. just added).
 
 > atmos terraform apply --affected --include-dependents --dry-run
 
@@ -678,6 +684,7 @@ Executing command="atmos terraform apply eks/external-dns -s nonprod" dependency
 Executing command="atmos terraform apply eks/istio/base -s nonprod" dependency of component=eks/cluster in stack=nonprod
 Executing command="atmos terraform apply eks/istio/istiod -s nonprod" dependency of component=eks/istio/base in stack=nonprod
 Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dependency of component=eks/istio/istiod in stack=nonprod
+
 Executing command="atmos terraform apply vpc -s prod"
 Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
 Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
@@ -693,8 +700,8 @@ Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" depend
 ```shell
 # Execute the `terraform apply` command on all components affected by the changes
 # in the current branch, in the `prod` stack,
-# and recursively process all the dependent components in the dependency order.
-# Assume that all the components in the `prod` stack are affected, e.g. just added.
+# and recursively process all the dependent components in dependency order.
+# Assume that all the components in the `prod` stack are affected (e.g. just added).
 
 > atmos terraform apply --affected --stack prod --include-dependents --dry-run
 
