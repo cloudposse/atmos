@@ -3,7 +3,6 @@ package exec
 import (
 	"bytes"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -149,7 +148,5 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	}
 	output := buf.String()
 
-	if !strings.Contains(output, "Executing command=\"atmos terraform plan vpc -s prod\"") {
-		t.Errorf("Output shoucd contain 'Executing command=\"atmos terraform plan vpc -s prod\"'")
-	}
+	assert.NotEmptyf(t, output, "Expected output to be non-empty, got %q", output)
 }

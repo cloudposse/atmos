@@ -1586,13 +1586,17 @@ func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, 
 func processPeerDependencies(dependents *[]schema.Dependent) {
 	for i := 0; i < len(*dependents); i++ {
 		d := &((*dependents)[i])
-		d.IncludedInDependents = processIncludedInDependenciesForPeerDependencies(&d.Dependents, d.StackSlug)
+		d.IncludedInDependents = processIncludedInDependenciesForPeerDependencies(dependents, d.StackSlug, i)
 		processPeerDependencies(&d.Dependents)
 	}
 }
 
-func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Dependent, stackSlug string) bool {
+func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Dependent, stackSlug string, depIndex int) bool {
 	for i := 0; i < len(*dependents); i++ {
+		if i == depIndex {
+			continue
+		}
+
 		d := &((*dependents)[i])
 
 		if d.StackSlug == stackSlug {
@@ -1600,7 +1604,7 @@ func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Depen
 		}
 
 		if len(d.Dependents) > 0 {
-			includedInDeps := processIncludedInDependenciesForPeerDependencies(&d.Dependents, stackSlug)
+			includedInDeps := processIncludedInDependenciesForPeerDependencies(&d.Dependents, stackSlug, -1)
 			if includedInDeps {
 				return true
 			}

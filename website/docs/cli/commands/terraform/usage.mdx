@@ -670,32 +670,22 @@ INFO Executing command="atmos terraform apply eks/karpenter -s prod"
 
 > atmos terraform apply --affected --include-dependents --dry-run
 
-INFO Executing command="atmos terraform apply vpc -s prod"
-INFO Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/base in stack=prod
 INFO Executing command="atmos terraform apply vpc -s nonprod"
 INFO Executing command="atmos terraform apply eks/cluster -s nonprod" dependency of component=vpc in stack=nonprod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dependency of component=eks/cluster in stack=nonprod
 INFO Executing command="atmos terraform apply eks/karpenter -s nonprod" dependency of component=eks/cluster in stack=nonprod
 INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod" dependency of component=eks/karpenter in stack=nonprod
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod" dependency of component=eks/cluster in stack=nonprod
 INFO Executing command="atmos terraform apply eks/external-dns -s nonprod" dependency of component=eks/cluster in stack=nonprod
 INFO Executing command="atmos terraform apply eks/istio/base -s nonprod" dependency of component=eks/cluster in stack=nonprod
 INFO Executing command="atmos terraform apply eks/istio/istiod -s nonprod" dependency of component=eks/istio/base in stack=nonprod
 INFO Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dependency of component=eks/istio/istiod in stack=nonprod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dependency of component=eks/istio/base in stack=nonprod
-INFO Executing command="atmos terraform apply eks/istio/istiod -s nonprod" dependency of component=eks/cluster in stack=nonprod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dependency of component=eks/istio/istiod in stack=nonprod
+INFO Executing command="atmos terraform apply vpc -s prod"
+INFO Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
+INFO Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
+INFO Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
+INFO Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
+INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
+INFO Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
+INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
 ```
 </Terminal>
 
@@ -710,15 +700,10 @@ INFO Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dep
 
 INFO Executing command="atmos terraform apply vpc -s prod"
 INFO Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
-INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/cluster in stack=prod
 INFO Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
 INFO Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
 INFO Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
 INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/base in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/cluster in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
-INFO Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/cluster in stack=prod
 INFO Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
 INFO Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
 ```
