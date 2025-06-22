@@ -18,11 +18,7 @@ var versionCmd = &cobra.Command{
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		err := exec.NewVersionExec(&atmosConfig).Execute(checkFlag, versionFormat)
-		checkErrorAndExit(err)
-
-		// Check for the cache and print update message
-		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
+		checkErrorAndExit(exec.NewVersionExec(&atmosConfig).Execute(checkFlag, versionFormat))
 	},
 }
 
