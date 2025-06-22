@@ -37,6 +37,11 @@ func getRunnableDescribeAffectedCmd(
 		checkAtmosConfig()
 		props, err := parseDescribeAffectedCliArgs(cmd, args)
 		checkErrorAndExit(err)
+		if cmd.Flags().Changed("pager") {
+			// TODO: update this post pr:https://github.com/cloudposse/atmos/pull/1174 is merged
+			props.CLIConfig.Settings.Terminal.Pager, err = cmd.Flags().GetString("pager")
+			checkErrorAndExit(err)
+		}
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
 		checkErrorAndExit(err)
 	}
@@ -90,7 +95,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 	result := exec.DescribeAffectedCmdArgs{
 		CLIConfig: &atmosConfig,
 	}
-	setFlagValueInCliArgs(flags, &result)
+	setDescribeAffectedFlagValueInCliArgs(flags, &result)
 
 	if result.Format != "yaml" && result.Format != "json" {
 		return exec.DescribeAffectedCmdArgs{}, exec.ErrInvalidFormat
@@ -102,7 +107,7 @@ func parseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (exec.Descr
 	return result, nil
 }
 
-func setFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffectedCmdArgs) {
+func setDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *exec.DescribeAffectedCmdArgs) {
 	flagsKeyValue := map[string]any{
 		"ref":                            &describe.Ref,
 		"sha":                            &describe.SHA,

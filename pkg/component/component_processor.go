@@ -2,14 +2,11 @@ package component
 
 import (
 	log "github.com/charmbracelet/log"
-	"github.com/pkg/errors"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-var ErrMissingStackNameTemplateAndPattern = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack.
 func ProcessComponentInStack(
@@ -95,8 +92,8 @@ func ProcessComponentFromContext(
 		}
 
 	default:
-		log.Error(ErrMissingStackNameTemplateAndPattern)
-		return nil, ErrMissingStackNameTemplateAndPattern
+		log.Error(e.ErrMissingStackNameTemplateAndPattern)
+		return nil, e.ErrMissingStackNameTemplateAndPattern
 	}
 
 	return ProcessComponentInStack(component, stack, atmosCliConfigPath, atmosBasePath)
