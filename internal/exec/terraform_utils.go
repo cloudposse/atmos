@@ -172,50 +172,50 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 }
 
 // ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
-func ExecuteTerraformAffected(a *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
 	var affectedList []schema.Affected
 	var err error
 
 	switch {
-	case a.RepoPath != "":
+	case args.RepoPath != "":
 		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRepoPath(
-			a.CLIConfig,
-			a.RepoPath,
-			a.Verbose,
-			a.IncludeSpaceliftAdminStacks,
-			a.IncludeSettings,
-			a.Stack,
-			a.ProcessTemplates,
-			a.ProcessYamlFunctions,
-			a.Skip,
+			args.CLIConfig,
+			args.RepoPath,
+			args.Verbose,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
 		)
-	case a.CloneTargetRef:
+	case args.CloneTargetRef:
 		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefClone(
-			a.CLIConfig,
-			a.Ref,
-			a.SHA,
-			a.SSHKeyPath,
-			a.SSHKeyPassword,
-			a.Verbose,
-			a.IncludeSpaceliftAdminStacks,
-			a.IncludeSettings,
-			a.Stack,
-			a.ProcessTemplates,
-			a.ProcessYamlFunctions,
-			a.Skip,
+			args.CLIConfig,
+			args.Ref,
+			args.SHA,
+			args.SSHKeyPath,
+			args.SSHKeyPassword,
+			args.Verbose,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
 		)
 	default:
 		affectedList, _, _, _, err = ExecuteDescribeAffectedWithTargetRefCheckout(
-			a.CLIConfig,
-			a.Ref,
-			a.SHA,
-			a.Verbose,
-			a.IncludeSpaceliftAdminStacks,
-			a.IncludeSettings,
-			a.Stack,
-			a.ProcessTemplates,
-			a.ProcessYamlFunctions,
-			a.Skip,
+			args.CLIConfig,
+			args.Ref,
+			args.SHA,
+			args.Verbose,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
 		)
 	}
 	if err != nil {
@@ -223,8 +223,8 @@ func ExecuteTerraformAffected(a *DescribeAffectedCmdArgs, info *schema.ConfigAnd
 	}
 
 	// Add dependent components and stacks for each affected component
-	if len(affectedList) > 0 && a.IncludeDependents {
-		err = addDependentsToAffected(a.CLIConfig, &affectedList, a.IncludeSettings)
+	if len(affectedList) > 0 {
+		err = addDependentsToAffected(args.CLIConfig, &affectedList, args.IncludeSettings)
 		if err != nil {
 			return err
 		}
@@ -246,7 +246,7 @@ func ExecuteTerraformAffected(a *DescribeAffectedCmdArgs, info *schema.ConfigAnd
 				"",
 				"",
 				affected.Dependents,
-				a,
+				args,
 			)
 			if err != nil {
 				return err
@@ -280,7 +280,7 @@ func executeTerraformAffectedComponentInDepOrder(
 
 	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
 
-	if parentComponent != "" && parentStack != "" {
+	if args.IncludeDependents && parentComponent != "" && parentStack != "" {
 		logFunc("Executing", "command", command, "dependency of component", parentComponent, "in stack", parentStack)
 	} else {
 		logFunc("Executing", "command", command)
